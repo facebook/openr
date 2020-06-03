@@ -479,6 +479,11 @@ Route::setPriority(uint32_t priority) {
   priority_ = priority;
 }
 
+void
+Route::setNextHops(const NextHopSet& nextHops) {
+  nextHops_ = nextHops;
+}
+
 /*=================================NextHop====================================*/
 
 NextHop
@@ -632,6 +637,11 @@ NextHop::getSwapLabel() const {
 std::optional<std::vector<int32_t>>
 NextHop::getPushLabels() const {
   return pushLabels_;
+}
+
+void
+NextHop::setPushLabels(std::vector<int32_t> pushLabels) {
+  pushLabels_ = pushLabels;
 }
 
 uint8_t

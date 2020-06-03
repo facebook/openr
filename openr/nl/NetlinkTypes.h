@@ -114,6 +114,8 @@ class NextHop final {
 
   std::optional<std::vector<int32_t>> getPushLabels() const;
 
+  void setPushLabels(std::vector<int32_t>);
+
   uint8_t getFamily() const;
 
  private:
@@ -325,6 +327,8 @@ class Route final {
   void setPriority(uint32_t priority);
 
   std::string str() const;
+
+  void setNextHops(const NextHopSet& nextHops);
 
  private:
   uint8_t type_{RTN_UNICAST};

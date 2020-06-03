@@ -36,6 +36,22 @@ NetlinkRouteMessage::rcvdRoute(Route&& route) {
     return; // ignore the route
   }
 
+  NextHopSet reversedMplsLabelNhs;
+  bool reverted = false;
+  for (auto nh : route.getNextHops()) {
+    auto pushLabels = nh.getPushLabels();
+    // reverse the push labels becasue thrift API definition.
+    if (pushLabels.has_value()) {
+      reverted = true;
+      std::reverse(pushLabels.value().begin(), pushLabels.value().end());
+      nh.setPushLabels(pushLabels.value());
+    }
+    reversedMplsLabelNhs.insert(nh);
+  }
+  if (reverted) {
+    route.setNextHops(reversedMplsLabelNhs);
+  }
+
   rcvdRoutes_.emplace_back(std::move(route));
 }
 
@@ -275,6 +291,7 @@ NetlinkRouteMessage::addPushNexthop(
   }
   // abort immediately to bring attention
   CHECK(labels.value().size() <= kMaxLabels);
+  std::reverse(labels.value().begin(), labels.value().end());
   for (auto label : labels.value()) {
     bool bos = i == labels.value().size() - 1 ? true : false;
     mplsLabel[i++].entry = encodeLabel(label, bos);
