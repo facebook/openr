@@ -59,8 +59,10 @@ Fib::Fib(
       }
     }
     fb303::fbData->setCounter(
-        "fib.require_routedb_sync", syncRoutesTimer_->isScheduled());
+        "fib.synced", syncRoutesTimer_->isScheduled() ? 0 : 1);
   });
+  // On startup we do require routedb_sync so explicitly set the counter to 0
+  fb303::fbData->setCounter("fib.synced", 0);
 
   if (enableOrderedFib_) {
     // check non-empty module ptr
