@@ -15,6 +15,7 @@
 #include <folly/Synchronized.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
+#include <folly/synchronization/Baton.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -696,7 +697,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
   folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   folly::CIDRNetwork prevAllocPrefix;
-  std::atomic<bool> hasAllocPrefix{false};
+  folly::Baton waitBaton;
   const uint8_t allocPrefixLen = 64;
   const std::string subscriptionKey = folly::sformat(
       "{}{}", openr::Constants::kPrefixDbMarker.toString(), myNodeName_);
@@ -719,7 +720,6 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
             allocPrefix = std::nullopt;
           }
           LOG(INFO) << "Lost allocated prefix!";
-          hasAllocPrefix.store(false, std::memory_order_relaxed);
         } else {
           EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, prefixes[0].type);
           auto prefix = toIPNetwork(prefixes[0].prefix);
@@ -728,7 +728,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
             allocPrefix = prefix;
           }
           LOG(INFO) << "Got new prefix allocation!";
-          hasAllocPrefix.store(true, std::memory_order_relaxed);
+          waitBaton.post(); // Post notification only on new prefix allocation
         } // if
       }, // callback
       false);
@@ -737,7 +737,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
   // 1) Set seed prefix in kvStore and verify that we get an elected prefix
   //
   // announce new seed prefix
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  waitBaton.reset();
   std::string ip6{"face:b00c:d00d::/61"};
   const auto seedPrefix = folly::IPAddress::createNetwork(ip6);
   auto prefixAllocParam = folly::sformat(
@@ -745,10 +745,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
   auto res = kvStoreClient_->setKey(
       Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
   EXPECT_TRUE(res.has_value());
-  // busy loop until we have prefix
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
+  waitBaton.wait(); // Wait for prefix allocation to update
   SYNCHRONIZED(allocPrefix) {
     EXPECT_TRUE(allocPrefix.has_value());
     if (allocPrefix.has_value()) {
@@ -764,7 +761,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
   // collision, and restart the prefix allocator to assign a different address
 
   thrift::StaticAllocation staticAlloc;
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  waitBaton.reset();
   staticAlloc.nodePrefixes[myNodeName_] =
       toIpPrefix(folly::IPAddress::networkToString(prevAllocPrefix));
   auto res0 = kvStoreClient_->setKey(
@@ -772,10 +769,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
       1);
   EXPECT_TRUE(res0.has_value());
-
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
+  waitBaton.wait(); // Wait for prefix allocation to update
   SYNCHRONIZED(allocPrefix) {
     EXPECT_TRUE(allocPrefix.has_value());
     if (allocPrefix.has_value()) {
@@ -788,8 +782,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
   // statically all possible v6 addresses except one. Prefix allocator
   // must assign the one that's left out in the static list
-
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  waitBaton.reset();
   staticAlloc.nodePrefixes["dontcare0"] = toIpPrefix("face:b00c:d00d:0::/64");
   staticAlloc.nodePrefixes["dontcare1"] = toIpPrefix("face:b00c:d00d:1::/64");
   staticAlloc.nodePrefixes["dontcare2"] = toIpPrefix("face:b00c:d00d:2::/64");
@@ -803,17 +796,9 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
       2);
   EXPECT_TRUE(res5.has_value());
-
-  // counter is added to break loop. In case allocated prefix is already
-  // the expected one, there will be no prefix update and hasAllocPrefix
-  // will remain 'false'
-  auto ctr = 1000000;
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-    if (ctr-- < 0) {
-      break;
-    }
-  }
+  // Wait for prefix allocation to update. We may timeout if the prefix index
+  // is the same as expected one
+  waitBaton.try_wait_for(std::chrono::seconds(2));
 
   // check the prefix allocated is the only available prefix
   SYNCHRONIZED(allocPrefix) {
