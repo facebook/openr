@@ -160,9 +160,6 @@ DEFINE_int32(
     spark_fastinit_keepalive_time_ms,
     100,
     "Fast initial keep alive time (in milliseconds)");
-DEFINE_string(
-    spark_report_url, "inproc://spark_server_report", "Spark Report URL");
-DEFINE_string(spark_cmd_url, "inproc://spark_server_cmd", "Spark Cmd URL");
 DEFINE_int32(
     spark2_hello_time_s,
     20,

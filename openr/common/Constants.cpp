@@ -24,8 +24,6 @@ constexpr folly::StringPiece Constants::kPrefixNameSeparator;
 constexpr folly::StringPiece Constants::kSeedPrefixAllocLenSeparator;
 constexpr folly::StringPiece Constants::kSeedPrefixAllocParamKey;
 constexpr folly::StringPiece Constants::kSparkMcastAddr;
-constexpr folly::StringPiece Constants::kSparkReportClientId;
-constexpr folly::StringPiece Constants::kSparkReportServerId;
 constexpr folly::StringPiece Constants::kStaticPrefixAllocParamKey;
 constexpr folly::StringPiece Constants::kSuccessResponse;
 constexpr int Constants::kHighWaterMark;

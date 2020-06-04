@@ -64,9 +64,6 @@ DECLARE_int32(spark_hold_time_s);
 DECLARE_int32(spark_keepalive_time_s);
 DECLARE_int32(spark_fastinit_keepalive_time_ms);
 
-DECLARE_string(spark_report_url);
-DECLARE_string(spark_cmd_url);
-
 DECLARE_bool(enable_netlink_fib_handler);
 DECLARE_bool(enable_netlink_system_handler);
 

@@ -713,48 +713,20 @@ createSparkNeighborEvent(
 
 thrift::SparkNeighbor
 createSparkNeighbor(
-    const std::string& domainName,
     const std::string& nodeName,
-    int64_t holdTime,
     const thrift::BinaryAddress& v4Addr,
     const thrift::BinaryAddress& v6Addr,
     int64_t kvStoreCmdPort,
     int64_t openrCtrlThriftPort,
     const std::string& ifName) {
   thrift::SparkNeighbor neighbor;
-  neighbor.domainName = domainName;
   neighbor.nodeName = nodeName;
-  neighbor.holdTime = holdTime;
   neighbor.transportAddressV4 = v4Addr;
   neighbor.transportAddressV6 = v6Addr;
   neighbor.kvStoreCmdPort = kvStoreCmdPort;
   neighbor.openrCtrlThriftPort = openrCtrlThriftPort;
   neighbor.ifName = ifName;
   return neighbor;
-}
-
-thrift::SparkPayload
-createSparkPayload(
-    int32_t version,
-    const thrift::SparkNeighbor& originator,
-    uint64_t seqNum,
-    const std::map<std::string, thrift::ReflectedNeighborInfo>& neighborInfos,
-    int64_t timestamp,
-    bool solicitResponse,
-    bool supportFloodOptimization,
-    bool restarting,
-    const std::optional<std::unordered_set<std::string>>& areas) {
-  thrift::SparkPayload payload;
-  payload.version = version;
-  payload.originator = originator;
-  payload.seqNum = seqNum;
-  payload.neighborInfos = neighborInfos;
-  payload.timestamp = timestamp;
-  payload.solicitResponse = solicitResponse;
-  payload.supportFloodOptimization = supportFloodOptimization;
-  payload.restarting_ref() = restarting;
-  fromStdOptional(payload.areas_ref(), areas);
-  return payload;
 }
 
 thrift::Adjacency

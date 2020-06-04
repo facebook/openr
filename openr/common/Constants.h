@@ -200,13 +200,6 @@ class Constants {
   static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{
       "{}::{}::TCP::CMD::LOCAL"};
 
-  // ID for Spark report server
-  static constexpr folly::StringPiece kSparkReportServerId{
-      "SPARK::ROUTER::SERVER"};
-  // ID for Spark report client
-  static constexpr folly::StringPiece kSparkReportClientId{
-      "SPARK::ROUTER::CLIENT"};
-
   static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
   static constexpr folly::StringPiece kPluginSessionContext{"OpenrPlugin"};
 

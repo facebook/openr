@@ -83,9 +83,7 @@ const auto peerSpec_3_1 = createPeerSpec(
     2);
 
 const auto nb2 = createSparkNeighbor(
-    "domain",
     "node-2",
-    0, // hold time
     toBinaryAddress(folly::IPAddress(nb2_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb2_v6_addr)),
     kvStoreCmdPort,
@@ -93,9 +91,7 @@ const auto nb2 = createSparkNeighbor(
     "");
 
 const auto nb3 = createSparkNeighbor(
-    "domain",
     "node-3",
-    0, // hold time
     toBinaryAddress(folly::IPAddress(nb3_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb3_v6_addr)),
     kvStoreCmdPort,

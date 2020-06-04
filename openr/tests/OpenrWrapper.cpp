@@ -21,9 +21,15 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::string nodeId,
     bool v4Enabled,
     std::chrono::seconds kvStoreDbSyncInterval,
-    std::chrono::milliseconds sparkHoldTime,
-    std::chrono::milliseconds sparkKeepAliveTime,
-    std::chrono::milliseconds sparkFastInitKeepAliveTime,
+    std::chrono::milliseconds sparkHoldTime, /*TO BE DEPRECATED*/
+    std::chrono::milliseconds sparkKeepAliveTime, /*TO BE DEPRECATED*/
+    std::chrono::milliseconds sparkFastInitKeepAliveTime, /*TO BE DEPRECATED*/
+    std::chrono::milliseconds spark2HelloTime,
+    std::chrono::milliseconds spark2FastInitHelloTime,
+    std::chrono::milliseconds spark2HandshakeTime,
+    std::chrono::milliseconds spark2HeartbeatTime,
+    std::chrono::milliseconds spark2HandshakeHoldTime,
+    std::chrono::milliseconds spark2HeartbeatHoldTime,
     std::chrono::seconds linkMonitorAdjHoldTime,
     std::chrono::milliseconds linkFlapInitialBackoff,
     std::chrono::milliseconds linkFlapMaxBackoff,
@@ -160,12 +166,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       sparkHoldTime, // hold time ms
       sparkKeepAliveTime, // keep alive ms
       sparkFastInitKeepAliveTime, // fastInitKeepAliveTime ms
-      std::chrono::milliseconds{0}, /* spark2_hello_time */
-      std::chrono::milliseconds{0}, /* spark2_hello_fast_init_time */
-      std::chrono::milliseconds{0}, /* spark2_handshake_time */
-      std::chrono::milliseconds{0}, /* spark2_heartbeat_time */
-      std::chrono::milliseconds{0}, /* spark2_negotiate_hold_time */
-      std::chrono::milliseconds{0}, /* spark2_heartbeat_hold_time */
+      spark2HelloTime,
+      spark2FastInitHelloTime,
+      spark2HandshakeTime,
+      spark2HeartbeatTime,
+      spark2HandshakeHoldTime,
+      spark2HeartbeatHoldTime,
       std::nullopt, // ip-tos
       v4Enabled, // enable v4
       interfaceUpdatesQueue_.getReader(),
