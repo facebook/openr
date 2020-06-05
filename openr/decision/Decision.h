@@ -306,7 +306,7 @@ class Decision : public OpenrEventBase {
   void coldStartUpdate();
 
   void sendRouteUpdate(
-      thrift::RouteDatabase& db, std::string const& eventDescription);
+      thrift::RouteDatabase&& db, std::string const& eventDescription);
 
   std::chrono::milliseconds getMaxFib();
 

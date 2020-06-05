@@ -1766,7 +1766,7 @@ Decision::processPendingAdjUpdates() {
   }
 
   fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
-  sendRouteUpdate(maybeRouteDb.value(), "DECISION_SPF");
+  sendRouteUpdate(std::move(maybeRouteDb).value(), "DECISION_SPF");
 }
 
 void
@@ -1789,7 +1789,7 @@ Decision::processPendingPrefixUpdates() {
   }
 
   fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
-  sendRouteUpdate(maybeRouteDb.value(), "ROUTE_UPDATE");
+  sendRouteUpdate(std::move(maybeRouteDb).value(), "ROUTE_UPDATE");
 }
 
 void
@@ -1807,7 +1807,8 @@ Decision::decrementOrderedFibHolds() {
     // Create empty perfEvents list. In this case we don't this route update to
     // be inculded in the Fib time
     maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
-    sendRouteUpdate(maybeRouteDb.value(), "ORDERED_FIB_HOLDS_EXPIRED");
+    sendRouteUpdate(
+        std::move(maybeRouteDb).value(), "ORDERED_FIB_HOLDS_EXPIRED");
   }
 }
 
@@ -1817,22 +1818,23 @@ Decision::coldStartUpdate() {
   if (not maybeRouteDb.has_value()) {
     LOG(ERROR) << "SEVERE: No routes to program after cold start duration. "
                << "Sending empty route db to FIB";
-    thrift::RouteDatabase db;
-    sendRouteUpdate(db, "COLD_START_UPDATE");
+    sendRouteUpdate(thrift::RouteDatabase(), "COLD_START_UPDATE");
     return;
   }
   // Create empty perfEvents list. In this case we don't this route update to
   // be inculded in the Fib time
   maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
-  sendRouteUpdate(maybeRouteDb.value(), "COLD_START_UPDATE");
+  sendRouteUpdate(std::move(maybeRouteDb).value(), "COLD_START_UPDATE");
 }
 
 void
 Decision::sendRouteUpdate(
-    thrift::RouteDatabase& db, std::string const& eventDescription) {
+    thrift::RouteDatabase&& db, std::string const& eventDescription) {
   if (db.perfEvents_ref().has_value()) {
     addPerfEvent(db.perfEvents_ref().value(), myNodeName_, eventDescription);
   }
+
+  // TODO: Apply RibPolicy to computed route db before sending out
 
   // sorting the input to meet findDeltaRoutes()'s assumption
   std::sort(db.mplsRoutes.begin(), db.mplsRoutes.end());
