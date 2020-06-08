@@ -32,7 +32,6 @@ class KvStoreCli(object):
         self.kvstore.add_command(EraseKeyCli().erase_key, name="erase-key")
         self.kvstore.add_command(SetKeyCli().set_key, name="set-key")
         self.kvstore.add_command(KvSignatureCli().kv_signature, name="kv-signature")
-        self.kvstore.add_command(TopologyCli().topology)
         self.kvstore.add_command(SnoopCli().snoop)
         self.kvstore.add_command(AllocationsCli().list, name="alloc-list")
         self.kvstore.add_command(AllocationsCli().set, name="alloc-set")
@@ -232,31 +231,6 @@ class KvSignatureCli(object):
         """
 
         kvstore.KvSignatureCmd(cli_opts).run(prefix)
-
-
-class TopologyCli(object):
-    @click.command()
-    @click.option(
-        "--node",
-        default="",
-        help="Show adjacencies for specific node, " "this yields more adjacency info",
-    )
-    @click.option("--bidir/--no-bidir", default=True, help="Only bidir adjacencies")
-    @click.option(
-        "--output-file",
-        default=Consts.TOPOLOGY_OUTPUT_FILE,
-        help="File to write .png image to " "(default is '/tmp/openr-topology.png')",
-    )
-    @click.option(
-        "--edge-label/--no-edge-label", default=True, help="Exclude edge labels"
-    )
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.pass_obj
-    def topology(cli_opts, node, bidir, output_file, edge_label, json):  # noqa: B902
-        """ generates an image file with a visualization of the openr topology
-        """
-
-        kvstore.TopologyCmd(cli_opts).run(node, bidir, output_file, edge_label, json)
 
 
 class SnoopCli(object):
