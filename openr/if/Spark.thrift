@@ -56,41 +56,6 @@ struct ReflectedNeighborInfo {
 //
 typedef i32 OpenrVersion
 
-//
-// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
-// 1. SparkHelloMsg;
-//    - Functionality:
-//      1) To advertise its own existence and basic neighbor information;
-//      2) To ask for immediate response for quick adjacency establishment;
-//      3) To notify for its own "RESTART" to neighbors;
-//    - SparkHelloMsg will be sent per interface;
-// 2. SparkHeartbeatMsg;
-//    - Functionality:
-//      To notify its own aliveness by advertising msg periodically;
-//    - SparkHeartbeatMsg will be sent per interface;
-// 3. SparkHandshakeMsg;
-//    - Functionality:
-//      To exchange param information to establish adjacency;
-//    - SparkHandshakeMsg will be sent per (interface, neighbor)
-//
-struct SparkHelloPacket {
-  // - Msg to announce node's presence on link with its
-  //   own params;
-  // - Send out periodically and on receipt of hello msg
-  //   with solicitation flag set;
-  3: optional SparkHelloMsg helloMsg
-
-  // - Msg to announce nodes's aliveness.
-  // - Send out periodically on intf where there is at
-  //   least one neighbor in ESTABLISHED state;
-  4: optional SparkHeartbeatMsg heartbeatMsg
-
-  // - Msg to exchange params to establish adjacency
-  //   with neighbors;
-  // - Send out periodically and on receipt of handshake msg;
-  5: optional SparkHandshakeMsg handshakeMsg
-}
-
 struct SparkHelloMsg {
   1: string domainName
   2: string nodeName
@@ -139,6 +104,41 @@ struct SparkHandshakeMsg {
   // TODO: Remove optional qualifier after AREA negotiation
   //       is fully in use
   11: optional string neighborNodeName
+}
+
+//
+// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
+// 1. SparkHelloMsg;
+//    - Functionality:
+//      1) To advertise its own existence and basic neighbor information;
+//      2) To ask for immediate response for quick adjacency establishment;
+//      3) To notify for its own "RESTART" to neighbors;
+//    - SparkHelloMsg will be sent per interface;
+// 2. SparkHeartbeatMsg;
+//    - Functionality:
+//      To notify its own aliveness by advertising msg periodically;
+//    - SparkHeartbeatMsg will be sent per interface;
+// 3. SparkHandshakeMsg;
+//    - Functionality:
+//      To exchange param information to establish adjacency;
+//    - SparkHandshakeMsg will be sent per (interface, neighbor)
+//
+struct SparkHelloPacket {
+  // - Msg to announce node's presence on link with its
+  //   own params;
+  // - Send out periodically and on receipt of hello msg
+  //   with solicitation flag set;
+  3: optional SparkHelloMsg helloMsg
+
+  // - Msg to announce nodes's aliveness.
+  // - Send out periodically on intf where there is at
+  //   least one neighbor in ESTABLISHED state;
+  4: optional SparkHeartbeatMsg heartbeatMsg
+
+  // - Msg to exchange params to establish adjacency
+  //   with neighbors;
+  // - Send out periodically and on receipt of handshake msg;
+  5: optional SparkHandshakeMsg handshakeMsg
 }
 
 enum SparkNeighborEventType {
