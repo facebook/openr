@@ -21,14 +21,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::string nodeId,
     bool v4Enabled,
     std::chrono::seconds kvStoreDbSyncInterval,
-    std::chrono::milliseconds sparkHoldTime, /*TO BE DEPRECATED*/
-    std::chrono::milliseconds sparkKeepAliveTime, /*TO BE DEPRECATED*/
     std::chrono::milliseconds spark2HelloTime,
     std::chrono::milliseconds spark2FastInitHelloTime,
     std::chrono::milliseconds spark2HandshakeTime,
     std::chrono::milliseconds spark2HeartbeatTime,
     std::chrono::milliseconds spark2HandshakeHoldTime,
     std::chrono::milliseconds spark2HeartbeatHoldTime,
+    std::chrono::milliseconds spark2GRHoldTime,
     std::chrono::seconds linkMonitorAdjHoldTime,
     std::chrono::milliseconds linkFlapInitialBackoff,
     std::chrono::milliseconds linkFlapMaxBackoff,
@@ -162,14 +161,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       "terragraph", // domain name
       nodeId_, // node name
       static_cast<uint16_t>(6666), // multicast port
-      sparkHoldTime, // hold time ms
-      sparkKeepAliveTime, // keep alive ms
       spark2HelloTime,
       spark2FastInitHelloTime,
       spark2HandshakeTime,
       spark2HeartbeatTime,
       spark2HandshakeHoldTime,
       spark2HeartbeatHoldTime,
+      spark2GRHoldTime,
       std::nullopt, // ip-tos
       v4Enabled, // enable v4
       interfaceUpdatesQueue_.getReader(),

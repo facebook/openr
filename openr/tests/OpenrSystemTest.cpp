@@ -52,14 +52,13 @@ namespace {
 const std::chrono::seconds kMaxOpenrSyncTime(3);
 
 const std::chrono::seconds kKvStoreDbSyncInterval(1);
-const std::chrono::milliseconds kSparkHoldTime(1000);
-const std::chrono::milliseconds kSparkKeepAliveTime(20);
 const std::chrono::milliseconds kSpark2HelloTime(100);
 const std::chrono::milliseconds kSpark2FastInitHelloTime(20);
 const std::chrono::milliseconds kSpark2HandshakeTime(20);
 const std::chrono::milliseconds kSpark2HeartbeatTime(20);
 const std::chrono::milliseconds kSpark2HandshakeHoldTime(200);
 const std::chrono::milliseconds kSpark2HeartbeatHoldTime(500);
+const std::chrono::milliseconds kSpark2GRHoldTime(1000);
 const std::chrono::seconds kLinkMonitorAdjHoldTime(1);
 const std::chrono::milliseconds kLinkFlapInitialBackoff(1);
 const std::chrono::milliseconds kLinkFlapMaxBackoff(8);
@@ -222,14 +221,13 @@ class OpenrFixture : public ::testing::Test {
         nodeId,
         v4Enabled,
         kKvStoreDbSyncInterval,
-        kSparkHoldTime,
-        kSparkKeepAliveTime,
         kSpark2HelloTime,
         kSpark2FastInitHelloTime,
         kSpark2HandshakeTime,
         kSpark2HeartbeatTime,
         kSpark2HandshakeHoldTime,
         kSpark2HeartbeatHoldTime,
+        kSpark2GRHoldTime,
         kLinkMonitorAdjHoldTime,
         kLinkFlapInitialBackoff,
         kLinkFlapMaxBackoff,

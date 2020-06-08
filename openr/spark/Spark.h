@@ -81,14 +81,13 @@ class Spark final : public OpenrEventBase {
       std::string const& myDomainName,
       std::string const& myNodeName,
       uint16_t const udpMcastPort,
-      std::chrono::milliseconds myHoldTime,
-      std::chrono::milliseconds myKeepAliveTime,
       std::chrono::milliseconds myHelloTime,
       std::chrono::milliseconds myHelloFastInitTime,
       std::chrono::milliseconds myHandshakeTime,
       std::chrono::milliseconds myHeartbeatTime,
       std::chrono::milliseconds myNegotiateHoldTime,
       std::chrono::milliseconds myHeartbeatHoldTime,
+      std::chrono::milliseconds myGracefulRestartHoldTime,
       std::optional<int> ipTos,
       bool enableV4,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
@@ -443,13 +442,6 @@ class Spark final : public OpenrEventBase {
   // UDP port for send/recv of spark hello messages
   const uint16_t udpMcastPort_{6666};
 
-  // the hold time to announce on all interfaces. Can't be less than 3s
-  const std::chrono::milliseconds myHoldTime_{0};
-
-  // hello message (keepAlive) exchange interval. Must be less than holdtime
-  // and greater than 0
-  const std::chrono::milliseconds myKeepAliveTime_{0};
-
   // Spark hello msg sendout interval
   const std::chrono::milliseconds myHelloTime_{0};
 
@@ -463,10 +455,13 @@ class Spark final : public OpenrEventBase {
   const std::chrono::milliseconds myHeartbeatTime_{0};
 
   // Spark negotiate stage hold time
-  const std::chrono::milliseconds myNegotiateHoldTime_{0};
+  const std::chrono::milliseconds myHandshakeHoldTime_{0};
 
   // Spark heartbeat msg hold time
   const std::chrono::milliseconds myHeartbeatHoldTime_{0};
+
+  // Spark hold time under graceful-restart mode
+  const std::chrono::milliseconds myGracefulRestartHoldTime_{0};
 
   // This flag indicates that we will also exchange v4 transportAddress in
   // Spark HelloMessage

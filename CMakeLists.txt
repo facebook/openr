@@ -732,7 +732,7 @@ if(BUILD_TESTS)
 
   add_openr_test(SparkTest spark_test
     SOURCES
-      openr/spark/tests/Spark2Test.cpp
+      openr/spark/tests/SparkTest.cpp
       openr/spark/tests/MockIoProvider.cpp
     DESTINATION sbin/tests/openr/spark
   )

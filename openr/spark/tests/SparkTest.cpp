@@ -124,26 +124,16 @@ class Spark2Fixture : public testing::Test {
       std::shared_ptr<thrift::OpenrConfig> config = nullptr,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      std::chrono::milliseconds grHoldTime = kGRHoldTime,
-      // TODO: remove unnecessary argument list when old spark is deprecated
-      std::chrono::milliseconds keepAliveTime = kFastInitHelloTime,
       SparkTimeConfig timeConfig = SparkTimeConfig(
           kHelloTime,
           kFastInitHelloTime,
           kHandshakeTime,
           kHeartbeatTime,
           kNegotiateHoldTime,
-          kHeartbeatHoldTime)) {
+          kHeartbeatHoldTime,
+          kGRHoldTime)) {
     return std::make_unique<SparkWrapper>(
-        domainName,
-        myNodeName,
-        grHoldTime,
-        keepAliveTime,
-        true, /* enableV4 */
-        version,
-        mockIoProvider,
-        config,
-        timeConfig);
+        domainName, myNodeName, version, mockIoProvider, config, timeConfig);
   }
 
   std::shared_ptr<MockIoProvider> mockIoProvider{nullptr};

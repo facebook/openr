@@ -251,14 +251,13 @@ Spark::Spark(
     std::string const& myDomainName,
     std::string const& myNodeName,
     uint16_t const udpMcastPort,
-    std::chrono::milliseconds myHoldTime,
-    std::chrono::milliseconds myKeepAliveTime,
     std::chrono::milliseconds myHelloTime,
     std::chrono::milliseconds myHelloFastInitTime,
     std::chrono::milliseconds myHandshakeTime,
     std::chrono::milliseconds myHeartbeatTime,
-    std::chrono::milliseconds myNegotiateHoldTime,
+    std::chrono::milliseconds myHandshakeHoldTime,
     std::chrono::milliseconds myHeartbeatHoldTime,
+    std::chrono::milliseconds myGracefulRestartHoldTime,
     std::optional<int> maybeIpTos,
     bool enableV4,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
@@ -272,14 +271,13 @@ Spark::Spark(
     : myDomainName_(myDomainName),
       myNodeName_(myNodeName),
       udpMcastPort_(udpMcastPort),
-      myHoldTime_(myHoldTime),
-      myKeepAliveTime_(myKeepAliveTime),
       myHelloTime_(myHelloTime),
       myHelloFastInitTime_(myHelloFastInitTime),
       myHandshakeTime_(myHandshakeTime),
       myHeartbeatTime_(myHeartbeatTime),
-      myNegotiateHoldTime_(myNegotiateHoldTime),
+      myHandshakeHoldTime_(myHandshakeHoldTime),
       myHeartbeatHoldTime_(myHeartbeatHoldTime),
+      myGracefulRestartHoldTime_(myGracefulRestartHoldTime),
       enableV4_(enableV4),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kKvStoreCmdPort_(kvStoreCmdPort),
@@ -288,10 +286,10 @@ Spark::Spark(
       enableFloodOptimization_(enableFloodOptimization),
       ioProvider_(std::move(ioProvider)),
       config_(std::move(config)) {
-  CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
+  CHECK(myGracefulRestartHoldTime_ >= 3 * myHeartbeatTime_)
       << "Keep-alive-time must be less than hold-time.";
-  CHECK(myKeepAliveTime > std::chrono::milliseconds(0))
-      << "Keep-alive-time can't be 0";
+  CHECK(myHeartbeatTime_ > std::chrono::milliseconds(0))
+      << "heartbeatMsg interval can't be 0";
   CHECK(myHelloTime_ > std::chrono::milliseconds(0))
       << "helloMsg interval can't be 0";
   CHECK(myHelloFastInitTime_ > std::chrono::milliseconds(0))
@@ -878,7 +876,7 @@ Spark::sendHandshakeMsg(
   handshakeMsg.nodeName = myNodeName_;
   handshakeMsg.isAdjEstablished = isAdjEstablished;
   handshakeMsg.holdTime = myHeartbeatHoldTime_.count();
-  handshakeMsg.gracefulRestartTime = myHoldTime_.count();
+  handshakeMsg.gracefulRestartTime = myGracefulRestartHoldTime_.count();
   handshakeMsg.transportAddressV6 = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
@@ -1277,7 +1275,7 @@ Spark::processHelloMsg(
             remoteIfName, // remote interface on neighborNode
             getNewLabelForIface(ifName), // label for Segment Routing
             remoteSeqNum, // seqNum reported by neighborNode
-            myKeepAliveTime_,
+            myHeartbeatTime_, // stepDetector sample period
             std::move(rttChangeCb),
             area.value()));
 
@@ -1374,7 +1372,7 @@ Spark::processHelloMsg(
           // prevent to stucking in NEGOTIATE forever
           processNegotiateTimeout(ifName, neighborName);
         });
-    neighbor.negotiateHoldTimer->scheduleTimeout(myNegotiateHoldTime_);
+    neighbor.negotiateHoldTimer->scheduleTimeout(myHandshakeHoldTime_);
 
     // Neighbor is aware of us. Promote to NEGOTIATE state
     SparkNeighState oldState = neighbor.state;
@@ -1540,7 +1538,8 @@ Spark::processHandshakeMsg(
   neighbor.heartbeatHoldTime = std::max(
       std::chrono::milliseconds(handshakeMsg.holdTime), myHeartbeatHoldTime_);
   neighbor.gracefulRestartHoldTime = std::max(
-      std::chrono::milliseconds(handshakeMsg.gracefulRestartTime), myHoldTime_);
+      std::chrono::milliseconds(handshakeMsg.gracefulRestartTime),
+      myGracefulRestartHoldTime_);
 
   // v4 subnet validation if enabled
   if (enableV4_) {

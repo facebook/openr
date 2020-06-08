@@ -230,7 +230,8 @@ main(int argc, char** argv) {
   }
 
   // Hold time for advertising Prefix/Adj keys into KvStore
-  const std::chrono::seconds initialDumpTime{2 * FLAGS_spark_keepalive_time_s};
+  const auto& sparkConf = config->getSparkConfig();
+  const std::chrono::seconds initialDumpTime{2 * sparkConf.keepalive_time_s};
 
   // Set up the zmq context for this process.
   Context context;
@@ -463,7 +464,6 @@ main(int argc, char** argv) {
   }
 
   // Create Spark instance for neighbor discovery
-  const auto& sparkConf = config->getSparkConfig();
   startEventBase(
       allThreads,
       orderedEvbs,
@@ -473,9 +473,6 @@ main(int argc, char** argv) {
           config->getConfig().domain, // My domain
           config->getNodeName(), // myNodeName
           static_cast<uint16_t>(sparkConf.neighbor_discovery_port),
-          std::chrono::seconds(
-              sparkConf.graceful_restart_time_s), // hold_time_s
-          std::chrono::seconds(FLAGS_spark_keepalive_time_s),
           std::chrono::seconds(sparkConf.hello_time_s),
           std::chrono::milliseconds(sparkConf.fastinit_hello_time_ms),
           std::chrono::milliseconds(
@@ -486,6 +483,8 @@ main(int argc, char** argv) {
               sparkConf.keepalive_time_s), // spark2_negotiate_hold_time_s
           std::chrono::seconds(
               sparkConf.hold_time_s), // spark2_heartbeat_hold_time_s
+          std::chrono::seconds(
+              sparkConf.graceful_restart_time_s), // spark2_gr_hold_time_s
           maybeIpTos,
           config->isV4Enabled(),
           interfaceUpdatesQueue.getReader(),
@@ -577,7 +576,7 @@ main(int argc, char** argv) {
       std::make_unique<Fib>(
           config,
           config->getConfig().fib_port,
-          std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
+          std::chrono::seconds(3 * sparkConf.keepalive_time_s),
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
           monitorSubmitUrl,

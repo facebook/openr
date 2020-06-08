@@ -41,14 +41,13 @@ class OpenrWrapper {
       std::string nodeId,
       bool v4Enabled,
       std::chrono::seconds kvStoreDbSyncInterval,
-      std::chrono::milliseconds sparkHoldTime, /*TO BE DEPRECATED*/
-      std::chrono::milliseconds sparkKeepAliveTime, /*TO BE DEPRECATED*/
       std::chrono::milliseconds spark2HelloTime,
       std::chrono::milliseconds spark2FastInitHelloTime,
       std::chrono::milliseconds spark2HandshakeTime,
       std::chrono::milliseconds spark2HeartbeatTime,
       std::chrono::milliseconds spark2HandshakeHoldTime,
-      std::chrono::milliseconds spark2HeartbeatHoleTime,
+      std::chrono::milliseconds spark2HeartbeatHoldTime,
+      std::chrono::milliseconds spark2GRHoldTime,
       std::chrono::seconds linkMonitorAdjHoldTime,
       std::chrono::milliseconds linkFlapInitialBackoff,
       std::chrono::milliseconds linkFlapMaxBackoff,

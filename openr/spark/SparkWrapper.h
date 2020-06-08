@@ -27,23 +27,27 @@ struct SparkTimeConfig {
           std::chrono::milliseconds{0},
       std::chrono::milliseconds handshakeTime = std::chrono::milliseconds{0},
       std::chrono::milliseconds heartbeatTime = std::chrono::milliseconds{0},
-      std::chrono::milliseconds negotiateHoldTime =
+      std::chrono::milliseconds handshakeHoldTime =
           std::chrono::milliseconds{0},
       std::chrono::milliseconds heartbeatHoldTime =
+          std::chrono::milliseconds{0},
+      std::chrono::milliseconds gracefulRestartHoldTime =
           std::chrono::milliseconds{0})
       : myHelloTime(helloTime),
         myHelloFastInitTime(helloFastInitTime),
         myHandshakeTime(handshakeTime),
         myHeartbeatTime(heartbeatTime),
-        myNegotiateHoldTime(negotiateHoldTime),
-        myHeartbeatHoldTime(heartbeatHoldTime) {}
+        myHandshakeHoldTime(handshakeHoldTime),
+        myHeartbeatHoldTime(heartbeatHoldTime),
+        myGracefulRestartHoldTime(gracefulRestartHoldTime) {}
 
   std::chrono::milliseconds myHelloTime;
   std::chrono::milliseconds myHelloFastInitTime;
   std::chrono::milliseconds myHandshakeTime;
   std::chrono::milliseconds myHeartbeatTime;
-  std::chrono::milliseconds myNegotiateHoldTime;
+  std::chrono::milliseconds myHandshakeHoldTime;
   std::chrono::milliseconds myHeartbeatHoldTime;
+  std::chrono::milliseconds myGracefulRestartHoldTime;
 };
 
 /**
@@ -59,9 +63,6 @@ class SparkWrapper {
   SparkWrapper(
       std::string const& myDomainName,
       std::string const& myNodeName,
-      std::chrono::milliseconds myHoldTime,
-      std::chrono::milliseconds myKeepAliveTime,
-      bool enableV4,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<thrift::OpenrConfig> config,

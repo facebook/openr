@@ -14,9 +14,6 @@ namespace openr {
 SparkWrapper::SparkWrapper(
     std::string const& myDomainName,
     std::string const& myNodeName,
-    std::chrono::milliseconds myHoldTime,
-    std::chrono::milliseconds myKeepAliveTime,
-    bool enableV4,
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<thrift::OpenrConfig> config,
@@ -26,16 +23,15 @@ SparkWrapper::SparkWrapper(
       myDomainName,
       myNodeName,
       static_cast<uint16_t>(6666),
-      myHoldTime,
-      myKeepAliveTime,
       timeConfig.myHelloTime, // spark2_hello_time
       timeConfig.myHelloFastInitTime, // spark2_hello_fast_init_time
       timeConfig.myHandshakeTime, // spark2_handshake_time
       timeConfig.myHeartbeatTime, // spark2_heartbeat_time
-      timeConfig.myNegotiateHoldTime, // spark2_negotiate_hold_time
+      timeConfig.myHandshakeHoldTime, // spark2_handshale_hold_time
       timeConfig.myHeartbeatHoldTime, // spark2_heartbeat_hold_time
+      timeConfig.myGracefulRestartHoldTime, // spark2_gr_hold_time
       std::nullopt /* ip-tos */,
-      enableV4,
+      true /* enableV4 */,
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       KvStoreCmdPort{10002},
