@@ -121,15 +121,12 @@ class Spark2Fixture : public testing::Test {
       std::string const& domainName,
       std::string const& myNodeName,
       uint32_t spark2Id,
-      bool enableSpark2 = true,
-      bool increaseHelloInterval = true,
       std::shared_ptr<thrift::OpenrConfig> config = nullptr,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       std::chrono::milliseconds grHoldTime = kGRHoldTime,
       // TODO: remove unnecessary argument list when old spark is deprecated
       std::chrono::milliseconds keepAliveTime = kFastInitHelloTime,
-      std::chrono::milliseconds fastInitKeepAliveTime = kFastInitHelloTime,
       SparkTimeConfig timeConfig = SparkTimeConfig(
           kHelloTime,
           kFastInitHelloTime,
@@ -142,13 +139,10 @@ class Spark2Fixture : public testing::Test {
         myNodeName,
         grHoldTime,
         keepAliveTime,
-        fastInitKeepAliveTime,
         true, /* enableV4 */
         version,
         mockIoProvider,
         config,
-        enableSpark2,
-        increaseHelloInterval,
         timeConfig);
   }
 
@@ -479,8 +473,6 @@ TEST_F(Spark2Fixture, VersionTest) {
       kDomainName,
       nodeName1,
       1,
-      true,
-      true,
       nullptr,
       std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion));
@@ -488,8 +480,6 @@ TEST_F(Spark2Fixture, VersionTest) {
       kDomainName,
       nodeName2,
       2,
-      true,
-      true,
       nullptr,
       std::make_pair(
           Constants::kOpenrSupportedVersion,
@@ -510,8 +500,6 @@ TEST_F(Spark2Fixture, VersionTest) {
       kDomainName,
       nodeName3,
       3,
-      true,
-      true,
       nullptr,
       std::make_pair(
           Constants::kOpenrSupportedVersion - 1,
@@ -1079,8 +1067,8 @@ TEST_F(Spark2Fixture, AreaMatch) {
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
-  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1139,8 +1127,8 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
-  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1194,8 +1182,8 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
-  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1248,8 +1236,8 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
-  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, nullptr);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+  auto node1 = createSpark(kDomainName, nodeName1, 1, nullptr);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1316,8 +1304,8 @@ TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
-  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1343,7 +1331,7 @@ TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
 
   // add third instance
   std::string nodeName3 = "ssw003";
-  auto node3 = createSpark(kDomainName, nodeName3, 3, true, true, config3);
+  auto node3 = createSpark(kDomainName, nodeName3, 3, config3);
   EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 
   LOG(INFO) << nodeName3 << " being started...";

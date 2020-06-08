@@ -42,7 +42,7 @@ enum class PacketValidationResult {
 };
 
 //
-// Define SparkNeighState for Spark2 usage. This is used to define
+// Define SparkNeighState for Spark usage. This is used to define
 // transition state for neighbors as part of the Finite State Machine.
 //
 enum class SparkNeighState {
@@ -83,7 +83,6 @@ class Spark final : public OpenrEventBase {
       uint16_t const udpMcastPort,
       std::chrono::milliseconds myHoldTime,
       std::chrono::milliseconds myKeepAliveTime,
-      std::chrono::milliseconds fastInitKeepAliveTime,
       std::chrono::milliseconds myHelloTime,
       std::chrono::milliseconds myHelloFastInitTime,
       std::chrono::milliseconds myHandshakeTime,
@@ -99,8 +98,6 @@ class Spark final : public OpenrEventBase {
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
       bool enableFloodOptimization = false,
-      bool enableSpark2 = false,
-      bool increaseHelloInterval = false,
       std::shared_ptr<thrift::OpenrConfig> config = nullptr);
 
   ~Spark() override = default;
@@ -164,17 +161,17 @@ class Spark final : public OpenrEventBase {
   // the neighbor could be added as adjacent peer.
   void processPacket();
 
-  // process helloMsg in Spark2 context
+  // process helloMsg in Spark context
   void processHelloMsg(
       thrift::SparkHelloMsg const& helloMsg,
       std::string const& ifName,
       std::chrono::microseconds const& myRecvTimeInUs);
 
-  // process heartbeatMsg in Spark2 context
+  // process heartbeatMsg in Spark context
   void processHeartbeatMsg(
       thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName);
 
-  // process handshakeMsg to update spark2Neighbors_ db
+  // process handshakeMsg to update sparkNeighbors_ db
   void processHandshakeMsg(
       thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName);
 
@@ -275,10 +272,10 @@ class Spark final : public OpenrEventBase {
       std::string const& ifName);
 
   //
-  // Spark2 related function call
+  // Spark related function call
   //
-  struct Spark2Neighbor {
-    Spark2Neighbor(
+  struct SparkNeighbor {
+    SparkNeighbor(
         std::string const& domainName,
         std::string const& nodeName,
         std::string const& remoteIfName,
@@ -364,8 +361,8 @@ class Spark final : public OpenrEventBase {
 
   std::unordered_map<
       std::string /* ifName */,
-      std::unordered_map<std::string /* neighborName */, Spark2Neighbor>>
-      spark2Neighbors_{};
+      std::unordered_map<std::string /* neighborName */, SparkNeighbor>>
+      sparkNeighbors_{};
 
   // util function to log Spark neighbor state transition
   void logStateTransition(
@@ -376,17 +373,17 @@ class Spark final : public OpenrEventBase {
 
   // util function to check SparkNeighState
   void checkNeighborState(
-      Spark2Neighbor const& neighbor, SparkNeighState const& state);
+      SparkNeighbor const& neighbor, SparkNeighState const& state);
 
   // wrapper call to declare neighborship down
   void neighborUpWrapper(
-      Spark2Neighbor& neighbor,
+      SparkNeighbor& neighbor,
       std::string const& ifName,
       std::string const& neighborName);
 
   // wrapper call to declare neighborship down
   void neighborDownWrapper(
-      Spark2Neighbor const& neighbor,
+      SparkNeighbor const& neighbor,
       std::string const& ifName,
       std::string const& neighborName);
 
@@ -411,7 +408,7 @@ class Spark final : public OpenrEventBase {
   void processGRMsg(
       std::string const& neighborName,
       std::string const& ifName,
-      Spark2Neighbor& neighbor);
+      SparkNeighbor& neighbor);
 
   // process timeout for heartbeat
   void processHeartbeatTimeout(
@@ -453,26 +450,22 @@ class Spark final : public OpenrEventBase {
   // and greater than 0
   const std::chrono::milliseconds myKeepAliveTime_{0};
 
-  // hello message exchange interval during fast init state, much faster than
-  // usual keep alive interval
-  const std::chrono::milliseconds fastInitKeepAliveTime_{0};
-
-  // Spark2 hello msg sendout interval
+  // Spark hello msg sendout interval
   const std::chrono::milliseconds myHelloTime_{0};
 
-  // Spark2 hello msg sendout interval under fast-init case
+  // Spark hello msg sendout interval under fast-init case
   const std::chrono::milliseconds myHelloFastInitTime_{0};
 
-  // Spark2 handshake msg sendout interval
+  // Spark handshake msg sendout interval
   const std::chrono::milliseconds myHandshakeTime_{0};
 
-  // Spark2 heartbeat msg sendout interval
+  // Spark heartbeat msg sendout interval
   const std::chrono::milliseconds myHeartbeatTime_{0};
 
-  // Spark2 negotiate stage hold time
+  // Spark negotiate stage hold time
   const std::chrono::milliseconds myNegotiateHoldTime_{0};
 
-  // Spark2 heartbeat msg hold time
+  // Spark heartbeat msg hold time
   const std::chrono::milliseconds myHeartbeatHoldTime_{0};
 
   // This flag indicates that we will also exchange v4 transportAddress in
@@ -502,12 +495,6 @@ class Spark final : public OpenrEventBase {
 
   // enable dual or not
   const bool enableFloodOptimization_{false};
-
-  // enable Spark2 or not
-  const bool enableSpark2_{false};
-
-  // increase Hello interval in Spark2
-  const bool increaseHelloInterval_{false};
 
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};

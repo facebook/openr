@@ -351,6 +351,15 @@ to establish neighbor adjacency and monitor neighbor aliveness.
 ENABLE_SPARK2=0
 ```
 
+#### SPARK2_INCREASE_HELLO_INTERVAL
+
+Flag to determine whether node will send out hello in low frequency.
+This flag is for backward compatibility concern.
+
+```
+SPARK2_INCREASE_HELLO_INTERVAL=0
+```
+
 #### SPARK2_HELLO_TIME_S
 
 How often to send spark2 helloMsg to neighbors. Default value is 20 seconds.
@@ -403,15 +412,6 @@ within this time.
 
 ```
 SPARK2_NEGOTIATE_HOLD_TIME_S=5
-```
-
-#### SPARK2_INCREASE_HELLO_INTERVAL
-
-Flag to determine whether node will send out hello in low frequency.
-This flag is for backward compatibility concern.
-
-```
-SPARK2_INCREASE_HELLO_INTERVAL=0
 ```
 
 #### ENABLE_NETLINK_FIB_HANDLER

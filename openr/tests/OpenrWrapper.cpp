@@ -23,7 +23,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::seconds kvStoreDbSyncInterval,
     std::chrono::milliseconds sparkHoldTime, /*TO BE DEPRECATED*/
     std::chrono::milliseconds sparkKeepAliveTime, /*TO BE DEPRECATED*/
-    std::chrono::milliseconds sparkFastInitKeepAliveTime, /*TO BE DEPRECATED*/
     std::chrono::milliseconds spark2HelloTime,
     std::chrono::milliseconds spark2FastInitHelloTime,
     std::chrono::milliseconds spark2HandshakeTime,
@@ -165,7 +164,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       static_cast<uint16_t>(6666), // multicast port
       sparkHoldTime, // hold time ms
       sparkKeepAliveTime, // keep alive ms
-      sparkFastInitKeepAliveTime, // fastInitKeepAliveTime ms
       spark2HelloTime,
       spark2FastInitHelloTime,
       spark2HandshakeTime,

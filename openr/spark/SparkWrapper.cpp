@@ -16,13 +16,10 @@ SparkWrapper::SparkWrapper(
     std::string const& myNodeName,
     std::chrono::milliseconds myHoldTime,
     std::chrono::milliseconds myKeepAliveTime,
-    std::chrono::milliseconds myFastInitKeepAliveTime,
     bool enableV4,
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<thrift::OpenrConfig> config,
-    bool enableSpark2,
-    bool increaseHelloInterval,
     SparkTimeConfig timeConfig)
     : myNodeName_(myNodeName) {
   spark_ = std::make_shared<Spark>(
@@ -31,7 +28,6 @@ SparkWrapper::SparkWrapper(
       static_cast<uint16_t>(6666),
       myHoldTime,
       myKeepAliveTime,
-      myFastInitKeepAliveTime, // fastInitKeepAliveTime
       timeConfig.myHelloTime, // spark2_hello_time
       timeConfig.myHelloFastInitTime, // spark2_hello_fast_init_time
       timeConfig.myHandshakeTime, // spark2_handshake_time
@@ -46,9 +42,7 @@ SparkWrapper::SparkWrapper(
       OpenrCtrlThriftPort{2018},
       version,
       std::move(ioProvider),
-      true,
-      enableSpark2,
-      increaseHelloInterval,
+      true /* enableFloodOptimization */,
       std::move(config));
 
   // start spark

@@ -61,13 +61,10 @@ class SparkWrapper {
       std::string const& myNodeName,
       std::chrono::milliseconds myHoldTime,
       std::chrono::milliseconds myKeepAliveTime,
-      std::chrono::milliseconds myFastInitKeepAliveTime,
       bool enableV4,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<thrift::OpenrConfig> config,
-      bool enableSpark2,
-      bool increaseHelloInterval,
       SparkTimeConfig timeConfig);
 
   ~SparkWrapper();

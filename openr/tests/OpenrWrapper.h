@@ -43,7 +43,6 @@ class OpenrWrapper {
       std::chrono::seconds kvStoreDbSyncInterval,
       std::chrono::milliseconds sparkHoldTime, /*TO BE DEPRECATED*/
       std::chrono::milliseconds sparkKeepAliveTime, /*TO BE DEPRECATED*/
-      std::chrono::milliseconds sparkFastInitKeepAliveTime, /*TO BE DEPRECATED*/
       std::chrono::milliseconds spark2HelloTime,
       std::chrono::milliseconds spark2FastInitHelloTime,
       std::chrono::milliseconds spark2HandshakeTime,

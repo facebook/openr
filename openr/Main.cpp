@@ -476,7 +476,6 @@ main(int argc, char** argv) {
           std::chrono::seconds(
               sparkConf.graceful_restart_time_s), // hold_time_s
           std::chrono::seconds(FLAGS_spark_keepalive_time_s),
-          std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
           std::chrono::seconds(sparkConf.hello_time_s),
           std::chrono::milliseconds(sparkConf.fastinit_hello_time_ms),
           std::chrono::milliseconds(
@@ -496,9 +495,7 @@ main(int argc, char** argv) {
           std::make_pair(
               Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
           std::make_shared<IoProvider>(),
-          config->isFloodOptimizationEnabled(),
-          FLAGS_enable_spark2,
-          FLAGS_spark2_increase_hello_interval));
+          config->isFloodOptimizationEnabled()));
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.
