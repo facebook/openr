@@ -204,11 +204,6 @@ class SpfSolver::SpfSolverImpl {
   Metric findMinDistToNeighbor(
       const std::string& myNodeName, const std::string& neighborName) const;
 
-  // returns the hop count from myNodeName_ to nodeName
-  Metric getMyHopsToNode(const std::string& nodeName);
-  // returns the hop count of the furthest node connected to nodeName
-  Metric getMaxHopsToNode(const std::string& nodeName);
-
   LinkState linkState_;
 
   PrefixState prefixState_;
@@ -240,8 +235,10 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb) {
   LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
   if (enableOrderedFib_) {
-    holdUpTtl = getMyHopsToNode(newAdjacencyDb.thisNodeName);
-    holdDownTtl = getMaxHopsToNode(newAdjacencyDb.thisNodeName) - holdUpTtl;
+    holdUpTtl =
+        linkState_.getHopsFromAToB(myNodeName_, newAdjacencyDb.thisNodeName);
+    holdDownTtl =
+        linkState_.getMaxHopsToNode(newAdjacencyDb.thisNodeName) - holdUpTtl;
   }
   fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
   return linkState_.updateAdjacencyDatabase(
@@ -262,27 +259,6 @@ SpfSolver::SpfSolverImpl::pushRoutesDeltaUpdates(
 bool
 SpfSolver::SpfSolverImpl::hasHolds() const {
   return linkState_.hasHolds();
-}
-
-Metric
-SpfSolver::SpfSolverImpl::getMyHopsToNode(const std::string& nodeName) {
-  if (myNodeName_ == nodeName) {
-    return 0;
-  }
-  auto const& spfResult = linkState_.getSpfResult(myNodeName_, false);
-  if (spfResult.count(nodeName)) {
-    return spfResult.at(nodeName).metric();
-  }
-  return getMaxHopsToNode(nodeName);
-}
-
-Metric
-SpfSolver::SpfSolverImpl::getMaxHopsToNode(const std::string& nodeName) {
-  Metric max = 0;
-  for (auto const& pathsFromNode : linkState_.getSpfResult(nodeName, false)) {
-    max = std::max(max, pathsFromNode.second.metric());
-  }
-  return max;
 }
 
 bool

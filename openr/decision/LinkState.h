@@ -299,6 +299,13 @@ class LinkState {
   // return true if this has caused any change in graph
   bool deleteAdjacencyDatabase(const std::string& nodeName);
 
+  // returns hop count from a to b,
+  // if nodes b is not reachable from a, returns getMaxHopsToNode(b)
+  LinkStateMetric getHopsFromAToB(std::string const& a, std::string const& b);
+
+  // returns hop count to furthest away node connected to nodeName
+  LinkStateMetric getMaxHopsToNode(const std::string& nodeName);
+
   // const public methods
 
   bool

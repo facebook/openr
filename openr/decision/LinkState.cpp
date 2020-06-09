@@ -725,6 +725,27 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
   return true;
 }
 
+LinkStateMetric
+LinkState::getHopsFromAToB(std::string const& a, std::string const& b) {
+  if (a == b) {
+    return 0;
+  }
+  auto const& spfResult = getSpfResult(a, false);
+  if (spfResult.count(b)) {
+    return spfResult.at(b).metric();
+  }
+  return getMaxHopsToNode(b);
+}
+
+LinkStateMetric
+LinkState::getMaxHopsToNode(const std::string& nodeName) {
+  LinkStateMetric max = 0;
+  for (auto const& pathsFromNode : getSpfResult(nodeName, false)) {
+    max = std::max(max, pathsFromNode.second.metric());
+  }
+  return max;
+}
+
 std::vector<LinkState::Path> const&
 LinkState::getKthPaths(
     const std::string& src, const std::string& dest, size_t k) {
