@@ -54,7 +54,7 @@ class ConfigDryRunCli(object):
     @click.argument("file")
     @click.pass_obj
     def dryrun(cli_opts, file):  # noqa: B902
-        """ Show openr running config """
+        """ Dryrun openr config, output parsed config upon success"""
 
         config.ConfigDryRunCmd(cli_opts).run(file)
 
