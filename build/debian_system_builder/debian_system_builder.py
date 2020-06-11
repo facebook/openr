@@ -178,7 +178,7 @@ def ccache_dir():
 def gcc_version():
     gcc_version = os.environ.get("GCC_VERSION")
     if not gcc_version:
-        gcc_version = "5"
+        gcc_version = "7"
     return gcc_version
 
 
