@@ -267,7 +267,7 @@ Spark::Spark(
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
     bool enableFloodOptimization,
-    std::shared_ptr<thrift::OpenrConfig> config)
+    std::shared_ptr<const Config> config)
     : myDomainName_(myDomainName),
       myNodeName_(myNodeName),
       udpMcastPort_(udpMcastPort),
@@ -285,7 +285,7 @@ Spark::Spark(
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
       enableFloodOptimization_(enableFloodOptimization),
       ioProvider_(std::move(ioProvider)),
-      config_(std::move(config)) {
+      config_(config) {
   CHECK(myGracefulRestartHoldTime_ >= 3 * myHeartbeatTime_)
       << "Keep-alive-time must be less than hold-time.";
   CHECK(myHeartbeatTime_ > std::chrono::milliseconds(0))
@@ -573,7 +573,7 @@ Spark::loadConfig() {
     return;
   }
 
-  for (const auto& areaConfig : config_->areas) {
+  for (const auto& areaConfig : config_->getAreas()) {
     addAreaRegex(
         areaConfig.area_id,
         areaConfig.neighbor_regexes,
@@ -2115,7 +2115,7 @@ Spark::getNeighborArea(
     if (neighborRegex and interfaceRegex) {
       if (matchRegexSet(peerNodeName, neighborRegex) and
           matchRegexSet(localIfName, interfaceRegex)) {
-        VLOG(4) << folly::sformat(
+        VLOG(1) << folly::sformat(
             "Area: {} found for neighbor: {}, interface: {}",
             areaId,
             peerNodeName,
@@ -2123,11 +2123,11 @@ Spark::getNeighborArea(
         candidateAreas.emplace_back(areaId);
       }
     } else if (neighborRegex and matchRegexSet(peerNodeName, neighborRegex)) {
-      VLOG(4) << folly::sformat(
+      VLOG(1) << folly::sformat(
           "Area: {} found for neighbor: {}", areaId, peerNodeName);
       candidateAreas.emplace_back(areaId);
     } else if (interfaceRegex and matchRegexSet(localIfName, interfaceRegex)) {
-      VLOG(4) << folly::sformat(
+      VLOG(1) << folly::sformat(
           "Area: {} found for interface: {}", areaId, localIfName);
       candidateAreas.emplace_back(areaId);
     }

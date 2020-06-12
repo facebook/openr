@@ -8,6 +8,7 @@
 #pragma once
 
 #include <openr/common/Constants.h>
+#include <openr/config/Config.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/Spark.h>
 
@@ -65,7 +66,7 @@ class SparkWrapper {
       std::string const& myNodeName,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
-      std::shared_ptr<thrift::OpenrConfig> config,
+      std::shared_ptr<const Config> config,
       SparkTimeConfig timeConfig);
 
   ~SparkWrapper();

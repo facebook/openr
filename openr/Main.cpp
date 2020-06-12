@@ -494,7 +494,8 @@ main(int argc, char** argv) {
           std::make_pair(
               Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
           std::make_shared<IoProvider>(),
-          config->isFloodOptimizationEnabled()));
+          config->isFloodOptimizationEnabled(),
+          config));
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.

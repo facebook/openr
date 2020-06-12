@@ -79,6 +79,11 @@ class Config {
     return areaIds_;
   }
 
+  const std::vector<thrift::AreaConfig>&
+  getAreas() const {
+    return config_.areas;
+  }
+
   //
   // spark
   //

@@ -25,6 +25,8 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/spark/IoProvider.h>
 #include <openr/spark/SparkWrapper.h>
 #include <openr/spark/tests/MockIoProvider.h>
@@ -121,7 +123,7 @@ class Spark2Fixture : public testing::Test {
       std::string const& domainName,
       std::string const& myNodeName,
       uint32_t spark2Id,
-      std::shared_ptr<thrift::OpenrConfig> config = nullptr,
+      std::shared_ptr<const Config> config = nullptr,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       SparkTimeConfig timeConfig = SparkTimeConfig(
@@ -1036,14 +1038,20 @@ TEST_F(Spark2Fixture, AreaMatch) {
   auto areaConfig21 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
   auto areaConfig22 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
 
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+
   // RSW: { 1 -> "RSW.*", 2 -> "FSW.*"}
   // FSW: { 1 -> "FSW.*", 2 -> "RSW.*"}
-  auto config1 = std::make_shared<thrift::OpenrConfig>();
-  auto config2 = std::make_shared<thrift::OpenrConfig>();
-  config1->areas.emplace_back(areaConfig11);
-  config1->areas.emplace_back(areaConfig12);
-  config2->areas.emplace_back(areaConfig21);
-  config2->areas.emplace_back(areaConfig22);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+  tConfig1.areas.emplace_back(areaConfig11);
+  tConfig1.areas.emplace_back(areaConfig12);
+  tConfig2.areas.emplace_back(areaConfig21);
+  tConfig2.areas.emplace_back(areaConfig22);
+
+  auto config1 = std::make_shared<Config>(tConfig1);
+  auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
@@ -1055,8 +1063,6 @@ TEST_F(Spark2Fixture, AreaMatch) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  std::string nodeName1 = "rsw001";
-  std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
@@ -1100,10 +1106,17 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
   auto areaConfig1 = SparkWrapper::createAreaConfig(area1, {"RSW.*"}, {".*"});
   auto areaConfig2 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
 
-  auto config1 = std::make_shared<thrift::OpenrConfig>();
-  auto config2 = std::make_shared<thrift::OpenrConfig>();
-  config1->areas.emplace_back(areaConfig1);
-  config2->areas.emplace_back(areaConfig2);
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+
+  tConfig1.areas.emplace_back(areaConfig1);
+  tConfig2.areas.emplace_back(areaConfig2);
+
+  auto config1 = std::make_shared<Config>(tConfig1);
+  auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
@@ -1115,8 +1128,6 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  std::string nodeName1 = "rsw001";
-  std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
@@ -1155,10 +1166,17 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
   auto areaConfig1 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
   auto areaConfig2 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
 
-  auto config1 = std::make_shared<thrift::OpenrConfig>();
-  auto config2 = std::make_shared<thrift::OpenrConfig>();
-  config1->areas.emplace_back(areaConfig1);
-  config2->areas.emplace_back(areaConfig2);
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+
+  tConfig1.areas.emplace_back(areaConfig1);
+  tConfig2.areas.emplace_back(areaConfig2);
+
+  auto config1 = std::make_shared<Config>(tConfig1);
+  auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
@@ -1170,8 +1188,6 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  std::string nodeName1 = "rsw001";
-  std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
@@ -1211,8 +1227,14 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
   //  with areaConfig. Make sure AREA negotiation will go through and they can
   //  form adj inside `defaultArea`.
   auto areaConfig2 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
-  auto config2 = std::make_shared<thrift::OpenrConfig>();
-  config2->areas.emplace_back(areaConfig2);
+
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+  tConfig2.areas.emplace_back(areaConfig2);
+
+  auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
@@ -1224,8 +1246,6 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  std::string nodeName1 = "rsw001";
-  std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, nullptr);
   auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
@@ -1271,14 +1291,23 @@ TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
   auto areaConfig31 = SparkWrapper::createAreaConfig(area1, {"fsw.*"}, {".*"});
   auto areaConfig32 = SparkWrapper::createAreaConfig(area2, {"rsw.*"}, {".*"});
 
-  auto config1 = std::make_shared<thrift::OpenrConfig>();
-  auto config2 = std::make_shared<thrift::OpenrConfig>();
-  auto config3 = std::make_shared<thrift::OpenrConfig>();
-  config1->areas.emplace_back(areaConfig11);
-  config1->areas.emplace_back(areaConfig12);
-  config2->areas.emplace_back(areaConfig2);
-  config3->areas.emplace_back(areaConfig31);
-  config3->areas.emplace_back(areaConfig32);
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+  std::string nodeName3 = "ssw003";
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+  auto tConfig3 = getBasicOpenrConfig(nodeName3);
+
+  tConfig1.areas.emplace_back(areaConfig11);
+  tConfig1.areas.emplace_back(areaConfig12);
+  tConfig2.areas.emplace_back(areaConfig2);
+  tConfig3.areas.emplace_back(areaConfig31);
+  tConfig3.areas.emplace_back(areaConfig32);
+
+  auto config1 = std::make_shared<Config>(tConfig1);
+  auto config2 = std::make_shared<Config>(tConfig2);
+  auto config3 = std::make_shared<Config>(tConfig3);
 
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex(
@@ -1292,8 +1321,6 @@ TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  std::string nodeName1 = "rsw001";
-  std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
@@ -1320,7 +1347,7 @@ TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
   }
 
   // add third instance
-  std::string nodeName3 = "ssw003";
+
   auto node3 = createSpark(kDomainName, nodeName3, 3, config3);
   EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 

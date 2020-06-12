@@ -58,8 +58,8 @@ class GflagConfig final {
       config.areas.emplace_back(
           apache::thrift::FRAGILE,
           area,
-          std::vector<std::string>{},
-          std::vector<std::string>{});
+          std::vector<std::string>{".*"},
+          std::vector<std::string>{".*"});
     }
 
     config.listen_addr = FLAGS_listen_addr;

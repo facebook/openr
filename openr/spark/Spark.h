@@ -24,6 +24,7 @@
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -97,7 +98,7 @@ class Spark final : public OpenrEventBase {
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
       bool enableFloodOptimization = false,
-      std::shared_ptr<thrift::OpenrConfig> config = nullptr);
+      std::shared_ptr<const Config> config = nullptr);
 
   ~Spark() override = default;
 
@@ -529,7 +530,7 @@ class Spark final : public OpenrEventBase {
       timeSeriesVector_{};
 
   // global openr config
-  std::shared_ptr<const thrift::OpenrConfig> config_{nullptr};
+  std::shared_ptr<const Config> config_{nullptr};
 
   // areaId -> node name regex parsed from areaConfig
   std::vector<std::tuple<

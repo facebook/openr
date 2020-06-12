@@ -16,7 +16,7 @@ SparkWrapper::SparkWrapper(
     std::string const& myNodeName,
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
-    std::shared_ptr<thrift::OpenrConfig> config,
+    std::shared_ptr<const Config> config,
     SparkTimeConfig timeConfig)
     : myNodeName_(myNodeName) {
   spark_ = std::make_shared<Spark>(
