@@ -954,15 +954,19 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
 
 TEST_F(FibTestFixture, longestPrefixMatchTest) {
   std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
+  const auto& defaultRoute = toIpPrefix("::/0");
   const auto& dbPrefix1 = toIpPrefix("192.168.0.0/16");
   const auto& dbPrefix2 = toIpPrefix("192.168.0.0/20");
   const auto& dbPrefix3 = toIpPrefix("192.168.0.0/24");
   const auto& dbPrefix4 = toIpPrefix("192.168.20.16/28");
+  unicastRoutes[defaultRoute] = createUnicastRoute(defaultRoute, {});
   unicastRoutes[dbPrefix1] = createUnicastRoute(dbPrefix1, {});
   unicastRoutes[dbPrefix2] = createUnicastRoute(dbPrefix2, {});
   unicastRoutes[dbPrefix3] = createUnicastRoute(dbPrefix3, {});
   unicastRoutes[dbPrefix4] = createUnicastRoute(dbPrefix4, {});
 
+  const auto inputdefaultRoute =
+      folly::IPAddress::tryCreateNetwork("::/0").value();
   const auto inputPrefix1 =
       folly::IPAddress::tryCreateNetwork("192.168.20.19").value();
   const auto inputPrefix2 =
@@ -977,6 +981,12 @@ TEST_F(FibTestFixture, longestPrefixMatchTest) {
       folly::IPAddress::tryCreateNetwork("192.168.0.0/22").value();
   const auto inputPrefix7 =
       folly::IPAddress::tryCreateNetwork("192.168.0.0/26").value();
+
+  // default route matching
+  const auto& result =
+      Fib::longestPrefixMatch(inputdefaultRoute, unicastRoutes);
+  EXPECT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), defaultRoute);
 
   // input 192.168.20.19 matched 192.168.20.16/28
   const auto& result1 = Fib::longestPrefixMatch(inputPrefix1, unicastRoutes);

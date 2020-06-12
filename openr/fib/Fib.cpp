@@ -150,7 +150,7 @@ Fib::longestPrefixMatch(
     const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
         unicastRoutes) {
   std::optional<thrift::IpPrefix> matchedPrefix;
-  uint8_t maxMask = 0;
+  int maxMask = -1;
   const auto& inputIP = inputPrefix.first;
   const auto& inputMask = inputPrefix.second;
 
