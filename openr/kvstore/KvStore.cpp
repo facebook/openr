@@ -485,6 +485,13 @@ KvStore::processRequestMsg(
   if (thriftRequest.area_ref().has_value()) {
     area = thriftRequest.area_ref().value();
   }
+  // TODO: migration workaround => if me/peer does is using default area,
+  // always honor my config, ignore peer's config.
+  if (areas_.size() == 1 and
+      (areas_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
+       area == openr::thrift::KvStore_constants::kDefaultArea())) {
+    area = *areas_.begin();
+  }
 
   VLOG(2) << "Request received for area " << area;
   try {

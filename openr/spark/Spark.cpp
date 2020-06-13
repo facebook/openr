@@ -1591,9 +1591,8 @@ Spark::processHandshakeMsg(
     }
   } else {
     // Backward compatibility:
-    // In case it doesn't support AREA negotiation.
-    // Override neighbor area deduced previously from helloMsg to defaultArea.
-    neighbor.area = thrift::KvStore_constants::kDefaultArea();
+    // In case peer/me doesn't support AREA negotiation.
+    // Use local configuration: nerighbor.area. Ignore handshakeMsg.area msg.
   }
 
   // state transition

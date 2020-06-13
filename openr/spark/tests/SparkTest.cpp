@@ -1224,8 +1224,9 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
   //  fsw002: { 2 -> "RSW.*"}
   //
   //  rsw001 doesn't know anything about AREA, whereas fsw002 is configured
-  //  with areaConfig. Make sure AREA negotiation will go through and they can
-  //  form adj inside `defaultArea`.
+  //  with areaConfig. Make sure AREA negotiation will go through
+  //  rsw001 form adj inside `defaultArea`.
+  //  fsw002 form adj inside `2`
   auto areaConfig2 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
@@ -1264,7 +1265,7 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
     auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
     EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
-    EXPECT_EQ(event2.value().area, defaultArea);
+    EXPECT_EQ(event2.value().area, area2);
   }
 }
 
