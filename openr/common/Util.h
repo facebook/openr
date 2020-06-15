@@ -488,7 +488,8 @@ thrift::NextHopThrift createNextHop(
     std::optional<std::string> ifName = std::nullopt,
     int32_t metric = 0,
     std::optional<thrift::MplsAction> maybeMplsAction = std::nullopt,
-    bool useNonShortestRoute = false);
+    bool useNonShortestRoute = false,
+    std::optional<std::string> maybeArea = std::nullopt);
 
 thrift::MplsAction createMplsAction(
     thrift::MplsActionCode const mplsActionCode,

@@ -297,6 +297,7 @@ add_library(openrlib
   openr/decision/Decision.cpp
   openr/decision/LinkState.cpp
   openr/decision/PrefixState.cpp
+  openr/decision/RibPolicy.cpp
   openr/dual/Dual.cpp
   openr/fib/Fib.cpp
   openr/kvstore/KvStoreClientInternal.cpp
@@ -658,6 +659,12 @@ if(BUILD_TESTS)
   add_openr_test(PrefixStateTest prefix_state_test
     SOURCES
       openr/decision/tests/PrefixStateTest.cpp
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_openr_test(RibPolicyTest rib_policy_test
+    SOURCES
+      openr/decision/tests/RibPolicyTest.cpp
     DESTINATION sbin/tests/openr/decision
   )
 

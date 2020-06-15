@@ -888,13 +888,15 @@ createNextHop(
     std::optional<std::string> ifName,
     int32_t metric,
     std::optional<thrift::MplsAction> maybeMplsAction,
-    bool useNonShortestRoute) {
+    bool useNonShortestRoute,
+    std::optional<std::string> maybeArea) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
   fromStdOptional(nextHop.address.ifName_ref(), std::move(ifName));
   nextHop.metric = metric;
   fromStdOptional(nextHop.mplsAction_ref(), maybeMplsAction);
   nextHop.useNonShortestRoute = useNonShortestRoute;
+  fromStdOptional(nextHop.area_ref(), maybeArea);
   return nextHop;
 }
 
