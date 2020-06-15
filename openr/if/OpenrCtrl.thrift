@@ -31,6 +31,95 @@ struct StaticRoutes {
   1: map<i32,list<Network.NextHopThrift>> mplsRoutes;
 }
 
+//
+// RIB Policy related data structures
+//
+
+/**
+ * Matcher selects the routes. As of now supports selecting specified routes,
+ * but can be expanded to select route by tags as well.
+ *
+ * - Atleast one criteria must be specified for selection
+ * - `AND` operator is assumed for selecting on multiple attributes.
+ * - setting criteria to none will skip the matching
+ */
+struct RibRouteMatcher {
+  1: optional list<Network.IpPrefix> prefixes;
+
+  // Select route based on the tag. Specifying multiple tag match on any
+  // TODO: Enable this when `PrefixEntry` have tag information available
+  // 2: optoinal list<string> tags;
+}
+
+/**
+ * `set weight <>` action for RibRoute
+ */
+struct RibRouteActionWeight {
+  // Default weight for the next-hops with no-area. Usually next-hops from
+  // static routes (external next-hops)
+  2: i32 default_weight;
+
+  // Area name to weight mapping (internal next-hops)
+  3: map<string, i32> area_to_weight;
+}
+
+/**
+ * Captures information for route transform. So far supports only weight
+ * manipulation, but in future we can add more `set_<>` action
+ * e.g. `set_admin_distance`
+ *
+ * - Atleast one `set_` statement must be specified
+ * - All provided `set_` statements are applied at once
+ */
+struct RibRouteAction {
+  1: optional RibRouteActionWeight set_weight;
+}
+
+/**
+ * RibPolicyStatement express a single `match` and `action`
+ * based on forseable need for route manipulation. However more sophisticated
+ * matching and transformation can be specified to modify multiple route
+ * attributes in granular way.
+ */
+struct RibPolicyStatement {
+  // Just for reference and understanding. Code doesn't use it in any way.
+  1: string name;
+
+  // Select routes to be transformed
+  2: RibRouteMatcher matcher;
+
+  // Transform operation for a single route object
+  3: RibRouteAction action;
+}
+
+/**
+ * Represents a RibPolicy. The intent of RibPolicy is to perform the route
+ * modifications on computed routes before programming. The technique provides
+ * ability to influence the forwarding decision of distributed computation with
+ * central knowledge (e.g. load-aware weight balancing among the areas) for
+ * non-oblivious routing scheme.
+ *
+ * `RibPolicy` is intends to be set via RPC API and is not supported via Config
+ * primarily because of its dynamic nature (ttl_secs). Read more about it below.
+ */
+struct RibPolicy {
+  // List of policy statements. Each statement can select routes and can
+  // transform it. The statements are applied in order they're specified. The
+  // first successful match/action will terminate the further policy processing.
+  // Different `action` can be specified for different set of routes (matchers).
+  1: list<RibPolicyStatement> statements;
+
+  // Number of seconds this policy is valid for. The policy must be refreshed or
+  // updated within `ttl_secs`. If not then policy will become in-effective.
+  // Policy is not preserved across restarts. Hence then external agent setting
+  // this policy should detect Open/R restart within `Initial Hold Time` (30s)
+  // and update the policy within the same window. No routes will be updated in
+  // HW within initial hold time window, which ensures the route programmed
+  // according to old policy will remain in effect until initial hold time
+  // expires.
+  // It is recommended to refresh policy every 20 seconds (< hold time).
+  2: i32 ttl_secs;
+}
 
 /**
  * Thrift service - exposes RPC APIs for interaction with all of Open/R's
@@ -41,6 +130,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   //
   // Config APIs
   //
+
   /**
    * get string config
    */
