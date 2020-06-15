@@ -16,7 +16,7 @@ namespace openr {
 LinkState
 getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
   using folly::sformat;
-  LinkState linkState;
+  LinkState linkState{openr::thrift::KvStore_constants::kDefaultArea()};
   for (auto const& [node, adjList] : adjMap) {
     CHECK_LT(node, 0x1 << 16);
     std::vector<thrift::Adjacency> adjs;

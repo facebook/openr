@@ -148,11 +148,12 @@ toString(const thrift::MplsAction& mplsAction) {
 inline std::string
 toString(const thrift::NextHopThrift& nextHop) {
   return folly::sformat(
-      "via {} dev {} weight {} metric {} {}",
+      "via {} dev {} weight {} metric {} area {} {}",
       toIPAddress(nextHop.address).str(),
       nextHop.address.ifName_ref().value_or("N/A"),
       nextHop.weight,
       nextHop.metric,
+      nextHop.area_ref().value_or("N/A"),
       nextHop.mplsAction_ref().has_value()
           ? toString(nextHop.mplsAction_ref().value())
           : "");

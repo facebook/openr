@@ -230,7 +230,7 @@ class SpfSolver::SpfSolverImpl {
   Metric findMinDistToNeighbor(
       const std::string& myNodeName, const std::string& neighborName) const;
 
-  LinkState linkState_;
+  LinkState linkState_{openr::thrift::KvStore_constants::kDefaultArea()};
 
   PrefixState prefixState_;
 
@@ -524,7 +524,9 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         link->getNhV6FromNode(myNodeName),
         link->getIfaceFromNode(myNodeName),
         link->getMetricFromNode(myNodeName),
-        createMplsAction(thrift::MplsActionCode::PHP));
+        createMplsAction(thrift::MplsActionCode::PHP),
+        false /* useNonShortestRoute */,
+        link->getArea());
     routeDb.mplsRoutes.emplace_back(createMplsRoute(topLabel, {std::move(nh)}));
   }
 
@@ -963,7 +965,8 @@ SpfSolver::SpfSolverImpl::selectKsp2(
         firstLink->getIfaceFromNode(myNodeName),
         cost,
         mplsAction,
-        true /* useNonShortestRoute */));
+        true /* useNonShortestRoute */,
+        firstLink->getArea()));
   }
 
   int staticNexthops = 0;
@@ -980,7 +983,8 @@ SpfSolver::SpfSolverImpl::selectKsp2(
             std::nullopt,
             0,
             std::nullopt,
-            true /* useNonShortestRoute */));
+            true /* useNonShortestRoute */,
+            std::nullopt /* area for static route is none */));
       }
     } else {
       LOG(ERROR) << "Static nexthops not exist for static mpls label: "
@@ -1191,7 +1195,9 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
                : link->getNhV6FromNode(myNodeName),
           link->getIfaceFromNode(myNodeName),
           distOverLink,
-          mplsAction));
+          mplsAction,
+          false /* useNonShortestRoute */,
+          link->getArea()));
     } // end for perDestination ...
   } // end for linkState_ ...
 

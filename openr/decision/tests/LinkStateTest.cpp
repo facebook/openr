@@ -16,6 +16,9 @@
 
 using namespace testing;
 
+const std::string kDefaultArea{
+    openr::thrift::KvStore_constants::kDefaultArea()};
+
 TEST(HoldableValueTest, BasicOperation) {
   openr::HoldableValue<bool> hv{true};
   EXPECT_TRUE(hv.value());
@@ -87,7 +90,8 @@ TEST(LinkTest, BasicOperation) {
   auto adj2 =
       openr::createAdjacency(n2, "if2", "if1", "fe80::1", "10.0.0.1", 1, 2, 1);
 
-  openr::Link l1(n1, adj1, n2, adj2);
+  openr::Link l1(kDefaultArea, n1, adj1, n2, adj2);
+  EXPECT_EQ(kDefaultArea, l1.getArea());
   EXPECT_EQ(n2, l1.getOtherNodeName(n1));
   EXPECT_EQ(n1, l1.getOtherNodeName(n2));
   EXPECT_THROW(l1.getOtherNodeName("node3"), std::invalid_argument);
@@ -118,7 +122,7 @@ TEST(LinkTest, BasicOperation) {
   EXPECT_FALSE(l1.isUp());
 
   // compare equivalent links
-  openr::Link l2(n2, adj2, n1, adj1);
+  openr::Link l2(kDefaultArea, n2, adj2, n1, adj1);
   EXPECT_TRUE(l1 == l2);
   EXPECT_FALSE(l1 < l2);
   EXPECT_FALSE(l2 < l1);
@@ -127,7 +131,7 @@ TEST(LinkTest, BasicOperation) {
   std::string n3 = "node3";
   auto adj3 =
       openr::createAdjacency(n2, "if3", "if2", "fe80::3", "10.0.0.3", 1, 1, 1);
-  openr::Link l3(n1, adj1, n3, adj3);
+  openr::Link l3(kDefaultArea, n1, adj1, n3, adj3);
   EXPECT_FALSE(l1 == l3);
   EXPECT_TRUE(l1 < l3 || l3 < l1);
 }
@@ -149,15 +153,17 @@ TEST(LinkStateTest, BasicOperation) {
   auto adj32 =
       openr::createAdjacency(n2, "if2", "if3", "fe80::2", "10.0.0.2", 1, 1, 1);
 
-  openr::Link l1(n1, adj12, n2, adj21);
-  openr::Link l2(n2, adj23, n3, adj32);
-  openr::Link l3(n3, adj31, n1, adj13);
+  openr::Link l1(kDefaultArea, n1, adj12, n2, adj21);
+  openr::Link l2(kDefaultArea, n2, adj23, n3, adj32);
+  openr::Link l3(kDefaultArea, n3, adj31, n1, adj13);
 
   auto adjDb1 = openr::createAdjDb(n1, {adj12, adj13}, 1);
   auto adjDb2 = openr::createAdjDb(n2, {adj21, adj23}, 2);
   auto adjDb3 = openr::createAdjDb(n3, {adj31, adj32}, 3);
 
-  openr::LinkState state;
+  openr::LinkState state{kDefaultArea};
+
+  EXPECT_EQ(kDefaultArea, state.getArea());
 
   EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).first);
   EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb2, 0, 0).first);
@@ -194,9 +200,9 @@ TEST(LinkStateTest, BasicOperation) {
 }
 
 TEST(LinkStateTest, pathAInPathB) {
-  auto l1 = std::make_shared<openr::Link>("1", "1/2", "2", "2/1");
-  auto l2 = std::make_shared<openr::Link>("2", "2/3", "3", "3/2");
-  auto l3 = std::make_shared<openr::Link>("1", "1/3", "3", "3/1");
+  auto l1 = std::make_shared<openr::Link>(kDefaultArea, "1", "1/2", "2", "2/1");
+  auto l2 = std::make_shared<openr::Link>(kDefaultArea, "2", "2/3", "3", "3/2");
+  auto l3 = std::make_shared<openr::Link>(kDefaultArea, "1", "1/3", "3", "3/1");
   openr::LinkState::Path p1, p2;
 
   EXPECT_TRUE(openr::LinkState::pathAInPathB(p1, p2));

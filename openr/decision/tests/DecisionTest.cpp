@@ -40,6 +40,9 @@ using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 
 namespace {
+
+const auto kDefaultArea{openr::thrift::KvStore_constants::kDefaultArea()};
+
 /// R1 -> R2, R3
 const auto adj12 =
     createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 100002);
@@ -180,13 +183,15 @@ createNextHopFromAdj(
     bool isV4,
     int32_t metric,
     std::optional<thrift::MplsAction> mplsAction = std::nullopt,
-    bool useNonShortestRoute = false) {
+    bool useNonShortestRoute = false,
+    const std::string& area = kDefaultArea) {
   return createNextHop(
       isV4 ? adj.nextHopV4 : adj.nextHopV6,
       adj.ifName,
       metric,
       std::move(mplsAction),
-      useNonShortestRoute);
+      useNonShortestRoute,
+      area);
 }
 
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order
@@ -762,7 +767,7 @@ TEST(BGPRedistribution, BasicOperation) {
       FRAGILE,
       bgpPrefix1,
       thrift::AdminDistance::EBGP,
-      {createNextHop(adj21.nextHopV6, adj21.ifName, adj21.metric)},
+      {createNextHopFromAdj(adj21, false, adj21.metric)},
       thrift::PrefixType::BGP,
       data1,
       false,
@@ -810,7 +815,7 @@ TEST(BGPRedistribution, BasicOperation) {
       FRAGILE,
       bgpPrefix1,
       thrift::AdminDistance::EBGP,
-      {createNextHop(adj12.nextHopV6, adj12.ifName, adj12.metric)},
+      {createNextHopFromAdj(adj12, false, adj12.metric)},
       thrift::PrefixType::BGP,
       data2,
       false,
@@ -849,7 +854,7 @@ TEST(BGPRedistribution, BasicOperation) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(adj31.nextHopV6, adj31.ifName, 10))))));
+                  createNextHopFromAdj(adj31, false, 10))))));
 
   // dicsonnect the network, each node will consider it's BGP route the best,
   // and thus not program anything
@@ -953,8 +958,8 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(adj12.nextHopV6, adj12.ifName, 10),
-                  createNextHop(adj13.nextHopV6, adj13.ifName, 10))))));
+                  createNextHopFromAdj(adj12, false, 10),
+                  createNextHopFromAdj(adj13, false, 10))))));
 
   //
   // Increase cost towards node3 to 20; prefix -> {node2}
@@ -971,7 +976,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(adj12.nextHopV6, adj12.ifName, 10))))));
+                  createNextHopFromAdj(adj12, false, 10))))));
 
   //
   // mark link towards node2 as drained; prefix1 -> {node3}
@@ -989,7 +994,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(adj13.nextHopV6, adj13.ifName, 20))))));
+                  createNextHopFromAdj(adj13, false, 20))))));
 
   //
   // Set cost towards node2 to 20 (still drained); prefix1 -> {node3}
@@ -1007,7 +1012,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(adj13.nextHopV6, adj13.ifName, 20))))));
+                  createNextHopFromAdj(adj13, false, 20))))));
 
   //
   // Undrain link; prefix1 -> {node2, node3}
@@ -1024,8 +1029,8 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(adj12.nextHopV6, adj12.ifName, 20),
-                  createNextHop(adj13.nextHopV6, adj13.ifName, 20))))));
+                  createNextHopFromAdj(adj12, false, 20),
+                  createNextHopFromAdj(adj13, false, 20))))));
 }
 
 //

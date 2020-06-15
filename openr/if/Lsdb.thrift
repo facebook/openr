@@ -123,6 +123,7 @@ struct AdjacencyDatabase {
   5: optional PerfEvents perfEvents;
 
   // openr area on which adjacency is formed
+  // TODO: Make this non-optional. This field has to be mandatory
   6: optional string area
 }
 

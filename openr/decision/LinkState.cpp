@@ -125,11 +125,13 @@ template class HoldableValue<LinkStateMetric>;
 template class HoldableValue<bool>;
 
 Link::Link(
+    const std::string& area,
     const std::string& nodeName1,
     const std::string& if1,
     const std::string& nodeName2,
     const std::string& if2)
-    : n1_(nodeName1),
+    : area_(area),
+      n1_(nodeName1),
       n2_(nodeName2),
       if1_(if1),
       if2_(if2),
@@ -140,11 +142,12 @@ Link::Link(
                std::pair<std::string, std::string>>>()(orderedNames_)) {}
 
 Link::Link(
+    const std::string& area,
     const std::string& nodeName1,
     const openr::thrift::Adjacency& adj1,
     const std::string& nodeName2,
     const openr::thrift::Adjacency& adj2)
-    : Link(nodeName1, adj1.ifName, nodeName2, adj2.ifName) {
+    : Link(area, nodeName1, adj1.ifName, nodeName2, adj2.ifName) {
   metric1_ = adj1.metric;
   metric2_ = adj2.metric;
   overload1_ = adj1.isOverloaded;
@@ -359,18 +362,21 @@ Link::operator==(const Link& other) const {
 
 std::string
 Link::toString() const {
-  return folly::sformat("{}%{} <---> {}%{}", n1_, if1_, n2_, if2_);
+  return folly::sformat("{} - {}%{} <---> {}%{}", area_, n1_, if1_, n2_, if2_);
 }
 
 std::string
 Link::directionalToString(const std::string& fromNode) const {
   return folly::sformat(
-      "{}%{} ---> {}%{}",
+      "{} - {}%{} ---> {}%{}",
+      area_,
       fromNode,
       getIfaceFromNode(fromNode),
       getOtherNodeName(fromNode),
       getIfaceFromNode(getOtherNodeName(fromNode)));
 }
+
+LinkState::LinkState(const std::string& area) : area_(area) {}
 
 size_t
 LinkState::LinkPtrHash::operator()(const std::shared_ptr<Link>& l) const {
@@ -532,7 +538,7 @@ LinkState::maybeMakeLink(
           adj.otherIfName == otherAdj.ifName &&
           adj.ifName == otherAdj.otherIfName) {
         return std::make_shared<Link>(
-            nodeName, adj, adj.otherNodeName, otherAdj);
+            area_, nodeName, adj, adj.otherNodeName, otherAdj);
       }
     }
   }
@@ -562,7 +568,12 @@ LinkState::updateAdjacencyDatabase(
     LinkStateMetric holdUpTtl,
     LinkStateMetric holdDownTtl) {
   auto const& nodeName = newAdjacencyDb.thisNodeName;
-  VLOG(1) << "Updating adjacency database for node " << nodeName;
+  VLOG(1) << "Updating adjacency database for node " << nodeName << ", area "
+          << newAdjacencyDb.area_ref().value_or("N/A");
+
+  // Area field must be specified and match with area_
+  DCHECK(newAdjacencyDb.area_ref());
+  DCHECK_EQ(area_, newAdjacencyDb.area_ref().value());
 
   for (auto const& adj : newAdjacencyDb.adjacencies) {
     VLOG(3) << "  neighbor: " << adj.otherNodeName

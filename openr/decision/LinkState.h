@@ -82,18 +82,21 @@ class HoldableValue {
 class Link {
  public:
   Link(
+      const std::string& area,
       const std::string& nodeName1,
       const std::string& if1,
       const std::string& nodeName2,
       const std::string& if2);
 
   Link(
+      const std::string& area,
       const std::string& nodeName1,
       const openr::thrift::Adjacency& adj1,
       const std::string& nodeName2,
       const openr::thrift::Adjacency& adj2);
 
  private:
+  const std::string area_;
   const std::string n1_, n2_, if1_, if2_;
   HoldableValue<LinkStateMetric> metric1_{1}, metric2_{1};
   HoldableValue<bool> overload1_{false}, overload2_{false};
@@ -116,6 +119,11 @@ class Link {
   bool decrementHolds();
 
   bool hasHolds() const;
+
+  const std::string&
+  getArea() const {
+    return area_;
+  }
 
   const std::string& getOtherNodeName(const std::string& nodeName) const;
 
@@ -168,6 +176,8 @@ class Link {
 
 class LinkState {
  public:
+  explicit LinkState(const std::string& area);
+
   struct LinkPtrHash {
     size_t operator()(const std::shared_ptr<Link>& l) const;
   };
@@ -258,6 +268,9 @@ class LinkState {
       const std::string& nodeName, bool useLinkMetric = true);
 
  private:
+  // LinkState belongs to a unique area
+  const std::string area_;
+
   // memoization structure for getSpfResult()
   std::unordered_map<
       std::pair<std::string /* nodeName */, bool /* useLinkMetric */>,
@@ -307,6 +320,11 @@ class LinkState {
   LinkStateMetric getMaxHopsToNode(const std::string& nodeName);
 
   // const public methods
+
+  const std::string&
+  getArea() const {
+    return area_;
+  }
 
   bool
   hasNode(const std::string& nodeName) const {
