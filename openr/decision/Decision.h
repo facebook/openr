@@ -131,21 +131,15 @@ class SpfSolver {
   // be defined in the .cpp
   //
 
+  //
+  // linkState_ related
+  //
+
   // update adjacencies for the given router
   std::pair<
       bool /* topology has changed */,
       bool /* route attributes has changed (nexthop addr, node/adj label */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
-
-  bool staticRoutesUpdated();
-
-  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
-
-  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
-
-  thrift::StaticRoutes const& getStaticRoutes();
-
-  bool hasHolds() const;
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph
@@ -157,6 +151,30 @@ class SpfSolver {
       thrift::AdjacencyDatabase> const&
   getAdjacencyDatabases();
 
+  //
+  // ordered fib programming
+  //
+
+  bool hasHolds() const;
+
+  bool decrementHolds();
+
+  //
+  // mpls static route
+  //
+
+  bool staticRoutesUpdated();
+
+  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
+
+  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
+
+  thrift::StaticRoutes const& getStaticRoutes();
+
+  //
+  // prefixState_ related
+  //
+
   // update prefixes for a given router. Returns true if this has caused any
   // routeDb change
   bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
@@ -165,14 +183,17 @@ class SpfSolver {
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
+  //
+  // best path calculation
+  //
+
   // Build route database using global prefix database and cached SPF
   // computation from perspective of a given router.
   // Returns std::nullopt if myNodeName doesn't have any prefix database
   std::optional<thrift::RouteDatabase> buildRouteDb(
       const std::string& myNodeName);
 
-  bool decrementHolds();
-
+  // spf counters
   void updateGlobalCounters();
 
  private:

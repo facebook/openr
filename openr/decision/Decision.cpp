@@ -90,12 +90,14 @@ class SpfSolver::SpfSolverImpl {
 
   ~SpfSolverImpl() = default;
 
+  //
+  // linkState_ related
+  //
+
   std::pair<
       bool /* topology has changed*/,
       bool /* route attributes has changed (nexthop addr, node/adj label */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& newAdjacencyDb);
-
-  bool hasHolds() const;
 
   // returns true if the AdjacencyDatabase existed
   bool deleteAdjacencyDatabase(const std::string& nodeName);
@@ -105,7 +107,29 @@ class SpfSolver::SpfSolverImpl {
       thrift::AdjacencyDatabase> const&
   getAdjacencyDatabases();
 
+  //
+  // ordered fib programming
+  //
+
+  bool hasHolds() const;
+
+  bool decrementHolds();
+
+  //
+  // mpls static route
+  //
+
+  bool staticRoutesUpdated();
+
+  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
+
+  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
+
   thrift::StaticRoutes const& getStaticRoutes();
+
+  //
+  // prefixState_ related
+  //
 
   // returns true if the prefixDb changed
   bool updatePrefixDatabase(const thrift::PrefixDatabase& prefixDb);
@@ -113,40 +137,48 @@ class SpfSolver::SpfSolverImpl {
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
+  //
+  // best path calculation
+  //
+
+  // Build route database using global prefix database and cached SPF
+  // computation from perspective of a given router.
+  // Returns std::nullopt if myNodeName doesn't have any prefix database
   std::optional<thrift::RouteDatabase> buildRouteDb(
       const std::string& myNodeName);
 
-  bool decrementHolds();
-
-  void updateGlobalCounters();
-
-  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
-
-  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
-
-  bool staticRoutesUpdated();
-
+  // helpers used in best path calculation
   static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
       const SpfResult& spfResult, const std::set<std::string>& dstNodes);
+
+  // spf counters
+  void updateGlobalCounters();
 
  private:
   // no copy
   SpfSolverImpl(SpfSolverImpl const&) = delete;
   SpfSolverImpl& operator=(SpfSolverImpl const&) = delete;
 
-  std::optional<thrift::UnicastRoute> createOpenRRoute(
+  std::optional<thrift::UnicastRoute> selectEcmpOpenr(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
-  std::optional<thrift::UnicastRoute> createBGPRoute(
+  std::optional<thrift::UnicastRoute> selectEcmpBgp(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
 
+  // Given prefixes and the nodes who announce it, get the kspf routes.
+  std::optional<thrift::UnicastRoute> selectKsp2(
+      const thrift::IpPrefix& prefix,
+      const string& myNodeName,
+      BestPathCalResult const& bestPathCalResult,
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
+
   // helper function to find the nodes for the nexthop for bgp route
-  BestPathCalResult findDstNodesForBgpRoute(
+  BestPathCalResult runBestPathSelectionBgp(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
@@ -160,19 +192,13 @@ class SpfSolver::SpfSolverImpl {
       bool const hasBgp,
       bool const useKsp2EdAlgo);
 
+  // helper to get min nexthop for a prefix, used in selectKsp2
   std::optional<int64_t> getMinNextHopThreshold(
       BestPathCalResult nodes,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
 
   // helper to filter overloaded nodes for anycast addresses
   BestPathCalResult maybeFilterDrainedNodes(BestPathCalResult&& result) const;
-
-  // Given prefixes and the nodes who announce it, get the kspf routes.
-  std::optional<thrift::UnicastRoute> selectKsp2Routes(
-      const thrift::IpPrefix& prefix,
-      const string& myNodeName,
-      BestPathCalResult const& bestPathCalResult,
-      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
 
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops (along with LFA if enabled) towards these set of dstNodeNames
@@ -373,8 +399,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
 
     if (forwardingAlgorithm == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
       auto route = hasBGP
-          ? createBGPRoute(myNodeName, prefix, nodePrefixes, isV4Prefix)
-          : createOpenRRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
+          ? selectEcmpBgp(myNodeName, prefix, nodePrefixes, isV4Prefix)
+          : selectEcmpOpenr(myNodeName, prefix, nodePrefixes, isV4Prefix);
       if (route.has_value()) {
         routeDb.unicastRoutes.emplace_back(std::move(route.value()));
       }
@@ -388,7 +414,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   } // for prefixState_.prefixes()
 
   for (const auto& kv : prefixToPerformKsp) {
-    auto unicastRoute = selectKsp2Routes(
+    auto unicastRoute = selectKsp2(
         kv.first, myNodeName, kv.second, prefixState_.prefixes().at(kv.first));
     if (unicastRoute.has_value()) {
       routeDb.unicastRoutes.emplace_back(std::move(unicastRoute.value()));
@@ -550,7 +576,7 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
   // for bgp route, we need to run best path calculation algorithm to get
   // the nodes
   auto bestPathCalRes =
-      findDstNodesForBgpRoute(myNodeName, prefix, nodePrefixes, isV4);
+      runBestPathSelectionBgp(myNodeName, prefix, nodePrefixes, isV4);
 
   if (bestPathCalRes.success) {
     if (useKsp2EdAlgo) {
@@ -619,7 +645,7 @@ SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
 }
 
 std::optional<thrift::UnicastRoute>
-SpfSolver::SpfSolverImpl::createOpenRRoute(
+SpfSolver::SpfSolverImpl::selectEcmpOpenr(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
@@ -659,7 +685,7 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
 }
 
 BestPathCalResult
-SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
+SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
@@ -744,7 +770,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
 }
 
 std::optional<thrift::UnicastRoute>
-SpfSolver::SpfSolverImpl::createBGPRoute(
+SpfSolver::SpfSolverImpl::selectEcmpBgp(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
@@ -848,7 +874,7 @@ SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
 }
 
 std::optional<thrift::UnicastRoute>
-SpfSolver::SpfSolverImpl::selectKsp2Routes(
+SpfSolver::SpfSolverImpl::selectKsp2(
     const thrift::IpPrefix& prefix,
     const string& myNodeName,
     BestPathCalResult const& bestPathCalResult,
