@@ -75,6 +75,8 @@ DECLARE_int32(link_flap_max_backoff_ms);
 
 DECLARE_bool(enable_perf_measurement);
 
+DECLARE_bool(enable_rib_policy);
+
 DECLARE_int32(decision_debounce_min_ms);
 DECLARE_int32(decision_debounce_max_ms);
 

@@ -71,6 +71,11 @@ class Config {
     return config_.enable_netlink_system_handler_ref().value_or(false);
   }
 
+  bool
+  isRibPolicyEnabled() const {
+    return config_.enable_rib_policy;
+  }
+
   //
   // area
   //

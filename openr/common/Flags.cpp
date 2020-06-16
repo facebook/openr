@@ -216,6 +216,7 @@ DEFINE_bool(
     enable_perf_measurement,
     true,
     "Enable performance measurement in network.");
+DEFINE_bool(enable_rib_policy, false, "Enable RibPolicy in Decision module");
 DEFINE_int32(
     decision_debounce_min_ms,
     10,

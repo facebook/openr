@@ -148,7 +148,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     auto confInvalidArea = getBasicOpenrConfig();
     confInvalidArea.areas.emplace_back(getAreaConfig("1"));
     confInvalidArea.areas.emplace_back(getAreaConfig("1"));
-    EXPECT_THROW(new Config(confInvalidArea), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
   }
 
   // features
@@ -159,7 +159,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalid.areas.emplace_back(getAreaConfig("1"));
     confInvalid.areas.emplace_back(getAreaConfig("2"));
     confInvalid.enable_ordered_fib_programming_ref() = true;
-    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
 
   // KSP2_ED_ECMP with IP
@@ -168,7 +168,14 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalid.prefix_forwarding_type = thrift::PrefixForwardingType::IP;
     confInvalid.prefix_forwarding_algorithm =
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
+  }
+
+  // RibPolicy
+  {
+    auto conf = getBasicOpenrConfig();
+    conf.enable_rib_policy = true;
+    EXPECT_TRUE(Config(conf).isRibPolicyEnabled());
   }
 
   // kvstore
@@ -179,7 +186,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
     confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
         ->flood_msg_per_sec = 0;
-    EXPECT_THROW(new Config(confInvalidFloodMsgPerSec), std::out_of_range);
+    EXPECT_THROW((Config(confInvalidFloodMsgPerSec)), std::out_of_range);
   }
   // flood_msg_burst_size <= 0
   {
@@ -187,7 +194,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
     confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
         ->flood_msg_burst_size = 0;
-    EXPECT_THROW(new Config(confInvalidFloodMsgPerSec), std::out_of_range);
+    EXPECT_THROW((Config(confInvalidFloodMsgPerSec)), std::out_of_range);
   }
 
   // link monitor
@@ -243,7 +250,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   {
     auto confInvalidPa = getBasicOpenrConfig();
     confInvalidPa.enable_prefix_allocation_ref() = true;
-    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
   // enable_prefix_allocation = true with multiple areas
   {
@@ -253,7 +260,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalidPa.enable_prefix_allocation_ref() = true;
     confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
   // prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and
   // allocate_prefix_len set
@@ -264,7 +271,7 @@ TEST(ConfigTest, PopulateInternalDb) {
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
     confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode =
         thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
-    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
   // prefix_allocation_mode = DYNAMIC_ROOT_NODE, seed_prefix and
   // allocate_prefix_len = null
@@ -275,7 +282,7 @@ TEST(ConfigTest, PopulateInternalDb) {
         thrift::PrefixAllocationConfig();
     confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode =
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
-    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
   // seed_prefix: invalid ipadrres format
   {
@@ -285,7 +292,7 @@ TEST(ConfigTest, PopulateInternalDb) {
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
     confInvalidPa.prefix_allocation_config_ref()->seed_prefix_ref() =
         "fc00:cafe:babe:/64";
-    EXPECT_ANY_THROW(new Config(confInvalidPa));
+    EXPECT_ANY_THROW((Config(confInvalidPa)));
   }
   // allocate_prefix_len: <= seed_prefix subnet length
   {
@@ -295,7 +302,7 @@ TEST(ConfigTest, PopulateInternalDb) {
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
     confInvalidPa.prefix_allocation_config_ref()->allocate_prefix_len_ref() =
         60;
-    EXPECT_THROW(new Config(confInvalidPa), std::out_of_range);
+    EXPECT_THROW((Config(confInvalidPa)), std::out_of_range);
   }
   // seed_prefix v4, enable_v4 = false
   {
@@ -309,7 +316,7 @@ TEST(ConfigTest, PopulateInternalDb) {
         "127.0.0.1/24";
     confInvalidPa.prefix_allocation_config_ref()->allocate_prefix_len_ref() =
         32;
-    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
 
   // bgp peering
@@ -318,7 +325,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   {
     auto confInvalid = getBasicOpenrConfig();
     confInvalid.enable_bgp_peering_ref() = true;
-    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
 
   // watchdog
@@ -327,7 +334,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   {
     auto confInvalid = getBasicOpenrConfig();
     confInvalid.enable_watchdog_ref() = true;
-    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
+    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
 }
 

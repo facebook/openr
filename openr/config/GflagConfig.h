@@ -206,6 +206,10 @@ class GflagConfig final {
             static_cast<thrift::AddPath>(FLAGS_add_path);
       }
     }
+
+    // RibPolicy
+    config.enable_rib_policy = FLAGS_enable_rib_policy;
+
     return std::make_shared<Config>(config);
   }
 

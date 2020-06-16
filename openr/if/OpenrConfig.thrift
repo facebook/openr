@@ -165,6 +165,12 @@ struct OpenrConfig {
   22: optional bool enable_ordered_fib_programming
   23: i32 fib_port
 
+  # Enables `RibPolicy` for computed routes. This knob allows thrift APIs to
+  # set/get `RibPolicy` in Decision module. For more information refer to
+  # `struct RibPolicy` in OpenrCtrl.thrift
+  # Disabled by default
+  24: bool enable_rib_policy = 0
+
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
