@@ -28,6 +28,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/decision/RibPolicy.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -258,6 +259,19 @@ class Decision : public OpenrEventBase {
    */
   folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>> getDecisionPrefixDbs();
 
+  /*
+   * Set new or replace existing RibPolicy. This will trigger the new policy
+   * run against computed routes and delta will be published.
+   */
+  folly::SemiFuture<folly::Unit> setRibPolicy(
+      thrift::RibPolicy const& ribPolicy);
+
+  /*
+   * Get the current RibPolicy instance. Throws exception if RibPolicy is not
+   * set yet.
+   */
+  folly::SemiFuture<thrift::RibPolicy> getRibPolicy();
+
  private:
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
@@ -322,6 +336,11 @@ class Decision : public OpenrEventBase {
    */
   void processPendingPrefixUpdates();
 
+  /**
+   * Function to process routes on RibPolicy update
+   */
+  void processRibPolicyUpdate();
+
   void decrementOrderedFibHolds();
 
   void coldStartUpdate();
@@ -339,6 +358,13 @@ class Decision : public OpenrEventBase {
 
   // Queue to publish route changes
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue_;
+
+  // Pointer to RibPolicy
+  std::unique_ptr<RibPolicy> ribPolicy_;
+
+  // Timer associated with RibPolicy. Triggered when ribPolicy is expired. This
+  // aims to revert the policy effects on programmed routes.
+  std::unique_ptr<folly::AsyncTimeout> ribPolicyTimer_;
 
   // the pointer to the SPF path calculator
   std::unique_ptr<SpfSolver> spfSolver_;

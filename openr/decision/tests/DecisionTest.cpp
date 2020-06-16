@@ -4411,6 +4411,94 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       Contains(createMplsRoute(32012, {nh, nh1})));
 }
 
+/**
+ * Exhaustively RibPolicy feature in Decision. The intention here is to
+ * verify the functionality of RibPolicy in Decision module. RibPolicy
+ * is also unit-tested for it's complete correctness and we don't aim
+ * it here.
+ *
+ * Test covers
+ * - Get policy without setting (exception case)
+ * - Set policy
+ * - Get policy after setting
+ * - Verify that set-policy triggers the route database change (apply policy)
+ * - Set the policy with 0 weight. See that route dis-appears
+ * - Expire policy. Verify it triggers the route database change (undo policy)
+ */
+TEST_F(DecisionTestFixture, RibPolicy) {
+  // Setup topology and prefixes. 1 unicast route will be computed
+  auto publication = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+       {"prefix:1", createPrefixValue("1", 1, {addr1})},
+       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+      {},
+      {},
+      {},
+      std::string(""));
+  sendKvPublication(publication);
+
+  // Expect route update. Verify next-hop weight to be 0 (ECMP)
+  {
+    auto updates = recvMyRouteDb("1", serializer);
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+    EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nextHops.at(0).weight);
+  }
+
+  // Get policy test. Expect failure
+  EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+
+  // Create rib policy
+  thrift::RibRouteActionWeight actionWeight;
+  actionWeight.area_to_weight.emplace(kDefaultArea, 2);
+  thrift::RibPolicyStatement policyStatement;
+  policyStatement.matcher.prefixes_ref() =
+      std::vector<thrift::IpPrefix>({addr2});
+  policyStatement.action.set_weight_ref() = actionWeight;
+  thrift::RibPolicy policy;
+  policy.statements.emplace_back(policyStatement);
+  policy.ttl_secs = 1;
+
+  // Set rib policy
+  EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
+
+  // Get rib policy and verify
+  {
+    auto retrievedPolicy = decision->getRibPolicy().get();
+    EXPECT_EQ(policy.statements, retrievedPolicy.statements);
+    EXPECT_GE(policy.ttl_secs, retrievedPolicy.ttl_secs);
+  }
+
+  // Expect the route database change with next-hop weight to be 2
+  {
+    auto updates = recvMyRouteDb("1", serializer);
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+    EXPECT_EQ(2, updates.unicastRoutesToUpdate.at(0).nextHops.at(0).weight);
+  }
+
+  // Set the policy with empty weight. Expect route delete
+  policy.statements.at(0)
+      .action.set_weight_ref()
+      ->area_to_weight[kDefaultArea] = 0;
+  EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
+  {
+    auto updates = recvMyRouteDb("1", serializer);
+    EXPECT_EQ(0, updates.unicastRoutesToUpdate.size());
+    ASSERT_EQ(1, updates.unicastRoutesToDelete.size());
+    EXPECT_EQ(addr2, updates.unicastRoutesToDelete.at(0));
+  }
+
+  // Let the policy expire. Wait for another route database change
+  {
+    auto updates = recvMyRouteDb("1", serializer);
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+    EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nextHops.at(0).weight);
+
+    auto retrievedPolicy = decision->getRibPolicy().get();
+    EXPECT_GE(0, retrievedPolicy.ttl_secs);
+  }
+}
+
 // The following topology is used:
 //
 //         100

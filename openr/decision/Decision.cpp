@@ -1466,6 +1466,12 @@ Decision::Decision(
           }
         }
       });
+
+  // Create RibPolicy timer to process routes on policy expiry
+  ribPolicyTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    LOG(WARNING) << "RibPolicy is expired";
+    processRibPolicyUpdate();
+  });
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
@@ -1522,6 +1528,52 @@ Decision::getDecisionPrefixDbs() {
     p.setValue(std::make_unique<thrift::PrefixDbs>(std::move(prefixDbs)));
   });
   return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
+  auto [p, sf] = folly::makePromiseContract<folly::Unit>();
+  auto ribPolicy = std::make_unique<RibPolicy>(ribPolicyThrift);
+  runInEventBaseThread(
+      [this, p = std::move(p), ribPolicy = std::move(ribPolicy)]() mutable {
+        const auto durationLeft = ribPolicy->getTtlDuration();
+        if (durationLeft.count() <= 0) {
+          LOG(ERROR)
+              << "Ignoring RibPolicy update with new instance because of "
+              << "staleness. Validity " << durationLeft.count() << "ms";
+          return;
+        }
+
+        // Update local policy instance
+        LOG(INFO) << "Updating RibPolicy with new instance. Validity "
+                  << durationLeft.count() << "ms";
+        ribPolicy_ = std::move(ribPolicy);
+
+        // Schedule timer for processing routes on expiry
+        ribPolicyTimer_->scheduleTimeout(durationLeft);
+
+        // Trigger route computation
+        processRibPolicyUpdate();
+
+        // Mark the policy update request to be done
+        p.setValue();
+      });
+  return std::move(sf);
+}
+
+folly::SemiFuture<thrift::RibPolicy>
+Decision::getRibPolicy() {
+  auto [p, sf] = folly::makePromiseContract<thrift::RibPolicy>();
+  runInEventBaseThread([this, p = std::move(p)]() mutable {
+    if (ribPolicy_) {
+      p.setValue(ribPolicy_->toThrift());
+    } else {
+      thrift::OpenrError e;
+      e.message = "RibPolicy is not configured";
+      p.setException(e);
+    }
+  });
+  return std::move(sf);
 }
 
 thrift::PrefixDatabase
@@ -1801,6 +1853,25 @@ Decision::processPendingPrefixUpdates() {
 }
 
 void
+Decision::processRibPolicyUpdate() {
+  if (coldStartTimer_->isScheduled()) {
+    return;
+  }
+
+  LOG(INFO) << "Decision: updating route db with RibPolicy change";
+  auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
+  if (not maybeRouteDb.has_value()) {
+    LOG(WARNING) << "Incurred no route updates";
+    return;
+  }
+
+  // Create empty list of perf events
+  maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
+
+  sendRouteUpdate(std::move(maybeRouteDb).value(), "RIB_POLICY_UPDATE");
+}
+
+void
 Decision::decrementOrderedFibHolds() {
   if (spfSolver_->decrementHolds()) {
     if (coldStartTimer_->isScheduled()) {
@@ -1842,7 +1913,28 @@ Decision::sendRouteUpdate(
     addPerfEvent(db.perfEvents_ref().value(), myNodeName_, eventDescription);
   }
 
-  // TODO: Apply RibPolicy to computed route db before sending out
+  //
+  // Apply RibPolicy to computed route db before sending out
+  //
+  if (ribPolicy_ && ribPolicy_->isActive()) {
+    auto tempRoutes = std::move(db.unicastRoutes);
+    for (auto route : tempRoutes) {
+      const bool transformed = ribPolicy_->applyAction(route);
+      if (transformed) {
+        VLOG(1) << "RibPolicy transformed the route " << toString(route.dest);
+      }
+
+      // Skip route if no valid next-hop
+      if (route.nextHops.empty()) {
+        VLOG(1) << "Removing route for " << toString(route.dest)
+                << " because of no remaining valid next-hops";
+        continue;
+      }
+
+      // Add to route db
+      db.unicastRoutes.emplace_back(std::move(route));
+    }
+  }
 
   // sorting the input to meet findDeltaRoutes()'s assumption
   std::sort(db.mplsRoutes.begin(), db.mplsRoutes.end());
