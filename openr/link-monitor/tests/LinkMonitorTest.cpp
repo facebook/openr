@@ -375,6 +375,20 @@ class LinkMonitorTestFixture : public ::testing::Test {
     }
   }
 
+  // check the sparkIfDb has expected number of UP interfaces
+  bool
+  checkExpectedUPCount(
+      const std::map<std::string, thrift::InterfaceInfo>& sparkIfDb,
+      int expectedUpCount) {
+    int receiveUpCount = 0;
+    for (const auto& kv : sparkIfDb) {
+      if (kv.second.isUp) {
+        receiveUpCount++;
+      }
+    }
+    return receiveUpCount == expectedUpCount;
+  }
+
   // collate Interfaces into a map so UT can run some checks
   using CollatedIfData = struct {
     int isUpCount{0};
@@ -1291,8 +1305,12 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
   recvAndReplyIfUpdate(); // No-op throttling update
-  recvAndReplyIfUpdate(); // linkX - UP update
-  recvAndReplyIfUpdate(); // linkY - UP update
+  // [linkX - UP update] or [both linkX and linkY - UP update]
+  recvAndReplyIfUpdate();
+  // if only got [linkX - UP update]
+  if (!checkExpectedUPCount(sparkIfDb, 2)) {
+    recvAndReplyIfUpdate(); // get [linkY - UP update]
+  }
   auto linkUpTs = std::chrono::steady_clock::now();
 
   // Elapsed total time between interface down->up must be greater than
@@ -1369,8 +1387,12 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
   recvAndReplyIfUpdate(); // No-op throttling update
-  recvAndReplyIfUpdate(); // linkX - UP update
-  recvAndReplyIfUpdate(); // linkY - UP update
+  // [linkX - UP update] or [both linkX and linkY - UP update]
+  recvAndReplyIfUpdate();
+  // if only got [linkX - UP update]
+  if (!checkExpectedUPCount(sparkIfDb, 2)) {
+    recvAndReplyIfUpdate(); // get [linkY - UP update]
+  }
   linkUpTs = std::chrono::steady_clock::now();
 
   // Elapsed total time between interface down->up must be greater than

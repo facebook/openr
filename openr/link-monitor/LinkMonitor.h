@@ -361,10 +361,10 @@ class LinkMonitor final : public OpenrEventBase {
   std::unique_ptr<fbzmq::ZmqThrottle> advertiseIfaceAddrThrottled_;
 
   // Timer for processing interfaces which are in backoff states
-  std::unique_ptr<fbzmq::ZmqTimeout> advertiseIfaceAddrTimer_;
+  std::unique_ptr<folly::AsyncTimeout> advertiseIfaceAddrTimer_;
 
   // Timer for resyncing InterfaceDb from netlink
-  std::unique_ptr<fbzmq::ZmqTimeout> interfaceDbSyncTimer_;
+  std::unique_ptr<folly::AsyncTimeout> interfaceDbSyncTimer_;
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
 
   // Thrift client connection to switch SystemService, which we actually use to

@@ -140,8 +140,8 @@ LinkMonitor::LinkMonitor(
         advertiseIfaceAddr();
       });
   // Create timer. Timer is used for immediate or delayed executions.
-  advertiseIfaceAddrTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
+  advertiseIfaceAddrTimer_ = folly::AsyncTimeout::make(
+      *getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
 
   LOG(INFO) << "Loading link-monitor state";
   zmqMonitorClient_ =
@@ -331,13 +331,12 @@ LinkMonitor::prepare() noexcept {
       });
 
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
-  interfaceDbSyncTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
+  interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     auto success = syncInterfaces();
     if (success) {
       VLOG(2) << "InterfaceDb Sync is successful";
       expBackoff_.reportSuccess();
-      interfaceDbSyncTimer_->scheduleTimeout(
-          Constants::kPlatformSyncInterval, true /* isPeriodic */);
+      interfaceDbSyncTimer_->scheduleTimeout(Constants::kPlatformSyncInterval);
     } else {
       fb303::fbData->addStatValue(
           "link_monitor.thrift.failure.getAllLinks", 1, fb303::SUM);
@@ -611,6 +610,12 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   if (adjHoldTimer_->isScheduled()) {
     return;
   }
+
+  // Cancel throttle timeout if scheduled
+  if (advertiseAdjacenciesThrottled_->isActive()) {
+    advertiseAdjacenciesThrottled_->cancel();
+  }
+
   auto adjDb = thrift::AdjacencyDatabase();
   adjDb.thisNodeName = nodeId_;
   adjDb.isOverloaded = state_.isOverloaded;
@@ -661,11 +666,6 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
 
   // Config is most likely to have changed. Update it in `ConfigStore`
   configStore_->storeThriftObj(kConfigKey, state_); // not awaiting on result
-
-  // Cancel throttle timeout if scheduled
-  if (advertiseAdjacenciesThrottled_->isActive()) {
-    advertiseAdjacenciesThrottled_->cancel();
-  }
 
   // Update some flat counters
   fb303::fbData->setCounter("link_monitor.adjacencies", adjacencies_.size());

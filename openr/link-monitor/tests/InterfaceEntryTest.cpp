@@ -37,7 +37,7 @@ TEST(InterfaceEntry, GetSetTest) {
   OpenrEventBase evl;
   fbzmq::ZmqThrottle throttle(
       evl.getEvb(), std::chrono::milliseconds(1), []() {});
-  auto timeout = fbzmq::ZmqTimeout::make(evl.getEvb(), []() {});
+  auto timeout = folly::AsyncTimeout::make(*evl.getEvb(), []() noexcept {});
   InterfaceEntry interface(
       "iface1",
       std::chrono::milliseconds(1),
@@ -118,7 +118,7 @@ TEST(InterfaceEntry, BackoffTest) {
   OpenrEventBase evl;
   fbzmq::ZmqThrottle throttle(
       evl.getEvb(), std::chrono::milliseconds(1), []() {});
-  auto timeout = fbzmq::ZmqTimeout::make(evl.getEvb(), []() {});
+  auto timeout = folly::AsyncTimeout::make(*evl.getEvb(), []() noexcept {});
   InterfaceEntry interface(
       "iface1",
       std::chrono::milliseconds(8),

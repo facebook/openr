@@ -17,7 +17,7 @@ InterfaceEntry::InterfaceEntry(
     std::chrono::milliseconds const& initBackoff,
     std::chrono::milliseconds const& maxBackoff,
     fbzmq::ZmqThrottle& updateCallback,
-    fbzmq::ZmqTimeout& updateTimeout)
+    folly::AsyncTimeout& updateTimeout)
     : ifName_(ifName),
       backoff_(initBackoff, maxBackoff),
       updateCallback_(updateCallback),

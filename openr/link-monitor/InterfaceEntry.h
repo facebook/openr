@@ -10,9 +10,9 @@
 #include <string>
 
 #include <fbzmq/async/ZmqThrottle.h>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <folly/IPAddress.h>
 #include <folly/String.h>
+#include <folly/io/async/AsyncTimeout.h>
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
@@ -35,7 +35,7 @@ class InterfaceEntry final {
       std::chrono::milliseconds const& initBackoff,
       std::chrono::milliseconds const& maxBackoff,
       fbzmq::ZmqThrottle& updateCallback,
-      fbzmq::ZmqTimeout& updateTimeout);
+      folly::AsyncTimeout& updateTimeout);
 
   // Update attributes
   bool updateAttrs(int ifIndex, bool isUp, uint64_t weight);
@@ -123,7 +123,7 @@ class InterfaceEntry final {
 
   // Update callback
   fbzmq::ZmqThrottle& updateCallback_;
-  fbzmq::ZmqTimeout& updateTimeout_;
+  folly::AsyncTimeout& updateTimeout_;
 };
 
 } // namespace openr
