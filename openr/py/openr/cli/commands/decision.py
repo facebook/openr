@@ -11,7 +11,7 @@
 import ipaddress
 import sys
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import click
 from openr.cli.utils import utils
@@ -19,7 +19,7 @@ from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
-from openr.OpenrCtrl import OpenrCtrl
+from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
@@ -613,3 +613,36 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             print("{} table for {} and {} match".format(db_type, *db_sources))
 
         return return_code
+
+
+class DecisionRibPolicyCmd(OpenrCtrlCmd):
+
+    # @override
+    def _run(self, client: OpenrCtrl.Client):
+        policy = None
+        try:
+            policy = client.getRibPolicy()
+        except ctrl_types.OpenrError as e:
+            print(f"Error: {e.message}", file=sys.stderr)
+            return
+
+        # Convert the prefixes to readable format
+        assert policy is not None
+        for stmt in policy.statements:
+            if stmt.matcher.prefixes:
+                stmt.matcher.prefixes = [
+                    ipnetwork.sprint_prefix(p) for p in stmt.matcher.prefixes
+                ]
+
+        # NOTE: We don't do explicit effor to print policy in
+        print("> RibPolicy")
+        print(f"  Validity: {policy.ttl_secs}s")
+        for stmt in policy.statements:
+            prefixes = stmt.matcher.prefixes or []
+            action = stmt.action.set_weight or ctrl_types.RibRouteActionWeight()
+            print(f"  Statement: {stmt.name}")
+            print(f"    Prefix Match List: {', '.join(prefixes)}")
+            print(
+                f"    Action Set Weight: default={action.default_weight}, "
+                f"area-weights={action.area_to_weight}"
+            )

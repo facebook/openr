@@ -28,7 +28,6 @@ from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.Fib import ttypes as fib_types
 from openr.KvStore import ttypes as kv_store_types
-from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
@@ -525,13 +524,15 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
     return adjs_map
 
 
-def print_json(map):
-    """ print json format of input dict
+def print_json(map, file=sys.stdout):
+    """
+    Print object in json format. Use this function for consistent json style
+    formatting for output. Further it prints to `stdout` stream.
 
-        @map: list of dict
+    @map: object that needs to be printed in json
     """
 
-    print(json_dumps(map))
+    print(json_dumps(map), file=file)
 
 
 def print_adjs_table(adjs_map, neigh=None, interface=None):
@@ -1540,7 +1541,11 @@ def ip_nexthop_to_str(
         else ""
     )
 
-    return "{}{}{}".format(mpls_action_str, ipnetwork.sprint_addr(nh.addr), ifName)
+    weight = f" weight {nextHop.weight}"
+
+    return "{}{}{}{}".format(
+        mpls_action_str, ipnetwork.sprint_addr(nh.addr), ifName, weight
+    )
 
 
 def print_unicast_routes(

@@ -28,6 +28,8 @@ class DecisionCli(object):
         self.decision.add_command(
             DecisionRoutesUnInstallableCli().routes, name="routes-uninstallable"
         )
+        # TODO: Add the DecisionRibPolicyCli
+        self.decision.add_command(DecisionRibPolicyCli().show, name="rib-policy")
 
         # for TG backward compatibility. Deprecated.
         self.decision.add_command(DecisionRoutesComputedCli().routes, name="routes")
@@ -199,3 +201,14 @@ class DecisionValidateCli(object):
 
         return_code = decision.DecisionValidateCmd(cli_opts).run(json, area)
         sys.exit(return_code)
+
+
+class DecisionRibPolicyCli(object):
+    @click.command()
+    @click.pass_obj
+    def show(cli_opts):  # noqa: B902
+        """
+        Show currently configured RibPolicy
+        """
+
+        decision.DecisionRibPolicyCmd(cli_opts).run()
