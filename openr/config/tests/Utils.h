@@ -37,6 +37,8 @@ getBasicOpenrConfig(
   config.link_monitor_config = linkMonitorConfig;
   config.spark_config = sparkConfig;
 
+  config.enable_rib_policy = true;
+
   return config;
 }
 } // namespace

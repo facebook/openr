@@ -812,6 +812,29 @@ TEST_F(OpenrCtrlFixture, PersistentStoreApis) {
   }
 }
 
+TEST_F(OpenrCtrlFixture, RibPolicy) {
+  // Set API
+  {
+    // Create valid rib policy
+    thrift::RibRouteActionWeight actionWeight;
+    actionWeight.area_to_weight.emplace("test-area", 2);
+    thrift::RibPolicyStatement policyStatement;
+    policyStatement.matcher.prefixes_ref() = std::vector<thrift::IpPrefix>();
+    policyStatement.action.set_weight_ref() = actionWeight;
+    thrift::RibPolicy policy;
+    policy.statements.emplace_back(policyStatement);
+    policy.ttl_secs = 1;
+
+    EXPECT_NO_THROW(openrCtrlThriftClient_->sync_setRibPolicy(policy));
+  }
+
+  // Get API
+  {
+    thrift::RibPolicy policy;
+    EXPECT_NO_THROW(openrCtrlThriftClient_->sync_getRibPolicy(policy));
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

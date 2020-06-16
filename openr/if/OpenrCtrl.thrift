@@ -474,4 +474,23 @@ service OpenrCtrl extends fb303_core.BaseService {
 
   // Get Openr Node Name
   string getMyNodeName()
+
+  //
+  // RibPolicy
+  //
+
+  /**
+   * Set RibPolicy.
+   *
+   * @throws OpenrError if rib-policy is not valid or enabled via configuration
+   */
+  void setRibPolicy(1: RibPolicy ribPolicy) throws (1: OpenrError error)
+
+  /**
+   * Get RibPolicy.
+   *
+   * @throws OpenrError if rib-policy is not enabled via configuration or is
+   *         not set previously
+   */
+  RibPolicy getRibPolicy() throws (1: OpenrError error)
 }

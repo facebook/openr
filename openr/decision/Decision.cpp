@@ -1533,7 +1533,21 @@ Decision::getDecisionPrefixDbs() {
 folly::SemiFuture<folly::Unit>
 Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();
-  auto ribPolicy = std::make_unique<RibPolicy>(ribPolicyThrift);
+  if (not config_->isRibPolicyEnabled()) {
+    thrift::OpenrError error;
+    error.message = "RibPolicy feature is not enabled";
+    p.setException(error);
+    return std::move(sf);
+  }
+
+  std::unique_ptr<RibPolicy> ribPolicy;
+  try {
+    ribPolicy = std::make_unique<RibPolicy>(ribPolicyThrift);
+  } catch (thrift::OpenrError const& e) {
+    p.setException(e);
+    return std::move(sf);
+  }
+
   runInEventBaseThread(
       [this, p = std::move(p), ribPolicy = std::move(ribPolicy)]() mutable {
         const auto durationLeft = ribPolicy->getTtlDuration();
@@ -1564,6 +1578,13 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
 folly::SemiFuture<thrift::RibPolicy>
 Decision::getRibPolicy() {
   auto [p, sf] = folly::makePromiseContract<thrift::RibPolicy>();
+  if (not config_->isRibPolicyEnabled()) {
+    thrift::OpenrError error;
+    error.message = "RibPolicy feature is not enabled";
+    p.setException(error);
+    return std::move(sf);
+  }
+
   runInEventBaseThread([this, p = std::move(p)]() mutable {
     if (ribPolicy_) {
       p.setValue(ribPolicy_->toThrift());

@@ -739,4 +739,21 @@ OpenrCtrlHandler::semifuture_getConfigKey(std::unique_ptr<std::string> key) {
       });
 }
 
+//
+// RibPolicy APIs
+//
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setRibPolicy(
+    std::unique_ptr<thrift::RibPolicy> policy) {
+  return decision_->setRibPolicy(*policy);
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::RibPolicy>>
+OpenrCtrlHandler::semifuture_getRibPolicy() {
+  return decision_->getRibPolicy().deferValue([](thrift::RibPolicy&& policy) {
+    return std::make_unique<thrift::RibPolicy>(policy);
+  });
+}
+
 } // namespace openr

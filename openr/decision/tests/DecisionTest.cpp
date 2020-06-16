@@ -4499,6 +4499,76 @@ TEST_F(DecisionTestFixture, RibPolicy) {
   }
 }
 
+/**
+ * Verifies that error is set if RibPolicy is invalid
+ */
+TEST_F(DecisionTestFixture, RibPolicyError) {
+  // Set empty rib policy
+  auto sf = decision->setRibPolicy(thrift::RibPolicy{});
+
+  // Expect an error to be set immediately (validation happens inline)
+  EXPECT_TRUE(sf.isReady());
+  EXPECT_TRUE(sf.hasException());
+  EXPECT_THROW(std::move(sf).get(), thrift::OpenrError);
+}
+
+/**
+ * Verifies that set/get APIs throws exception if RibPolicy feature is not
+ * enabled.
+ */
+TEST(Decision, RibPolicyFeatureKnob) {
+  auto tConfig = getBasicOpenrConfig("1");
+  tConfig.enable_rib_policy = false; // Disable rib_policy feature
+  auto config = std::make_shared<Config>(tConfig);
+  ASSERT_FALSE(config->isRibPolicyEnabled());
+
+  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  fbzmq::Context zeromqContext;
+  auto decision = std::make_unique<Decision>(
+      config,
+      true, /* computeLfaPaths */
+      false, /* bgpDryRun */
+      debounceTimeoutMin,
+      debounceTimeoutMax,
+      kvStoreUpdatesQueue.getReader(),
+      staticRoutesUpdateQueue.getReader(),
+      routeUpdatesQueue,
+      zeromqContext);
+
+  // SET
+  {
+    // Create valid rib policy
+    thrift::RibRouteActionWeight actionWeight;
+    actionWeight.area_to_weight.emplace(kDefaultArea, 2);
+    thrift::RibPolicyStatement policyStatement;
+    policyStatement.matcher.prefixes_ref() =
+        std::vector<thrift::IpPrefix>({addr2});
+    policyStatement.action.set_weight_ref() = actionWeight;
+    thrift::RibPolicy policy;
+    policy.statements.emplace_back(policyStatement);
+    policy.ttl_secs = 1;
+
+    auto sf = decision->setRibPolicy(policy);
+    EXPECT_TRUE(sf.isReady());
+    EXPECT_TRUE(sf.hasException());
+    EXPECT_THROW(std::move(sf).get(), thrift::OpenrError);
+  }
+
+  // GET
+  {
+    auto sf = decision->getRibPolicy();
+    EXPECT_TRUE(sf.isReady());
+    EXPECT_TRUE(sf.hasException());
+    EXPECT_THROW(std::move(sf).get(), thrift::OpenrError);
+  }
+
+  kvStoreUpdatesQueue.close();
+  staticRoutesUpdateQueue.close();
+  routeUpdatesQueue.close();
+}
+
 // The following topology is used:
 //
 //         100
