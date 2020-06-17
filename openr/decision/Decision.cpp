@@ -580,36 +580,39 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
   auto bestPathCalRes =
       runBestPathSelectionBgp(myNodeName, prefix, nodePrefixes, isV4);
 
-  if (bestPathCalRes.success) {
-    if (useKsp2EdAlgo) {
-      auto iter = nodePrefixes.find(myNodeName);
-      bool labelExistForMyNode = iter != nodePrefixes.end() &&
-              iter->second.prependLabel_ref().has_value()
-          ? true
-          : false;
-      // In ksp2 algorithm, we consider program our own advertised prefix if
-      // there are other nodes announcing it and prepend label associated with
-      // it.
-      if ((not bestPathCalRes.nodes.count(myNodeName)) ||
-          (bestPathCalRes.nodes.size() > 1 && labelExistForMyNode)) {
-        return maybeFilterDrainedNodes(std::move(bestPathCalRes));
-      } else {
-        VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
-                << ". Best path originated by self.";
-      }
-    } else if (not bestPathCalRes.nodes.count(myNodeName)) {
-      return maybeFilterDrainedNodes(std::move(bestPathCalRes));
-    } else {
-      VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
-              << ". Best path originated by self.";
-    }
-  } else if (not bestPathCalRes.success) {
+  // best path calculation failure
+  if (not bestPathCalRes.success) {
     LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
-  } else {
-    VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
-            << ". Best path originated by self.";
+    return dstNodes;
   }
+
+  // ecmp
+  if (not useKsp2EdAlgo) {
+    // not announcing BGP prefix originated by self
+    if (bestPathCalRes.nodes.count(myNodeName)) {
+      VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
+              << ". Best path originated by self.";
+      return dstNodes;
+    }
+
+    return maybeFilterDrainedNodes(std::move(bestPathCalRes));
+  }
+
+  // ksp2
+  auto iter = nodePrefixes.find(myNodeName);
+  bool labelExistForMyNode =
+      iter != nodePrefixes.end() && iter->second.prependLabel_ref().has_value();
+  // In ksp2 algorithm, we consider program our own advertised prefix if
+  // there are other nodes announcing it and prepend label associated with
+  // it.
+  if (not bestPathCalRes.nodes.count(myNodeName) or
+      (bestPathCalRes.nodes.size() > 1 and labelExistForMyNode)) {
+    return maybeFilterDrainedNodes(std::move(bestPathCalRes));
+  }
+
+  VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
+          << ". Best path originated by self.";
   return dstNodes;
 }
 
