@@ -386,7 +386,7 @@ class LinkState {
       std::string const& src,
       std::string const& dest,
       SpfResult const& result,
-      LinkSet const& linksToIgnore);
+      LinkSet& linksToIgnore);
 
   void addLink(std::shared_ptr<Link> link);
 

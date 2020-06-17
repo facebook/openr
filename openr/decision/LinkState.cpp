@@ -400,13 +400,14 @@ LinkState::traceOnePath(
     std::string const& src,
     std::string const& dest,
     SpfResult const& result,
-    LinkSet const& linksToIgnore) {
+    LinkSet& linksToIgnore) {
   if (src == dest) {
     return LinkState::Path{};
   }
   auto const& nodeResult = result.at(dest);
   for (auto const& pathLink : nodeResult.pathLinks()) {
-    if (!linksToIgnore.count(pathLink.link)) {
+    // only consider this link if we haven't yet
+    if (linksToIgnore.insert(pathLink.link).second) {
       auto path = traceOnePath(src, pathLink.prevNode, result, linksToIgnore);
       if (path) {
         path->push_back(pathLink.link);
@@ -779,9 +780,6 @@ LinkState::getKthPaths(
       LinkSet visitedLinks;
       auto path = traceOnePath(src, dest, res, visitedLinks);
       while (path && !path->empty()) {
-        for (auto const& link : *path) {
-          visitedLinks.insert(link);
-        }
         paths.push_back(std::move(*path));
         path = traceOnePath(src, dest, res, visitedLinks);
       }
