@@ -12,6 +12,7 @@
 #include <re2/re2.h>
 #include <re2/set.h>
 
+#include <openr/common/AsyncThrottle.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/link-monitor/InterfaceEntry.h>
@@ -35,8 +36,7 @@ toCIDRNetworkSet(std::vector<thrift::PrefixEntry> const& prefixes) {
  */
 TEST(InterfaceEntry, GetSetTest) {
   OpenrEventBase evl;
-  fbzmq::ZmqThrottle throttle(
-      evl.getEvb(), std::chrono::milliseconds(1), []() {});
+  AsyncThrottle throttle(evl.getEvb(), std::chrono::milliseconds(1), []() {});
   auto timeout = folly::AsyncTimeout::make(*evl.getEvb(), []() noexcept {});
   InterfaceEntry interface(
       "iface1",
@@ -116,8 +116,7 @@ TEST(InterfaceEntry, GetSetTest) {
  */
 TEST(InterfaceEntry, BackoffTest) {
   OpenrEventBase evl;
-  fbzmq::ZmqThrottle throttle(
-      evl.getEvb(), std::chrono::milliseconds(1), []() {});
+  AsyncThrottle throttle(evl.getEvb(), std::chrono::milliseconds(1), []() {});
   auto timeout = folly::AsyncTimeout::make(*evl.getEvb(), []() noexcept {});
   InterfaceEntry interface(
       "iface1",

@@ -12,7 +12,6 @@
 #include <unordered_map>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqThrottle.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
@@ -24,6 +23,7 @@
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/AsyncThrottle.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>

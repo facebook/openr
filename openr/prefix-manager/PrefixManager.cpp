@@ -84,7 +84,7 @@ PrefixManager::PrefixManager(
       *getEvb(), [this]() noexcept { syncKvStore(); });
 
   // Create throttled update state
-  syncKvStoreThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
+  syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
         if (initialSyncKvStoreTimer_->isScheduled()) {
           return;

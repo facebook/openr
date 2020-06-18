@@ -11,12 +11,12 @@
 #include <unordered_map>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqThrottle.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 #include <folly/futures/Future.h>
 
+#include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
@@ -130,7 +130,7 @@ class PrefixManager final : public OpenrEventBase {
 
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
-  std::unique_ptr<fbzmq::ZmqThrottle> syncKvStoreThrottled_;
+  std::unique_ptr<AsyncThrottle> syncKvStoreThrottled_;
   std::unique_ptr<folly::AsyncTimeout> initialSyncKvStoreTimer_;
 
   // TTL for a key in the key value store

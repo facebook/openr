@@ -283,6 +283,7 @@ install(TARGETS
 
 add_library(openrlib
   openr/allocators/PrefixAllocator.cpp
+  openr/common/AsyncThrottle.cpp
   openr/common/BuildInfo.cpp
   openr/common/Constants.cpp
   openr/common/ExponentialBackoff.cpp
@@ -611,6 +612,12 @@ if(BUILD_TESTS)
     SOURCES
       openr/ctrl-server/tests/OpenrCtrlLongPollTest.cpp
     DESTINATION sbin/tests/openr/ctrl-server
+  )
+
+  add_openr_test(AsyncThrottleTest async_throttle_test
+    SOURCES
+      openr/common/tests/AsyncThrottleTest.cpp
+    DESTINATION sbin/tests/openr/common
   )
 
   add_openr_test(ExponentialBackoffTest exp_backoff_test

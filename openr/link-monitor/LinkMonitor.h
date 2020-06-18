@@ -13,8 +13,6 @@
 #include <utility>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqThrottle.h>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/CppAttributes.h>
@@ -30,6 +28,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/allocators/RangeAllocator.h>
+#include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
@@ -357,8 +356,8 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Throttled versions of "advertise<>" functions. It batches
   // up multiple calls and send them in one go!
-  std::unique_ptr<fbzmq::ZmqThrottle> advertiseAdjacenciesThrottled_;
-  std::unique_ptr<fbzmq::ZmqThrottle> advertiseIfaceAddrThrottled_;
+  std::unique_ptr<AsyncThrottle> advertiseAdjacenciesThrottled_;
+  std::unique_ptr<AsyncThrottle> advertiseIfaceAddrThrottled_;
 
   // Timer for processing interfaces which are in backoff states
   std::unique_ptr<folly::AsyncTimeout> advertiseIfaceAddrTimer_;

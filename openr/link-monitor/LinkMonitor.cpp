@@ -127,7 +127,7 @@ LinkMonitor::LinkMonitor(
   });
 
   // Create throttled adjacency advertiser
-  advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
+  advertiseAdjacenciesThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
         // will advertise to all areas but will not trigger a adj key update
         // if nothing changed.
@@ -135,7 +135,7 @@ LinkMonitor::LinkMonitor(
       });
 
   // Create throttled interfaces and addresses advertiser
-  advertiseIfaceAddrThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
+  advertiseIfaceAddrThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
         advertiseIfaceAddr();
       });
