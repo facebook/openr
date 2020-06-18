@@ -1534,18 +1534,20 @@ def ip_nexthop_to_str(
     ifName = "%{}".format(nh.ifName) if nh.ifName else ""
     if len(nh.addr) == 4 and ignore_v4_iface:
         ifName = ""
+    addr_str = "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
 
     mpls_action_str = (
-        "{} ".format(mpls_action_to_str(nextHop.mplsAction))
+        " action: {}".format(mpls_action_to_str(nextHop.mplsAction))
         if nextHop.mplsAction is not None
         else ""
     )
 
-    weight = f" weight {nextHop.weight}"
+    weight = f" weight: {nextHop.weight}"
 
-    return "{}{}{}{}".format(
-        mpls_action_str, ipnetwork.sprint_addr(nh.addr), ifName, weight
-    )
+    # always put addr_str at head
+    # this is consumed by downstream tooling in --json options
+    # TODO remove hard dependency on json output format in fbossdeploy/fcr
+    return "{}{}{}".format(addr_str, mpls_action_str, weight)
 
 
 def print_unicast_routes(
