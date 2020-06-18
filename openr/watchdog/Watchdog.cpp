@@ -80,16 +80,18 @@ void
 Watchdog::updateCounters() {
   VLOG(2) << "Checking thread aliveness counters...";
 
-  auto const& now = std::chrono::duration_cast<std::chrono::seconds>(
-      std::chrono::system_clock::now().time_since_epoch());
+  // Use steady_clock for watchdog as system_clock can change
+  auto const& now = std::chrono::steady_clock::now();
   std::vector<std::string> stuckThreads;
   for (auto const& kv : monitorEvbs_) {
     auto const& name = kv.second;
     auto const& lastTs = kv.first->getTimestamp();
+    auto timeDiff =
+        std::chrono::duration_cast<std::chrono::seconds>(now - lastTs);
     VLOG(4) << "Thread " << name << ", " << (now - lastTs).count()
             << " seconds ever since last thread activity";
 
-    if (now - lastTs > threadTimeout_) {
+    if (timeDiff > threadTimeout_) {
       // fire a crash right now
       LOG(WARNING) << "Watchdog: " << name << " thread detected to be dead";
       stuckThreads.emplace_back(name);

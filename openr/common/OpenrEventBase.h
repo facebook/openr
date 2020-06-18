@@ -71,9 +71,10 @@ class OpenrEventBase {
   /**
    * Get latest timestamp of health check timer
    */
-  std::chrono::seconds
-  getTimestamp() const {
-    return timestamp_.load();
+  std::chrono::steady_clock::time_point
+  getTimestamp() const noexcept {
+    return std::chrono::steady_clock::time_point(
+        std::chrono::steady_clock::duration(timestamp_.load()));
   }
 
   /**
@@ -155,7 +156,7 @@ class OpenrEventBase {
   std::unordered_map<int /* fd */, ZmqEventHandler> fdHandlers_;
 
   // Timestamp
-  std::atomic<std::chrono::seconds> timestamp_{std::chrono::seconds(0)};
+  std::atomic<std::chrono::steady_clock::duration::rep> timestamp_;
   std::unique_ptr<folly::AsyncTimeout> timeout_;
 };
 

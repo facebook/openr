@@ -118,7 +118,8 @@ TEST(OpenrEventBaseTest, DefaultConstructor) {
 TEST_F(OpenrEventBaseTestFixture, Timestamp) {
   // Expect non empty timestamp
   auto ts1 = evb.getTimestamp();
-  EXPECT_GT(ts1, std::chrono::seconds(0));
+  EXPECT_GT(
+      ts1, std::chrono::steady_clock::time_point(std::chrono::seconds(0)));
 
   // Sleep for a while
   /* sleep override */

@@ -125,9 +125,11 @@ OpenrEventBase::OpenrEventBase()
     : fiberManager_(folly::fibers::getFiberManager(evb_, getFmOptions())) {
   // Periodic timer to update eventbase's timestamp. This is used by Watchdog to
   // identify stuck threads.
-  timestamp_ = getElapsedSeconds();
+  // update aliveness timestamp
+  timestamp_.store(std::chrono::steady_clock::now().time_since_epoch().count());
   timeout_ = folly::AsyncTimeout::make(evb_, [this]() noexcept {
-    timestamp_ = getElapsedSeconds();
+    timestamp_.store(
+        std::chrono::steady_clock::now().time_since_epoch().count());
     timeout_->scheduleTimeout(std::chrono::seconds(1));
   });
   timeout_->scheduleTimeout(0);
