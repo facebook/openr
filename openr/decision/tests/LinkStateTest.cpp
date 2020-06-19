@@ -369,7 +369,7 @@ TEST(LinkStateTest, getHopCounts) {
         {5, {}},
     });
 
-    EXPECT_EQ(0, linkState.getHopsFromAToB("1", "5"));
+    EXPECT_FALSE(linkState.getHopsFromAToB("1", "5").has_value());
     EXPECT_EQ(1, linkState.getHopsFromAToB("2", "3"));
     EXPECT_EQ(3, linkState.getMaxHopsToNode("1"));
     EXPECT_EQ(0, linkState.getMaxHopsToNode("5"));

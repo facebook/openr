@@ -261,18 +261,22 @@ class LinkState {
 
   using Path = std::vector<std::shared_ptr<Link>>;
 
-  // non-const public methods
-  // IMPT: clear memoization structures as appropirate in these functions
-
+  // Shortest paths API:
+  // - getSpfResult()
+  // - getKthPaths()
+  //
+  // each is memoized all params. memoization invalidated for any topolgy
+  // altering calls, i.e. if decrementHolds(), updateAdjacencyDatabase(), or
+  // deleteAdjacencyDatabase() returns true
   SpfResult const& getSpfResult(
-      const std::string& nodeName, bool useLinkMetric = true);
+      const std::string& nodeName, bool useLinkMetric = true) const;
 
  private:
   // LinkState belongs to a unique area
   const std::string area_;
 
   // memoization structure for getSpfResult()
-  std::unordered_map<
+  mutable std::unordered_map<
       std::pair<std::string /* nodeName */, bool /* useLinkMetric */>,
       SpfResult>
       spfResults_;
@@ -287,16 +291,18 @@ class LinkState {
   // For k > 1, the algorithm is performed considering all links except links on
   // paths in the set {p in getKthPaths(src, dest, i) | 1 <= i < k}.
   std::vector<LinkState::Path> const& getKthPaths(
-      const std::string& src, const std::string& dest, size_t k);
+      const std::string& src, const std::string& dest, size_t k) const;
 
  private:
   // memoization structure for getKthPaths()
-  std::unordered_map<
+  mutable std::unordered_map<
       std::tuple<std::string /* src */, std::string /* dest */, size_t /* k */>,
       std::vector<LinkState::Path>>
       kthPathResults_;
 
  public:
+  // non-const public methods
+  // IMPT: clear memoization structures as appropirate in these functions
   bool decrementHolds();
 
   // update adjacencies for the given router
@@ -305,21 +311,29 @@ class LinkState {
       bool /* adjacency attributes have changed: nexthop addr, or label */>
   updateAdjacencyDatabase(
       thrift::AdjacencyDatabase const& adjacencyDb,
-      LinkStateMetric holdUpTtl,
-      LinkStateMetric holdDownTtl);
+      LinkStateMetric holdUpTtl = 0,
+      LinkStateMetric holdDownTtl = 0);
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph
   bool deleteAdjacencyDatabase(const std::string& nodeName);
 
-  // returns hop count from a to b,
-  // if nodes b is not reachable from a, returns getMaxHopsToNode(b)
-  LinkStateMetric getHopsFromAToB(std::string const& a, std::string const& b);
+  // const public methods
+
+  // returns metric from a to b,
+  // if nodes b is not reachable from a, returns std::nullopt
+  std::optional<LinkStateMetric> getMetricFromAToB(
+      std::string const& a,
+      std::string const& b,
+      bool useLinkMetric = true) const;
+
+  std::optional<LinkStateMetric>
+  getHopsFromAToB(std::string const& a, std::string const& b) const {
+    return getMetricFromAToB(a, b, false);
+  }
 
   // returns hop count to furthest away node connected to nodeName
-  LinkStateMetric getMaxHopsToNode(const std::string& nodeName);
-
-  // const public methods
+  LinkStateMetric getMaxHopsToNode(const std::string& nodeName) const;
 
   const std::string&
   getArea() const {
@@ -386,7 +400,7 @@ class LinkState {
       std::string const& src,
       std::string const& dest,
       SpfResult const& result,
-      LinkSet& linksToIgnore);
+      LinkSet& linksToIgnore) const;
 
   void addLink(std::shared_ptr<Link> link);
 
@@ -407,7 +421,8 @@ class LinkState {
                              weights as advertised from the adjacent nodes,
                              otherwise it will consider the graph unweighted */
       const LinkSet& linksToIgnore =
-          {} /* optionaly specify a set of links to not use when running */);
+          {} /* optionaly specify a set of links to not use when running */)
+      const;
 
   // returns Link object if the reverse adjancency is present in
   // adjacencyDatabases_.at(adj.otherNodeName), else returns nullptr

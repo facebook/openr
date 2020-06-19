@@ -261,10 +261,12 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb) {
   LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
   if (enableOrderedFib_) {
-    holdUpTtl =
-        linkState_.getHopsFromAToB(myNodeName_, newAdjacencyDb.thisNodeName);
-    holdDownTtl =
-        linkState_.getMaxHopsToNode(newAdjacencyDb.thisNodeName) - holdUpTtl;
+    if (auto maybeHoldUpTtl = linkState_.getHopsFromAToB(
+            myNodeName_, newAdjacencyDb.thisNodeName)) {
+      holdUpTtl = maybeHoldUpTtl.value();
+      holdDownTtl =
+          linkState_.getMaxHopsToNode(newAdjacencyDb.thisNodeName) - holdUpTtl;
+    }
   }
   fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
   return linkState_.updateAdjacencyDatabase(

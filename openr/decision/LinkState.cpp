@@ -400,7 +400,7 @@ LinkState::traceOnePath(
     std::string const& src,
     std::string const& dest,
     SpfResult const& result,
-    LinkSet& linksToIgnore) {
+    LinkSet& linksToIgnore) const {
   if (src == dest) {
     return LinkState::Path{};
   }
@@ -737,20 +737,21 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
   return true;
 }
 
-LinkStateMetric
-LinkState::getHopsFromAToB(std::string const& a, std::string const& b) {
+std::optional<LinkStateMetric>
+LinkState::getMetricFromAToB(
+    std::string const& a, std::string const& b, bool useLinkMetric) const {
   if (a == b) {
     return 0;
   }
-  auto const& spfResult = getSpfResult(a, false);
+  auto const& spfResult = getSpfResult(a, useLinkMetric);
   if (spfResult.count(b)) {
     return spfResult.at(b).metric();
   }
-  return getMaxHopsToNode(b);
+  return std::nullopt;
 }
 
 LinkStateMetric
-LinkState::getMaxHopsToNode(const std::string& nodeName) {
+LinkState::getMaxHopsToNode(const std::string& nodeName) const {
   LinkStateMetric max = 0;
   for (auto const& pathsFromNode : getSpfResult(nodeName, false)) {
     max = std::max(max, pathsFromNode.second.metric());
@@ -760,7 +761,7 @@ LinkState::getMaxHopsToNode(const std::string& nodeName) {
 
 std::vector<LinkState::Path> const&
 LinkState::getKthPaths(
-    const std::string& src, const std::string& dest, size_t k) {
+    const std::string& src, const std::string& dest, size_t k) const {
   CHECK_GE(k, 1);
   std::tuple<std::string, std::string, size_t> key(src, dest, k);
   auto entryIter = kthPathResults_.find(key);
@@ -790,7 +791,8 @@ LinkState::getKthPaths(
 }
 
 LinkState::SpfResult const&
-LinkState::getSpfResult(const std::string& thisNodeName, bool useLinkMetric) {
+LinkState::getSpfResult(
+    const std::string& thisNodeName, bool useLinkMetric) const {
   std::pair<std::string, bool> key{thisNodeName, useLinkMetric};
   auto entryIter = spfResults_.find(key);
   if (spfResults_.end() == entryIter) {
@@ -807,7 +809,7 @@ LinkState::SpfResult
 LinkState::runSpf(
     const std::string& thisNodeName,
     bool useLinkMetric,
-    const LinkState::LinkSet& linksToIgnore) {
+    const LinkState::LinkSet& linksToIgnore) const {
   LinkState::SpfResult result;
 
   fb303::fbData->addStatValue("decision.spf_runs", 1, fb303::COUNT);
