@@ -424,6 +424,9 @@ NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
       nextHop.address = toBinaryAddress(folly::IPAddressV6("::"));
     }
 
+    // Set nexthop weight
+    nextHop.weight = nh.getWeight();
+
     // Add mpls action
     if (labelAction.has_value()) {
       if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
@@ -485,7 +488,8 @@ NetlinkFibHandler::buildNextHop(
     }
     nhBuilder.setGateway(toIPAddress(nh.address));
     buildMplsAction(nhBuilder, nh);
-    rtBuilder.addNextHop(nhBuilder.setWeight(0).build());
+    nhBuilder.setWeight(nh.weight);
+    rtBuilder.addNextHop(nhBuilder.build());
     nhBuilder.reset();
   }
 }

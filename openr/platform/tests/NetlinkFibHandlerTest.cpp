@@ -44,7 +44,7 @@ createNextHop(
   nh.address = toBinaryAddress(folly::sformat(nhFormat, 1 + index));
   nh.address.ifName_ref() =
       kInterfaces.at(folly::Random::rand32() % kInterfaces.size());
-  nh.weight = 0; // Weight is not yet being supported in NetlinkFibHandler
+  nh.weight = 0;
   if (mplsAction.has_value()) {
     nh.mplsAction_ref() = mplsAction.value();
   }
@@ -315,6 +315,34 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
       .get();
   routes = handler.semifuture_getRouteTableByClient(kClientId).get();
   EXPECT_EQ(0, routes->size());
+}
+
+//
+// Add route with different weights. Make sure the code translates the weight
+// and reads it again when working with fbnl data structures
+//
+TEST_P(FibHandlerFixture, UnicastAddUcmp) {
+  const int16_t kClientId = 786;
+  const bool isV4 = GetParam();
+
+  // Create route with two nexthops
+  thrift::UnicastRoute r1 = createUnicastRoute(0, 2, isV4);
+  r1.nextHops.at(0).weight = 3;
+  r1.nextHops.at(1).weight = 7;
+
+  // Expect no routes in the beginning
+  auto routes = handler.semifuture_getRouteTableByClient(kClientId).get();
+  ASSERT_EQ(0, routes->size());
+
+  // Add route and verify that it gets added
+  handler
+      .semifuture_addUnicastRoute(
+          kClientId, std::make_unique<thrift::UnicastRoute>(r1))
+      .get();
+  routes = handler.semifuture_getRouteTableByClient(kClientId).get();
+  ASSERT_EQ(1, routes->size());
+  sortNextHops(*routes);
+  EXPECT_EQ(r1, routes->at(0));
 }
 
 //
