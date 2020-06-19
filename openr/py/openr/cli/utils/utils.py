@@ -1542,7 +1542,8 @@ def ip_nexthop_to_str(
         else ""
     )
 
-    weight = f" weight: {nextHop.weight}"
+    # NOTE: Default weight=0 is in-fact weight=1
+    weight = f" weight {1 if nextHop.weight == 0 else nextHop.weight}"
 
     # always put addr_str at head
     # this is consumed by downstream tooling in --json options

@@ -160,7 +160,12 @@ NetlinkRouteMessage::addIpNexthop(
     rtnh->rtnh_ifindex = path.getIfIndex().value();
   }
   rtnh->rtnh_flags = 0;
+
+  // Set weight if specified - This is only applicable for IP nexthops
   rtnh->rtnh_hops = 0;
+  if (path.getWeight()) {
+    rtnh->rtnh_hops = path.getWeight() - 1;
+  }
 
   // RTA_GATEWAY
   auto const via = path.getGateway();
@@ -188,6 +193,12 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
   rtnh->rtnh_len = sizeof(*rtnh);
   rtnh->rtnh_flags = 0;
   rtnh->rtnh_hops = 0;
+
+  // Weights are not supported for MPLS routes
+  if (path.getWeight()) {
+    LOG(ERROR) << "Weight is not supported for MPLS PHP or SWAP next-hop";
+    return -EINVAL;
+  }
 
   // Set interface index if available, else let the kernel resolve it
   if (path.getIfIndex().has_value()) {
@@ -241,8 +252,14 @@ NetlinkRouteMessage::addPopNexthop(
   rtnh->rtnh_len = sizeof(*rtnh);
   if (!path.getIfIndex().has_value()) {
     LOG(ERROR) << "Loopback interface index not provided for POP";
-    return EINVAL;
+    return -EINVAL;
   }
+  // Weights are not supported for MPLS routes
+  if (path.getWeight()) {
+    LOG(ERROR) << "Weight is not supported for MPLS POP next-hop";
+    return -EINVAL;
+  }
+
   rtnh->rtnh_ifindex = path.getIfIndex().value();
   rtnh->rtnh_flags = 0;
   rtnh->rtnh_hops = 0;
@@ -265,7 +282,12 @@ NetlinkRouteMessage::addPushNexthop(
   // fill the OIF
   rtnh->rtnh_len = sizeof(*rtnh);
   rtnh->rtnh_flags = 0;
+
+  // Set weight if specified - This is only applicable for IP nexthops
   rtnh->rtnh_hops = 0;
+  if (path.getWeight()) {
+    rtnh->rtnh_hops = path.getWeight() - 1;
+  }
 
   // Set interface index if available, else let the kernel resolve it
   if (path.getIfIndex().has_value()) {
@@ -406,8 +428,10 @@ NetlinkRouteMessage::showMultiPathAttribues(
     const struct rtattr* const rta) const {
   const struct rtnexthop* const rtnh =
       reinterpret_cast<struct rtnexthop*>(RTA_DATA(rta));
-  LOG(INFO) << "len: " << rtnh->rtnh_len << " flags: " << rtnh->rtnh_flags;
-  LOG(INFO) << "hop: " << rtnh->rtnh_hops << " ifindex: " << rtnh->rtnh_ifindex;
+  LOG(INFO) << "  NextHop Len=" << static_cast<size_t>(rtnh->rtnh_len)
+            << ", flags: " << static_cast<size_t>(rtnh->rtnh_flags)
+            << ", weight: " << static_cast<size_t>(rtnh->rtnh_hops) + 1
+            << ", ifIndex: " << rtnh->rtnh_ifindex;
 
   const struct rtattr* subrta = RTNH_DATA(rtnh);
   int len = rtnh->rtnh_len;
@@ -661,6 +685,10 @@ NetlinkRouteMessage::parseNextHops(
         parseNextHopAttribute(routeAttr, family, nhBuilder);
       } break;
       }
+    }
+    // Set the next-hop weight if available
+    if (family != AF_MPLS) {
+      nhBuilder.setWeight(nh->rtnh_hops + 1);
     }
     setMplsAction(nhBuilder, family);
     auto nexthop = nhBuilder.build();

@@ -62,6 +62,8 @@ folly::IPAddress ipAddrY2V6{"fe80::202"};
 folly::IPAddress ipAddrY3V6{"fe80::203"};
 folly::IPAddress ipAddrY4V6{"fe80::204"};
 
+// TODO: Fix the subnet of vethX and vethY for v4 & v6 both. Make it easier
+// to get local interface address or remote interface address
 folly::IPAddress ipAddrX1V4{"172.10.10.10"};
 folly::IPAddress ipAddrX1V4Peer{"172.10.10.11"};
 folly::IPAddress ipAddrY1V4{"172.10.11.10"};
@@ -356,14 +358,19 @@ class NlMessageFixture : public ::testing::Test {
 
  protected:
   openr::fbnl::NextHop
+  // TODO: Convert `folly::Optional` to `std::optional`
   buildNextHop(
       folly::Optional<std::vector<int32_t>> pushLabels,
       folly::Optional<uint32_t> swapLabel,
       folly::Optional<thrift::MplsActionCode> action,
       folly::Optional<folly::IPAddress> gateway,
-      std::optional<int> ifIndex) {
+      std::optional<int> ifIndex,
+      std::optional<uint8_t> weight = std::nullopt) {
     openr::fbnl::NextHopBuilder nhBuilder;
 
+    if (weight.has_value()) {
+      nhBuilder.setWeight(weight.value());
+    }
     if (pushLabels.has_value()) {
       nhBuilder.setPushLabels(pushLabels.value());
     }
@@ -421,19 +428,22 @@ class NlMessageFixture : public ::testing::Test {
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V4,
-        ifIndexY));
+        ifIndexY,
+        1));
     paths.push_back(buildNextHop(
         outLabel5,
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V4,
-        ifIndexY));
+        ifIndexY,
+        1));
     paths.push_back(buildNextHop(
         outLabel6,
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V4,
-        ifIndexY));
+        ifIndexY,
+        1));
 
     struct v4Addr addr4 {};
     for (uint32_t i = 0; i < count; i++) {
@@ -458,21 +468,24 @@ class NlMessageFixture : public ::testing::Test {
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexX));
+        ifIndexX,
+        1));
     paths.push_back(buildNextHop(
         outLabel2,
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexX));
+        ifIndexX,
+        1));
     paths.push_back(buildNextHop(
-        folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX));
+        folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX, 1));
     paths.push_back(buildNextHop(
         outLabel4,
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexX));
+        ifIndexX,
+        1));
     struct v6Addr addr6 {
       0
     };
@@ -616,13 +629,13 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   std::vector<openr::fbnl::NextHop> paths;
 
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX));
+      folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX, 1));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY2V6, ifIndexX));
+      folly::none, folly::none, folly::none, ipAddrY2V6, ifIndexX, 1));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY3V6, ifIndexX));
+      folly::none, folly::none, folly::none, ipAddrY3V6, ifIndexX, 1));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY4V6, ifIndexX));
+      folly::none, folly::none, folly::none, ipAddrY4V6, ifIndexX, 1));
 
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
@@ -691,9 +704,9 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
+      folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY, 1));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY2V4, ifIndexY));
+      folly::none, folly::none, folly::none, ipAddrY2V4, ifIndexY, 1));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
   ackCount = getAckCount();
@@ -764,7 +777,8 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexX));
+        ifIndexX,
+        1));
   }
 
   auto route = buildRoute(kRouteProtoId, ipPrefix5, folly::none, paths);
@@ -996,7 +1010,8 @@ TEST_F(NlMessageFixture, InvalidRoute) {
       folly::none,
       thrift::MplsActionCode::PUSH,
       ipAddrY1V6,
-      ifIndexX));
+      ifIndexX,
+      1));
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths1));
 
@@ -1007,7 +1022,8 @@ TEST_F(NlMessageFixture, InvalidRoute) {
       folly::none,
       thrift::MplsActionCode::PUSH,
       ipAddrY1V6,
-      ifIndexX));
+      ifIndexX,
+      1));
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix2, folly::none, paths2));
 
@@ -1239,9 +1255,10 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
       folly::none,
       thrift::MplsActionCode::PUSH,
       ipAddrY1V4,
-      ifIndexY));
+      ifIndexY,
+      1));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY2V4, ifIndexY));
+      folly::none, folly::none, folly::none, ipAddrY2V4, ifIndexY, 1));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
   ackCount = getAckCount();
@@ -1324,9 +1341,14 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
   std::vector<int32_t> labels(16);
   std::iota(std::begin(labels), std::end(labels), 701);
   paths.push_back(buildNextHop(
-      labels, folly::none, thrift::MplsActionCode::PUSH, ipAddrY1V4, ifIndexY));
+      labels,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V4,
+      ifIndexY,
+      1));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
+      folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY, 1));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
   ackCount = getAckCount();
@@ -1699,6 +1721,224 @@ TEST_F(NlMessageFixture, GetAllNeighborsV4) {
   // GetAllReachableNeighbors should not return them
   EXPECT_EQ(testNeighbors, 0);
 }
+
+/**
+ * Verifies that MPLS UCMP returns expected error code (invalid argument)
+ */
+TEST_F(NlMessageFixture, MplsUcmpError) {
+  //
+  // POP next-hop
+  //
+  {
+    std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+        folly::none,
+        folly::none,
+        thrift::MplsActionCode::POP_AND_LOOKUP,
+        folly::none,
+        std::nullopt,
+        3 /* non-default weight */)};
+    auto route = buildRoute(kRouteProtoId, folly::none, inLabel1, paths);
+    EXPECT_EQ(-EINVAL, nlSock->addRoute(route).get());
+  }
+
+  //
+  // PHP next-hop
+  //
+  {
+    std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+        folly::none,
+        folly::none,
+        thrift::MplsActionCode::PHP,
+        ipAddrX1V6,
+        ifIndexY,
+        3 /* non-default weight */)};
+    auto route = buildRoute(kRouteProtoId, folly::none, inLabel1, paths);
+    EXPECT_EQ(-EINVAL, nlSock->addRoute(route).get());
+  }
+
+  //
+  // SWAP next-hop
+  //
+  {
+    std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+        folly::none,
+        swapLabel1,
+        thrift::MplsActionCode::SWAP,
+        ipAddrX1V6,
+        ifIndexY,
+        3 /* non-default weight */)};
+    auto route = buildRoute(kRouteProtoId, folly::none, inLabel1, paths);
+    EXPECT_EQ(-EINVAL, nlSock->addRoute(route).get());
+  }
+}
+
+class NlMessageFixtureV4OrV6 : public NlMessageFixture,
+                               public testing::WithParamInterface<bool> {};
+
+/**
+ * Validates the UCMP functionality with single next-hop. The kernel ignore the
+ * weight and reports default weight (0 aka 1) as there is no effective UCMP for
+ * route with single next-hop
+ */
+TEST_P(NlMessageFixtureV4OrV6, UcmpSingleNextHop) {
+  const bool isV4 = GetParam();
+
+  folly::CIDRNetwork ipPrefix = isV4
+      ? folly::IPAddress::createNetwork("10.10.0.0/24")
+      : folly::IPAddress::createNetwork("fd00::/64");
+
+  std::vector<openr::fbnl::NextHop> paths;
+  paths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      isV4 ? ipAddrY1V4Peer : ipAddrX1V6,
+      ifIndexY,
+      3 /* non-default weight */));
+  auto route = buildRoute(kRouteProtoId, ipPrefix, folly::none, paths);
+
+  // Add route
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+
+  // Create expected route object
+  std::vector<openr::fbnl::NextHop> expectedPaths;
+  expectedPaths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      isV4 ? ipAddrY1V4Peer : ipAddrX1V6,
+      ifIndexY,
+      std::nullopt /* default weight */));
+  auto expectedRoute =
+      buildRoute(kRouteProtoId, ipPrefix, folly::none, expectedPaths);
+
+  // verify Netlink getAllRoutes for IPv4 nexthops
+  // NOTE: Weight is ignored
+  auto kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, expectedRoute));
+
+  // Delete the route
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, expectedRoute));
+}
+
+/**
+ * Add multiple next-hops to IP route with different weights. Verify that
+ * kernel accepts the route and also report the route back with the same
+ * weight numbers.
+ *
+ * NOTE: Kernel doesn't normalize any weights
+ */
+TEST_P(NlMessageFixtureV4OrV6, UcmpMultipleNextHops) {
+  const bool isV4 = GetParam();
+
+  folly::CIDRNetwork ipPrefix = isV4
+      ? folly::IPAddress::createNetwork("10.10.0.0/24")
+      : folly::IPAddress::createNetwork("fd00::/64");
+
+  // Path contains one MPLS push next-hop and another IP nexthop
+  std::vector<openr::fbnl::NextHop> paths;
+  paths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      isV4 ? ipAddrY1V4Peer : ipAddrX1V6,
+      ifIndexY,
+      3 /* non-default weight */));
+  paths.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      folly::none,
+      isV4 ? ipAddrX1V4Peer : ipAddrY1V6,
+      ifIndexX,
+      9 /* non-default weight */));
+  auto route = buildRoute(kRouteProtoId, ipPrefix, folly::none, paths);
+
+  // Add route
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+
+  // verify Netlink getAllRoutes for IPv4 nexthops
+  // NOTE: Weight is reported as it. It is not normalized
+  auto kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
+
+  // Delete the route
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
+}
+
+/**
+ * Same as above but now both nexthops have same weight (0 and 1).
+ * NOTE: weight=0 and weight=1 are treated same as weight=1
+ */
+TEST_P(NlMessageFixtureV4OrV6, UcmpMultipleNextHopsDefaultWeight) {
+  const bool isV4 = GetParam();
+
+  folly::CIDRNetwork ipPrefix = isV4
+      ? folly::IPAddress::createNetwork("10.10.0.0/24")
+      : folly::IPAddress::createNetwork("fd00::/64");
+
+  // Path contains one MPLS push next-hop and another IP nexthop
+  std::vector<openr::fbnl::NextHop> paths;
+  paths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      isV4 ? ipAddrY1V4Peer : ipAddrX1V6,
+      ifIndexY,
+      0 /* default-weight */));
+  paths.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      folly::none,
+      isV4 ? ipAddrX1V4Peer : ipAddrY1V6,
+      ifIndexX,
+      1 /* default weight */));
+  auto route = buildRoute(kRouteProtoId, ipPrefix, folly::none, paths);
+
+  // Add route
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+
+  // Create expected route. It contains both next-hops with weight=1
+  std::vector<openr::fbnl::NextHop> expectedPaths;
+  expectedPaths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      isV4 ? ipAddrY1V4Peer : ipAddrX1V6,
+      ifIndexY,
+      1 /* default-weight */));
+  expectedPaths.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      folly::none,
+      isV4 ? ipAddrX1V4Peer : ipAddrY1V6,
+      ifIndexX,
+      1 /* default weight */));
+  auto expectedRoute =
+      buildRoute(kRouteProtoId, ipPrefix, folly::none, expectedPaths);
+
+  // verify Netlink getAllRoutes for IPv4 nexthops
+  // NOTE: Weight is reported as it. It is not normalized
+  auto kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, expectedRoute));
+
+  // Delete the route
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, expectedRoute));
+}
+
+INSTANTIATE_TEST_CASE_P(
+    NetlinkProtocolSocket, NlMessageFixtureV4OrV6, ::testing::Bool());
 
 int
 main(int argc, char* argv[]) {
