@@ -96,7 +96,7 @@ const std::chrono::milliseconds kNegotiateHoldTime(500);
 const std::chrono::milliseconds kHeartbeatHoldTime(200);
 }; // namespace
 
-class Spark2Fixture : public testing::Test {
+class SparkFixture : public testing::Test {
  protected:
   void
   SetUp() override {
@@ -142,10 +142,10 @@ class Spark2Fixture : public testing::Test {
   std::unique_ptr<std::thread> mockIoProviderThread{nullptr};
 };
 
-class SimpleSpark2Fixture : public Spark2Fixture {
+class SimpleSparkFixture : public SparkFixture {
  protected:
   void
-  createAndConnectSpark2Nodes() {
+  createAndConnect() {
     // Define interface names for the test
     mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -168,7 +168,7 @@ class SimpleSpark2Fixture : public Spark2Fixture {
     // start tracking iface2
     EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
-    LOG(INFO) << "Start to receive messages from Spark2";
+    LOG(INFO) << "Start to receive messages from Spark";
 
     // Now wait for sparks to detect each other
     {
@@ -202,9 +202,9 @@ class SimpleSpark2Fixture : public Spark2Fixture {
 // Start 2 Spark instances and wait them forming adj. Then
 // increase/decrease RTT, expect NEIGHBOR_RTT_CHANGE event
 //
-TEST_F(SimpleSpark2Fixture, RttTest) {
-  // create Spark2 instances and establish connections
-  createAndConnectSpark2Nodes();
+TEST_F(SimpleSparkFixture, RttTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
 
   LOG(INFO) << "Change rtt between nodes to 40ms (asymmetric)";
 
@@ -241,9 +241,9 @@ TEST_F(SimpleSpark2Fixture, RttTest) {
 // make it uni-directional, expect both side to lose adj
 // due to missing node info in `ReflectedNeighborInfo`
 //
-TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
-  // create Spark2 instances and establish connections
-  createAndConnectSpark2Nodes();
+TEST_F(SimpleSparkFixture, UnidirectionTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
 
   LOG(INFO) << "Stopping communications from iface2 to iface1";
 
@@ -272,9 +272,9 @@ TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
 // restart one of them within GR window, make sure we get neighbor
 // "RESTARTED" event due to graceful restart window.
 //
-TEST_F(SimpleSpark2Fixture, GRTest) {
-  // create Spark2 instances and establish connections
-  createAndConnectSpark2Nodes();
+TEST_F(SimpleSparkFixture, GRTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
 
   // Kill node2
   LOG(INFO) << "Kill and restart node-2";
@@ -320,9 +320,9 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 // gracefully shut down one of them but NOT bring it back,
 // make sure we get neighbor "DOWN" event due to GR timer expiring.
 //
-TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
-  // create Spark2 instances and establish connections
-  createAndConnectSpark2Nodes();
+TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
 
   // Kill node2
   LOG(INFO) << "Kill and restart node-2";
@@ -348,9 +348,9 @@ TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
 // stop the bi-direction communication from each other.
 // Observe neighbor going DOWN due to hold timer expiration.
 //
-TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
-  // create Spark2 instances and establish connections
-  createAndConnectSpark2Nodes();
+TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
 
   // record time for future comparison
   auto startTime = std::chrono::steady_clock::now();
@@ -377,9 +377,9 @@ TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
 // Start 2 Spark instances and wait them forming adj. Then
 // remove/add interface from one instance's perspective
 //
-TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
-  // create Spark2 instances and establish connections
-  createAndConnectSpark2Nodes();
+TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
 
   auto startTime = std::chrono::steady_clock::now();
 
@@ -444,7 +444,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
 // version. Confirm node3 can't form adjacency with neither of node1/node2
 // bi-directionally.
 //
-TEST_F(Spark2Fixture, VersionTest) {
+TEST_F(SparkFixture, VersionTest) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex(
       {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
@@ -515,7 +515,7 @@ TEST_F(Spark2Fixture, VersionTest) {
 // Start 2 Spark instances within different domains. Then
 // make sure they can't form adj as helloMsg being ignored.
 //
-TEST_F(Spark2Fixture, DomainTest) {
+TEST_F(SparkFixture, DomainTest) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -559,7 +559,7 @@ TEST_F(Spark2Fixture, DomainTest) {
 //      \   /
 //     [node1]
 //
-TEST_F(Spark2Fixture, HubAndSpokeTopology) {
+TEST_F(SparkFixture, HubAndSpokeTopology) {
   const std::string iface1_2{"iface1_2"};
   const std::string iface1_3{"iface1_3"};
   const int ifIndex1_2{12};
@@ -646,7 +646,7 @@ TEST_F(Spark2Fixture, HubAndSpokeTopology) {
   }
 }
 
-TEST_F(Spark2Fixture, FastInitTest) {
+TEST_F(SparkFixture, FastInitTest) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -664,12 +664,12 @@ TEST_F(Spark2Fixture, FastInitTest) {
   auto node2 = createSpark(kDomainName, nodeName2, 2);
 
   {
-    // Record current timestamp
-    const auto startTime = std::chrono::steady_clock::now();
-
     // start tracking interfaces
     EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
     EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+    // record current timestamp
+    const auto startTime = std::chrono::steady_clock::now();
 
     EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
     EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
@@ -687,8 +687,12 @@ TEST_F(Spark2Fixture, FastInitTest) {
   node2 = createSpark(kDomainName, nodeName2, 3 /* changed */);
 
   {
-    const auto startTime = std::chrono::steady_clock::now();
+    // start tracking interfaces
     EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+    // record current timestamp
+    const auto startTime = std::chrono::steady_clock::now();
+
     EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
 
     // make sure total time used is limited
@@ -705,7 +709,7 @@ TEST_F(Spark2Fixture, FastInitTest) {
 // Shut down node-3 and make sure adjacency between node-1 and node-2
 // is NOT affected.
 //
-TEST_F(Spark2Fixture, MultiplePeersOverSameInterface) {
+TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex(
       {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
@@ -832,7 +836,7 @@ TEST_F(Spark2Fixture, MultiplePeersOverSameInterface) {
 // shutdown the peer that cannot hear, and make sure there is no DOWN
 // event generated for this one.
 //
-TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
+TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -875,7 +879,7 @@ TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
 // Start 1 Spark instace and make its interfaces connected to its own
 // Make sure pkt loop can be handled gracefully and no ADJ will be formed.
 //
-TEST_F(Spark2Fixture, LoopedHelloPktTest) {
+TEST_F(SparkFixture, LoopedHelloPktTest) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}});
 
@@ -907,7 +911,7 @@ TEST_F(Spark2Fixture, LoopedHelloPktTest) {
 // neighbors. Then put them in same subnet, make sure instances
 // will form adj with each other.
 //
-TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
+TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -975,7 +979,7 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
 // neighbor state within NEGOTIATE/WARM depending on whether
 // new helloMsg is received.
 //
-TEST_F(Spark2Fixture, InvalidV4Subnet) {
+TEST_F(SparkFixture, InvalidV4Subnet) {
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -1030,7 +1034,7 @@ TEST_F(Spark2Fixture, InvalidV4Subnet) {
 // Start 2 Spark instances with areaConfig and make sure they
 // can form adj with each other in specified AREA.
 //
-TEST_F(Spark2Fixture, AreaMatch) {
+TEST_F(SparkFixture, AreaMatch) {
   // Explicitly set regex to be capital letters to make sure
   // regex is NOT case-sensative
   auto areaConfig11 = SparkWrapper::createAreaConfig(area1, {"RSW.*"}, {".*"});
@@ -1095,7 +1099,7 @@ TEST_F(Spark2Fixture, AreaMatch) {
 // Start 2 Spark instances with areaConfig and make sure they
 // can NOT form adj due to wrong AREA regex matching.
 //
-TEST_F(Spark2Fixture, NoAreaMatch) {
+TEST_F(SparkFixture, NoAreaMatch) {
   // AreaConfig:
   //  rsw001: { 1 -> "RSW.*"}
   //  fsw002: { 1 -> "FSW.*"}
@@ -1153,7 +1157,7 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
 // Start 2 Spark instances with areaConfig and make sure they
 // can NOT form adj due to inconsistent AREA negotiation result.
 //
-TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
+TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   // AreaConfig:
   //  rsw001: { 1 -> "FSW.*"}
   //  fsw002: { 2 -> "RSW.*"}
@@ -1218,7 +1222,7 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
 // another Spark with areaConfig passed in. Make sure they can
 // form adj in `defaultArea` for backward compatibility.
 //
-TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
+TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   // AreaConfig:
   //  rsw001: {}
   //  fsw002: { 2 -> "RSW.*"}
@@ -1275,7 +1279,7 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
 // can form adj with different peers within different area over the
 // same interface.
 //
-TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
+TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   // AreaConfig:
   //  rsw001: { 1 -> {"FSW.*"}, 2 -> {"SSW.*"}}
   //  fsw002: { 1 -> {"RSW.*", "SSW.*"}}
