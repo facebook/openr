@@ -70,7 +70,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 
         SYNCHRONIZED(kvStorePublishers_) {
           for (auto& kv : kvStorePublishers_) {
-            kv.second.next(maybePublication.value());
+            kv.second->publish(maybePublication.value());
           }
         }
 
@@ -134,8 +134,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 }
 
 OpenrCtrlHandler::~OpenrCtrlHandler() {
-  std::vector<apache::thrift::ServerStreamPublisher<thrift::Publication>>
-      publishers;
+  std::vector<std::unique_ptr<KvStorePublisher>> publishers;
   // NOTE: We're intentionally creating list of publishers to and then invoke
   // `complete()` on them.
   // Reason => `complete()` returns only when callback `onComplete` associated
@@ -150,7 +149,7 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   LOG(INFO) << "Terminating " << publishers.size()
             << " active KvStore snoop stream(s).";
   for (auto& publisher : publishers) {
-    std::move(publisher).complete();
+    publisher->complete();
   }
 
   LOG(INFO) << "Cleanup all pending request(s).";
@@ -591,7 +590,8 @@ OpenrCtrlHandler::semifuture_getKvStorePeersArea(
 }
 
 apache::thrift::ServerStream<thrift::Publication>
-OpenrCtrlHandler::subscribeKvStore() {
+OpenrCtrlHandler::subscribeKvStoreFilter(
+    std::unique_ptr<thrift::KvFilter> filter) {
   // Get new client-ID (monotonically increasing)
   auto clientToken = publisherToken_++;
 
@@ -612,8 +612,9 @@ OpenrCtrlHandler::subscribeKvStore() {
   SYNCHRONIZED(kvStorePublishers_) {
     assert(kvStorePublishers_.count(clientToken) == 0);
     LOG(INFO) << "KvStore snoop stream-" << clientToken << " started.";
-    kvStorePublishers_.emplace(
-        clientToken, std::move(streamAndPublisher.second));
+    auto kvStorePublisher = std::make_unique<KvStorePublisher>(
+        std::move(*filter), std::move(streamAndPublisher.second));
+    kvStorePublishers_.emplace(clientToken, std::move(kvStorePublisher));
   }
   return std::move(streamAndPublisher.first);
 }
@@ -622,10 +623,33 @@ folly::SemiFuture<apache::thrift::ResponseAndServerStream<
     thrift::Publication,
     thrift::Publication>>
 OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
+  return semifuture_subscribeAndGetKvStoreFiltered(
+      std::make_unique<thrift::KvFilter>());
+}
+
+folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+    thrift::Publication,
+    thrift::Publication>>
+OpenrCtrlHandler::semifuture_subscribeAndGetKvStoreFiltered(
+    std::unique_ptr<thrift::KvFilter> filter) {
+  thrift::KeyDumpParams params;
+  if (filter->keys_ref().has_value() && (*filter->keys_ref()).size()) {
+    folly::join(",", *filter->keys_ref(), params.prefix);
+  }
+
+  if (filter->originatorIds_ref().has_value() &&
+      (*filter->originatorIds_ref()).size()) {
+    params.originatorIds = std::move(*filter->originatorIds_ref());
+  }
+
+  if (filter->oper_ref().has_value()) {
+    params.oper_ref() = std::move(*filter->oper_ref());
+  }
+
   return semifuture_getKvStoreKeyValsFiltered(
-             std::make_unique<thrift::KeyDumpParams>())
+             std::make_unique<thrift::KeyDumpParams>(params))
       .defer(
-          [stream = subscribeKvStore()](
+          [stream = subscribeKvStoreFilter(std::move(filter))](
               folly::Try<std::unique_ptr<thrift::Publication>>&& pub) mutable {
             pub.throwIfFailed();
             return apache::thrift::ResponseAndServerStream<

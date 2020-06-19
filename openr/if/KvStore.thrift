@@ -51,6 +51,22 @@ enum Command {
   FLOOD_TOPO_SET = 11, // set or unset flooding-topo child
 }
 
+enum FilterOperator {
+  // Logical operation between originator ids and keys
+  OR = 1,
+  AND = 2,
+}
+
+// KvFilter specifies which keys in Kv Store to
+// subscribe so that users receive only certain kinds of
+// updates. For example, DC Controller might be interesred in
+// getting "adj:.*" keys from open/r domain.
+struct KvFilter {
+  1: optional list<string> keys;
+  2: optional set<string> originatorIds;
+  3: optional FilterOperator oper // default is OR
+}
+
 struct KeySetParams {
   // NOTE: the struct is denormalized on purpose,
   // it may happen so we repeat originatorId
@@ -87,6 +103,7 @@ struct KeyDumpParams {
   //  1) If NOT empty, ONLY respond with keyVals on which hash differs;
   //  2) Otherwise, respond with flooding element to signal DB change;
   2: optional KeyVals keyValHashes
+  4: optional FilterOperator oper
 }
 
 // Peer's publication and command socket URLs

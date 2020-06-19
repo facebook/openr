@@ -17,11 +17,6 @@ include "openr/if/OpenrCtrl.thrift"
  */
 service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
   /**
-   * Subscribe KvStore updates
-   */
-  stream<KvStore.Publication> subscribeKvStore()
-
-  /**
    * Retrieve KvStore snapshot and as well subscribe subsequent updates. This
    * is useful for mirroring copy of KvStore on remote node for monitoring or
    * control applications. No update between snapshot and full-stream is lost.
@@ -29,4 +24,7 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
    * There may be some replicated entries in stream that are also in snapshot.
    */
   KvStore.Publication, stream<KvStore.Publication> subscribeAndGetKvStore()
+
+  KvStore.Publication, stream<KvStore.Publication>
+    subscribeAndGetKvStoreFiltered(1: KvStore.KvFilter filter)
 }

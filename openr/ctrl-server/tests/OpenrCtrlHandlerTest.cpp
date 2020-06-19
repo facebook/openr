@@ -607,29 +607,11 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   //
-  // Subscribe API
+  // Subscribe and Get API
   //
-
   {
-    std::atomic<int> received{0};
+    // Add more keys and values
     const std::string key{"snoop-key"};
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
-    auto subscription =
-        handler->subscribeKvStore().toClientStream().subscribeExTry(
-            folly::getEventBase(), [&received, key](auto&& t) {
-              // Consider publication only if `key` is present
-              // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals.count(key)) {
-                return;
-              }
-              auto& pub = *t;
-              EXPECT_EQ(1, pub.keyVals.size());
-              ASSERT_EQ(1, pub.keyVals.count(key));
-              EXPECT_EQ("value1", pub.keyVals.at(key).value_ref().value());
-              EXPECT_EQ(received + 1, pub.keyVals.at(key).version);
-              received++;
-            });
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
     kvStoreWrapper->setKey(
         key, createThriftValue(1, "node1", std::string("value1")));
     kvStoreWrapper->setKey(
@@ -638,33 +620,15 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
         key, createThriftValue(2, "node1", std::string("value1")));
     kvStoreWrapper->setKey(
         key, createThriftValue(3, "node1", std::string("value1")));
-
-    // Check we should receive-3 updates
-    while (received < 3) {
-      std::this_thread::yield();
-    }
-
-    // Cancel subscription
-    subscription.cancel();
-    std::move(subscription).detach();
-
-    // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
-      std::this_thread::yield();
-    }
   }
 
-  //
-  // Subscribe and Get API
-  //
-
   {
-    std::atomic<int> received{0};
     const std::string key{"snoop-key"};
+
+    std::atomic<int> received{0};
     auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
         handler->semifuture_subscribeAndGetKvStore().get();
-
     // Expect 10 keys in the initial dump
     // NOTE: there may be extra keys from PrefixManager & LinkMonitor)
     EXPECT_LE(10, responseAndSubscription.response.keyVals.size());
@@ -711,6 +675,313 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
     // Check we should receive-3 updates
     while (received < 5) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumKvStorePublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+
+  // Subscribe and Get API
+  // No entry is found in the initial shapshot
+  // Matching prefixes get injected later.
+  {
+    std::atomic<int> received{0};
+    const std::string key{"key4"};
+    std::vector<std::string> keys = {"key4"};
+    std::set<std::string> ids;
+    ids.insert("node1");
+    ids.insert("node2");
+    ids.insert("node3");
+    ids.insert("node33");
+
+    thrift::KvFilter filter;
+    filter.keys_ref() = keys;
+    filter.originatorIds_ref() = ids;
+    filter.oper_ref() = thrift::FilterOperator::AND;
+    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
+    auto responseAndSubscription =
+        handler
+            ->semifuture_subscribeAndGetKvStoreFiltered(
+                std::make_unique<thrift::KvFilter>(filter))
+            .get();
+
+    EXPECT_LE(0, responseAndSubscription.response.keyVals.size());
+    ASSERT_EQ(0, responseAndSubscription.response.keyVals.count(key));
+
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .toClientStream()
+            .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
+              // Consider publication only if `key` is present
+              // NOTE: There can be updates to prefix or adj keys
+              if (!t.hasValue() or not t->keyVals.count(key)) {
+                return;
+              }
+              auto& pub = *t;
+              EXPECT_EQ(1, pub.keyVals.size());
+              ASSERT_EQ(1, pub.keyVals.count(key));
+              EXPECT_EQ("value4", pub.keyVals.at(key).value_ref().value());
+              received++;
+            });
+
+    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    kvStoreWrapper->setKey(
+        key, createThriftValue(1, "node1", std::string("value4")));
+
+    // Check we should receive-1 updates
+    while (received < 1) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumKvStorePublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+
+  // Subscribe and Get API
+  // Initial kv store snapshot has matching entries
+  // More Matching prefixes get injected later.
+  {
+    std::atomic<int> received{0};
+    const std::string key{"key333"};
+    std::vector<std::string> keys = {"key33"};
+    std::set<std::string> ids;
+    ids.insert("node1");
+    ids.insert("node2");
+    ids.insert("node3");
+    ids.insert("node33");
+    thrift::KvFilter filter;
+    filter.keys_ref() = keys;
+    filter.originatorIds_ref() = ids;
+    filter.oper_ref() = thrift::FilterOperator::AND;
+
+    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
+    auto responseAndSubscription =
+        handler
+            ->semifuture_subscribeAndGetKvStoreFiltered(
+                std::make_unique<thrift::KvFilter>(filter))
+            .get();
+
+    EXPECT_LE(2, responseAndSubscription.response.keyVals.size());
+    ASSERT_EQ(1, responseAndSubscription.response.keyVals.count(key));
+
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .toClientStream()
+            .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
+              // Consider publication only if `key` is present
+              // NOTE: There can be updates to prefix or adj keys
+              if (!t.hasValue() or not t->keyVals.count(key)) {
+                return;
+              }
+              auto& pub = *t;
+              EXPECT_EQ(1, pub.keyVals.size());
+              ASSERT_EQ(1, pub.keyVals.count(key));
+              EXPECT_EQ("value333", pub.keyVals.at(key).value_ref().value());
+              received++;
+            });
+
+    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    kvStoreWrapper->setKey(
+        key, createThriftValue(2, "node33", std::string("value333")));
+
+    // Check we should receive-1 updates
+    while (received < 1) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumKvStorePublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+
+  // Subscribe and Get API
+  // Multiple matching keys
+  {
+    std::atomic<int> received{0};
+    const std::string key{"test-key"};
+    std::vector<std::string> keys = {"key1", key, "key3"};
+    std::set<std::string> ids;
+    ids.insert("node1");
+    ids.insert("node2");
+    ids.insert("node3");
+    ids.insert("node33");
+    thrift::KvFilter filter;
+    filter.keys_ref() = keys;
+    filter.originatorIds_ref() = ids;
+    filter.oper_ref() = thrift::FilterOperator::AND;
+
+    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
+    auto responseAndSubscription =
+        handler
+            ->semifuture_subscribeAndGetKvStoreFiltered(
+                std::make_unique<thrift::KvFilter>(filter))
+            .get();
+
+    EXPECT_LE(3, responseAndSubscription.response.keyVals.size());
+    EXPECT_EQ(0, responseAndSubscription.response.keyVals.count(key));
+    ASSERT_EQ(1, responseAndSubscription.response.keyVals.count("key1"));
+    ASSERT_EQ(1, responseAndSubscription.response.keyVals.count("key3"));
+
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .toClientStream()
+            .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
+              // Consider publication only if `key` is present
+              // NOTE: There can be updates to prefix or adj keys
+              if (!t.hasValue() or not t->keyVals.count(key)) {
+                return;
+              }
+              auto& pub = *t;
+              EXPECT_EQ(1, pub.keyVals.size());
+              ASSERT_EQ(1, pub.keyVals.count(key));
+              EXPECT_EQ("value1", pub.keyVals.at(key).value_ref().value());
+              received++;
+            });
+
+    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    kvStoreWrapper->setKey(
+        key, createThriftValue(4, "node1", std::string("value1")));
+
+    // Check we should receive-1 updates
+    while (received < 1) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumKvStorePublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+
+  // Subscribe and Get API
+  // No matching originator id in initial snapshot
+  {
+    std::atomic<int> received{0};
+    const std::string key{"test_key"};
+    std::vector<std::string> keys = {"key1", "key2", "key3", key};
+    std::set<std::string> ids;
+    ids.insert("node10");
+    thrift::KvFilter filter;
+    filter.keys_ref() = keys;
+    filter.originatorIds_ref() = ids;
+    filter.oper_ref() = thrift::FilterOperator::AND;
+
+    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
+    auto responseAndSubscription =
+        handler
+            ->semifuture_subscribeAndGetKvStoreFiltered(
+                std::make_unique<thrift::KvFilter>(filter))
+            .get();
+
+    EXPECT_LE(0, responseAndSubscription.response.keyVals.size());
+
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .toClientStream()
+            .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
+              // Consider publication only if `key` is present
+              // NOTE: There can be updates to prefix or adj keys
+              if (!t.hasValue() or not t->keyVals.count(key)) {
+                return;
+              }
+              auto& pub = *t;
+              EXPECT_EQ(1, pub.keyVals.size());
+              ASSERT_EQ(1, pub.keyVals.count(key));
+              EXPECT_EQ("value1", pub.keyVals.at(key).value_ref().value());
+              received++;
+            });
+
+    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    kvStoreWrapper->setKey(
+        key, createThriftValue(2, "node1", std::string("value1")));
+
+    // Check we should receive-1 updates
+    while (received < 1) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumKvStorePublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+
+  // Subscribe and Get API
+  // Use OR logical operators in Kv Filter
+  {
+    std::atomic<int> received{0};
+    const std::string key{"snoop-test-key"};
+    std::vector<std::string> keys = {"key1", "key2", "key3", key};
+    std::set<std::string> ids;
+    ids.insert("node1");
+    ids.insert("node2");
+    ids.insert("node3");
+    ids.insert("node33");
+    thrift::KvFilter filter;
+    filter.keys_ref() = keys;
+    filter.originatorIds_ref() = ids;
+
+    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
+    auto responseAndSubscription =
+        handler
+            ->semifuture_subscribeAndGetKvStoreFiltered(
+                std::make_unique<thrift::KvFilter>(filter))
+            .get();
+
+    EXPECT_LE(10, responseAndSubscription.response.keyVals.size());
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .toClientStream()
+            .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
+              // Consider publication only if `key` is present
+              // NOTE: There can be updates to prefix or adj keys
+              if (!t.hasValue() or not t->keyVals.count(key)) {
+                return;
+              }
+              auto& pub = *t;
+              EXPECT_EQ(1, pub.keyVals.size());
+              ASSERT_EQ(1, pub.keyVals.count(key));
+              EXPECT_EQ("value1", pub.keyVals.at(key).value_ref().value());
+              EXPECT_EQ(received + 10, pub.keyVals.at(key).version);
+              received++;
+            });
+
+    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    kvStoreWrapper->setKey(
+        key, createThriftValue(10, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(11, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(12, "node1", std::string("value1")));
+
+    // Check we should receive-3 updates
+    while (received < 3) {
       std::this_thread::yield();
     }
 

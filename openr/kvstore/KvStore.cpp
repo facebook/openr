@@ -75,6 +75,27 @@ KvStoreFilters::keyMatch(
   return false;
 }
 
+// The function return true if there is a match on all the attributes
+// such as key prefix and originator ids.
+bool
+KvStoreFilters::keyMatchAll(
+    std::string const& key, thrift::Value const& value) const {
+  if (keyPrefixList_.empty() && originatorIds_.empty()) {
+    // No filter and nothing to match against.
+    return true;
+  }
+
+  if (!keyPrefixList_.empty() && not keyPrefixObjList_.keyMatch(key)) {
+    return false;
+  }
+
+  if (!originatorIds_.empty() && not originatorIds_.count(value.originatorId)) {
+    return false;
+  }
+
+  return true;
+}
+
 std::vector<std::string>
 KvStoreFilters::getKeyPrefixes() const {
   return keyPrefixList_;
@@ -575,7 +596,13 @@ KvStore::dumpKvStoreKeys(
       folly::split(",", keyDumpParams.prefix, keyPrefixList, true);
       const auto keyPrefixMatch =
           KvStoreFilters(keyPrefixList, keyDumpParams.originatorIds);
-      auto thriftPub = kvStoreDb.dumpAllWithFilters(keyPrefixMatch);
+
+      thrift::FilterOperator oper = thrift::FilterOperator::OR;
+      if (keyDumpParams.oper_ref().has_value()) {
+        oper = *keyDumpParams.oper_ref();
+      }
+
+      auto thriftPub = kvStoreDb.dumpAllWithFilters(keyPrefixMatch, oper);
       if (keyDumpParams.keyValHashes_ref().has_value()) {
         thriftPub = kvStoreDb.dumpDifference(
             thriftPub.keyVals, keyDumpParams.keyValHashes_ref().value());
@@ -1086,15 +1113,27 @@ KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
 // dump the entries of my KV store whose keys match the given prefix
 // if prefix is the empty string, the full KV store is dumped
 thrift::Publication
-KvStoreDb::dumpAllWithFilters(KvStoreFilters const& kvFilters) const {
+KvStoreDb::dumpAllWithFilters(
+    KvStoreFilters const& kvFilters, thrift::FilterOperator oper) const {
   thrift::Publication thriftPub;
   thriftPub.area_ref() = area_;
 
-  for (auto const& kv : kvStore_) {
-    if (not kvFilters.keyMatch(kv.first, kv.second)) {
-      continue;
+  switch (oper) {
+  case thrift::FilterOperator::AND:
+    for (auto const& kv : kvStore_) {
+      if (not kvFilters.keyMatchAll(kv.first, kv.second)) {
+        continue;
+      }
+      thriftPub.keyVals[kv.first] = kv.second;
     }
-    thriftPub.keyVals[kv.first] = kv.second;
+    break;
+  default:
+    for (auto const& kv : kvStore_) {
+      if (not kvFilters.keyMatch(kv.first, kv.second)) {
+        continue;
+      }
+      thriftPub.keyVals[kv.first] = kv.second;
+    }
   }
   return thriftPub;
 }

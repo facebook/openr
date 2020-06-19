@@ -17,6 +17,7 @@
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStorePublisher.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
@@ -200,12 +201,19 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler
-  apache::thrift::ServerStream<thrift::Publication> subscribeKvStore() override;
+  apache::thrift::ServerStream<thrift::Publication> subscribeKvStoreFilter(
+      std::unique_ptr<thrift::KvFilter>);
 
   folly::SemiFuture<apache::thrift::ResponseAndServerStream<
       thrift::Publication,
       thrift::Publication>>
   semifuture_subscribeAndGetKvStore() override;
+
+  folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+      thrift::Publication,
+      thrift::Publication>>
+  semifuture_subscribeAndGetKvStoreFiltered(
+      std::unique_ptr<thrift::KvFilter> filter) override;
 
   // Long poll support
   folly::SemiFuture<bool> semifuture_longPollKvStoreAdj(
@@ -313,9 +321,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // Active kvstore snoop publishers
   std::atomic<int64_t> publisherToken_{0};
-  folly::Synchronized<std::unordered_map<
-      int64_t,
-      apache::thrift::ServerStreamPublisher<thrift::Publication>>>
+  folly::Synchronized<
+      std::unordered_map<int64_t, std::unique_ptr<KvStorePublisher>>>
       kvStorePublishers_;
 
   // pending longPoll requests from clients, which consists of

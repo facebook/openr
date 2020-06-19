@@ -90,6 +90,9 @@ class KvStoreFilters {
   // Check if key matches the filters
   bool keyMatch(std::string const& key, thrift::Value const& value) const;
 
+  // Check if key matches all the filters
+  bool keyMatchAll(std::string const& key, thrift::Value const& value) const;
+
   // return comma separeated string prefix
   std::vector<std::string> getKeyPrefixes() const;
 
@@ -199,7 +202,9 @@ class KvStoreDb : public DualNode {
 
   // dump the entries of my KV store whose keys match the given prefix
   // if prefix is the empty sting, the full KV store is dumped
-  thrift::Publication dumpAllWithFilters(KvStoreFilters const& kvFilters) const;
+  thrift::Publication dumpAllWithFilters(
+      KvStoreFilters const& kvFilters,
+      thrift::FilterOperator oper = thrift::FilterOperator::OR) const;
 
   // dump the hashes of my KV store whose keys match the given prefix
   // if prefix is the empty sting, the full hash store is dumped

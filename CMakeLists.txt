@@ -303,6 +303,7 @@ add_library(openrlib
   openr/fib/Fib.cpp
   openr/kvstore/KvStoreClientInternal.cpp
   openr/kvstore/KvStore.cpp
+  openr/kvstore/KvStorePublisher.cpp
   openr/kvstore/KvStoreWrapper.cpp
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
