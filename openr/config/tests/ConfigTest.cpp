@@ -197,6 +197,63 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW((Config(confInvalidFloodMsgPerSec)), std::out_of_range);
   }
 
+  // Spark
+
+  // Exception: neighbor_discovery_port <= 0 or > 65535
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.neighbor_discovery_port = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
+
+    confInvalidSpark.spark_config.neighbor_discovery_port = 65536;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
+  }
+
+  // Exception: hello_time_s <= 0
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.hello_time_s = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
+  }
+
+  // Exception: fastinit_hello_time_ms <= 0
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.fastinit_hello_time_ms = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
+  }
+
+  // Exception: fastinit_hello_time_ms > hello_time_s
+  {
+    auto confInvalidSpark2 = getBasicOpenrConfig();
+    confInvalidSpark2.spark_config.fastinit_hello_time_ms = 10000;
+    confInvalidSpark2.spark_config.hello_time_s = 2;
+    EXPECT_THROW(auto c = Config(confInvalidSpark2), std::invalid_argument);
+  }
+
+  // Exception: keepalive_time_s <= 0
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.keepalive_time_s = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
+  }
+
+  // Exception: keepalive_time_s > hold_time_s
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.keepalive_time_s = 10;
+    confInvalidSpark.spark_config.hold_time_s = 5;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+  }
+
+  // Exception: graceful_restart_time_s < 3 * keepalive_time_s
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.keepalive_time_s = 10;
+    confInvalidSpark.spark_config.graceful_restart_time_s = 20;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+  }
+
   // link monitor
 
   // linkflap_initial_backoff_ms < 0
