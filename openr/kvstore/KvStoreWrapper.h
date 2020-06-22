@@ -173,6 +173,11 @@ class KvStoreWrapper {
     return kvStore_.get();
   }
 
+  const std::string
+  getNodeId() {
+    return this->nodeId;
+  }
+
  public:
   /**
    * Socket URLs and other constants which can be used for connecting to KvStore

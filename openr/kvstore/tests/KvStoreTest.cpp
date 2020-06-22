@@ -173,8 +173,8 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
       for (const auto j : adjacencyList[i]) {
         const auto neighborId = getNodeId(kOriginBase, j);
         LOG(INFO) << "Adding neighbor " << neighborId << " to store " << nodeId;
-        EXPECT_TRUE(
-            stores[i]->addPeer(stores[j]->nodeId, stores[j]->getPeerSpec()));
+        EXPECT_TRUE(stores[i]->addPeer(
+            stores[j]->getNodeId(), stores[j]->getPeerSpec()));
       }
     }
 
@@ -260,7 +260,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           EXPECT_EQ(expectedKeyVals, receivedKeyVals);
 
           // Print for debugging.
-          VLOG(4) << "Store " << store->nodeId << " received keys.";
+          VLOG(4) << "Store " << store->getNodeId() << " received keys.";
           for (auto const& kv : receivedKeyVals) {
             VLOG(4) << "\tkey: " << kv.first
                     << ", value: " << kv.second.value_ref().value()
@@ -289,7 +289,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           for (auto& store : stores) {
             auto keyVals = store->dumpAll();
             if (not keyVals.empty()) {
-              VLOG(2) << store->nodeId << " still has " << keyVals.size()
+              VLOG(2) << store->getNodeId() << " still has " << keyVals.size()
                       << " keys remaining";
               for (auto& kv : keyVals) {
                 VLOG(2) << "  " << kv.first << ", ttl: " << kv.second.ttl;
@@ -1163,7 +1163,7 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   EXPECT_EQ(thriftVal2, *maybeThriftVal);
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
-  EXPECT_TRUE(store1->addPeer(store0->nodeId, store0->getPeerSpec()));
+  EXPECT_TRUE(store1->addPeer(store0->getNodeId(), store0->getPeerSpec()));
   // wait to sync kvstore
   std::this_thread::sleep_for(std::chrono::milliseconds(20));
   // key 'test1' should be added with remaining TTL
@@ -1202,13 +1202,13 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   store2->run();
 
   // Add peers to store0
-  EXPECT_TRUE(store0->addPeer(store1->nodeId, store1->getPeerSpec()));
-  EXPECT_TRUE(store0->addPeer(store2->nodeId, store2->getPeerSpec()));
+  EXPECT_TRUE(store0->addPeer(store1->getNodeId(), store1->getPeerSpec()));
+  EXPECT_TRUE(store0->addPeer(store2->getNodeId(), store2->getPeerSpec()));
 
   // map of peers we expect and dump peers to expect the results.
   std::unordered_map<std::string, thrift::PeerSpec> expectedPeers = {
-      {store1->nodeId, store1->getPeerSpec()},
-      {store2->nodeId, store2->getPeerSpec()},
+      {store1->getNodeId(), store1->getPeerSpec()},
+      {store2->getNodeId(), store2->getPeerSpec()},
   };
   EXPECT_EQ(expectedPeers, store0->getPeers());
 
@@ -1255,7 +1255,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   EXPECT_EQ(thriftVal, pub.keyVals["test"]);
 
   // Update store1 with same peer spec
-  EXPECT_TRUE(store0->addPeer(store1->nodeId, store1->getPeerSpec()));
+  EXPECT_TRUE(store0->addPeer(store1->getNodeId(), store1->getPeerSpec()));
   EXPECT_EQ(expectedPeers, store0->getPeers());
 
   // Update key
@@ -1283,7 +1283,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   LOG(INFO) << "Deleting the peers for store0...";
   store0->delPeer("store1");
   expectedPeers.clear();
-  expectedPeers[store2->nodeId] = store2->getPeerSpec();
+  expectedPeers[store2->getNodeId()] = store2->getPeerSpec();
   EXPECT_EQ(expectedPeers, store0->getPeers());
 
   // Remove store2 and verify that there are no more peers
@@ -1326,17 +1326,17 @@ TEST_F(KvStoreTestFixture, DualTest) {
 
   //
   // Add peers to all stores
-  EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
-  EXPECT_TRUE(r0->addPeer(n1->nodeId, n1->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n0->getNodeId(), n0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n1->getNodeId(), n1->getPeerSpec()));
 
-  EXPECT_TRUE(r1->addPeer(n0->nodeId, n0->getPeerSpec()));
-  EXPECT_TRUE(r1->addPeer(n1->nodeId, n1->getPeerSpec()));
+  EXPECT_TRUE(r1->addPeer(n0->getNodeId(), n0->getPeerSpec()));
+  EXPECT_TRUE(r1->addPeer(n1->getNodeId(), n1->getPeerSpec()));
 
-  EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
-  EXPECT_TRUE(n0->addPeer(r1->nodeId, r1->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r0->getNodeId(), r0->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r1->getNodeId(), r1->getPeerSpec()));
 
-  EXPECT_TRUE(n1->addPeer(r0->nodeId, r0->getPeerSpec()));
-  EXPECT_TRUE(n1->addPeer(r1->nodeId, r1->getPeerSpec()));
+  EXPECT_TRUE(n1->addPeer(r0->getNodeId(), r0->getPeerSpec()));
+  EXPECT_TRUE(n1->addPeer(r1->getNodeId(), r1->getPeerSpec()));
 
   // let kvstore dual sync
   /* sleep override */
@@ -1595,10 +1595,10 @@ TEST_F(KvStoreTestFixture, DualTest) {
 
   // case3. bring r0 back up, and validate again
   // everybody should pick r0 as new root
-  EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
-  EXPECT_TRUE(r0->addPeer(n1->nodeId, n1->getPeerSpec()));
-  EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
-  EXPECT_TRUE(n1->addPeer(r0->nodeId, r0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n0->getNodeId(), n0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n1->getNodeId(), n1->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r0->getNodeId(), r0->getPeerSpec()));
+  EXPECT_TRUE(n1->addPeer(r0->getNodeId(), r0->getPeerSpec()));
 
   // let kvstore dual sync
   /* sleep override */
@@ -1738,8 +1738,8 @@ TEST_F(KvStoreTestFixture, DualTest) {
   }
 
   // case5. bring r0-n1 link back up, and validate again
-  EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
-  EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n0->getNodeId(), n0->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r0->getNodeId(), r0->getPeerSpec()));
 
   // let kvstore dual sync
   /* sleep override */
@@ -1757,10 +1757,10 @@ TEST_F(KvStoreTestFixture, DualTest) {
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
   // bring r0 back up
-  EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
-  EXPECT_TRUE(r0->addPeer(n1->nodeId, n1->getPeerSpec()));
-  EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
-  EXPECT_TRUE(n1->addPeer(r0->nodeId, r0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n0->getNodeId(), n0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n1->getNodeId(), n1->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r0->getNodeId(), r0->getPeerSpec()));
+  EXPECT_TRUE(n1->addPeer(r0->getNodeId(), r0->getPeerSpec()));
 
   // let kvstore dual sync
   /* sleep override */
@@ -1875,12 +1875,12 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
   for (auto& store : peerStores) {
-    auto key = folly::sformat("test-key-{}", store->nodeId);
+    auto key = folly::sformat("test-key-{}", store->getNodeId());
     thrift::Value thriftVal(
         apache::thrift::FRAGILE,
         1 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-{}", store->nodeId),
+        folly::sformat("test-value-{}", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -1905,8 +1905,8 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // NOTE: It is important to add peers after starting our store to avoid
   // race condition where certain updates are lost over PUB/SUB channel
   for (auto& store : peerStores) {
-    myStore->addPeer(store->nodeId, store->getPeerSpec());
-    store->addPeer(myStore->nodeId, myStore->getPeerSpec());
+    myStore->addPeer(store->getNodeId(), store->getPeerSpec());
+    store->addPeer(myStore->getNodeId(), myStore->getPeerSpec());
   }
 
   // Wait for full-sync to complete. Full-sync is complete when all of our
@@ -1915,7 +1915,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "Waiting for full sync to complete.";
   for (auto& store : stores_) {
     std::unordered_set<std::string> keys;
-    VLOG(3) << "Store " << store->nodeId << " received keys.";
+    VLOG(3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
       for (auto const& kv : publication.keyVals) {
@@ -1934,12 +1934,12 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   //
   LOG(INFO) << "Submitting the second round of key-values...";
   for (auto& store : peerStores) {
-    auto key = folly::sformat("test-key-{}", store->nodeId);
+    auto key = folly::sformat("test-key-{}", store->getNodeId());
     thrift::Value thriftVal(
         apache::thrift::FRAGILE,
         2 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-new-{}", store->nodeId),
+        folly::sformat("test-value-new-{}", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -1961,7 +1961,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Receive 16 updates from each store
   for (auto& store : stores_) {
     std::unordered_set<std::string> keys;
-    VLOG(3) << "Store " << store->nodeId << " received keys.";
+    VLOG(3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
       for (auto const& kv : publication.keyVals) {
@@ -1993,12 +1993,12 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Set new key
   {
     auto& store = peerStores[0];
-    auto key = folly::sformat("flood-test-key-1", store->nodeId);
+    auto key = folly::sformat("flood-test-key-1", store->getNodeId());
     thrift::Value thriftVal(
         apache::thrift::FRAGILE,
         2 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("flood-test-value-1", store->nodeId),
+        folly::sformat("flood-test-value-1", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -2014,7 +2014,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Receive publication from each store as one update is atleast expected
   {
     for (auto& store : stores_) {
-      VLOG(2) << "Receiving publication from " << store->nodeId;
+      VLOG(2) << "Receiving publication from " << store->getNodeId();
       store->recvPublication();
     }
   }
@@ -2079,11 +2079,13 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     auto& store = stores[i];
     if (i > 0) {
       auto& peerStore = stores[i - 1];
-      EXPECT_TRUE(store->addPeer(peerStore->nodeId, peerStore->getPeerSpec()));
+      EXPECT_TRUE(
+          store->addPeer(peerStore->getNodeId(), peerStore->getPeerSpec()));
     }
     if (i < kNumStores - 1) {
       auto& peerStore = stores[i + 1];
-      EXPECT_TRUE(store->addPeer(peerStore->nodeId, peerStore->getPeerSpec()));
+      EXPECT_TRUE(
+          store->addPeer(peerStore->getNodeId(), peerStore->getPeerSpec()));
     }
   }
 
@@ -2143,7 +2145,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     ASSERT_TRUE(pub1.nodeIds_ref().has_value());
     ASSERT_TRUE(pub2.nodeIds_ref().has_value());
     EXPECT_EQ(
-        std::vector<std::string>{stores[0]->nodeId},
+        std::vector<std::string>{stores[0]->getNodeId()},
         pub1.nodeIds_ref().value());
     auto expectedNodeIds = nodeIdsSeq;
     std::reverse(std::begin(expectedNodeIds), std::end(expectedNodeIds));
@@ -2151,7 +2153,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   }
 
   for (auto& store : stores) {
-    LOG(INFO) << "Pulling state from " << store->nodeId;
+    LOG(INFO) << "Pulling state from " << store->getNodeId();
     auto maybeThriftVal = store->getKey(kKeyName);
     ASSERT_TRUE(maybeThriftVal.has_value());
     EXPECT_EQ(thriftValLast, *maybeThriftVal);
@@ -2203,12 +2205,12 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
   int i = 0;
   for (auto& store : peerStores) {
-    auto key = folly::sformat("{}-test-key-{}", i % 2, store->nodeId);
+    auto key = folly::sformat("{}-test-key-{}", i % 2, store->getNodeId());
     thrift::Value thriftVal(
         apache::thrift::FRAGILE,
         1 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-{}", store->nodeId),
+        folly::sformat("test-value-{}", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -2236,7 +2238,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   // NOTE: It is important to add peers after starting our store to avoid
   // race condition where certain updates are lost over PUB/SUB channel
   for (auto& store : peerStores) {
-    myStore->addPeer(store->nodeId, store->getPeerSpec());
+    myStore->addPeer(store->getNodeId(), store->getPeerSpec());
   }
 
   // Wait for full-sync to complete. Full-sync is complete when all of our
@@ -2245,7 +2247,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   LOG(INFO) << "Waiting for full sync to complete.";
   {
     std::unordered_set<std::string> keys;
-    VLOG(3) << "Store " << myStore->nodeId << " received keys.";
+    VLOG(3) << "Store " << myStore->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = myStore->recvPublication();
       for (auto const& kv : publication.keyVals) {
@@ -2285,7 +2287,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
         apache::thrift::FRAGILE,
         1 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-{}", myStore->nodeId),
+        folly::sformat("test-value-{}", myStore->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -2314,7 +2316,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
 
   // Add missing key, test-key-0, into peerKeyVals
   const auto key = "test-key-0";
-  const auto strVal = folly::sformat("test-value-{}", myStore->nodeId);
+  const auto strVal = folly::sformat("test-value-{}", myStore->getNodeId());
   const thrift::Value thriftVal(
       apache::thrift::FRAGILE,
       1 /* version */,
@@ -2406,8 +2408,8 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   store0->run();
   store1->run();
 
-  store0->addPeer(store1->nodeId, store1->getPeerSpec());
-  store1->addPeer(store0->nodeId, store0->getPeerSpec());
+  store0->addPeer(store1->getNodeId(), store1->getPeerSpec());
+  store1->addPeer(store0->getNodeId(), store0->getPeerSpec());
 
   /**
    * check sync works fine, add a key with TTL > ttlDecr in store1,
@@ -2489,11 +2491,11 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   store1->run();
   store2->run();
 
-  store0->addPeer(store1->nodeId, store1->getPeerSpec());
-  store1->addPeer(store0->nodeId, store0->getPeerSpec());
+  store0->addPeer(store1->getNodeId(), store1->getPeerSpec());
+  store1->addPeer(store0->getNodeId(), store0->getPeerSpec());
 
-  store1->addPeer(store2->nodeId, store2->getPeerSpec());
-  store2->addPeer(store1->nodeId, store1->getPeerSpec());
+  store1->addPeer(store2->getNodeId(), store2->getPeerSpec());
+  store2->addPeer(store1->getNodeId(), store1->getPeerSpec());
 
   auto startTime1 = steady_clock::now();
   const int duration1 = 5; // in seconds
@@ -2555,8 +2557,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   store0->run();
   store1->run();
 
-  store0->addPeer(store1->nodeId, store1->getPeerSpec());
-  store1->addPeer(store0->nodeId, store0->getPeerSpec());
+  store0->addPeer(store1->getNodeId(), store1->getPeerSpec());
+  store1->addPeer(store0->getNodeId(), store0->getPeerSpec());
 
   /**
    * TEST1: install several keys in store0 which is not rate limited
@@ -2862,10 +2864,10 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         storeC->addPeer("storeB", storeB->getPeerSpec(), plane.area_id);
         // verify get peers command
         std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
-            {storeA->nodeId, storeA->getPeerSpec()},
+            {storeA->getNodeId(), storeA->getPeerSpec()},
         };
         std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
-            {storeC->nodeId, storeC->getPeerSpec()},
+            {storeC->getNodeId(), storeC->getPeerSpec()},
         };
         EXPECT_EQ(expectedPeersPod, storeB->getPeers(pod.area_id));
         EXPECT_EQ(expectedPeersPlane, storeB->getPeers(plane.area_id));

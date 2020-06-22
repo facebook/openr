@@ -981,7 +981,7 @@ KvStoreDb::getNextState(
 KvStoreDb::KvStorePeer::KvStorePeer(
     const std::string& nodeName,
     const thrift::PeerSpec& peerSpec,
-    const ExponentialBackoff<std::chrono::milliseconds> expBackoff)
+    const ExponentialBackoff<std::chrono::milliseconds>& expBackoff)
     : nodeName(nodeName), peerSpec(peerSpec), expBackoff(expBackoff) {
   CHECK(!(this->nodeName.empty()));
   CHECK(!(this->peerSpec.peerAddr.empty()));
@@ -1210,6 +1210,9 @@ KvStoreDb::dumpDifference(
   return thriftPub;
 }
 
+// This function serves the purpose of periodically scanning peers in
+// IDLE state and promote them to SYNCING state. The initial dump will
+// happen in async nature to unblock KvStore to process other requests.
 void
 KvStoreDb::requestThriftPeerSync() {
   // minimal timeout for next run
@@ -1234,29 +1237,28 @@ KvStoreDb::requestThriftPeerSync() {
     }
 
     // create thrift client and do backoff if can't go through
-    if (not thriftPeer.client) {
-      try {
-        LOG(INFO) << "Creating kvstore thrift client with addr: "
-                  << peerSpec.peerAddr << ", peerName: " << peerName;
+    try {
+      LOG(INFO) << "Creating kvstore thrift client with addr: "
+                << peerSpec.peerAddr << ", peerName: " << peerName;
 
-        // TODO: tune `connectTimeout` and `processingTimeout` value
-        //       if necessary
-        auto client = getOpenrCtrlPlainTextClient(
-            *(evb_->getEvb()),
-            folly::IPAddress(peerSpec.peerAddr),
-            peerSpec.ctrlPort);
-        thriftPeer.client = std::move(client);
-      } catch (std::exception const& e) {
-        LOG(ERROR) << "Failed to connect to node: " << peerName
-                   << "  with addr: " << peerSpec.peerAddr
-                   << ". Exception: " << folly::exceptionStr(e);
+      // TODO: tune `connectTimeout` and `processingTimeout` value
+      //       if necessary
+      // TODO: migrate to secure thrift connection
+      auto client = getOpenrCtrlPlainTextClient(
+          *(evb_->getEvb()),
+          folly::IPAddress(peerSpec.peerAddr),
+          peerSpec.ctrlPort);
+      thriftPeer.client = std::move(client);
+    } catch (std::exception const& e) {
+      LOG(ERROR) << "Failed to connect to node: " << peerName
+                 << "  with addr: " << peerSpec.peerAddr
+                 << ". Exception: " << folly::exceptionStr(e);
 
-        thriftPeer.client = nullptr;
-        thriftPeer.expBackoff.reportError(); // apply exponential backoff
-        timeout = std::min(
-            timeout, thriftPeer.expBackoff.getTimeRemainingUntilRetry());
-        continue;
-      }
+      thriftPeer.client = nullptr;
+      thriftPeer.expBackoff.reportError(); // apply exponential backoff
+      timeout =
+          std::min(timeout, thriftPeer.expBackoff.getTimeRemainingUntilRetry());
+      continue;
     }
 
     // state transition
@@ -1281,21 +1283,53 @@ KvStoreDb::requestThriftPeerSync() {
     // send request over thrift client and attach callback
     auto sf = thriftPeer.client->semifuture_getKvStoreKeyValsFilteredArea(
         params, area_);
+    auto startTime = std::chrono::steady_clock::now();
     std::move(sf)
         .via(evb_->getEvb())
-        .thenValue([this, peerName](thrift::Publication&& pub) {
-          LOG(INFO) << "Initial full-dump received from: " << peerName
-                    << ", received: " << pub.keyVals.size() << " key-vals";
+        .thenValue([this, peerName, startTime](thrift::Publication&& pub) {
+          // clean up `in-sync` peer collection
+          thriftPeersInSync_.erase(peerName);
 
-          processThriftSyncSuccess(peerName, std::move(pub));
+          // record time and process SUCCESS state transition
+          auto endTime = std::chrono::steady_clock::now();
+          processThriftSyncSuccess(
+              peerName,
+              std::move(pub),
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endTime - startTime));
         })
-        .thenError([this, peerName](const folly::exception_wrapper& ew) {
-          LOG(WARNING) << "Failed to do a full-dump with: " << peerName
-                       << ". Exception: " << ew.what();
+        .thenError(
+            [this, peerName, startTime](const folly::exception_wrapper& ew) {
+              // clean up `in-sync` peer collection
+              thriftPeersInSync_.erase(peerName);
 
-          fb303::fbData->addStatValue("kvstore.full_dump_failure");
-          processThriftSyncFailure(peerName);
-        });
+              // record time and process FAILURE state transition
+              auto endTime = std::chrono::steady_clock::now();
+              processThriftSyncFailure(
+                  peerName,
+                  ew.what(),
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      endTime - startTime));
+
+              // counter update
+              fb303::fbData->addStatValue(
+                  "kvstore.full_dump_failure", 1, fb303::COUNT);
+            });
+
+    // put peer into `inSync_` set
+    thriftPeersInSync_.emplace(peerName);
+
+    // in case pending peer size is over parallelSyncLimit,
+    // wait until kMaxBackoff before sending next round of sync
+    if (thriftPeersInSync_.size() > parallelSyncLimitOverThrift_) {
+      timeout = Constants::kMaxBackoff;
+      break;
+    }
+  } // for loop
+
+  // process the rest after min timeout if NOT scheduled
+  if (not thriftSyncTimer_->isScheduled()) {
+    thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(timeout));
   }
 }
 
@@ -1306,16 +1340,87 @@ KvStoreDb::requestThriftPeerSync() {
 //  4) Promote KvStorePeerState from SYNCING -> INITIALIZED;
 void
 KvStoreDb::processThriftSyncSuccess(
-    std::string const& peerName, thrift::Publication&& pub) {
-  CHECK(false) << "Not implemented";
+    std::string const& peerName,
+    thrift::Publication&& pub,
+    std::chrono::milliseconds timeDelta) {
+  const auto kvUpdateCnt = mergePublication(pub);
+  auto numMissingKeys = 0;
+  if (pub.tobeUpdatedKeys_ref().has_value()) {
+    numMissingKeys = pub.tobeUpdatedKeys_ref()->size();
+  }
+
+  LOG(INFO) << "[Thrift Sync] Full-sync response received from: " << peerName
+            << " with " << pub.keyVals.size() << " key-vals and "
+            << numMissingKeys << " missing keys. Incured " << kvUpdateCnt
+            << " key-value updates."
+            << " Processing time: " << timeDelta.count() << "ms.";
+
+  // check if it is valid peer(i.e. peer removed in process of syncing)
+  auto peerIt = thriftPeers_.find(peerName);
+  if (peerIt == thriftPeers_.end()) {
+    LOG(WARNING) << "Received async full-sync response from invalid peer: "
+                 << peerName << ". Ignore state transition.";
+    return;
+  }
+
+  // In case there are duplicate msg for full-sync, state transition
+  // will handle it gracefully.
+  auto& peer = thriftPeers_.at(peerName);
+  CHECK(
+      peer.state == KvStorePeerState::SYNCING or
+      peer.state == KvStorePeerState::INITIALIZED);
+  KvStorePeerState oldState = peer.state;
+  peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
+  logStateTransition(peerName, oldState, peer.state);
+
+  // Successfully received full-sync response. Double the parallel
+  // sync limit. This is to:
+  //  1) accelerate the rest of pending full-syncs if any;
+  //  2) assume subsequeny sync diff will be small in traffic amount;
+  parallelSyncLimitOverThrift_ = std::min(
+      2 * parallelSyncLimitOverThrift_,
+      Constants::kMaxFullSyncPendingCountThreshold);
+
+  // Schedule another round of `thriftSyncTimer_` in case it is
+  // NOT scheduled.
+  if (not thriftSyncTimer_->isScheduled()) {
+    thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  }
 }
 
 // This function will process the exception hit during full-dump:
 //  1) Change peer state from current state to IDLE due to exception;
 //  2) Schedule syncTimer to pick IDLE peer up if NOT scheduled;
 void
-KvStoreDb::processThriftSyncFailure(std::string const& peerName) {
-  CHECK(false) << "Not implemented";
+KvStoreDb::processThriftSyncFailure(
+    std::string const& peerName,
+    folly::fbstring const& exceptionStr,
+    std::chrono::milliseconds timeDelta) {
+  LOG(INFO) << "[Thrift Sync] Exception: " << exceptionStr
+            << " happened during full-sync with peer: " << peerName
+            << ". Processing time: " << timeDelta.count() << "ms.";
+
+  auto peerIt = thriftPeers_.find(peerName);
+  if (peerIt == thriftPeers_.end()) {
+    LOG(ERROR) << "Exception happened against invalid peer: " << peerName
+               << ". Ignore state transition.";
+    return;
+  }
+
+  // reset client to reconnect later in next batch of thriftSyncTimer_ scanning
+  auto& peer = thriftPeers_.at(peerName);
+  peer.client.reset();
+
+  // state transition
+  KvStorePeerState oldState = peer.state;
+  peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_TIMEOUT);
+  logStateTransition(peerName, oldState, peer.state);
+
+  // Schedule another round of `thriftSyncTimer_` in case it is
+  // NOT scheduled.
+  if (not thriftSyncTimer_->isScheduled()) {
+    thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  }
 }
 
 void
@@ -1361,26 +1466,12 @@ KvStoreDb::addThriftPeers(
               Constants::kInitialBackoff, Constants::kMaxBackoff));
       thriftPeers_.emplace(peerName, std::move(peer));
     }
+  } // for loop
 
-    try {
-      LOG(INFO) << "Creating kvstore thrift client with addr: "
-                << newPeerSpec.peerAddr << ", peerName: " << peerName;
-
-      // TODO: tune `connectTimeout` and `processingTimeout` value
-      //       if necessary
-      // TODO: migrate to secure thrift connection
-      auto client = getOpenrCtrlPlainTextClient(
-          *(evb_->getEvb()),
-          folly::IPAddress(newPeerSpec.peerAddr),
-          newPeerSpec.ctrlPort);
-      thriftPeers_.at(peerName).peerSpec = newPeerSpec;
-      thriftPeers_.at(peerName).client = std::move(client);
-    } catch (std::exception const& e) {
-      LOG(ERROR) << "Failed to connect to KvStore instance with addr: "
-                 << newPeerSpec.peerAddr
-                 << ". Exception: " << folly::exceptionStr(e);
-    }
-  }
+  // TODO: add throttle to process in batch mode. PEER_UP event
+  //       can come at the same time.
+  // kick off thriftSyncTimer_ if not yet to asyc process full-sync
+  thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
 }
 
 // add new peers to subscribe to
@@ -1481,12 +1572,17 @@ KvStoreDb::addPeers(
         }
       }
 
-      // Enqueue for full-sync requests
-      LOG(INFO) << "Enqueuing full-sync request for peer " << peerName;
-      peersToSyncWith_.emplace(
-          peerName,
-          ExponentialBackoff<std::chrono::milliseconds>(
-              Constants::kInitialBackoff, Constants::kMaxBackoff));
+      // ATTN: under thrift connection, initial full-sync will be handled
+      //       separately. `peersToSyncWith_` will ONLY handle periodic
+      //       random sync.
+      if (not kvParams_.enableKvStoreThrift) {
+        // Enqueue for full-sync requests
+        LOG(INFO) << "Enqueuing full-sync request for peer " << peerName;
+        peersToSyncWith_.emplace(
+            peerName,
+            ExponentialBackoff<std::chrono::milliseconds>(
+                Constants::kInitialBackoff, Constants::kMaxBackoff));
+      }
     } catch (std::exception const& e) {
       LOG(ERROR) << "Error connecting to: `" << peerName
                  << "` reason: " << folly::exceptionStr(e);

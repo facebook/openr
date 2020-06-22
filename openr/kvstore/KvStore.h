@@ -277,10 +277,15 @@ class KvStoreDb : public DualNode {
 
   // util function to process when sync response received
   void processThriftSyncSuccess(
-      std::string const& peerName, thrift::Publication&& pub);
+      std::string const& peerName,
+      thrift::Publication&& pub,
+      std::chrono::milliseconds timeDelta);
 
   // util function to process when exception encountered
-  void processThriftSyncFailure(std::string const& peerName);
+  void processThriftSyncFailure(
+      std::string const& peerName,
+      folly::fbstring const& exceptionStr,
+      std::chrono::milliseconds timeDelta);
 
   // send dual messages over syncSock
   bool sendDualMessages(
@@ -414,7 +419,7 @@ class KvStoreDb : public DualNode {
     KvStorePeer(
         const std::string& nodeName,
         const thrift::PeerSpec& peerSpec,
-        const ExponentialBackoff<std::chrono::milliseconds> expBackoff);
+        const ExponentialBackoff<std::chrono::milliseconds>& expBackoff);
     // node name
     const std::string nodeName;
 
@@ -431,8 +436,11 @@ class KvStoreDb : public DualNode {
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
   };
 
-  // Peers collection for KvStore to sync with
+  // Thrift peers collection for KvStore to sync with
   std::unordered_map<std::string, KvStorePeer> thriftPeers_;
+
+  // Pending thrift in-sync peers
+  std::unordered_set<std::string> thriftPeersInSync_;
 
   // The peers we will be talking to: both PUB and CMD URLs for each. We use
   // peerAddCounter_ to uniquely identify a peering session's socket-id.
@@ -499,6 +507,9 @@ class KvStoreDb : public DualNode {
   // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
   // response received
   size_t parallelSyncLimit_{2};
+
+  // thrift version of "parallelSyncLimit_"
+  size_t parallelSyncLimitOverThrift_{2};
 
   // event loop
   OpenrEventBase* evb_{nullptr};
