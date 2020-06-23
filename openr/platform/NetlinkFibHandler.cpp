@@ -238,13 +238,19 @@ NetlinkFibHandler::semifuture_syncFib(
   // to complete and prepare the map of existing routes
   std::unordered_map<folly::CIDRNetwork, fbnl::Route> existingRoutes;
   {
-    auto v4Routes = nlSock_->getIPv4Routes(protocol.value());
-    auto v6Routes = nlSock_->getIPv6Routes(protocol.value());
-    for (auto& route : std::move(v4Routes).get()) {
+    auto v4Routes = nlSock_->getIPv4Routes(protocol.value()).get();
+    auto v6Routes = nlSock_->getIPv6Routes(protocol.value()).get();
+    if (v4Routes.hasError()) {
+      throw fbnl::NlException("Failed fetching IPv4 routes", v4Routes.error());
+    }
+    if (v6Routes.hasError()) {
+      throw fbnl::NlException("Failed fetching IPv6 routes", v6Routes.error());
+    }
+    for (auto& route : std::move(v4Routes).value()) {
       const auto prefix = route.getDestination();
       existingRoutes.emplace(prefix, std::move(route));
     }
-    for (auto& route : std::move(v6Routes).get()) {
+    for (auto& route : std::move(v6Routes).value()) {
       const auto prefix = route.getDestination();
       existingRoutes.emplace(prefix, std::move(route));
     }
@@ -299,7 +305,11 @@ NetlinkFibHandler::semifuture_syncMplsFib(
   // Create set of existing route
   // NOTE: Synchronous call to retrieve all the routes
   std::unordered_map<int32_t, fbnl::Route> existingRoutes;
-  for (auto& route : nlSock_->getMplsRoutes(protocol.value()).get()) {
+  auto nlRoutes = nlSock_->getMplsRoutes(protocol.value()).get();
+  if (nlRoutes.hasError()) {
+    throw fbnl::NlException("Failed fetching IPv6 routes", nlRoutes.error());
+  }
+  for (auto& route : std::move(nlRoutes).value()) {
     const auto topLabel = route.getMplsLabel().value();
     existingRoutes.emplace(topLabel, std::move(route));
   }
@@ -360,20 +370,26 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
   auto v4Routes = nlSock_->getIPv4Routes(protocol.value());
   auto v6Routes = nlSock_->getIPv6Routes(protocol.value());
   return folly::collectAll(std::move(v4Routes), std::move(v6Routes))
-      .deferValue([this](std::tuple<
-                         folly::Try<std::vector<fbnl::Route>>,
-                         folly::Try<std::vector<fbnl::Route>>>&& res) {
-        auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
-        for (auto& nlRoutes : {std::get<0>(res), std::get<1>(res)}) {
-          for (auto& nlRoute : nlRoutes.value()) {
-            thrift::UnicastRoute route;
-            route.dest = toIpPrefix(nlRoute.getDestination());
-            route.nextHops = toThriftNextHops(nlRoute.getNextHops());
-            routes->emplace_back(std::move(route));
-          }
-        }
-        return routes;
-      });
+      .deferValue(
+          [this](std::tuple<
+                 folly::Try<folly::Expected<std::vector<fbnl::Route>, int>>,
+                 folly::Try<folly::Expected<std::vector<fbnl::Route>, int>>>&&
+                     res) {
+            auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
+            for (auto& nlRoutes : {std::get<0>(res), std::get<1>(res)}) {
+              if (nlRoutes.value().hasError()) {
+                throw fbnl::NlException(
+                    "Failed fetching routes", nlRoutes.value().error());
+              }
+              for (auto& nlRoute : nlRoutes.value().value()) {
+                thrift::UnicastRoute route;
+                route.dest = toIpPrefix(nlRoute.getDestination());
+                route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+                routes->emplace_back(std::move(route));
+              }
+            }
+            return routes;
+          });
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
@@ -387,17 +403,22 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
   LOG(INFO) << "Get mpls routes for client " << getClientName(clientId);
 
   return nlSock_->getMplsRoutes(protocol.value())
-      .deferValue([this](std::vector<fbnl::Route>&& nlRoutes) {
-        auto routes = std::make_unique<std::vector<thrift::MplsRoute>>();
-        routes->reserve(nlRoutes.size());
-        for (auto& nlRoute : nlRoutes) {
-          thrift::MplsRoute route;
-          route.topLabel = nlRoute.getMplsLabel().value();
-          route.nextHops = toThriftNextHops(nlRoute.getNextHops());
-          routes->emplace_back(std::move(route));
-        }
-        return routes;
-      });
+      .deferValue(
+          [this](folly::Expected<std::vector<fbnl::Route>, int>&& nlRoutes) {
+            if (nlRoutes.hasError()) {
+              throw fbnl::NlException(
+                  "Failed fetching routes", nlRoutes.error());
+            }
+            auto routes = std::make_unique<std::vector<thrift::MplsRoute>>();
+            routes->reserve(nlRoutes->size());
+            for (auto& nlRoute : nlRoutes.value()) {
+              thrift::MplsRoute route;
+              route.topLabel = nlRoute.getMplsLabel().value();
+              route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+              routes->emplace_back(std::move(route));
+            }
+            return routes;
+          });
 }
 
 std::vector<thrift::NextHopThrift>
@@ -599,7 +620,7 @@ NetlinkFibHandler::getLoopbackIfIndex() {
 
 void
 NetlinkFibHandler::initializeInterfaceCache() noexcept {
-  auto links = nlSock_->getAllLinks().get();
+  auto links = nlSock_->getAllLinks().get().value();
 
   // Acquire locks on the cache
   auto lockedIfNameToIndex = ifNameToIndex_.wlock();

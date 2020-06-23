@@ -48,7 +48,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   void setReturnStatus(int status) override;
 
   // Get future for received links in response to GET request
-  folly::SemiFuture<std::vector<Route>>
+  folly::SemiFuture<folly::Expected<std::vector<Route>, int>>
   getRoutesSemiFuture() {
     return routePromise_.getSemiFuture();
   }
@@ -167,7 +167,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
     uint8_t type{0};
   } filters_;
 
-  folly::Promise<std::vector<Route>> routePromise_;
+  folly::Promise<folly::Expected<std::vector<Route>, int>> routePromise_;
   std::vector<Route> rcvdRoutes_;
 };
 
@@ -184,7 +184,7 @@ class NetlinkLinkMessage final : public NetlinkMessage {
   void setReturnStatus(int status) override;
 
   // Get future for received links in response to GET request
-  folly::SemiFuture<std::vector<Link>>
+  folly::SemiFuture<folly::Expected<std::vector<Link>, int>>
   getLinksSemiFuture() {
     return linkPromise_.getSemiFuture();
   }
@@ -204,7 +204,7 @@ class NetlinkLinkMessage final : public NetlinkMessage {
 
   void rcvdLink(Link&& link) override;
 
-  folly::Promise<std::vector<Link>> linkPromise_;
+  folly::Promise<folly::Expected<std::vector<Link>, int>> linkPromise_;
   std::vector<Link> rcvdLinks_;
 };
 
@@ -221,7 +221,7 @@ class NetlinkAddrMessage final : public NetlinkMessage {
   void setReturnStatus(int status) override;
 
   // Get future for received addresses in response to GET request
-  folly::SemiFuture<std::vector<IfAddress>>
+  folly::SemiFuture<folly::Expected<std::vector<IfAddress>, int>>
   getAddrsSemiFuture() {
     return addrPromise_.getSemiFuture();
   }
@@ -245,7 +245,7 @@ class NetlinkAddrMessage final : public NetlinkMessage {
 
   void rcvdIfAddress(IfAddress&& ifAddr) override;
 
-  folly::Promise<std::vector<IfAddress>> addrPromise_;
+  folly::Promise<folly::Expected<std::vector<IfAddress>, int>> addrPromise_;
   std::vector<IfAddress> rcvdAddrs_;
 };
 
@@ -262,7 +262,7 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
   void setReturnStatus(int status) override;
 
   // Get future for received neighbors in response to GET request
-  folly::SemiFuture<std::vector<Neighbor>>
+  folly::SemiFuture<folly::Expected<std::vector<Neighbor>, int>>
   getNeighborsSemiFuture() {
     return neighborPromise_.getSemiFuture();
   }
@@ -282,7 +282,7 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
 
   void rcvdNeighbor(Neighbor&& ifAddr) override;
 
-  folly::Promise<std::vector<Neighbor>> neighborPromise_;
+  folly::Promise<folly::Expected<std::vector<Neighbor>, int>> neighborPromise_;
   std::vector<Neighbor> rcvdNeighbors_;
 };
 

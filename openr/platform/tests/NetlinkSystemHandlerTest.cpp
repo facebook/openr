@@ -62,7 +62,7 @@ TEST(SystemHandler, addRemoveIfaceAddresses) {
         std::make_unique<std::string>(std::string("eth0")),
         std::make_unique<std::vector<thrift::IpPrefix>>(ifPrefixes));
     EXPECT_NO_THROW(std::move(retval).get());
-    auto addrs = nlSock.getAllIfAddresses().get();
+    auto addrs = nlSock.getAllIfAddresses().get().value();
     ASSERT_EQ(1, addrs.size());
     EXPECT_EQ(ifAddr, addrs.at(0));
   }
@@ -83,7 +83,7 @@ TEST(SystemHandler, addRemoveIfaceAddresses) {
         std::make_unique<std::string>(std::string("eth0")),
         std::make_unique<std::vector<thrift::IpPrefix>>(ifPrefixes));
     EXPECT_NO_THROW(std::move(retval).get());
-    auto addrs = nlSock.getAllIfAddresses().get();
+    auto addrs = nlSock.getAllIfAddresses().get().value();
     EXPECT_EQ(0, addrs.size());
   }
 }
@@ -123,7 +123,7 @@ TEST(SystemHandler, syncIfaceAddresses) {
   // Verify that addr1 is added and addr3 no longer exists. In fake
   // implementation addrs are returned in the order they're added.
   {
-    auto addrs = nlSock.getAllIfAddresses().get();
+    auto addrs = nlSock.getAllIfAddresses().get().value();
     ASSERT_EQ(4, addrs.size());
     EXPECT_EQ(ifAddr2, addrs.at(0));
     EXPECT_EQ(ifAddr4, addrs.at(1));

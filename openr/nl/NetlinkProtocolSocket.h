@@ -155,17 +155,20 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   /**
    * API to get interfaces from kernel
    */
-  virtual folly::SemiFuture<std::vector<fbnl::Link>> getAllLinks();
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
+  getAllLinks();
 
   /**
-   * API to get interface addresses from kernel
+   * API to get interface addresses from kernel.
    */
-  virtual folly::SemiFuture<std::vector<fbnl::IfAddress>> getAllIfAddresses();
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::IfAddress>, int>>
+  getAllIfAddresses();
 
   /**
    * API to get neighbors from kernel
    */
-  virtual folly::SemiFuture<std::vector<fbnl::Neighbor>> getAllNeighbors();
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
+  getAllNeighbors();
 
   /**
    * API to retrieve routes from kernel. Attributes specified in filter will be
@@ -176,20 +179,21 @@ class NetlinkProtocolSocket : public folly::EventHandler {
    * - address family
    * - type
    */
-  virtual folly::SemiFuture<std::vector<fbnl::Route>> getRoutes(
-      const fbnl::Route& filter);
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
+  getRoutes(const fbnl::Route& filter);
 
   /**
    * APIs to retrieve routes from default routing table.
    * std::vector<fbnl::Route> getAllRoutes();
    */
-  virtual folly::SemiFuture<std::vector<fbnl::Route>> getAllRoutes();
-  virtual folly::SemiFuture<std::vector<fbnl::Route>> getIPv4Routes(
-      uint8_t protocolId);
-  virtual folly::SemiFuture<std::vector<fbnl::Route>> getIPv6Routes(
-      uint8_t protocolId);
-  virtual folly::SemiFuture<std::vector<fbnl::Route>> getMplsRoutes(
-      uint8_t protocolId);
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
+  getAllRoutes();
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
+  getIPv4Routes(uint8_t protocolId);
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
+  getIPv6Routes(uint8_t protocolId);
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
+  getMplsRoutes(uint8_t protocolId);
 
   /**
    * Utility function to accumulate result of multiple requests into one. The

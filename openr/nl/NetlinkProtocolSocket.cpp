@@ -566,7 +566,7 @@ NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   return future;
 }
 
-folly::SemiFuture<std::vector<fbnl::Link>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
 NetlinkProtocolSocket::getAllLinks() {
   VLOG(1) << "Netlink get links";
   auto linkMsg = std::make_unique<openr::fbnl::NetlinkLinkMessage>();
@@ -579,7 +579,7 @@ NetlinkProtocolSocket::getAllLinks() {
   return future;
 }
 
-folly::SemiFuture<std::vector<fbnl::IfAddress>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::IfAddress>, int>>
 NetlinkProtocolSocket::getAllIfAddresses() {
   VLOG(1) << "Netlink get interface addresses";
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
@@ -592,7 +592,7 @@ NetlinkProtocolSocket::getAllIfAddresses() {
   return future;
 }
 
-folly::SemiFuture<std::vector<fbnl::Neighbor>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
 NetlinkProtocolSocket::getAllNeighbors() {
   VLOG(1) << "Netlink get neighbors";
   auto neighMsg = std::make_unique<openr::fbnl::NetlinkNeighborMessage>();
@@ -605,7 +605,7 @@ NetlinkProtocolSocket::getAllNeighbors() {
   return future;
 }
 
-folly::SemiFuture<std::vector<fbnl::Route>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
 NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
   VLOG(1) << "Netlink get routes with filter. " << filter.str();
   auto routeMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
@@ -618,7 +618,7 @@ NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
   return future;
 }
 
-folly::SemiFuture<std::vector<fbnl::Route>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
 NetlinkProtocolSocket::getAllRoutes() {
   fbnl::RouteBuilder builder;
   builder.setProtocolId(RTPROT_UNSPEC); // Explicitly set protocol to 0
@@ -626,7 +626,7 @@ NetlinkProtocolSocket::getAllRoutes() {
   return getRoutes(builder.build());
 }
 
-folly::SemiFuture<std::vector<fbnl::Route>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
 NetlinkProtocolSocket::getIPv4Routes(uint8_t protocolId) {
   fbnl::RouteBuilder builder;
   // Set address family to MPLS with default v4 route
@@ -637,7 +637,7 @@ NetlinkProtocolSocket::getIPv4Routes(uint8_t protocolId) {
   return getRoutes(builder.build());
 }
 
-folly::SemiFuture<std::vector<fbnl::Route>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
 NetlinkProtocolSocket::getIPv6Routes(uint8_t protocolId) {
   fbnl::RouteBuilder builder;
   // Set address family to MPLS with default v6 route
@@ -648,7 +648,7 @@ NetlinkProtocolSocket::getIPv6Routes(uint8_t protocolId) {
   return getRoutes(builder.build());
 }
 
-folly::SemiFuture<std::vector<fbnl::Route>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
 NetlinkProtocolSocket::getMplsRoutes(uint8_t protocolId) {
   fbnl::RouteBuilder builder;
   // Set address family to MPLS with default label

@@ -57,7 +57,12 @@ NetlinkRouteMessage::rcvdRoute(Route&& route) {
 
 void
 NetlinkRouteMessage::setReturnStatus(int status) {
-  routePromise_.setValue(std::move(rcvdRoutes_));
+  if (status == 0) {
+    routePromise_.setValue(std::move(rcvdRoutes_));
+  } else {
+    routePromise_.setValue(folly::makeUnexpected(status));
+  }
+
   NetlinkMessage::setReturnStatus(status);
 }
 
@@ -820,7 +825,11 @@ NetlinkLinkMessage::rcvdLink(Link&& link) {
 
 void
 NetlinkLinkMessage::setReturnStatus(int status) {
-  linkPromise_.setValue(std::move(rcvdLinks_));
+  if (status == 0) {
+    linkPromise_.setValue(std::move(rcvdLinks_));
+  } else {
+    linkPromise_.setValue(folly::makeUnexpected(status));
+  }
   NetlinkMessage::setReturnStatus(status);
 }
 
@@ -890,7 +899,12 @@ NetlinkAddrMessage::rcvdIfAddress(IfAddress&& ifAddr) {
 
 void
 NetlinkAddrMessage::setReturnStatus(int status) {
-  addrPromise_.setValue(std::move(rcvdAddrs_));
+  if (status == 0) {
+    addrPromise_.setValue(std::move(rcvdAddrs_));
+  } else {
+    addrPromise_.setValue(folly::makeUnexpected(status));
+  }
+
   NetlinkMessage::setReturnStatus(status);
 }
 
@@ -1018,7 +1032,11 @@ NetlinkNeighborMessage::rcvdNeighbor(Neighbor&& neighbor) {
 
 void
 NetlinkNeighborMessage::setReturnStatus(int status) {
-  neighborPromise_.setValue(std::move(rcvdNeighbors_));
+  if (status == 0) {
+    neighborPromise_.setValue(std::move(rcvdNeighbors_));
+  } else {
+    neighborPromise_.setValue(folly::makeUnexpected(status));
+  }
   NetlinkMessage::setReturnStatus(status);
 }
 

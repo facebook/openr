@@ -54,16 +54,19 @@ class FakeNetlinkProtocolSocket : public NetlinkProtocolSocket {
 
   folly::SemiFuture<int> addRoute(const fbnl::Route& route) override;
   folly::SemiFuture<int> deleteRoute(const fbnl::Route& route) override;
-  folly::SemiFuture<std::vector<fbnl::Route>> getRoutes(
+  folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>> getRoutes(
       const fbnl::Route& filter) override;
 
   folly::SemiFuture<int> addIfAddress(const fbnl::IfAddress&) override;
   folly::SemiFuture<int> deleteIfAddress(const fbnl::IfAddress&) override;
-  folly::SemiFuture<std::vector<fbnl::IfAddress>> getAllIfAddresses() override;
+  folly::SemiFuture<folly::Expected<std::vector<fbnl::IfAddress>, int>>
+  getAllIfAddresses() override;
 
-  folly::SemiFuture<std::vector<fbnl::Link>> getAllLinks() override;
+  folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>> getAllLinks()
+      override;
 
-  folly::SemiFuture<std::vector<fbnl::Neighbor>> getAllNeighbors() override;
+  folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
+  getAllNeighbors() override;
 
  protected:
   void

@@ -70,7 +70,7 @@ FakeNetlinkProtocolSocket::deleteRoute(const fbnl::Route& route) {
   return folly::SemiFuture<int>(cnt ? 0 : ESRCH);
 }
 
-folly::SemiFuture<std::vector<fbnl::Route>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
 FakeNetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
   const auto filterFamily = filter.getFamily();
   const auto filterProto = filter.getProtocolId();
@@ -167,13 +167,13 @@ FakeNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
   return folly::SemiFuture<int>(-EADDRNOTAVAIL);
 }
 
-folly::SemiFuture<std::vector<fbnl::IfAddress>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::IfAddress>, int>>
 FakeNetlinkProtocolSocket::getAllIfAddresses() {
   std::vector<fbnl::IfAddress> addrs;
   for (auto& [_, addrs_] : ifAddrs_) {
     addrs.insert(addrs.end(), addrs_.begin(), addrs_.end());
   }
-  return folly::SemiFuture<std::vector<fbnl::IfAddress>>(std::move(addrs));
+  return addrs;
 }
 
 folly::SemiFuture<int>
@@ -192,16 +192,16 @@ FakeNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
   return folly::SemiFuture<int>(0);
 }
 
-folly::SemiFuture<std::vector<fbnl::Link>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
 FakeNetlinkProtocolSocket::getAllLinks() {
   std::vector<fbnl::Link> links;
   for (auto& [_, link] : links_) {
     links.emplace_back(link);
   }
-  return folly::SemiFuture<std::vector<fbnl::Link>>(std::move(links));
+  return links;
 }
 
-folly::SemiFuture<std::vector<fbnl::Neighbor>>
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
 FakeNetlinkProtocolSocket::getAllNeighbors() {
   CHECK(false) << "Not implemented";
 }

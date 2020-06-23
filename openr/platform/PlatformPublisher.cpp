@@ -35,7 +35,8 @@ PlatformPublisher::PlatformPublisher(
   }
 
   // Initialize interface index to name mapping
-  for (auto& link : nlSock->getAllLinks().get()) {
+  auto nlLinks = nlSock->getAllLinks().get();
+  for (auto& link : nlLinks.value()) {
     ifIndexToName_.emplace(link.getIfIndex(), link.getLinkName());
   }
 
