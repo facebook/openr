@@ -358,6 +358,153 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
   EXPECT_EQ(1, store2->dumpAll().size());
 }
 
+//
+// Test case for flooding publication over thrift.
+//
+// Simple Topology:
+//
+// node1 <---> node2
+//
+// A ---> B indicates: A has B as its thrift peer
+//
+TEST_F(SimpleKvStoreThriftTestFixture, BasicFloodingOverThrift) {
+  // create 2 nodes topology for thrift peers
+  createSimpleThriftTestTopo();
+
+  // build peerSpec for thrift peer connection
+  auto peerSpec1 = createPeerSpec(
+      "inproc://dummy-spec-1", // TODO: remove dummy url once zmq deprecated
+      Constants::kPlatformHost.toString(),
+      thriftServers_.back()->getOpenrCtrlThriftPort());
+  auto peerSpec2 = createPeerSpec(
+      "inproc://dummy-spec-2", // TODO: remove dummy url once zmq deprecated
+      Constants::kPlatformHost.toString(),
+      thriftServers_.front()->getOpenrCtrlThriftPort());
+  auto store1 = stores_.front();
+  auto store2 = stores_.back();
+
+  //
+  // Step1: Add peer to each other's KvStore instances
+  //        Expect full-sync request exchanged;
+  //
+  EXPECT_TRUE(store1->addPeer(store2->getNodeId(), peerSpec1));
+  EXPECT_TRUE(store2->addPeer(store1->getNodeId(), peerSpec2));
+
+  // verifying keys are exchanged between peers
+  EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
+  EXPECT_TRUE(verifyKvStoreKeyVal(store2.get(), key1, thriftVal1));
+
+  //
+  // Step2: Inject a new key in one of the store. Make sure flooding happens
+  //        and the other store have the key;
+  //
+  const std::string key3{"key3"};
+  auto thriftVal3 =
+      createThriftValue(3, store2->getNodeId(), std::string("value3"));
+  EXPECT_TRUE(store2->setKey(key3, thriftVal3));
+  EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key3, thriftVal3));
+
+  // 3 keys from both stores
+  EXPECT_EQ(3, store1->dumpAll().size());
+  EXPECT_EQ(3, store2->dumpAll().size());
+}
+
+//
+// Test case for flooding publication over thrift.
+//
+// Ring Topology:
+//
+// node1 ---> node2 ---> node3
+//   ^                    |
+//   |                    |
+//   ----------------------
+//
+// 1) Inject key1 in node1;
+// 2) Inject key2 in node2;
+// 3) Inject key3 in node3;
+// 4) Ring topology will make sure flooding is happening one-way
+//    but reach global consistensy;
+//
+// A ---> B indicates: A has B as its thrift peer
+//
+TEST_F(KvStoreThriftTestFixture, RingTopoFloodingOverThrift) {
+  // spin up 3 kvStore instances and thriftServers
+  const std::string node1{"node-1"};
+  const std::string node2{"node-2"};
+  const std::string node3{"node-3"};
+  const std::string key1{"key-1"};
+  const std::string key2{"key-2"};
+  const std::string key3{"key-3"};
+
+  createKvStore(node1);
+  auto store1 = stores_.back();
+  createThriftServer(node1, store1);
+  auto thriftServer1 = thriftServers_.back();
+
+  createKvStore(node2);
+  auto store2 = stores_.back();
+  createThriftServer(node2, store2);
+  auto thriftServer2 = thriftServers_.back();
+
+  createKvStore(node3);
+  auto store3 = stores_.back();
+  createThriftServer(node3, store3);
+  auto thriftServer3 = thriftServers_.back();
+
+  // add peers
+  auto peerSpec1 = createPeerSpec(
+      "inproc://dummy-spec-1", // TODO: remove dummy url once zmq deprecated
+      Constants::kPlatformHost.toString(),
+      thriftServer2->getOpenrCtrlThriftPort());
+  auto peerSpec2 = createPeerSpec(
+      "inproc://dummy-spec-2", // TODO: remove dummy url once zmq deprecated
+      Constants::kPlatformHost.toString(),
+      thriftServer3->getOpenrCtrlThriftPort());
+  auto peerSpec3 = createPeerSpec(
+      "inproc://dummy-spec-3", // TODO: remove dummy url once zmq deprecated
+      Constants::kPlatformHost.toString(),
+      thriftServer1->getOpenrCtrlThriftPort());
+
+  LOG(INFO) << "KvStore instances add thrift peers...";
+  EXPECT_TRUE(store1->addPeer(store2->getNodeId(), peerSpec1));
+  EXPECT_TRUE(store2->addPeer(store3->getNodeId(), peerSpec2));
+  EXPECT_TRUE(store3->addPeer(store1->getNodeId(), peerSpec3));
+
+  LOG(INFO) << "Verify initial full-sync happening...";
+  EXPECT_TRUE(verifyKvStorePeerState(
+      store1.get(), store2->getNodeId(), KvStorePeerState::INITIALIZED));
+  EXPECT_TRUE(verifyKvStorePeerState(
+      store2.get(), store3->getNodeId(), KvStorePeerState::INITIALIZED));
+  EXPECT_TRUE(verifyKvStorePeerState(
+      store3.get(), store1->getNodeId(), KvStorePeerState::INITIALIZED));
+  EXPECT_EQ(0, store1->dumpAll().size());
+  EXPECT_EQ(0, store2->dumpAll().size());
+  EXPECT_EQ(0, store3->dumpAll().size());
+
+  LOG(INFO) << "Inject diff keys into individual store instances...";
+  auto thriftVal1 =
+      createThriftValue(1, store1->getNodeId(), std::string("value1"));
+  auto thriftVal2 =
+      createThriftValue(2, store2->getNodeId(), std::string("value2"));
+  auto thriftVal3 =
+      createThriftValue(3, store3->getNodeId(), std::string("value3"));
+  EXPECT_TRUE(store1->setKey(key1, thriftVal1));
+  EXPECT_TRUE(store2->setKey(key2, thriftVal2));
+  EXPECT_TRUE(store3->setKey(key3, thriftVal3));
+
+  LOG(INFO) << "Verifying keys are exchanged between peers...";
+  EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
+  EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key3, thriftVal3));
+  EXPECT_TRUE(verifyKvStoreKeyVal(store2.get(), key1, thriftVal1));
+  EXPECT_TRUE(verifyKvStoreKeyVal(store2.get(), key3, thriftVal3));
+  EXPECT_TRUE(verifyKvStoreKeyVal(store3.get(), key1, thriftVal1));
+  EXPECT_TRUE(verifyKvStoreKeyVal(store3.get(), key2, thriftVal2));
+
+  EXPECT_EQ(3, store1->dumpAll().size());
+  EXPECT_EQ(3, store2->dumpAll().size());
+  EXPECT_EQ(3, store3->dumpAll().size());
+}
+
 TEST(KvStore, StateTransitionTest) {
   {
     // IDLE => SYNCING
