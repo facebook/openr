@@ -111,8 +111,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       config_,
-      std::nullopt /* ip-tos */,
-      std::unordered_map<std::string, thrift::PeerSpec>{});
+      std::nullopt /* ip-tos */);
   std::thread kvStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " KvStore running.";
     kvStore_->run();

@@ -107,8 +107,7 @@ class PrefixManagerTestFixture : public testing::Test {
     config = std::make_shared<Config>(tConfig);
 
     // spin up a kvstore
-    kvStoreWrapper = std::make_shared<KvStoreWrapper>(
-        context, config, std::unordered_map<std::string, thrift::PeerSpec>{});
+    kvStoreWrapper = std::make_shared<KvStoreWrapper>(context, config);
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
@@ -994,8 +993,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
   auto tConfig = getBasicOpenrConfig("node-1");
   tConfig.kvstore_config.sync_interval_s = 1;
   auto config = std::make_shared<Config>(tConfig);
-  auto kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-      context, config, std::unordered_map<std::string, thrift::PeerSpec>{});
+  auto kvStoreWrapper = std::make_unique<KvStoreWrapper>(context, config);
   kvStoreWrapper->run();
   LOG(INFO) << "The test KV store is running";
 

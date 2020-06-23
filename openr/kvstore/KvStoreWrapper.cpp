@@ -24,13 +24,11 @@ namespace openr {
 KvStoreWrapper::KvStoreWrapper(
     fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
-    std::unordered_map<std::string, thrift::PeerSpec> peers,
     std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
         peerUpdatesQueue,
     bool enableKvStoreThrift)
     : nodeId(config->getNodeName()),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
-      monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
       enableFloodOptimization_(
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
               false)),
@@ -42,10 +40,9 @@ KvStoreWrapper::KvStoreWrapper(
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
                                    : dummyPeerUpdatesQueue_.getReader(),
       KvStoreGlobalCmdUrl{globalCmdUrl},
-      MonitorSubmitUrl{monitorSubmitUrl},
+      MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId)},
       config,
       std::nullopt /* ip-tos */,
-      peers,
       Constants::kHighWaterMark,
       enableKvStoreThrift_);
 }

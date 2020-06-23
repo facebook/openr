@@ -129,8 +129,6 @@ KvStore::KvStore(
     MonitorSubmitUrl monitorSubmitUrl,
     std::shared_ptr<const Config> config,
     std::optional<int> maybeIpTos,
-    // initializer for mutable state
-    std::unordered_map<std::string, thrift::PeerSpec> peers,
     int zmqHwm,
     bool enableKvStoreThrift)
     : kvParams_(
@@ -228,8 +226,7 @@ KvStore::KvStore(
                 folly::none,
                 fbzmq::NonblockingFlag{true}),
             config->getKvStoreConfig().is_flood_root_ref().value_or(false),
-            config->getNodeName(),
-            peers));
+            config->getNodeName()));
   }
 }
 
@@ -995,8 +992,7 @@ KvStoreDb::KvStoreDb(
     const std::string& area,
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
     bool isFloodRoot,
-    const std::string& nodeId,
-    std::unordered_map<std::string, thrift::PeerSpec> peers)
+    const std::string& nodeId)
     : DualNode(nodeId, isFloodRoot),
       kvParams_(kvParams),
       area_(area),
@@ -1022,12 +1018,6 @@ KvStoreDb::KvStoreDb(
 
   // Attach socket callbacks/schedule events
   attachCallbacks();
-
-  VLOG(2) << "Subscribing/connecting to all peers...";
-
-  // Add all existing peers again. This will also ensure querying full-sync
-  // from each peer.
-  addPeers(peers);
 
   // Hook up timer with cleanupTtlCountdownQueue(). The actual scheduling
   // happens within updateTtlCountdownQueue()
@@ -1468,10 +1458,10 @@ KvStoreDb::addThriftPeers(
     }
   } // for loop
 
-  // TODO: add throttle to process in batch mode. PEER_UP event
-  //       can come at the same time.
   // kick off thriftSyncTimer_ if not yet to asyc process full-sync
-  thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  if (not thriftSyncTimer_->isScheduled()) {
+    thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  }
 }
 
 // add new peers to subscribe to

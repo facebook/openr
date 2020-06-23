@@ -69,10 +69,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     config_ = std::make_shared<Config>(tConfig);
 
     // Start KvStore and attach a client to it
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        zmqContext_,
-        config_,
-        std::unordered_map<std::string, openr::thrift::PeerSpec>{});
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(zmqContext_, config_);
     kvStoreWrapper_->run();
     evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
       kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -347,10 +344,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
-    auto store = std::make_shared<KvStoreWrapper>(
-        zmqContext,
-        config,
-        std::unordered_map<std::string, openr::thrift::PeerSpec>{});
+    auto store = std::make_shared<KvStoreWrapper>(zmqContext, config);
     store->run();
     LOG(INFO) << "The test store is running";
 

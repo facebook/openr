@@ -427,7 +427,6 @@ main(int argc, char** argv) {
           monitorSubmitUrl,
           config,
           maybeIpTos,
-          std::unordered_map<std::string, openr::thrift::PeerSpec>{},
           FLAGS_kvstore_zmq_hwm,
           FLAGS_enable_kvstore_thrift));
 

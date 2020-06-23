@@ -56,21 +56,19 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
    */
   void
   SetUp() override {
-    const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-
     for (uint32_t i = 0; i < kNumStores; i++) {
       auto config = std::make_shared<Config>(
           getBasicOpenrConfig(folly::sformat("store{}", i + 1)));
-      auto store =
-          std::make_unique<KvStoreWrapper>(zmqContext, config, emptyPeers);
+      auto store = std::make_unique<KvStoreWrapper>(zmqContext, config);
       stores.emplace_back(std::move(store));
       configs.emplace_back(std::move(config));
       stores.back()->run();
     }
 
     for (uint32_t i = 1; i < kNumStores; i++) {
-      stores[i - 1]->addPeer(stores[i]->nodeId, stores[i]->getPeerSpec());
-      stores[i]->addPeer(stores[i - 1]->nodeId, stores[i - 1]->getPeerSpec());
+      stores[i - 1]->addPeer(stores[i]->getNodeId(), stores[i]->getPeerSpec());
+      stores[i]->addPeer(
+          stores[i - 1]->getNodeId(), stores[i - 1]->getPeerSpec());
     }
 
     for (uint32_t i = 0; i < kNumClients; i++) {

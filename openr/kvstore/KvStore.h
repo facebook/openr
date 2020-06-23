@@ -188,8 +188,7 @@ class KvStoreDb : public DualNode {
       const std::string& area,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
       bool isFloodRoot,
-      const std::string& nodeId,
-      std::unordered_map<std::string, thrift::PeerSpec> peers);
+      const std::string& nodeId);
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
       const std::string& requestId, thrift::KvStoreRequest& thriftReq);
@@ -539,8 +538,6 @@ class KvStore final : public OpenrEventBase {
       std::shared_ptr<const Config> config,
       // IP TOS value to set on sockets using TCP
       std::optional<int> ipTos,
-      // initial list of peers to connect to
-      std::unordered_map<std::string, thrift::PeerSpec> peers,
       // ZMQ high water mark
       int zmqHwm = Constants::kHighWaterMark,
       bool enableKvStoreThrift = false);

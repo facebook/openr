@@ -29,8 +29,7 @@ class LongPollFixture : public ::testing::Test {
     config_ = std::make_shared<Config>(tConfig);
 
     // Create KvStore module
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_, config_, std::unordered_map<std::string, thrift::PeerSpec>());
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config_);
     kvStoreWrapper_->run();
 
     // spin up an openrThriftServer

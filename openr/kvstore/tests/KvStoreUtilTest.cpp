@@ -38,10 +38,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     auto makeStoreWrapper = [this](std::string nodeId) {
       auto tConfig = getBasicOpenrConfig(nodeId);
       config_ = std::make_shared<Config>(tConfig);
-      return std::make_shared<KvStoreWrapper>(
-          context_,
-          config_,
-          std::unordered_map<std::string, thrift::PeerSpec>{});
+      return std::make_shared<KvStoreWrapper>(context_, config_);
     };
 
     auto makeThriftServerWrapper =

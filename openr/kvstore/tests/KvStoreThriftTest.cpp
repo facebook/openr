@@ -60,7 +60,6 @@ class KvStoreThriftTestFixture : public ::testing::Test {
     stores_.emplace_back(std::make_shared<KvStoreWrapper>(
         context_,
         std::make_shared<Config>(tConfig),
-        std::unordered_map<std::string, thrift::PeerSpec>{},
         std::nullopt,
         true /* enable_kvstore_thrift */));
     stores_.back()->run();
@@ -115,10 +114,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
   // zmqContext
   fbzmq::Context context_;
 
-  // local address
-  const std::string localhost_{"::1"};
-
-  // maximum waiting time to check key-val
+  // initialize maximum waiting time to check key-val:
   const std::chrono::milliseconds waitTime_{1000};
 
   // vector of KvStores created
@@ -198,11 +194,11 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
   // build peerSpec for thrift peer connection
   auto peerSpec1 = createPeerSpec(
       "inproc://dummy-spec-1", // TODO: remove dummy url once zmq deprecated
-      localhost_,
+      Constants::kPlatformHost.toString(),
       thriftServers_.back()->getOpenrCtrlThriftPort());
   auto peerSpec2 = createPeerSpec(
       "inproc://dummy-spec-2", // TODO: remove dummy url once zmq deprecated
-      localhost_,
+      Constants::kPlatformHost.toString(),
       thriftServers_.front()->getOpenrCtrlThriftPort());
   auto store1 = stores_.front();
   auto store2 = stores_.back();
@@ -260,11 +256,11 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
   // build peerSpec for thrift client connection
   auto peerSpec1 = createPeerSpec(
       "inproc://dummy-spec-1", // TODO: remove dummy url once zmq deprecated
-      localhost_,
+      Constants::kPlatformHost.toString(),
       dummyPort1);
   auto peerSpec2 = createPeerSpec(
       "inproc://dummy-spec-2", // TODO: remove dummy url once zmq deprecated
-      localhost_,
+      Constants::kPlatformHost.toString(),
       dummyPort2);
   auto store1 = stores_.front();
   auto store2 = stores_.back();

@@ -32,7 +32,6 @@ class KvStoreWrapper {
   KvStoreWrapper(
       fbzmq::Context& zmqContext,
       std::shared_ptr<const Config> config,
-      std::unordered_map<std::string, thrift::PeerSpec> peers,
       std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
           peerUpdatesQueue = std::nullopt,
       bool enableKvStoreThrift = false);
@@ -178,24 +177,12 @@ class KvStoreWrapper {
     return this->nodeId;
   }
 
- public:
-  /**
-   * Socket URLs and other constants which can be used for connecting to KvStore
-   * sockets.
-   */
+ private:
   const std::string nodeId;
 
-  /**
-   * Global URLs could be created outside of kvstore, mainly for testing
-   */
+  // Global URLs could be created outside of kvstore, mainly for testing
   const std::string globalCmdUrl;
 
-  /**
-   * Socket URL for zmq Monitoring
-   */
-  const std::string monitorSubmitUrl;
-
- private:
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   apache::thrift::CompactSerializer serializer_;

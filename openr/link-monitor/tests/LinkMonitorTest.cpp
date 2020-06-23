@@ -325,10 +325,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   void
   createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context,
-        config,
-        std::unordered_map<std::string, thrift::PeerSpec>{},
-        peerUpdatesQueue.getReader());
+        context, config, peerUpdatesQueue.getReader());
     kvStoreWrapper->run();
   }
 

@@ -72,8 +72,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module
-    kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context_, config, std::unordered_map<std::string, thrift::PeerSpec>());
+    kvStoreWrapper = std::make_unique<KvStoreWrapper>(context_, config);
     kvStoreWrapper->run();
 
     // Create Decision module

@@ -101,7 +101,6 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   KvStoreWrapper*
   createKvStore(
       std::string nodeId,
-      std::unordered_map<std::string, thrift::PeerSpec> peers,
       thrift::KvstoreConfig kvStoreConf = getTestKvConf(),
       const std::vector<thrift::AreaConfig>& areas = {}) {
     auto tConfig = getBasicOpenrConfig(nodeId);
@@ -109,8 +108,7 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
     tConfig.areas = areas;
     config_ = std::make_shared<Config>(tConfig);
 
-    stores_.emplace_back(
-        std::make_unique<KvStoreWrapper>(context, config_, peers));
+    stores_.emplace_back(std::make_unique<KvStoreWrapper>(context, config_));
     return stores_.back().get();
   }
 
@@ -157,12 +155,11 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
 
     // Create and start stores
     VLOG(1) << "Creating and starting stores ...";
-    const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
     std::vector<KvStoreWrapper*> stores;
     for (unsigned int i = 0; i < kNumStores; ++i) {
       const auto nodeId = getNodeId(kOriginBase, i);
       LOG(INFO) << "Creating store " << nodeId;
-      stores.push_back(createKvStore(nodeId, emptyPeers));
+      stores.emplace_back(createKvStore(nodeId));
       stores.back()->run();
     }
 
@@ -558,8 +555,7 @@ TEST(KvStore, compareValuesTest) {
 // Test counter reporting
 //
 TEST_F(KvStoreTestFixture, CounterReport) {
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  auto kvStore = createKvStore("node1", emptyPeers);
+  auto kvStore = createKvStore("node1");
   kvStore->run();
 
   /** Verify redundant publications **/
@@ -688,10 +684,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
       5 /* ttl version */,
       0 /* hash */);
 
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  auto kvStore =
-      createKvStore("test", emptyPeers); // std::chrono::seconds(100) /* Monitor
-                                         // Submit Interval */,
+  auto kvStore = createKvStore("test");
   kvStore->run();
 
   //
@@ -928,15 +921,13 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
 }
 
 TEST_F(KvStoreTestFixture, LeafNode) {
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-
   auto store0Conf = getTestKvConf();
   store0Conf.set_leaf_node_ref() = true;
   store0Conf.key_prefix_filters_ref() = {"e2e"};
   store0Conf.key_originator_id_filters_ref() = {"store0"};
 
-  auto store0 = createKvStore("store0", emptyPeers, store0Conf);
-  auto store1 = createKvStore("store1", emptyPeers);
+  auto store0 = createKvStore("store0", store0Conf);
+  auto store1 = createKvStore("store1");
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   std::unordered_map<std::string, thrift::Value> expectedOrignatorVals;
 
@@ -1111,9 +1102,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
  * 7. Check TTL for existing key in store1 does not get updated
  */
 TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  auto store0 = createKvStore("store0", emptyPeers);
-  auto store1 = createKvStore("store1", emptyPeers);
+  auto store0 = createKvStore("store0");
+  auto store1 = createKvStore("store1");
   store0->run();
   store1->run();
 
@@ -1190,11 +1180,9 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
  * 8. Verify PEER_DEL API
  */
 TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-
-  auto store0 = createKvStore("store0", emptyPeers);
-  auto store1 = createKvStore("store1", emptyPeers);
-  auto store2 = createKvStore("store2", emptyPeers);
+  auto store0 = createKvStore("store0");
+  auto store1 = createKvStore("store1");
+  auto store2 = createKvStore("store2");
 
   // Start stores in their respective threads.
   store0->run();
@@ -1288,6 +1276,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
 
   // Remove store2 and verify that there are no more peers
   store0->delPeer("store2");
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers{};
   EXPECT_EQ(emptyPeers, store0->getPeers());
 }
 
@@ -1303,8 +1292,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
  * verify flooding-topology information on each node (parent, children, cost)
  */
 TEST_F(KvStoreTestFixture, DualTest) {
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-
   auto floodRootConf = getTestKvConf();
   floodRootConf.enable_flood_optimization_ref() = true;
   floodRootConf.is_flood_root_ref() = true;
@@ -1313,10 +1300,10 @@ TEST_F(KvStoreTestFixture, DualTest) {
   nonFloodRootConf.enable_flood_optimization_ref() = true;
   nonFloodRootConf.is_flood_root_ref() = false;
 
-  auto r0 = createKvStore("r0", emptyPeers, floodRootConf);
-  auto r1 = createKvStore("r1", emptyPeers, floodRootConf);
-  auto n0 = createKvStore("n0", emptyPeers, nonFloodRootConf);
-  auto n1 = createKvStore("n1", emptyPeers, nonFloodRootConf);
+  auto r0 = createKvStore("r0", floodRootConf);
+  auto r1 = createKvStore("r1", floodRootConf);
+  auto n0 = createKvStore("n0", nonFloodRootConf);
+  auto n1 = createKvStore("n1", nonFloodRootConf);
 
   // Start stores in their respective threads.
   r0->run();
@@ -1860,13 +1847,12 @@ TEST_P(KvStoreTestTtlFixture, Graph) {
 TEST_F(KvStoreTestFixture, BasicSync) {
   const std::string kOriginBase = "peer-store-";
   const unsigned int kNumStores = 16;
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
   // Create and start peer-stores
   std::vector<KvStoreWrapper*> peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
     auto nodeId = getNodeId(kOriginBase, j);
-    auto store = createKvStore(nodeId, emptyPeers);
+    auto store = createKvStore(nodeId);
     store->run();
     peerStores.push_back(store);
   }
@@ -1899,7 +1885,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
 
   // set up the store that we'll be testing
   auto myNodeId = getNodeId(kOriginBase, kNumStores);
-  auto myStore = createKvStore(myNodeId, emptyPeers);
+  auto myStore = createKvStore(myNodeId);
   myStore->run();
 
   // NOTE: It is important to add peers after starting our store to avoid
@@ -2063,10 +2049,9 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   LOG(INFO) << "Preparing and starting stores.";
   std::vector<KvStoreWrapper*> stores;
   std::vector<std::string> nodeIdsSeq;
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   for (unsigned int i = 0; i < kNumStores; ++i) {
     auto nodeId = getNodeId(kOriginBase, i);
-    auto store = createKvStore(nodeId, emptyPeers);
+    auto store = createKvStore(nodeId);
     LOG(INFO) << "Preparing store " << nodeId;
     store->run();
     stores.push_back(store);
@@ -2189,13 +2174,12 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
 TEST_F(KvStoreTestFixture, DumpPrefix) {
   const std::string kOriginBase = "peer-store-";
   const unsigned int kNumStores = 16;
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
   // Create and start peer-stores
   std::vector<KvStoreWrapper*> peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
     auto nodeId = getNodeId(kOriginBase, j);
-    auto store = createKvStore(nodeId, emptyPeers);
+    auto store = createKvStore(nodeId);
     store->run();
     peerStores.push_back(store);
   }
@@ -2232,7 +2216,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
 
   // set up the store that we'll be testing
   auto myNodeId = getNodeId(kOriginBase, kNumStores);
-  auto myStore = createKvStore(myNodeId, emptyPeers);
+  auto myStore = createKvStore(myNodeId);
   myStore->run();
 
   // NOTE: It is important to add peers after starting our store to avoid
@@ -2272,9 +2256,8 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   LOG(INFO) << "Starting store under test";
 
   // set up the store that we'll be testing
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto myNodeId = "test-node";
-  auto myStore = createKvStore(myNodeId, emptyPeers);
+  auto myStore = createKvStore(myNodeId);
   myStore->run();
 
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
@@ -2367,9 +2350,8 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
   LOG(INFO) << "Starting test KvStore";
 
   // set up the store that we'll be testing
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   const auto myNodeId = "test-node1";
-  auto myStore = createKvStore(myNodeId, emptyPeers);
+  auto myStore = createKvStore(myNodeId);
   myStore->run();
 
   // Set key via KvStoreWrapper::setKey
@@ -2400,11 +2382,10 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
 TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   fbzmq::Context context;
 
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  auto store0 = createKvStore("store0", emptyPeers);
+  auto store0 = createKvStore("store0");
   auto store1Conf = getTestKvConf();
   store1Conf.ttl_decrement_ms = 300;
-  auto store1 = createKvStore("store1", emptyPeers, store1Conf);
+  auto store1 = createKvStore("store1", store1Conf);
   store0->run();
   store1->run();
 
@@ -2473,7 +2454,6 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
 TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   fbzmq::Context context;
 
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   // use prod syncInterval 60s
   thrift::KvstoreConfig prodConf, rateLimitConf;
   const size_t messageRate{10}, burstSize{50};
@@ -2483,9 +2463,9 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
       burstSize /*flood_msg_burst_size*/);
   rateLimitConf.flood_rate_ref() = floodRate;
 
-  auto store0 = createKvStore("store0", emptyPeers, prodConf);
-  auto store1 = createKvStore("store1", emptyPeers, rateLimitConf);
-  auto store2 = createKvStore("store2", emptyPeers, prodConf);
+  auto store0 = createKvStore("store0", prodConf);
+  auto store1 = createKvStore("store1", rateLimitConf);
+  auto store2 = createKvStore("store2", prodConf);
 
   store0->run();
   store1->run();
@@ -2551,9 +2531,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
       burstSize /*flood_msg_burst_size*/);
   rateLimitConf.flood_rate_ref() = floodRate;
 
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  auto store0 = createKvStore("store0", emptyPeers);
-  auto store1 = createKvStore("store1", emptyPeers, rateLimitConf);
+  auto store0 = createKvStore("store0");
+  auto store1 = createKvStore("store1", rateLimitConf);
   store0->run();
   store1->run();
 
@@ -2739,9 +2718,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
  *           (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
  */
 TEST_F(KvStoreTestFixture, FullSync) {
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  auto storeA = createKvStore("storeA", emptyPeers);
-  auto storeB = createKvStore("storeB", emptyPeers);
+  auto storeA = createKvStore("storeA");
+  auto storeB = createKvStore("storeB");
   storeA->run();
   storeB->run();
 
@@ -2833,8 +2811,6 @@ TEST_F(KvStoreTestFixture, FullSync) {
    StoreA (pod-area)  --- (pod area) StoreB (plane area) -- (plane area) StoreC
 */
 TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-
   folly::EventBase evb;
   auto scheduleTimePoint = std::chrono::steady_clock::now();
 
@@ -2844,10 +2820,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   plane.area_id = "plane-area";
   plane.neighbor_regexes.emplace_back(".*");
 
-  auto storeA = createKvStore("storeA", emptyPeers, getTestKvConf(), {pod});
-  auto storeB =
-      createKvStore("storeB", emptyPeers, getTestKvConf(), {pod, plane});
-  auto storeC = createKvStore("storeC", emptyPeers, getTestKvConf(), {plane});
+  auto storeA = createKvStore("storeA", getTestKvConf(), {pod});
+  auto storeB = createKvStore("storeB", getTestKvConf(), {pod, plane});
+  auto storeC = createKvStore("storeC", getTestKvConf(), {plane});
 
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
@@ -3022,8 +2997,7 @@ TEST_P(KvStoreRateLimitTestFixture, InitialSync) {
   // in this test
   //
   auto config = std::make_shared<Config>(getBasicOpenrConfig("store0"));
-  auto store0 = std::make_unique<KvStoreWrapper>(
-      context, config, std::unordered_map<std::string, thrift::PeerSpec>{});
+  auto store0 = std::make_unique<KvStoreWrapper>(context, config);
   store0->run();
 
   //
@@ -3185,8 +3159,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
   // NOTE: Set db-sync-interval to 60s (high value) to avoid periodic full sync
   // in this test
   //
-  auto store0 = createKvStore(
-      "store0", std::unordered_map<std::string, thrift::PeerSpec>{});
+  auto store0 = createKvStore("store0");
   store0->run();
 
   // Verify initial expectations

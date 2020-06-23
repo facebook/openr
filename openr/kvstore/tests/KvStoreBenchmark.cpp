@@ -73,14 +73,11 @@ class KvStoreTestFixture {
    * Retured raw pointer of an object will be freed as well.
    */
   KvStoreWrapper*
-  createKvStore(
-      const std::string& nodeId,
-      std::unordered_map<std::string, thrift::PeerSpec> peers) {
+  createKvStore(const std::string& nodeId) {
     auto tConfig = getBasicOpenrConfig(nodeId);
     tConfig.kvstore_config.sync_interval_s = kDbSyncInterval.count();
     config_ = std::make_shared<Config>(tConfig);
-    auto ptr =
-        std::make_unique<KvStoreWrapper>(context, config_, std::move(peers));
+    auto ptr = std::make_unique<KvStoreWrapper>(context, config_);
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
@@ -230,9 +227,7 @@ static void
 BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
   auto suspender = folly::BenchmarkSuspender();
   auto kvStoreTestFixture = std::make_unique<KvStoreTestFixture>();
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-
-  auto kvStore = kvStoreTestFixture->createKvStore("kvStore", emptyPeers);
+  auto kvStore = kvStoreTestFixture->createKvStore("kvStore");
   kvStore->run();
 
   for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
@@ -268,9 +263,7 @@ static void
 BM_KvStoreFloodingUpdate(uint32_t iters, size_t numOfUpdateKeys) {
   auto suspender = folly::BenchmarkSuspender();
   auto kvStoreTestFixture = std::make_unique<KvStoreTestFixture>();
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-
-  auto kvStore = kvStoreTestFixture->createKvStore("kvStore", emptyPeers);
+  auto kvStore = kvStoreTestFixture->createKvStore("kvStore");
 
   // Start stores in their respective threads.
   kvStore->run();

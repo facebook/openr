@@ -107,9 +107,8 @@ class MultipleStoreFixture : public ::testing::Test {
   initKvStores() {
     // wrapper to spin up a kvstore through KvStoreWrapper
     auto makeStoreWrapper = [this](std::string nodeId) {
-      const auto peers = std::unordered_map<std::string, thrift::PeerSpec>{};
       config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-      return std::make_shared<KvStoreWrapper>(context, config, peers);
+      return std::make_shared<KvStoreWrapper>(context, config);
     };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -241,8 +240,6 @@ class MultipleAreaFixture : public MultipleStoreFixture {
     // wrapper to spin up a kvstore through KvStoreWrapper
     auto makeStoreWrapper =
         [this](std::string nodeId, std::unordered_set<std::string> areas) {
-          const auto peers =
-              std::unordered_map<std::string, thrift::PeerSpec>{};
           auto tConfig = getBasicOpenrConfig(nodeId);
           for (const auto& id : areas) {
             thrift::AreaConfig a;
@@ -251,7 +248,7 @@ class MultipleAreaFixture : public MultipleStoreFixture {
             tConfig.areas.emplace_back(std::move(a));
           }
           config = std::make_shared<Config>(tConfig);
-          return std::make_shared<KvStoreWrapper>(context, config, peers);
+          return std::make_shared<KvStoreWrapper>(context, config);
         };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -448,24 +445,23 @@ TEST_F(
 TEST(KvStoreClientInternal, EmptyValueKey) {
   fbzmq::Context context;
   folly::Baton waitBaton;
-  std::unordered_map<std::string, thrift::PeerSpec> peers;
 
-  // start store1, store2, store 3 with empty peers
+  // start store1, store2, store 3
   auto config1 = std::make_shared<Config>(getBasicOpenrConfig("node1"));
-  auto store1 = std::make_unique<KvStoreWrapper>(context, config1, peers);
+  auto store1 = std::make_unique<KvStoreWrapper>(context, config1);
   store1->run();
   auto config2 = std::make_shared<Config>(getBasicOpenrConfig("node2"));
-  auto store2 = std::make_unique<KvStoreWrapper>(context, config2, peers);
+  auto store2 = std::make_unique<KvStoreWrapper>(context, config2);
   store2->run();
   auto config3 = std::make_shared<Config>(getBasicOpenrConfig("node3"));
-  auto store3 = std::make_unique<KvStoreWrapper>(context, config3, peers);
+  auto store3 = std::make_unique<KvStoreWrapper>(context, config3);
   store3->run();
 
   // add peers store1 <---> store2 <---> store3
-  store1->addPeer(store2->nodeId, store2->getPeerSpec());
-  store2->addPeer(store1->nodeId, store1->getPeerSpec());
-  store2->addPeer(store3->nodeId, store3->getPeerSpec());
-  store3->addPeer(store2->nodeId, store2->getPeerSpec());
+  store1->addPeer(store2->getNodeId(), store2->getPeerSpec());
+  store2->addPeer(store1->getNodeId(), store1->getPeerSpec());
+  store2->addPeer(store3->getNodeId(), store3->getPeerSpec());
+  store3->addPeer(store2->getNodeId(), store2->getPeerSpec());
 
   // add key in store1, check for the key in all stores
   // Create another OpenrEventBase instance for looping clients
@@ -474,7 +470,7 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
 
   // create kvstore client for store 1
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      &evb, store1->nodeId, store1->getKvStore(), 1000ms);
+      &evb, store1->getNodeId(), store1->getKvStore(), 1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(
@@ -598,10 +594,8 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with one fake peer
-  std::unordered_map<std::string, thrift::PeerSpec> peers;
-  peers.emplace("peer1", createPeerSpec("inproc://fake_pub_url_1"));
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config, peers);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -696,10 +690,9 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
   const std::string testKey{"test-key"};
   const std::string testValue{"test-value"};
 
+  // Initialize and start KvStore
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  // Initialize and start KvStore with one fake peer
-  auto store = std::make_shared<KvStoreWrapper>(
-      context, config, std::unordered_map<std::string, thrift::PeerSpec>{});
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -789,10 +782,8 @@ TEST(KvStoreClientInternal, ApiTest) {
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with one fake peer
-  std::unordered_map<std::string, thrift::PeerSpec> peers;
-  peers.emplace("peer1", createPeerSpec("inproc://fake_cmd_url_1"));
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config, peers);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Define and start evb for KvStoreClientInternal usage.
@@ -823,6 +814,8 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Schedule callback to add/del peer via client-1 (will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
+    EXPECT_TRUE(
+        store->addPeer("peer1", createPeerSpec("inproc://fake_cmd_url_1")));
     EXPECT_TRUE(
         store->addPeer("peer2", createPeerSpec("inproc://fake_cmd_url_2")));
     EXPECT_TRUE(store->delPeer("peer1"));
@@ -993,9 +986,8 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with empty peer
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config, emptyPeers);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -1144,9 +1136,8 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with empty peer
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config, emptyPeers);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
