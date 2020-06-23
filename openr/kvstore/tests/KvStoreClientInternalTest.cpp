@@ -238,18 +238,23 @@ class MultipleAreaFixture : public MultipleStoreFixture {
   void
   initKvStores() {
     // wrapper to spin up a kvstore through KvStoreWrapper
-    auto makeStoreWrapper =
-        [this](std::string nodeId, std::unordered_set<std::string> areas) {
-          auto tConfig = getBasicOpenrConfig(nodeId);
-          for (const auto& id : areas) {
-            thrift::AreaConfig a;
-            a.area_id = id;
-            a.neighbor_regexes.emplace_back(".*");
-            tConfig.areas.emplace_back(std::move(a));
-          }
-          config = std::make_shared<Config>(tConfig);
-          return std::make_shared<KvStoreWrapper>(context, config);
-        };
+    auto makeStoreWrapper = [this](
+                                std::string nodeId,
+                                std::unordered_set<std::string> areas) {
+      std::vector<openr::thrift::AreaConfig> areaConfig;
+      for (const auto& id : areas) {
+        thrift::AreaConfig a;
+        a.area_id = id;
+        a.neighbor_regexes.emplace_back(".*");
+        areaConfig.emplace_back(std::move(a));
+      }
+      auto tConfig = getBasicOpenrConfig(
+          nodeId,
+          "domain",
+          std::make_unique<std::vector<openr::thrift::AreaConfig>>(areaConfig));
+      config = std::make_shared<Config>(tConfig);
+      return std::make_shared<KvStoreWrapper>(context, config);
+    };
 
     // spin up KvStore instances through KvStoreWrapper
     store1 =

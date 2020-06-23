@@ -42,6 +42,11 @@ class Config {
     return config_.node_name;
   }
 
+  const std::string&
+  getDomainName() const {
+    return config_.domain;
+  }
+
   //
   // feature knobs
   //

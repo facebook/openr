@@ -73,27 +73,6 @@ const auto ESTABLISHED = SparkNeighState::ESTABLISHED;
 
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("Fire_and_Blood");
-
-// the hold time we use during the tests
-const std::chrono::milliseconds kGRHoldTime(500);
-
-// the time interval for spark2 hello msg under fast init mode
-const std::chrono::milliseconds kFastInitHelloTime(50);
-
-// the time interval for spark2 hello msg
-const std::chrono::milliseconds kHelloTime(200);
-
-// the time interval for spark2 handhshake msg
-const std::chrono::milliseconds kHandshakeTime(50);
-
-// the time interval for spark2 heartbeat msg
-const std::chrono::milliseconds kHeartbeatTime(50);
-
-// the hold time for spark2 negotiate stage
-const std::chrono::milliseconds kNegotiateHoldTime(500);
-
-// the hold time for spark2 heartbeat msg
-const std::chrono::milliseconds kHeartbeatHoldTime(200);
 }; // namespace
 
 class SparkFixture : public testing::Test {
@@ -125,17 +104,9 @@ class SparkFixture : public testing::Test {
       uint32_t spark2Id,
       std::shared_ptr<const Config> config = nullptr,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      SparkTimeConfig timeConfig = SparkTimeConfig(
-          kHelloTime,
-          kFastInitHelloTime,
-          kHandshakeTime,
-          kHeartbeatTime,
-          kNegotiateHoldTime,
-          kHeartbeatHoldTime,
-          kGRHoldTime)) {
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion)) {
     return std::make_unique<SparkWrapper>(
-        domainName, myNodeName, version, mockIoProvider, config, timeConfig);
+        myNodeName, version, mockIoProvider, config);
   }
 
   std::shared_ptr<MockIoProvider> mockIoProvider{nullptr};
@@ -156,11 +127,17 @@ class SimpleSparkFixture : public SparkFixture {
     };
     mockIoProvider->setConnectedPairs(connectedPairs);
 
+    auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
+    auto config1 = std::make_shared<Config>(tConfig1);
+
+    auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
+    auto config2 = std::make_shared<Config>(tConfig2);
+
     // start one spark2 instance
-    node1 = createSpark(kDomainName, "node-1", 1);
+    node1 = createSpark(kDomainName, "node-1", 1, config1);
 
     // start another spark2 instance
-    node2 = createSpark(kDomainName, "node-2", 2);
+    node2 = createSpark(kDomainName, "node-2", 2, config2);
 
     // start tracking iface1
     EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -287,7 +264,10 @@ TEST_F(SimpleSparkFixture, GRTest) {
     LOG(INFO) << "node-1 reported node-2 as RESTARTING";
   }
 
-  node2 = createSpark(kDomainName, "node-2", 3 /* spark2Id change */);
+  auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  node2 = createSpark(kDomainName, "node-2", 3 /* spark2Id change */, config2);
 
   LOG(INFO) << "Adding iface2 to node-2 to let it start helloMsg adverstising";
 
@@ -309,9 +289,27 @@ TEST_F(SimpleSparkFixture, GRTest) {
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
+        // node1->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime *
+        // 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_DOWN,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(
-        node2->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node2
+            ->waitForEvent(
+                NB_DOWN,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
   }
 }
 
@@ -338,8 +336,14 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
     // Make sure 'down' event is triggered by GRTimer expire
     // and NOT related with heartbeat holdTimer( no hearbeatTimer started )
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(endTime - startTime >= kGRHoldTime);
-    ASSERT_TRUE(endTime - startTime <= kGRHoldTime + kHeartbeatHoldTime);
+    ASSERT_TRUE(
+        endTime - startTime >=
+        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s));
+
+    ASSERT_TRUE(
+        endTime - startTime <=
+        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s) +
+            std::chrono::seconds(node1->getSparkConfig().hold_time_s));
   }
 }
 
@@ -368,8 +372,12 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
 
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(endTime - startTime >= kHeartbeatHoldTime);
-    ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
+    ASSERT_TRUE(
+        endTime - startTime >=
+        std::chrono::seconds(node1->getSparkConfig().hold_time_s));
+    ASSERT_TRUE(
+        endTime - startTime <=
+        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s));
   }
 }
 
@@ -395,7 +403,11 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(
-        endTime - startTime <= std::min(kGRHoldTime, kHeartbeatHoldTime));
+        endTime - startTime <=
+        std::min(
+            std::chrono::seconds(
+                node1->getSparkConfig().graceful_restart_time_s),
+            std::chrono::seconds(node1->getSparkConfig().hold_time_s)));
     LOG(INFO)
         << "node-1 reported down adjacency to node-2 due to interface removal";
   }
@@ -404,15 +416,23 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     EXPECT_TRUE(node2->waitForEvent(NB_DOWN).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
+    ASSERT_TRUE(
+        endTime - startTime <=
+        std::chrono::seconds(node2->getSparkConfig().graceful_restart_time_s));
     LOG(INFO)
         << "node-2 reported down adjacency to node-2 due to heartbeat expired";
   }
 
   {
     // should NOT receive any event after down adj
-    EXPECT_TRUE(node1->recvNeighborEvent(kGRHoldTime).hasError());
-    EXPECT_TRUE(node2->recvNeighborEvent(kGRHoldTime).hasError());
+    EXPECT_TRUE(node1
+                    ->recvNeighborEvent(std::chrono::seconds(
+                        node1->getSparkConfig().graceful_restart_time_s))
+                    .hasError());
+    EXPECT_TRUE(node2
+                    ->recvNeighborEvent(std::chrono::seconds(
+                        node2->getSparkConfig().graceful_restart_time_s))
+                    .hasError());
   }
 
   // Resume interface connection
@@ -425,7 +445,10 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
+    ASSERT_TRUE(
+        endTime - startTime <=
+        std::chrono::seconds(node1->getSparkConfig().hold_time_s) +
+            std::chrono::seconds(node1->getSparkConfig().keepalive_time_s));
     LOG(INFO) << "node-1 reported up adjacency to node-2";
   }
 
@@ -433,7 +456,10 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
+    ASSERT_TRUE(
+        endTime - startTime <=
+        std::chrono::seconds(node1->getSparkConfig().hold_time_s) +
+            std::chrono::seconds(node1->getSparkConfig().keepalive_time_s));
     LOG(INFO) << "node-2 reported up adjacency to node-1";
   }
 }
@@ -461,21 +487,18 @@ TEST_F(SparkFixture, VersionTest) {
   const std::string nodeName1 = "node-1";
   const std::string nodeName2 = "node-2";
   const std::string nodeName3 = "node-3";
-  auto node1 = createSpark(
-      kDomainName,
-      nodeName1,
-      1,
-      nullptr,
-      std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion));
-  auto node2 = createSpark(
-      kDomainName,
-      nodeName2,
-      2,
-      nullptr,
-      std::make_pair(
-          Constants::kOpenrSupportedVersion,
-          Constants::kOpenrSupportedVersion));
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
+  auto config3 = std::make_shared<Config>(tConfig3);
+
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -492,7 +515,7 @@ TEST_F(SparkFixture, VersionTest) {
       kDomainName,
       nodeName3,
       3,
-      nullptr,
+      config3,
       std::make_pair(
           Constants::kOpenrSupportedVersion - 1,
           Constants::kOpenrSupportedVersion - 1));
@@ -503,11 +526,35 @@ TEST_F(SparkFixture, VersionTest) {
   // node3 can't form adj with neither node1 nor node2
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(
-        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node2
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(
-        node3->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node3
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config3->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config3->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
   }
 }
 
@@ -531,8 +578,15 @@ TEST_F(SparkFixture, DomainTest) {
   std::string domainStark = "Winter_Is_Coming";
   std::string nodeLannister = "Lannister";
   std::string nodeStark = "Stark";
-  auto node1 = createSpark(domainLannister, nodeLannister, 1);
-  auto node2 = createSpark(domainStark, nodeStark, 2);
+
+  auto tConfig1 = getBasicOpenrConfig(nodeLannister, domainLannister);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeStark, domainStark);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(domainLannister, nodeLannister, 1, config1);
+  auto node2 = createSpark(domainStark, nodeStark, 2, config2);
 
   // start tracking iface1 and iface2
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -540,9 +594,25 @@ TEST_F(SparkFixture, DomainTest) {
 
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(
-        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node2
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeStark).has_value());
     EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeLannister).has_value());
   }
@@ -586,9 +656,19 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   const std::string nodeName1 = "node-1";
   const std::string nodeName2 = "node-2";
   const std::string nodeName3 = "node-3";
-  auto node1 = createSpark(kDomainName, nodeName1, 1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2);
-  auto node3 = createSpark(kDomainName, nodeName3, 3);
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
+  auto config3 = std::make_shared<Config>(tConfig3);
+
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node3 = createSpark(kDomainName, nodeName3, 3, config3);
 
   EXPECT_TRUE(
       node1->updateInterfaceDb({{iface1_2, ifIndex1_2, ip1V4_2, ip1V6_2},
@@ -660,8 +740,15 @@ TEST_F(SparkFixture, FastInitTest) {
   // By default, helloMsg is sent out every "kFastInitHelloTime" interval
   const std::string nodeName1 = "node-1";
   const std::string nodeName2 = "node-2";
-  auto node1 = createSpark(kDomainName, nodeName1, 1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2);
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   {
     // start tracking interfaces
@@ -677,14 +764,15 @@ TEST_F(SparkFixture, FastInitTest) {
     // make sure total time used is limited
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
-    EXPECT_GE(5 * kFastInitHelloTime.count(), duration.count());
+    EXPECT_GE(
+        5 * config1->getSparkConfig().fastinit_hello_time_ms, duration.count());
   }
 
   // kill and restart node-2
   LOG(INFO) << "Killing and restarting: " << nodeName2;
 
   node2.reset();
-  node2 = createSpark(kDomainName, nodeName2, 3 /* changed */);
+  node2 = createSpark(kDomainName, nodeName2, 3 /* changed */, config2);
 
   {
     // start tracking interfaces
@@ -698,7 +786,8 @@ TEST_F(SparkFixture, FastInitTest) {
     // make sure total time used is limited
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
-    EXPECT_GE(5 * kFastInitHelloTime.count(), duration.count());
+    EXPECT_GE(
+        5 * config2->getSparkConfig().fastinit_hello_time_ms, duration.count());
   }
 }
 
@@ -726,8 +815,15 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   const std::string nodeName1 = "node-1";
   const std::string nodeName2 = "node-2";
   const std::string nodeName3 = "node-3";
-  auto node1 = createSpark(kDomainName, nodeName1, 1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2);
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -741,7 +837,10 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   // add third instance
   LOG(INFO) << "Creating and starting " << nodeName3;
 
-  auto node3 = createSpark(kDomainName, nodeName3, 3);
+  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
+  auto config3 = std::make_shared<Config>(tConfig3);
+
+  auto node3 = createSpark(kDomainName, nodeName3, 3, config3);
   EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 
   // node-1 and node-2 should hear from node-3
@@ -847,18 +946,35 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
-  auto node1 = createSpark(kDomainName, "node-1", 1);
-  auto node2 = createSpark(kDomainName, "node-2", 2);
+
+  auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(kDomainName, "node-1", 1, config1);
+  auto node2 = createSpark(kDomainName, "node-2", 2, config2);
 
   // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    EXPECT_TRUE(node1->recvNeighborEvent(kGRHoldTime * 2).hasError());
+    EXPECT_TRUE(node1
+                    ->recvNeighborEvent(
+                        std::chrono::seconds(
+                            config1->getSparkConfig().graceful_restart_time_s) *
+                        2)
+                    .hasError());
     LOG(INFO) << "node-1 doesn't have any neighbor event";
 
-    EXPECT_TRUE(node2->recvNeighborEvent(kGRHoldTime * 2).hasError());
+    EXPECT_TRUE(node2
+                    ->recvNeighborEvent(
+                        std::chrono::seconds(
+                            config2->getSparkConfig().graceful_restart_time_s) *
+                        2)
+                    .hasError());
     LOG(INFO) << "node-2 doesn't have any neighbor event";
   }
 
@@ -891,7 +1007,10 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start one spark2 instance
-  auto node1 = createSpark(kDomainName, "node-1", 1);
+
+  auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+  auto node1 = createSpark(kDomainName, "node-1", 1, config1);
 
   // start tracking iface1.
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -899,7 +1018,15 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_DOWN,
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, "node-1").has_value());
   }
 }
@@ -923,8 +1050,14 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
-  auto node1 = createSpark(kDomainName, "node-1", 1);
-  auto node2 = createSpark(kDomainName, "node-2", 2);
+  auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(kDomainName, "node-1", 1, config1);
+  auto node2 = createSpark(kDomainName, "node-2", 2, config2);
 
   // enable v4 subnet validation to put adddres in different /31 subnet
   // on purpose.
@@ -946,10 +1079,26 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   // won't form adj as v4 validation should fail
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
 
     EXPECT_FALSE(
-        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node2
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
   }
 
   {
@@ -993,8 +1142,15 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
   // start spark2 instances
   std::string nodeName1 = "node-1";
   std::string nodeName2 = "node-2";
-  auto node1 = createSpark(kDomainName, nodeName1, 1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2);
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   // enable v4 subnet validation to put adddres in different /31 subnet
   // on purpose.
@@ -1012,10 +1168,26 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
   // won't form adj as v4 validation should fail
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
 
     EXPECT_FALSE(
-        node2->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node2
+            ->waitForEvent(
+                NB_DOWN,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
   }
 
   // check neighbor state: should be in WARM/NEGOTIATE stage
@@ -1047,12 +1219,18 @@ TEST_F(SparkFixture, AreaMatch) {
 
   // RSW: { 1 -> "RSW.*", 2 -> "FSW.*"}
   // FSW: { 1 -> "FSW.*", 2 -> "RSW.*"}
-  auto tConfig1 = getBasicOpenrConfig(nodeName1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2);
-  tConfig1.areas.emplace_back(areaConfig11);
-  tConfig1.areas.emplace_back(areaConfig12);
-  tConfig2.areas.emplace_back(areaConfig21);
-  tConfig2.areas.emplace_back(areaConfig22);
+
+  std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig11, areaConfig12};
+  std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig21, areaConfig22};
+
+  auto tConfig1 = getBasicOpenrConfig(
+      nodeName1,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
+  auto tConfig2 = getBasicOpenrConfig(
+      nodeName2,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1112,12 +1290,17 @@ TEST_F(SparkFixture, NoAreaMatch) {
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
+  std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig1};
+  std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2);
-
-  tConfig1.areas.emplace_back(areaConfig1);
-  tConfig2.areas.emplace_back(areaConfig2);
+  auto tConfig1 = getBasicOpenrConfig(
+      nodeName1,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
+  auto tConfig2 = getBasicOpenrConfig(
+      nodeName2,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1143,9 +1326,25 @@ TEST_F(SparkFixture, NoAreaMatch) {
 
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(
-        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node2
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeName2).has_value());
     EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeName1).has_value());
   }
@@ -1173,11 +1372,17 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+  std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig1};
+  std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  tConfig1.areas.emplace_back(areaConfig1);
-  tConfig2.areas.emplace_back(areaConfig2);
+  auto tConfig1 = getBasicOpenrConfig(
+      nodeName1,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
+  auto tConfig2 = getBasicOpenrConfig(
+      nodeName2,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1203,9 +1408,25 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
 
   {
     EXPECT_FALSE(
-        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node1
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config1->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
     EXPECT_FALSE(
-        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+        node2
+            ->waitForEvent(
+                NB_UP,
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s),
+                std::chrono::seconds(
+                    config2->getSparkConfig().graceful_restart_time_s) *
+                    2)
+            .has_value());
 
     auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
     EXPECT_TRUE(neighState1 == WARM || neighState1 == NEGOTIATE);
@@ -1235,10 +1456,15 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
+  std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  auto tConfig2 = getBasicOpenrConfig(nodeName2);
-  tConfig2.areas.emplace_back(areaConfig2);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto tConfig2 = getBasicOpenrConfig(
+      nodeName2,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
 
+  auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
@@ -1251,7 +1477,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, nullptr);
+  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
@@ -1300,15 +1526,23 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   std::string nodeName2 = "fsw002";
   std::string nodeName3 = "ssw003";
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2);
-  auto tConfig3 = getBasicOpenrConfig(nodeName3);
+  std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig11, areaConfig12};
+  std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
+  std::vector<openr::thrift::AreaConfig> vec3 = {areaConfig31, areaConfig32};
 
-  tConfig1.areas.emplace_back(areaConfig11);
-  tConfig1.areas.emplace_back(areaConfig12);
-  tConfig2.areas.emplace_back(areaConfig2);
-  tConfig3.areas.emplace_back(areaConfig31);
-  tConfig3.areas.emplace_back(areaConfig32);
+  auto tConfig1 = getBasicOpenrConfig(
+      nodeName1,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
+  auto tConfig2 = getBasicOpenrConfig(
+      nodeName2,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
+
+  auto tConfig3 = getBasicOpenrConfig(
+      nodeName3,
+      kDomainName,
+      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec3));
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);

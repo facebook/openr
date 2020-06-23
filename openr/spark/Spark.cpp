@@ -248,53 +248,47 @@ Spark::SparkNeighbor::SparkNeighbor(
 }
 
 Spark::Spark(
-    std::string const& myDomainName,
-    std::string const& myNodeName,
-    uint16_t const udpMcastPort,
-    std::chrono::milliseconds myHelloTime,
-    std::chrono::milliseconds myHelloFastInitTime,
-    std::chrono::milliseconds myHandshakeTime,
-    std::chrono::milliseconds myHeartbeatTime,
-    std::chrono::milliseconds myHandshakeHoldTime,
-    std::chrono::milliseconds myHeartbeatHoldTime,
-    std::chrono::milliseconds myGracefulRestartHoldTime,
     std::optional<int> maybeIpTos,
-    bool enableV4,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
     OpenrCtrlThriftPort openrCtrlThriftPort,
-    std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
-    bool enableFloodOptimization,
-    std::shared_ptr<const Config> config)
-    : myDomainName_(myDomainName),
-      myNodeName_(myNodeName),
-      udpMcastPort_(udpMcastPort),
-      myHelloTime_(myHelloTime),
-      myHelloFastInitTime_(myHelloFastInitTime),
-      myHandshakeTime_(myHandshakeTime),
-      myHeartbeatTime_(myHeartbeatTime),
-      myHandshakeHoldTime_(myHandshakeHoldTime),
-      myHeartbeatHoldTime_(myHeartbeatHoldTime),
-      myGracefulRestartHoldTime_(myGracefulRestartHoldTime),
-      enableV4_(enableV4),
+    std::shared_ptr<const Config> config,
+    std::pair<uint32_t, uint32_t> version)
+    : myDomainName_(config->getConfig().domain),
+      myNodeName_(config->getNodeName()),
+      neighborDiscoveryPort_(static_cast<uint16_t>(
+          config->getSparkConfig().neighbor_discovery_port)),
+      helloTime_(std::chrono::seconds(config->getSparkConfig().hello_time_s)),
+      fastInitHelloTime_(std::chrono::milliseconds(
+          config->getSparkConfig().fastinit_hello_time_ms)),
+      handshakeTime_(std::chrono::milliseconds(
+          config->getSparkConfig().fastinit_hello_time_ms)),
+      keepAliveTime_(
+          std::chrono::seconds(config->getSparkConfig().keepalive_time_s)),
+      handshakeHoldTime_(
+          std::chrono::seconds(config->getSparkConfig().keepalive_time_s)),
+      holdTime_(std::chrono::seconds(config->getSparkConfig().hold_time_s)),
+      gracefulRestartTime_(std::chrono::seconds(
+          config->getSparkConfig().graceful_restart_time_s)),
+      enableV4_(config->isV4Enabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(openrCtrlThriftPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
-      enableFloodOptimization_(enableFloodOptimization),
+      enableFloodOptimization_(config->isFloodOptimizationEnabled()),
       ioProvider_(std::move(ioProvider)),
-      config_(config) {
-  CHECK(myGracefulRestartHoldTime_ >= 3 * myHeartbeatTime_)
+      config_(std::move(config)) {
+  CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
       << "Keep-alive-time must be less than hold-time.";
-  CHECK(myHeartbeatTime_ > std::chrono::milliseconds(0))
+  CHECK(keepAliveTime_ > std::chrono::milliseconds(0))
       << "heartbeatMsg interval can't be 0";
-  CHECK(myHelloTime_ > std::chrono::milliseconds(0))
+  CHECK(helloTime_ > std::chrono::milliseconds(0))
       << "helloMsg interval can't be 0";
-  CHECK(myHelloFastInitTime_ > std::chrono::milliseconds(0))
+  CHECK(fastInitHelloTime_ > std::chrono::milliseconds(0))
       << "fastInit helloMsg interval can't be 0";
-  CHECK(myHelloFastInitTime_ <= myHelloTime_)
+  CHECK(fastInitHelloTime_ <= helloTime_)
       << "fastInit helloMsg interval must be smaller than normal interval";
   CHECK(ioProvider_) << "Got null IoProvider";
 
@@ -439,7 +433,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
     VLOG(2) << "Binding UDP socket to receive on any destination address";
 
     auto mcastSockAddr =
-        folly::SocketAddress(folly::IPAddress("::"), udpMcastPort_);
+        folly::SocketAddress(folly::IPAddress("::"), neighborDiscoveryPort_);
 
     sockaddr_storage addrStorage;
     mcastSockAddr.getAddress(&addrStorage);
@@ -566,13 +560,6 @@ Spark::addAreaRegex(
 //  2) etc.
 void
 Spark::loadConfig() {
-  if (not config_) {
-    // global openrConfig_ NOT supported yet. To make regex backward compatible:
-    // defaultArea => anything(".*") for backward compatible
-    addAreaRegex(thrift::KvStore_constants::kDefaultArea(), {".*"}, {".*"});
-    return;
-  }
-
   for (const auto& areaConfig : config_->getAreas()) {
     addAreaRegex(
         areaConfig.area_id,
@@ -875,8 +862,8 @@ Spark::sendHandshakeMsg(
   thrift::SparkHandshakeMsg handshakeMsg;
   handshakeMsg.nodeName = myNodeName_;
   handshakeMsg.isAdjEstablished = isAdjEstablished;
-  handshakeMsg.holdTime = myHeartbeatHoldTime_.count();
-  handshakeMsg.gracefulRestartTime = myGracefulRestartHoldTime_.count();
+  handshakeMsg.holdTime = holdTime_.count();
+  handshakeMsg.gracefulRestartTime = gracefulRestartTime_.count();
   handshakeMsg.transportAddressV6 = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
@@ -891,7 +878,8 @@ Spark::sendHandshakeMsg(
 
   // send the pkt
   folly::SocketAddress dstAddr(
-      folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
+      neighborDiscoveryPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
     LOG(ERROR) << "Handshake packet is too big, can't send it out.";
@@ -950,7 +938,8 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
 
   // send the pkt
   folly::SocketAddress dstAddr(
-      folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
+      neighborDiscoveryPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
     LOG(ERROR) << "Handshake packet is too big, can't send it out.";
@@ -1275,7 +1264,7 @@ Spark::processHelloMsg(
             remoteIfName, // remote interface on neighborNode
             getNewLabelForIface(ifName), // label for Segment Routing
             remoteSeqNum, // seqNum reported by neighborNode
-            myHeartbeatTime_, // stepDetector sample period
+            keepAliveTime_, // stepDetector sample period
             std::move(rttChangeCb),
             area.value()));
 
@@ -1362,9 +1351,9 @@ Spark::processHelloMsg(
                      "Key NOT found: {} under: {}", neighborName, ifName);
           sparkNeighbors_.at(ifName)
               .at(neighborName)
-              .negotiateTimer->scheduleTimeout(myHandshakeTime_);
+              .negotiateTimer->scheduleTimeout(handshakeTime_);
         });
-    neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_);
+    neighbor.negotiateTimer->scheduleTimeout(handshakeTime_);
 
     // Starts negotiate hold-timer
     neighbor.negotiateHoldTimer = folly::AsyncTimeout::make(
@@ -1372,7 +1361,7 @@ Spark::processHelloMsg(
           // prevent to stucking in NEGOTIATE forever
           processNegotiateTimeout(ifName, neighborName);
         });
-    neighbor.negotiateHoldTimer->scheduleTimeout(myHandshakeHoldTime_);
+    neighbor.negotiateHoldTimer->scheduleTimeout(handshakeHoldTime_);
 
     // Neighbor is aware of us. Promote to NEGOTIATE state
     SparkNeighState oldState = neighbor.state;
@@ -1535,11 +1524,11 @@ Spark::processHandshakeMsg(
   neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
 
   // update neighbor holdTime as "NEGOTIATING" process
-  neighbor.heartbeatHoldTime = std::max(
-      std::chrono::milliseconds(handshakeMsg.holdTime), myHeartbeatHoldTime_);
+  neighbor.heartbeatHoldTime =
+      std::max(std::chrono::milliseconds(handshakeMsg.holdTime), holdTime_);
   neighbor.gracefulRestartHoldTime = std::max(
       std::chrono::milliseconds(handshakeMsg.gracefulRestartTime),
-      myGracefulRestartHoldTime_);
+      gracefulRestartTime_);
 
   // v4 subnet validation if enabled
   if (enableV4_) {
@@ -1715,7 +1704,8 @@ Spark::sendHelloMsg(
   // send the payload
   auto packet = fbzmq::util::writeThriftObjStr(helloPacket, serializer_);
   folly::SocketAddress dstAddr(
-      folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
+      neighborDiscoveryPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
     LOG(ERROR) << "Hello packet is too big, cannot sent!";
@@ -1923,11 +1913,11 @@ Spark::addInterfaceToDb(
             sendHeartbeatMsg(ifName);
             // schedule heartbeatTimers periodically as soon as intf is UP
             ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
-                myHeartbeatTime_);
+                keepAliveTime_);
           });
 
       ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
-      ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(myHeartbeatTime_);
+      ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(keepAliveTime_);
     }
 
     auto rollHelper = [](std::chrono::milliseconds timeDuration) {
@@ -1940,8 +1930,8 @@ Spark::addInterfaceToDb(
       };
     };
 
-    auto roll = rollHelper(myHelloTime_);
-    auto rollFast = rollHelper(myHelloFastInitTime_);
+    auto roll = rollHelper(helloTime_);
+    auto rollFast = rollHelper(fastInitHelloTime_);
     auto timePoint = std::chrono::steady_clock::now();
 
     // NOTE: We do not send hello packet immediately after adding new interface
@@ -1960,7 +1950,7 @@ Spark::addInterfaceToDb(
           // hello contain myNodeName_ info ). To give enough margin, send
           // 3 times of necessary packets.
           inFastInitState = (std::chrono::steady_clock::now() - timePoint) <=
-              6 * myHelloFastInitTime_;
+              6 * fastInitHelloTime_;
 
           sendHelloMsg(ifName, inFastInitState);
 

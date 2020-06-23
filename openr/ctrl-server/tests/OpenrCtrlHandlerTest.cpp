@@ -37,15 +37,21 @@ class OpenrCtrlFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
-    // create config
-    auto tConfig = getBasicOpenrConfig(
-        nodeName, true /* enableV4 */, true /* enableSegmentRouting */);
+    std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : {"0", "plane", "pod"}) {
       thrift::AreaConfig area;
       area.area_id = id;
       area.neighbor_regexes.emplace_back(".*");
-      tConfig.areas.emplace_back(std::move(area));
+      areaConfig.emplace_back(std::move(area));
     }
+    // create config
+    auto tConfig = getBasicOpenrConfig(
+        nodeName,
+        "domain",
+        std::make_unique<std::vector<openr::thrift::AreaConfig>>(areaConfig),
+        true /* enableV4 */,
+        true /* enableSegmentRouting */);
+
     // kvstore config
     tConfig.kvstore_config.sync_interval_s = 1;
     tConfig.kvstore_config.enable_flood_optimization_ref() = true;
@@ -619,6 +625,13 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
         key, createThriftValue(2, "node1", std::string("value1")));
     kvStoreWrapper->setKey(
         key, createThriftValue(3, "node1", std::string("value1")));
+
+    std::vector<std::string> filterKeys{key};
+    thrift::Publication pub;
+    openrCtrlThriftClient_->sync_getKvStoreKeyVals(pub, filterKeys);
+    EXPECT_EQ(1, pub.keyVals.size());
+    EXPECT_EQ(3, pub.keyVals.at(key).version);
+    EXPECT_EQ("value1", pub.keyVals.at(key).value_ref().value());
   }
 
   {

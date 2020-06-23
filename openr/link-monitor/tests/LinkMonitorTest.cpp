@@ -301,15 +301,19 @@ class LinkMonitorTestFixture : public ::testing::Test {
           std::chrono ::milliseconds(1),
       std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
     // create config
-    auto tConfig = getBasicOpenrConfig("node-1");
-    tConfig.enable_segment_routing_ref() = true;
-    tConfig.enable_v4_ref() = true;
+    std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : areas) {
       thrift::AreaConfig area;
       area.area_id = id;
       area.neighbor_regexes.emplace_back(".*");
-      tConfig.areas.emplace_back(std::move(area));
+      areaConfig.emplace_back(std::move(area));
     }
+    auto tConfig = getBasicOpenrConfig(
+        "node-1",
+        "domain",
+        std::make_unique<std::vector<openr::thrift::AreaConfig>>(areaConfig),
+        true,
+        true);
     // kvstore config
     tConfig.kvstore_config.sync_interval_s = 1;
     // link monitor config

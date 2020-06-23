@@ -6,6 +6,9 @@ namespace {
 openr::thrift::OpenrConfig
 getBasicOpenrConfig(
     const std::string nodeName = "",
+    const std::string domainName = "domain",
+    std::optional<std::unique_ptr<std::vector<openr::thrift::AreaConfig>>>
+        areaCfg = std::nullopt,
     bool enableV4 = true,
     bool enableSegmentRouting = false,
     bool orderedFibProgramming = false,
@@ -21,12 +24,16 @@ getBasicOpenrConfig(
   openr::thrift::KvstoreConfig kvstoreConfig;
 
   openr::thrift::SparkConfig sparkConfig;
-  sparkConfig.graceful_restart_time_s = 60;
+  sparkConfig.hello_time_s = 2;
+  sparkConfig.keepalive_time_s = 1;
+  sparkConfig.fastinit_hello_time_ms = 50;
+  sparkConfig.hold_time_s = 2;
+  sparkConfig.graceful_restart_time_s = 6;
 
   openr::thrift::OpenrConfig config;
 
   config.node_name = nodeName;
-  config.domain = "domain";
+  config.domain = domainName;
   config.enable_v4_ref() = enableV4;
   config.enable_segment_routing_ref() = enableSegmentRouting;
   config.enable_ordered_fib_programming_ref() = orderedFibProgramming;
@@ -38,6 +45,18 @@ getBasicOpenrConfig(
   config.spark_config = sparkConfig;
 
   config.enable_rib_policy = true;
+
+  if (not areaCfg.has_value()) {
+    openr::thrift::AreaConfig areaConfig;
+    areaConfig.area_id = "0";
+    areaConfig.neighbor_regexes = {".*"};
+    areaConfig.interface_regexes = {".*"};
+    config.areas.emplace_back(areaConfig);
+  } else {
+    for (const auto& areaCfg : *(areaCfg.value())) {
+      config.areas.emplace_back(areaCfg);
+    }
+  }
 
   return config;
 }

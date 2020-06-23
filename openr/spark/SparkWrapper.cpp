@@ -12,34 +12,20 @@ using namespace fbzmq;
 namespace openr {
 
 SparkWrapper::SparkWrapper(
-    std::string const& myDomainName,
     std::string const& myNodeName,
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
-    std::shared_ptr<const Config> config,
-    SparkTimeConfig timeConfig)
-    : myNodeName_(myNodeName) {
+    std::shared_ptr<const Config> config)
+    : myNodeName_(myNodeName), config_(config) {
   spark_ = std::make_shared<Spark>(
-      myDomainName,
-      myNodeName,
-      static_cast<uint16_t>(6666),
-      timeConfig.myHelloTime, // spark2_hello_time
-      timeConfig.myHelloFastInitTime, // spark2_hello_fast_init_time
-      timeConfig.myHandshakeTime, // spark2_handshake_time
-      timeConfig.myHeartbeatTime, // spark2_heartbeat_time
-      timeConfig.myHandshakeHoldTime, // spark2_handshale_hold_time
-      timeConfig.myHeartbeatHoldTime, // spark2_heartbeat_hold_time
-      timeConfig.myGracefulRestartHoldTime, // spark2_gr_hold_time
       std::nullopt /* ip-tos */,
-      true /* enableV4 */,
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       KvStoreCmdPort{10002},
       OpenrCtrlThriftPort{2018},
-      version,
       std::move(ioProvider),
-      true /* enableFloodOptimization */,
-      std::move(config));
+      config,
+      version);
 
   // start spark
   run();

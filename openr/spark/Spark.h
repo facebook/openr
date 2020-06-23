@@ -79,26 +79,15 @@ enum class SparkNeighEvent {
 class Spark final : public OpenrEventBase {
  public:
   Spark(
-      std::string const& myDomainName,
-      std::string const& myNodeName,
-      uint16_t const udpMcastPort,
-      std::chrono::milliseconds myHelloTime,
-      std::chrono::milliseconds myHelloFastInitTime,
-      std::chrono::milliseconds myHandshakeTime,
-      std::chrono::milliseconds myHeartbeatTime,
-      std::chrono::milliseconds myNegotiateHoldTime,
-      std::chrono::milliseconds myHeartbeatHoldTime,
-      std::chrono::milliseconds myGracefulRestartHoldTime,
       std::optional<int> ipTos,
-      bool enableV4,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
       KvStoreCmdPort kvStoreCmdPort,
       OpenrCtrlThriftPort openrCtrlThriftPort,
-      std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
-      bool enableFloodOptimization = false,
-      std::shared_ptr<const Config> config = nullptr);
+      std::shared_ptr<const Config> config,
+      std::pair<uint32_t, uint32_t> version = std::make_pair(
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion));
 
   ~Spark() override = default;
 
@@ -441,28 +430,28 @@ class Spark final : public OpenrEventBase {
   const std::string myNodeName_{};
 
   // UDP port for send/recv of spark hello messages
-  const uint16_t udpMcastPort_{6666};
+  const uint16_t neighborDiscoveryPort_{6666};
 
   // Spark hello msg sendout interval
-  const std::chrono::milliseconds myHelloTime_{0};
+  const std::chrono::milliseconds helloTime_{0};
 
   // Spark hello msg sendout interval under fast-init case
-  const std::chrono::milliseconds myHelloFastInitTime_{0};
+  const std::chrono::milliseconds fastInitHelloTime_{0};
 
   // Spark handshake msg sendout interval
-  const std::chrono::milliseconds myHandshakeTime_{0};
+  const std::chrono::milliseconds handshakeTime_{0};
 
-  // Spark heartbeat msg sendout interval
-  const std::chrono::milliseconds myHeartbeatTime_{0};
+  // Spark heartbeat msg sendout interval (keepAliveTime)
+  const std::chrono::milliseconds keepAliveTime_{0};
 
   // Spark negotiate stage hold time
-  const std::chrono::milliseconds myHandshakeHoldTime_{0};
+  const std::chrono::milliseconds handshakeHoldTime_{0};
 
   // Spark heartbeat msg hold time
-  const std::chrono::milliseconds myHeartbeatHoldTime_{0};
+  const std::chrono::milliseconds holdTime_{0};
 
   // Spark hold time under graceful-restart mode
-  const std::chrono::milliseconds myGracefulRestartHoldTime_{0};
+  const std::chrono::milliseconds gracefulRestartTime_{0};
 
   // This flag indicates that we will also exchange v4 transportAddress in
   // Spark HelloMessage

@@ -469,31 +469,12 @@ main(int argc, char** argv) {
       watchdog,
       "Spark",
       std::make_unique<Spark>(
-          config->getConfig().domain, // My domain
-          config->getNodeName(), // myNodeName
-          static_cast<uint16_t>(sparkConf.neighbor_discovery_port),
-          std::chrono::seconds(sparkConf.hello_time_s),
-          std::chrono::milliseconds(sparkConf.fastinit_hello_time_ms),
-          std::chrono::milliseconds(
-              sparkConf.fastinit_hello_time_ms), // spark2_handshake_time_ms
-          std::chrono::seconds(
-              sparkConf.keepalive_time_s), // spark2_heartbeat_time_s
-          std::chrono::seconds(
-              sparkConf.keepalive_time_s), // spark2_negotiate_hold_time_s
-          std::chrono::seconds(
-              sparkConf.hold_time_s), // spark2_heartbeat_hold_time_s
-          std::chrono::seconds(
-              sparkConf.graceful_restart_time_s), // spark2_gr_hold_time_s
           maybeIpTos,
-          config->isV4Enabled(),
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
           OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
-          std::make_pair(
-              Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
           std::make_shared<IoProvider>(),
-          config->isFloodOptimizationEnabled(),
           config));
 
   // Static list of prefixes to announce into the network as long as OpenR is

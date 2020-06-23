@@ -21,36 +21,6 @@ struct SparkInterfaceEntry {
   folly::CIDRNetwork v6LinkLocalNetwork;
 };
 
-struct SparkTimeConfig {
-  SparkTimeConfig(
-      std::chrono::milliseconds helloTime = std::chrono::milliseconds{0},
-      std::chrono::milliseconds helloFastInitTime =
-          std::chrono::milliseconds{0},
-      std::chrono::milliseconds handshakeTime = std::chrono::milliseconds{0},
-      std::chrono::milliseconds heartbeatTime = std::chrono::milliseconds{0},
-      std::chrono::milliseconds handshakeHoldTime =
-          std::chrono::milliseconds{0},
-      std::chrono::milliseconds heartbeatHoldTime =
-          std::chrono::milliseconds{0},
-      std::chrono::milliseconds gracefulRestartHoldTime =
-          std::chrono::milliseconds{0})
-      : myHelloTime(helloTime),
-        myHelloFastInitTime(helloFastInitTime),
-        myHandshakeTime(handshakeTime),
-        myHeartbeatTime(heartbeatTime),
-        myHandshakeHoldTime(handshakeHoldTime),
-        myHeartbeatHoldTime(heartbeatHoldTime),
-        myGracefulRestartHoldTime(gracefulRestartHoldTime) {}
-
-  std::chrono::milliseconds myHelloTime;
-  std::chrono::milliseconds myHelloFastInitTime;
-  std::chrono::milliseconds myHandshakeTime;
-  std::chrono::milliseconds myHeartbeatTime;
-  std::chrono::milliseconds myHandshakeHoldTime;
-  std::chrono::milliseconds myHeartbeatHoldTime;
-  std::chrono::milliseconds myGracefulRestartHoldTime;
-};
-
 /**
  * A utility class to wrap and interact with Spark. It exposes the APIs to
  * send commands to and receive publications from Spark.
@@ -62,12 +32,10 @@ struct SparkTimeConfig {
 class SparkWrapper {
  public:
   SparkWrapper(
-      std::string const& myDomainName,
       std::string const& myNodeName,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
-      std::shared_ptr<const Config> config,
-      SparkTimeConfig timeConfig);
+      std::shared_ptr<const Config> config);
 
   ~SparkWrapper();
 
@@ -105,8 +73,14 @@ class SparkWrapper {
       const std::vector<std::string>& nodeRegexes,
       const std::vector<std::string>& interfaceRegexes);
 
+  const openr::thrift::SparkConfig
+  getSparkConfig() {
+    return config_->getSparkConfig();
+  }
+
  private:
   std::string myNodeName_{""};
+  std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;

@@ -400,6 +400,8 @@ TEST(ConfigTest, GeneralGetter) {
   {
     auto tConfig = getBasicOpenrConfig(
         "node-1",
+        "domain",
+        std::nullopt, /* area config */
         true /* enableV4 */,
         false /* enableSegmentRouting */,
         false /* orderedFibProgramming */,
@@ -408,6 +410,9 @@ TEST(ConfigTest, GeneralGetter) {
 
     // getNodeName
     EXPECT_EQ("node-1", config.getNodeName());
+
+    // getDomainName
+    EXPECT_EQ("domain", config.getDomainName());
 
     // getAreaIds
     auto areaIds = config.getAreaIds();

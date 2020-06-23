@@ -50,6 +50,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
+      "terragraph",
+      std::nullopt, /* area config */
       v4Enabled,
       true /*enableSegmentRouting*/,
       false /*orderedFibProgramming*/,
@@ -157,25 +159,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create spark
   //
   spark_ = std::make_unique<Spark>(
-      "terragraph", // domain name
-      nodeId_, // node name
-      static_cast<uint16_t>(6666), // multicast port
-      spark2HelloTime,
-      spark2FastInitHelloTime,
-      spark2HandshakeTime,
-      spark2HeartbeatTime,
-      spark2HandshakeHoldTime,
-      spark2HeartbeatHoldTime,
-      spark2GRHoldTime,
       std::nullopt, // ip-tos
-      v4Enabled, // enable v4
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       KvStoreCmdPort{0},
       OpenrCtrlThriftPort{0},
-      std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      ioProvider_);
+      ioProvider_,
+      config_);
 
   //
   // create link monitor
