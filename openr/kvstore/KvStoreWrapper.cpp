@@ -221,6 +221,12 @@ KvStoreWrapper::delPeer(std::string peerName, std::string area) {
   return true;
 }
 
+std::optional<KvStorePeerState>
+KvStoreWrapper::getPeerState(
+    std::string const& peerName, std::string const& area) {
+  return kvStore_->getKvStorePeerState(peerName, area).get();
+}
+
 std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper::getPeers(std::string area) {
   auto peers = *(kvStore_->getKvStorePeers(area).get());

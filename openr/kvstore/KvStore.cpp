@@ -720,6 +720,24 @@ KvStore::getAreasConfig() {
   return sf;
 }
 
+folly::SemiFuture<std::optional<KvStorePeerState>>
+KvStore::getKvStorePeerState(
+    std::string const& peerName, std::string const& area) {
+  folly::Promise<std::optional<KvStorePeerState>> promise;
+  auto sf = promise.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(promise), peerName, area]() mutable {
+        if (!kvStoreDb_.count(area)) {
+          p.setValue(std::nullopt);
+        } else {
+          auto& kvStoreDb = kvStoreDb_.at(area);
+          auto state = kvStoreDb.getCurrentState(peerName);
+          p.setValue(state);
+        }
+      });
+  return sf;
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 KvStore::getKvStorePeers(std::string area) {
   folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
@@ -958,6 +976,15 @@ KvStoreDb::logStateTransition(
   SYSLOG(INFO) << "State change: [" << toStr(oldState) << "] -> ["
                << toStr(newState) << "] "
                << "for peer: " << peerName;
+}
+
+// static util function to fetch current peer state
+std::optional<KvStorePeerState>
+KvStoreDb::getCurrentState(std::string const& peerName) {
+  if (thriftPeers_.count(peerName)) {
+    return thriftPeers_.at(peerName).state;
+  }
+  return std::nullopt;
 }
 
 // static util function for state transition
@@ -1282,7 +1309,7 @@ KvStoreDb::requestThriftPeerSync() {
 
           // record time and process SUCCESS state transition
           auto endTime = std::chrono::steady_clock::now();
-          processThriftSyncSuccess(
+          processThriftSuccess(
               peerName,
               std::move(pub),
               std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1295,7 +1322,7 @@ KvStoreDb::requestThriftPeerSync() {
 
               // record time and process FAILURE state transition
               auto endTime = std::chrono::steady_clock::now();
-              processThriftSyncFailure(
+              processThriftFailure(
                   peerName,
                   ew.what(),
                   std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1319,6 +1346,7 @@ KvStoreDb::requestThriftPeerSync() {
 
   // process the rest after min timeout if NOT scheduled
   if (not thriftSyncTimer_->isScheduled()) {
+    LOG(INFO) << "Scheduled thrift sync in: " << timeout.count() << " ms.";
     thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(timeout));
   }
 }
@@ -1329,7 +1357,7 @@ KvStoreDb::requestThriftPeerSync() {
 //  3) Exponetially update number of peers to SYNC in parallel;
 //  4) Promote KvStorePeerState from SYNCING -> INITIALIZED;
 void
-KvStoreDb::processThriftSyncSuccess(
+KvStoreDb::processThriftSuccess(
     std::string const& peerName,
     thrift::Publication&& pub,
     std::chrono::milliseconds timeDelta) {
@@ -1382,12 +1410,12 @@ KvStoreDb::processThriftSyncSuccess(
 //  1) Change peer state from current state to IDLE due to exception;
 //  2) Schedule syncTimer to pick IDLE peer up if NOT scheduled;
 void
-KvStoreDb::processThriftSyncFailure(
+KvStoreDb::processThriftFailure(
     std::string const& peerName,
     folly::fbstring const& exceptionStr,
     std::chrono::milliseconds timeDelta) {
   LOG(INFO) << "[Thrift Sync] Exception: " << exceptionStr
-            << " happened during full-sync with peer: " << peerName
+            << ". Peer name: " << peerName
             << ". Processing time: " << timeDelta.count() << "ms.";
 
   auto peerIt = thriftPeers_.find(peerName);
@@ -1435,16 +1463,15 @@ KvStoreDb::addThriftPeers(
         //        potentially have peerSpec updated by LM)
         LOG(INFO) << "[Peer Update]: peerAddr is updated from: "
                   << oldPeerSpec.peerAddr << " to: " << newPeerSpec.peerAddr;
-      } else {
-        // case2: rcvd PEER_UP event for existing peer with the same
-        //        peerAddr(i.e. peer ungracefully peer shut-down and
-        //        come back before holdTimer expired)
-        LOG(WARNING) << "[Peer Update]: detected " << peerName
-                     << " previously shut-down ungracefully";
       }
+      logStateTransition(
+          peerName, peerIter->second.state, KvStorePeerState::IDLE);
+
+      peerIter->second.peerSpec = newPeerSpec; // update peerSpec
+      peerIter->second.state = KvStorePeerState::IDLE; // set IDLE initially
       peerIter->second.client.reset(); // destruct thriftClient
     } else {
-      // case 3: found a new peer coming up
+      // case 2: found a new peer coming up
       LOG(INFO) << "[Peer Add]: " << peerName << " is added."
                 << " peerAddr: " << newPeerSpec.peerAddr
                 << " flood-optimization:" << supportFloodOptimization;
@@ -2557,12 +2584,10 @@ KvStoreDb::floodPublication(
   }
   publication.nodeIds_ref()->emplace_back(kvParams_.nodeId);
 
-  // Flood publication on local PUB queue
+  // Flood publication to internal subscribers
   kvParams_.kvStoreUpdatesQueue.push(publication);
 
-  //
-  // Create request and send only keyValue updates to all neighbors
-  //
+  // Flood keyValue ONLY updates to external neighbors
   if (publication.keyVals.empty()) {
     return;
   }
@@ -2572,10 +2597,12 @@ KvStoreDb::floodPublication(
     fromStdOptional(publication.floodRootId_ref(), DualNode::getSptRootId());
   }
 
+  // prepare thrift structure for flooding purpose
   thrift::KvStoreRequest floodRequest;
   thrift::KeySetParams params;
 
   params.keyVals = publication.keyVals;
+  // TODO: remove solicit response when all KEY_SET request is over thrift
   params.solicitResponse = false;
   params.nodeIds_ref().copy_from(publication.nodeIds_ref());
   params.floodRootId_ref().copy_from(publication.floodRootId_ref());
@@ -2590,28 +2617,92 @@ KvStoreDb::floodPublication(
     floodRootId = params.floodRootId_ref().value();
   }
   const auto& floodPeers = getFloodPeers(floodRootId);
-  for (const auto& peer : floodPeers) {
-    if (senderId.has_value() && senderId.value() == peer) {
-      // Do not flood towards senderId from whom we received this publication
-      continue;
+
+  // ATTN: KvStore maintains different ways of flooding mechanism.
+  //  1) Over thrift peer connection;
+  //  2) Over ZMQ socket;
+  if (kvParams_.enableKvStoreThrift) {
+    for (const auto& peerName : floodPeers) {
+      auto peerIt = thriftPeers_.find(peerName);
+      if (peerIt == thriftPeers_.end()) {
+        LOG(ERROR) << "Invalid flooding peer: " << peerName << ". Skip it.";
+        continue;
+      }
+
+      if (senderId.has_value() && senderId.value() == peerName) {
+        // Do not flood towards senderId from whom we received this publication
+        continue;
+      }
+
+      auto& thriftPeer = thriftPeers_.at(peerName);
+      if (thriftPeer.state != KvStorePeerState::INITIALIZED or
+          (not thriftPeer.client)) {
+        // peer in thriftPeers can still in the process of initial full-sync.
+        // Skip flooding to those peers.
+        continue;
+      }
+
+      auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
+      auto startTime = std::chrono::steady_clock::now();
+      std::move(sf)
+          .via(evb_->getEvb())
+          .thenValue([peerName, startTime](folly::Unit&&) {
+            VLOG(4) << "Flooding ack received from peer: " << peerName;
+
+            // record time and process SUCCESS state transition
+            auto endTime = std::chrono::steady_clock::now();
+            fb303::fbData->addStatValue(
+                "kvstore.flood_duration_ms_thrift",
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    endTime - startTime)
+                    .count(),
+                fb303::AVG);
+          })
+          .thenError(
+              [this, peerName, startTime](const folly::exception_wrapper& ew) {
+                // record time and process SUCCESS state transition
+                auto endTime = std::chrono::steady_clock::now();
+                processThriftFailure(
+                    peerName,
+                    ew.what(),
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        endTime - startTime));
+
+                fb303::fbData->addStatValue(
+                    "kvstore.flood_thrift_failure", 1, fb303::COUNT);
+              });
     }
-    VLOG(4) << "Forwarding publication, received from: "
-            << (senderId.has_value() ? senderId.value() : "N/A")
-            << ", to: " << peer << ", via: " << kvParams_.nodeId;
 
-    fb303::fbData->addStatValue("kvstore.sent_publications", 1, fb303::COUNT);
     fb303::fbData->addStatValue(
-        "kvstore.sent_key_vals", publication.keyVals.size(), fb303::SUM);
+        "kvstore.publications_sent_over_thrift", 1, fb303::COUNT);
+    fb303::fbData->addStatValue(
+        "kvstore.key_vals_sent_over_thrift",
+        publication.keyVals.size(),
+        fb303::SUM);
+  } else {
+    for (const auto& peer : floodPeers) {
+      if (senderId.has_value() && senderId.value() == peer) {
+        // Do not flood towards senderId from whom we received this publication
+        continue;
+      }
+      VLOG(4) << "Forwarding publication, received from: "
+              << (senderId.has_value() ? senderId.value() : "N/A")
+              << ", to: " << peer << ", via: " << kvParams_.nodeId;
 
-    // Send flood request
-    auto const& peerCmdSocketId = peers_.at(peer).second;
-    auto const ret = sendMessageToPeer(peerCmdSocketId, floodRequest);
-    if (ret.hasError()) {
-      // this could be pretty common on initial connection setup
-      LOG(ERROR) << "Failed to flood publication to peer " << peer
-                 << " using id " << peerCmdSocketId
-                 << ", error: " << ret.error();
-      collectSendFailureStats(ret.error(), peerCmdSocketId);
+      fb303::fbData->addStatValue("kvstore.sent_publications", 1, fb303::COUNT);
+      fb303::fbData->addStatValue(
+          "kvstore.sent_key_vals", publication.keyVals.size(), fb303::SUM);
+
+      // Send flood request
+      auto const& peerCmdSocketId = peers_.at(peer).second;
+      auto const ret = sendMessageToPeer(peerCmdSocketId, floodRequest);
+      if (ret.hasError()) {
+        // this could be pretty common on initial connection setup
+        LOG(ERROR) << "Failed to flood publication to peer " << peer
+                   << " using id " << peerCmdSocketId
+                   << ", error: " << ret.error();
+        collectSendFailureStats(ret.error(), peerCmdSocketId);
+      }
     }
   }
 }

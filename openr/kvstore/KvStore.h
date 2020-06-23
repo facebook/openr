@@ -245,6 +245,9 @@ class KvStoreDb : public DualNode {
   // dump all peers we are subscribed to
   thrift::PeersMap dumpPeers();
 
+  // util funtion to fetch KvStorePeerState
+  std::optional<KvStorePeerState> getCurrentState(std::string const& peerName);
+
   // process spanning-tree-set command to set/unset a child for a given root
   void processFloodTopoSet(
       const thrift::FloodTopoSetParams& setParams) noexcept;
@@ -257,13 +260,13 @@ class KvStoreDb : public DualNode {
       std::optional<KvStorePeerState> const& currState,
       KvStorePeerEvent const& event);
 
+  // util function to convert ENUM KvStorePeerState to string
+  static std::string toStr(KvStorePeerState state);
+
  private:
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
   KvStoreDb& operator=(KvStoreDb const&) = delete;
-
-  // util function to convert ENUM KvStorePeerState to string
-  static std::string toStr(KvStorePeerState state);
 
   // util function to log state transition
   static void logStateTransition(
@@ -275,13 +278,13 @@ class KvStoreDb : public DualNode {
   void requestThriftPeerSync();
 
   // util function to process when sync response received
-  void processThriftSyncSuccess(
+  void processThriftSuccess(
       std::string const& peerName,
       thrift::Publication&& pub,
       std::chrono::milliseconds timeDelta);
 
   // util function to process when exception encountered
-  void processThriftSyncFailure(
+  void processThriftFailure(
       std::string const& peerName,
       folly::fbstring const& exceptionStr,
       std::chrono::milliseconds timeDelta);
@@ -605,6 +608,12 @@ class KvStore final : public OpenrEventBase {
 
   // API to get reader for kvStoreUpdatesQueue
   messaging::RQueue<thrift::Publication> getKvStoreUpdatesReader();
+
+  // API to fetch state of peerNode, used for unit-testing
+  folly::SemiFuture<std::optional<KvStorePeerState>> getKvStorePeerState(
+      std::string const& peerName,
+      std::string const& area =
+          openr::thrift::KvStore_constants::kDefaultArea());
 
  private:
   // disable copying
