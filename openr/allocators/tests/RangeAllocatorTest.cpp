@@ -284,6 +284,17 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
   const uint64_t end = start + rangeSize - 1; // Range is inclusive
 
   folly::Baton waitBaton;
+
+  // Limit only one post() call for the wait().
+  // The UT is possible to call baton.post() more than one time,
+  // which will cause a fatal error.
+  bool isPost = false;
+  auto batonPostOnce = [&]() {
+    if (!isPost) {
+      isPost = true;
+      waitBaton.post();
+    }
+  };
   std::map<int /* client id */, uint64_t /* allocated value */> allocation;
   auto allocators = createAllocators<uint64_t>(
       {start, end},
@@ -321,7 +332,7 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
           // no override
           LOG(INFO) << "We got everything, stopping OpenrEventBase.";
           // Synchronization primitive
-          waitBaton.post();
+          batonPostOnce();
           return;
         }
         // Overide mode: client [expectedClientIdStart, expectedClientIdEnd]
@@ -337,7 +348,7 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
         if (clientIds == expectedClientIds) {
           LOG(INFO) << "We got everything, stopping OpenrEventBase.";
           // Synchronization primitive
-          waitBaton.post();
+          batonPostOnce();
         }
       },
       4s);
@@ -349,7 +360,15 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
   // Synchronization primitive
   waitBaton.wait();
 
-  EXPECT_TRUE(allocators.front()->isRangeConsumed());
+  while (true) {
+    // Wait for kvstore updated.
+    // Because in the rare case that isRangeConsumed() could dump and check all
+    // keys earlier than all the keys are actually set into the kvstore.
+    if (allocators.front()->isRangeConsumed()) {
+      break;
+    }
+    std::this_thread::yield();
+  }
 
   VLOG(2) << "=============== Allocation Table ===============";
   for (auto const& kv : allocation) {

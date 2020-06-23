@@ -166,7 +166,7 @@ class RangeAllocator {
 
   // Scheduled timeout token
   std::optional<int64_t> allocateValue_{std::nullopt};
-  std::unique_ptr<fbzmq::ZmqTimeout> timeout_;
+  std::unique_ptr<folly::AsyncTimeout> timeout_;
 
   // if allocator has started
   bool hasStarted_{false};

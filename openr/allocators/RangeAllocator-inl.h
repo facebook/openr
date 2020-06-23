@@ -57,8 +57,8 @@ RangeAllocator<T>::RangeAllocator(
       checkValueInUseCb_(std::move(checkValueInUseCb)),
       rangeAllocTtl_(rangeAllocTtl),
       area_(area) {
-  timeout_ =
-      fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() mutable noexcept {
+  timeout_ = folly::AsyncTimeout::make(
+      *eventBase_->getEvb(), [this]() mutable noexcept {
         CHECK(allocateValue_.has_value());
         auto allocateValue = allocateValue_.value();
         allocateValue_.reset();
@@ -68,19 +68,22 @@ RangeAllocator<T>::RangeAllocator(
 
 template <typename T>
 RangeAllocator<T>::~RangeAllocator() {
-  VLOG(2) << "RangeAllocator: Destructing " << nodeName_ << ", " << keyPrefix_;
-  // We need to cancel any pending timeout
-  if (timeout_) {
-    timeout_.reset();
-    allocateValue_.reset();
-  }
+  eventBase_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
+    VLOG(2) << "RangeAllocator: Destructing " << nodeName_ << ", "
+            << keyPrefix_;
+    // We need to cancel any pending timeout
+    if (timeout_) {
+      timeout_.reset();
+      allocateValue_.reset();
+    }
 
-  // Unsubscribe from KvStoreClientInternal if we have been to
-  if (myValue_) {
-    const auto myKey = createKey(*myValue_);
-    kvStoreClient_->unsubscribeKey(myKey);
-    kvStoreClient_->unsetKey(myKey, area_);
-  }
+    // Unsubscribe from KvStoreClientInternal if we have been to
+    if (myValue_) {
+      const auto myKey = createKey(*myValue_);
+      kvStoreClient_->unsubscribeKey(myKey);
+      kvStoreClient_->unsetKey(myKey, area_);
+    }
+  });
 }
 
 template <typename T>
