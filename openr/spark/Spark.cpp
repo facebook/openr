@@ -292,9 +292,6 @@ Spark::Spark(
       << "fastInit helloMsg interval must be smaller than normal interval";
   CHECK(ioProvider_) << "Got null IoProvider";
 
-  // Initialize global openr config
-  loadConfig();
-
   // Initialize list of BucketedTimeSeries
   const std::chrono::seconds sec{1};
   const int32_t numBuckets = Constants::kMaxAllowedPps / 3;
@@ -501,71 +498,6 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
     counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
-}
-
-void
-Spark::addAreaRegex(
-    const std::string& areaId,
-    const std::vector<std::string>& neighborRegexes,
-    const std::vector<std::string>& interfaceRegexes) {
-  CHECK(not(neighborRegexes.empty() and interfaceRegexes.empty()))
-      << "Invalid config. At least one non-empty regexes for neighbor or interface";
-
-  re2::RE2::Options regexOpts;
-  regexOpts.set_case_sensitive(false);
-  std::string regexErr;
-  std::shared_ptr<re2::RE2::Set> neighborRegexList{nullptr},
-      interfaceRegexList{nullptr};
-
-  // neighbor regex
-  if (not neighborRegexes.empty()) {
-    neighborRegexList =
-        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-
-    for (const auto& regexStr : neighborRegexes) {
-      if (-1 == neighborRegexList->Add(regexStr, &regexErr)) {
-        LOG(FATAL) << folly::sformat(
-            "Failed to add neighbor regex: {} for area: {}. Error: {}",
-            regexStr,
-            areaId,
-            regexErr);
-      }
-    }
-    CHECK(neighborRegexList->Compile()) << "Neighbor regex compilation failed";
-  }
-
-  // interface regex
-  if (not interfaceRegexes.empty()) {
-    interfaceRegexList =
-        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-
-    for (const auto& regexStr : interfaceRegexes) {
-      if (-1 == interfaceRegexList->Add(regexStr, &regexErr)) {
-        LOG(FATAL) << folly::sformat(
-            "Failed to add interface regex: {} for area: {}. Error: {}",
-            regexStr,
-            areaId,
-            regexErr);
-      }
-    }
-    CHECK(interfaceRegexList->Compile())
-        << "Interface regex compilation failed";
-  }
-  areaIdRegexList_.emplace_back(std::make_tuple(
-      areaId, std::move(neighborRegexList), std::move(interfaceRegexList)));
-}
-
-// parse openrConfig to initialize:
-//  1) areaId => [node_name|interface_name] regex matching;
-//  2) etc.
-void
-Spark::loadConfig() {
-  for (const auto& areaConfig : config_->getAreas()) {
-    addAreaRegex(
-        areaConfig.area_id,
-        areaConfig.neighbor_regexes,
-        areaConfig.interface_regexes);
-  }
 }
 
 PacketValidationResult
@@ -1244,7 +1176,8 @@ Spark::processHelloMsg(
     // TODO: Spark is yet to support area change due to dynamic configuration.
     //       To avoid running area deducing logic for every single helloMsg,
     //       ONLY deduce for unknown neighbors.
-    auto area = getNeighborArea(neighborName, ifName, areaIdRegexList_);
+    auto area =
+        getNeighborArea(neighborName, ifName, config_->getAreaConfiguration());
     if (not area.has_value()) {
       return;
     }
@@ -2090,17 +2023,16 @@ std::optional<std::string>
 Spark::getNeighborArea(
     const std::string& peerNodeName,
     const std::string& localIfName,
-    const std::vector<std::tuple<
-        std::string,
-        std::shared_ptr<re2::RE2::Set>,
-        std::shared_ptr<re2::RE2::Set>>>& areaIdRegexList) {
+    const std::unordered_map<std::string /* areaId */, AreaConfiguration>&
+        areaConfigs) {
   std::vector<std::string> candidateAreas{};
 
   // looping through areaIdRegexList
-  for (const auto& t : areaIdRegexList) {
-    const auto& areaId = std::get<0>(t);
-    const auto& neighborRegex = std::get<1>(t);
-    const auto& interfaceRegex = std::get<2>(t);
+  for (const auto& t : areaConfigs) {
+    const auto& areaId = t.first;
+    const auto& neighborRegex = t.second.neighborRegexList;
+    const auto& interfaceRegex = t.second.interfaceRegexList;
+
     if (neighborRegex and interfaceRegex) {
       if (matchRegexSet(peerNodeName, neighborRegex) and
           matchRegexSet(localIfName, interfaceRegex)) {

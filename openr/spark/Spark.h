@@ -208,9 +208,6 @@ class Spark final : public OpenrEventBase {
   // set flat counter/stats
   void updateGlobalCounters();
 
-  // utility method to initialize/reload openr config
-  void loadConfig();
-
   // utility method to add regex for:
   //
   //  tuple(areaId, neighbor_regex, interface_regex)
@@ -235,10 +232,8 @@ class Spark final : public OpenrEventBase {
   static std::optional<std::string> getNeighborArea(
       const std::string& peerNodeName,
       const std::string& ifName,
-      const std::vector<std::tuple<
-          std::string,
-          std::shared_ptr<re2::RE2::Set>,
-          std::shared_ptr<re2::RE2::Set>>>& areaIdRegexList);
+      const std::unordered_map<std::string /* areaId */, AreaConfiguration>&
+          areaConfigs);
 
   // function to receive and parse received pkt
   bool parsePacket(
@@ -520,13 +515,6 @@ class Spark final : public OpenrEventBase {
 
   // global openr config
   std::shared_ptr<const Config> config_{nullptr};
-
-  // areaId -> node name regex parsed from areaConfig
-  std::vector<std::tuple<
-      std::string /* areaId */,
-      std::shared_ptr<re2::RE2::Set> /* neighbor regex */,
-      std::shared_ptr<re2::RE2::Set> /* interface regex */>>
-      areaIdRegexList_{};
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};

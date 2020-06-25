@@ -140,7 +140,7 @@ TEST_F(ConfigTestFixture, ConstructFromFile) {
   }
 }
 
-TEST(ConfigTest, PopulateInternalDb) {
+TEST(ConfigTest, PopulateAreaConfig) {
   // area
 
   // duplicate area id
@@ -151,6 +151,79 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
   }
 
+  // area config - empty neighbor and interfsace regexes
+  {
+    openr::thrift::AreaConfig area;
+    area.area_id = thrift::KvStore_constants::kDefaultArea();
+    std::vector<openr::thrift::AreaConfig> vec = {area};
+    auto confInvalidArea = getBasicOpenrConfig(
+        "node-1",
+        "domain",
+        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
+  }
+
+  // non-empty interface regex
+  {
+    openr::thrift::AreaConfig areaConfig;
+    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.interface_regexes.emplace_back("iface.*");
+    std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
+    auto confValidArea = getBasicOpenrConfig(
+        "node-1",
+        "domain",
+        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    EXPECT_NO_THROW((Config(confValidArea)));
+  }
+
+  // non-empty neighbor regexes
+  {
+    openr::thrift::AreaConfig areaConfig;
+    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.neighbor_regexes.emplace_back("fsw.*");
+    std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
+    auto confValidArea = getBasicOpenrConfig(
+        "node-1",
+        "domain",
+        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    EXPECT_NO_THROW((Config(confValidArea)));
+  }
+
+  // non-empty neighbor and interface regexes
+  {
+    openr::thrift::AreaConfig areaConfig;
+    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.interface_regexes.emplace_back("iface.*");
+    areaConfig.neighbor_regexes.emplace_back("fsw.*");
+    std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
+    auto confValidArea = getBasicOpenrConfig(
+        "node-1",
+        "domain",
+        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    EXPECT_NO_THROW((Config(confValidArea)));
+  }
+
+  {
+    openr::thrift::AreaConfig areaConfig;
+    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.interface_regexes.emplace_back("iface.*");
+    areaConfig.neighbor_regexes.emplace_back("fsw.*");
+    std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
+    auto confValidArea = getBasicOpenrConfig(
+        "node-1",
+        "domain",
+        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    Config cfg = Config(confValidArea);
+    EXPECT_EQ(cfg.getAreaConfiguration().size(), 1);
+    EXPECT_EQ(
+        cfg.getAreaConfiguration().count(
+            thrift::KvStore_constants::kDefaultArea()),
+        1);
+    EXPECT_EQ(cfg.getAreaConfiguration().count("1"), 0);
+  }
+}
+
+TEST(ConfigTest, PopulateInternalDb) {
   // features
 
   // enable_ordered_fib_programming = true with multiple areas
@@ -415,9 +488,9 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_EQ("domain", config.getDomainName());
 
     // getAreaIds
-    auto areaIds = config.getAreaIds();
-    EXPECT_EQ(1, areaIds.size());
-    EXPECT_EQ(1, areaIds.count(thrift::KvStore_constants::kDefaultArea()));
+    auto areaC = config.getAreaConfiguration();
+    EXPECT_EQ(1, areaC.size());
+    EXPECT_EQ(1, areaC.count(thrift::KvStore_constants::kDefaultArea()));
 
     // enable_v4
     EXPECT_TRUE(config.isV4Enabled());

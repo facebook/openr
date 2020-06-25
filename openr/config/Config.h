@@ -18,6 +18,19 @@ namespace openr {
 
 typedef std::pair<folly::CIDRNetwork, uint8_t> PrefixAllocationParams;
 
+struct AreaConfiguration {
+  AreaConfiguration(
+      const std::string& area,
+      std::shared_ptr<re2::RE2::Set> neighborRegexList,
+      std::shared_ptr<re2::RE2::Set> interfaceRegexList)
+      : area_(area),
+        neighborRegexList(std::move(neighborRegexList)),
+        interfaceRegexList(std::move(interfaceRegexList)) {}
+  const std::string area_;
+  std::shared_ptr<re2::RE2::Set> neighborRegexList{nullptr};
+  std::shared_ptr<re2::RE2::Set> interfaceRegexList{nullptr};
+};
+
 class Config {
  public:
   explicit Config(const std::string& configFile);
@@ -92,6 +105,18 @@ class Config {
   const std::vector<thrift::AreaConfig>&
   getAreas() const {
     return config_.areas;
+  }
+
+  void addAreaRegex(
+      const std::string& areaId,
+      const std::vector<std::string>& neighborRegexes,
+      const std::vector<std::string>& interfaceRegexes);
+
+  void populateAreaConfig();
+
+  const std::unordered_map<std::string, AreaConfiguration>&
+  getAreaConfiguration() const {
+    return areaConfigs_;
   }
 
   //
@@ -202,6 +227,9 @@ class Config {
   std::shared_ptr<re2::RE2::Set> redistributeItfRegexes_{nullptr};
   // prefix allocation
   folly::Optional<PrefixAllocationParams> prefixAllocationParams_{folly::none};
+
+  // areaId -> neighbor regex and interface regex mapped
+  std::unordered_map<std::string /* areaId */, AreaConfiguration> areaConfigs_;
 };
 
 } // namespace openr

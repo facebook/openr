@@ -78,7 +78,72 @@ Config::createPrefixAllocationParams(
 }
 
 void
-Config::populateInternalDb() {
+Config::addAreaRegex(
+    const std::string& areaId,
+    const std::vector<std::string>& neighborRegexes,
+    const std::vector<std::string>& interfaceRegexes) {
+  if (neighborRegexes.empty() and interfaceRegexes.empty()) {
+    throw std::invalid_argument(folly::sformat(
+        "Invalid config. At least one non-empty regexes for neighbor or interface"));
+  }
+
+  re2::RE2::Options regexOpts;
+  regexOpts.set_case_sensitive(false);
+  std::string regexErr;
+  std::shared_ptr<re2::RE2::Set> neighborRegexList{nullptr},
+      interfaceRegexList{nullptr};
+
+  // neighbor regex
+  if (not neighborRegexes.empty()) {
+    neighborRegexList =
+        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+
+    for (const auto& regexStr : neighborRegexes) {
+      if (-1 == neighborRegexList->Add(regexStr, &regexErr)) {
+        throw std::invalid_argument(folly::sformat(
+            "Failed to add neighbor regex: {} for area: {}. Error: {}",
+            regexStr,
+            areaId,
+            regexErr));
+      }
+    }
+    if (not neighborRegexList->Compile()) {
+      throw std::invalid_argument(
+          folly::sformat("Neighbor regex compilation failed"));
+    }
+  }
+
+  // interface regex
+  if (not interfaceRegexes.empty()) {
+    interfaceRegexList =
+        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+
+    for (const auto& regexStr : interfaceRegexes) {
+      if (-1 == interfaceRegexList->Add(regexStr, &regexErr)) {
+        throw std::invalid_argument(folly::sformat(
+            "Failed to add interface regex: {} for area: {}. Error: {}",
+            regexStr,
+            areaId,
+            regexErr));
+      }
+    }
+    if (not interfaceRegexList->Compile()) {
+      throw std::invalid_argument(
+          folly::sformat("Interface regex compilation failed"));
+    }
+  }
+
+  areaConfigs_.emplace(
+      areaId,
+      AreaConfiguration(
+          areaId, std::move(neighborRegexList), std::move(interfaceRegexList)));
+}
+
+// parse openrConfig to initialize:
+//  1) areaId => [node_name|interface_name] regex matching;
+//  2) etc.
+void
+Config::populateAreaConfig() {
   //
   // Area
   //
@@ -92,11 +157,25 @@ Config::populateInternalDb() {
       : config_.areas;
 
   for (const auto& area : areas) {
+    // TODO: Check if we can remove areaIds_ and
+    // use areaConfigs_.
     if (not areaIds_.emplace(area.area_id).second) {
       throw std::invalid_argument(
           folly::sformat("Duplicate area config: area_id {}", area.area_id));
     }
   }
+
+  for (const auto& areaConfig : config_.areas) {
+    addAreaRegex(
+        areaConfig.area_id,
+        areaConfig.neighbor_regexes,
+        areaConfig.interface_regexes);
+  }
+}
+
+void
+Config::populateInternalDb() {
+  populateAreaConfig();
 
   // prefix forwarding type and algorithm
   const auto& pfxType = config_.prefix_forwarding_type;
