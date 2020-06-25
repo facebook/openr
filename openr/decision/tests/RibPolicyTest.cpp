@@ -13,6 +13,8 @@
 #include <openr/common/Util.h>
 #include <openr/decision/RibPolicy.h>
 
+#include <folly/IPAddress.h>
+
 using namespace openr;
 
 namespace {
@@ -80,33 +82,35 @@ TEST(RibPolicyStatement, ApplyAction) {
 
   // Test with non matching prefix. Shouldn't be transformed.
   {
-    const auto constRoute =
-        createUnicastRoute(toIpPrefix("fd00::/64"), {nhDefault, nh1, nh2});
-    auto route = constRoute; // Mutable copy
+    RibUnicastEntry entry(
+        folly::IPAddress::createNetwork("fd00::/64"), {nhDefault, nh1, nh2});
 
-    EXPECT_FALSE(policyStatement.applyAction(route));
-    EXPECT_EQ(constRoute, route); // Route shouldn't be modified
+    const auto constEntry = entry; // const copy
+
+    EXPECT_FALSE(policyStatement.applyAction(entry));
+    EXPECT_EQ(constEntry, entry); // Route shouldn't be modified
   }
 
   // Test with matching prefix. Expect transformed nexthops
   {
-    const auto constRoute =
-        createUnicastRoute(toIpPrefix("fc00::/64"), {nhDefault, nh1, nh2});
-    auto route = constRoute; // Mutable copy
+    RibUnicastEntry entry(
+        folly::IPAddress::createNetwork("fc00::/64"), {nhDefault, nh1, nh2});
 
-    EXPECT_TRUE(policyStatement.applyAction(route));
+    EXPECT_TRUE(policyStatement.applyAction(entry));
 
     // We should only see two next-hops. `area1` next-hop will be removed
     // because it's weight is set to `0`
-    ASSERT_EQ(2, route.nextHops.size());
+    ASSERT_EQ(2, entry.nexthops.size());
 
     auto nhDefaultModified = nhDefault;
     nhDefaultModified.weight = 1;
-    EXPECT_EQ(nhDefaultModified, route.nextHops.at(0));
 
     auto nh2Modified = nh2;
     nh2Modified.weight = 2;
-    EXPECT_EQ(nh2Modified, route.nextHops.at(1));
+
+    EXPECT_THAT(
+        entry.nexthops,
+        testing::UnorderedElementsAre(nhDefaultModified, nh2Modified));
   }
 }
 
@@ -137,12 +141,12 @@ TEST(RibPolicy, ApiTest) {
 
   // Verify match
   {
-    thrift::UnicastRoute route;
-    route.dest = toIpPrefix("10.0.0.0/8");
-    EXPECT_TRUE(policy.match(route));
+    RibUnicastEntry matchEntry(folly::IPAddress::createNetwork("10.0.0.0/8"));
+    EXPECT_TRUE(policy.match(matchEntry));
 
-    route.dest = toIpPrefix("99.0.0.0/8");
-    EXPECT_FALSE(policy.match(route));
+    RibUnicastEntry nonMatchEntry(
+        folly::IPAddress::createNetwork("99.0.0.0/8"));
+    EXPECT_FALSE(policy.match(nonMatchEntry));
   }
 }
 
@@ -180,36 +184,49 @@ TEST(RibPolicy, ApplyAction) {
 
   // Apply policy on fc01::/64 (stmt1 gets applied)
   {
-    const auto constRoute =
-        createUnicastRoute(toIpPrefix("fc01::/64"), {nh1, nh2});
-    auto route = constRoute; // Mutable copy
+    RibUnicastEntry entry(
+        folly::IPAddress::createNetwork("fc01::/64"), {nh1, nh2});
 
-    EXPECT_TRUE(policy.applyAction(route));
-    ASSERT_EQ(2, route.nextHops.size());
-    EXPECT_EQ(99, route.nextHops.at(0).weight);
-    EXPECT_EQ(1, route.nextHops.at(1).weight);
+    EXPECT_TRUE(policy.applyAction(entry));
+    ASSERT_EQ(2, entry.nexthops.size());
+
+    auto expectNh1 = nh1;
+    expectNh1.weight = 99;
+
+    auto expectNh2 = nh2;
+    expectNh2.weight = 1;
+
+    EXPECT_THAT(
+        entry.nexthops, testing::UnorderedElementsAre(expectNh1, expectNh2));
   }
 
   // Apply policy on fc02::/64 (stmt1 gets applied)
   {
-    const auto constRoute =
-        createUnicastRoute(toIpPrefix("fc02::/64"), {nh1, nh2});
-    auto route = constRoute; // Mutable copy
+    RibUnicastEntry entry(
+        folly::IPAddress::createNetwork("fc02::/64"), {nh1, nh2});
 
-    EXPECT_TRUE(policy.applyAction(route));
-    ASSERT_EQ(2, route.nextHops.size());
-    EXPECT_EQ(1, route.nextHops.at(0).weight);
-    EXPECT_EQ(99, route.nextHops.at(1).weight);
+    EXPECT_TRUE(policy.applyAction(entry));
+    ASSERT_EQ(2, entry.nexthops.size());
+
+    auto expectNh1 = nh1;
+    expectNh1.weight = 1;
+
+    auto expectNh2 = nh2;
+    expectNh2.weight = 99;
+
+    EXPECT_THAT(
+        entry.nexthops, testing::UnorderedElementsAre(expectNh1, expectNh2));
   }
 
   // Apply policy on fc03::/64 (non matching prefix)
   {
-    const auto constRoute =
-        createUnicastRoute(toIpPrefix("fc03::/64"), {nh1, nh2});
-    auto route = constRoute; // Mutable copy
+    RibUnicastEntry entry(
+        folly::IPAddress::createNetwork("fc03::/64"), {nh1, nh2});
 
-    EXPECT_FALSE(policy.applyAction(route));
-    EXPECT_EQ(constRoute, route); // Route shouldn't be modified
+    const auto constEntry = entry; // const copy
+
+    EXPECT_FALSE(policy.applyAction(entry));
+    EXPECT_EQ(constEntry, entry); // Route shouldn't be modified
   }
 }
 

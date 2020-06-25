@@ -28,6 +28,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
@@ -50,9 +51,40 @@ struct BestPathCalResult {
   std::string bestNode{""};
   std::set<std::string> nodes;
   std::optional<int64_t> bestIgpMetric{std::nullopt};
-  std::string const* bestData{nullptr};
   std::optional<thrift::MetricVector> bestVector{std::nullopt};
 };
+
+struct DecisionRouteDb {
+  std::unordered_map<thrift::IpPrefix /* prefix */, RibUnicastEntry>
+      unicastEntries;
+  std::unordered_map<int32_t /* label */, RibMplsEntry> mplsEntries;
+
+  thrift::RouteDatabase
+  toThrift() const {
+    thrift::RouteDatabase tRouteDb;
+    // unicast routes
+    for (const auto& [_, entry] : unicastEntries) {
+      tRouteDb.unicastRoutes.emplace_back(entry.toTUnicastRoute());
+    }
+    // mpls routes
+    for (const auto& [_, entry] : mplsEntries) {
+      tRouteDb.mplsRoutes.emplace_back(entry.toTMplsRoute());
+    }
+    return tRouteDb;
+  }
+};
+
+/*
+ * Given old DecisionRouteDb and new DecisionRouteDb
+ * return RouteDatabaseDelta
+ */
+thrift::RouteDatabaseDelta getRouteDelta(
+    const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb);
+
+/*
+ * Given DecisionRouteDb, translate to thrift::RouteDatabase
+ */
+thrift::RouteDatabase toTRouteDatabase(const DecisionRouteDb& decisionRouteDb);
 
 namespace detail {
 /**
@@ -191,8 +223,7 @@ class SpfSolver {
   // Build route database using global prefix database and cached SPF
   // computation from perspective of a given router.
   // Returns std::nullopt if myNodeName doesn't have any prefix database
-  std::optional<thrift::RouteDatabase> buildRouteDb(
-      const std::string& myNodeName);
+  std::optional<DecisionRouteDb> buildRouteDb(const std::string& myNodeName);
 
   // spf counters
   void updateGlobalCounters();
@@ -346,7 +377,9 @@ class Decision : public OpenrEventBase {
   void coldStartUpdate();
 
   void sendRouteUpdate(
-      thrift::RouteDatabase&& db, std::string const& eventDescription);
+      DecisionRouteDb&& routeDb,
+      std::optional<thrift::PerfEvents>&& perfEvents,
+      std::string const& eventDescription);
 
   std::chrono::milliseconds getMaxFib();
 
@@ -354,7 +387,8 @@ class Decision : public OpenrEventBase {
   thrift::PrefixDatabase updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
 
-  thrift::RouteDatabase routeDb_;
+  // cached routeDb
+  DecisionRouteDb routeDb_;
 
   // Queue to publish route changes
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue_;

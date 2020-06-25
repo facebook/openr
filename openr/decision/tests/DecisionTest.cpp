@@ -207,6 +207,28 @@ using PrefixRoutes = unordered_map<
 // Note: routeMap will be modified
 void
 fillRouteMap(
+    const string& node, RouteMap& routeMap, const DecisionRouteDb& routeDb) {
+  for (auto const& [_, entry] : routeDb.unicastEntries) {
+    auto prefix = folly::IPAddress::networkToString(entry.prefix);
+    for (const auto& nextHop : entry.nexthops) {
+      VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
+              << toString(nextHop);
+
+      routeMap[make_pair(node, prefix)].emplace(nextHop);
+    }
+  }
+  for (auto const& [_, entry] : routeDb.mplsEntries) {
+    auto topLabelStr = std::to_string(entry.label);
+    for (const auto& nextHop : entry.nexthops) {
+      VLOG(4) << "node: " << node << " label: " << topLabelStr << " -> "
+              << toString(nextHop);
+      routeMap[make_pair(node, topLabelStr)].emplace(nextHop);
+    }
+  }
+}
+
+void
+fillRouteMap(
     const string& node,
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
@@ -239,7 +261,6 @@ getRouteMap(SpfSolver& spfSolver, const vector<string>& nodes) {
       continue;
     }
 
-    EXPECT_EQ(node, routeDb->thisNodeName);
     fillRouteMap(node, routeMap, routeDb.value());
   }
 
@@ -251,10 +272,10 @@ void
 fillPrefixRoutes(
     const string& node,
     PrefixRoutes& prefixRoutes,
-    const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : routeDb.unicastRoutes) {
-    auto prefix = toString(route.dest);
-    prefixRoutes[make_pair(node, prefix)] = route;
+    const DecisionRouteDb& routeDb) {
+  for (auto const& [_, entry] : routeDb.unicastEntries) {
+    auto prefix = folly::IPAddress::networkToString(entry.prefix);
+    prefixRoutes[make_pair(node, prefix)] = entry.toTUnicastRoute();
   }
 }
 
@@ -268,7 +289,6 @@ getUnicastRoutes(SpfSolver& spfSolver, const vector<string>& nodes) {
       continue;
     }
 
-    EXPECT_EQ(node, routeDb->thisNodeName);
     fillPrefixRoutes(node, prefixRoutes, routeDb.value());
   }
 
@@ -396,8 +416,8 @@ TEST(SpfSolver, Counters) {
 
   // Perform SPF run to generate some counters
   const auto routeDb = spfSolver.buildRouteDb("1");
-  for (const auto& uniRoute : routeDb.value().unicastRoutes) {
-    EXPECT_NE(toString(uniRoute.dest), "10.1.0.0/16");
+  for (const auto& [prefix, _] : routeDb.value().unicastEntries) {
+    EXPECT_NE(toString(prefix), "10.1.0.0/16");
   }
 
   // Verify counters
@@ -452,9 +472,8 @@ TEST(ShortestPathTest, UnreachableNodes) {
   for (string const& node : allNodes) {
     auto routeDb = spfSolver.buildRouteDb(node);
     ASSERT_TRUE(routeDb.has_value());
-    EXPECT_EQ(node, routeDb->thisNodeName);
-    EXPECT_EQ(0, routeDb->unicastRoutes.size());
-    EXPECT_EQ(0, routeDb->mplsRoutes.size()); // No label routes
+    EXPECT_EQ(0, routeDb->unicastEntries.size());
+    EXPECT_EQ(0, routeDb->mplsEntries.size()); // No label routes
   }
 }
 
@@ -481,9 +500,8 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
 
   auto routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("1", routeDb->thisNodeName);
-  EXPECT_EQ(0, routeDb->unicastRoutes.size());
-  EXPECT_EQ(0, routeDb->mplsRoutes.size());
+  EXPECT_EQ(0, routeDb->unicastEntries.size());
+  EXPECT_EQ(0, routeDb->mplsEntries.size());
 }
 
 //
@@ -514,13 +532,11 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 
   auto routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("1", routeDb->thisNodeName);
-  EXPECT_EQ(0, routeDb->unicastRoutes.size());
+  EXPECT_EQ(0, routeDb->unicastEntries.size());
 
   routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("2", routeDb->thisNodeName);
-  EXPECT_EQ(0, routeDb->unicastRoutes.size());
+  EXPECT_EQ(0, routeDb->unicastEntries.size());
 }
 
 //
@@ -573,15 +589,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   auto routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("1", routeDb->thisNodeName);
-  EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastEntries.size());
+  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
 
   routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("2", routeDb->thisNodeName);
-  EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastEntries.size());
+  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
 
   //
   // Update adjacency database of node 1 by changing it's nexthops and verift
@@ -601,15 +615,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("1", routeDb->thisNodeName);
-  EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastEntries.size());
+  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
 
   routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("2", routeDb->thisNodeName);
-  EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastEntries.size());
+  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
 
   //
   // Update adjacency database of node 2 by changing it's nexthops and verift
@@ -629,15 +641,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("1", routeDb->thisNodeName);
-  EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastEntries.size());
+  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
 
   routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ("2", routeDb->thisNodeName);
-  EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastEntries.size());
+  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
 
   //
   // Change adjLabel. This should report route-attribute change only for node1
@@ -762,7 +772,8 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
 
-  auto routeDb = spfSolver.buildRouteDb("2");
+  auto decisionRouteDb = *spfSolver.buildRouteDb("2");
+  auto routeDb = decisionRouteDb.toThrift();
   thrift::UnicastRoute route1(
       FRAGILE,
       bgpPrefix1,
@@ -772,8 +783,8 @@ TEST(BGPRedistribution, BasicOperation) {
       data1,
       false,
       {createNextHop(addr1.prefixAddress)});
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(routeDb.unicastRoutes, testing::Contains(route1));
 
   // add the prefix to node2 with the same metric vector. we expect the bgp
   // route to be gone since both nodes have same metric vector we can't
@@ -788,8 +799,9 @@ TEST(BGPRedistribution, BasicOperation) {
       mv2,
       std::nullopt));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
-  routeDb = spfSolver.buildRouteDb("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(1));
+  decisionRouteDb = *spfSolver.buildRouteDb("1");
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(1));
 
   // decrease the one of second node's metrics and expect to see the route
   // toward just the first
@@ -799,9 +811,10 @@ TEST(BGPRedistribution, BasicOperation) {
       .metrics[numMetrics - 1]
       .metric.front()--;
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
-  routeDb = spfSolver.buildRouteDb("2");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
+  decisionRouteDb = *spfSolver.buildRouteDb("2");
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(routeDb.unicastRoutes, testing::Contains(route1));
 
   // now make 2 better
   prefixDb2WithBGP.prefixEntries.back()
@@ -821,9 +834,10 @@ TEST(BGPRedistribution, BasicOperation) {
       false,
       createNextHop(addr2.prefixAddress));
 
-  routeDb = spfSolver.buildRouteDb("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route2));
+  decisionRouteDb = *spfSolver.buildRouteDb("1");
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(routeDb.unicastRoutes, testing::Contains(route2));
 
   // now make that a tie break for a multipath route
   prefixDb1WithBGP.prefixEntries.back()
@@ -841,13 +855,14 @@ TEST(BGPRedistribution, BasicOperation) {
 
   // 1 and 2 will not program BGP route
   EXPECT_THAT(
-      spfSolver.buildRouteDb("1").value().unicastRoutes, testing::SizeIs(1));
+      spfSolver.buildRouteDb("1").value().unicastEntries, testing::SizeIs(1));
 
   // 3 will program the BGP route towards both
-  routeDb = spfSolver.buildRouteDb("3");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
+  decisionRouteDb = *spfSolver.buildRouteDb("3");
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
-      routeDb.value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, bgpPrefix1),
           Truly([&data2](auto i) { return i.data_ref() == data2; }),
@@ -859,13 +874,18 @@ TEST(BGPRedistribution, BasicOperation) {
   // dicsonnect the network, each node will consider it's BGP route the best,
   // and thus not program anything
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(createAdjDb("1", {}, 0)).first);
+  decisionRouteDb = *spfSolver.buildRouteDb("1");
+  routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(
-      spfSolver.buildRouteDb("1").value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::AllOf(
           testing::Not(testing::Contains(route1)),
           testing::Not(testing::Contains(route2))));
+
+  decisionRouteDb = *spfSolver.buildRouteDb("2");
+  routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(
-      spfSolver.buildRouteDb("2").value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::AllOf(
           testing::Not(testing::Contains(route1)),
           testing::Not(testing::Contains(route2))));
@@ -948,10 +968,11 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   // Step-1 prefix1 -> {node2, node3}
   //
-  auto routeDb = spfSolver.buildRouteDb("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
+  auto decisionRouteDb = *spfSolver.buildRouteDb("1");
+  auto routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
-      routeDb.value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
@@ -966,10 +987,11 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[1].metric = 20;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildRouteDb("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
+  decisionRouteDb = *spfSolver.buildRouteDb("1");
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
-      routeDb.value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
@@ -984,10 +1006,12 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[0].isOverloaded = true;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildRouteDb("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  decisionRouteDb = *spfSolver.buildRouteDb("1");
+  routeDb = decisionRouteDb.toThrift();
+
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(
-      routeDb.value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
@@ -1002,10 +1026,11 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[0].metric = 20;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildRouteDb("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  decisionRouteDb = *spfSolver.buildRouteDb("1");
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(
-      routeDb.value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
@@ -1019,10 +1044,11 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[0].isOverloaded = false;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildRouteDb("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
+  decisionRouteDb = *spfSolver.buildRouteDb("1");
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
-      routeDb.value().unicastRoutes,
+      routeDb.unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
@@ -1076,14 +1102,14 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   bool foundRouteV6 = false;
   bool foundRouteNodeLabel = false;
   if (routeDb.has_value()) {
-    for (auto const& route : routeDb->unicastRoutes) {
-      if (route.dest == addr3) {
+    for (auto const& [preifx, _] : routeDb->unicastEntries) {
+      if (preifx == addr3) {
         foundRouteV6 = true;
         break;
       }
     }
-    for (auto const& route : routeDb->mplsRoutes) {
-      if (route.topLabel == 3) {
+    for (auto const& [label, _] : routeDb->mplsEntries) {
+      if (label == 3) {
         foundRouteNodeLabel = true;
       }
     }
@@ -1576,14 +1602,10 @@ class SimpleRingTopologyFixture
 
   void
   verifyRouteInUpdateNoDelete(
-      std::string nodeName, int32_t mplsLabel, thrift::RouteDatabase& compDb) {
+      std::string nodeName, int32_t mplsLabel, const DecisionRouteDb& compDb) {
     // verify route DB change in node 1.
     auto routeDb1 = spfSolver->buildRouteDb(nodeName).value();
-    std::sort(compDb.mplsRoutes.begin(), compDb.mplsRoutes.end());
-    std::sort(compDb.unicastRoutes.begin(), compDb.unicastRoutes.end());
-    std::sort(routeDb1.mplsRoutes.begin(), routeDb1.mplsRoutes.end());
-    std::sort(routeDb1.unicastRoutes.begin(), routeDb1.unicastRoutes.end());
-    auto deltaRoutes = findDeltaRoutes(routeDb1, compDb);
+    auto deltaRoutes = getRouteDelta(routeDb1, compDb);
 
     int find = 0;
     for (const auto& mplsRoute : deltaRoutes.mplsRoutesToUpdate) {
@@ -1748,14 +1770,11 @@ TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
 
   // verify route DB change in node 1, 2 ,3.
   // verify that only one route to mpls lable 1 is installed in all nodes
-  thrift::RouteDatabase emptyRouteDb;
-  emptyRouteDb.thisNodeName = "1";
+  DecisionRouteDb emptyRouteDb;
   verifyRouteInUpdateNoDelete("1", 2, emptyRouteDb);
 
-  emptyRouteDb.thisNodeName = "2";
   verifyRouteInUpdateNoDelete("2", 2, emptyRouteDb);
 
-  emptyRouteDb.thisNodeName = "3";
   verifyRouteInUpdateNoDelete("3", 2, emptyRouteDb);
 
   auto counters = fb303::fbData->getCounters();

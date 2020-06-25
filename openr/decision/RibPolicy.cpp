@@ -32,8 +32,9 @@ RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
   }
 
   // Populate the match fields
-  prefixSet_.insert(
-      stmt.matcher.prefixes_ref()->begin(), stmt.matcher.prefixes_ref()->end());
+  for (const auto& tPrefix : *stmt.matcher.prefixes_ref()) {
+    prefixSet_.insert(toIPNetwork(tPrefix));
+  }
 }
 
 thrift::RibPolicyStatement
@@ -43,18 +44,18 @@ RibPolicyStatement::toThrift() const {
   stmt.action = action_;
   stmt.matcher.prefixes_ref() = std::vector<thrift::IpPrefix>();
   for (auto const& prefix : prefixSet_) {
-    stmt.matcher.prefixes_ref()->emplace_back(prefix);
+    stmt.matcher.prefixes_ref()->emplace_back(toIpPrefix(prefix));
   }
   return stmt;
 }
 
 bool
-RibPolicyStatement::match(const thrift::UnicastRoute& route) const {
-  return prefixSet_.count(route.dest) > 0;
+RibPolicyStatement::match(const RibUnicastEntry& route) const {
+  return prefixSet_.count(route.prefix) > 0;
 }
 
 bool
-RibPolicyStatement::applyAction(thrift::UnicastRoute& route) const {
+RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   if (not match(route)) {
     return false;
   }
@@ -62,8 +63,8 @@ RibPolicyStatement::applyAction(thrift::UnicastRoute& route) const {
   // Iterate over all next-hops. NOTE that we iterate over rvalue
   CHECK(action_.set_weight_ref().has_value());
   auto const& weightAction = action_.set_weight_ref().value();
-  std::vector<thrift::NextHopThrift> newNextHops;
-  for (auto& nh : route.nextHops) {
+  std::unordered_set<thrift::NextHopThrift> newNexthops;
+  for (auto& nh : route.nexthops) {
     auto new_weight = weightAction.default_weight;
     if (nh.area_ref()) {
       new_weight = folly::get_default(
@@ -72,12 +73,13 @@ RibPolicyStatement::applyAction(thrift::UnicastRoute& route) const {
           weightAction.default_weight);
     }
     if (new_weight > 0) {
-      nh.weight = new_weight;
-      newNextHops.emplace_back(std::move(nh));
+      auto newNh = nh;
+      newNh.weight = new_weight;
+      newNexthops.emplace(std::move(newNh));
     }
     // We skip the next-hop with weight=0
   }
-  route.nextHops = std::move(newNextHops);
+  route.nexthops = std::move(newNexthops);
 
   return true;
 }
@@ -131,7 +133,7 @@ RibPolicy::isActive() const {
 }
 
 bool
-RibPolicy::match(const thrift::UnicastRoute& route) const {
+RibPolicy::match(const RibUnicastEntry& route) const {
   for (auto const& statement : policyStatements_) {
     if (statement.match(route)) {
       return true;
@@ -141,7 +143,7 @@ RibPolicy::match(const thrift::UnicastRoute& route) const {
 }
 
 bool
-RibPolicy::applyAction(thrift::UnicastRoute& route) const {
+RibPolicy::applyAction(RibUnicastEntry& route) const {
   for (auto const& statement : policyStatements_) {
     if (statement.applyAction(route)) {
       return true;

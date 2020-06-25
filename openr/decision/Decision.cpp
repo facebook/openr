@@ -31,6 +31,7 @@
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
 #include <openr/decision/PrefixState.h>
+#include <openr/decision/RibEntry.h>
 
 using namespace std;
 
@@ -44,6 +45,46 @@ using Metric = openr::LinkStateMetric;
 using SpfResult = openr::LinkState::SpfResult;
 
 namespace openr {
+
+thrift::RouteDatabaseDelta
+getRouteDelta(const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb) {
+  thrift::RouteDatabaseDelta delta;
+
+  // unicastRoutesToUpdate
+  for (const auto& [prefix, entry] : newDb.unicastEntries) {
+    const auto& oldEntry = oldDb.unicastEntries.find(prefix);
+    if (oldEntry != oldDb.unicastEntries.end() && oldEntry->second == entry) {
+      continue;
+    }
+
+    // new prefix, or prefix entry changed
+    delta.unicastRoutesToUpdate.emplace_back(entry.toTUnicastRoute());
+  }
+
+  // unicastRoutesToDelete
+  for (const auto& [prefix, _] : oldDb.unicastEntries) {
+    if (newDb.unicastEntries.count(prefix) == 0) {
+      delta.unicastRoutesToDelete.emplace_back(prefix);
+    }
+  }
+
+  // mplsRoutesToUpdate
+  for (const auto& [label, entry] : newDb.mplsEntries) {
+    const auto& oldEntry = oldDb.mplsEntries.find(label);
+    if (oldEntry != oldDb.mplsEntries.cend() && oldEntry->second == entry) {
+      continue;
+    }
+    delta.mplsRoutesToUpdate.emplace_back(entry.toTMplsRoute());
+  }
+
+  // mplsRoutesToDelete
+  for (const auto& [label, _] : oldDb.mplsEntries) {
+    if (newDb.mplsEntries.count(label) == 0) {
+      delta.mplsRoutesToDelete.emplace_back(label);
+    }
+  }
+  return delta;
+}
 
 /**
  * Private implementation of the SpfSolver
@@ -144,8 +185,7 @@ class SpfSolver::SpfSolverImpl {
   // Build route database using global prefix database and cached SPF
   // computation from perspective of a given router.
   // Returns std::nullopt if myNodeName doesn't have any prefix database
-  std::optional<thrift::RouteDatabase> buildRouteDb(
-      const std::string& myNodeName);
+  std::optional<DecisionRouteDb> buildRouteDb(const std::string& myNodeName);
 
   // helpers used in best path calculation
   static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
@@ -159,23 +199,32 @@ class SpfSolver::SpfSolverImpl {
   SpfSolverImpl(SpfSolverImpl const&) = delete;
   SpfSolverImpl& operator=(SpfSolverImpl const&) = delete;
 
-  std::optional<thrift::UnicastRoute> selectEcmpOpenr(
+  // Given prefixes and the nodes who announce it, get the ecmp routes.
+  // emplace unicastEntry into unicastEntries if valid ecmp exists
+  void selectEcmpOpenr(
+      std::unordered_map<thrift::IpPrefix, RibUnicastEntry>& unicastEntries,
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
-  std::optional<thrift::UnicastRoute> selectEcmpBgp(
+
+  // Given bgp prefixes and the nodes who announce it, get the ecmp routes.
+  // emplace unicastEntry into unicastEntries if valid ecmp exists
+  void selectEcmpBgp(
+      std::unordered_map<thrift::IpPrefix, RibUnicastEntry>& unicastEntries,
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
 
   // Given prefixes and the nodes who announce it, get the kspf routes.
-  std::optional<thrift::UnicastRoute> selectKsp2(
+  void selectKsp2(
+      std::unordered_map<thrift::IpPrefix, RibUnicastEntry>& unicastEntries,
       const thrift::IpPrefix& prefix,
       const string& myNodeName,
       BestPathCalResult const& bestPathCalResult,
-      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+      bool hasBgp);
 
   // helper function to find the nodes for the nexthop for bgp route
   BestPathCalResult runBestPathSelectionBgp(
@@ -215,7 +264,7 @@ class SpfSolver::SpfSolverImpl {
   // parallel link logic (tested by our UT)
   // If swap label is provided then it will be used to associate SWAP or PHP
   // mpls action
-  std::vector<thrift::NextHopThrift> getNextHopsThrift(
+  std::unordered_set<thrift::NextHopThrift> getNextHopsThrift(
       const std::string& myNodeName,
       const std::set<std::string>& dstNodeNames,
       bool isV4,
@@ -321,7 +370,7 @@ SpfSolver::SpfSolverImpl::getPrefixDatabases() {
   return prefixState_.getPrefixDatabases();
 }
 
-std::optional<thrift::RouteDatabase>
+std::optional<DecisionRouteDb>
 SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   if (not linkState_.hasNode(myNodeName)) {
     return std::nullopt;
@@ -330,14 +379,11 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   const auto startTime = std::chrono::steady_clock::now();
   fb303::fbData->addStatValue("decision.route_build_runs", 1, fb303::COUNT);
 
-  thrift::RouteDatabase routeDb;
-  routeDb.thisNodeName = myNodeName;
+  DecisionRouteDb routeDb{};
 
   //
-  // Create unicastRoutes - IP and IP2MPLS routes
+  // Calculate unicast route best paths: IP and IP2MPLS routes
   //
-  std::unordered_map<thrift::IpPrefix, BestPathCalResult> prefixToPerformKsp;
-
   for (const auto& kv : prefixState_.prefixes()) {
     const auto& prefix = kv.first;
     const auto& nodePrefixes = kv.second;
@@ -393,39 +439,32 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
-    const auto forwardingAlgorithm = hasKsp2EdEcmp and not hasSpEcmp
-        ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
-        : thrift::PrefixForwardingAlgorithm::SP_ECMP;
-
-    if (forwardingAlgorithm == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
-      auto route = hasBGP
-          ? selectEcmpBgp(myNodeName, prefix, nodePrefixes, isV4Prefix)
-          : selectEcmpOpenr(myNodeName, prefix, nodePrefixes, isV4Prefix);
-      if (route.has_value()) {
-        routeDb.unicastRoutes.emplace_back(std::move(route.value()));
-      }
+    if (hasSpEcmp and hasBGP) {
+      selectEcmpBgp(
+          routeDb.unicastEntries, myNodeName, prefix, nodePrefixes, isV4Prefix);
+    } else if (hasSpEcmp) {
+      selectEcmpOpenr(
+          routeDb.unicastEntries, myNodeName, prefix, nodePrefixes, isV4Prefix);
     } else {
       const auto nodes = getBestAnnouncingNodes(
           myNodeName, prefix, nodePrefixes, hasBGP, true);
-      if (nodes.success && nodes.nodes.size() != 0) {
-        prefixToPerformKsp[prefix] = nodes;
+      if (not nodes.success or nodes.nodes.size() == 0) {
+        continue;
       }
+      selectKsp2(
+          routeDb.unicastEntries,
+          prefix,
+          myNodeName,
+          nodes,
+          nodePrefixes,
+          hasBGP);
     }
   } // for prefixState_.prefixes()
-
-  for (const auto& kv : prefixToPerformKsp) {
-    auto unicastRoute = selectKsp2(
-        kv.first, myNodeName, kv.second, prefixState_.prefixes().at(kv.first));
-    if (unicastRoute.has_value()) {
-      routeDb.unicastRoutes.emplace_back(std::move(unicastRoute.value()));
-    }
-  }
 
   //
   // Create MPLS routes for all nodeLabel
   //
-  std::unordered_map<int32_t, std::pair<std::string, thrift::MplsRoute>>
-      labelToNode;
+  std::unordered_map<int32_t, std::pair<std::string, RibMplsEntry>> labelToNode;
   for (const auto& kv : linkState_.getAdjacencyDatabases()) {
     const auto& adjDb = kv.second;
     const auto topLabel = adjDb.nodeLabel;
@@ -463,8 +502,10 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       nh.address = toBinaryAddress(folly::IPAddressV6("::"));
       nh.mplsAction_ref() =
           createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
-      labelToNode[topLabel] = std::make_pair(
-          adjDb.thisNodeName, createMplsRoute(topLabel, {std::move(nh)}));
+      labelToNode.erase(topLabel);
+      labelToNode.emplace(
+          topLabel,
+          std::make_pair(adjDb.thisNodeName, RibMplsEntry(topLabel, {nh})));
       continue;
     }
 
@@ -483,24 +524,26 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     // nexthops are valid for routing without loops. Fib is responsible for
     // installing these routes by making sure it programs least cost nexthops
     // first and of same action type (based on HW limitations)
-    auto nextHopsThrift = getNextHopsThrift(
-        myNodeName,
-        {adjDb.thisNodeName},
-        false,
-        false,
-        metricNhs.first,
-        metricNhs.second,
-        topLabel);
-    labelToNode[topLabel] = std::make_pair(
-        adjDb.thisNodeName,
-        createMplsRoute(topLabel, std::move(nextHopsThrift)));
+    labelToNode.erase(topLabel);
+    labelToNode.emplace(
+        topLabel,
+        std::make_pair(
+            adjDb.thisNodeName,
+            RibMplsEntry(
+                topLabel,
+                getNextHopsThrift(
+                    myNodeName,
+                    {adjDb.thisNodeName},
+                    false,
+                    false,
+                    metricNhs.first,
+                    metricNhs.second,
+                    topLabel))));
   }
-  std::transform(
-      labelToNode.begin(),
-      labelToNode.end(),
-      std::back_inserter(routeDb.mplsRoutes),
-      [](const std::pair<int32_t, std::pair<std::string, thrift::MplsRoute>>&
-             kv) -> thrift::MplsRoute { return kv.second.second; });
+
+  for (auto& [label, nodeToEntry] : labelToNode) {
+    routeDb.mplsEntries.emplace(label, std::move(nodeToEntry.second));
+  }
 
   //
   // Create MPLS routes for all of our adjacencies
@@ -520,14 +563,17 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
-    auto nh = createNextHop(
-        link->getNhV6FromNode(myNodeName),
-        link->getIfaceFromNode(myNodeName),
-        link->getMetricFromNode(myNodeName),
-        createMplsAction(thrift::MplsActionCode::PHP),
-        false /* useNonShortestRoute */,
-        link->getArea());
-    routeDb.mplsRoutes.emplace_back(createMplsRoute(topLabel, {std::move(nh)}));
+    routeDb.mplsEntries.emplace(
+        topLabel,
+        RibMplsEntry(
+            topLabel,
+            {createNextHop(
+                link->getNhV6FromNode(myNodeName),
+                link->getIfaceFromNode(myNodeName),
+                link->getMetricFromNode(myNodeName),
+                createMplsAction(thrift::MplsActionCode::PHP),
+                false /* useNonShortestRoute */,
+                link->getArea())}));
   }
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -648,20 +694,21 @@ SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
   return filtered.nodes.empty() ? result : filtered;
 }
 
-std::optional<thrift::UnicastRoute>
+void
 SpfSolver::SpfSolverImpl::selectEcmpOpenr(
+    std::unordered_map<thrift::IpPrefix, RibUnicastEntry>& unicastEntries,
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
     bool const isV4) {
   // Prepare list of nodes announcing the prefix
-  const auto dstNodes =
+  const auto& ret =
       getBestAnnouncingNodes(myNodeName, prefix, nodePrefixes, false, false);
-  if (not dstNodes.success) {
-    return std::nullopt;
+  if (not ret.success) {
+    return;
   }
 
-  std::set<std::string> prefixNodes = dstNodes.nodes;
+  std::set<std::string> prefixNodes = ret.nodes;
 
   const bool perDestination = getPrefixForwardingType(nodePrefixes) ==
       thrift::PrefixForwardingType::SR_MPLS;
@@ -672,20 +719,20 @@ SpfSolver::SpfSolverImpl::selectEcmpOpenr(
     LOG(WARNING) << "No route to prefix " << toString(prefix)
                  << ", advertised by: " << folly::join(", ", prefixNodes);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
-    return std::nullopt;
+    return;
   }
 
-  // Convert list of neighbor nodes to nexthops (considering adjacencies)
-  return createUnicastRoute(
-      prefix,
-      getNextHopsThrift(
-          myNodeName,
-          prefixNodes,
-          isV4,
-          perDestination,
-          metricNhs.first,
-          metricNhs.second,
-          std::nullopt));
+  RibUnicastEntry entry(toIPNetwork(prefix));
+  entry.nexthops = getNextHopsThrift(
+      myNodeName,
+      prefixNodes,
+      isV4,
+      perDestination,
+      metricNhs.first,
+      metricNhs.second,
+      std::nullopt);
+  // TODO add openr bestPrefixEntry.
+  unicastEntries.emplace(prefix, std::move(entry));
 }
 
 BestPathCalResult
@@ -749,7 +796,6 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_WINNER:
       ret.bestVector = std::move(metricVector);
-      ret.bestData = &(prefixEntry.data);
       ret.bestNode = nodeName;
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_LOOSER:
@@ -771,8 +817,9 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
   return ret;
 }
 
-std::optional<thrift::UnicastRoute>
+void
 SpfSolver::SpfSolverImpl::selectEcmpBgp(
+    std::unordered_map<thrift::IpPrefix, RibUnicastEntry>& unicastEntries,
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
@@ -785,7 +832,7 @@ SpfSolver::SpfSolverImpl::selectEcmpBgp(
   const auto dstInfo =
       getBestAnnouncingNodes(myNodeName, prefix, nodePrefixes, true, false);
   if (not dstInfo.success) {
-    return std::nullopt;
+    return;
   }
 
   if (dstInfo.nodes.empty() or dstInfo.nodes.count(myNodeName)) {
@@ -796,9 +843,8 @@ SpfSolver::SpfSolverImpl::selectEcmpBgp(
       fb303::fbData->addStatValue(
           "decision.no_route_to_prefix", 1, fb303::COUNT);
     }
-    return std::nullopt;
+    return;
   }
-  CHECK_NOTNULL(dstInfo.bestData);
 
   auto bestNextHop = prefixState_.getLoopbackVias(
       {dstInfo.bestNode}, isV4, dstInfo.bestIgpMetric);
@@ -807,29 +853,29 @@ SpfSolver::SpfSolverImpl::selectEcmpBgp(
         "decision.missing_loopback_addr", 1, fb303::SUM);
     LOG(ERROR) << "Cannot find the best paths loopback address. "
                << "Skipping route for prefix: " << toString(prefix);
-    return std::nullopt;
+    return;
   }
 
   const auto nextHopsWithMetric =
       getNextHopsWithMetric(myNodeName, dstInfo.nodes, false);
 
-  auto allNextHops = getNextHopsThrift(
-      myNodeName,
-      dstInfo.nodes,
-      isV4,
-      false,
-      nextHopsWithMetric.first,
-      nextHopsWithMetric.second,
-      std::nullopt);
+  RibUnicastEntry entry(
+      toIPNetwork(prefix),
+      getNextHopsThrift(
+          myNodeName,
+          dstInfo.nodes,
+          isV4,
+          false,
+          nextHopsWithMetric.first,
+          nextHopsWithMetric.second,
+          std::nullopt), // nexthops
+      thrift::PrefixEntry(
+          nodePrefixes.find(dstInfo.bestNode)->second), // bestPrefixEntry
+      bgpDryRun_, // doNotInstall
+      bestNextHop.at(0) // bestNexthop
+  );
 
-  return thrift::UnicastRoute{FRAGILE,
-                              prefix,
-                              thrift::AdminDistance::EBGP,
-                              std::move(allNextHops),
-                              thrift::PrefixType::BGP,
-                              *(dstInfo.bestData),
-                              bgpDryRun_, /* doNotInstall */
-                              bestNextHop.at(0)};
+  unicastEntries.emplace(prefix, std::move(entry));
 }
 
 std::optional<thrift::RouteDatabaseDelta>
@@ -875,14 +921,15 @@ SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
   return ret;
 }
 
-std::optional<thrift::UnicastRoute>
+void
 SpfSolver::SpfSolverImpl::selectKsp2(
+    std::unordered_map<thrift::IpPrefix, RibUnicastEntry>& unicastEntries,
     const thrift::IpPrefix& prefix,
     const string& myNodeName,
     BestPathCalResult const& bestPathCalResult,
-    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
-  thrift::UnicastRoute route;
-  route.dest = prefix;
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+    bool hasBgp) {
+  RibUnicastEntry entry(toIPNetwork(prefix));
   bool selfNodeContained{false};
 
   std::vector<LinkState::Path> paths;
@@ -924,7 +971,7 @@ SpfSolver::SpfSolverImpl::selectKsp2(
   }
 
   if (paths.size() == 0) {
-    return std::nullopt;
+    return;
   }
 
   for (const auto& path : paths) {
@@ -959,7 +1006,7 @@ SpfSolver::SpfSolverImpl::selectKsp2(
     auto const& prefixStr = prefix.prefixAddress.addr;
     bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
 
-    route.nextHops.emplace_back(createNextHop(
+    entry.nexthops.emplace(createNextHop(
         isV4Prefix ? firstLink->getNhV4FromNode(myNodeName)
                    : firstLink->getNhV6FromNode(myNodeName),
         firstLink->getIfaceFromNode(myNodeName),
@@ -978,7 +1025,7 @@ SpfSolver::SpfSolverImpl::selectKsp2(
     if (routeIter != staticRoutes_.mplsRoutes.end()) {
       for (const auto& nh : routeIter->second) {
         staticNexthops++;
-        route.nextHops.emplace_back(createNextHop(
+        entry.nexthops.emplace(createNextHop(
             nh.address,
             std::nullopt,
             0,
@@ -996,30 +1043,26 @@ SpfSolver::SpfSolverImpl::selectKsp2(
   // the threshold, we will ignore this route.
   auto minNextHop = getMinNextHopThreshold(bestPathCalResult, nodePrefixes);
   auto dynamicNextHop =
-      static_cast<int64_t>(route.nextHops.size()) - staticNexthops;
+      static_cast<int64_t>(entry.nexthops.size()) - staticNexthops;
   if (minNextHop.has_value() && minNextHop.value() > dynamicNextHop) {
     LOG(WARNING) << "Dropping routes to " << toString(prefix) << " because of "
                  << dynamicNextHop << " of nexthops is smaller than "
-                 << minNextHop.value() << "\n"
-                 << toString(route);
-    return std::nullopt;
+                 << minNextHop.value();
+    return;
   }
 
-  if (bestPathCalResult.bestData != nullptr) {
+  if (hasBgp) {
     auto bestNextHop = prefixState_.getLoopbackVias(
         {bestPathCalResult.bestNode},
         prefix.prefixAddress.addr.size() == folly::IPAddressV4::byteCount(),
         bestPathCalResult.bestIgpMetric);
-    if (bestNextHop.size() != 1) {
-      return route;
+    if (bestNextHop.size() == 1) {
+      entry.bestNexthop = bestNextHop.at(0);
+      entry.bestPrefixEntry = nodePrefixes.at(bestPathCalResult.bestNode);
+      entry.doNotInstall = bgpDryRun_;
     }
-    route.data_ref() = *(bestPathCalResult.bestData);
-    // in order to announce it back to BGP, we have to have the data
-    route.prefixType_ref() = thrift::PrefixType::BGP;
-    route.bestNexthop_ref() = bestNextHop[0];
   }
-
-  return std::move(route);
+  unicastEntries.emplace(prefix, std::move(entry));
 }
 
 std::pair<Metric, std::unordered_set<std::string>>
@@ -1120,7 +1163,7 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
   return std::make_pair(shortestMetric, nextHopNodes);
 }
 
-std::vector<thrift::NextHopThrift>
+std::unordered_set<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getNextHopsThrift(
     const std::string& myNodeName,
     const std::set<std::string>& dstNodeNames,
@@ -1132,7 +1175,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
     std::optional<int32_t> swapLabel) const {
   CHECK(not nextHopNodes.empty());
 
-  std::vector<thrift::NextHopThrift> nextHops;
+  std::unordered_set<thrift::NextHopThrift> nextHops;
   for (const auto& link : linkState_.linksFromNode(myNodeName)) {
     for (const auto& dstNode :
          perDestination ? dstNodeNames : std::set<std::string>{""}) {
@@ -1190,7 +1233,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
 
       // if we are computing LFA paths, any nexthop to the node will do
       // otherwise, we only want those nexthops along a shortest path
-      nextHops.emplace_back(createNextHop(
+      nextHops.emplace(createNextHop(
           isV4 ? link->getNhV4FromNode(myNodeName)
                : link->getNhV6FromNode(myNodeName),
           link->getIfaceFromNode(myNodeName),
@@ -1324,7 +1367,7 @@ SpfSolver::getPrefixDatabases() {
   return impl_->getPrefixDatabases();
 }
 
-std::optional<thrift::RouteDatabase>
+std::optional<DecisionRouteDb>
 SpfSolver::buildRouteDb(const std::string& myNodeName) {
   return impl_->buildRouteDb(myNodeName);
 }
@@ -1364,7 +1407,6 @@ Decision::Decision(
       routeUpdatesQueue_(routeUpdatesQueue),
       myNodeName_(config->getConfig().node_name) {
   auto tConfig = config->getConfig();
-  routeDb_.thisNodeName = myNodeName_;
   processUpdatesTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(
@@ -1480,18 +1522,21 @@ Decision::getDecisionRouteDb(std::string nodeName) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([p = std::move(p), nodeName, this]() mutable {
     thrift::RouteDatabase routeDb;
+
     if (nodeName.empty()) {
       nodeName = myNodeName_;
     }
     auto maybeRouteDb = spfSolver_->buildRouteDb(nodeName);
     if (maybeRouteDb.has_value()) {
-      routeDb = std::move(maybeRouteDb.value());
-    } else {
-      routeDb.thisNodeName = nodeName;
+      routeDb = maybeRouteDb->toThrift();
     }
+
+    // static routes
     for (const auto& [key, val] : spfSolver_->getStaticRoutes().mplsRoutes) {
       routeDb.mplsRoutes.emplace_back(createMplsRoute(key, val));
     }
+
+    routeDb.thisNodeName = nodeName;
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
   });
   return sf;
@@ -1846,8 +1891,8 @@ Decision::processPendingAdjUpdates() {
     return;
   }
 
-  fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
-  sendRouteUpdate(std::move(maybeRouteDb).value(), "DECISION_SPF");
+  sendRouteUpdate(
+      std::move(*maybeRouteDb), std::move(maybePerfEvents), "DECISION_SPF");
 }
 
 void
@@ -1869,8 +1914,8 @@ Decision::processPendingPrefixUpdates() {
     return;
   }
 
-  fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
-  sendRouteUpdate(std::move(maybeRouteDb).value(), "ROUTE_UPDATE");
+  sendRouteUpdate(
+      std::move(*maybeRouteDb), std::move(maybePerfEvents), "ROUTE_UPDATE");
 }
 
 void
@@ -1887,9 +1932,8 @@ Decision::processRibPolicyUpdate() {
   }
 
   // Create empty list of perf events
-  maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
-
-  sendRouteUpdate(std::move(maybeRouteDb).value(), "RIB_POLICY_UPDATE");
+  sendRouteUpdate(
+      std::move(*maybeRouteDb), thrift::PerfEvents{}, "RIB_POLICY_UPDATE");
 }
 
 void
@@ -1906,9 +1950,10 @@ Decision::decrementOrderedFibHolds() {
 
     // Create empty perfEvents list. In this case we don't this route update to
     // be inculded in the Fib time
-    maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
     sendRouteUpdate(
-        std::move(maybeRouteDb).value(), "ORDERED_FIB_HOLDS_EXPIRED");
+        std::move(*maybeRouteDb),
+        thrift::PerfEvents{},
+        "ORDERED_FIB_HOLDS_EXPIRED");
   }
 }
 
@@ -1918,55 +1963,59 @@ Decision::coldStartUpdate() {
   if (not maybeRouteDb.has_value()) {
     LOG(ERROR) << "SEVERE: No routes to program after cold start duration. "
                << "Sending empty route db to FIB";
-    sendRouteUpdate(thrift::RouteDatabase(), "COLD_START_UPDATE");
+    sendRouteUpdate(
+        std::move(*maybeRouteDb), std::nullopt, "COLD_START_UPDATE");
     return;
   }
   // Create empty perfEvents list. In this case we don't this route update to
   // be inculded in the Fib time
-  maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
-  sendRouteUpdate(std::move(maybeRouteDb).value(), "COLD_START_UPDATE");
+  sendRouteUpdate(
+      std::move(*maybeRouteDb), thrift::PerfEvents{}, "COLD_START_UPDATE");
 }
 
 void
 Decision::sendRouteUpdate(
-    thrift::RouteDatabase&& db, std::string const& eventDescription) {
-  if (db.perfEvents_ref().has_value()) {
-    addPerfEvent(db.perfEvents_ref().value(), myNodeName_, eventDescription);
+    DecisionRouteDb&& routeDb,
+    std::optional<thrift::PerfEvents>&& perfEvents,
+    std::string const& eventDescription) {
+  if (perfEvents.has_value()) {
+    addPerfEvent(*perfEvents, myNodeName_, eventDescription);
   }
 
   //
   // Apply RibPolicy to computed route db before sending out
   //
   if (ribPolicy_ && ribPolicy_->isActive()) {
-    auto tempRoutes = std::move(db.unicastRoutes);
-    for (auto route : tempRoutes) {
-      const bool transformed = ribPolicy_->applyAction(route);
-      if (transformed) {
-        VLOG(1) << "RibPolicy transformed the route " << toString(route.dest);
+    auto i = routeDb.unicastEntries.begin();
+    while (i != routeDb.unicastEntries.end()) {
+      auto& entry = i->second;
+      if (ribPolicy_->applyAction(entry)) {
+        VLOG(1) << "RibPolicy transformed the route "
+                << folly::IPAddress::networkToString(entry.prefix);
       }
-
       // Skip route if no valid next-hop
-      if (route.nextHops.empty()) {
-        VLOG(1) << "Removing route for " << toString(route.dest)
+      if (entry.nexthops.empty()) {
+        VLOG(1) << "Removing route for "
+                << folly::IPAddress::networkToString(entry.prefix)
                 << " because of no remaining valid next-hops";
+        i = routeDb.unicastEntries.erase(i);
         continue;
       }
-
-      // Add to route db
-      db.unicastRoutes.emplace_back(std::move(route));
+      ++i;
     }
   }
 
-  // sorting the input to meet findDeltaRoutes()'s assumption
-  std::sort(db.mplsRoutes.begin(), db.mplsRoutes.end());
-  std::sort(db.unicastRoutes.begin(), db.unicastRoutes.end());
-  // Find out delta to be sent to Fib
-  auto routeDelta = findDeltaRoutes(db, routeDb_);
-  routeDelta.perfEvents_ref().copy_from(db.perfEvents_ref());
-  routeDb_ = std::move(db);
+  // TODO change this to publish RibUpdate directly
+  auto delta = getRouteDelta(routeDb, routeDb_);
 
-  // publish the new route state
-  routeUpdatesQueue_.push(std::move(routeDelta));
+  // update decision routeDb cache
+  routeDb_ = std::move(routeDb);
+
+  // publish the new route state to fib
+  // TODO - remove thisNodeName from routeDelta
+  delta.thisNodeName = myNodeName_;
+  fromStdOptional(delta.perfEvents_ref(), perfEvents);
+  routeUpdatesQueue_.push(std::move(delta));
 }
 
 std::chrono::milliseconds
@@ -1977,5 +2026,4 @@ Decision::getMaxFib() {
   }
   return maxFib;
 }
-
 } // namespace openr

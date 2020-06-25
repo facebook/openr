@@ -8,6 +8,7 @@
 #include <chrono>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/decision/RibEntry.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 
@@ -32,23 +33,22 @@ class RibPolicyStatement {
   /**
    * Checks if route qualifies the match criteria for policy statement
    */
-  bool match(const thrift::UnicastRoute& route) const;
+  bool match(const RibUnicastEntry& route) const;
 
   /**
    * Transform route. This API apply action on the route only if it is selected.
    *
    * @returns boolean indicating if route is transformed or not.
    */
-  bool applyAction(thrift::UnicastRoute& route) const;
+  bool applyAction(RibUnicastEntry& route) const;
 
  private:
   const std::string name_;
 
   // Unordered set for efficient lookup on matching
   // NOTE: The matching requires the same prefix representation (fully
-  // qualified) We should be using `folly::CIDRNetwork` instead once we migrate
-  // to C++ `RibRoute` struct from `thrift::UnicastRoute`
-  std::unordered_set<thrift::IpPrefix> prefixSet_;
+  // qualified)
+  std::unordered_set<folly::CIDRNetwork> prefixSet_;
 
   // PolicyAction operation
   const thrift::RibRouteAction action_;
@@ -84,14 +84,14 @@ class RibPolicy {
    * Checks if route qualifies the match criteria for policy. First successful
    * match with a PolicyStatement will be returned.
    */
-  bool match(const thrift::UnicastRoute& route) const;
+  bool match(const RibUnicastEntry& route) const;
 
   /**
    * Transform route. This API apply action on the route only if it is selected.
    *
    * @returns boolean indicating if route is transformed or not.
    */
-  bool applyAction(thrift::UnicastRoute& route) const;
+  bool applyAction(RibUnicastEntry& route) const;
 
  private:
   // List of policy statements
