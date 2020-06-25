@@ -181,14 +181,12 @@ class SpfSolver::SpfSolverImpl {
   BestPathCalResult runBestPathSelectionBgp(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
-      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
-      bool const isV4);
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
 
   BestPathCalResult getBestAnnouncingNodes(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
-      bool const isV4,
       bool const hasBgp,
       bool const useKsp2EdAlgo);
 
@@ -408,7 +406,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       }
     } else {
       const auto nodes = getBestAnnouncingNodes(
-          myNodeName, prefix, nodePrefixes, isV4Prefix, hasBGP, true);
+          myNodeName, prefix, nodePrefixes, hasBGP, true);
       if (nodes.success && nodes.nodes.size() != 0) {
         prefixToPerformKsp[prefix] = nodes;
       }
@@ -545,7 +543,6 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
-    bool const isV4,
     bool const hasBgp,
     bool const useKsp2EdAlgo) {
   BestPathCalResult dstNodes;
@@ -580,7 +577,7 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
   // for bgp route, we need to run best path calculation algorithm to get
   // the nodes
   auto bestPathCalRes =
-      runBestPathSelectionBgp(myNodeName, prefix, nodePrefixes, isV4);
+      runBestPathSelectionBgp(myNodeName, prefix, nodePrefixes);
 
   // best path calculation failure
   if (not bestPathCalRes.success) {
@@ -658,8 +655,8 @@ SpfSolver::SpfSolverImpl::selectEcmpOpenr(
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
     bool const isV4) {
   // Prepare list of nodes announcing the prefix
-  const auto dstNodes = getBestAnnouncingNodes(
-      myNodeName, prefix, nodePrefixes, isV4, false, false);
+  const auto dstNodes =
+      getBestAnnouncingNodes(myNodeName, prefix, nodePrefixes, false, false);
   if (not dstNodes.success) {
     return std::nullopt;
   }
@@ -695,9 +692,7 @@ BestPathCalResult
 SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
-    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
-    // TODO: Remove unused isV4 variable
-    bool const /* isV4 */) {
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
   BestPathCalResult ret;
   auto const& mySpfResult = linkState_.getSpfResult(myNodeName);
   for (auto const& kv : nodePrefixes) {
@@ -787,8 +782,8 @@ SpfSolver::SpfSolverImpl::selectEcmpBgp(
   std::set<std::string> nodes;
   std::optional<thrift::MetricVector> bestVector{std::nullopt};
 
-  const auto dstInfo = getBestAnnouncingNodes(
-      myNodeName, prefix, nodePrefixes, isV4, true, false);
+  const auto dstInfo =
+      getBestAnnouncingNodes(myNodeName, prefix, nodePrefixes, true, false);
   if (not dstInfo.success) {
     return std::nullopt;
   }
