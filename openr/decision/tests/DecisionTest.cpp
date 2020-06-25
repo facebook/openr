@@ -774,15 +774,13 @@ TEST(BGPRedistribution, BasicOperation) {
 
   auto decisionRouteDb = *spfSolver.buildRouteDb("2");
   auto routeDb = decisionRouteDb.toThrift();
-  thrift::UnicastRoute route1(
-      FRAGILE,
-      bgpPrefix1,
-      thrift::AdminDistance::EBGP,
-      {createNextHopFromAdj(adj21, false, adj21.metric)},
-      thrift::PrefixType::BGP,
-      data1,
-      false,
-      {createNextHop(addr1.prefixAddress)});
+  auto route1 = createUnicastRoute(
+      bgpPrefix1, {createNextHopFromAdj(adj21, false, adj21.metric)});
+  route1.prefixType_ref() = thrift::PrefixType::BGP;
+  route1.data_ref() = data1;
+  route1.bestNexthop_ref() = createNextHop(addr1.prefixAddress);
+  route1.doNotInstall = false;
+
   EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(routeDb.unicastRoutes, testing::Contains(route1));
 
@@ -824,15 +822,12 @@ TEST(BGPRedistribution, BasicOperation) {
       .metric.front() += 2;
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
 
-  thrift::UnicastRoute route2(
-      FRAGILE,
-      bgpPrefix1,
-      thrift::AdminDistance::EBGP,
-      {createNextHopFromAdj(adj12, false, adj12.metric)},
-      thrift::PrefixType::BGP,
-      data2,
-      false,
-      createNextHop(addr2.prefixAddress));
+  auto route2 = createUnicastRoute(
+      bgpPrefix1, {createNextHopFromAdj(adj12, false, adj12.metric)});
+  route2.prefixType_ref() = thrift::PrefixType::BGP;
+  route2.data_ref() = data2;
+  route2.bestNexthop_ref() = createNextHop(addr2.prefixAddress);
+  route2.doNotInstall = false;
 
   decisionRouteDb = *spfSolver.buildRouteDb("1");
   routeDb = decisionRouteDb.toThrift();

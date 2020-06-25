@@ -76,9 +76,6 @@ struct RibUnicastEntry : RibEntry {
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
     tUnicast.doNotInstall = doNotInstall;
     if (bestPrefixEntry.type == thrift::PrefixType::BGP) {
-      // TODO: ideally Open/R should not program routes using other admin
-      // distance remove tUnicast.adminDistance_ref() = EBGP;
-      tUnicast.adminDistance_ref() = thrift::AdminDistance::EBGP;
       tUnicast.prefixType_ref() = thrift::PrefixType::BGP;
       tUnicast.data_ref() = *bestPrefixEntry.data_ref();
       tUnicast.bestNexthop_ref() = bestNexthop.value();
