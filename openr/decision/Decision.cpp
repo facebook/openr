@@ -1611,12 +1611,12 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
         auto rc = areaLinkState.updateAdjacencyDatabase(
             adjacencyDb, holdUpTtl, holdDownTtl);
-        if (rc.first) {
+        if (rc.topologyChanged || rc.nodeLabelChanged) {
           res.adjChanged = true;
           pendingAdjUpdates_.addUpdate(
               myNodeName_, castToStd(adjacencyDb.perfEvents_ref()));
         }
-        if (rc.second) {
+        if (rc.linkAttributesChanged) {
           // rebuild the routes, if related route attributes has been
           // changed. e.g. node mpls label change, adjacency label change,
           // local nexthops change etc.
@@ -1640,7 +1640,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         VLOG(1) << "Updating prefix database for node " << nodeName;
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
-        if (prefixState_.updatePrefixDatabase(nodePrefixDb)) {
+        if (!prefixState_.updatePrefixDatabase(nodePrefixDb).empty()) {
           res.prefixesChanged = true;
           pendingPrefixUpdates_.addUpdate(
               myNodeName_, castToStd(nodePrefixDb.perfEvents_ref()));
@@ -1670,7 +1670,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     std::string nodeName = getNodeNameFromKey(key);
 
     if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-      if (areaLinkState.deleteAdjacencyDatabase(nodeName)) {
+      if (areaLinkState.deleteAdjacencyDatabase(nodeName).topologyChanged) {
         res.adjChanged = true;
         pendingAdjUpdates_.addUpdate(
             myNodeName_, castToStd(thrift::PrefixDatabase().perfEvents_ref()));
@@ -1684,7 +1684,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       deletePrefixDb.thisNodeName = nodeName;
       deletePrefixDb.deletePrefix = true;
       auto nodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
-      if (prefixState_.updatePrefixDatabase(nodePrefixDb)) {
+      if (!prefixState_.updatePrefixDatabase(nodePrefixDb).empty()) {
         res.prefixesChanged = true;
       }
       continue;
@@ -1840,7 +1840,7 @@ Decision::decrementOrderedFibHolds() {
   bool topoChanged = false;
   bool stillHasHolds = false;
   for (auto& [_, linkState] : areaLinkStates_) {
-    topoChanged |= linkState.decrementHolds();
+    topoChanged |= linkState.decrementHolds().topologyChanged;
     stillHasHolds |= linkState.hasHolds();
   }
   if (topoChanged && !coldStartTimer_->isScheduled()) {

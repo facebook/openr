@@ -29,8 +29,10 @@ class PrefixState {
   void deleteLoopbackPrefix(
       thrift::IpPrefix const& prefix, const std::string& nodename);
 
-  // returns true if the prefixDb changed
-  bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
+  // returns set of changed prefixes (i.e. a node started advertising or
+  // withdrew or any attributes changed)
+  std::unordered_set<thrift::IpPrefix> updatePrefixDatabase(
+      thrift::PrefixDatabase const& prefixDb);
 
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases() const;

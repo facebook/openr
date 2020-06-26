@@ -267,7 +267,7 @@ class LinkState {
   //
   // each is memoized all params. memoization invalidated for any topolgy
   // altering calls, i.e. if decrementHolds(), updateAdjacencyDatabase(), or
-  // deleteAdjacencyDatabase() returns true
+  // deleteAdjacencyDatabase() returns with LinkState::topologyChanged set true
   SpfResult const& getSpfResult(
       const std::string& nodeName, bool useLinkMetric = true) const;
 
@@ -303,20 +303,38 @@ class LinkState {
  public:
   // non-const public methods
   // IMPT: clear memoization structures as appropirate in these functions
-  bool decrementHolds();
+  class LinkStateChange {
+   public:
+    LinkStateChange() = default;
+
+    LinkStateChange(bool topo, bool link, bool node)
+        : topologyChanged(topo),
+          linkAttributesChanged(link),
+          nodeLabelChanged(node) {}
+
+    bool
+    operator==(LinkStateChange const& other) const {
+      return topologyChanged == other.topologyChanged &&
+          linkAttributesChanged == other.linkAttributesChanged &&
+          nodeLabelChanged == other.nodeLabelChanged;
+    }
+
+    bool topologyChanged{false};
+    bool linkAttributesChanged{false};
+    bool nodeLabelChanged{false};
+  };
+
+  LinkStateChange decrementHolds();
 
   // update adjacencies for the given router
-  std::pair<
-      bool /* topology has changed */,
-      bool /* adjacency attributes have changed: nexthop addr, or label */>
-  updateAdjacencyDatabase(
+  LinkStateChange updateAdjacencyDatabase(
       thrift::AdjacencyDatabase const& adjacencyDb,
       LinkStateMetric holdUpTtl = 0,
       LinkStateMetric holdDownTtl = 0);
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph
-  bool deleteAdjacencyDatabase(const std::string& nodeName);
+  LinkStateChange deleteAdjacencyDatabase(const std::string& nodeName);
 
   // const public methods
 

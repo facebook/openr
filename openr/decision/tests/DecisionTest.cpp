@@ -371,11 +371,11 @@ TEST(ShortestPathTest, UnreachableNodes) {
   LinkState linkState(kDefaultArea);
   PrefixState prefixState;
 
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
 
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
 
   unordered_map<
       pair<string /* node name */, string /* ip prefix */>,
@@ -411,9 +411,9 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   // mention the R2's AdjDb. Add R2's prefixes though.
   //
 
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2));
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
 
   auto routeDb = spfSolver.buildRouteDb("1", linkState, prefixState);
   ASSERT_TRUE(routeDb.has_value());
@@ -442,10 +442,10 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   // mention the R2's AdjDb. Add R2's prefixes though.
   //
 
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2));
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
 
   // dump routes for both nodes, expect no routing entries
 
@@ -495,16 +495,16 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb1);
-    EXPECT_FALSE(res.first);
-    EXPECT_TRUE(res.second); // label changed for node1
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_TRUE(res.nodeLabelChanged); // label changed for node1
   }
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb2);
-    EXPECT_TRUE(res.first);
-    EXPECT_TRUE(res.second);
+    EXPECT_TRUE(res.topologyChanged);
+    EXPECT_TRUE(res.nodeLabelChanged);
   }
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
 
   //
   // dump routes for both nodes, expect 4 route entries (1 unicast, 3 label) on
@@ -528,8 +528,8 @@ TEST(SpfSolver, AdjacencyUpdate) {
   adjacencyDb1.adjacencies[0].nextHopV6 = toBinaryAddress("fe80::1234:b00c");
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb1);
-    EXPECT_FALSE(res.first);
-    EXPECT_TRUE(res.second);
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_TRUE(res.linkAttributesChanged);
   }
 
   //
@@ -554,8 +554,8 @@ TEST(SpfSolver, AdjacencyUpdate) {
   adjacencyDb2.adjacencies[0].nextHopV6 = toBinaryAddress("fe80::5678:b00c");
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb2);
-    EXPECT_FALSE(res.first);
-    EXPECT_TRUE(res.second);
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_TRUE(res.linkAttributesChanged);
   }
 
   //
@@ -581,30 +581,32 @@ TEST(SpfSolver, AdjacencyUpdate) {
   adjacencyDb1.adjacencies[0].adjLabel = 111;
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb1);
-    EXPECT_FALSE(res.first);
-    EXPECT_TRUE(res.second);
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_TRUE(res.linkAttributesChanged);
   }
 
   adjacencyDb2.adjacencies[0].adjLabel = 222;
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb2);
-    EXPECT_FALSE(res.first);
-    EXPECT_TRUE(res.second);
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_TRUE(res.linkAttributesChanged);
   }
 
   // Change nodeLabel.
   adjacencyDb1.nodeLabel = 11;
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb1);
-    EXPECT_FALSE(res.first);
-    EXPECT_TRUE(res.second);
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_FALSE(res.linkAttributesChanged);
+    EXPECT_TRUE(res.nodeLabelChanged);
   }
 
   adjacencyDb2.nodeLabel = 22;
   {
     auto res = linkState.updateAdjacencyDatabase(adjacencyDb2);
-    EXPECT_FALSE(res.first);
-    EXPECT_TRUE(res.second);
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_FALSE(res.linkAttributesChanged);
+    EXPECT_TRUE(res.nodeLabelChanged);
   }
 }
 
@@ -625,18 +627,18 @@ TEST(MplsRoutes, BasicTest) {
   auto adjacencyDb3 = createAdjDb("3", {adj32}, 3);
 
   EXPECT_EQ(
-      std::make_pair(false, true),
+      LinkState::LinkStateChange(false, false, true),
       linkState.updateAdjacencyDatabase(adjacencyDb1));
   EXPECT_EQ(
-      std::make_pair(false, false),
+      LinkState::LinkStateChange(false, false, false),
       linkState.updateAdjacencyDatabase(adjacencyDb1));
 
   EXPECT_EQ(
-      std::make_pair(false, false),
+      LinkState::LinkStateChange(false, false, false),
       linkState.updateAdjacencyDatabase(adjacencyDb2));
 
   EXPECT_EQ(
-      std::make_pair(true, true),
+      LinkState::LinkStateChange(true, false, true),
       linkState.updateAdjacencyDatabase(adjacencyDb3));
 
   auto routeMap =
@@ -665,9 +667,9 @@ TEST(BGPRedistribution, BasicOperation) {
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 0);
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   thrift::PrefixDatabase prefixDb1WithBGP = prefixDb1;
   thrift::PrefixDatabase prefixDb2WithBGP = prefixDb2;
@@ -699,8 +701,8 @@ TEST(BGPRedistribution, BasicOperation) {
       mv1,
       std::nullopt));
 
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1WithBGP));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2WithBGP));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1WithBGP).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
 
   auto decisionRouteDb = *spfSolver.buildRouteDb("2", linkState, prefixState);
   auto routeDb = decisionRouteDb.toThrift();
@@ -726,7 +728,7 @@ TEST(BGPRedistribution, BasicOperation) {
       false,
       mv2,
       std::nullopt));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2WithBGP));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
   decisionRouteDb = *spfSolver.buildRouteDb("1", linkState, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(1));
@@ -738,7 +740,7 @@ TEST(BGPRedistribution, BasicOperation) {
       .value()
       .metrics[numMetrics - 1]
       .metric.front()--;
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2WithBGP));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
   decisionRouteDb = *spfSolver.buildRouteDb("2", linkState, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
@@ -750,7 +752,7 @@ TEST(BGPRedistribution, BasicOperation) {
       .value()
       .metrics[numMetrics - 1]
       .metric.front() += 2;
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2WithBGP));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
 
   auto route2 = createUnicastRoute(
       bgpPrefix1, {createNextHopFromAdj(adj12, false, adj12.metric)});
@@ -775,8 +777,8 @@ TEST(BGPRedistribution, BasicOperation) {
       .value()
       .metrics[numMetrics - 1]
       .isBestPathTieBreaker = true;
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1WithBGP));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2WithBGP));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1WithBGP).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
 
   // 1 and 2 will not program BGP route
   EXPECT_THAT(
@@ -801,7 +803,8 @@ TEST(BGPRedistribution, BasicOperation) {
 
   // dicsonnect the network, each node will consider it's BGP route the best,
   // and thus not program anything
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(createAdjDb("1", {}, 0)).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(createAdjDb("1", {}, 0))
+                  .topologyChanged);
   decisionRouteDb = *spfSolver.buildRouteDb("1", linkState, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(
@@ -881,9 +884,9 @@ TEST(BGPRedistribution, IgpMetric) {
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 0);
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   //
   // Update prefix databases
@@ -892,8 +895,8 @@ TEST(BGPRedistribution, IgpMetric) {
       createPrefixDb("2", {createPrefixEntry(addr2), bgpPrefix2});
   auto prefixDb3WithBgp =
       createPrefixDb("3", {createPrefixEntry(addr3), bgpPrefix3});
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2WithBgp));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb3WithBgp));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBgp).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3WithBgp).empty());
 
   //
   // Step-1 prefix1 -> {node2, node3}
@@ -916,7 +919,7 @@ TEST(BGPRedistribution, IgpMetric) {
   // Increase cost towards node3 to 20; prefix -> {node2}
   //
   adjacencyDb1.adjacencies[1].metric = 20;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   decisionRouteDb = *spfSolver.buildRouteDb("1", linkState, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(3));
@@ -935,7 +938,7 @@ TEST(BGPRedistribution, IgpMetric) {
   // No route towards addr2 (node2's loopback)
   //
   adjacencyDb1.adjacencies[0].isOverloaded = true;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   decisionRouteDb = *spfSolver.buildRouteDb("1", linkState, prefixState);
   routeDb = decisionRouteDb.toThrift();
 
@@ -955,7 +958,7 @@ TEST(BGPRedistribution, IgpMetric) {
   // No route towards addr2 (node2's loopback)
   //
   adjacencyDb1.adjacencies[0].metric = 20;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   decisionRouteDb = *spfSolver.buildRouteDb("1", linkState, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(2));
@@ -973,7 +976,7 @@ TEST(BGPRedistribution, IgpMetric) {
   // Undrain link; prefix1 -> {node2, node3}
   //
   adjacencyDb1.adjacencies[0].isOverloaded = false;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   decisionRouteDb = *spfSolver.buildRouteDb("1", linkState, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(routeDb.unicastRoutes, testing::SizeIs(3));
@@ -1017,18 +1020,18 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   PrefixState prefixState;
 
   EXPECT_EQ(
-      std::make_pair(false, true),
+      LinkState::LinkStateChange(false, false, true),
       linkState.updateAdjacencyDatabase(adjacencyDb1));
   EXPECT_EQ(
-      std::make_pair(!partitioned, true),
+      LinkState::LinkStateChange(!partitioned, false, true),
       linkState.updateAdjacencyDatabase(adjacencyDb2));
   EXPECT_EQ(
-      std::make_pair(!partitioned, true),
+      LinkState::LinkStateChange(!partitioned, false, true),
       linkState.updateAdjacencyDatabase(adjacencyDb3));
 
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb3));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3).empty());
 
   // route from 1 to 3
   auto routeDb = spfSolver.buildRouteDb("1", linkState, prefixState);
@@ -1077,13 +1080,13 @@ TEST(ConnectivityTest, OverloadNodeTest) {
   // Make node-2 overloaded
   adjacencyDb2.isOverloaded = true;
 
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb3));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3).empty());
 
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   auto routeMap =
       getRouteMap(spfSolver, {"1", "2", "3"}, linkState, prefixState);
@@ -1170,19 +1173,19 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   auto adjacencyDb2 = createAdjDb("2", {adj21_old_1, adj23}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj32, adj31_old}, 3);
 
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb3));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3).empty());
 
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
 
   // add/update adjacency of node1 with old versions
   adjacencyDb1 = createAdjDb("1", {adj12_old_1, adj13_old}, 1);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   adjacencyDb1 = createAdjDb("1", {adj12_old_2, adj13_old}, 1);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
 
   auto routeMap =
       getRouteMap(spfSolver, {"1", "2", "3"}, linkState, prefixState);
@@ -1259,12 +1262,12 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
 
   // adjacency update (remove adjacency) for node1
   adjacencyDb1 = createAdjDb("1", {adj12_old_2}, 0);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   adjacencyDb3 = createAdjDb("3", {adj32}, 0);
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   adjacencyDb1 = createAdjDb("1", {adj12_old_2, adj13_old}, 0);
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
 }
 
 //
@@ -1299,16 +1302,16 @@ class SimpleRingMeshTopologyFixture
     adjacencyDb4 = createAdjDb("4", {adj41, adj42, adj43}, 4);
 
     EXPECT_EQ(
-        std::make_pair(false, true),
+        LinkState::LinkStateChange(false, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb1));
     EXPECT_EQ(
-        std::make_pair(true, true),
+        LinkState::LinkStateChange(true, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb2));
     EXPECT_EQ(
-        std::make_pair(true, true),
+        LinkState::LinkStateChange(true, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb3));
     EXPECT_EQ(
-        std::make_pair(true, true),
+        LinkState::LinkStateChange(true, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb4));
 
     auto pdb1 = v4Enabled ? prefixDb1V4 : prefixDb1;
@@ -1321,38 +1324,38 @@ class SimpleRingMeshTopologyFixture
     auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
     auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
 
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb1,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
                                     : std::nullopt)
-            : pdb1));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+            : pdb1);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb2,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
                                     : std::nullopt)
-            : pdb2));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+            : pdb2);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb3,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
                                     : std::nullopt)
-            : pdb3));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+            : pdb3);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb4,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
                                     : std::nullopt)
-            : pdb4));
+            : pdb4);
   }
 
   thrift::AdjacencyDatabase adjacencyDb1, adjacencyDb2, adjacencyDb3,
@@ -1440,7 +1443,7 @@ TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
   validateAdjLabelRoutes(routeMap, "1", adjacencyDb1.adjacencies);
 
   adjacencyDb3.isOverloaded = true;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
   routeMap = getRouteMap(*spfSolver, {"1"}, linkState, prefixState);
 
   EXPECT_EQ(
@@ -1480,16 +1483,16 @@ class SimpleRingTopologyFixture
     adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
 
     EXPECT_EQ(
-        std::make_pair(false, true),
+        LinkState::LinkStateChange(false, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb1));
     EXPECT_EQ(
-        std::make_pair(true, true),
+        LinkState::LinkStateChange(true, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb2));
     EXPECT_EQ(
-        std::make_pair(true, true),
+        LinkState::LinkStateChange(true, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb3));
     EXPECT_EQ(
-        std::make_pair(true, true),
+        LinkState::LinkStateChange(true, false, true),
         linkState.updateAdjacencyDatabase(adjacencyDb4));
 
     auto pdb1 = v4Enabled ? prefixDb1V4 : prefixDb1;
@@ -1502,38 +1505,38 @@ class SimpleRingTopologyFixture
     auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
     auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
 
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb1,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
                                     : std::nullopt)
-            : pdb1));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+            : pdb1);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb2,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
                                     : std::nullopt)
-            : pdb2));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+            : pdb2);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb3,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
                                     : std::nullopt)
-            : pdb3));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+            : pdb3);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb4,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
                                     : std::nullopt)
-            : pdb4));
+            : pdb4);
   }
 
   thrift::AdjacencyDatabase adjacencyDb1, adjacencyDb2, adjacencyDb3,
@@ -2051,8 +2054,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
   // are overloaded. In such case, there is no route from node 1 to node 2 and 4
   adjacencyDb1.adjacencies[0].isOverloaded = true;
   adjacencyDb3.isOverloaded = true;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
   routeMap = getRouteMap(*spfSolver, {"1"}, linkState, prefixState);
 
   EXPECT_EQ(
@@ -2397,8 +2400,8 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
       "1", {createPrefixEntry(addr1), createPrefixEntry(defaultRoute)});
   auto prefixDb4 = createPrefixDb(
       "4", {createPrefixEntry(addr4), createPrefixEntry(defaultRoute)});
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1));
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb4));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb4).empty());
 
   auto routeMap =
       getRouteMap(*spfSolver, {"1", "2", "3", "4"}, linkState, prefixState);
@@ -2443,8 +2446,8 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
   CustomSetUp(true /* multipath */, false /* useKsp2Ed */);
   adjacencyDb2.isOverloaded = true;
   adjacencyDb3.isOverloaded = true;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   auto routeMap =
       getRouteMap(*spfSolver, {"1", "2", "3", "4"}, linkState, prefixState);
@@ -2556,7 +2559,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
 TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
   CustomSetUp(true /* multipath */, false /* useKsp2Ed */);
   adjacencyDb3.adjacencies[0].isOverloaded = true; // make adj31 overloaded
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   auto routeMap =
       getRouteMap(*spfSolver, {"1", "2", "3", "4"}, linkState, prefixState);
@@ -2665,7 +2668,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
 
   // Now also make adj34 overloaded which will disconnect the node-3
   adjacencyDb3.adjacencies[1].isOverloaded = true;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   routeMap =
       getRouteMap(*spfSolver, {"1", "2", "3", "4"}, linkState, prefixState);
@@ -2817,25 +2820,29 @@ class ParallelAdjRingTopologyFixture
 
     // Adjacency db's
 
-    EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-    EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-    EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
-    EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb4).first);
+    EXPECT_FALSE(
+        linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+    EXPECT_TRUE(
+        linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+    EXPECT_TRUE(
+        linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
+    EXPECT_TRUE(
+        linkState.updateAdjacencyDatabase(adjacencyDb4).topologyChanged);
 
     // Prefix db's
 
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+    prefixState.updatePrefixDatabase(
         useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb1, prefixType)
-                  : prefixDb1));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+                  : prefixDb1);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb2, prefixType)
-                  : prefixDb2));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+                  : prefixDb2);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb3, prefixType)
-                  : prefixDb3));
-    EXPECT_TRUE(prefixState.updatePrefixDatabase(
+                  : prefixDb3);
+    prefixState.updatePrefixDatabase(
         useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb4, prefixType)
-                  : prefixDb4));
+                  : prefixDb4);
   }
 
   thrift::Adjacency adj12_1, adj12_2, adj12_3, adj13_1, adj21_1, adj21_2,
@@ -3234,8 +3241,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
 
   adjacencyDb1.adjacencies.at(1).isOverloaded = true;
   adjacencyDb3.adjacencies.at(2).isOverloaded = true;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   routeMap =
       getRouteMap(*spfSolver, {"1", "2", "3", "4"}, linkState, prefixState);
@@ -3349,8 +3356,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   adjacencyDb1.adjacencies.at(1).isOverloaded = true;
   adjacencyDb3.adjacencies.at(2).isOverloaded = true;
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   thrift::MetricVector mv1, mv2;
   int64_t numMetrics = 5;
@@ -3526,11 +3533,11 @@ TEST(DecisionTest, Ip2MplsRoutes) {
   auto adjacencyDb5 = createAdjDb("5", {adj52, adj53}, 5);
 
   // Adjacency db's
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb4).first);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb5).first);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb4).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb5).topologyChanged);
 
   // Prefix db's
   const auto defaultPrefixV6 = toIpPrefix("::/0");
@@ -3541,7 +3548,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb1_));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1_).empty());
   const auto prefixDb2_ = createPrefixDb(
       "2",
       {createPrefixEntry(
@@ -3549,7 +3556,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb2_));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2_).empty());
   const auto prefixDb3_ = createPrefixDb(
       "3",
       {createPrefixEntry(
@@ -3557,7 +3564,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb3_));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3_).empty());
   const auto prefixDb4_ = createPrefixDb(
       "4",
       {createPrefixEntry(
@@ -3565,7 +3572,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb4_));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb4_).empty());
   const auto prefixDb5_ = createPrefixDb(
       "5",
       {createPrefixEntry(
@@ -3573,7 +3580,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_TRUE(prefixState.updatePrefixDatabase(prefixDb5_));
+  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb5_).empty());
 
   // Some actions
   auto const labelPush1 = createMplsAction(

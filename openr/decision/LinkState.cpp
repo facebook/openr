@@ -497,20 +497,20 @@ LinkState::isNodeOverloaded(const std::string& nodeName) const {
   return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName).value();
 }
 
-bool
+LinkState::LinkStateChange
 LinkState::decrementHolds() {
-  bool holdChange = false;
+  LinkStateChange change;
   for (auto& link : allLinks_) {
-    holdChange |= link->decrementHolds();
+    change.topologyChanged |= link->decrementHolds();
   }
   for (auto& kv : nodeOverloads_) {
-    holdChange |= kv.second.decrementTtl();
+    change.topologyChanged |= kv.second.decrementTtl();
   }
-  if (holdChange) {
+  if (change.topologyChanged) {
     spfResults_.clear();
     kthPathResults_.clear();
   }
-  return holdChange;
+  return change;
 }
 
 bool
@@ -561,13 +561,12 @@ LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
   return links;
 }
 
-std::pair<
-    bool /* topology has changed*/,
-    bool /* route attributes has changed (nexthop addr, node/adj label */>
+LinkState::LinkStateChange
 LinkState::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb,
     LinkStateMetric holdUpTtl,
     LinkStateMetric holdDownTtl) {
+  LinkStateChange change;
   auto const& nodeName = newAdjacencyDb.thisNodeName;
   VLOG(1) << "Updating adjacency database for node " << nodeName << ", area "
           << newAdjacencyDb.area_ref().value_or("N/A");
@@ -599,12 +598,11 @@ LinkState::updateAdjacencyDatabase(
   std::unordered_set<Link> linksUp;
   std::unordered_set<Link> linksDown;
 
-  bool topoChanged = updateNodeOverloaded(
+  change.topologyChanged |= updateNodeOverloaded(
       nodeName, newAdjacencyDb.isOverloaded, holdUpTtl, holdDownTtl);
 
-  bool routeAttrChanged = false;
-
-  routeAttrChanged |= priorAdjacencyDb.nodeLabel != newAdjacencyDb.nodeLabel;
+  change.nodeLabelChanged =
+      priorAdjacencyDb.nodeLabel != newAdjacencyDb.nodeLabel;
 
   auto newIter = newLinks.begin();
   auto oldIter = oldLinks.begin();
@@ -614,7 +612,7 @@ LinkState::updateAdjacencyDatabase(
       // newIter is pointing at a Link not currently present, record this as a
       // link to add and advance newIter
       (*newIter)->setHoldUpTtl(holdUpTtl);
-      topoChanged |= (*newIter)->isUp();
+      change.topologyChanged |= (*newIter)->isUp();
       // even if we are holding a change, we apply the change to our link state
       // and check for holds when running spf. this ensures we don't add the
       // same hold twice
@@ -629,7 +627,7 @@ LinkState::updateAdjacencyDatabase(
       // as a link to remove and advance oldIter.
       // If this link was previously overloaded or had a hold up, this does not
       // change the topology.
-      topoChanged |= (*oldIter)->isUp();
+      change.topologyChanged |= (*oldIter)->isUp();
       removeLink(*oldIter);
       VLOG(1) << "removeLink " << (*oldIter)->toString();
       ++oldIter;
@@ -649,7 +647,7 @@ LinkState::updateAdjacencyDatabase(
           newLink.directionalToString(nodeName),
           oldLink.getMetricFromNode(nodeName),
           newLink.getMetricFromNode(nodeName));
-      topoChanged = oldLink.setMetricFromNode(
+      change.topologyChanged |= oldLink.setMetricFromNode(
           nodeName,
           newLink.getMetricFromNode(nodeName),
           holdUpTtl,
@@ -663,7 +661,7 @@ LinkState::updateAdjacencyDatabase(
           newLink.directionalToString(nodeName),
           oldLink.getOverloadFromNode(nodeName),
           newLink.getOverloadFromNode(nodeName));
-      topoChanged = oldLink.setOverloadFromNode(
+      change.topologyChanged |= oldLink.setOverloadFromNode(
           nodeName,
           newLink.getOverloadFromNode(nodeName),
           holdUpTtl,
@@ -679,8 +677,7 @@ LinkState::updateAdjacencyDatabase(
           oldLink.getAdjLabelFromNode(nodeName),
           newLink.getAdjLabelFromNode(nodeName));
 
-      // Route attribute changes only when adjLabel has changed for local node
-      routeAttrChanged |= true;
+      change.linkAttributesChanged |= true;
 
       // change the adjLabel on the link object we already have
       oldLink.setAdjLabelFromNode(
@@ -696,7 +693,7 @@ LinkState::updateAdjacencyDatabase(
           toString(oldLink.getNhV4FromNode(nodeName)),
           toString(newLink.getNhV4FromNode(nodeName)));
 
-      routeAttrChanged |= true;
+      change.linkAttributesChanged |= true;
       oldLink.setNhV4FromNode(nodeName, newLink.getNhV4FromNode(nodeName));
     }
     if (newLink.getNhV6FromNode(nodeName) !=
@@ -707,34 +704,36 @@ LinkState::updateAdjacencyDatabase(
           toString(oldLink.getNhV6FromNode(nodeName)),
           toString(newLink.getNhV6FromNode(nodeName)));
 
-      routeAttrChanged |= true;
+      change.linkAttributesChanged |= true;
       oldLink.setNhV6FromNode(nodeName, newLink.getNhV6FromNode(nodeName));
     }
     ++newIter;
     ++oldIter;
   }
-  if (topoChanged) {
+  if (change.topologyChanged) {
     spfResults_.clear();
     kthPathResults_.clear();
   }
-  return std::make_pair(topoChanged, routeAttrChanged);
+  return change;
 }
 
-bool
+LinkState::LinkStateChange
 LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
+  LinkStateChange change;
   VLOG(1) << "Deleting adjacency database for node " << nodeName;
   auto search = adjacencyDatabases_.find(nodeName);
 
-  if (search == adjacencyDatabases_.end()) {
+  if (search != adjacencyDatabases_.end()) {
+    removeNode(nodeName);
+    adjacencyDatabases_.erase(search);
+    spfResults_.clear();
+    kthPathResults_.clear();
+    change.topologyChanged = true;
+  } else {
     LOG(WARNING) << "Trying to delete adjacency db for nonexisting node "
                  << nodeName;
-    return false;
   }
-  removeNode(nodeName);
-  adjacencyDatabases_.erase(search);
-  spfResults_.clear();
-  kthPathResults_.clear();
-  return true;
+  return change;
 }
 
 std::optional<LinkStateMetric>

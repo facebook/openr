@@ -31,8 +31,10 @@ PrefixState::deleteLoopbackPrefix(
   }
 }
 
-bool
+std::unordered_set<thrift::IpPrefix>
 PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
+  std::unordered_set<thrift::IpPrefix> changed;
+
   auto const& nodeName = prefixDb.thisNodeName;
 
   // Get old and new set of prefixes - NOTE explicit copy
@@ -45,9 +47,6 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     newPrefixSet.emplace(prefixEntry.prefix);
   }
 
-  // Boolean to indicate update in prefix entry
-  bool isUpdated{false};
-
   // Remove old prefixes first
   for (const auto& prefix : oldPrefixSet) {
     if (newPrefixSet.count(prefix)) {
@@ -57,7 +56,7 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
             << nodeName;
     auto& nodeList = prefixes_.at(prefix);
     nodeList.erase(nodeName);
-    isUpdated = true;
+    changed.insert(prefix);
     if (nodeList.empty()) {
       prefixes_.erase(prefix);
     }
@@ -72,12 +71,12 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
       VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
               << " has been advertised by node " << nodeName;
       nodeList.emplace(nodeName, prefixEntry);
-      isUpdated = true;
+      changed.insert(prefixEntry.prefix);
     } else if (nodePrefixIt->second != prefixEntry) {
       VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
               << " has been updated by node " << nodeName;
       nodeList[nodeName] = prefixEntry;
-      isUpdated = true;
+      changed.insert(prefixEntry.prefix);
     } else {
       // This prefix has no change. Skip rest of code!
       continue;
@@ -101,7 +100,7 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     nodeToPrefixes_.erase(nodeName);
   }
 
-  return isUpdated;
+  return changed;
 }
 
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
