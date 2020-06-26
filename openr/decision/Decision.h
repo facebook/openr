@@ -95,39 +95,72 @@ namespace detail {
  * Out of all buffered applications we try to keep the perf events for the
  * oldest appearing event.
  */
-struct DecisionPendingUpdates {
-  void
-  clear() {
-    count_ = 0;
-    minTs_ = std::nullopt;
-    perfEvents_ = std::nullopt;
+class DecisionPendingUpdates {
+ public:
+  explicit DecisionPendingUpdates(std::string const& myNodeName)
+      : myNodeName_(myNodeName) {}
+
+  bool
+  needsFullRebuild() const {
+    return needsFullRebuild_;
+  }
+
+  bool
+  needsRouteUpdate() const {
+    return needsFullRebuild() || !updatedPrefixes_.empty();
+  }
+
+  std::unordered_set<thrift::IpPrefix> const&
+  updatedPrefixes() const {
+    return updatedPrefixes_;
   }
 
   void
-  addUpdate(
-      const std::string& nodeName,
-      const std::optional<thrift::PerfEvents>& perfEvents) {
-    ++count_;
+  applyLinkStateChange(
+      std::string const& nodeName,
+      LinkState::LinkStateChange const& change,
+      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt) {
+    needsFullRebuild_ |=
+        (change.topologyChanged || change.nodeLabelChanged ||
+         // we only need a full rebuild if link attributes change locally
+         // this would be a nexthop on link label change
+         (change.linkAttributesChanged && nodeName == myNodeName_));
+    addUpdate(perfEvents);
+  }
 
-    // Skip if perf information is missing
-    if (not perfEvents.has_value()) {
-      if (not perfEvents_) {
-        perfEvents_ = thrift::PerfEvents{};
-        addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
-        minTs_ = perfEvents_->events.front().unixTs;
-      }
-      return;
-    }
+  void
+  applyPrefixStateChange(
+      std::unordered_set<thrift::IpPrefix>&& change,
+      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt) {
+    updatedPrefixes_.merge(std::move(change));
+    addUpdate(perfEvents);
+  }
 
-    // Update local copy of perf evens if it is newer than the one to be added
-    // We do debounce (batch updates) for recomputing routes and in order to
-    // measure convergence performance, it is better to use event which is
-    // oldest.
-    if (!minTs_ or minTs_.value() > perfEvents->events.front().unixTs) {
-      minTs_ = perfEvents->events.front().unixTs;
-      perfEvents_ = perfEvents;
-      addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
+  void
+  reset() {
+    count_ = 0;
+    perfEvents_ = std::nullopt;
+    needsFullRebuild_ = false;
+    updatedPrefixes_.clear();
+  }
+
+  void
+  addEvent(std::string const& eventDescription) {
+    if (perfEvents_) {
+      addPerfEvent(*perfEvents_, myNodeName_, eventDescription);
     }
+  }
+
+  std::optional<thrift::PerfEvents> const&
+  perfEvents() const {
+    return perfEvents_;
+  }
+
+  std::optional<thrift::PerfEvents>
+  moveOutEvents() {
+    std::optional<thrift::PerfEvents> events = std::move(perfEvents_);
+    perfEvents_ = std::nullopt;
+    return events;
   }
 
   uint32_t
@@ -135,16 +168,42 @@ struct DecisionPendingUpdates {
     return count_;
   }
 
-  std::optional<thrift::PerfEvents>
-  getPerfEvents() const {
-    return perfEvents_;
+ private:
+  void
+  addUpdate(const std::optional<thrift::PerfEvents>& perfEvents) {
+    ++count_;
+
+    // Update local copy of perf evens if it is newer than the one to be added
+    // We do debounce (batch updates) for recomputing routes and in order to
+    // measure convergence performance, it is better to use event which is
+    // oldest.
+    if (!perfEvents_ ||
+        (perfEvents &&
+         perfEvents_->events.front().unixTs >
+             perfEvents->events.front().unixTs)) {
+      // if we don't have any perf events for this batch and this update also
+      // doesn't have anything, let's start building the event list from now
+      perfEvents_ = perfEvents ? perfEvents : thrift::PerfEvents{};
+      addPerfEvent(*perfEvents_, myNodeName_, "DECISION_RECEIVED");
+    }
   }
 
- private:
+  // tracks how many updates are part of this batch
   uint32_t count_{0};
-  std::optional<int64_t> minTs_;
+
+  // oldest perfEvents list in the batch
   std::optional<thrift::PerfEvents> perfEvents_;
+
+  // set if we need to rebuild all routes
+  bool needsFullRebuild_{false};
+
+  // track prefixes that have changed in this batch
+  std::unordered_set<thrift::IpPrefix> updatedPrefixes_;
+
+  // local node name to determine action on linkAttributes change
+  std::string myNodeName_;
 };
+
 } // namespace detail
 
 // The class to compute shortest-paths using Dijkstra algorithm
@@ -274,22 +333,7 @@ class Decision : public OpenrEventBase {
   ProcessPublicationResult processPublication(
       thrift::Publication const& thriftPub);
 
-  // process static routes publication from prefix manager.
-  void processStaticRouteUpdates();
-
   void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
-
-  /**
-   * Process received publication and populate the pendingAdjUpdates_
-   * attributes which can be applied later on after a debounce timeout.
-   */
-  detail::DecisionPendingUpdates pendingAdjUpdates_;
-
-  /**
-   * Process received publication and populate the pendingPrefixUpdates_
-   * attributes upon receiving prefix update publication
-   */
-  detail::DecisionPendingUpdates pendingPrefixUpdates_;
 
   // openr config
   std::shared_ptr<const Config> config_;
@@ -300,35 +344,20 @@ class Decision : public OpenrEventBase {
 
   /**
    * Timer to schedule pending update processing
-   * Refer to processUpdatesStatus_ to decide whether spf recalculation or
+   * Refer to pendingUpdates_ to decide whether spf recalculation or
    * just route rebuilding is needed.
    * Apply exponential backoff timeout to avoid churn
    */
   std::unique_ptr<folly::AsyncTimeout> processUpdatesTimer_;
   ExponentialBackoff<std::chrono::milliseconds> processUpdatesBackoff_;
 
-  // store update to-do status
-  ProcessPublicationResult processUpdatesStatus_;
-
-  bool staticRoutesChanged_{false};
-
   /**
    * Caller function of processPendingAdjUpdates and processPendingPrefixUpdates
-   * Check current processUpdatesStatus_ to decide which sub function to call
+   * Check current pendingUpdates_ to decide which sub function to call
    * to further process pending updates
    * Reset timer and status afterwards.
    */
   void processPendingUpdates();
-
-  /**
-   * Function to process pending adjacency publications.
-   */
-  void processPendingAdjUpdates();
-
-  /**
-   * Function to process prefix updates.
-   */
-  void processPendingPrefixUpdates();
 
   /**
    * Function to process routes on RibPolicy update
@@ -406,6 +435,9 @@ class Decision : public OpenrEventBase {
 
   // this node's name and the key markers
   const std::string myNodeName_;
+
+  // store update to-do status and perf events
+  detail::DecisionPendingUpdates pendingUpdates_;
 };
 
 } // namespace openr

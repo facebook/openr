@@ -1261,7 +1261,8 @@ Decision::Decision(
     : config_(config),
       processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       routeUpdatesQueue_(routeUpdatesQueue),
-      myNodeName_(config->getConfig().node_name) {
+      myNodeName_(config->getConfig().node_name),
+      pendingUpdates_(config->getConfig().node_name) {
   auto tConfig = config->getConfig();
   processUpdatesTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { processPendingUpdates(); });
@@ -1310,11 +1311,8 @@ Decision::Decision(
         LOG(INFO) << "Terminating KvStore updates processing fiber";
         break;
       }
-
-      // Apply publication and update stored update status
-      ProcessPublicationResult res; // default initialized to false
       try {
-        res = processPublication(maybeThriftPub.value());
+        processPublication(maybeThriftPub.value());
       } catch (const std::exception& e) {
 #if FOLLY_USE_SYMBOLIZER
         // collect stack strace then fail the process
@@ -1326,17 +1324,14 @@ Decision::Decision(
         LOG(FATAL) << "Exception occured in Decision::processPublication - "
                    << folly::exceptionStr(e);
       }
-      processUpdatesStatus_.adjChanged |= res.adjChanged;
-      processUpdatesStatus_.prefixesChanged |= res.prefixesChanged;
       // compute routes with exponential backoff timer if needed
-      if (res.adjChanged || res.prefixesChanged) {
+      if (pendingUpdates_.needsRouteUpdate()) {
         if (!processUpdatesBackoff_.atMaxBackoff()) {
           processUpdatesBackoff_.reportError();
           processUpdatesTimer_->scheduleTimeout(
               processUpdatesBackoff_.getTimeRemainingUntilRetry());
-        } else {
-          CHECK(processUpdatesTimer_->isScheduled());
         }
+        CHECK(processUpdatesTimer_->isScheduled());
       }
     }
   });
@@ -1609,21 +1604,11 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
           }
         }
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
-        auto rc = areaLinkState.updateAdjacencyDatabase(
-            adjacencyDb, holdUpTtl, holdDownTtl);
-        if (rc.topologyChanged || rc.nodeLabelChanged) {
-          res.adjChanged = true;
-          pendingAdjUpdates_.addUpdate(
-              myNodeName_, castToStd(adjacencyDb.perfEvents_ref()));
-        }
-        if (rc.linkAttributesChanged) {
-          // rebuild the routes, if related route attributes has been
-          // changed. e.g. node mpls label change, adjacency label change,
-          // local nexthops change etc.
-          res.prefixesChanged = true;
-          pendingPrefixUpdates_.addUpdate(
-              myNodeName_, castToStd(adjacencyDb.perfEvents_ref()));
-        }
+        pendingUpdates_.applyLinkStateChange(
+            adjacencyDb.thisNodeName,
+            areaLinkState.updateAdjacencyDatabase(
+                adjacencyDb, holdUpTtl, holdDownTtl),
+            castToStd(adjacencyDb.perfEvents_ref()));
         if (areaLinkState.hasHolds() && orderedFibTimer_ != nullptr &&
             !orderedFibTimer_->isScheduled()) {
           orderedFibTimer_->scheduleTimeout(getMaxFib());
@@ -1640,11 +1625,9 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         VLOG(1) << "Updating prefix database for node " << nodeName;
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
-        if (!prefixState_.updatePrefixDatabase(nodePrefixDb).empty()) {
-          res.prefixesChanged = true;
-          pendingPrefixUpdates_.addUpdate(
-              myNodeName_, castToStd(nodePrefixDb.perfEvents_ref()));
-        }
+        pendingUpdates_.applyPrefixStateChange(
+            prefixState_.updatePrefixDatabase(nodePrefixDb)),
+            castToStd(nodePrefixDb.perfEvents_ref());
         continue;
       }
 
@@ -1670,11 +1653,10 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     std::string nodeName = getNodeNameFromKey(key);
 
     if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-      if (areaLinkState.deleteAdjacencyDatabase(nodeName).topologyChanged) {
-        res.adjChanged = true;
-        pendingAdjUpdates_.addUpdate(
-            myNodeName_, castToStd(thrift::PrefixDatabase().perfEvents_ref()));
-      }
+      pendingUpdates_.applyLinkStateChange(
+          nodeName,
+          areaLinkState.deleteAdjacencyDatabase(nodeName),
+          castToStd(thrift::PrefixDatabase().perfEvents_ref()));
       continue;
     }
 
@@ -1684,38 +1666,13 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       deletePrefixDb.thisNodeName = nodeName;
       deletePrefixDb.deletePrefix = true;
       auto nodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
-      if (!prefixState_.updatePrefixDatabase(nodePrefixDb).empty()) {
-        res.prefixesChanged = true;
-      }
+      pendingUpdates_.applyPrefixStateChange(
+          prefixState_.updatePrefixDatabase(nodePrefixDb));
       continue;
     }
   }
 
   return res;
-}
-
-void
-Decision::processStaticRouteUpdates() {
-  auto maybePerfEvents = pendingPrefixUpdates_.getPerfEvents();
-  pendingPrefixUpdates_.clear();
-  if (coldStartTimer_->isScheduled()) {
-    return;
-  }
-
-  if (maybePerfEvents) {
-    addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_DEBOUNCE");
-  }
-  // update routeDb once for all updates received
-  LOG(INFO) << "Decision: updating new routeDb.";
-  auto maybeRouteDb = spfSolver_->processStaticRouteUpdates();
-
-  if (not maybeRouteDb.has_value()) {
-    LOG(WARNING) << "prefix manager updates incurred no route updates";
-    return;
-  }
-
-  fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
-  routeUpdatesQueue_.push(std::move(maybeRouteDb.value()));
 }
 
 void
@@ -1726,95 +1683,54 @@ Decision::pushRoutesDeltaUpdates(
 
 void
 Decision::processPendingUpdates() {
+  if (coldStartTimer_->isScheduled()) {
+    return;
+  }
+
+  pendingUpdates_.addEvent("DECISION_DEBOUNCE");
+  VLOG(1) << "Decision: processing " << pendingUpdates_.getCount()
+          << " accumulated updates.";
+  if (pendingUpdates_.perfEvents()) {
+    if (auto expectedDuration = getDurationBetweenPerfEvents(
+            *pendingUpdates_.perfEvents(),
+            "DECISION_RECEIVED",
+            "DECISION_DEBOUNCE")) {
+      VLOG(1) << "Debounced " << pendingUpdates_.getCount() << " events over "
+              << expectedDuration->count() << "ms.";
+    }
+  }
   // we need to update  static route first, because there maybe routes
   // depending on static routes.
   bool staticRoutesUpdated{false};
   if (spfSolver_->staticRoutesUpdated()) {
     staticRoutesUpdated = true;
-    processStaticRouteUpdates();
+    if (auto maybeRouteDbDelta = spfSolver_->processStaticRouteUpdates()) {
+      routeUpdatesQueue_.push(std::move(maybeRouteDbDelta.value()));
+    }
   }
 
-  if (processUpdatesStatus_.adjChanged) {
-    processPendingAdjUpdates();
-  } else if (
-      processUpdatesStatus_.prefixesChanged ||
-      staticRoutesUpdated) // if only static routes gets updated, we still need
-                           // to update routes because there maybe routes
-                           // depended on static routes.
-  {
-    processPendingPrefixUpdates();
+  std::optional<DecisionRouteDb> maybeRouteDb = std::nullopt;
+  if (pendingUpdates_.needsRouteUpdate() || staticRoutesUpdated) {
+    // if only static routes gets updated, we still need to update routes
+    // because there maybe routes depended on static routes.
+    maybeRouteDb = buildRouteDb(myNodeName_);
+  }
+  if (maybeRouteDb.has_value()) {
+    sendRouteUpdate(
+        std::move(*maybeRouteDb),
+        pendingUpdates_.moveOutEvents(),
+        "ROUTE_UPDATE");
+  } else {
+    LOG(WARNING) << "processPendingUpdates incurred no routes";
   }
 
-  // reset update status
-  processUpdatesStatus_.adjChanged = false;
-  processUpdatesStatus_.prefixesChanged = false;
+  pendingUpdates_.reset();
 
   // update decision debounce flag
   processUpdatesBackoff_.reportSuccess();
-}
-
-void
-Decision::processPendingAdjUpdates() {
-  VLOG(1) << "Decision: processing " << pendingAdjUpdates_.getCount()
-          << " accumulated adjacency updates.";
-
-  if (!pendingAdjUpdates_.getCount()) {
-    LOG(ERROR) << "Decision route computation triggered without any pending "
-               << "adjacency updates.";
-    return;
+  if (processUpdatesTimer_->isScheduled()) {
+    processUpdatesTimer_->cancelTimeout();
   }
-
-  // Retrieve perf events, add debounce perf event, log information to
-  // ZmqMonitor, ad and clear pending updates
-  auto maybePerfEvents = pendingAdjUpdates_.getPerfEvents();
-  if (maybePerfEvents) {
-    addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_DEBOUNCE");
-    auto const& events = maybePerfEvents->events;
-    auto const& eventsCnt = events.size();
-    CHECK_LE(2, eventsCnt);
-    auto duration = events[eventsCnt - 1].unixTs - events[eventsCnt - 2].unixTs;
-    VLOG(1) << "Debounced " << pendingAdjUpdates_.getCount() << " events over "
-            << std::chrono::milliseconds(duration).count() << "ms.";
-  }
-  pendingAdjUpdates_.clear();
-
-  if (coldStartTimer_->isScheduled()) {
-    return;
-  }
-
-  // run SPF once for all updates received
-  LOG(INFO) << "Decision: computing new paths.";
-  auto maybeRouteDb = buildRouteDb(myNodeName_);
-  if (not maybeRouteDb.has_value()) {
-    LOG(WARNING) << "AdjacencyDb updates incurred no route updates";
-    return;
-  }
-
-  sendRouteUpdate(
-      std::move(*maybeRouteDb), std::move(maybePerfEvents), "DECISION_SPF");
-}
-
-void
-Decision::processPendingPrefixUpdates() {
-  auto maybePerfEvents = pendingPrefixUpdates_.getPerfEvents();
-  pendingPrefixUpdates_.clear();
-  if (coldStartTimer_->isScheduled()) {
-    return;
-  }
-
-  if (maybePerfEvents) {
-    addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_DEBOUNCE");
-  }
-  // update routeDb once for all updates received
-  LOG(INFO) << "Decision: updating new routeDb.";
-  auto maybeRouteDb = buildRouteDb(myNodeName_);
-  if (not maybeRouteDb.has_value()) {
-    LOG(WARNING) << "PrefixDb updates incurred no route updates";
-    return;
-  }
-
-  sendRouteUpdate(
-      std::move(*maybeRouteDb), std::move(maybePerfEvents), "ROUTE_UPDATE");
 }
 
 void

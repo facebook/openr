@@ -5563,6 +5563,87 @@ TEST_F(DecisionTestFixture, Counters) {
       fb303::fbData->getCounters().at("decision.num_partial_adjacencies"), 0);
 }
 
+TEST(DecisionPendingUpdates, needsFullRebuild) {
+  openr::detail::DecisionPendingUpdates updates("node1");
+  LinkState::LinkStateChange linkStateChange;
+
+  linkStateChange.linkAttributesChanged = true;
+  updates.applyLinkStateChange("node2", linkStateChange);
+  EXPECT_FALSE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  updates.applyLinkStateChange("node1", linkStateChange);
+  EXPECT_TRUE(updates.needsRouteUpdate());
+  EXPECT_TRUE(updates.needsFullRebuild());
+
+  updates.reset();
+  EXPECT_FALSE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  linkStateChange.linkAttributesChanged = false;
+  linkStateChange.topologyChanged = true;
+  updates.applyLinkStateChange("node2", linkStateChange);
+  EXPECT_TRUE(updates.needsRouteUpdate());
+  EXPECT_TRUE(updates.needsFullRebuild());
+
+  updates.reset();
+  linkStateChange.topologyChanged = false;
+  linkStateChange.nodeLabelChanged = true;
+  updates.applyLinkStateChange("node2", linkStateChange);
+  EXPECT_TRUE(updates.needsRouteUpdate());
+  EXPECT_TRUE(updates.needsFullRebuild());
+}
+
+TEST(DecisionPendingUpdates, updatedPrefixes) {
+  openr::detail::DecisionPendingUpdates updates("node1");
+
+  EXPECT_FALSE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  EXPECT_TRUE(updates.updatedPrefixes().empty());
+
+  // empty update no change
+  updates.applyPrefixStateChange({});
+  EXPECT_FALSE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  EXPECT_TRUE(updates.updatedPrefixes().empty());
+
+  updates.applyPrefixStateChange({addr1, addr2V4});
+  EXPECT_TRUE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  EXPECT_THAT(
+      updates.updatedPrefixes(), testing::UnorderedElementsAre(addr1, addr2V4));
+  updates.applyPrefixStateChange({addr2});
+  EXPECT_TRUE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  EXPECT_THAT(
+      updates.updatedPrefixes(),
+      testing::UnorderedElementsAre(addr1, addr2V4, addr2));
+
+  updates.reset();
+  EXPECT_FALSE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  EXPECT_TRUE(updates.updatedPrefixes().empty());
+}
+
+TEST(DecisionPendingUpdates, perfEvents) {
+  openr::detail::DecisionPendingUpdates updates("node1");
+  LinkState::LinkStateChange linkStateChange;
+  updates.applyLinkStateChange("node2", linkStateChange);
+  EXPECT_THAT(updates.perfEvents()->events, testing::SizeIs(1));
+  EXPECT_EQ(
+      updates.perfEvents()->events.front().eventDescr, "DECISION_RECEIVED");
+  openr::thrift::PerfEvents earlierEvents;
+  earlierEvents.events.push_back({});
+  earlierEvents.events.back().nodeName = "node3";
+  earlierEvents.events.back().eventDescr = "EARLIER";
+  earlierEvents.events.back().unixTs = 1;
+  updates.applyPrefixStateChange({}, earlierEvents);
+
+  // expect what we hasd to be displaced by this
+  EXPECT_THAT(updates.perfEvents()->events, testing::SizeIs(2));
+  EXPECT_EQ(updates.perfEvents()->events.front().eventDescr, "EARLIER");
+  EXPECT_EQ(
+      updates.perfEvents()->events.back().eventDescr, "DECISION_RECEIVED");
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
