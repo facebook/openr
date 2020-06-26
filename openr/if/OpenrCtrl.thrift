@@ -260,11 +260,22 @@ service OpenrCtrl extends fb303_core.BaseService {
   //
 
   /**
-   * Get adjacency databases of all nodes, representing topology from Decision
-   * module. This represents currently active nodes (includes bi-directional
-   * check)
+   * Get default area adjacency databases of all nodes, representing default
+   * area topology from Decision module. This represents currently active nodes
+   * (includes bi-directional check)
+   * only selects default area adj DBs. Deprecated, perfer
+   * getAllDecisionAdjacencyDbs()
    */
   Decision.AdjDbs getDecisionAdjacencyDbs() throws (1: OpenrError error)
+
+
+  /**
+   * Get adjacency databases of all nodes. NOTE: for ABRs, there can be more
+   * than one AdjDb for a node (one per area)
+   * (includes bi-directional check)
+   */
+  list<Lsdb.AdjacencyDatabase> getAllDecisionAdjacencyDbs()
+    throws (1: OpenrError error)
 
   /**
    * Get global prefix databases. This represents prefixes of actives nodes

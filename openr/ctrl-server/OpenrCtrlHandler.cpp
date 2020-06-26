@@ -421,6 +421,12 @@ OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
   return decision_->getDecisionAdjacencyDbs();
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
+OpenrCtrlHandler::semifuture_getAllDecisionAdjacencyDbs() {
+  CHECK(decision_);
+  return decision_->getAllDecisionAdjacencyDbs();
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
 OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   CHECK(decision_);

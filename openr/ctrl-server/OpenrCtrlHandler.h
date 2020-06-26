@@ -139,6 +139,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
   semifuture_getDecisionAdjacencyDbs() override;
 
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
+  semifuture_getAllDecisionAdjacencyDbs() override;
+
   folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
   semifuture_getDecisionPrefixDbs() override;
 

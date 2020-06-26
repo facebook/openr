@@ -28,6 +28,8 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/decision/LinkState.h>
+#include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
@@ -164,38 +166,6 @@ class SpfSolver {
   // be defined in the .cpp
   //
 
-  //
-  // linkState_ related
-  //
-
-  // update adjacencies for the given router
-  std::pair<
-      bool /* topology has changed */,
-      bool /* route attributes has changed (nexthop addr, node/adj label */>
-  updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
-
-  // delete a node's adjacency database
-  // return true if this has caused any change in graph
-  bool deleteAdjacencyDatabase(const std::string& nodeName);
-
-  // get adjacency databases
-  std::unordered_map<
-      std::string /* nodeName */,
-      thrift::AdjacencyDatabase> const&
-  getAdjacencyDatabases();
-
-  //
-  // ordered fib programming
-  //
-
-  bool hasHolds() const;
-
-  bool decrementHolds();
-
-  //
-  // mpls static route
-  //
-
   bool staticRoutesUpdated();
 
   void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
@@ -204,29 +174,13 @@ class SpfSolver {
 
   thrift::StaticRoutes const& getStaticRoutes();
 
-  //
-  // prefixState_ related
-  //
-
-  // update prefixes for a given router. Returns true if this has caused any
-  // routeDb change
-  bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
-
-  // get prefix databases
-  std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
-  getPrefixDatabases();
-
-  //
-  // best path calculation
-  //
-
-  // Build route database using global prefix database and cached SPF
-  // computation from perspective of a given router.
+  // Build route database using given prefix and link states for a given
+  // router, myNodeName
   // Returns std::nullopt if myNodeName doesn't have any prefix database
-  std::optional<DecisionRouteDb> buildRouteDb(const std::string& myNodeName);
-
-  // spf counters
-  void updateGlobalCounters();
+  std::optional<DecisionRouteDb> buildRouteDb(
+      const std::string& myNodeName,
+      LinkState const& linkState,
+      PrefixState const& prefixState);
 
  private:
   // no-copy
@@ -281,9 +235,15 @@ class Decision : public OpenrEventBase {
   getDecisionStaticRoutes();
 
   /*
-   * Retrieve AdjacencyDatabase as map.
+   * Retrieve AdjacencyDatabase for kDefaultArea
    */
   folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>> getDecisionAdjacencyDbs();
+
+  /*
+   * Retrieve AdjacencyDatabase for all nodes in all areas
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
+  getAllDecisionAdjacencyDbs();
 
   /*
    * Retrieve PrefixDatabase as a map.
@@ -302,6 +262,9 @@ class Decision : public OpenrEventBase {
    * set yet.
    */
   folly::SemiFuture<thrift::RibPolicy> getRibPolicy();
+
+  // periodically called by counterUpdateTimer_, exposed publicly for testing
+  void updateGlobalCounters() const;
 
  private:
   Decision(Decision const&) = delete;
@@ -372,7 +335,9 @@ class Decision : public OpenrEventBase {
    */
   void processRibPolicyUpdate();
 
-  void decrementOrderedFibHolds();
+  // decremnts holds and send any resulting output, returns true if any
+  // linkstate has remaining holds
+  bool decrementOrderedFibHolds();
 
   void coldStartUpdate();
 
@@ -386,6 +351,11 @@ class Decision : public OpenrEventBase {
   // node to prefix entries database for nodes advertising per prefix keys
   thrift::PrefixDatabase updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
+
+  // build the route database for nodeName
+  // coalesces routes computed for all areas
+  std::optional<DecisionRouteDb> buildRouteDb(
+      std::string const& nodeName) const;
 
   // cached routeDb
   DecisionRouteDb routeDb_;
@@ -402,6 +372,12 @@ class Decision : public OpenrEventBase {
 
   // the pointer to the SPF path calculator
   std::unique_ptr<SpfSolver> spfSolver_;
+
+  // per area link states
+  std::unordered_map<std::string, LinkState> areaLinkStates_;
+
+  // global prefix state
+  PrefixState prefixState_;
 
   // For orderedFib prgramming, we keep track of the fib programming times
   // across the network
