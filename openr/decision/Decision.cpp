@@ -1264,8 +1264,11 @@ Decision::Decision(
       myNodeName_(config->getConfig().node_name),
       pendingUpdates_(config->getConfig().node_name) {
   auto tConfig = config->getConfig();
-  processUpdatesTimer_ = folly::AsyncTimeout::make(
-      *getEvb(), [this]() noexcept { processPendingUpdates(); });
+  processUpdatesTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+        processUpdatesBackoff_.reportSuccess();
+        processPendingUpdates();
+      });
   spfSolver_ = std::make_unique<SpfSolver>(
       tConfig.node_name,
       tConfig.enable_v4_ref().value_or(false),
