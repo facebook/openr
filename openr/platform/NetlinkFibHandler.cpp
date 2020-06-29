@@ -43,7 +43,8 @@ createSemiFutureWithClientIdError() {
 } // namespace
 
 NetlinkFibHandler::NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock)
-    : nlSock_(nlSock),
+    : facebook::fb303::BaseService("openr"),
+      nlSock_(nlSock),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
                      .count()) {

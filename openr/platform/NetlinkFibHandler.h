@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include <fb303/BaseService.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <folly/Expected.h>
 #include <folly/futures/Future.h>
@@ -36,7 +37,8 @@ namespace openr {
  * - All APIs exposed are asynchronous. Sync API retries the existing routing
  *   state in synchronous way and program changes asynchrnously.
  */
-class NetlinkFibHandler : public thrift::FibServiceSvIf {
+class NetlinkFibHandler : public thrift::FibServiceSvIf,
+                          public facebook::fb303::BaseService {
  public:
   explicit NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock);
   ~NetlinkFibHandler() override;
