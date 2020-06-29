@@ -359,6 +359,113 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
 }
 
 //
+// Test case to verify correctness of 3-way full-sync
+// Tuple => (key, version, value)
+//
+// store1 has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+// store2 has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+//
+// After store1 did a full-sync with store2, we expect both have:
+//
+// (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+//
+TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
+  // spin up 2 kvStore instances and thriftServers
+  const std::string node1{"node-1"};
+  const std::string node2{"node-2"};
+  const std::string value1{"value-1"};
+  const std::string value2{"value-2"};
+
+  createKvStore(node1);
+  auto store1 = stores_.back();
+  createThriftServer(node1, store1);
+
+  createKvStore(node2);
+  auto store2 = stores_.back();
+  createThriftServer(node2, store2);
+
+  // inject keys in store1 and store2
+  const std::string k0{"key0"};
+  const std::string k1{"key1"};
+  const std::string k2{"key2"};
+  const std::string k3{"key3"};
+  const std::string k4{"key4"};
+  std::vector<std::string> allKeys = {k0, k1, k2, k3, k4};
+  std::vector<std::pair<std::string, int>> keyVersionAs = {
+      {k0, 5}, {k1, 1}, {k2, 9}, {k3, 1}};
+  std::vector<std::pair<std::string, int>> keyVersionBs = {
+      {k1, 1}, {k2, 1}, {k3, 9}, {k4, 6}};
+
+  // eventbase to schedule callbacks at certain time spot
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    for (const auto& keyVer : keyVersionAs) {
+      auto val = createThriftValue(
+          keyVer.second /* version */,
+          node1 /* originatorId */,
+          value1 /* value */);
+      EXPECT_TRUE(store1->setKey(keyVer.first, val));
+      // keyValMapA.emplace(keyVer.first, val);
+    }
+
+    for (const auto& keyVer : keyVersionBs) {
+      auto val = createThriftValue(
+          keyVer.second /* version */,
+          node1 /* originatorId */,
+          value2 /* value */);
+      if (keyVer.first == k1) {
+        val.value_ref() = value1; // set same value for k1
+      }
+      EXPECT_TRUE(store2->setKey(keyVer.first, val));
+      // keyValMapB.emplace(keyVer.first, val);
+    }
+
+    // Add peer ONLY for uni-direction
+    auto peerSpec1 = createPeerSpec(
+        "inproc://dummy-spec-1", // TODO: remove dummy url once zmq deprecated
+        Constants::kPlatformHost.toString(),
+        thriftServers_.back()->getOpenrCtrlThriftPort());
+    EXPECT_TRUE(store1->addPeer(store2->getNodeId(), peerSpec1));
+  });
+
+  // after 3-way full-sync, we expect both A and B have:
+  // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+  evb.scheduleTimeout(std::chrono::milliseconds(1000), [&]() noexcept {
+    for (const auto& key : allKeys) {
+      auto val1 = store1->getKey(key);
+      auto val2 = store2->getKey(key);
+      EXPECT_TRUE(val1.has_value());
+      EXPECT_TRUE(val2.has_value());
+      EXPECT_EQ(val1->value_ref().value(), val2->value_ref().value());
+      EXPECT_EQ(val1->version, val2->version);
+    }
+    evb.stop();
+  });
+
+  evb.run();
+
+  // verify 5 keys from both stores
+  EXPECT_EQ(5, store1->dumpAll().size());
+  EXPECT_EQ(5, store2->dumpAll().size());
+
+  auto v0 = store1->getKey(k0);
+  EXPECT_EQ(v0->version, 5);
+  EXPECT_EQ(v0->value_ref().value(), value1);
+  auto v1 = store1->getKey(k1);
+  EXPECT_EQ(v1->version, 1);
+  EXPECT_EQ(v1->value_ref().value(), value1);
+  auto v2 = store1->getKey(k2);
+  EXPECT_EQ(v2->version, 9);
+  EXPECT_EQ(v2->value_ref().value(), value1);
+  auto v3 = store1->getKey(k3);
+  EXPECT_EQ(v3->version, 9);
+  EXPECT_EQ(v3->value_ref().value(), value2);
+  auto v4 = store1->getKey(k4);
+  EXPECT_EQ(v4->version, 6);
+  EXPECT_EQ(v4->value_ref().value(), value2);
+}
+
+//
 // Test case for flooding publication over thrift.
 //
 // Simple Topology:

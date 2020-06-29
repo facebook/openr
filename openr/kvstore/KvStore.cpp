@@ -1361,7 +1361,9 @@ KvStoreDb::processThriftSuccess(
     std::string const& peerName,
     thrift::Publication&& pub,
     std::chrono::milliseconds timeDelta) {
-  const auto kvUpdateCnt = mergePublication(pub);
+  // ATTN: `peerName` is MANDATORY to fulfill the finialized
+  //       full-sync with peers.
+  const auto kvUpdateCnt = mergePublication(pub, peerName);
   auto numMissingKeys = 0;
   if (pub.tobeUpdatedKeys_ref().has_value()) {
     numMissingKeys = pub.tobeUpdatedKeys_ref()->size();
@@ -2490,8 +2492,6 @@ KvStoreDb::finalizeFullSync(
   if (not updates.keyVals.size()) {
     return;
   }
-  VLOG(1) << "finalizeFullSync back to: " << senderId
-          << " with keys: " << folly::join(",", keys);
 
   thrift::KvStoreRequest updateRequest;
   thrift::KeySetParams params;
@@ -2506,13 +2506,66 @@ KvStoreDb::finalizeFullSync(
   updateRequest.keySetParams_ref() = params;
   updateRequest.area_ref() = area_;
 
-  VLOG(1) << "sending finalizeFullSync back to " << senderId;
-  auto const ret = sendMessageToPeer(senderId, updateRequest);
-  if (ret.hasError()) {
-    // this could fail when senderId goes offline
-    LOG(ERROR) << "Failed to send finalizeFullSync to " << senderId
-               << " using id " << senderId << ", error: " << ret.error();
-    collectSendFailureStats(ret.error(), senderId);
+  // ATTN: KvStore maintains different mechanism over 3-way full-sync.
+  //  1) Over thrift peer connection;
+  //  2) Over ZMQ socket;
+  if (kvParams_.enableKvStoreThrift) {
+    auto peerIt = thriftPeers_.find(senderId);
+    if (peerIt == thriftPeers_.end()) {
+      LOG(ERROR) << "Invalid peer: " << senderId
+                 << " to do finalize sync with. Skip it.";
+      return;
+    }
+
+    auto& thriftPeer = thriftPeers_.at(senderId);
+    if (thriftPeer.state == KvStorePeerState::IDLE or (not thriftPeer.client)) {
+      // peer in thriftPeers collection can still be in IDLE state.
+      // Skip final full-sync with those peers.
+      return;
+    }
+
+    LOG(INFO) << "[Thrift Sync] Finalize full-sync back to: " << senderId
+              << " with keys: " << folly::join(",", keys);
+
+    auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
+    auto startTime = std::chrono::steady_clock::now();
+    std::move(sf)
+        .via(evb_->getEvb())
+        .thenValue([senderId, startTime](folly::Unit&&) {
+          VLOG(4) << "Finalize full-sync ack received from peer: " << senderId;
+
+          auto endTime = std::chrono::steady_clock::now();
+          fb303::fbData->addStatValue(
+              "kvstore.finalize_full_sync_duration_ms_thrift",
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endTime - startTime)
+                  .count(),
+              fb303::AVG);
+        })
+        .thenError(
+            [this, senderId, startTime](const folly::exception_wrapper& ew) {
+              // thrift failure processing and state transition
+              auto endTime = std::chrono::steady_clock::now();
+              processThriftFailure(
+                  senderId,
+                  ew.what(),
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      endTime - startTime));
+
+              fb303::fbData->addStatValue(
+                  "kvstore.finalize_full_sync_thrift_failure", 1, fb303::COUNT);
+            });
+  } else {
+    VLOG(1) << "finalizeFullSync back to: " << senderId
+            << " with keys: " << folly::join(",", keys);
+
+    auto const ret = sendMessageToPeer(senderId, updateRequest);
+    if (ret.hasError()) {
+      // this could fail when senderId goes offline
+      LOG(ERROR) << "Failed to send finalizeFullSync to " << senderId
+                 << " using id " << senderId << ", error: " << ret.error();
+      collectSendFailureStats(ret.error(), senderId);
+    }
   }
 }
 
@@ -2635,9 +2688,9 @@ KvStoreDb::floodPublication(
       }
 
       auto& thriftPeer = thriftPeers_.at(peerName);
-      if (thriftPeer.state != KvStorePeerState::INITIALIZED or
+      if (thriftPeer.state == KvStorePeerState::IDLE or
           (not thriftPeer.client)) {
-        // peer in thriftPeers can still in the process of initial full-sync.
+        // peer in thriftPeers collection can still be in IDLE state.
         // Skip flooding to those peers.
         continue;
       }
