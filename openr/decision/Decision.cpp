@@ -1784,8 +1784,7 @@ Decision::coldStartUpdate() {
   if (not maybeRouteDb.has_value()) {
     LOG(ERROR) << "SEVERE: No routes to program after cold start duration. "
                << "Sending empty route db to FIB";
-    sendRouteUpdate(
-        std::move(*maybeRouteDb), std::nullopt, "COLD_START_UPDATE");
+    sendRouteUpdate({}, std::nullopt, "COLD_START_UPDATE");
     return;
   }
   // Create empty perfEvents list. In this case we don't this route update to

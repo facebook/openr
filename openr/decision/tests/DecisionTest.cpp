@@ -3967,6 +3967,8 @@ class DecisionTestFixture : public ::testing::Test {
   void
   SetUp() override {
     auto tConfig = getBasicOpenrConfig("1");
+    // set coldstart to be longer than debounce time
+    tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
     config = std::make_shared<Config>(tConfig);
 
     decision = make_shared<Decision>(
@@ -4870,7 +4872,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeoutMax);
+  std::this_thread::sleep_for(3 * debounceTimeoutMax);
 
   // make sure the counter did not increment
   counters = fb303::fbData->getCounters();
@@ -4904,7 +4906,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeoutMax);
+  std::this_thread::sleep_for(3 * debounceTimeoutMax);
 
   // make sure counter is incremented
   counters = fb303::fbData->getCounters();
@@ -4915,7 +4917,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeoutMax);
+  std::this_thread::sleep_for(3 * debounceTimeoutMax);
 
   // make sure counter is not incremented
   counters = fb303::fbData->getCounters();
@@ -5561,6 +5563,35 @@ TEST_F(DecisionTestFixture, Counters) {
   decision->updateGlobalCounters();
   EXPECT_EQ(
       fb303::fbData->getCounters().at("decision.num_partial_adjacencies"), 0);
+}
+
+TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
+  for (int i = debounceTimeoutMin.count(); true; i *= 2) {
+    auto nodeName = std::to_string(i);
+    auto publication = createThriftPublication(
+        {{"prefix:" + nodeName, createPrefixValue(nodeName, 1, {addr1})}},
+        {},
+        {},
+        {},
+        std::string(""));
+    sendKvPublication(publication);
+    if (i >= debounceTimeoutMax.count()) {
+      break;
+    }
+  }
+
+  // wait for debouncer to try to fire
+  /* sleep override */
+  std::this_thread::sleep_for(
+      debounceTimeoutMax + std::chrono::milliseconds(100));
+  // send one more update
+  auto publication = createThriftPublication(
+      {{"prefix:2", createPrefixValue("2", 1, {addr1})}},
+      {},
+      {},
+      {},
+      std::string(""));
+  sendKvPublication(publication);
 }
 
 TEST(DecisionPendingUpdates, needsFullRebuild) {
