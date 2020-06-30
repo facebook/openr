@@ -73,6 +73,7 @@ class SparkWrapper {
       const std::vector<std::string>& nodeRegexes,
       const std::vector<std::string>& interfaceRegexes);
 
+  // utility function to construct thrift::AreaConfig.SparkConfigs
   const openr::thrift::SparkConfig
   getSparkConfig() {
     return config_->getSparkConfig();

@@ -288,27 +288,19 @@ TEST_F(SimpleSparkFixture, GRTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
+    const auto& graceful_restart_time_s1 =
+        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s2 =
+        std::chrono::seconds(node2->getSparkConfig().graceful_restart_time_s);
     EXPECT_FALSE(
-        // node1->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime *
-        // 2).has_value());
         node1
             ->waitForEvent(
-                NB_DOWN,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_DOWN, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(
         node2
             ->waitForEvent(
-                NB_DOWN,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_DOWN, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
   }
 }
@@ -336,13 +328,12 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
     // Make sure 'down' event is triggered by GRTimer expire
     // and NOT related with heartbeat holdTimer( no hearbeatTimer started )
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(
-        endTime - startTime >=
-        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s));
+    const auto& graceful_restart_time_s1 =
+        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s);
+    ASSERT_TRUE(endTime - startTime >= graceful_restart_time_s1);
 
     ASSERT_TRUE(
-        endTime - startTime <=
-        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s) +
+        endTime - startTime <= graceful_restart_time_s1 +
             std::chrono::seconds(node1->getSparkConfig().hold_time_s));
   }
 }
@@ -525,35 +516,21 @@ TEST_F(SparkFixture, VersionTest) {
 
   // node3 can't form adj with neither node1 nor node2
   {
+    const auto& restart_time_s1 =
+        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+    const auto& restart_time_s2 =
+        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+    const auto& restart_time_s3 =
+        std::chrono::seconds(config3->getSparkConfig().graceful_restart_time_s);
+
     EXPECT_FALSE(
-        node1
-            ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s) *
-                    2)
+        node1->waitForEvent(NB_UP, restart_time_s1, restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(
-        node2
-            ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+        node2->waitForEvent(NB_UP, restart_time_s2, restart_time_s2 * 2)
             .has_value());
     EXPECT_FALSE(
-        node3
-            ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config3->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config3->getSparkConfig().graceful_restart_time_s) *
-                    2)
+        node3->waitForEvent(NB_UP, restart_time_s3, restart_time_s3 * 2)
             .has_value());
   }
 }
@@ -593,25 +570,16 @@ TEST_F(SparkFixture, DomainTest) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
+    const auto& restart_time_s1 =
+        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+    const auto& restart_time_s2 =
+        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+
     EXPECT_FALSE(
-        node1
-            ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s) *
-                    2)
+        node1->waitForEvent(NB_UP, restart_time_s1, restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(
-        node2
-            ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+        node2->waitForEvent(NB_UP, restart_time_s2, restart_time_s2 * 2)
             .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeStark).has_value());
     EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeLannister).has_value());
@@ -1017,15 +985,12 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
+    const auto& graceful_restart_time_s1 =
+        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
     EXPECT_FALSE(
         node1
             ->waitForEvent(
-                NB_DOWN,
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_DOWN, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, "node-1").has_value());
   }
@@ -1078,26 +1043,20 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
 
   // won't form adj as v4 validation should fail
   {
+    const auto& graceful_restart_time_s1 =
+        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s2 =
+        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
     EXPECT_FALSE(
         node1
             ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
 
     EXPECT_FALSE(
         node2
             ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_UP, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
   }
 
@@ -1167,26 +1126,22 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
 
   // won't form adj as v4 validation should fail
   {
+    const auto& graceful_restart_time_s1 =
+        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+
+    const auto& graceful_restart_time_s2 =
+        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+
     EXPECT_FALSE(
         node1
             ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
 
     EXPECT_FALSE(
         node2
             ->waitForEvent(
-                NB_DOWN,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_DOWN, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
   }
 
@@ -1325,25 +1280,20 @@ TEST_F(SparkFixture, NoAreaMatch) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
+    const auto& graceful_restart_time_s1 =
+        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s2 =
+        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+
     EXPECT_FALSE(
         node1
             ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(
         node2
             ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_UP, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeName2).has_value());
     EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeName1).has_value());
@@ -1407,25 +1357,20 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
+    const auto& graceful_restart_time_s1 =
+        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s2 =
+        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+
     EXPECT_FALSE(
         node1
             ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config1->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(
         node2
             ->waitForEvent(
-                NB_UP,
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s),
-                std::chrono::seconds(
-                    config2->getSparkConfig().graceful_restart_time_s) *
-                    2)
+                NB_UP, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
 
     auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
