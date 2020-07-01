@@ -72,6 +72,11 @@ class ExponentialBackoff {
    */
   Duration getTimeRemainingUntilRetry() const;
 
+  Duration
+  getCurrentBackoff() const {
+    return currentBackoff_;
+  }
+
   /**
    * Get latest error timestamp
    */

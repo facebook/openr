@@ -615,6 +615,12 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
+  add_openr_test(AsyncDebounceTest async_debounce_test
+    SOURCES
+      openr/common/tests/AsyncDebounceTest.cpp
+    DESTINATION sbin/tests/openr/common
+  )
+
   add_openr_test(AsyncThrottleTest async_throttle_test
     SOURCES
       openr/common/tests/AsyncThrottleTest.cpp
