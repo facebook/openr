@@ -1273,16 +1273,14 @@ Decision::Decision(
     // TODO: Remove unused zmqContext argument
     fbzmq::Context& /* zmqContext */)
     : config_(config),
-      processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       routeUpdatesQueue_(routeUpdatesQueue),
       myNodeName_(config->getConfig().node_name),
-      pendingUpdates_(config->getConfig().node_name) {
+      pendingUpdates_(config->getConfig().node_name),
+      rebuildRoutesDebounced_(
+          getEvb(), debounceMinDur, debounceMaxDur, [this]() noexcept {
+            rebuildRoutes("DECISION_DEBOUNCE");
+          }) {
   auto tConfig = config->getConfig();
-  processUpdatesTimer_ =
-      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-        processUpdatesBackoff_.reportSuccess();
-        processPendingUpdates();
-      });
   spfSolver_ = std::make_unique<SpfSolver>(
       tConfig.node_name,
       tConfig.enable_v4_ref().value_or(false),
@@ -1291,8 +1289,10 @@ Decision::Decision(
       bgpDryRun,
       tConfig.bgp_use_igp_metric_ref().value_or(false));
 
-  coldStartTimer_ = folly::AsyncTimeout::make(
-      *getEvb(), [this]() noexcept { coldStartUpdate(); });
+  coldStartTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    pendingUpdates_.setNeedsFullRebuild();
+    rebuildRoutes("COLD_START_UPDATE");
+  });
   if (auto eor = config->getConfig().eor_time_s_ref()) {
     coldStartTimer_->scheduleTimeout(std::chrono::seconds(*eor));
   }
@@ -1343,12 +1343,7 @@ Decision::Decision(
       }
       // compute routes with exponential backoff timer if needed
       if (pendingUpdates_.needsRouteUpdate()) {
-        if (!processUpdatesBackoff_.atMaxBackoff()) {
-          processUpdatesBackoff_.reportError();
-          processUpdatesTimer_->scheduleTimeout(
-              processUpdatesBackoff_.getTimeRemainingUntilRetry());
-        }
-        CHECK(processUpdatesTimer_->isScheduled());
+        rebuildRoutesDebounced_();
       }
     }
   });
@@ -1366,20 +1361,15 @@ Decision::Decision(
           }
           // Apply publication and update stored update status
           pushRoutesDeltaUpdates(maybeThriftPub.value());
-          if (!processUpdatesBackoff_.atMaxBackoff()) {
-            processUpdatesBackoff_.reportError();
-            processUpdatesTimer_->scheduleTimeout(
-                processUpdatesBackoff_.getTimeRemainingUntilRetry());
-          } else {
-            CHECK(processUpdatesTimer_->isScheduled());
-          }
+          rebuildRoutesDebounced_();
         }
       });
 
   // Create RibPolicy timer to process routes on policy expiry
   ribPolicyTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     LOG(WARNING) << "RibPolicy is expired";
-    processRibPolicyUpdate();
+    pendingUpdates_.setNeedsFullRebuild();
+    rebuildRoutes("RIB_POLICY_EXPIRED");
   });
 }
 
@@ -1498,7 +1488,8 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
         ribPolicyTimer_->scheduleTimeout(durationLeft);
 
         // Trigger route computation
-        processRibPolicyUpdate();
+        pendingUpdates_.setNeedsFullRebuild();
+        rebuildRoutes("RIB_POLICY_UPDATE");
 
         // Mark the policy update request to be done
         p.setValue();
@@ -1570,10 +1561,8 @@ Decision::updateNodePrefixDatabase(
   return nodePrefixDb;
 }
 
-ProcessPublicationResult
+void
 Decision::processPublication(thrift::Publication const& thriftPub) {
-  ProcessPublicationResult res;
-
   auto const& area = thriftPub.area_ref()
       ? thriftPub.area_ref().value()
       : thrift::KvStore_constants::kDefaultArea();
@@ -1588,7 +1577,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 
   // Nothing to process if no adj/prefix db changes
   if (thriftPub.keyVals.empty() and thriftPub.expiredKeys.empty()) {
-    return res;
+    return;
   }
 
   for (const auto& kv : thriftPub.keyVals) {
@@ -1688,8 +1677,6 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       continue;
     }
   }
-
-  return res;
 }
 
 void
@@ -1699,12 +1686,12 @@ Decision::pushRoutesDeltaUpdates(
 }
 
 void
-Decision::processPendingUpdates() {
+Decision::rebuildRoutes(std::string const& event) {
   if (coldStartTimer_->isScheduled()) {
     return;
   }
 
-  pendingUpdates_.addEvent("DECISION_DEBOUNCE");
+  pendingUpdates_.addEvent(event);
   VLOG(1) << "Decision: processing " << pendingUpdates_.getCount()
           << " accumulated updates.";
   if (pendingUpdates_.perfEvents()) {
@@ -1732,40 +1719,14 @@ Decision::processPendingUpdates() {
     // because there maybe routes depended on static routes.
     maybeRouteDb = buildRouteDb(myNodeName_);
   }
+  pendingUpdates_.addEvent("ROUTE_UPDATE");
   if (maybeRouteDb.has_value()) {
-    sendRouteUpdate(
-        std::move(*maybeRouteDb),
-        pendingUpdates_.moveOutEvents(),
-        "ROUTE_UPDATE");
+    sendRouteUpdate(std::move(*maybeRouteDb), pendingUpdates_.moveOutEvents());
   } else {
-    LOG(WARNING) << "processPendingUpdates incurred no routes";
+    LOG(WARNING) << "rebuildRoutes incurred no routes";
   }
 
   pendingUpdates_.reset();
-
-  // update decision debounce flag
-  processUpdatesBackoff_.reportSuccess();
-  if (processUpdatesTimer_->isScheduled()) {
-    processUpdatesTimer_->cancelTimeout();
-  }
-}
-
-void
-Decision::processRibPolicyUpdate() {
-  if (coldStartTimer_->isScheduled()) {
-    return;
-  }
-
-  LOG(INFO) << "Decision: updating route db with RibPolicy change";
-  auto maybeRouteDb = buildRouteDb(myNodeName_);
-  if (not maybeRouteDb.has_value()) {
-    LOG(WARNING) << "Incurred no route updates";
-    return;
-  }
-
-  // Create empty list of perf events
-  sendRouteUpdate(
-      std::move(*maybeRouteDb), thrift::PerfEvents{}, "RIB_POLICY_UPDATE");
 }
 
 bool
@@ -1773,38 +1734,14 @@ Decision::decrementOrderedFibHolds() {
   bool topoChanged = false;
   bool stillHasHolds = false;
   for (auto& [_, linkState] : areaLinkStates_) {
-    topoChanged |= linkState.decrementHolds().topologyChanged;
+    pendingUpdates_.applyLinkStateChange(
+        myNodeName_, linkState.decrementHolds());
     stillHasHolds |= linkState.hasHolds();
   }
-  if (topoChanged && !coldStartTimer_->isScheduled()) {
-    auto maybeRouteDb = buildRouteDb(myNodeName_);
-    if (maybeRouteDb.has_value()) {
-      // Create empty perfEvents list. In this case we don't this route update
-      // to be inculded in the Fib time
-      sendRouteUpdate(
-          std::move(*maybeRouteDb),
-          thrift::PerfEvents{},
-          "ORDERED_FIB_HOLDS_EXPIRED");
-    } else {
-      LOG(INFO) << "decrementOrderedFibHolds incurred no route updates";
-    }
+  if (pendingUpdates_.needsRouteUpdate()) {
+    rebuildRoutes("ORDERED_FIB_HOLDS_EXPIRED");
   }
   return stillHasHolds;
-}
-
-void
-Decision::coldStartUpdate() {
-  auto maybeRouteDb = buildRouteDb(myNodeName_);
-  if (not maybeRouteDb.has_value()) {
-    LOG(ERROR) << "SEVERE: No routes to program after cold start duration. "
-               << "Sending empty route db to FIB";
-    sendRouteUpdate({}, std::nullopt, "COLD_START_UPDATE");
-    return;
-  }
-  // Create empty perfEvents list. In this case we don't this route update to
-  // be inculded in the Fib time
-  sendRouteUpdate(
-      std::move(*maybeRouteDb), thrift::PerfEvents{}, "COLD_START_UPDATE");
 }
 
 std::optional<DecisionRouteDb>
@@ -1834,13 +1771,7 @@ Decision::buildRouteDb(const std::string& nodeName) const {
 
 void
 Decision::sendRouteUpdate(
-    DecisionRouteDb&& routeDb,
-    std::optional<thrift::PerfEvents>&& perfEvents,
-    std::string const& eventDescription) {
-  if (perfEvents.has_value()) {
-    addPerfEvent(*perfEvents, myNodeName_, eventDescription);
-  }
-
+    DecisionRouteDb&& routeDb, std::optional<thrift::PerfEvents>&& perfEvents) {
   //
   // Apply RibPolicy to computed route db before sending out
   //

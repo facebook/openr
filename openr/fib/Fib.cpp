@@ -763,10 +763,12 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents> perfEvents) {
 
   if (enableOrderedFib_) {
     // Export convergence duration counter
-    // this is the local time it takes to program a route after an event
+    // this is the local time it takes to program a route after the hold expired
     // we are using this for ordered fib programing
     auto localDuration = getDurationBetweenPerfEvents(
-        *perfEvents, "DECISION_RECEIVED", "OPENR_FIB_ROUTES_PROGRAMMED");
+        *perfEvents,
+        "ORDERED_FIB_HOLDS_EXPIRED",
+        "OPENR_FIB_ROUTES_PROGRAMMED");
     if (localDuration.hasError()) {
       LOG(WARNING) << "Ignoring perf event with bad local duration "
                    << localDuration.error();

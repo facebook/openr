@@ -23,8 +23,8 @@
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/AsyncDebounce.h>
 #include <openr/common/AsyncThrottle.h>
-#include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
@@ -43,10 +43,6 @@
 #include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
-struct ProcessPublicationResult {
-  bool adjChanged{false};
-  bool prefixesChanged{false};
-};
 
 struct BestPathCalResult {
   bool success{false};
@@ -99,6 +95,11 @@ class DecisionPendingUpdates {
  public:
   explicit DecisionPendingUpdates(std::string const& myNodeName)
       : myNodeName_(myNodeName) {}
+
+  void
+  setNeedsFullRebuild() {
+    needsFullRebuild_ = true;
+  }
 
   bool
   needsFullRebuild() const {
@@ -330,8 +331,7 @@ class Decision : public OpenrEventBase {
   Decision& operator=(Decision const&) = delete;
 
   // process publication from KvStore
-  ProcessPublicationResult processPublication(
-      thrift::Publication const& thriftPub);
+  void processPublication(thrift::Publication const& thriftPub);
 
   void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
 
@@ -343,37 +343,20 @@ class Decision : public OpenrEventBase {
   std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
 
   /**
-   * Timer to schedule pending update processing
-   * Refer to pendingUpdates_ to decide whether spf recalculation or
-   * just route rebuilding is needed.
-   * Apply exponential backoff timeout to avoid churn
+   * Rebuild all routes and send out update delta. Check current pendingUpdates_
+   * to decide which routes need rebuilding, otherwise rebuild all. Use
+   * pendingUpdates_.perfEvents() in the sent route delta appended with param
+   * event before rebuild and "ROUTE_UPDATE" after.
    */
-  std::unique_ptr<folly::AsyncTimeout> processUpdatesTimer_;
-  ExponentialBackoff<std::chrono::milliseconds> processUpdatesBackoff_;
-
-  /**
-   * Caller function of processPendingAdjUpdates and processPendingPrefixUpdates
-   * Check current pendingUpdates_ to decide which sub function to call
-   * to further process pending updates
-   * Reset timer and status afterwards.
-   */
-  void processPendingUpdates();
-
-  /**
-   * Function to process routes on RibPolicy update
-   */
-  void processRibPolicyUpdate();
+  void rebuildRoutes(std::string const& event);
 
   // decremnts holds and send any resulting output, returns true if any
   // linkstate has remaining holds
   bool decrementOrderedFibHolds();
 
-  void coldStartUpdate();
-
   void sendRouteUpdate(
       DecisionRouteDb&& routeDb,
-      std::optional<thrift::PerfEvents>&& perfEvents,
-      std::string const& eventDescription);
+      std::optional<thrift::PerfEvents>&& perfEvents);
 
   std::chrono::milliseconds getMaxFib();
 
@@ -436,8 +419,14 @@ class Decision : public OpenrEventBase {
   // this node's name and the key markers
   const std::string myNodeName_;
 
-  // store update to-do status and perf events
+  // store rebuildROutes to-do status and perf events
   detail::DecisionPendingUpdates pendingUpdates_;
+
+  /**
+   * Debounced trigger for rebuildRoutes invoked by input paths kvstore update
+   * queue and static routes update queue
+   */
+  AsyncDebounce<std::chrono::milliseconds> rebuildRoutesDebounced_;
 };
 
 } // namespace openr
