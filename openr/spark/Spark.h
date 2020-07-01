@@ -92,7 +92,7 @@ class Spark final : public OpenrEventBase {
   ~Spark() override = default;
 
   // get the current state of neighborNode, used for unit-testing
-  std::optional<SparkNeighState> getSparkNeighState(
+  folly::SemiFuture<std::optional<SparkNeighState>> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
   // override eventloop stop()

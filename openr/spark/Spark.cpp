@@ -914,14 +914,13 @@ Spark::checkNeighborState(
       << "Actual state: [" << toStr(neighbor.state) << "].";
 }
 
-std::optional<SparkNeighState>
+folly::SemiFuture<std::optional<SparkNeighState>>
 Spark::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
   folly::Promise<std::optional<SparkNeighState>> promise;
-  auto future = promise.getFuture();
-
+  auto sf = promise.getSemiFuture();
   runInEventBaseThread(
-      [this, promise = std::move(promise), &ifName, &neighborName]() mutable {
+      [this, promise = std::move(promise), ifName, neighborName]() mutable {
         if (sparkNeighbors_.find(ifName) == sparkNeighbors_.end()) {
           LOG(ERROR) << "No interface: " << ifName
                      << " in sparkNeighbor collection";
@@ -939,7 +938,7 @@ Spark::getSparkNeighState(
           }
         }
       });
-  return std::move(future).get();
+  return sf;
 }
 
 void

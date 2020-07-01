@@ -128,7 +128,7 @@ SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
 std::optional<SparkNeighState>
 SparkWrapper::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
-  return spark_->getSparkNeighState(ifName, neighborName);
+  return spark_->getSparkNeighState(ifName, neighborName).get();
 }
 
 thrift::AreaConfig
