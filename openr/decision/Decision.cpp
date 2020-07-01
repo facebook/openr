@@ -196,7 +196,8 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool hasBgp,
       LinkState const& linkState,
-      PrefixState const& prefixState);
+      PrefixState const& prefixState,
+      const thrift::PrefixForwardingAlgorithm& pfxFwdAlg);
 
   // helper function to find the nodes for the nexthop for bgp route
   BestPathCalResult runBestPathSelectionBgp(
@@ -310,7 +311,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
     const auto& nodePrefixes = kv.second;
 
     bool hasBGP = false, hasNonBGP = false, missingMv = false;
-    bool hasSpEcmp = false, hasKsp2EdEcmp = false;
+    bool hasSpEcmp = false, hasKsp2EdEcmp = false, hasMplsForwarding = false;
     for (auto const& npKv : nodePrefixes) {
       bool isBGP = npKv.second.type == thrift::PrefixType::BGP;
       hasBGP |= isBGP;
@@ -326,6 +327,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       hasKsp2EdEcmp |= npKv.second.forwardingAlgorithm ==
           thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     }
+    thrift::PrefixForwardingAlgorithm prefixAlg =
+        getPrefixForwardingAlgorithm(nodePrefixes);
 
     // skip adding route for BGP prefixes that have issues
     if (hasBGP) {
@@ -360,24 +363,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       continue;
     }
 
-    if (hasSpEcmp and hasBGP) {
-      selectEcmpBgp(
-          routeDb.unicastEntries,
-          myNodeName,
-          prefix,
-          nodePrefixes,
-          isV4Prefix,
-          linkState,
-          prefixState);
-    } else if (hasSpEcmp) {
-      selectEcmpOpenr(
-          routeDb.unicastEntries,
-          myNodeName,
-          prefix,
-          nodePrefixes,
-          isV4Prefix,
-          linkState);
-    } else {
+    if (getPrefixForwardingType(nodePrefixes) ==
+        thrift::PrefixForwardingType::SR_MPLS) {
       const auto nodes = getBestAnnouncingNodes(
           myNodeName, prefix, nodePrefixes, hasBGP, true, linkState);
       if (not nodes.success or nodes.nodes.size() == 0) {
@@ -391,7 +378,31 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
           nodePrefixes,
           hasBGP,
           linkState,
-          prefixState);
+          prefixState,
+          prefixAlg);
+    } else {
+      if (hasSpEcmp and hasBGP) {
+        selectEcmpBgp(
+            routeDb.unicastEntries,
+            myNodeName,
+            prefix,
+            nodePrefixes,
+            isV4Prefix,
+            linkState,
+            prefixState);
+      } else if (hasSpEcmp) {
+        selectEcmpOpenr(
+            routeDb.unicastEntries,
+            myNodeName,
+            prefix,
+            nodePrefixes,
+            isV4Prefix,
+            linkState);
+      } else {
+        LOG(ERROR) << "prefix not supported: " << toString(prefix);
+        fb303::fbData->addStatValue(
+            "decision.incompatible_forwarding_type", 1, fb303::COUNT);
+      }
     }
   } // for prefixState.prefixes()
 
@@ -872,7 +883,8 @@ SpfSolver::SpfSolverImpl::selectKsp2(
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
     bool hasBgp,
     LinkState const& linkState,
-    PrefixState const& prefixState) {
+    PrefixState const& prefixState,
+    const thrift::PrefixForwardingAlgorithm& pfxFwdAlg) {
   RibUnicastEntry entry(toIPNetwork(prefix));
   bool selfNodeContained{false};
 
@@ -890,26 +902,28 @@ SpfSolver::SpfSolverImpl::selectKsp2(
     }
   }
 
-  // when get to second shortes routes, we want to make sure the shortest route
-  // is not part of second shortest route to avoid double spraying issue
-  size_t const firstPathsSize = paths.size();
-  for (const auto& node : bestPathCalResult.nodes) {
-    for (auto const& secPath : linkState.getKthPaths(myNodeName, node, 2)) {
-      bool add = true;
-      for (size_t i = 0; i < firstPathsSize; ++i) {
-        // this could happen for anycast VIPs.
-        // for example, in a full mesh topology contains A, B and C. B and C
-        // both annouce a prefix P. When A wants to talk to P, it's shortes
-        // paths are A->B and A->C. And it is second shortest path is A->B->C
-        // and A->C->B. In this case,  A->B->C containser A->B already, so we
-        // want to avoid this.
-        if (LinkState::pathAInPathB(paths[i], secPath)) {
-          add = false;
-          break;
+  if (pfxFwdAlg == thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP) {
+    // when get to second shortes routes, we want to make sure the shortest
+    // route is not part of second shortest route to avoid double spraying issue
+    size_t const firstPathsSize = paths.size();
+    for (const auto& node : bestPathCalResult.nodes) {
+      for (auto const& secPath : linkState.getKthPaths(myNodeName, node, 2)) {
+        bool add = true;
+        for (size_t i = 0; i < firstPathsSize; ++i) {
+          // this could happen for anycast VIPs.
+          // for example, in a full mesh topology contains A, B and C. B and C
+          // both annouce a prefix P. When A wants to talk to P, it's shortes
+          // paths are A->B and A->C. And it is second shortest path is A->B->C
+          // and A->C->B. In this case,  A->B->C containser A->B already, so we
+          // want to avoid this.
+          if (LinkState::pathAInPathB(paths[i], secPath)) {
+            add = false;
+            break;
+          }
         }
-      }
-      if (add) {
-        paths.push_back(secPath);
+        if (add) {
+          paths.push_back(secPath);
+        }
       }
     }
   }

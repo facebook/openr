@@ -645,6 +645,19 @@ getPrefixForwardingType(
   return thrift::PrefixForwardingType::SR_MPLS;
 }
 
+thrift::PrefixForwardingAlgorithm
+getPrefixForwardingAlgorithm(
+    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes) {
+  CHECK(nodePrefixes.size() > 0);
+  thrift::PrefixForwardingAlgorithm ret =
+      nodePrefixes.begin()->second.forwardingAlgorithm;
+  for (auto const& kv : nodePrefixes) {
+    ret = ret > kv.second.forwardingAlgorithm ? kv.second.forwardingAlgorithm
+                                              : ret;
+  }
+  return ret;
+}
+
 void
 checkMplsAction(thrift::MplsAction const& mplsAction) {
   switch (mplsAction.action) {

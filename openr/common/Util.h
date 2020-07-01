@@ -301,6 +301,16 @@ thrift::PrefixForwardingType getPrefixForwardingType(
     const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes);
 
 /**
+ * Get forwarding algorithm from list of prefixes. We're taking map as input for
+ * efficiency purpose.
+ * It is feasible that multiple nodes will advertise a same prefix and
+ * will ask to forward on different algorithms. We will make sure that algorithm
+ * with lowest enum value would be picked.
+ */
+thrift::PrefixForwardingAlgorithm getPrefixForwardingAlgorithm(
+    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes);
+
+/**
  * Validates that label is 20 bit only and other bits are not set
  * XXX: We can do more validation - e.g. reserved range, global vs local range
  */

@@ -1426,18 +1426,12 @@ TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
       NextHops({createNextHopFromAdj(adj13, v4Enabled, 10, std::nullopt, true),
                 createNextHopFromAdj(adj12, v4Enabled, 20, push3, true),
                 createNextHopFromAdj(adj14, v4Enabled, 20, push3, true)}));
-  // EXPECT_EQ(
-  //     routeMap[make_pair("1", std::to_string(adjacencyDb3.nodeLabel))],
-  //     NextHops({createNextHopFromAdj(adj13, false, 10, labelPhpAction)}));
-  //
+
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
       NextHops({createNextHopFromAdj(adj12, v4Enabled, 10, std::nullopt, true),
                 createNextHopFromAdj(adj13, v4Enabled, 20, push2, true),
                 createNextHopFromAdj(adj14, v4Enabled, 20, push2, true)}));
-  // EXPECT_EQ(
-  //     routeMap[make_pair("1", std::to_string(adjacencyDb2.nodeLabel))],
-  //     NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", adjacencyDb1.nodeLabel);
   validateAdjLabelRoutes(routeMap, "1", adjacencyDb1.adjacencies);
@@ -1450,6 +1444,39 @@ TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
       NextHops({createNextHopFromAdj(adj14, v4Enabled, 10, std::nullopt, true),
                 createNextHopFromAdj(adj12, v4Enabled, 20, push4, true)}));
+}
+
+TEST_P(SimpleRingMeshTopologyFixture, SPMPLS) {
+  CustomSetUp(
+      false /* multipath - ignored */,
+      true /* useKsp2Ed */,
+      std::get<1>(GetParam()));
+
+  auto prefixDb = prefixState.getPrefixDatabases()["1"];
+  for (auto& prefixEntry : prefixDb.prefixEntries) {
+    prefixEntry.forwardingAlgorithm =
+        thrift::PrefixForwardingAlgorithm::SP_ECMP;
+  }
+  prefixState.updatePrefixDatabase(prefixDb);
+  auto routeMap = getRouteMap(*spfSolver, {"2"}, linkState, prefixState);
+
+  // validate router 2
+  EXPECT_EQ(
+      routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
+      NextHops(
+          {createNextHopFromAdj(adj21, v4Enabled, 10, std::nullopt, true)}));
+
+  routeMap = getRouteMap(*spfSolver, {"3"}, linkState, prefixState);
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
+      NextHops(
+          {createNextHopFromAdj(adj31, v4Enabled, 10, std::nullopt, true)}));
+
+  routeMap = getRouteMap(*spfSolver, {"4"}, linkState, prefixState);
+  EXPECT_EQ(
+      routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
+      NextHops(
+          {createNextHopFromAdj(adj41, v4Enabled, 10, std::nullopt, true)}));
 }
 
 //
@@ -3611,19 +3638,17 @@ TEST(DecisionTest, Ip2MplsRoutes) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj12_1, false, 10),
-                createNextHopFromAdj(adj12_2, false, 10)}));
+      NextHops({createNextHopFromAdj(adj12_2, false, 10, std::nullopt, true),
+                createNextHopFromAdj(adj12_1, false, 10, std::nullopt, true)}));
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
-      NextHops({createNextHopFromAdj(adj13, false, 10)}));
+      NextHops({createNextHopFromAdj(adj13, false, 10, std::nullopt, true)}));
+
   EXPECT_EQ(
       routeMap[make_pair("1", "::/0")],
-      NextHops({createNextHopFromAdj(adj13, false, 30, labelPush4),
-                createNextHopFromAdj(adj13, false, 20, labelPush5),
-                createNextHopFromAdj(adj12_2, false, 20, labelPush4),
-                createNextHopFromAdj(adj12_2, false, 20, labelPush5),
-                createNextHopFromAdj(adj12_1, false, 20, labelPush4),
-                createNextHopFromAdj(adj12_1, false, 20, labelPush5)}));
+      NextHops({createNextHopFromAdj(adj13, false, 20, labelPush5, true),
+                createNextHopFromAdj(adj12_1, false, 20, labelPush4, true),
+                createNextHopFromAdj(adj12_1, false, 20, labelPush5, true)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", std::to_string(adjacencyDb2.nodeLabel))],
@@ -3648,18 +3673,17 @@ TEST(DecisionTest, Ip2MplsRoutes) {
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({createNextHopFromAdj(adj21_1, false, 10),
-                createNextHopFromAdj(adj21_2, false, 10)}));
+      NextHops({createNextHopFromAdj(adj21_1, false, 10, std::nullopt, true),
+                createNextHopFromAdj(adj21_2, false, 10, std::nullopt, true)}));
+
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops({createNextHopFromAdj(adj21_1, false, 20, labelPush3),
-                createNextHopFromAdj(adj21_2, false, 20, labelPush3),
-                createNextHopFromAdj(adj25, false, 20, labelPush3),
-                createNextHopFromAdj(adj24, false, 30, labelPush3)}));
+      NextHops({createNextHopFromAdj(adj21_1, false, 20, labelPush3, true),
+                createNextHopFromAdj(adj25, false, 20, labelPush3, true)}));
   EXPECT_EQ(
       routeMap[make_pair("2", "::/0")],
-      NextHops({createNextHopFromAdj(adj24, false, 10),
-                createNextHopFromAdj(adj25, false, 10)}));
+      NextHops({createNextHopFromAdj(adj24, false, 10, std::nullopt, true),
+                createNextHopFromAdj(adj25, false, 10, std::nullopt, true)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", std::to_string(adjacencyDb1.nodeLabel))],
@@ -3684,17 +3708,15 @@ TEST(DecisionTest, Ip2MplsRoutes) {
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({createNextHopFromAdj(adj31, false, 10),
-                createNextHopFromAdj(adj34, false, 40, labelPush1)}));
+      NextHops({createNextHopFromAdj(adj31, false, 10, std::nullopt, true)}));
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj31, false, 20, labelPush2),
-                createNextHopFromAdj(adj35, false, 20, labelPush2),
-                createNextHopFromAdj(adj34, false, 30, labelPush2)}));
+      NextHops({createNextHopFromAdj(adj31, false, 20, labelPush2, true),
+                createNextHopFromAdj(adj35, false, 20, labelPush2, true)}));
   EXPECT_EQ(
       routeMap[make_pair("3", "::/0")],
-      NextHops({createNextHopFromAdj(adj34, false, 20),
-                createNextHopFromAdj(adj35, false, 10)}));
+      NextHops({createNextHopFromAdj(adj34, false, 20, std::nullopt, true),
+                createNextHopFromAdj(adj35, false, 10, std::nullopt, true)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", std::to_string(adjacencyDb1.nodeLabel))],
@@ -3721,16 +3743,13 @@ TEST(DecisionTest, Ip2MplsRoutes) {
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr1))],
-      NextHops({createNextHopFromAdj(adj42, false, 20, labelPush1),
-                createNextHopFromAdj(adj43, false, 30, labelPush1)}));
+      NextHops({createNextHopFromAdj(adj42, false, 20, labelPush1, true)}));
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj42, false, 10),
-                createNextHopFromAdj(adj43, false, 40, labelPush2)}));
+      NextHops({createNextHopFromAdj(adj42, false, 10, std::nullopt, true)}));
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr3))],
-      NextHops({createNextHopFromAdj(adj43, false, 20),
-                createNextHopFromAdj(adj42, false, 30, labelPush3)}));
+      NextHops({createNextHopFromAdj(adj43, false, 20, std::nullopt, true)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", std::to_string(adjacencyDb1.nodeLabel))],
@@ -3754,14 +3773,14 @@ TEST(DecisionTest, Ip2MplsRoutes) {
 
   EXPECT_EQ(
       routeMap[make_pair("5", toString(addr1))],
-      NextHops({createNextHopFromAdj(adj52, false, 20, labelPush1),
-                createNextHopFromAdj(adj53, false, 20, labelPush1)}));
+      NextHops({createNextHopFromAdj(adj52, false, 20, labelPush1, true),
+                createNextHopFromAdj(adj53, false, 20, labelPush1, true)}));
   EXPECT_EQ(
       routeMap[make_pair("5", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj52, false, 10)}));
+      NextHops({createNextHopFromAdj(adj52, false, 10, std::nullopt, true)}));
   EXPECT_EQ(
       routeMap[make_pair("5", toString(addr3))],
-      NextHops({createNextHopFromAdj(adj53, false, 10)}));
+      NextHops({createNextHopFromAdj(adj53, false, 10, std::nullopt, true)}));
 
   EXPECT_EQ(
       routeMap[make_pair("5", std::to_string(adjacencyDb1.nodeLabel))],
