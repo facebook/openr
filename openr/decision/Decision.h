@@ -62,11 +62,11 @@ struct DecisionRouteDb {
     thrift::RouteDatabase tRouteDb;
     // unicast routes
     for (const auto& [_, entry] : unicastEntries) {
-      tRouteDb.unicastRoutes.emplace_back(entry.toTUnicastRoute());
+      tRouteDb.unicastRoutes.emplace_back(entry.toThrift());
     }
     // mpls routes
     for (const auto& [_, entry] : mplsEntries) {
-      tRouteDb.mplsRoutes.emplace_back(entry.toTMplsRoute());
+      tRouteDb.mplsRoutes.emplace_back(entry.toThrift());
     }
     return tRouteDb;
   }

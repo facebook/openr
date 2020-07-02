@@ -279,7 +279,7 @@ fillPrefixRoutes(
     const DecisionRouteDb& routeDb) {
   for (auto const& [_, entry] : routeDb.unicastEntries) {
     auto prefix = folly::IPAddress::networkToString(entry.prefix);
-    prefixRoutes[make_pair(node, prefix)] = entry.toTUnicastRoute();
+    prefixRoutes[make_pair(node, prefix)] = entry.toThrift();
   }
 }
 

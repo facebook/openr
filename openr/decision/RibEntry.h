@@ -69,7 +69,7 @@ struct RibUnicastEntry : RibEntry {
   }
 
   thrift::UnicastRoute
-  toTUnicastRoute() const {
+  toThrift() const {
     thrift::UnicastRoute tUnicast;
     tUnicast.dest = toIpPrefix(prefix);
     tUnicast.nextHops =
@@ -102,7 +102,7 @@ struct RibMplsEntry : RibEntry {
   }
 
   thrift::MplsRoute
-  toTMplsRoute() const {
+  toThrift() const {
     thrift::MplsRoute tMpls;
     tMpls.topLabel = label;
     tMpls.nextHops =

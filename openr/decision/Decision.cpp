@@ -57,7 +57,7 @@ getRouteDelta(const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb) {
     }
 
     // new prefix, or prefix entry changed
-    delta.unicastRoutesToUpdate.emplace_back(entry.toTUnicastRoute());
+    delta.unicastRoutesToUpdate.emplace_back(entry.toThrift());
   }
 
   // unicastRoutesToDelete
@@ -73,7 +73,7 @@ getRouteDelta(const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb) {
     if (oldEntry != oldDb.mplsEntries.cend() && oldEntry->second == entry) {
       continue;
     }
-    delta.mplsRoutesToUpdate.emplace_back(entry.toTMplsRoute());
+    delta.mplsRoutesToUpdate.emplace_back(entry.toThrift());
   }
 
   // mplsRoutesToDelete
