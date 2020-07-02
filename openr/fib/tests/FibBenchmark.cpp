@@ -7,10 +7,11 @@
 
 #include <thread>
 
+#include <gtest/gtest.h>
+
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
-#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
