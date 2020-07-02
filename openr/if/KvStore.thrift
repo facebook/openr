@@ -212,6 +212,7 @@ struct KvStoreRequest {
   9: optional Dual.DualMessages dualMessages
   10: optional FloodTopoSetParams floodTopoSetParams
   // area identifier to identify the KvStoreDb instance
+  // TODO has: Make area field mandatory
   11: optional string area
 }
 
@@ -239,5 +240,5 @@ struct Publication {
   6: optional string floodRootId;
 
   // area to which this publication belogs
-  7: optional string area;
+  7: string area = kDefaultArea;
 }

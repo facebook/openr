@@ -1114,7 +1114,7 @@ KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
 thrift::Publication
 KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
   thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
+  thriftPub.area = area_;
 
   for (auto const& key : keys) {
     // if requested key if found, respond with version and value
@@ -1133,7 +1133,7 @@ thrift::Publication
 KvStoreDb::dumpAllWithFilters(
     KvStoreFilters const& kvFilters, thrift::FilterOperator oper) const {
   thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
+  thriftPub.area = area_;
 
   switch (oper) {
   case thrift::FilterOperator::AND:
@@ -1160,7 +1160,7 @@ KvStoreDb::dumpAllWithFilters(
 thrift::Publication
 KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
+  thriftPub.area = area_;
   for (auto const& kv : kvStore_) {
     if (not kvFilters.keyMatch(kv.first, kv.second)) {
       continue;
@@ -1186,7 +1186,7 @@ KvStoreDb::dumpDifference(
     std::unordered_map<std::string, thrift::Value> const& myKeyVal,
     std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const {
   thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
+  thriftPub.area = area_;
 
   thriftPub.tobeUpdatedKeys_ref() = std::vector<std::string>{};
   std::unordered_set<std::string> allKeys;
@@ -2793,7 +2793,7 @@ KvStoreDb::mergePublication(
       kvStore_, rcvdPublication.keyVals, kvParams_.filters);
   deltaPublication.floodRootId_ref().copy_from(
       rcvdPublication.floodRootId_ref());
-  deltaPublication.area_ref() = area_;
+  deltaPublication.area = area_;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals.size();
   fb303::fbData->addStatValue(

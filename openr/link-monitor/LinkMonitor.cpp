@@ -620,7 +620,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   adjDb.thisNodeName = nodeId_;
   adjDb.isOverloaded = state_.isOverloaded;
   adjDb.nodeLabel = enableSegmentRouting_ ? state_.nodeLabel : 0;
-  adjDb.area_ref() = area;
+  adjDb.area = area;
   for (const auto& adjKv : adjacencies_) {
     // 'second.second' is the adj object for this peer
     // must match the area

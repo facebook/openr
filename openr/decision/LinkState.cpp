@@ -569,11 +569,10 @@ LinkState::updateAdjacencyDatabase(
   LinkStateChange change;
   auto const& nodeName = newAdjacencyDb.thisNodeName;
   VLOG(1) << "Updating adjacency database for node " << nodeName << ", area "
-          << newAdjacencyDb.area_ref().value_or("N/A");
+          << newAdjacencyDb.area;
 
   // Area field must be specified and match with area_
-  DCHECK(newAdjacencyDb.area_ref());
-  DCHECK_EQ(area_, newAdjacencyDb.area_ref().value());
+  DCHECK_EQ(area_, newAdjacencyDb.area);
 
   for (auto const& adj : newAdjacencyDb.adjacencies) {
     VLOG(3) << "  neighbor: " << adj.otherNodeName

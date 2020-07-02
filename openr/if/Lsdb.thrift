@@ -122,9 +122,8 @@ struct AdjacencyDatabase {
   // Optional attribute to measure convergence performance
   5: optional PerfEvents perfEvents;
 
-  // openr area on which adjacency is formed
-  // TODO has: Make this non-optional. This field has to be mandatory
-  6: optional string area
+  // Adjacency is always a part of an area.
+  6: string area
 }
 
 //

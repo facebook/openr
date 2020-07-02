@@ -421,8 +421,7 @@ thrift::SparkNeighborEvent createSparkNeighborEvent(
     int64_t rttUs,
     int32_t label,
     bool supportFloodOptimization,
-    std::string area = std::string{
-        openr::thrift::KvStore_constants::kDefaultArea()});
+    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
 
 thrift::Adjacency createAdjacency(
     const std::string& nodeName,
@@ -452,8 +451,7 @@ thrift::AdjacencyDatabase createAdjDb(
     const std::vector<thrift::Adjacency>& adjs,
     int32_t nodeLabel,
     bool overLoadBit = false,
-    std::optional<std::string> area = std::string{
-        openr::thrift::KvStore_constants::kDefaultArea()});
+    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
 
 thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,
@@ -485,8 +483,7 @@ thrift::Publication createThriftPublication(
     const std::optional<std::vector<std::string>>& nodeIds = std::nullopt,
     const std::optional<std::vector<std::string>>& keysToUpdate = std::nullopt,
     const std::optional<std::string>& floodRootId = std::nullopt,
-    const std::optional<std::string>& area = std::string{
-        openr::thrift::KvStore_constants::kDefaultArea()});
+    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
 
 thrift::InterfaceInfo createThriftInterfaceInfo(
     const bool isUp,

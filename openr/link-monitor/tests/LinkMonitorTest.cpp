@@ -171,8 +171,7 @@ void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
   LOG(INFO) << "Node: " << adjDb.thisNodeName
             << ", Overloaded: " << adjDb.isOverloaded
-            << ", Label: " << adjDb.nodeLabel
-            << ", area: " << adjDb.area_ref().value();
+            << ", Label: " << adjDb.nodeLabel << ", area: " << adjDb.area;
   for (auto const& adj : adjDb.adjacencies) {
     LOG(INFO) << "  " << adj.otherNodeName << "@" << adj.ifName
               << ", metric: " << adj.metric << ", label: " << adj.adjLabel
@@ -446,13 +445,11 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Waiting to receive publication for key " << key << " area "
               << area;
     auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_TRUE(pub.area_ref().has_value());
-    if (pub.area_ref().value() != area) {
+    if (pub.area != area) {
       return std::nullopt;
     }
 
-    VLOG(1) << "Received publication with keys in area "
-            << pub.area_ref().value();
+    VLOG(1) << "Received publication with keys in area " << pub.area;
     for (auto const& kv : pub.keyVals) {
       VLOG(1) << "  " << kv.first;
     }

@@ -536,11 +536,8 @@ void
 KvStoreClientInternal::processPublication(
     thrift::Publication const& publication) {
   // Go through received key-values and find out the ones which need update
-  std::string area{thrift::KvStore_constants::kDefaultArea()};
-
-  if (publication.area_ref().has_value()) {
-    area = publication.area_ref().value();
-  }
+  CHECK(not publication.area.empty());
+  const auto& area = publication.area;
 
   auto& persistedKeyVals = persistedKeyVals_[area];
   auto& keyTtlBackoffs = keyTtlBackoffs_[area];

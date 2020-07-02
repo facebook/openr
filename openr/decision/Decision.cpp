@@ -1563,9 +1563,8 @@ Decision::updateNodePrefixDatabase(
 
 void
 Decision::processPublication(thrift::Publication const& thriftPub) {
-  auto const& area = thriftPub.area_ref()
-      ? thriftPub.area_ref().value()
-      : thrift::KvStore_constants::kDefaultArea();
+  CHECK(not thriftPub.area.empty());
+  auto const& area = thriftPub.area;
 
   if (!areaLinkStates_.count(area)) {
     areaLinkStates_.emplace(area, area);

@@ -712,7 +712,7 @@ createSparkNeighborEvent(
     int64_t rttUs,
     int32_t label,
     bool supportFloodOptimization,
-    std::string area) {
+    const std::string& area) {
   thrift::SparkNeighborEvent event;
   event.eventType = eventType;
   event.ifName = ifName;
@@ -800,13 +800,13 @@ createAdjDb(
     const std::vector<thrift::Adjacency>& adjs,
     int32_t nodeLabel,
     bool overLoadBit,
-    std::optional<std::string> area) {
+    const std::string& area) {
   thrift::AdjacencyDatabase adjDb;
   adjDb.thisNodeName = nodeName;
   adjDb.isOverloaded = overLoadBit;
   adjDb.adjacencies = adjs;
   adjDb.nodeLabel = nodeLabel;
-  fromStdOptional(adjDb.area_ref(), area);
+  adjDb.area = area;
   return adjDb;
 }
 
@@ -874,14 +874,14 @@ createThriftPublication(
     const std::optional<std::vector<std::string>>& nodeIds,
     const std::optional<std::vector<std::string>>& keysToUpdate,
     const std::optional<std::string>& floodRootId,
-    const std::optional<std::string>& area) {
+    const std::string& area) {
   thrift::Publication pub;
   pub.keyVals = kv;
   pub.expiredKeys = expiredKeys;
   fromStdOptional(pub.nodeIds_ref(), nodeIds);
   fromStdOptional(pub.tobeUpdatedKeys_ref(), keysToUpdate);
   fromStdOptional(pub.floodRootId_ref(), floodRootId);
-  fromStdOptional(pub.area_ref(), area);
+  pub.area = area;
   return pub;
 }
 
