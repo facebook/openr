@@ -123,7 +123,7 @@ struct AdjacencyDatabase {
   5: optional PerfEvents perfEvents;
 
   // openr area on which adjacency is formed
-  // TODO: Make this non-optional. This field has to be mandatory
+  // TODO has: Make this non-optional. This field has to be mandatory
   6: optional string area
 }
 
@@ -132,6 +132,7 @@ struct AdjacencyDatabase {
 //
 
 /**
+ * @deprecated
  * Metric entity type
  */
 enum MetricEntityType {
@@ -148,6 +149,7 @@ enum MetricEntityType {
 }
 
 /**
+ * @deprecated
  * Metric entity priorities.
  * Large gaps are provided so that in future, we can place other fields
  * in between if needed
@@ -166,6 +168,7 @@ enum MetricEntityPriority {
 }
 
 // How to compare two MetricEntity
+// @deprecated
 enum CompareType {
   // if present only in one metric vector, route with this type will win
   WIN_IF_PRESENT = 1,
@@ -176,6 +179,7 @@ enum CompareType {
   IGNORE_IF_NOT_PRESENT = 3,
 }
 
+// @deprecated
 struct MetricEntity {
   // Type identifying each entity. (Used only for identification)
   1: i64 type
@@ -199,6 +203,7 @@ struct MetricEntity {
 }
 
 // Expected to be sorted on priority
+// @deprecated
 struct MetricVector {
   // Only two metric vectors of same version will be compared.
   // If we want to come up with new scheme for metric vector at a later date.
@@ -207,30 +212,101 @@ struct MetricVector {
   2: list<MetricEntity> metrics
 }
 
+/**
+ * PrefixMetrics - Structs represents the core set of metrics used in best
+ * prefix selection (aka best path selection). Overall goal of metric is to
+ * capture the preference of advertised route. The winning PrefixEntry will
+ * be used to compute the next-hops towards winning nodes and will be
+ * re-distributed.
+ *
+ * `transitive` => Policy will retain the attribute value by default on route
+ *                 re-distribution
+ * `immutable` => The attribute is transitive and can't be modified by the
+ *                Policy on route re-distribution. These attribute once set on
+ *                origination can never be modified after-wards. `mutable`
+ *                attributes can be modified by policy on re-distribution
+ */
+struct PrefixMetrics {
+  // Version of prefix metrics. This should be updated everytime any changes
+  // in this struct. It must be assigned automatically by the default value
+  // here and code shouldn't try to set it to custom value. Decision module
+  // can use the versioning information to appropriately respect backward
+  // compatibility when new metric is introduced or old one is deprecated.
+  1: i32 version = 1
+
+  // 1st tie-breaker
+  // Comparator: `prefer-higher`
+  // Policy Compatibility: `transitive`, `mutable`
+  // Network path preference for this route. This is set and updated as route
+  // traverse the network.
+  2: i32 path_preferecnce = 0
+
+  // 2nd tie-breaker
+  // Comparator: `prefer-higher`
+  // Policy Compatibility: `transitive`, `immutable`
+  // User aka application preference of route. This is set at the origination
+  // point and is never modified.
+  3: i32 source_preference = 0
+
+  // 3rd tie-breaker
+  // Comparator: `prefer-lower`
+  // Policy Compatibility: `transitive`, `mutable`
+  // Intends to indicate the cost to reach the originating node from
+  // re-originating node. Usually zero on originating node. However customized
+  // policy can change the behavior.
+  4: i32 distance = 0
+
+  //
+  // NOTE: Forwarding Algorithm set with `PrefixEntry` will be the subsequent
+  // tie-breaker among the nodes advertising PrefixEntry with best metrics.
+  // e.g. SP_ECMP (Shortest Path ECMP) - Will further tie-break nodes as per the
+  // `igp_metric`. While `KSP2_ED_ECMP` will tie-break nodes as per nearest and
+  // second nearest.
+  // This information is inferred from topology and only intends to be local to
+  // the node. Every node will have different behavior for forwarding algorithm
+  // based on topology. And hence we're not include `igp_cost` metric in here
+  //
+}
+
 struct PrefixEntry {
   1: Network.IpPrefix prefix
+
+  // Indicates the type of prefix. This have no use except to indicate the
+  // source of origination. e.g. Interface route, BGP route etc.
   2: Network.PrefixType type
-  // optional additional metadata (encoding depends on PrefixType)
+
+  // Optional additional metadata. Encoding depends on PrefixType
+  // TODO has: Mark this field optional
   3: binary data
+
   // Default mode of forwarding for prefix is IP. If `forwardingType` is
-  // set then IP -> MPLS route will be programmed at LERs and LSR will perform
-  // label forwarding until packet reaches destination.
+  // set to SR_MPLS, then packet will be encapsulated via IP -> MPLS route will
+  // be programmed at LERs and LSR (middle-hops) will perform label switching
+  // while preserving the label until packet reaches destination
   4: OpenrConfig.PrefixForwardingType forwardingType =
     OpenrConfig.PrefixForwardingType.IP
-  # Default forwarding algorithm is shortest path ECMP. Open/R implements
-  # 2-shortest path edge disjoint algorithm for forwarding. Forwarding type
-  # must be set to SR_MPLS. MPLS tunneling will be used for forwarding on
-  # shortest paths
+
+  # Default forwarding (route computation) algorithm is shortest path ECMP.
+  # Open/R implements 2-shortest path edge disjoint algorithm for forwarding.
+  # Forwarding type must be set to SR_MPLS. MPLS tunneling will be used for
+  # forwarding on shortest paths
   7: OpenrConfig.PrefixForwardingAlgorithm forwardingAlgorithm =
     OpenrConfig.PrefixForwardingAlgorithm.SP_ECMP
 
+  // TODO has: This field is deprecated, it is only meaningful for the local
+  // node advertising this prefix and no use for modules that receives this
+  // information.
   // Indicates if the prefix entry is ephemeral or persistent.
   // If optional value is not present, then entry is persistent.
   // Ephemeral entries are not saved into persistent store(file) and will be
   // lost with restart, if not refreshed before cold start time.
   5: optional bool ephemeral
+
+  // TODO has: This is deprecated. Instead use `metrics` field, it is compact
+  // and concise.
   // Metric vector for externally injected routes into openr
   6: optional MetricVector mv
+
   // If the # of nethops for this prefix is below certain threshold, Decision
   // will not program/anounce the routes. If this parameter is not set, Decision
   // will not do extra check # of nexthops.
@@ -238,6 +314,23 @@ struct PrefixEntry {
 
   // the IP or MPLS next-hops of this prefix must have this label prepended
   9: optional i32 prependLabel
+
+  // Metrics associated with this Prefix. Route advertisement from multiple
+  // nodes is first tied up on Metrics (best path selection) and then next-hops
+  // are computed towards the nodes announcing the best routes.
+  10: PrefixMetrics metrics
+
+  // Set of tags associated with this route. This is meta-data and intends to be
+  // used by Policy. NOTE: There is no ordering on tags
+  11: set<string> tags
+
+  // List of areas, this route has traversed through. This is automatically
+  // extended as route gets re-distributed across the areas.
+  // AreaID at index=0 indicates the originating area and at AreaID at the
+  // end indicates the re-distributing area.
+  // NOTE: This is immutable by Policy and only code can modify it. It is always
+  // set to empty on origination
+  12: list<string> area_stack
 }
 
 // all prefixes that are bound to a given router

@@ -278,6 +278,9 @@ def thrift_to_dict(thrift_inst, update_func=None):
         :return dict: dict with attributes as key, value in strings
     """
 
+    if thrift_inst is None:
+        return None
+
     gen_dict = copy.copy(thrift_inst).__dict__
     if update_func is not None:
         update_func(gen_dict, thrift_inst)
@@ -328,6 +331,8 @@ def prefix_entry_to_dict(prefix_entry):
             {
                 "prefix": ipnetwork.sprint_prefix(prefix_entry.prefix),
                 "data": str(prefix_entry.data),
+                "metrics": thrift_to_dict(prefix_entry.metrics),
+                "tags": list(prefix_entry.tags if prefix_entry.tags else []),
                 "mv": metric_vector_to_dict(prefix_entry.mv)
                 if prefix_entry.mv
                 else None,
