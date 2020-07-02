@@ -2171,7 +2171,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       .metric.front()--;
 
   // change data to some special case for verification
-  prefixDBOne.prefixEntries.back().data = "123";
+  prefixDBOne.prefixEntries.back().data_ref() = "123";
   prefixState.updatePrefixDatabase(prefixDBTwo);
   prefixState.updatePrefixDatabase(prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, linkState, prefixState);
@@ -2275,7 +2275,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   if (route.bestNexthop_ref() == bestNextHop1) {
     EXPECT_EQ(route.data_ref(), "123");
   } else {
-    EXPECT_EQ(route.data_ref(), "");
+    EXPECT_FALSE(route.data_ref());
   }
   EXPECT_EQ(route.prefixType_ref(), thrift::PrefixType::BGP);
 

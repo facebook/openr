@@ -77,7 +77,9 @@ struct RibUnicastEntry : RibEntry {
     tUnicast.doNotInstall = doNotInstall;
     if (bestPrefixEntry.type == thrift::PrefixType::BGP) {
       tUnicast.prefixType_ref() = thrift::PrefixType::BGP;
-      tUnicast.data_ref() = *bestPrefixEntry.data_ref();
+      if (bestPrefixEntry.data_ref()) {
+        tUnicast.data_ref() = *bestPrefixEntry.data_ref();
+      }
       tUnicast.bestNexthop_ref() = bestNexthop.value();
     }
     return tUnicast;

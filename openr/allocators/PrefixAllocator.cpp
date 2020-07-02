@@ -631,7 +631,6 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   auto prefixEntry = openr::thrift::PrefixEntry();
   prefixEntry.prefix = toIpPrefix(prefix);
   prefixEntry.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
-  prefixEntry.data = {};
   prefixEntry.forwardingType = prefixForwardingType_;
   prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
   prefixEntry.ephemeral_ref().reset();

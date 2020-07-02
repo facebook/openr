@@ -833,7 +833,9 @@ createPrefixEntry(
   thrift::PrefixEntry prefixEntry;
   prefixEntry.prefix = prefix;
   prefixEntry.type = type;
-  prefixEntry.data = data;
+  if (not data.empty()) {
+    prefixEntry.data_ref() = data;
+  }
   prefixEntry.forwardingType = forwardingType;
   prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
   fromStdOptional(prefixEntry.ephemeral_ref(), ephemeral);

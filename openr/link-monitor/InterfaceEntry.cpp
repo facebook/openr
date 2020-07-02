@@ -134,7 +134,6 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
     prefixEntry.prefix =
         toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second));
     prefixEntry.type = thrift::PrefixType::LOOPBACK;
-    prefixEntry.data = "";
     prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
     prefixEntry.ephemeral_ref().reset();
     prefixes.push_back(prefixEntry);

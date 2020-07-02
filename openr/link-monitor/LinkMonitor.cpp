@@ -743,7 +743,6 @@ LinkMonitor::advertiseRedistAddrs() {
     auto prefixEntry = openr::thrift::PrefixEntry();
     prefixEntry.prefix = prefix;
     prefixEntry.type = thrift::PrefixType::LOOPBACK;
-    prefixEntry.data = "";
     prefixEntry.forwardingType = prefixForwardingType_;
     prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
     prefixEntry.ephemeral_ref().reset();

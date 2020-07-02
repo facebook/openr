@@ -276,8 +276,7 @@ struct PrefixEntry {
   2: Network.PrefixType type
 
   // Optional additional metadata. Encoding depends on PrefixType
-  // TODO has: Mark this field optional
-  3: binary data
+  3: optional binary data
 
   // Default mode of forwarding for prefix is IP. If `forwardingType` is
   // set to SR_MPLS, then packet will be encapsulated via IP -> MPLS route will
