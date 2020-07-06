@@ -436,6 +436,11 @@ class KvStoreDb : public DualNode {
 
     // thrift client for this peer
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+
+    // timer to periodically send keep-alive status
+    // ATTN: this mechanism serves the purpose of avoiding channel being
+    //       closed from thrift server due to IDLE timeout(i.e. 60s by default)
+    std::unique_ptr<folly::AsyncTimeout> keepAliveTimer{nullptr};
   };
 
   // Thrift peers collection for KvStore to sync with

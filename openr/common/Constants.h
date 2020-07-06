@@ -88,6 +88,9 @@ class Constants {
   // default interval for kvstore to sync with peers
   static constexpr std::chrono::seconds kStoreSyncInterval{60};
 
+  // default thrift client keep alive interval to avoid idle timeout
+  static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{30};
+
   // Count of maximum pending kvstore sync response before waiting for
   // kMaxBackoff to send the next sync request
   static constexpr size_t kMaxFullSyncPendingCountThreshold{32};

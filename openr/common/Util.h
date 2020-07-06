@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <random>
 #include <string>
 #include <vector>
 
@@ -398,6 +399,23 @@ castToStd(folly::Optional<T>&& t) {
     return std::move(*t);
   }
   return {};
+}
+
+//
+// template method to return jittered time based on:
+//
+// @param: base => base value for random number generation;
+// @param: pct => percentage of the deviation from base value;
+//
+template <class T>
+T
+addJitter(T base, double pct = 20.0) {
+  CHECK(pct > 0 and pct <= 100) << "percentage input must between 0 and 100";
+  thread_local static std::default_random_engine generator;
+  std::uniform_int_distribution<int> distribution(
+      pct / -100.0 * base.count(), pct / 100.0 * base.count());
+  auto roll = std::bind(distribution, generator);
+  return T(base.count() + roll());
 }
 
 thrift::PeerSpec createPeerSpec(

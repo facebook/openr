@@ -970,6 +970,21 @@ TEST(UtilTest, FunctionExecutionTime) {
   LOG_FN_EXECUTION_TIME;
 }
 
+TEST(UtilTest, AddJitter) {
+  std::chrono::milliseconds t1_ms(100);
+  std::chrono::seconds t2_s(200);
+  double pct = 20;
+
+  auto t1_jitter_ms = addJitter<std::chrono::milliseconds>(t1_ms, pct);
+  auto t2_jitter_s = addJitter<std::chrono::seconds>(t2_s, pct);
+  CHECK(
+      t1_jitter_ms >= (1 - pct / 100.0) * t1_ms and
+      t1_jitter_ms <= (1 + pct / 100.0) * t1_jitter_ms);
+  CHECK(
+      t2_jitter_s >= (1 - pct / 100.0) * t2_s and
+      t2_jitter_s <= (1 + pct / 100.0) * t2_jitter_s);
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
