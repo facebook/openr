@@ -1524,10 +1524,10 @@ def mpls_action_to_str(mpls_action: network_types.MplsAction) -> str:
     )
     label_str = ""
     if mpls_action.swapLabel is not None:
-        label_str = str(mpls_action.swapLabel)
+        label_str = f" {mpls_action.swapLabel}"
     if mpls_action.pushLabels is not None:
-        label_str = "/".join(str(l) for l in mpls_action.pushLabels)
-    return "mpls {} {}".format(action_str, label_str)
+        label_str = f" {'/'.join(str(l) for l in mpls_action.pushLabels)}"
+    return "mpls {}{}".format(action_str, label_str)
 
 
 def ip_nexthop_to_str(
@@ -1544,7 +1544,7 @@ def ip_nexthop_to_str(
     addr_str = "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
 
     mpls_action_str = (
-        " action: {}".format(mpls_action_to_str(nextHop.mplsAction))
+        " {}".format(mpls_action_to_str(nextHop.mplsAction))
         if nextHop.mplsAction is not None
         else ""
     )
