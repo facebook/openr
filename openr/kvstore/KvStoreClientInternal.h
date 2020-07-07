@@ -148,7 +148,7 @@ class KvStoreClientInternal {
    * will overwrite the existing filter
    */
   void subscribeKeyFilter(KvStoreFilters kvFilters, KeyCallback callback);
-  void unSubscribeKeyFilter();
+  void unsubscribeKeyFilter();
 
   OpenrEventBase*
   getOpenrEventBase() const noexcept {

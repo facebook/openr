@@ -828,26 +828,26 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Schedule callback to persist key2 from client2 (this will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
-    // 1st get key
-    auto maybeVal1 = client2->getKey("test_key2");
-    ASSERT_TRUE(maybeVal1.has_value());
-    EXPECT_EQ(1, maybeVal1->version);
-    EXPECT_EQ("test_value2", maybeVal1->value_ref());
-
     openrEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
+      // 1st get key
+      auto maybeVal1 = client2->getKey("test_key2");
+      ASSERT_TRUE(maybeVal1.has_value());
+      EXPECT_EQ(1, maybeVal1->version);
+      EXPECT_EQ("test_value2", maybeVal1->value_ref());
+
       // persistKey with new value
       client2->persistKey("test_key2", "test_value2-client2");
+
+      // 2nd getkey
+      auto maybeVal2 = client2->getKey("test_key2");
+      ASSERT_TRUE(maybeVal2.has_value());
+      EXPECT_EQ(2, maybeVal2->version);
+      EXPECT_EQ("test_value2-client2", maybeVal2->value_ref());
+
+      // get key with non-existing key
+      auto maybeVal3 = client2->getKey("test_key3");
+      EXPECT_FALSE(maybeVal3);
     });
-
-    // 2nd getkey
-    auto maybeVal2 = client2->getKey("test_key2");
-    ASSERT_TRUE(maybeVal2.has_value());
-    EXPECT_EQ(2, maybeVal2->version);
-    EXPECT_EQ("test_value2-client2", maybeVal2->value_ref());
-
-    // get key with non-existing key
-    auto maybeVal3 = client2->getKey("test_key3");
-    EXPECT_FALSE(maybeVal3);
   });
 
   evb.scheduleTimeout(std::chrono::milliseconds(3), [&]() noexcept {
@@ -865,7 +865,8 @@ TEST(KvStoreClientInternal, ApiTest) {
             thrift::Value().value_ref() = "set_test_value"));
 
     // Sync call to insert key-value into the KvStore
-    client1->setKey(testKey, testValue);
+    openrEvb.getEvb()->runInEventBaseThreadAndWait(
+        [&]() { client1->setKey(testKey, testValue); });
 
     // Sync call to get key-value from KvStore
     auto maybeValue = store->getKey(testKey);
@@ -875,25 +876,29 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // dump keys
   evb.scheduleTimeout(std::chrono::milliseconds(4), [&]() noexcept {
-    const auto maybeKeyVals = client1->dumpAllWithPrefix();
-    ASSERT_TRUE(maybeKeyVals.has_value());
-    ASSERT_EQ(3, maybeKeyVals->size());
-    EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value_ref());
-    EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value_ref());
-    EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value_ref());
+    openrEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
+      const auto maybeKeyVals = client1->dumpAllWithPrefix();
+      ASSERT_TRUE(maybeKeyVals.has_value());
+      ASSERT_EQ(3, maybeKeyVals->size());
+      EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value_ref());
+      EXPECT_EQ(
+          "test_value2-client2", maybeKeyVals->at("test_key2").value_ref());
+      EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value_ref());
 
-    const auto maybeKeyVals2 = client2->dumpAllWithPrefix();
-    ASSERT_TRUE(maybeKeyVals2.has_value());
-    EXPECT_EQ(*maybeKeyVals, *maybeKeyVals2);
+      const auto maybeKeyVals2 = client2->dumpAllWithPrefix();
+      ASSERT_TRUE(maybeKeyVals2.has_value());
+      EXPECT_EQ(*maybeKeyVals, *maybeKeyVals2);
 
-    // dump keys with a given prefix
-    const auto maybePrefixedKeyVals = client1->dumpAllWithPrefix("test");
-    ASSERT_TRUE(maybePrefixedKeyVals.has_value());
-    ASSERT_EQ(2, maybePrefixedKeyVals->size());
-    EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value_ref());
-    EXPECT_EQ(
-        "test_value2-client2",
-        maybePrefixedKeyVals->at("test_key2").value_ref());
+      // dump keys with a given prefix
+      const auto maybePrefixedKeyVals = client1->dumpAllWithPrefix("test");
+      ASSERT_TRUE(maybePrefixedKeyVals.has_value());
+      ASSERT_EQ(2, maybePrefixedKeyVals->size());
+      EXPECT_EQ(
+          "test_value1", maybePrefixedKeyVals->at("test_key1").value_ref());
+      EXPECT_EQ(
+          "test_value2-client2",
+          maybePrefixedKeyVals->at("test_key2").value_ref());
+    });
   });
 
   // Inject keys w/ TTL
@@ -924,17 +929,19 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Keys shall not expire even after TTL bcoz client is updating their TTL
   evb.scheduleTimeout(std::chrono::milliseconds(6) + kTtl * 3, [&]() noexcept {
-    LOG(INFO) << "received response.";
-    auto maybeVal1 = client2->getKey("test_ttl_key1");
-    ASSERT_TRUE(maybeVal1.has_value());
-    EXPECT_EQ("test_ttl_value1", maybeVal1->value_ref());
-    EXPECT_LT(500, maybeVal1->ttlVersion);
+    openrEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
+      LOG(INFO) << "received response.";
+      auto maybeVal1 = client2->getKey("test_ttl_key1");
+      ASSERT_TRUE(maybeVal1.has_value());
+      EXPECT_EQ("test_ttl_value1", maybeVal1->value_ref());
+      EXPECT_LT(500, maybeVal1->ttlVersion);
 
-    auto maybeVal2 = client1->getKey("test_ttl_key2");
-    ASSERT_TRUE(maybeVal2.has_value());
-    EXPECT_LT(1500, maybeVal2->ttlVersion);
-    EXPECT_EQ(1, maybeVal2->version);
-    EXPECT_EQ("test_ttl_value2", maybeVal2->value_ref());
+      auto maybeVal2 = client1->getKey("test_ttl_key2");
+      ASSERT_TRUE(maybeVal2.has_value());
+      EXPECT_LT(1500, maybeVal2->ttlVersion);
+      EXPECT_EQ(1, maybeVal2->version);
+      EXPECT_EQ("test_ttl_value2", maybeVal2->value_ref());
+    });
 
     // nuke client to mimick scenario user process dies and no ttl
     // update
@@ -1203,7 +1210,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
 
   // unsubscribe kvstore key filter and test for callback
   evb.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    client1->unSubscribeKeyFilter();
+    client1->unsubscribeKeyFilter();
   });
 
   // add another key with same prefix, after unsubscribing,

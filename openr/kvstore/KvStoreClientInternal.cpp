@@ -158,6 +158,8 @@ KvStoreClientInternal::persistKey(
     std::string const& value,
     std::chrono::milliseconds const ttl /* = Constants::kTtlInfInterval */,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   VLOG(3) << "KvStoreClientInternal: persistKey called for key:" << key
           << " area:" << area;
 
@@ -283,6 +285,8 @@ KvStoreClientInternal::setKey(
     uint32_t version /* = 0 */,
     std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   VLOG(3) << "KvStoreClientInternal: setKey called for key " << key;
 
   // Build new key-value pair
@@ -310,6 +314,7 @@ KvStoreClientInternal::setKey(
     std::string const& key,
     thrift::Value const& thriftValue,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
   CHECK(thriftValue.value_ref());
 
   std::unordered_map<std::string, thrift::Value> keyVals;
@@ -377,6 +382,8 @@ void
 KvStoreClientInternal::unsetKey(
     std::string const& key,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   VLOG(3) << "KvStoreClientInternal: unsetKey called for key " << key
           << " area " << area;
 
@@ -392,6 +399,8 @@ KvStoreClientInternal::clearKey(
     std::string keyValue,
     std::chrono::milliseconds ttl,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   VLOG(1) << "KvStoreClientInternal: clear key called for key " << key;
 
   // erase keys
@@ -424,9 +433,11 @@ std::optional<thrift::Value>
 KvStoreClientInternal::getKey(
     std::string const& key,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+  CHECK(kvStore_);
+
   VLOG(3) << "KvStoreClientInternal: getKey called for key " << key << ", area "
           << area;
-  CHECK(kvStore_);
 
   thrift::Publication pub;
   try {
@@ -452,6 +463,7 @@ std::optional<std::unordered_map<std::string, thrift::Value>>
 KvStoreClientInternal::dumpAllWithPrefix(
     const std::string& prefix /* = "" */,
     const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
   CHECK(kvStore_);
 
   thrift::Publication pub;
@@ -472,8 +484,10 @@ KvStoreClientInternal::subscribeKey(
     KeyCallback callback,
     bool fetchKeyValue,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  VLOG(3) << "KvStoreClientInternal: subscribeKey called for key " << key;
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
   CHECK(bool(callback)) << "Callback function for " << key << " is empty";
+
+  VLOG(3) << "KvStoreClientInternal: subscribeKey called for key " << key;
   keyCallbacks_[key] = std::move(callback);
 
   if (fetchKeyValue) {
@@ -488,13 +502,17 @@ KvStoreClientInternal::subscribeKey(
 void
 KvStoreClientInternal::subscribeKeyFilter(
     KvStoreFilters kvFilters, KeyCallback callback) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   keyPrefixFilter_ = std::move(kvFilters);
   keyPrefixFilterCallback_ = std::move(callback);
   return;
 }
 
 void
-KvStoreClientInternal::unSubscribeKeyFilter() {
+KvStoreClientInternal::unsubscribeKeyFilter() {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   keyPrefixFilterCallback_ = nullptr;
   keyPrefixFilter_ = KvStoreFilters({}, {});
   return;
@@ -502,6 +520,8 @@ KvStoreClientInternal::unSubscribeKeyFilter() {
 
 void
 KvStoreClientInternal::unsubscribeKey(std::string const& key) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   VLOG(3) << "KvStoreClientInternal: unsubscribeKey called for key " << key;
   // Store callback into KeyCallback map
   if (keyCallbacks_.erase(key) == 0) {
@@ -511,6 +531,8 @@ KvStoreClientInternal::unsubscribeKey(std::string const& key) {
 
 void
 KvStoreClientInternal::setKvCallback(KeyCallback callback) {
+  CHECK(eventBase_->getEvb()->isInEventBaseThread());
+
   kvCallback_ = std::move(callback);
 }
 

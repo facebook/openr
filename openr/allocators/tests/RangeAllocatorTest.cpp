@@ -251,11 +251,13 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
   waitBaton.wait();
 
   for (size_t i = 0; i < allocators.size(); ++i) {
-    EXPECT_FALSE(allocators[i]->isRangeConsumed());
-    const auto maybeVal = allocators[i]->getValueFromKvStore();
-    ASSERT_TRUE(maybeVal.has_value());
-    ASSERT_NE(allocation.end(), allocation.find(i));
-    EXPECT_EQ(allocation[i], *maybeVal);
+    evb.getEvb()->runInEventBaseThreadAndWait([&]() {
+      EXPECT_FALSE(allocators[i]->isRangeConsumed());
+      const auto maybeVal = allocators[i]->getValueFromKvStore();
+      ASSERT_TRUE(maybeVal.has_value());
+      ASSERT_NE(allocation.end(), allocation.find(i));
+      EXPECT_EQ(allocation[i], *maybeVal);
+    });
   }
 
   VLOG(2) << "=============== Allocation Table ===============";
@@ -364,7 +366,10 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
     // Wait for kvstore updated.
     // Because in the rare case that isRangeConsumed() could dump and check all
     // keys earlier than all the keys are actually set into the kvstore.
-    if (allocators.front()->isRangeConsumed()) {
+    bool isRangeConsumed{false};
+    evb.getEvb()->runInEventBaseThreadAndWait(
+        [&]() { isRangeConsumed = allocators.front()->isRangeConsumed(); });
+    if (isRangeConsumed) {
       break;
     }
     std::this_thread::yield();
@@ -395,7 +400,8 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
     allocators.pop_back();
   }
 
-  EXPECT_TRUE(allocators.front()->isRangeConsumed());
+  evb.getEvb()->runInEventBaseThreadAndWait(
+      [&]() { EXPECT_TRUE(allocators.front()->isRangeConsumed()); });
 
   VLOG(2) << "=============== Allocation Table ===============";
   for (auto const& kv : allocation) {

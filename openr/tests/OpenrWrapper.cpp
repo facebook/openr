@@ -417,8 +417,12 @@ OpenrWrapper<Serializer>::getIpPrefix() {
       return ipPrefix_;
     }
   }
-  auto keys =
-      kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+
+  std::optional<std::unordered_map<std::string, thrift::Value>> keys;
+  eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
+    keys =
+        kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+  });
 
   SYNCHRONIZED(ipPrefix_) {
     for (const auto& key : keys.value()) {
@@ -443,7 +447,11 @@ OpenrWrapper<Serializer>::getIpPrefix() {
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
-  auto keys = kvStoreClient_->dumpAllWithPrefix(key);
+  std::optional<std::unordered_map<std::string, thrift::Value>> keys;
+  eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
+    keys =
+        kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+  });
   return keys.has_value();
 }
 
