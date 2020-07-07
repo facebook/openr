@@ -282,10 +282,8 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
   std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
       {store2->getNodeId(), newPeerSpec}};
 
-  // verify peer state reset to IDLE
+  // TODO: add counter verification for state change to IDLE
   EXPECT_TRUE(store1->addPeer(store2->getNodeId(), newPeerSpec));
-  EXPECT_TRUE(verifyKvStorePeerState(
-      store1.get(), store2->getNodeId(), KvStorePeerState::IDLE));
   EXPECT_EQ(newExpPeer, store1->getPeers());
 
   // verify another full-sync request being sent

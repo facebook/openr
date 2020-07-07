@@ -969,6 +969,19 @@ KvStoreDb::toStr(KvStorePeerState state) {
   return res;
 }
 
+// static util function to fetch peers by state
+std::vector<std::string>
+KvStoreDb::getPeersByState(KvStorePeerState state) {
+  std::vector<std::string> res;
+  for (auto const& kv : thriftPeers_) {
+    auto const& peer = kv.second;
+    if (peer.state == state) {
+      res.emplace_back(peer.nodeName);
+    }
+  }
+  return res;
+}
+
 // static util function to log state transition
 void
 KvStoreDb::logStateTransition(
@@ -1237,6 +1250,10 @@ KvStoreDb::requestThriftPeerSync() {
   // minimal timeout for next run
   auto timeout = std::chrono::milliseconds(Constants::kMaxBackoff);
 
+  // pre-fetch of peers in "SYNCING" state for later calculation
+  uint32_t numThriftPeersInSync =
+      getPeersByState(KvStorePeerState::SYNCING).size();
+
   // Scan over thriftPeers to promote IDLE peers to SYNCING
   for (auto& kv : thriftPeers_) {
     auto& peerName = kv.first; // std::string
@@ -1257,8 +1274,9 @@ KvStoreDb::requestThriftPeerSync() {
 
     // create thrift client and do backoff if can't go through
     try {
-      LOG(INFO) << "Creating kvstore thrift client with addr: "
-                << peerSpec.peerAddr << ", peerName: " << peerName;
+      LOG(INFO) << "[Thrift Sync] Creating kvstore thrift client with addr: "
+                << peerSpec.peerAddr << ", port: " << peerSpec.ctrlPort
+                << ", peerName: " << peerName;
 
       // TODO: tune `connectTimeout` and `processingTimeout` value
       //       if necessary
@@ -1274,7 +1292,7 @@ KvStoreDb::requestThriftPeerSync() {
           Constants::kThriftClientKeepAliveInterval, 20.0);
       thriftPeer.keepAliveTimer->scheduleTimeout(period);
     } catch (std::exception const& e) {
-      LOG(ERROR) << "Failed to connect to node: " << peerName
+      LOG(ERROR) << "[Thrift Sync] Failed to connect to node: " << peerName
                  << "  with addr: " << peerSpec.peerAddr
                  << ". Exception: " << folly::exceptionStr(e);
 
@@ -1290,6 +1308,9 @@ KvStoreDb::requestThriftPeerSync() {
     KvStorePeerState oldState = thriftPeer.state;
     thriftPeer.state = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
     logStateTransition(peerName, oldState, thriftPeer.state);
+
+    // mark peer from IDLE -> SYNCING
+    numThriftPeersInSync += 1;
 
     // build KeyDumpParam
     thrift::KeyDumpParams params;
@@ -1312,9 +1333,6 @@ KvStoreDb::requestThriftPeerSync() {
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([this, peerName, startTime](thrift::Publication&& pub) {
-          // clean up `in-sync` peer collection
-          thriftPeersInSync_.erase(peerName);
-
           // record time and process SUCCESS state transition
           auto endTime = std::chrono::steady_clock::now();
           processThriftSuccess(
@@ -1325,9 +1343,6 @@ KvStoreDb::requestThriftPeerSync() {
         })
         .thenError(
             [this, peerName, startTime](const folly::exception_wrapper& ew) {
-              // clean up `in-sync` peer collection
-              thriftPeersInSync_.erase(peerName);
-
               // record time and process FAILURE state transition
               auto endTime = std::chrono::steady_clock::now();
               processThriftFailure(
@@ -1341,23 +1356,26 @@ KvStoreDb::requestThriftPeerSync() {
                   "kvstore.full_dump_failure", 1, fb303::COUNT);
             });
 
-    // put peer into `inSync_` set
-    thriftPeersInSync_.emplace(peerName);
-
     // in case pending peer size is over parallelSyncLimit,
     // wait until kMaxBackoff before sending next round of sync
-    if (thriftPeersInSync_.size() > parallelSyncLimitOverThrift_) {
+    if (numThriftPeersInSync > parallelSyncLimitOverThrift_) {
       timeout = Constants::kMaxBackoff;
-      LOG(INFO) << "[Thrift Sync] Over parallel sync limit: "
-                << parallelSyncLimitOverThrift_
-                << ". Wait for next round of syncing in: " << timeout.count()
-                << " ms.";
+      LOG(INFO) << "[Thrift Sync] " << numThriftPeersInSync
+                << " peers are syncing in progress. Over parallel sync limit: "
+                << parallelSyncLimitOverThrift_;
       break;
     }
   } // for loop
 
   // process the rest after min timeout if NOT scheduled
-  if (not thriftSyncTimer_->isScheduled()) {
+  uint32_t numThriftPeersInIdle =
+      getPeersByState(KvStorePeerState::IDLE).size();
+  if (numThriftPeersInIdle > 0 or
+      numThriftPeersInSync > parallelSyncLimitOverThrift_) {
+    LOG_IF(INFO, numThriftPeersInIdle)
+        << "[Thrift Sync] " << numThriftPeersInIdle
+        << " idle peers require full-sync. Schedule full-sync after: "
+        << timeout.count() << "ms.";
     thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(timeout));
   }
 }
@@ -1412,10 +1430,14 @@ KvStoreDb::processThriftSuccess(
       2 * parallelSyncLimitOverThrift_,
       Constants::kMaxFullSyncPendingCountThreshold);
 
-  // Schedule another round of `thriftSyncTimer_` in case it is
-  // NOT scheduled.
-  if (not thriftSyncTimer_->isScheduled()) {
+  // Schedule another round of `thriftSyncTimer_` full-sync request if
+  // there is still peer in IDLE state. If no IDLE peer, cancel timeout.
+  uint32_t numThriftPeersInIdle =
+      getPeersByState(KvStorePeerState::IDLE).size();
+  if (numThriftPeersInIdle > 0) {
     thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  } else {
+    thriftSyncTimer_->cancelTimeout();
   }
 }
 
@@ -1441,6 +1463,7 @@ KvStoreDb::processThriftFailure(
   // reset client to reconnect later in next batch of thriftSyncTimer_ scanning
   auto& peer = thriftPeers_.at(peerName);
   peer.keepAliveTimer->cancelTimeout();
+  peer.expBackoff.reportError(); // apply exponential backoff
   peer.client.reset();
 
   // state transition

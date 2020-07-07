@@ -255,6 +255,9 @@ class KvStoreDb : public DualNode {
   // get current snapshot of SPT(s) information
   thrift::SptInfos processFloodTopoGet() noexcept;
 
+  // util function to fetch peer by its state
+  std::vector<std::string> getPeersByState(KvStorePeerState state);
+
   // util function for state transition
   static KvStorePeerState getNextState(
       std::optional<KvStorePeerState> const& currState,
@@ -443,11 +446,8 @@ class KvStoreDb : public DualNode {
     std::unique_ptr<folly::AsyncTimeout> keepAliveTimer{nullptr};
   };
 
-  // Thrift peers collection for KvStore to sync with
-  std::unordered_map<std::string, KvStorePeer> thriftPeers_;
-
-  // Pending thrift in-sync peers
-  std::unordered_set<std::string> thriftPeersInSync_;
+  // set of peers with all info over thrift channel
+  std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
   // The peers we will be talking to: both PUB and CMD URLs for each. We use
   // peerAddCounter_ to uniquely identify a peering session's socket-id.
