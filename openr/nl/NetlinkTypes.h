@@ -32,7 +32,7 @@ class NlException : public std::runtime_error {
  public:
   explicit NlException(const std::string& msg, int err = 0)
       : std::runtime_error(folly::sformat(
-            "Error({}) - {}. {} ", err, folly::errnoStr(err), msg)) {}
+            "Error({}) - {}. {} ", err, folly::errnoStr(std::abs(err)), msg)) {}
 };
 
 const uint8_t DEFAULT_PROTOCOL_ID = 99;
