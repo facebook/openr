@@ -36,6 +36,8 @@ PlatformPublisher::PlatformPublisher(
 
   // Initialize interface index to name mapping
   auto nlLinks = nlSock->getAllLinks().get();
+  CHECK(nlLinks.hasValue())
+      << fbnl::NlException("Error getting links", nlLinks.error()).what();
   for (auto& link : nlLinks.value()) {
     ifIndexToName_.emplace(link.getIfIndex(), link.getLinkName());
   }
