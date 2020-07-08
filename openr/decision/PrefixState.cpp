@@ -9,6 +9,8 @@
 
 #include <openr/common/Util.h>
 
+using apache::thrift::can_throw;
+
 namespace openr {
 
 void
@@ -36,12 +38,14 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   std::unordered_set<thrift::IpPrefix> changed;
 
   auto const& nodeName = prefixDb.thisNodeName;
+  auto const& area = can_throw(*prefixDb.area_ref());
 
   // Get old and new set of prefixes - NOTE explicit copy
-  const std::set<thrift::IpPrefix> oldPrefixSet = nodeToPrefixes_[nodeName];
+  const std::set<thrift::IpPrefix> oldPrefixSet =
+      nodeToPrefixes_[nodeName][area];
 
   // update the entry
-  auto& newPrefixSet = nodeToPrefixes_[nodeName];
+  auto& newPrefixSet = nodeToPrefixes_[nodeName][area];
   newPrefixSet.clear();
   for (const auto& prefixEntry : prefixDb.prefixEntries) {
     newPrefixSet.emplace(prefixEntry.prefix);
@@ -52,35 +56,52 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     if (newPrefixSet.count(prefix)) {
       continue;
     }
-    VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
-            << nodeName;
-    auto& nodeList = prefixes_.at(prefix);
-    nodeList.erase(nodeName);
-    changed.insert(prefix);
-    if (nodeList.empty()) {
-      prefixes_.erase(prefix);
-    }
-    deleteLoopbackPrefix(prefix, nodeName);
-  }
-  for (const auto& prefixEntry : prefixDb.prefixEntries) {
-    auto& nodeList = prefixes_[prefixEntry.prefix];
-    auto nodePrefixIt = nodeList.find(nodeName);
 
-    // Add or Update prefix
-    if (nodePrefixIt == nodeList.end()) {
-      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
-              << " has been advertised by node " << nodeName;
-      nodeList.emplace(nodeName, prefixEntry);
-      changed.insert(prefixEntry.prefix);
-    } else if (nodePrefixIt->second != prefixEntry) {
-      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
-              << " has been updated by node " << nodeName;
-      nodeList[nodeName] = prefixEntry;
-      changed.insert(prefixEntry.prefix);
-    } else {
-      // This prefix has no change. Skip rest of code!
+    VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
+            << nodeName << " from area " << area;
+
+    auto& entriesByOriginator = prefixes_.at(prefix);
+
+    // skip duplicate withdrawn
+    if (not entriesByOriginator.count(nodeName)) {
       continue;
     }
+
+    // remove route from advertised from <node, area>
+    entriesByOriginator.at(nodeName).erase(area);
+
+    // remove node map if routes from all areas are withdrawn
+    if (entriesByOriginator.at(nodeName).empty()) {
+      entriesByOriginator.erase(nodeName);
+    }
+
+    // remove prefix if routes are withdrawn
+    if (entriesByOriginator.empty()) {
+      prefixes_.erase(prefix);
+    }
+
+    deleteLoopbackPrefix(prefix, nodeName);
+    changed.insert(prefix);
+  }
+
+  // update prefix entry for new announcement
+  for (const auto& prefixEntry : prefixDb.prefixEntries) {
+    auto& entriesByOriginator = prefixes_[prefixEntry.prefix];
+
+    // This prefix has no change. Skip rest of code!
+    if (entriesByOriginator.count(nodeName) > 0 and
+        entriesByOriginator.at(nodeName).count(area) > 0 and
+        entriesByOriginator.at(nodeName).at(area) == prefixEntry) {
+      continue;
+    }
+
+    // Add or Update prefix
+    entriesByOriginator[nodeName][area] = prefixEntry;
+    changed.insert(prefixEntry.prefix);
+
+    VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
+            << " has been advertised/updated by node " << nodeName
+            << " from area " << area;
 
     // Keep track of loopback addresses (v4 / v6) for each node
     if (thrift::PrefixType::LOOPBACK == prefixEntry.type) {
@@ -106,13 +127,17 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 PrefixState::getPrefixDatabases() const {
   std::unordered_map<std::string, thrift::PrefixDatabase> prefixDatabases;
-  for (auto const& kv : nodeToPrefixes_) {
-    thrift::PrefixDatabase prefixDb;
-    prefixDb.thisNodeName = kv.first;
-    for (auto const& prefix : kv.second) {
-      prefixDb.prefixEntries.emplace_back(prefixes_.at(prefix).at(kv.first));
+  for (auto const& [node, areaToPrefixes] : nodeToPrefixes_) {
+    for (auto const& [area, prefixes] : areaToPrefixes) {
+      thrift::PrefixDatabase prefixDb;
+      prefixDb.thisNodeName = node;
+      prefixDb.area_ref() = area;
+      for (auto const& prefix : prefixes) {
+        prefixDb.prefixEntries.emplace_back(
+            prefixes_.at(prefix).at(node).at(area));
+      }
+      prefixDatabases.emplace(node, std::move(prefixDb));
     }
-    prefixDatabases.emplace(kv.first, std::move(prefixDb));
   }
   return prefixDatabases;
 }

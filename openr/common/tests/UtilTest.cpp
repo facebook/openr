@@ -795,23 +795,27 @@ TEST(UtilTest, MplsActionValidate) {
 }
 
 TEST(UtilTest, getPrefixForwardingType) {
-  std::unordered_map<std::string, thrift::PrefixEntry> prefixes;
-  prefixes["node1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
-  prefixes["node2"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
-  prefixes["node3"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  thrift::PrefixEntries prefixes;
+
+  prefixes["node1"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes["node2"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes["node3"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
 
   EXPECT_EQ(
       thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
 
-  prefixes["node3"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  prefixes["node3"]["area1"].forwardingType =
+      thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_EQ(
       thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
 
-  prefixes["node2"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  prefixes["node2"]["area1"].forwardingType =
+      thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_EQ(
       thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
 
-  prefixes["node1"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  prefixes["node1"]["area1"].forwardingType =
+      thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_EQ(
       thrift::PrefixForwardingType::SR_MPLS, getPrefixForwardingType(prefixes));
 }

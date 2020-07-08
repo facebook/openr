@@ -12,15 +12,14 @@
 #include <vector>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 
 namespace openr {
 class PrefixState {
  public:
-  std::unordered_map<
-      thrift::IpPrefix,
-      std::unordered_map<std::string, thrift::PrefixEntry>> const&
+  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntries> const&
   prefixes() const {
     return prefixes_;
   }
@@ -54,11 +53,11 @@ class PrefixState {
 
  private:
   // For each prefix in the network, stores a set of nodes that advertise it
+  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntries> prefixes_;
   std::unordered_map<
-      thrift::IpPrefix,
-      std::unordered_map<std::string, thrift::PrefixEntry>>
-      prefixes_;
-  std::unordered_map<std::string, std::set<thrift::IpPrefix>> nodeToPrefixes_;
+      std::string /* node */,
+      std::unordered_map<std::string /* area */, std::set<thrift::IpPrefix>>>
+      nodeToPrefixes_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
 }; // class PrefixState

@@ -30,6 +30,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/AllocPrefix_types.h>
+#include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -299,7 +300,7 @@ thrift::BuildInfo getBuildInfoThrift() noexcept;
  * if and only if everyone says MPLS else forwarding type will be IP.
  */
 thrift::PrefixForwardingType getPrefixForwardingType(
-    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes);
+    const thrift::PrefixEntries& prefixEntries);
 
 /**
  * Get forwarding algorithm from list of prefixes. We're taking map as input for
@@ -309,7 +310,7 @@ thrift::PrefixForwardingType getPrefixForwardingType(
  * with lowest enum value would be picked.
  */
 thrift::PrefixForwardingAlgorithm getPrefixForwardingAlgorithm(
-    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes);
+    const thrift::PrefixEntries& prefixEntries);
 
 /**
  * Validates that label is 20 bit only and other bits are not set
@@ -473,7 +474,9 @@ thrift::AdjacencyDatabase createAdjDb(
 
 thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,
-    const std::vector<thrift::PrefixEntry>& prefixEntries);
+    const std::vector<thrift::PrefixEntry>& prefixEntries = {},
+    const std::string& area = std::string{
+        openr::thrift::KvStore_constants::kDefaultArea()});
 
 thrift::PrefixEntry createPrefixEntry(
     thrift::IpPrefix prefix,
@@ -514,7 +517,7 @@ thrift::NextHopThrift createNextHop(
     int32_t metric = 0,
     std::optional<thrift::MplsAction> maybeMplsAction = std::nullopt,
     bool useNonShortestRoute = false,
-    std::optional<std::string> maybeArea = std::nullopt);
+    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
 
 thrift::MplsAction createMplsAction(
     thrift::MplsActionCode const mplsActionCode,

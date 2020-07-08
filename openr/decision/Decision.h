@@ -47,7 +47,9 @@ namespace openr {
 struct BestPathCalResult {
   bool success{false};
   std::string bestNode{""};
+  std::string bestArea{""};
   std::set<std::string> nodes;
+  std::set<std::string> areas;
   std::optional<int64_t> bestIgpMetric{std::nullopt};
   std::optional<thrift::MetricVector> bestVector{std::nullopt};
 };
@@ -239,7 +241,7 @@ class SpfSolver {
   // Returns std::nullopt if myNodeName doesn't have any prefix database
   std::optional<DecisionRouteDb> buildRouteDb(
       const std::string& myNodeName,
-      LinkState const& linkState,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState);
 
  private:
@@ -363,11 +365,6 @@ class Decision : public OpenrEventBase {
   // node to prefix entries database for nodes advertising per prefix keys
   thrift::PrefixDatabase updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
-
-  // build the route database for nodeName
-  // coalesces routes computed for all areas
-  std::optional<DecisionRouteDb> buildRouteDb(
-      std::string const& nodeName) const;
 
   // cached routeDb
   DecisionRouteDb routeDb_;

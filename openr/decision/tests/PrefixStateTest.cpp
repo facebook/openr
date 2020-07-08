@@ -73,8 +73,7 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
   EXPECT_TRUE(state_.updatePrefixDatabase(prefixDb1Updated).empty());
   EXPECT_EQ(prefixDb1Updated, state_.getPrefixDatabases().at(dbEntry.first));
 
-  thrift::PrefixDatabase emptyPrefixDb;
-  emptyPrefixDb.thisNodeName = dbEntry.first;
+  auto emptyPrefixDb = createPrefixDb(dbEntry.first);
   std::unordered_set<thrift::IpPrefix> affectedPrefixes;
   for (auto const& entry : prefixDb1Updated.prefixEntries) {
     affectedPrefixes.insert(entry.prefix);
@@ -151,8 +150,7 @@ TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV4) {
       state_.getNodeHostLoopbacksV4(),
       testing::UnorderedElementsAre(pair1, pair2));
 
-  thrift::PrefixDatabase emptyPrefixDb;
-  emptyPrefixDb.thisNodeName = "0";
+  auto emptyPrefixDb = createPrefixDb("0");
   EXPECT_FALSE(state_.updatePrefixDatabase(emptyPrefixDb).empty());
   EXPECT_THAT(
       state_.getNodeHostLoopbacksV4(), testing::UnorderedElementsAre(pair2));
@@ -167,8 +165,7 @@ TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV6) {
       state_.getNodeHostLoopbacksV6(),
       testing::UnorderedElementsAre(pair1, pair2));
 
-  thrift::PrefixDatabase emptyPrefixDb;
-  emptyPrefixDb.thisNodeName = "0";
+  auto emptyPrefixDb = createPrefixDb("0");
   EXPECT_FALSE(state_.updatePrefixDatabase(emptyPrefixDb).empty());
   EXPECT_THAT(
       state_.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair2));
@@ -207,15 +204,13 @@ TEST_P(LoopbackTestWithParam, AddRemoveLoopbackV4orV6) {
       : createPrefixEntry(toIpPrefix("ffff::2/128"), thrift::PrefixType::BGP);
 
   // announcing loopback and p1
-  thrift::PrefixDatabase emptyPrefixDb;
-  emptyPrefixDb.thisNodeName = "0";
-  emptyPrefixDb.prefixEntries = {node0LB, p1};
-  EXPECT_FALSE(state_.updatePrefixDatabase(emptyPrefixDb).empty());
+  auto prefixDb = createPrefixDb("0", {node0LB, p1});
+  EXPECT_FALSE(state_.updatePrefixDatabase(prefixDb).empty());
 
   // withdraw loopback and p1, announcing p2, expect no loopback is there
   // anymore
-  emptyPrefixDb.prefixEntries = {p2};
-  EXPECT_FALSE(state_.updatePrefixDatabase(emptyPrefixDb).empty());
+  prefixDb.prefixEntries = {p2};
+  EXPECT_FALSE(state_.updatePrefixDatabase(prefixDb).empty());
   if (isV4) {
     EXPECT_THAT(
         state_.getNodeHostLoopbacksV4(), testing::UnorderedElementsAre(pair2));

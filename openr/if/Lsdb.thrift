@@ -346,4 +346,7 @@ struct PrefixDatabase {
   // Set to true if prefix was added by 'per prefix key' format.
   // this value is local to the node, and not used by remote nodes
   6: optional bool perPrefixKey
+  // openr area in which prefix is advertised
+  // TODO: Make this non-optional. This field has to be mandatory
+  7: optional string area
 }

@@ -36,6 +36,7 @@ struct RibEntry {
 struct RibUnicastEntry : RibEntry {
   const folly::CIDRNetwork prefix;
   thrift::PrefixEntry bestPrefixEntry;
+  std::string bestArea;
   // install to fib or not
   bool doNotInstall{false};
   // best nexthop fields for BGP route advertising
@@ -53,11 +54,13 @@ struct RibUnicastEntry : RibEntry {
       const folly::CIDRNetwork& prefix,
       std::unordered_set<thrift::NextHopThrift> nexthops,
       thrift::PrefixEntry bestPrefixEntry,
-      bool doNotInstall,
-      thrift::NextHopThrift bestNexthop)
+      const std::string& bestArea,
+      bool doNotInstall = false,
+      std::optional<thrift::NextHopThrift> bestNexthop = std::nullopt)
       : RibEntry(std::move(nexthops)),
         prefix(prefix),
         bestPrefixEntry(std::move(bestPrefixEntry)),
+        bestArea(bestArea),
         doNotInstall(doNotInstall),
         bestNexthop(std::move(bestNexthop)) {}
 

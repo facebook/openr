@@ -634,28 +634,41 @@ getBuildInfoThrift() noexcept {
 }
 
 thrift::PrefixForwardingType
-getPrefixForwardingType(
-    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes) {
-  for (auto const& kv : nodePrefixes) {
-    if (kv.second.forwardingType == thrift::PrefixForwardingType::IP) {
-      return thrift::PrefixForwardingType::IP;
+getPrefixForwardingType(const thrift::PrefixEntries& prefixEntries) {
+  if (prefixEntries.empty()) {
+    return thrift::PrefixForwardingType::IP;
+  }
+
+  for (auto const& [_, areaToPrefixEntries] : prefixEntries) {
+    for (auto const& [_, prefixEntry] : areaToPrefixEntries) {
+      if (prefixEntry.forwardingType == thrift::PrefixForwardingType::IP) {
+        return thrift::PrefixForwardingType::IP;
+      }
+      DCHECK(
+          prefixEntry.forwardingType == thrift::PrefixForwardingType::SR_MPLS);
     }
-    DCHECK(kv.second.forwardingType == thrift::PrefixForwardingType::SR_MPLS);
   }
   return thrift::PrefixForwardingType::SR_MPLS;
 }
 
 thrift::PrefixForwardingAlgorithm
-getPrefixForwardingAlgorithm(
-    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes) {
-  CHECK(nodePrefixes.size() > 0);
-  thrift::PrefixForwardingAlgorithm ret =
-      nodePrefixes.begin()->second.forwardingAlgorithm;
-  for (auto const& kv : nodePrefixes) {
-    ret = ret > kv.second.forwardingAlgorithm ? kv.second.forwardingAlgorithm
-                                              : ret;
+getPrefixForwardingAlgorithm(const thrift::PrefixEntries& prefixEntries) {
+  if (prefixEntries.empty()) {
+    return thrift::PrefixForwardingAlgorithm::SP_ECMP;
   }
-  return ret;
+
+  for (auto const& [_, areaToPrefixEntries] : prefixEntries) {
+    for (auto const& [_, prefixEntry] : areaToPrefixEntries) {
+      if (prefixEntry.forwardingAlgorithm ==
+          thrift::PrefixForwardingAlgorithm::SP_ECMP) {
+        return thrift::PrefixForwardingAlgorithm::SP_ECMP;
+      }
+      DCHECK(
+          prefixEntry.forwardingAlgorithm ==
+          thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP);
+    }
+  }
+  return thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
 }
 
 void
@@ -813,10 +826,12 @@ createAdjDb(
 thrift::PrefixDatabase
 createPrefixDb(
     const std::string& nodeName,
-    const std::vector<thrift::PrefixEntry>& prefixEntries) {
+    const std::vector<thrift::PrefixEntry>& prefixEntries,
+    const std::string& area) {
   thrift::PrefixDatabase prefixDb;
   prefixDb.thisNodeName = nodeName;
   prefixDb.prefixEntries = prefixEntries;
+  prefixDb.area_ref() = area;
   return prefixDb;
 }
 
@@ -904,14 +919,14 @@ createNextHop(
     int32_t metric,
     std::optional<thrift::MplsAction> maybeMplsAction,
     bool useNonShortestRoute,
-    std::optional<std::string> maybeArea) {
+    const std::string& area) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
   fromStdOptional(nextHop.address.ifName_ref(), std::move(ifName));
   nextHop.metric = metric;
   fromStdOptional(nextHop.mplsAction_ref(), maybeMplsAction);
   nextHop.useNonShortestRoute = useNonShortestRoute;
-  fromStdOptional(nextHop.area_ref(), maybeArea);
+  nextHop.area_ref() = area;
   return nextHop;
 }
 

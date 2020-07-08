@@ -22,3 +22,18 @@ typedef map<string, Lsdb.AdjacencyDatabase>
 typedef map<string, Lsdb.PrefixDatabase>
   (cpp.type = "std::unordered_map<std::string, openr::thrift::PrefixDatabase>")
   PrefixDbs
+
+typedef map<string, Lsdb.PrefixEntry>
+  (
+    cpp.type =
+    "std::unordered_map<std::string /* area */, openr::thrift::PrefixEntry>"
+  )
+  PrefixEntriesByAreaId
+
+// prefix entries per prefix: by originator node and area
+typedef map<string, PrefixEntriesByAreaId>
+  (
+    cpp.type =
+    "std::unordered_map<std::string /* node */, std::unordered_map<std::string /* area */, openr::thrift::PrefixEntry>>"
+  )
+  PrefixEntries
