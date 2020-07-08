@@ -4146,13 +4146,14 @@ class DecisionTestFixture : public ::testing::Test {
   createPrefixValue(
       const string& node,
       int64_t version,
-      const vector<thrift::IpPrefix>& prefixes) {
+      const vector<thrift::IpPrefix>& prefixes,
+      const string& area = kDefaultArea) {
     vector<thrift::PrefixEntry> prefixEntries;
     for (const auto& prefix : prefixes) {
       prefixEntries.emplace_back(createPrefixEntry(prefix));
     }
     return createPrefixValue(
-        node, version, createPrefixDb(node, prefixEntries));
+        node, version, createPrefixDb(node, prefixEntries, area));
   }
 
   std::unordered_map<std::string, thrift::Value>
@@ -4487,6 +4488,152 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_THAT(
       dumpRouteDb({"1"})["1"].mplsRoutes,
       Contains(createMplsRoute(32012, {nh, nh1})));
+}
+
+// The following topology is used:
+//  1--- A ---2
+//  |         |
+//  B         A
+//  |         |
+//  3--- B ---4
+//
+// area A: adj12, adj24
+// area B: adj13, adj34
+TEST_F(DecisionTestFixture, MultiArea) {
+  //
+  // publish area A adj and prefix
+  // "1" originate addr1 into A
+  // "2" originate addr2 into A
+  //
+  auto publication = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue("2", 1, {adj21, adj24}, false, 2)},
+       {"adj:4", createAdjValue("4", 1, {adj42}, false, 4)},
+       {"prefix:1", createPrefixValue("1", 1, {addr1}, "A")},
+       {"prefix:2", createPrefixValue("2", 1, {addr2}, "A")}},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      std::string(""), /*floodRootId */
+      "A");
+
+  sendKvPublication(publication);
+  recvMyRouteDb("1", serializer);
+
+  //
+  // publish area B adj and prefix
+  // "3" originate addr3 into B
+  // "4" originate addr4 into B
+  //
+  publication = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj13}, false, 1)},
+       {"adj:3", createAdjValue("3", 1, {adj31, adj34}, false, 3)},
+       {"adj:4", createAdjValue("4", 1, {adj43}, false, 4)},
+       {"prefix:3", createPrefixValue("3", 1, {addr3}, "B")},
+       {"prefix:4", createPrefixValue("4", 1, {addr4}, "B")}},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      std::string(""), /*floodRootId */
+      "B");
+  sendKvPublication(publication);
+  recvMyRouteDb("1" /* node name */, serializer);
+
+  auto routeDb1 = dumpRouteDb({"1"})["1"];
+  auto routeDb2 = dumpRouteDb({"2"})["2"];
+  auto routeDb3 = dumpRouteDb({"3"})["3"];
+  auto routeDb4 = dumpRouteDb({"4"})["4"];
+
+  // routeDb1 from node "1"
+  {
+    auto routeToAddr2 = createUnicastRoute(
+        addr2,
+        {createNextHopFromAdj(adj12, false, 10, std::nullopt, false, "A")});
+    auto routeToAddr3 = createUnicastRoute(
+        addr3,
+        {createNextHopFromAdj(adj13, false, 10, std::nullopt, false, "B")});
+    // addr4 is only originated in area B
+    auto routeToAddr4 = createUnicastRoute(
+        addr4,
+        {createNextHopFromAdj(adj13, false, 20, std::nullopt, false, "B")});
+    EXPECT_THAT(routeDb1.unicastRoutes, testing::SizeIs(3));
+    EXPECT_THAT(
+        routeDb1.unicastRoutes,
+        testing::UnorderedElementsAre(
+            routeToAddr2, routeToAddr3, routeToAddr4));
+  }
+
+  // routeDb2 from node "2" will only see addr1 in area A
+  {
+    auto routeToAddr1 = createUnicastRoute(
+        addr1,
+        {createNextHopFromAdj(adj21, false, 10, std::nullopt, false, "A")});
+    EXPECT_THAT(routeDb2.unicastRoutes, testing::SizeIs(1));
+    EXPECT_THAT(
+        routeDb2.unicastRoutes, testing::UnorderedElementsAre(routeToAddr1));
+  }
+
+  // routeDb3 will only see addr4 in area B
+  {
+    auto routeToAddr4 = createUnicastRoute(
+        addr4,
+        {createNextHopFromAdj(adj34, false, 10, std::nullopt, false, "B")});
+    EXPECT_THAT(routeDb3.unicastRoutes, testing::SizeIs(1));
+    EXPECT_THAT(
+        routeDb3.unicastRoutes, testing::UnorderedElementsAre(routeToAddr4));
+  }
+
+  // routeDb4
+  {
+    auto routeToAddr2 = createUnicastRoute(
+        addr2,
+        {createNextHopFromAdj(adj42, false, 10, std::nullopt, false, "A")});
+    auto routeToAddr3 = createUnicastRoute(
+        addr3,
+        {createNextHopFromAdj(adj43, false, 10, std::nullopt, false, "B")});
+    // addr1 is only originated in area A
+    auto routeToAddr1 = createUnicastRoute(
+        addr1,
+        {createNextHopFromAdj(adj42, false, 20, std::nullopt, false, "A")});
+    EXPECT_THAT(routeDb4.unicastRoutes, testing::SizeIs(3));
+    EXPECT_THAT(
+        routeDb4.unicastRoutes,
+        testing::UnorderedElementsAre(
+            routeToAddr2, routeToAddr3, routeToAddr1));
+  }
+
+  //
+  // "1" originate addr1 into B
+  //
+  publication = createThriftPublication(
+      {{"prefix:1", createPrefixValue("1", 1, {addr1}, "B")}},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      std::string(""), /*floodRootId */
+      "B");
+  sendKvPublication(publication);
+  recvMyRouteDb("1" /* node name */, serializer);
+
+  routeDb3 = dumpRouteDb({"3"})["3"];
+  routeDb4 = dumpRouteDb({"4"})["4"];
+
+  // routeMap3 now should see addr1 in areaB
+  {
+    auto routeToAddr1 = createUnicastRoute(
+        addr1,
+        {createNextHopFromAdj(adj31, false, 10, std::nullopt, false, "B")});
+    EXPECT_THAT(routeDb3.unicastRoutes, testing::Contains(routeToAddr1));
+  }
+
+  // routeMap4 now could reach addr1 through areaA or areaB
+  {
+    auto routeToAddr1 = createUnicastRoute(
+        addr1,
+        {createNextHopFromAdj(adj43, false, 20, std::nullopt, false, "B"),
+         createNextHopFromAdj(adj42, false, 20, std::nullopt, false, "A")});
+    EXPECT_THAT(routeDb4.unicastRoutes, testing::Contains(routeToAddr1));
+  }
 }
 
 /**
