@@ -499,10 +499,8 @@ KvStore::processRequestMsg(
   }
 
   auto& thriftRequest = maybeThriftReq.value();
-  std::string area{openr::thrift::KvStore_constants::kDefaultArea()};
-  if (thriftRequest.area_ref().has_value()) {
-    area = thriftRequest.area_ref().value();
-  }
+  CHECK(not thriftRequest.area.empty());
+  std::string area = thriftRequest.area; // NOTE: Non constness is intended
   // TODO: migration workaround => if me/peer does is using default area,
   // always honor my config, ignore peer's config.
   if (areas_.size() == 1 and
@@ -1799,7 +1797,7 @@ KvStoreDb::requestFullSyncFromPeers() {
 
     dumpRequest.cmd = thrift::Command::KEY_DUMP;
     dumpRequest.keyDumpParams_ref() = params;
-    dumpRequest.area_ref() = area_;
+    dumpRequest.area = area_;
 
     VLOG(1) << "Sending full-sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
@@ -2107,7 +2105,7 @@ KvStoreDb::sendTopoSetCmd(
     setParams.allRoots_ref() = allRoots;
   }
   request.floodTopoSetParams_ref() = setParams;
-  request.area_ref() = area_;
+  request.area = area_;
 
   const auto ret = sendMessageToPeer(dstCmdSocketId, request);
   if (ret.hasError()) {
@@ -2547,7 +2545,7 @@ KvStoreDb::finalizeFullSync(
 
   updateRequest.cmd = thrift::Command::KEY_SET;
   updateRequest.keySetParams_ref() = params;
-  updateRequest.area_ref() = area_;
+  updateRequest.area = area_;
 
   // ATTN: KvStore maintains different mechanism over 3-way full-sync.
   //  1) Over thrift peer connection;
@@ -2706,7 +2704,7 @@ KvStoreDb::floodPublication(
 
   floodRequest.cmd = thrift::Command::KEY_SET;
   floodRequest.keySetParams_ref() = params;
-  floodRequest.area_ref() = area_;
+  floodRequest.area = area_;
 
   std::optional<std::string> floodRootId{std::nullopt};
   if (params.floodRootId_ref().has_value()) {
@@ -2909,7 +2907,7 @@ KvStoreDb::sendDualMessages(
   thrift::KvStoreRequest dualRequest;
   dualRequest.cmd = thrift::Command::DUAL;
   dualRequest.dualMessages_ref() = msgs;
-  dualRequest.area_ref() = area_;
+  dualRequest.area = area_;
   const auto ret = sendMessageToPeer(neighborCmdSocketId, dualRequest);
   // NOTE: we rely on zmq (on top of tcp) to reliably deliver message,
   // if we switch to other protocols, we need to make sure its reliability.

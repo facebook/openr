@@ -205,15 +205,17 @@ struct AreasConfig {
 
 // a request to the server (tagged union)
 struct KvStoreRequest {
+  // Command type. Set one of the optional parameter based on command
   1: Command cmd
+
+  // area identifier to identify the KvStoreDb instance (mandatory)
+  11: string area
+
   2: optional KeySetParams keySetParams
   3: optional KeyGetParams keyGetParams
   6: optional KeyDumpParams keyDumpParams
   9: optional Dual.DualMessages dualMessages
   10: optional FloodTopoSetParams floodTopoSetParams
-  // area identifier to identify the KvStoreDb instance
-  // TODO has: Make area field mandatory
-  11: optional string area
 }
 
 //
