@@ -152,6 +152,14 @@ class GflagConfig final {
     sparkConf.hold_time_s = FLAGS_spark2_heartbeat_hold_time_s;
     sparkConf.graceful_restart_time_s = FLAGS_spark_hold_time_s;
 
+    // StepDetector
+    auto& stepDetectorConf = sparkConf.step_detector_conf;
+    stepDetectorConf.fast_window_size = FLAGS_step_detector_fast_window_size;
+    stepDetectorConf.slow_window_size = FLAGS_step_detector_slow_window_size;
+    stepDetectorConf.lower_threshold = FLAGS_step_detector_lower_threshold;
+    stepDetectorConf.upper_threshold = FLAGS_step_detector_upper_threshold;
+    stepDetectorConf.ads_threshold = FLAGS_step_detector_ads_threshold;
+
     // Watchdog
     if (FLAGS_enable_watchdog) {
       config.enable_watchdog_ref() = FLAGS_enable_watchdog;

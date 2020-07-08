@@ -187,6 +187,26 @@ DEFINE_int32(
     5,
     "How long (in seconds) to keep neighbor adjacency without receiving "
     "any heartbeat packet in stable state.");
+DEFINE_uint64(
+    step_detector_fast_window_size,
+    10,
+    "Number of samples in fast sliding window for StepDetector");
+DEFINE_uint64(
+    step_detector_slow_window_size,
+    60,
+    "Number of samples in slow sliding window for StepDetector");
+DEFINE_uint32(
+    step_detector_lower_threshold,
+    2,
+    "Lower threshold in percentage for StepDetector");
+DEFINE_uint32(
+    step_detector_upper_threshold,
+    5,
+    "Upper threshold in percentage for StepDetector");
+DEFINE_uint64(
+    step_detector_ads_threshold,
+    500,
+    "Absolute step threshold to detect gradual change for StepDetector");
 DEFINE_bool(
     enable_netlink_fib_handler,
     false,

@@ -53,21 +53,6 @@ const int kMinIpv6Mtu = 1280;
 //
 const int kSparkHopLimit = 255;
 
-// number of samples in fast sliding window
-const size_t kFastWndSize = 10;
-
-// number of samples in slow sliding window
-const size_t kSlowWndSize = 60;
-
-// lower threshold, in percentage
-const uint8_t kLoThreshold = 2;
-
-// upper threshold, in percentage
-const uint8_t kHiThreshold = 5;
-
-// absolute step threshold, in microseconds
-const int64_t kAbsThreshold = 500;
-
 // number of restarting packets to send out per interface before I'm going down
 const int kNumRestartingPktSent = 3;
 
@@ -219,6 +204,7 @@ Spark::getNextState(
 }
 
 Spark::SparkNeighbor::SparkNeighbor(
+    const thrift::StepDetectorConfig& stepDetectorConfig,
     std::string const& domainName,
     std::string const& nodeName,
     std::string const& remoteIfName,
@@ -234,12 +220,8 @@ Spark::SparkNeighbor::SparkNeighbor(
       seqNum(seqNum),
       state(SparkNeighState::IDLE),
       stepDetector(
+          stepDetectorConfig /* step detector config */,
           samplingPeriod /* sampling period */,
-          kFastWndSize /* fast window size */,
-          kSlowWndSize /* slow window size */,
-          kLoThreshold /* lower threshold */,
-          kHiThreshold /* upper threshold */,
-          kAbsThreshold /* absolute threshold */,
           rttChangeCb /* callback function */),
       area(adjArea) {
   CHECK(!(this->domainName.empty()));
@@ -1191,6 +1173,8 @@ Spark::processHelloMsg(
         std::piecewise_construct,
         std::forward_as_tuple(neighborName),
         std::forward_as_tuple(
+            config_->getSparkConfig().step_detector_conf, // step detector
+                                                          // config
             domainName, // neighborNode domain
             neighborName, // neighborNode name
             remoteIfName, // remote interface on neighborNode

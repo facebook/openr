@@ -260,6 +260,7 @@ class Spark final : public OpenrEventBase {
   //
   struct SparkNeighbor {
     SparkNeighbor(
+        const thrift::StepDetectorConfig&,
         std::string const& domainName,
         std::string const& nodeName,
         std::string const& remoteIfName,

@@ -12,8 +12,17 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/StepDetector.h>
+#include <openr/config/Config.h>
 
 namespace {
+
+// const for constructing StepDetectorConfig
+const uint64_t FAST_WINDOW_SIZE = 10;
+const uint64_t SLOW_WINDOW_SIZE = 30;
+const uint32_t LOWER_THRESHOLD = 2;
+const uint32_t UPPER_THRESHOLD = 10;
+const uint64_t ABS_THRESHOLD = 5;
+
 // generate specified number of samples from a given Guassian distribution
 std::vector<double>
 genGaussianSamples(double mean, double stddev, size_t numOfSamples) {
@@ -27,6 +36,21 @@ genGaussianSamples(double mean, double stddev, size_t numOfSamples) {
   }
   return res;
 }
+
+openr::thrift::StepDetectorConfig
+getTestConfig() {
+  // generate a config for testing
+  openr::thrift::StepDetectorConfig stepDetectorConfig;
+
+  stepDetectorConfig.fast_window_size = FAST_WINDOW_SIZE;
+  stepDetectorConfig.slow_window_size = SLOW_WINDOW_SIZE;
+  stepDetectorConfig.lower_threshold = LOWER_THRESHOLD;
+  stepDetectorConfig.upper_threshold = UPPER_THRESHOLD;
+  stepDetectorConfig.ads_threshold = ABS_THRESHOLD;
+
+  return stepDetectorConfig;
+}
+
 } // namespace
 
 // time series consists of large jumps
@@ -46,12 +70,8 @@ TEST(StepDetectorTest, LargeStep) {
   };
 
   openr::StepDetector<double, std::chrono::seconds> stepDetector(
+      getTestConfig(),
       std::chrono::seconds(1) /* sampling period */,
-      10 /* small window size */,
-      30 /* large window size */,
-      2 /* lower threshold */,
-      10 /* upper threshold */,
-      5 /* absolute threshold */,
       stepCb /* callback function */);
 
   {
@@ -112,13 +132,10 @@ TEST(StepDetectorTest, SlowBoiling) {
   };
 
   openr::StepDetector<double, std::chrono::seconds> stepDetector(
+      getTestConfig(),
       std::chrono::seconds(1) /* sampling period */,
-      10 /* small window size */,
-      30 /* large window size */,
-      2 /* lower threshold */,
-      10 /* upper threshold */,
-      5 /* absolute threshold */,
-      stepCb /* callback function */);
+      stepCb /* callback function */
+  );
 
   {
     // stable mean w/o step

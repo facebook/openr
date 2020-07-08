@@ -41,6 +41,14 @@ struct LinkMonitorConfig {
   6: list<string> redistribute_interface_regexes = []
 }
 
+struct StepDetectorConfig {
+   1: i64 (cpp2.type = "std::uint64_t") fast_window_size = 10
+   2: i64 (cpp2.type = "std::uint64_t") slow_window_size = 60
+   3: i32 (cpp2.type = "std::uint32_t") lower_threshold = 2
+   4: i32 (cpp2.type = "std::uint32_t") upper_threshold = 5
+   5: i64 (cpp2.type = "std::uint64_t") ads_threshold = 500
+}
+
 struct SparkConfig {
   1: i32 neighbor_discovery_port = 6666
 
@@ -50,6 +58,8 @@ struct SparkConfig {
   4: i32 keepalive_time_s = 2
   5: i32 hold_time_s = 10
   6: i32 graceful_restart_time_s = 30
+
+  7: StepDetectorConfig step_detector_conf
 }
 
 struct WatchdogConfig {
