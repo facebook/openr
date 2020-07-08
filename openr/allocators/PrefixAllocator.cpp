@@ -85,6 +85,15 @@ PrefixAllocator::PrefixAllocator(
 }
 
 void
+PrefixAllocator::stop() {
+  // Stop KvStoreClient first
+  kvStoreClient_->stop();
+
+  // Invoke stop method of super class
+  OpenrEventBase::stop();
+}
+
+void
 PrefixAllocator::staticAllocation() {
   // subscribe for incremental updates of static prefix allocation key
   kvStoreClient_->subscribeKey(

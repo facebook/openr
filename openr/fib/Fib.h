@@ -60,6 +60,11 @@ class Fib final : public OpenrEventBase {
       fbzmq::Context& zmqContext);
 
   /**
+   * Override stop method of OpenrEventBase
+   */
+  void stop() override;
+
+  /**
    * Utility function to create thrift client connection to SwitchAgent. Can
    * throw exception if it fails to open transport to client on specified port.
    * It will return immediately if healthy client connection already exists.

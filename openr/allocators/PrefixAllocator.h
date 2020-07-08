@@ -57,6 +57,11 @@ class PrefixAllocator : public OpenrEventBase {
   PrefixAllocator(PrefixAllocator const&) = delete;
   PrefixAllocator& operator=(PrefixAllocator const&) = delete;
 
+  /**
+   * Override stop method of OpenrEventBase
+   */
+  void stop() override;
+
   // Thread safe API for testing only
   std::optional<uint32_t> getMyPrefixIndex();
 

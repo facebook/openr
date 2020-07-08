@@ -56,6 +56,11 @@ class KvStoreClientInternal {
   ~KvStoreClientInternal();
 
   /**
+   * Stop methods provides a clean way for termination when OpenrEventBase.
+   */
+  void stop();
+
+  /**
    * Set specified key-value into KvStore. This is an authoratitive call. It
    * means that if someone else advertise the same key we try to win over it
    * by re-advertising KV with higher version.

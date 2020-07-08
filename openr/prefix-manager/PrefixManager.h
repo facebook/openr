@@ -43,6 +43,11 @@ class PrefixManager final : public OpenrEventBase {
 
   ~PrefixManager();
 
+  /**
+   * Override stop method of OpenrEventBase
+   */
+  void stop() override;
+
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
   PrefixManager& operator=(PrefixManager const&) = delete;

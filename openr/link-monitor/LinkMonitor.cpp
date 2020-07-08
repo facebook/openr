@@ -354,6 +354,15 @@ LinkMonitor::prepare() noexcept {
 }
 
 void
+LinkMonitor::stop() {
+  // Stop KvStoreClient first
+  kvStoreClient_->stop();
+
+  // Invoke stop method of super class
+  OpenrEventBase::stop();
+}
+
+void
 LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   const auto& neighborAddrV4 = event.neighbor.transportAddressV4;
   const auto& neighborAddrV6 = event.neighbor.transportAddressV6;

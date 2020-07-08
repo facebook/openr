@@ -106,6 +106,11 @@ class LinkMonitor final : public OpenrEventBase {
 
   ~LinkMonitor() override = default;
 
+  /**
+   * Override stop method of OpenrEventBase
+   */
+  void stop() override;
+
   // set in mock mode
   // under mock mode, will report tcp://[::]:port as kvstore communication
   // URL instead of using link local address

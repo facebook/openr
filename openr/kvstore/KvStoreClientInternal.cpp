@@ -61,6 +61,12 @@ KvStoreClientInternal::~KvStoreClientInternal() {
     checkPersistKeyTimer_.reset();
   });
 
+  // Stop kvstore internal if not stopped yet
+  stop();
+}
+
+void
+KvStoreClientInternal::stop() {
   // wait for fiber to be closed before destroy KvStoreClientInternal
   taskFuture_.wait();
   LOG(INFO) << "Fiber task closed...";

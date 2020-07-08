@@ -144,6 +144,17 @@ Fib::Fib(
   fb303::fbData->addStatExportType("fib.thrift.failure.sync_fib", fb303::COUNT);
 }
 
+void
+Fib::stop() {
+  // Stop KvStoreClient first
+  if (kvStoreClient_) {
+    kvStoreClient_->stop();
+  }
+
+  // Invoke stop method of super class
+  OpenrEventBase::stop();
+}
+
 std::optional<thrift::IpPrefix>
 Fib::longestPrefixMatch(
     const folly::CIDRNetwork& inputPrefix,

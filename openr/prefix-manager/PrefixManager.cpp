@@ -179,6 +179,15 @@ PrefixManager::~PrefixManager() {
 }
 
 void
+PrefixManager::stop() {
+  // Stop KvStoreClient first
+  kvStoreClient_->stop();
+
+  // Invoke stop method of super class
+  OpenrEventBase::stop();
+}
+
+void
 PrefixManager::persistPrefixDb() {
   // prefixDb persistent entries have changed,
   // save the newest persistent entries to disk.
