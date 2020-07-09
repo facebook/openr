@@ -1021,7 +1021,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
       std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::steady_clock::now() - startTime);
   EXPECT_GE(
-      elapsedTime.count(),
+      elapsedTime.count() + 10 /* error buffer */,
       std::chrono::duration_cast<std::chrono::milliseconds>(holdTime).count());
   EXPECT_EQ(1, publication.keyVals.size());
   EXPECT_EQ(1, publication.keyVals.count("prefix:node-1"));
