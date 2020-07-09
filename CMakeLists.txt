@@ -80,7 +80,6 @@ add_fbthrift_cpp_library(
   openr/if/BgpConfig.thrift
   OPTIONS
     json
-    optionals
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} bgp_config_cpp2)
 
@@ -89,7 +88,6 @@ add_fbthrift_cpp_library(
   openr/if/OpenrConfig.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     bgp_config_cpp2
 )
@@ -100,7 +98,6 @@ add_fbthrift_cpp_library(
   openr/if/Dual.thrift
   OPTIONS
     json
-    optionals
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} dual_cpp2)
 
@@ -109,7 +106,6 @@ add_fbthrift_cpp_library(
   openr/if/Network.thrift
   OPTIONS
     json
-    optionals
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} network_cpp2)
 
@@ -118,7 +114,6 @@ add_fbthrift_cpp_library(
   openr/if/PersistentStore.thrift
   OPTIONS
     json
-    optionals
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} persistent_store_cpp2)
 
@@ -127,7 +122,6 @@ add_fbthrift_cpp_library(
   openr/if/KvStore.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     dual_cpp2
 )
@@ -138,7 +132,6 @@ add_fbthrift_cpp_library(
   openr/if/Lsdb.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     openr_config_cpp2
     network_cpp2
@@ -150,7 +143,6 @@ add_fbthrift_cpp_library(
   openr/if/Fib.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     openr_config_cpp2
     network_cpp2
@@ -163,7 +155,6 @@ add_fbthrift_cpp_library(
   openr/if/Spark.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     network_cpp2
 )
@@ -174,7 +165,6 @@ add_fbthrift_cpp_library(
   openr/if/LinkMonitor.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     openr_config_cpp2
     lsdb_cpp2
@@ -191,7 +181,6 @@ add_fbthrift_cpp_library(
     NeighborListenerClientForFibagent
   OPTIONS
     json
-    optionals
   DEPENDS
     fb303::fb303_thrift_cpp
     network_cpp2
@@ -203,7 +192,6 @@ add_fbthrift_cpp_library(
   openr/if/AllocPrefix.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     network_cpp2
 )
@@ -214,7 +202,6 @@ add_fbthrift_cpp_library(
   openr/if/PrefixManager.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     openr_config_cpp2
     lsdb_cpp2
@@ -226,7 +213,6 @@ add_fbthrift_cpp_library(
   openr/if/Decision.thrift
   OPTIONS
     json
-    optionals
   DEPENDS
     lsdb_cpp2
     fib_cpp2
@@ -240,7 +226,6 @@ add_fbthrift_cpp_library(
     OpenrCtrl
   OPTIONS
     json
-    optionals
   DEPENDS
     openr_config_cpp2
     decision_cpp2
@@ -262,7 +247,6 @@ add_fbthrift_cpp_library(
     OpenrCtrlCpp
   OPTIONS
     json
-    optionals
     stream
     server_stream
   DEPENDS
