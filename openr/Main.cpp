@@ -263,6 +263,20 @@ main(int argc, char** argv) {
         std::make_unique<Watchdog>(config));
   }
 
+  // Starting main event-loop
+  std::thread mainEventLoopThread([&]() noexcept {
+    LOG(INFO) << "Starting main event loop...";
+    folly::setThreadName("MainLoop");
+    mainEventLoop.run();
+    LOG(INFO) << "Main event loop got stopped";
+  });
+  mainEventLoop.waitUntilRunning();
+
+  if (FLAGS_enable_fib_service_waiting &&
+      !config->isNetlinkFibHandlerEnabled()) {
+    waitForFibService(mainEventLoop, config->getConfig().fib_port);
+  }
+
   // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
 
@@ -353,19 +367,6 @@ main(int argc, char** argv) {
 
   const MonitorSubmitUrl monitorSubmitUrl{
       folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
-
-  // Starting main event-loop
-  std::thread mainEventLoopThread([&]() noexcept {
-    LOG(INFO) << "Starting main event loop...";
-    folly::setThreadName("MainLoop");
-    mainEventLoop.run();
-    LOG(INFO) << "Main event loop got stopped";
-  });
-  mainEventLoop.waitUntilRunning();
-
-  if (FLAGS_enable_fib_service_waiting) {
-    waitForFibService(mainEventLoop, config->getConfig().fib_port);
-  }
 
   // Starting openrCtrlEvb for thrift handler
   OpenrEventBase ctrlEvb;
