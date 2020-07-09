@@ -295,6 +295,7 @@ add_library(openrlib
   openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
   openr/nl/tests/FakeNetlinkProtocolSocket.cpp
+  openr/monitor/Monitor.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/platform/NetlinkSystemHandler.cpp
   openr/platform/PlatformPublisher.cpp
