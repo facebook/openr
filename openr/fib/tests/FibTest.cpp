@@ -42,6 +42,7 @@
 using namespace std;
 using namespace openr;
 
+using apache::thrift::BaseThriftServer;
 using apache::thrift::FRAGILE;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
@@ -1072,6 +1073,77 @@ TEST_F(FibTestFixture, doNotInstall) {
 
   // now 2 routes are installable
   EXPECT_EQ(routes.size(), 2);
+}
+
+/**
+ * Introduce error in route programming by detaching interface
+ * - Verify that routes are programmed serially
+ * - Verify that routes are synced after encountering the error
+ */
+TEST_F(FibTestFixture, ThriftServerError) {
+  // InterfaceUpdates - Send initial interface update
+  thrift::InterfaceDatabase intfDb;
+  intfDb.thisNodeName = "node-1";
+  intfDb.interfaces.emplace(
+      "iface_1_2_1", createThriftInterfaceInfo(true, 121, {}));
+  intfDb.interfaces.emplace(
+      "iface_1_2_2", createThriftInterfaceInfo(true, 122, {}));
+  interfaceUpdatesQueue.push(intfDb);
+
+  // Wait for route sync before starting rest of the UT
+  mockFibHandler->waitForSyncFib();
+  mockFibHandler->waitForSyncMplsFib();
+
+  //
+  // NOTE: Set the failure injection to throw ERROR on 50% of the requests
+  //
+  BaseThriftServer::FailureInjection failureInjection;
+  failureInjection.errorFraction = 0.5;
+  server->setFailureInjection(failureInjection);
+
+  // RouteUpdates - Send route update for unicast & mpls routes
+  thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.thisNodeName = "node-1";
+  routeDbDelta.unicastRoutesToUpdate = {
+      createUnicastRoute(prefix2, {path1_2_2}),
+      createUnicastRoute(prefix1, {path1_2_1})};
+  routeDbDelta.mplsRoutesToUpdate = {createMplsRoute(label2, {mpls_path1_2_2}),
+                                     createMplsRoute(label1, {mpls_path1_2_1})};
+  routeUpdatesQueue.push(routeDbDelta);
+
+  // InterfaceUpdates - Send interface down event
+  intfDb.interfaces.at("iface_1_2_1").isUp = false;
+  interfaceUpdatesQueue.push(intfDb);
+
+  //
+  // Wait for either success case or for failure
+  //
+  while (true) {
+    if (mockFibHandler->getAddRoutesCount() == 2 &&
+        mockFibHandler->getAddMplsRoutesCount() == 2 &&
+        mockFibHandler->getDelRoutesCount() == 1 &&
+        mockFibHandler->getDelMplsRoutesCount() == 1) {
+      // SUCCESS; nothing to do
+      return;
+    }
+
+    int64_t failures = folly::get_default(
+        facebook::fb303::fbData->getCounters(),
+        "fib.thrift.failure.add_del_route.count",
+        0);
+    if (failures > 0) {
+      // FAILURE; wait for FibSync
+      break;
+    }
+    std::this_thread::yield();
+  }
+
+  //
+  // Reset failure inject and wait for FibSync
+  //
+  server->setFailureInjection(BaseThriftServer::FailureInjection());
+  mockFibHandler->waitForSyncFib();
+  mockFibHandler->waitForSyncMplsFib();
 }
 
 int

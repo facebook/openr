@@ -498,6 +498,11 @@ Fib::dumpPerfDb() const {
 
 void
 Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
+  SCOPE_EXIT {
+    updateRoutesSemaphore_.signal(); // Release when this function returns
+  };
+  updateRoutesSemaphore_.wait();
+
   LOG(INFO) << "Processing route add/update for "
             << routeDbDelta.unicastRoutesToUpdate.size() << " unicast, "
             << routeDbDelta.mplsRoutesToUpdate.size() << " mpls, "

@@ -10,6 +10,7 @@
 #include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/fibers/Semaphore.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
@@ -261,6 +262,11 @@ class Fib final : public OpenrEventBase {
   bool hasSyncedFib_{false};
 
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
+
+  // Semaphore to serialize route programming across two fibers (interface
+  // updates & route updates)
+  // NOTE: Initializing with a single slot to avoid parallel processing
+  folly::fibers::Semaphore updateRoutesSemaphore_{1};
 };
 
 } // namespace openr
