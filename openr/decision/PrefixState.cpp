@@ -38,7 +38,7 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   std::unordered_set<thrift::IpPrefix> changed;
 
   auto const& nodeName = prefixDb.thisNodeName;
-  auto const& area = can_throw(*prefixDb.area_ref());
+  auto const& area = prefixDb.area;
 
   // Get old and new set of prefixes - NOTE explicit copy
   const std::set<thrift::IpPrefix> oldPrefixSet =

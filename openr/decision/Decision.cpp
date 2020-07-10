@@ -1698,7 +1698,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         CHECK_EQ(nodeName, prefixDb.thisNodeName);
         auto nodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
         // TODO - this should directly come from KvStore.
-        nodePrefixDb.area_ref() = area;
+        nodePrefixDb.area = area;
         VLOG(1) << "Updating prefix database for node " << nodeName
                 << " from area " << area;
         fb303::fbData->addStatValue(
@@ -1745,7 +1745,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       deletePrefixDb.deletePrefix = true;
       auto nodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
       // TODO - this should directly come from KvStore.
-      nodePrefixDb.area_ref() = area;
+      nodePrefixDb.area = area;
       pendingUpdates_.applyPrefixStateChange(
           prefixState_.updatePrefixDatabase(nodePrefixDb));
       continue;
