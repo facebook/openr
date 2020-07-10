@@ -1026,6 +1026,42 @@ KvStoreDb::KvStorePeer::KvStorePeer(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
 }
 
+//
+// KvStoreDb is the class instance that maintains the KV pairs with internal map
+// per AREA. KvStoreDb will sync with peers to maintain eventual consistency.
+// It supports external message exchanging through:
+//
+//  1) ZMQ socket(TO BE DEPRECATED);
+//  2) Thrift channel interface;
+//
+// NOTE Monitoring:
+// This module exposes fb303 counters that can be leveraged for monitoring
+// KvStoreDb's correctness and performance behevior in production
+//
+//  kvstore.thrift.num_client_connection_failure: # of client creation failures
+//  kvstore.thrift.num_full_sync: # of full-sync performed;
+//  kvstore.thrift.num_missing_keys: # of missing keys from syncing with peer;
+//  kvstore.thrift.num_full_sync_success: # of successful full-sync performed;
+//  kvstore.thrift.num_full_sync_failure: # of failed full-sync performed;
+//  kvstore.thrift.full_sync_duration_ms: avg time elapsed for a full-sync req;
+//
+//  kvstore.thrift.num_flood_pub: # of flooding req issued;
+//  kvstore.thrift.num_flood_key_vals: # of keyVals one flooding req contains;
+//  kvstore.thrift.num_flood_pub_success: # of successful flooding req
+//  performed;
+//  kvstore.thrift.num_flood_pub_failure: # of failed flooding req
+//  performed;
+//  kvstore.thrift.flood_pub_duration_ms: avg time elapsed for a
+//  flooding req;
+//
+//  kvstore.thrift.num_finalized_sync: # of finalized full-sync performed;
+//  kvstore.thrift.num_finalized_sync_success: # of successful finalized sync
+//  performed;
+//  kvstore.thrift.num_finalized_sync_failure: # of failed finalized
+//  sync performed;
+//  kvstore.thrift.finalized_sync_duration_ms: avg time elapsed
+//  for a finalized sync req;
+//
 KvStoreDb::KvStoreDb(
     OpenrEventBase* evb,
     KvStoreParams& kvParams,
@@ -1064,6 +1100,48 @@ KvStoreDb::KvStoreDb(
   ttlCountdownTimer_ = folly::AsyncTimeout::make(
       *evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
+  // Initialize fb303 counter keys for thrift
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_full_sync", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_full_sync_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_full_sync_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_pub", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_pub_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_pub_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_finalized_sync", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_finalized_sync_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_finalized_sync_failure", fb303::COUNT);
+
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.full_sync_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.flood_pub_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.finalized_sync_duration_ms", fb303::AVG);
+
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_missing_keys", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_keyvals_update", fb303::SUM);
+
+  // TODO: this telemetry is created to check if valid key-val info exchanged
+  // over ZMQ after thrift channel is enabled.
+  fb303::fbData->addStatExportType("kvstore.zmq.num_missing_keys", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.zmq.num_keyvals_update", fb303::SUM);
+
   // Initialize stats keys
   fb303::fbData->addStatExportType("kvstore.cmd_hash_dump", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.cmd_key_dump", fb303::COUNT);
@@ -1077,8 +1155,6 @@ KvStoreDb::KvStoreDb(
   fb303::fbData->addStatExportType("kvstore.full_sync_duration_ms", fb303::AVG);
   fb303::fbData->addStatExportType("kvstore.looped_publications", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
   fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
   fb303::fbData->addStatExportType("kvstore.rate_limit_keys", fb303::AVG);
   fb303::fbData->addStatExportType("kvstore.rate_limit_suppress", fb303::COUNT);
@@ -1294,6 +1370,11 @@ KvStoreDb::requestThriftPeerSync() {
                  << "  with addr: " << peerSpec.peerAddr
                  << ". Exception: " << folly::exceptionStr(e);
 
+      // record telemetry for thrift calls
+      fb303::fbData->addStatValue(
+          "kvstore.thrift.num_client_connection_failure", 1, fb303::COUNT);
+
+      // clean up state for next round of scanning
       thriftPeer.keepAliveTimer->cancelTimeout();
       thriftPeer.client.reset();
       thriftPeer.expBackoff.reportError(); // apply exponential backoff
@@ -1324,6 +1405,10 @@ KvStoreDb::requestThriftPeerSync() {
     params.keyValHashes_ref() =
         std::move(dumpHashWithFilters(kvFilters).keyVals);
 
+    // record telemetry for initial full-sync
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.num_full_sync", 1, fb303::COUNT);
+
     // send request over thrift client and attach callback
     auto sf = thriftPeer.client->semifuture_getKvStoreKeyValsFilteredArea(
         params, area_);
@@ -1331,27 +1416,27 @@ KvStoreDb::requestThriftPeerSync() {
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([this, peerName, startTime](thrift::Publication&& pub) {
-          // record time and process SUCCESS state transition
           auto endTime = std::chrono::steady_clock::now();
-          processThriftSuccess(
-              peerName,
-              std::move(pub),
+          auto timeDelta =
               std::chrono::duration_cast<std::chrono::milliseconds>(
-                  endTime - startTime));
+                  endTime - startTime);
+          processThriftSuccess(peerName, std::move(pub), timeDelta);
         })
         .thenError(
             [this, peerName, startTime](const folly::exception_wrapper& ew) {
-              // record time and process FAILURE state transition
               auto endTime = std::chrono::steady_clock::now();
-              processThriftFailure(
-                  peerName,
-                  ew.what(),
+              auto timeDelta =
                   std::chrono::duration_cast<std::chrono::milliseconds>(
-                      endTime - startTime));
+                      endTime - startTime);
+              processThriftFailure(peerName, ew.what(), timeDelta);
 
-              // counter update
+              // record telemetry for thrift calls
               fb303::fbData->addStatValue(
-                  "kvstore.full_dump_failure", 1, fb303::COUNT);
+                  "kvstore.thrift.num_full_sync_failure", 1, fb303::COUNT);
+              fb303::fbData->addStatValue(
+                  "kvstore.thrift.full_sync_duration_ms",
+                  timeDelta.count(),
+                  fb303::AVG);
             });
 
     // in case pending peer size is over parallelSyncLimit,
@@ -1395,6 +1480,16 @@ KvStoreDb::processThriftSuccess(
   if (pub.tobeUpdatedKeys_ref().has_value()) {
     numMissingKeys = pub.tobeUpdatedKeys_ref()->size();
   }
+
+  // record telemetry for thrift calls
+  fb303::fbData->addStatValue(
+      "kvstore.thrift.num_full_sync_success", 1, fb303::COUNT);
+  fb303::fbData->addStatValue(
+      "kvstore.thrift.full_sync_duration_ms", timeDelta.count(), fb303::AVG);
+  fb303::fbData->addStatValue(
+      "kvstore.thrift.num_missing_keys", numMissingKeys, fb303::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.thrift.num_keyvals_update", kvUpdateCnt, fb303::SUM);
 
   LOG(INFO) << "[Thrift Sync] Full-sync response received from: " << peerName
             << " with " << pub.keyVals.size() << " key-vals and "
@@ -2227,6 +2322,11 @@ KvStoreDb::processSyncResponse(
             << syncPub.keyVals.size() << " key-vals and " << numMissingKeys
             << " missing keys. Incured " << kvUpdateCnt << " key-value updates";
 
+  fb303::fbData->addStatValue(
+      "kvstore.zmq.num_missing_keys", numMissingKeys, fb303::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.zmq.num_keyvals_update", kvUpdateCnt, fb303::SUM);
+
   if (latestSentPeerSync_.count(requestId)) {
     auto syncDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - latestSentPeerSync_.at(requestId));
@@ -2568,6 +2668,10 @@ KvStoreDb::finalizeFullSync(
     LOG(INFO) << "[Thrift Sync] Finalize full-sync back to: " << senderId
               << " with keys: " << folly::join(",", keys);
 
+    // record telemetry for thrift calls
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.num_finalized_sync", 1, fb303::COUNT);
+
     auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
     auto startTime = std::chrono::steady_clock::now();
     std::move(sf)
@@ -2576,25 +2680,30 @@ KvStoreDb::finalizeFullSync(
           VLOG(4) << "Finalize full-sync ack received from peer: " << senderId;
 
           auto endTime = std::chrono::steady_clock::now();
-          fb303::fbData->addStatValue(
-              "kvstore.finalize_full_sync_duration_ms_thrift",
+          auto timeDelta =
               std::chrono::duration_cast<std::chrono::milliseconds>(
-                  endTime - startTime)
-                  .count(),
+                  endTime - startTime);
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.num_finalized_sync_success", 1, fb303::COUNT);
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.finalized_sync_duration_ms",
+              timeDelta.count(),
               fb303::AVG);
         })
         .thenError(
             [this, senderId, startTime](const folly::exception_wrapper& ew) {
-              // thrift failure processing and state transition
               auto endTime = std::chrono::steady_clock::now();
-              processThriftFailure(
-                  senderId,
-                  ew.what(),
+              auto timeDelta =
                   std::chrono::duration_cast<std::chrono::milliseconds>(
-                      endTime - startTime));
+                      endTime - startTime);
+              processThriftFailure(senderId, ew.what(), timeDelta);
 
               fb303::fbData->addStatValue(
-                  "kvstore.finalize_full_sync_thrift_failure", 1, fb303::COUNT);
+                  "kvstore.thrift.num_finalized_sync_failure", 1, fb303::COUNT);
+              fb303::fbData->addStatValue(
+                  "kvstore.thrift.finalized_sync_duration_ms",
+                  timeDelta.count(),
+                  fb303::AVG);
             });
   } else {
     VLOG(1) << "finalizeFullSync back to: " << senderId
@@ -2736,6 +2845,14 @@ KvStoreDb::floodPublication(
         continue;
       }
 
+      // record telemetry for flooding publications
+      fb303::fbData->addStatValue(
+          "kvstore.thrift.num_flood_pub", 1, fb303::COUNT);
+      fb303::fbData->addStatValue(
+          "kvstore.thrift.num_flood_key_vals",
+          publication.keyVals.size(),
+          fb303::SUM);
+
       auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
       auto startTime = std::chrono::steady_clock::now();
       std::move(sf)
@@ -2743,36 +2860,36 @@ KvStoreDb::floodPublication(
           .thenValue([peerName, startTime](folly::Unit&&) {
             VLOG(4) << "Flooding ack received from peer: " << peerName;
 
-            // record time and process SUCCESS state transition
             auto endTime = std::chrono::steady_clock::now();
-            fb303::fbData->addStatValue(
-                "kvstore.flood_duration_ms_thrift",
+            auto timeDelta =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
-                    endTime - startTime)
-                    .count(),
+                    endTime - startTime);
+
+            // record telemetry for thrift calls
+            fb303::fbData->addStatValue(
+                "kvstore.thrift.num_flood_pub_success", 1, fb303::COUNT);
+            fb303::fbData->addStatValue(
+                "kvstore.thrift.flood_pub_duration_ms",
+                timeDelta.count(),
                 fb303::AVG);
           })
           .thenError(
               [this, peerName, startTime](const folly::exception_wrapper& ew) {
-                // record time and process SUCCESS state transition
                 auto endTime = std::chrono::steady_clock::now();
-                processThriftFailure(
-                    peerName,
-                    ew.what(),
+                auto timeDelta =
                     std::chrono::duration_cast<std::chrono::milliseconds>(
-                        endTime - startTime));
+                        endTime - startTime);
+                processThriftFailure(peerName, ew.what(), timeDelta);
 
+                // record telemetry for thrift calls
                 fb303::fbData->addStatValue(
-                    "kvstore.flood_thrift_failure", 1, fb303::COUNT);
+                    "kvstore.thrift.num_flood_pub_failure", 1, fb303::COUNT);
+                fb303::fbData->addStatValue(
+                    "kvstore.thrift.flood_pub_duration_ms",
+                    timeDelta.count(),
+                    fb303::AVG);
               });
     }
-
-    fb303::fbData->addStatValue(
-        "kvstore.publications_sent_over_thrift", 1, fb303::COUNT);
-    fb303::fbData->addStatValue(
-        "kvstore.key_vals_sent_over_thrift",
-        publication.keyVals.size(),
-        fb303::SUM);
   } else {
     for (const auto& peer : floodPeers) {
       if (senderId.has_value() && senderId.value() == peer) {

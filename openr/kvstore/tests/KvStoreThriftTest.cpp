@@ -368,6 +368,9 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
 // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
 //
 TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
+  // Reset fb303 data for every test to make sure clean startup
+  facebook::fb303::fbData->resetAllData();
+
   // spin up 2 kvStore instances and thriftServers
   const std::string node1{"node-1"};
   const std::string node2{"node-2"};
@@ -437,9 +440,40 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
       EXPECT_EQ(val1->value_ref().value(), val2->value_ref().value());
       EXPECT_EQ(val1->version, val2->version);
     }
-    evb.stop();
   });
 
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(1000) +
+          std::chrono::milliseconds(Constants::kCounterSubmitInterval),
+      [&]() noexcept {
+        auto counters = facebook::fb303::fbData->getCounters();
+
+        // check key existence
+        ASSERT_EQ(1, counters.count("kvstore.thrift.num_full_sync.count"));
+        ASSERT_EQ(
+            1, counters.count("kvstore.thrift.num_full_sync_success.count"));
+        ASSERT_EQ(
+            1, counters.count("kvstore.thrift.num_full_sync_failure.count"));
+        ASSERT_EQ(1, counters.count("kvstore.thrift.num_finalized_sync.count"));
+        ASSERT_EQ(
+            1,
+            counters.count("kvstore.thrift.num_finalized_sync_success.count"));
+        ASSERT_EQ(
+            1,
+            counters.count("kvstore.thrift.num_finalized_sync_failure.count"));
+
+        // check key value
+        EXPECT_EQ(1, counters.at("kvstore.thrift.num_full_sync.count"));
+        EXPECT_EQ(1, counters.at("kvstore.thrift.num_full_sync_success.count"));
+        EXPECT_EQ(0, counters.at("kvstore.thrift.num_full_sync_failure.count"));
+        EXPECT_EQ(1, counters.at("kvstore.thrift.num_finalized_sync.count"));
+        EXPECT_EQ(
+            1, counters.at("kvstore.thrift.num_finalized_sync_success.count"));
+        EXPECT_EQ(
+            0, counters.at("kvstore.thrift.num_finalized_sync_failure.count"));
+
+        evb.stop();
+      });
   evb.run();
 
   // verify 5 keys from both stores
