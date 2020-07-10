@@ -74,9 +74,6 @@ class GflagConfig final {
     if (auto v = FLAGS_enable_netlink_fib_handler) {
       config.enable_netlink_fib_handler_ref() = v;
     }
-    if (auto v = FLAGS_enable_netlink_system_handler) {
-      config.enable_netlink_system_handler_ref() = v;
-    }
     if (auto v = FLAGS_decision_graceful_restart_window_s; v >= 0) {
       config.eor_time_s_ref() = v;
     }

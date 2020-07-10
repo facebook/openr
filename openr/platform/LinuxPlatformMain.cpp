@@ -31,10 +31,6 @@ DEFINE_bool(
     enable_netlink_fib_handler,
     true,
     "If set, netlink fib handler will be started for route programming.");
-DEFINE_bool(
-    enable_netlink_system_handler,
-    true,
-    "If set, netlink system handler will be started");
 
 using openr::NetlinkFibHandler;
 using openr::NetlinkSystemHandler;
@@ -71,25 +67,22 @@ main(int argc, char** argv) {
       openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
       nlSock.get());
 
+  // start NetlinkSystem thread
   apache::thrift::ThriftServer systemServiceServer;
-  if (FLAGS_enable_netlink_system_handler) {
-    // start NetlinkSystem thread
-    auto nlHandler = std::make_shared<NetlinkSystemHandler>(nlSock.get());
+  auto nlHandler = std::make_shared<NetlinkSystemHandler>(nlSock.get());
+  auto systemThriftThread =
+      std::thread([nlHandler, &systemServiceServer]() noexcept {
+        folly::setThreadName("SystemService");
+        systemServiceServer.setNWorkerThreads(1);
+        systemServiceServer.setNPoolThreads(1);
+        systemServiceServer.setPort(FLAGS_system_thrift_port);
+        systemServiceServer.setInterface(nlHandler);
 
-    auto systemThriftThread =
-        std::thread([nlHandler, &systemServiceServer]() noexcept {
-          folly::setThreadName("SystemService");
-          systemServiceServer.setNWorkerThreads(1);
-          systemServiceServer.setNPoolThreads(1);
-          systemServiceServer.setPort(FLAGS_system_thrift_port);
-          systemServiceServer.setInterface(nlHandler);
-
-          LOG(INFO) << "System Service starting...";
-          systemServiceServer.serve();
-          LOG(INFO) << "System Service stopped.";
-        });
-    allThreads.emplace_back(std::move(systemThriftThread));
-  }
+        LOG(INFO) << "System Service starting...";
+        systemServiceServer.serve();
+        LOG(INFO) << "System Service stopped.";
+      });
+  allThreads.emplace_back(std::move(systemThriftThread));
 
   apache::thrift::ThriftServer linuxFibAgentServer;
   if (FLAGS_enable_netlink_fib_handler) {
@@ -121,13 +114,11 @@ main(int argc, char** argv) {
     linuxFibAgentServer.stop();
   }
 
-  if (FLAGS_enable_netlink_system_handler) {
-    systemServiceServer.stop();
+  systemServiceServer.stop();
 
-    // Wait for threads to finish
-    for (auto& t : allThreads) {
-      t.join();
-    }
+  // Wait for threads to finish
+  for (auto& t : allThreads) {
+    t.join();
   }
 
   if (nlSock) {

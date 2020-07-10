@@ -221,10 +221,6 @@ DEFINE_int32(
     "Mark control plane traffic with specified IP-TOS value. Set this to 0 "
     "if you don't want to mark packets.");
 DEFINE_int32(
-    zmq_context_threads,
-    1,
-    "Number of ZMQ Context thread to use for IO processing.");
-DEFINE_int32(
     link_flap_initial_backoff_ms,
     1000,
     "Initial backoff to dampen link flaps (in milliseconds)");

@@ -38,7 +38,6 @@ getBasicOpenrConfig(
   config.enable_segment_routing_ref() = enableSegmentRouting;
   config.enable_ordered_fib_programming_ref() = orderedFibProgramming;
   config.dryrun_ref() = dryrun;
-  config.enable_netlink_system_handler_ref() = true;
 
   config.kvstore_config = kvstoreConfig;
   config.link_monitor_config = linkMonitorConfig;

@@ -74,7 +74,6 @@ DECLARE_bool(enable_netlink_fib_handler);
 DECLARE_bool(enable_netlink_system_handler);
 
 DECLARE_int32(ip_tos);
-DECLARE_int32(zmq_context_threads);
 
 DECLARE_int32(link_flap_initial_backoff_ms);
 DECLARE_int32(link_flap_max_backoff_ms);

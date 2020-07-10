@@ -432,16 +432,6 @@ TCP port on which `FibService` will be listening.
 FIB_HANDLER_PORT=60100
 ```
 
-#### ENABLE_NETLINK_SYSTEM_HANDLER
-
-Knob to enable/disable default implementation of `SystemService` and
-`PlatformPublisher` that comes along with OpenR for Linux platform. If you want
-to run your own SystemService then disable this option.
-
-```
-ENABLE_NETLINK_SYSTEM_HANDLER=true
-```
-
 #### DECISION_DEBOUNCE_MIN_MS / DECISION_DEBOUNCE_MAX_MS
 
 Knobs to control how often to run Decision. On receipt of first even debounce
