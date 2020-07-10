@@ -2789,6 +2789,7 @@ KvStoreDb::floodPublication(
 
   // Flood publication to internal subscribers
   kvParams_.kvStoreUpdatesQueue.push(publication);
+  fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
 
   // Flood keyValue ONLY updates to external neighbors
   if (publication.keyVals.empty()) {
