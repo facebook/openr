@@ -19,6 +19,7 @@
 namespace openr {
 
 struct RibEntry {
+  // TODO: should this be map<area, nexthops>?
   std::unordered_set<thrift::NextHopThrift> nexthops;
 
   // constructor
@@ -98,6 +99,14 @@ struct RibMplsEntry : RibEntry {
   RibMplsEntry(
       int32_t label, std::unordered_set<thrift::NextHopThrift> nexthops)
       : RibEntry(std::move(nexthops)), label(label) {}
+
+  static RibMplsEntry
+  fromThrift(const thrift::MplsRoute& tMpls) {
+    return RibMplsEntry(
+        tMpls.topLabel,
+        std::unordered_set<thrift::NextHopThrift>(
+            tMpls.nextHops.begin(), tMpls.nextHops.end()));
+  }
 
   bool
   operator==(const RibMplsEntry& other) const {

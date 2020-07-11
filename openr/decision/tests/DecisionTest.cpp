@@ -26,6 +26,7 @@
 #include <openr/common/Util.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
 DEFINE_bool(stress_test, false, "pass this to run the stress test");
@@ -1617,7 +1618,7 @@ class SimpleRingTopologyFixture
 
     int find = 0;
     for (const auto& mplsRoute : deltaRoutes.mplsRoutesToUpdate) {
-      if (mplsRoute.topLabel == mplsLabel) {
+      if (mplsRoute.label == mplsLabel) {
         find++;
       }
     }
@@ -4086,7 +4087,7 @@ class DecisionTestFixture : public ::testing::Test {
     return routeMap;
   }
 
-  thrift::RouteDatabaseDelta
+  DecisionRouteUpdate
   recvMyRouteDb(
       const string& /* myNodeName */,
       // TODO: Remove unused argument serializer
@@ -4180,11 +4181,12 @@ class DecisionTestFixture : public ::testing::Test {
   }
 
   /**
-   * Check whether two RouteDatabaseDeltas to be equal
+   * Check whether two DecisionRouteUpdates to be equal
    */
   bool
   checkEqualRoutesDelta(
-      thrift::RouteDatabaseDelta& lhs, thrift::RouteDatabaseDelta& rhs) {
+      DecisionRouteUpdate& lhsC, thrift::RouteDatabaseDelta& rhs) {
+    auto lhs = lhsC.toThrift();
     std::sort(
         lhs.unicastRoutesToUpdate.begin(), lhs.unicastRoutesToUpdate.end());
     std::sort(
@@ -4213,8 +4215,8 @@ class DecisionTestFixture : public ::testing::Test {
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
-  messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueueReader{
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
 
   // Decision owned by this wrapper.
@@ -4297,7 +4299,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
   // only expect to add a route to addr3
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].dest, addr3);
+  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].prefix, toIPNetwork(addr3));
   EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
@@ -4390,7 +4392,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
   // only expect to add a route to addr3
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].dest, addr3);
+  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].prefix, toIPNetwork(addr3));
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
 
@@ -4402,7 +4404,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // construct new static mpls route add
   thrift::RouteDatabaseDelta input;
-  input.thisNodeName = "1";
   thrift::NextHopThrift nh, nh1, nh2;
   nh.address = toBinaryAddress(folly::IPAddressV6("::1"));
   nh1.address = toBinaryAddress(folly::IPAddressV6("::2"));
@@ -4420,8 +4421,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   auto routesDelta = routeUpdatesQueueReader.get().value();
   // consume an empty routes update because of reachability change.
   routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents_ref().reset();
-  EXPECT_EQ(routesDelta, input);
+  routesDelta.perfEvents.reset();
+  EXPECT_EQ(routesDelta.toThrift(), input);
 
   // update another routes and make sure only that is updated
   route.topLabel = 32012;
@@ -4430,8 +4431,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routesDelta = routeUpdatesQueueReader.get().value();
   // consume an empty routes update because of reachability change.
   routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents_ref().reset();
-  EXPECT_EQ(routesDelta, input);
+  routesDelta.perfEvents.reset();
+  EXPECT_EQ(routesDelta.toThrift(), input);
 
   auto staticRoutes =
       decision->getDecisionStaticRoutes().wait().value()->mplsRoutes;
@@ -4454,7 +4455,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routesDelta = routeUpdatesQueueReader.get().value();
   // consume an empty routes update because of reachability change.
   routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents_ref().reset();
+  routesDelta.perfEvents.reset();
   EXPECT_EQ(routesDelta.mplsRoutesToDelete[0], 32011);
   EXPECT_EQ(routesDelta.mplsRoutesToUpdate.size(), 0);
 
@@ -4477,8 +4478,12 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routesDelta = routeUpdatesQueueReader.get().value();
   // consume an empty routes update because of reachability change.
   routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents_ref().reset();
-  EXPECT_EQ(routesDelta, input);
+  routesDelta.perfEvents.reset();
+  EXPECT_EQ(1, routesDelta.mplsRoutesToUpdate.size());
+  EXPECT_EQ(32012, routesDelta.mplsRoutesToUpdate.at(0).label);
+  EXPECT_THAT(
+      routesDelta.mplsRoutesToUpdate.at(0).nexthops,
+      testing::UnorderedElementsAre(nh, nh1));
 
   staticRoutes = decision->getDecisionStaticRoutes().wait().value()->mplsRoutes;
   EXPECT_EQ(staticRoutes.size(), 1);
@@ -4667,7 +4672,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
   {
     auto updates = recvMyRouteDb("1", serializer);
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
-    EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nextHops.at(0).weight);
+    EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight);
   }
 
   // Get policy test. Expect failure
@@ -4698,7 +4703,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
   {
     auto updates = recvMyRouteDb("1", serializer);
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
-    EXPECT_EQ(2, updates.unicastRoutesToUpdate.at(0).nextHops.at(0).weight);
+    EXPECT_EQ(2, updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight);
   }
 
   // Set the policy with empty weight. Expect route delete
@@ -4710,14 +4715,14 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     auto updates = recvMyRouteDb("1", serializer);
     EXPECT_EQ(0, updates.unicastRoutesToUpdate.size());
     ASSERT_EQ(1, updates.unicastRoutesToDelete.size());
-    EXPECT_EQ(addr2, updates.unicastRoutesToDelete.at(0));
+    EXPECT_EQ(toIPNetwork(addr2), updates.unicastRoutesToDelete.at(0));
   }
 
   // Let the policy expire. Wait for another route database change
   {
     auto updates = recvMyRouteDb("1", serializer);
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
-    EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nextHops.at(0).weight);
+    EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight);
 
     auto retrievedPolicy = decision->getRibPolicy().get();
     EXPECT_GE(0, retrievedPolicy.ttl_secs);
@@ -4749,7 +4754,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
 
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   fbzmq::Context zeromqContext;
   auto decision = std::make_unique<Decision>(
       config,
@@ -5542,10 +5547,10 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   }
 
   // Receive RouteUpdate from Decision
-  auto routesDelta1 = recvMyRouteDb("1", serializer);
-  EXPECT_EQ(999, routesDelta1.unicastRoutesToUpdate.size()); // Route to all
-                                                             // nodes except
-                                                             // mine
+  auto routeUpdates1 = recvMyRouteDb("1", serializer);
+  EXPECT_EQ(999, routeUpdates1.unicastRoutesToUpdate.size()); // Route to all
+                                                              // nodes except
+                                                              // mine
   //
   // Wait until all pending updates are finished
   //
@@ -5562,9 +5567,9 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   LOG(INFO) << "Advertising prefix update";
   sendKvPublication(newPub);
   // Receive RouteDelta from Decision
-  auto routesDelta2 = recvMyRouteDb("1", serializer);
+  auto routeUpdates2 = recvMyRouteDb("1", serializer);
   // Expect no routes delta
-  EXPECT_EQ(0, routesDelta2.unicastRoutesToUpdate.size());
+  EXPECT_EQ(0, routeUpdates2.unicastRoutesToUpdate.size());
 
   //
   // Verify counters information
@@ -5677,7 +5682,7 @@ TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
   routeDbDelta = recvMyRouteDb("1", serializer);
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
-  EXPECT_EQ(addr5, routeDbDelta.unicastRoutesToDelete.at(0));
+  EXPECT_EQ(toIPNetwork(addr5), routeDbDelta.unicastRoutesToDelete.at(0));
 }
 
 //
@@ -5744,7 +5749,8 @@ TEST_F(DecisionTestFixture, Counters) {
   sendKvPublication(publication0);
   const auto routeDb = recvMyRouteDb("1", serializer);
   for (const auto& uniRoute : routeDb.unicastRoutesToUpdate) {
-    EXPECT_NE(toString(uniRoute.dest), "10.1.0.0/16");
+    EXPECT_NE(
+        folly::IPAddress::networkToString(uniRoute.prefix), "10.1.0.0/16");
   }
 
   // Verify counters

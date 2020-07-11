@@ -104,7 +104,7 @@ class DecisionWrapper {
   // member methods
   //
 
-  thrift::RouteDatabaseDelta
+  DecisionRouteUpdate
   recvMyRouteDb() {
     auto maybeRouteDb = routeUpdatesQueueReader.get();
     auto routeDb = maybeRouteDb.value();
@@ -196,9 +196,9 @@ class DecisionWrapper {
 
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
-  messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueueReader{
+  messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
 
   // KvStore owned by this wrapper.
@@ -274,8 +274,8 @@ sendRecvUpdate(
   auto routes2 = decisionWrapper->recvMyRouteDb();
 
   // Extract time from perfevent and accumulate processing time
-  if (routes2.perfEvents_ref().has_value()) {
-    accumulatePerfTimes(routes2.perfEvents_ref().value(), processTimes);
+  if (routes2.perfEvents.has_value()) {
+    accumulatePerfTimes(routes2.perfEvents.value(), processTimes);
   }
 }
 

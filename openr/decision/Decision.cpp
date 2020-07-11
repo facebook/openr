@@ -46,9 +46,9 @@ using SpfResult = openr::LinkState::SpfResult;
 
 namespace openr {
 
-thrift::RouteDatabaseDelta
+DecisionRouteUpdate
 getRouteDelta(const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb) {
-  thrift::RouteDatabaseDelta delta;
+  DecisionRouteUpdate delta;
 
   // unicastRoutesToUpdate
   for (const auto& [prefix, entry] : newDb.unicastEntries) {
@@ -58,13 +58,13 @@ getRouteDelta(const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb) {
     }
 
     // new prefix, or prefix entry changed
-    delta.unicastRoutesToUpdate.emplace_back(entry.toThrift());
+    delta.unicastRoutesToUpdate.emplace_back(entry);
   }
 
   // unicastRoutesToDelete
   for (const auto& [prefix, _] : oldDb.unicastEntries) {
     if (newDb.unicastEntries.count(prefix) == 0) {
-      delta.unicastRoutesToDelete.emplace_back(prefix);
+      delta.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix));
     }
   }
 
@@ -74,7 +74,7 @@ getRouteDelta(const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb) {
     if (oldEntry != oldDb.mplsEntries.cend() && oldEntry->second == entry) {
       continue;
     }
-    delta.mplsRoutesToUpdate.emplace_back(entry.toThrift());
+    delta.mplsRoutesToUpdate.emplace_back(entry);
   }
 
   // mplsRoutesToDelete
@@ -139,7 +139,7 @@ class SpfSolver::SpfSolverImpl {
 
   void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
 
-  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
+  std::optional<DecisionRouteUpdate> processStaticRouteUpdates();
 
   thrift::StaticRoutes const& getStaticRoutes();
 
@@ -867,7 +867,7 @@ SpfSolver::SpfSolverImpl::selectEcmpBgp(
   unicastEntries.emplace(prefix, std::move(entry));
 }
 
-std::optional<thrift::RouteDatabaseDelta>
+std::optional<DecisionRouteUpdate>
 SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
   std::unordered_map<int32_t, thrift::MplsRoute> routesToUpdate;
   std::unordered_set<int32_t> routesToDel;
@@ -894,12 +894,10 @@ SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
     return {};
   }
 
-  thrift::RouteDatabaseDelta ret;
-  ret.thisNodeName = myNodeName_;
-  for (const auto& routeToUpdate : routesToUpdate) {
-    staticRoutes_.mplsRoutes[routeToUpdate.first] =
-        routeToUpdate.second.nextHops;
-    ret.mplsRoutesToUpdate.emplace_back(std::move(routeToUpdate.second));
+  DecisionRouteUpdate ret;
+  for (const auto& [label, tMplsRoute] : routesToUpdate) {
+    staticRoutes_.mplsRoutes[label] = tMplsRoute.nextHops;
+    ret.mplsRoutesToUpdate.emplace_back(RibMplsEntry::fromThrift(tMplsRoute));
   }
 
   for (const auto& routeToDel : routesToDel) {
@@ -1319,7 +1317,7 @@ SpfSolver::buildRouteDb(
   return impl_->buildRouteDb(myNodeName, areaLinkStates, prefixState);
 }
 
-std::optional<thrift::RouteDatabaseDelta>
+std::optional<DecisionRouteUpdate>
 SpfSolver::processStaticRouteUpdates() {
   return impl_->processStaticRouteUpdates();
 }
@@ -1336,7 +1334,7 @@ Decision::Decision(
     std::chrono::milliseconds debounceMaxDur,
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
-    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
+    messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue,
     // TODO: Remove unused zmqContext argument
     fbzmq::Context& /* zmqContext */)
     : config_(config),
@@ -1845,16 +1843,13 @@ Decision::sendRouteUpdate(
     }
   }
 
-  // TODO change this to publish RibUpdate directly
   auto delta = getRouteDelta(routeDb, routeDb_);
 
   // update decision routeDb cache
   routeDb_ = std::move(routeDb);
 
   // publish the new route state to fib
-  // TODO - remove thisNodeName from routeDelta
-  delta.thisNodeName = myNodeName_;
-  fromStdOptional(delta.perfEvents_ref(), perfEvents);
+  delta.perfEvents = perfEvents;
   routeUpdatesQueue_.push(std::move(delta));
 }
 

@@ -599,7 +599,6 @@ findDeltaRoutes(
 
   // Build routes to be programmed.
   thrift::RouteDatabaseDelta routeDbDelta;
-  routeDbDelta.thisNodeName = newRouteDb.thisNodeName;
   routeDbDelta.unicastRoutesToUpdate = std::move(unicastRoutesToUpdate);
   routeDbDelta.unicastRoutesToDelete = {prefixesToRemove.begin(),
                                         prefixesToRemove.end()};

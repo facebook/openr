@@ -32,6 +32,7 @@
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -76,9 +77,9 @@ struct DecisionRouteDb {
 
 /*
  * Given old DecisionRouteDb and new DecisionRouteDb
- * return RouteDatabaseDelta
+ * return DecisionRouteUpdate
  */
-thrift::RouteDatabaseDelta getRouteDelta(
+DecisionRouteUpdate getRouteDelta(
     const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb);
 
 /*
@@ -232,7 +233,7 @@ class SpfSolver {
 
   void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
 
-  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
+  std::optional<DecisionRouteUpdate> processStaticRouteUpdates();
 
   thrift::StaticRoutes const& getStaticRoutes();
 
@@ -281,7 +282,7 @@ class Decision : public OpenrEventBase {
       std::chrono::milliseconds debounceMaxDur,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
-      messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue,
       fbzmq::Context& zmqContext);
 
   virtual ~Decision() = default;
@@ -370,7 +371,7 @@ class Decision : public OpenrEventBase {
   DecisionRouteDb routeDb_;
 
   // Queue to publish route changes
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue_;
 
   // Pointer to RibPolicy
   std::unique_ptr<RibPolicy> ribPolicy_;

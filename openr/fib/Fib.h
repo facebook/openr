@@ -20,6 +20,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
@@ -54,7 +55,7 @@ class Fib final : public OpenrEventBase {
   Fib(std::shared_ptr<const Config> config,
       int32_t thriftPort,
       std::chrono::seconds coldStartDuration,
-      messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
+      messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       KvStore* kvStore,

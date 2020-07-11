@@ -178,7 +178,7 @@ class FibWrapper {
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
 
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
 
   fbzmq::Context context{};
@@ -213,16 +213,19 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
   // Generate random prefixes
   auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
       numOfPrefixes, kBitMaskLen);
-  thrift::RouteDatabaseDelta routeDbDelta;
-  routeDbDelta.thisNodeName = "node-1";
-  for (auto& prefix : prefixes) {
-    routeDbDelta.unicastRoutesToUpdate.emplace_back(createUnicastRoute(
-        prefix,
-        fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
-            kNumOfNexthops, kVethNameY)));
+  {
+    DecisionRouteUpdate routeUpdate;
+    for (auto& prefix : prefixes) {
+      auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
+          kNumOfNexthops, kVethNameY);
+      auto nhsSet =
+          std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+      routeUpdate.unicastRoutesToUpdate.emplace_back(
+          RibUnicastEntry(toIPNetwork(prefix), nhsSet));
+    }
+    // Send routeDB to Fib and wait for updating completing
+    fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
   }
-  // Send routeDB to Fib and wait for updating completing
-  fibWrapper->routeUpdatesQueue.push(routeDbDelta);
   fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
   // Customized time counter
@@ -236,20 +239,22 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
 
   for (uint32_t i = 0; i < iters; i++) {
     // Update routes by randomly regenerating nextHops for deltaSize prefixes.
-    routeDbDelta.unicastRoutesToUpdate.clear();
+    DecisionRouteUpdate routeUpdate;
     for (uint32_t index = 0; index < deltaSize; index++) {
-      routeDbDelta.unicastRoutesToUpdate.emplace_back(createUnicastRoute(
-          prefixes[index],
-          fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
-              kNumOfNexthops, kVethNameY)));
+      auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
+          kNumOfNexthops, kVethNameY);
+      auto nhsSet =
+          std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+      routeUpdate.unicastRoutesToUpdate.emplace_back(
+          RibUnicastEntry(toIPNetwork(prefixes[index]), nhsSet));
     }
     // Add perfevents
     thrift::PerfEvents perfEvents;
-    addPerfEvent(perfEvents, routeDbDelta.thisNodeName, "FIB_INIT_UPDATE");
-    routeDbDelta.perfEvents_ref() = perfEvents;
+    addPerfEvent(perfEvents, "node-1", "FIB_INIT_UPDATE");
+    routeUpdate.perfEvents = perfEvents;
 
     // Send routeDB to Fib for updates
-    fibWrapper->routeUpdatesQueue.push(routeDbDelta);
+    fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
     fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
     // Get time information from perf event

@@ -229,7 +229,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
 
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;

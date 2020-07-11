@@ -39,6 +39,7 @@
 #include <openr/config/GflagConfig.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
@@ -240,7 +241,7 @@ main(int argc, char** argv) {
   folly::setThreadName("openr");
 
   // Queue for inter-module communication
-  ReplicateQueue<openr::thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
   ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdateRequestQueue;

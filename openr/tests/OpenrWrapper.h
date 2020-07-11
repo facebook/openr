@@ -158,7 +158,7 @@ class OpenrWrapper {
   const std::string kvStoreLocalPubUrl_;
   const std::string kvStoreGlobalCmdUrl_;
   const std::string platformPubUrl_;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;

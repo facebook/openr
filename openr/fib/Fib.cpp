@@ -28,7 +28,7 @@ Fib::Fib(
     std::shared_ptr<const Config> config,
     int32_t thriftPort,
     std::chrono::seconds coldStartDuration,
-    messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
+    messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     KvStore* kvStore,
@@ -106,8 +106,7 @@ Fib::Fib(
         break;
       }
 
-      CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
-      processRouteUpdates(std::move(maybeThriftObj).value());
+      processRouteUpdates(std::move(maybeThriftObj).value().toThrift());
     }
   });
 

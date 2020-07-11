@@ -14,6 +14,7 @@
 
 #include <openr/common/Types.h>
 #include <openr/config/Config.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/messaging/Queue.h>
@@ -24,7 +25,7 @@ struct PluginArgs {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue;
   messaging::ReplicateQueue<openr::thrift::RouteDatabaseDelta>&
       staticRoutesUpdateQueue;
-  messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue;
   std::shared_ptr<const Config> config;
   std::shared_ptr<wangle::SSLContextConfig> sslContext;
 };
