@@ -35,11 +35,18 @@ PlatformPublisher::PlatformPublisher(
   }
 
   // Initialize interface index to name mapping
-  auto nlLinks = nlSock->getAllLinks().get();
-  CHECK(nlLinks.hasValue())
-      << fbnl::NlException("Error getting links", nlLinks.error()).what();
-  for (auto& link : nlLinks.value()) {
-    ifIndexToName_.emplace(link.getIfIndex(), link.getLinkName());
+  for (int i = 0; i < 3; i++) {
+    auto nlLinks = nlSock->getAllLinks().get();
+    if (nlLinks.hasError() && std::abs(nlLinks.error()) == ETIMEDOUT) {
+      CHECK_LT(i, 3) << "Timed out 3 times for fetching links";
+      continue;
+    }
+
+    CHECK(nlLinks.hasValue())
+        << fbnl::NlException("Error getting links", nlLinks.error()).what();
+    for (auto& link : nlLinks.value()) {
+      ifIndexToName_.emplace(link.getIfIndex(), link.getLinkName());
+    }
   }
 
   // Attach callbacks for link events
