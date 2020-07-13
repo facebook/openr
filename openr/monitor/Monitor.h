@@ -4,8 +4,6 @@
 
 #include "openr/monitor/MonitorBase.h"
 
-const size_t kMaxLogEvents{100};
-
 namespace openr {
 
 /**
@@ -16,9 +14,8 @@ class Monitor : public MonitorBase {
   Monitor(
       std::shared_ptr<const Config> config,
       const std::string& category,
-      messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue,
-      const size_t maxLogEvents = kMaxLogEvents)
-      : MonitorBase(config, category, eventLogUpdatesQueue, maxLogEvents) {}
+      messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue)
+      : MonitorBase(config, category, eventLogUpdatesQueue) {}
 
  private:
   //  print the log sample to syslog

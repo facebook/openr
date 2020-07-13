@@ -410,4 +410,7 @@ DEFINE_uint32(
 
 DEFINE_int32(add_path, 0, "add path value");
 
+DEFINE_uint32(
+    monitor_max_event_log, 100, "Max number for storing recent event logs");
+
 DEFINE_string(config, "", "OpenR config file path");

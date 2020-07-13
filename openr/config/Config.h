@@ -211,6 +211,14 @@ class Config {
     return *config_.watchdog_config_ref();
   }
 
+  //
+  // monitor
+  //
+  const thrift::MonitorConfig&
+  getMonitorConfig() const {
+    return config_.monitor_config;
+  }
+
  private:
   void populateInternalDb();
   // thrift config

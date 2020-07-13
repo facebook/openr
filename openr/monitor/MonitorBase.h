@@ -28,8 +28,7 @@ class MonitorBase : public OpenrEventBase {
   MonitorBase(
       std::shared_ptr<const Config> config,
       const std::string& category,
-      messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue,
-      const size_t maxLogEvents);
+      messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue);
 
   // Add an event log to queue
   void addEventLog(LogSample const& eventLog);
@@ -55,7 +54,7 @@ class MonitorBase : public OpenrEventBase {
   messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue_;
 
   // Number of last log events to queue
-  const size_t maxLogEvents_{0};
+  const uint32_t maxLogEvents_{0};
 
   // List of recent log
   std::list<LogSample> recentLog_{};

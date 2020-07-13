@@ -6,11 +6,11 @@ namespace openr {
 MonitorBase::MonitorBase(
     std::shared_ptr<const Config> config,
     const std::string& category,
-    messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue,
-    const size_t maxLogEvents)
+    messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue)
     : category_{category},
       eventLogUpdatesQueue_{eventLogUpdatesQueue},
-      maxLogEvents_{maxLogEvents} {
+      maxLogEvents_{
+          folly::to<uint32_t>(config->getMonitorConfig().max_event_log)} {
   // Initialize stats counter
   fb303::fbData->addStatExportType("monitor.log.publish.failure", fb303::COUNT);
 

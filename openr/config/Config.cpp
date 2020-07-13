@@ -279,22 +279,45 @@ Config::populateInternalDb() {
         sparkConfig.keepalive_time_s));
   }
 
-  if (sparkConfig.step_detector_conf.fast_window_size >
-      sparkConfig.step_detector_conf.slow_window_size) {
+  if (sparkConfig.step_detector_conf.lower_threshold < 0 ||
+      sparkConfig.step_detector_conf.upper_threshold < 0 ||
+      sparkConfig.step_detector_conf.lower_threshold >=
+          sparkConfig.step_detector_conf.upper_threshold) {
     throw std::invalid_argument(folly::sformat(
-        "step_detector_conf.fast_window_size ({}) should be <= step_detector_conf.slow_window_size ({})",
+        "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({}), and they should be >= 0",
+        sparkConfig.step_detector_conf.lower_threshold,
+        sparkConfig.step_detector_conf.upper_threshold));
+  }
+
+  if (sparkConfig.step_detector_conf.fast_window_size < 0 ||
+      sparkConfig.step_detector_conf.slow_window_size < 0 ||
+      (sparkConfig.step_detector_conf.fast_window_size >
+       sparkConfig.step_detector_conf.slow_window_size)) {
+    throw std::invalid_argument(folly::sformat(
+        "step_detector_conf.fast_window_size ({}) should be <= step_detector_conf.slow_window_size ({}), and they should be >= 0",
         sparkConfig.step_detector_conf.fast_window_size,
         sparkConfig.step_detector_conf.slow_window_size));
   }
 
-  if (sparkConfig.step_detector_conf.lower_threshold >=
-      sparkConfig.step_detector_conf.upper_threshold) {
+  if (sparkConfig.step_detector_conf.lower_threshold < 0 ||
+      sparkConfig.step_detector_conf.upper_threshold < 0 ||
+      sparkConfig.step_detector_conf.lower_threshold >=
+          sparkConfig.step_detector_conf.upper_threshold) {
     throw std::invalid_argument(folly::sformat(
         "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({})",
         sparkConfig.step_detector_conf.lower_threshold,
         sparkConfig.step_detector_conf.upper_threshold));
   }
 
+  //
+  // Monitor
+  //
+  const auto& monitorConfig = config_.monitor_config;
+  if (monitorConfig.max_event_log < 0) {
+    throw std::out_of_range(folly::sformat(
+        "monitor_max_event_log ({}) should be >= 0",
+        monitorConfig.max_event_log));
+  }
   //
   // Link Monitor
   //

@@ -42,11 +42,11 @@ struct LinkMonitorConfig {
 }
 
 struct StepDetectorConfig {
-   1: i64 (cpp2.type = "std::uint64_t") fast_window_size = 10
-   2: i64 (cpp2.type = "std::uint64_t") slow_window_size = 60
-   3: i32 (cpp2.type = "std::uint32_t") lower_threshold = 2
-   4: i32 (cpp2.type = "std::uint32_t") upper_threshold = 5
-   5: i64 (cpp2.type = "std::uint64_t") ads_threshold = 500
+   1: i64 fast_window_size = 10
+   2: i64 slow_window_size = 60
+   3: i32 lower_threshold = 2
+   4: i32 upper_threshold = 5
+   5: i64 ads_threshold = 500
 }
 
 struct SparkConfig {
@@ -66,6 +66,10 @@ struct WatchdogConfig {
   1: i32 interval_s = 20
   2: i32 thread_timeout_s = 300
   3: i32 max_memory_mb = 800
+}
+
+struct MonitorConfig {
+  1: i32 max_event_log = 100
 }
 
 enum PrefixForwardingType {
@@ -177,6 +181,9 @@ struct OpenrConfig {
   # `struct RibPolicy` in OpenrCtrl.thrift
   # Disabled by default
   24: bool enable_rib_policy = 0
+
+  # Config for monitor module
+  25: MonitorConfig monitor_config
 
   # bgp
   100: optional bool enable_bgp_peering

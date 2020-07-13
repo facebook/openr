@@ -18,9 +18,8 @@ class MonitorMock : public MonitorBase {
   MonitorMock(
       std::shared_ptr<const Config> config,
       const std::string& category,
-      messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue,
-      const size_t maxLogEvents)
-      : MonitorBase(config, category, eventLogUpdatesQueue, maxLogEvents) {}
+      messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue)
+      : MonitorBase(config, category, eventLogUpdatesQueue) {}
   MOCK_METHOD1(processEventLog, void(LogSample const& eventLog));
 };
 
@@ -36,8 +35,7 @@ class MonitorTestFixture : public ::testing::Test {
     monitor = make_unique<MonitorMock>(
         std::make_unique<openr::Config>(config),
         category,
-        eventLogUpdatesQueue,
-        5 /* maxLogEvents = 5 */);
+        eventLogUpdatesQueue);
     monitorThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "monitor thread starting";
       monitor->run();

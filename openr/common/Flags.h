@@ -149,4 +149,6 @@ DECLARE_bool(bgp_enable_stateful_ha);
 DECLARE_uint32(bgp_min_nexthop);
 DECLARE_int32(add_path);
 
+DECLARE_uint32(monitor_max_event_log);
+
 DECLARE_string(config);

@@ -327,6 +327,44 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
+  // Exception step_detector_fast_window_size >= 0
+  //           step_detector_slow_window_size >= 0
+  //           step_detector_lower_threshold >= 0
+  //           step_detector_upper_threshold >= 0
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.step_detector_conf.fast_window_size = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+    confInvalidSpark.spark_config.step_detector_conf.slow_window_size = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+    confInvalidSpark.spark_config.step_detector_conf.lower_threshold = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+    confInvalidSpark.spark_config.step_detector_conf.upper_threshold = -1;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+  }
+
+  // Exception step_detector_fast_window_size > step_detector_slow_window_size
+  //           step_detector_lower_threshold > step_detector_upper_threshold
+  {
+    auto confInvalidSpark = getBasicOpenrConfig();
+    confInvalidSpark.spark_config.step_detector_conf.fast_window_size = 10;
+    confInvalidSpark.spark_config.step_detector_conf.slow_window_size = 5;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+
+    confInvalidSpark.spark_config.step_detector_conf.upper_threshold = 5;
+    confInvalidSpark.spark_config.step_detector_conf.lower_threshold = 10;
+    EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
+  }
+
+  // Monitor
+
+  // Exception monitor_max_event_log >= 0
+  {
+    auto confInvalidMon = getBasicOpenrConfig();
+    confInvalidMon.monitor_config.max_event_log = -1;
+    EXPECT_THROW(auto c = Config(confInvalidMon), std::out_of_range);
+  }
+
   // link monitor
 
   // linkflap_initial_backoff_ms < 0

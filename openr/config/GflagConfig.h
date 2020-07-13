@@ -157,6 +157,10 @@ class GflagConfig final {
     stepDetectorConf.upper_threshold = FLAGS_step_detector_upper_threshold;
     stepDetectorConf.ads_threshold = FLAGS_step_detector_ads_threshold;
 
+    // Monitor
+    auto& monitorConf = config.monitor_config;
+    monitorConf.max_event_log = FLAGS_monitor_max_event_log;
+
     // Watchdog
     if (FLAGS_enable_watchdog) {
       config.enable_watchdog_ref() = FLAGS_enable_watchdog;
