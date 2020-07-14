@@ -8,7 +8,6 @@
 #include <cstdio>
 #include <thread>
 
-#include <fbzmq/service/monitor/ZmqMonitor.h>
 #include <fbzmq/zmq/Context.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
@@ -64,17 +63,12 @@ class OpenrCtrlFixture : public ::testing::Test {
     lmConf.include_interface_regexes = {"po.*"};
     config = std::make_shared<Config>(tConfig);
 
-    // Create zmq-monitor
-    zmqMonitor = std::make_unique<fbzmq::ZmqMonitor>(
-        monitorSubmitUrl_, "inproc://monitor_pub_url", context_);
-    zmqMonitorThread_ = std::thread([&]() { zmqMonitor->run(); });
-
     // Create PersistentStore
     std::string const configStoreFile = "/tmp/openr-ctrl-handler-test.bin";
     // start fresh
     std::remove(configStoreFile.data());
-    persistentStore = std::make_unique<PersistentStore>(
-        nodeName, configStoreFile, context_, true /* dryrun */);
+    persistentStore =
+        std::make_unique<PersistentStore>(configStoreFile, true /* dryrun */);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module
@@ -90,8 +84,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::milliseconds(500),
         kvStoreWrapper->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
-        routeUpdatesQueue_,
-        context_);
+        routeUpdatesQueue_);
     decisionThread_ = std::thread([&]() { decision->run(); });
 
     // Create Fib module
@@ -212,9 +205,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     decisionThread_.join();
 
     kvStoreWrapper->stop();
-
-    zmqMonitor->stop();
-    zmqMonitorThread_.join();
   }
 
   thrift::PeerSpec
@@ -249,7 +239,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_{nullptr};
   std::unique_ptr<PlatformPublisher> platformPublisher_{nullptr};
 
-  std::thread zmqMonitorThread_;
   std::thread decisionThread_;
   std::thread fibThread_;
   std::thread prefixManagerThread_;
@@ -257,7 +246,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::thread linkMonitorThread_;
 
   std::shared_ptr<Config> config;
-  std::unique_ptr<fbzmq::ZmqMonitor> zmqMonitor;
   std::shared_ptr<Decision> decision;
   std::shared_ptr<Fib> fib;
   std::shared_ptr<PrefixManager> prefixManager;
@@ -424,6 +412,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
       createThriftValue(1, "node1", std::string("valuePlane1"));
   keyValsPlane["keyPlane2"] =
       createThriftValue(1, "node1", std::string("valuePlane2"));
+
   //
   // area list get
   //
@@ -440,7 +429,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   //
   // Key set/get
   //
-
   {
     thrift::KeySetParams setParams;
     setParams.keyVals = keyVals;
@@ -469,6 +457,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(keyVals.at("key2"), pub.keyVals["key2"]);
     EXPECT_EQ(keyVals.at("key11"), pub.keyVals["key11"]);
   }
+
   // pod keys
   {
     std::vector<std::string> filterKeys{"keyPod1"};
@@ -490,6 +479,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(keyVals.at("key33"), pub.keyVals["key33"]);
     EXPECT_EQ(keyVals.at("key333"), pub.keyVals["key333"]);
   }
+
   // with areas
   {
     thrift::Publication pub;
@@ -526,7 +516,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   //
   // Dual and Flooding APIs
   //
-
   {
     thrift::DualMessages messages;
     openrCtrlThriftClient_->sync_processKvStoreDualMessage(
@@ -561,7 +550,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   //
   // Peers APIs
   //
-
   const thrift::PeersMap peers{{"peer1", createPeerSpec("inproc://peer1-cmd")},
                                {"peer2", createPeerSpec("inproc://peer2-cmd")},
                                {"peer3", createPeerSpec("inproc://peer3-cmd")}};

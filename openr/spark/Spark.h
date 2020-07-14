@@ -11,8 +11,6 @@
 #include <functional>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/SocketAddress.h>
 #include <folly/container/EvictingCacheMap.h>
 #include <folly/fibers/FiberManager.h>

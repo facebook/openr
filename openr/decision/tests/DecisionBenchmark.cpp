@@ -80,8 +80,7 @@ class DecisionWrapper {
         std::chrono::milliseconds(500),
         kvStoreUpdatesQueue.getReader(),
         staticRoutesUpdateQueue.getReader(),
-        routeUpdatesQueue,
-        zeromqContext);
+        routeUpdatesQueue);
 
     decisionThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Decision thread starting";
@@ -190,9 +189,6 @@ class DecisionWrapper {
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   CompactSerializer serializer{};
-
-  // ZMQ context for IO processing
-  fbzmq::Context zeromqContext{};
 
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;

@@ -25,9 +25,7 @@ static const long kDbFlushRatio = 10000;
 namespace openr {
 
 PersistentStore::PersistentStore(
-    const std::string& /* nodeName */, // TODO remove nodeName argument
     const std::string& storageFilePath,
-    fbzmq::Context& /* context */, // TODO remove context argument
     bool dryrun,
     bool periodicallySaveToDisk)
     : storageFilePath_(storageFilePath), dryrun_(dryrun) {

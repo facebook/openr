@@ -12,8 +12,6 @@
 #include <vector>
 
 #include <boost/functional/hash.hpp>
-#include <fbzmq/service/if/gen-cpp2/Monitor_types.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>

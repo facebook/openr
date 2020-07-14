@@ -79,8 +79,8 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     // Start persistent config store
     tempFileName_ = folly::sformat("/tmp/openr.{}", tid);
-    configStore_ = std::make_unique<PersistentStore>(
-        "1", tempFileName_, zmqContext_, true /* dryrun */);
+    configStore_ =
+        std::make_unique<PersistentStore>(tempFileName_, true /* dryrun */);
     threads_.emplace_back([&]() noexcept { configStore_->run(); });
     configStore_->waitUntilRunning();
 
@@ -386,8 +386,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       tempFileNames.emplace_back(tempFileName);
 
       // spin up config store server for this allocator
-      auto configStore = std::make_unique<PersistentStore>(
-          folly::sformat("node{}", i), tempFileName, zmqContext);
+      auto configStore = std::make_unique<PersistentStore>(tempFileName);
       threads.emplace_back([&configStore]() noexcept { configStore->run(); });
       configStore->waitUntilRunning();
 
@@ -395,8 +394,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // used
       tempFileName = folly::sformat("/tmp/openr.{}.{}.{}", tid, round, i);
       tempFileNames.emplace_back(tempFileName);
-      auto tempConfigStore = std::make_unique<PersistentStore>(
-          folly::sformat("temp-node{}", i), tempFileName, zmqContext);
+      auto tempConfigStore = std::make_unique<PersistentStore>(tempFileName);
       threads.emplace_back([&tempConfigStore]() noexcept {
         tempConfigStore->run();
       });

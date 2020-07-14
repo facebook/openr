@@ -13,8 +13,6 @@
 #include <unordered_set>
 
 #include <fb303/ServiceData.h>
-#include <fbzmq/service/logging/LogSample.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/MapUtil.h>
 #include <folly/Memory.h>
@@ -1334,9 +1332,7 @@ Decision::Decision(
     std::chrono::milliseconds debounceMaxDur,
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
-    messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue,
-    // TODO: Remove unused zmqContext argument
-    fbzmq::Context& /* zmqContext */)
+    messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
     : config_(config),
       routeUpdatesQueue_(routeUpdatesQueue),
       myNodeName_(config->getConfig().node_name),

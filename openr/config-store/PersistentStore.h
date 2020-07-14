@@ -17,7 +17,6 @@ namespace fs = std::experimental::filesystem;
 #endif
 #include <string>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -45,23 +44,18 @@ struct PersistentObject {
   std::string key;
   std::optional<std::string> data;
 };
-/**
+
+/*
  * PersistentStore provides functionality of storing `Key-Values` with arbitrary
  * values which persists across restarts.
  *
  * `storageFilePath`: Describe the path of file in file system where data will
  * be stored/retrieved from (in binary format).
- *
- * You can interact with this module via ZMQ-Socket APIs described in
- * PersistentStore.thrift file via `REP` socket.
- *
  */
 class PersistentStore : public OpenrEventBase {
  public:
   PersistentStore(
-      const std::string& nodeName,
       const std::string& storageFilePath,
-      fbzmq::Context& context,
       bool dryrun = false,
       bool periodicallySaveToDisk = true);
 

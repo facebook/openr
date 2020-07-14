@@ -4047,8 +4047,7 @@ class DecisionTestFixture : public ::testing::Test {
         debounceTimeoutMax,
         kvStoreUpdatesQueue.getReader(),
         staticRoutesUpdateQueue.getReader(),
-        routeUpdatesQueue,
-        zeromqContext);
+        routeUpdatesQueue);
 
     decisionThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Decision thread starting";
@@ -4208,9 +4207,6 @@ class DecisionTestFixture : public ::testing::Test {
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   CompactSerializer serializer{};
-
-  // ZMQ context for IO processing
-  fbzmq::Context zeromqContext{};
 
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
@@ -4755,7 +4751,6 @@ TEST(Decision, RibPolicyFeatureKnob) {
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  fbzmq::Context zeromqContext;
   auto decision = std::make_unique<Decision>(
       config,
       true, /* computeLfaPaths */
@@ -4764,8 +4759,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
       debounceTimeoutMax,
       kvStoreUpdatesQueue.getReader(),
       staticRoutesUpdateQueue.getReader(),
-      routeUpdatesQueue,
-      zeromqContext);
+      routeUpdatesQueue);
 
   // SET
   {

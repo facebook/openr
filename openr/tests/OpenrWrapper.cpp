@@ -94,9 +94,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // create and start config-store thread
   configStore_ = std::make_unique<PersistentStore>(
-      nodeId_,
-      folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_),
-      context_);
+      folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_));
   std::thread configStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " ConfigStore running.";
     configStore_->run();
@@ -211,8 +209,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::chrono::milliseconds(250),
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
-      routeUpdatesQueue_,
-      context_);
+      routeUpdatesQueue_);
 
   //
   // create FIB

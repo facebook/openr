@@ -10,24 +10,6 @@ namespace py openr.PersistentStore
 namespace py3 openr.thrift
 namespace lua openr.PersistentStore
 
-enum StoreRequestType {
-  STORE = 1;
-  LOAD = 2;
-  ERASE = 3;
-}
-
-struct StoreRequest {
-  1: StoreRequestType requestType;
-  2: string key;
-  3: binary data;    // Will be present only if `requestType == STORE`
-}
-
-struct StoreResponse {
-  1: bool success = 0;
-  2: string key;
-  3: binary data;    // Will be there only if `success` is true
-}
-
 struct StoreDatabase {
   // map <key -> data>
   1: map<string, binary> keyVals;

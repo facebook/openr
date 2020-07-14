@@ -9,12 +9,10 @@
 
 namespace openr {
 
-PersistentStoreWrapper::PersistentStoreWrapper(
-    fbzmq::Context& context, const unsigned long tid)
-    : nodeName(folly::sformat("1-{}", tid)),
-      filePath(folly::sformat("/tmp/aq_persistent_store_test_{}", tid)) {
+PersistentStoreWrapper::PersistentStoreWrapper(const unsigned long tid)
+    : filePath(folly::sformat("/tmp/aq_persistent_store_test_{}", tid)) {
   VLOG(1) << "PersistentStoreWrapper: Creating PersistentStore.";
-  store_ = std::make_unique<PersistentStore>(nodeName, filePath, context);
+  store_ = std::make_unique<PersistentStore>(filePath);
 }
 
 void

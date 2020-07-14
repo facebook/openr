@@ -68,11 +68,10 @@ eraseKeyFromStore(
 void
 BM_PersistentStoreWrite(uint32_t iters, size_t numOfStringKeys) {
   auto suspender = folly::BenchmarkSuspender();
-  fbzmq::Context context;
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
   // Create new storeWrapper and perform some operations on it
-  auto store = std::make_unique<PersistentStoreWrapper>(context, tid);
+  auto store = std::make_unique<PersistentStoreWrapper>(tid);
   store->run();
 
   // Generate keys
@@ -102,10 +101,9 @@ BM_PersistentStoreWrite(uint32_t iters, size_t numOfStringKeys) {
 void
 BM_PersistentStoreLoad(uint32_t iters, size_t numOfStringKeys) {
   auto suspender = folly::BenchmarkSuspender();
-  fbzmq::Context context;
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
   // Create new storeWrapper and perform some operations on it
-  auto store = std::make_unique<PersistentStoreWrapper>(context, tid);
+  auto store = std::make_unique<PersistentStoreWrapper>(tid);
   store->run();
 
   // Generate keys
@@ -136,11 +134,10 @@ BM_PersistentStoreLoad(uint32_t iters, size_t numOfStringKeys) {
 void
 BM_PersistentStoreCreateDestroy(uint32_t iters, size_t numOfStringKeys) {
   auto suspender = folly::BenchmarkSuspender();
-  fbzmq::Context context;
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
   // Create storeWrapper and perform some operations on it
-  auto store = std::make_unique<PersistentStoreWrapper>(context, tid + 1);
+  auto store = std::make_unique<PersistentStoreWrapper>(tid + 1);
   store->run();
 
   // Generate keys
@@ -155,7 +152,7 @@ BM_PersistentStoreCreateDestroy(uint32_t iters, size_t numOfStringKeys) {
 
   for (uint32_t i = 0; i < iters; i++) {
     // Create & destroy the store - ensure the same tid
-    auto store1 = std::make_unique<PersistentStoreWrapper>(context, tid + 1);
+    auto store1 = std::make_unique<PersistentStoreWrapper>(tid + 1);
   }
 }
 

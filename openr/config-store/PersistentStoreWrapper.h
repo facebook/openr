@@ -13,7 +13,7 @@ namespace openr {
 
 class PersistentStoreWrapper {
  public:
-  PersistentStoreWrapper(fbzmq::Context& context, const unsigned long tid);
+  explicit PersistentStoreWrapper(const unsigned long tid);
 
   // Destructor will try to save DB to disk before destroying the object
   ~PersistentStoreWrapper() {
@@ -35,7 +35,6 @@ class PersistentStoreWrapper {
   void stop();
 
  public:
-  const std::string nodeName;
   const std::string filePath;
 
  private:

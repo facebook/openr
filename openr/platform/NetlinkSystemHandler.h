@@ -14,9 +14,6 @@
 #include <string>
 #include <utility>
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/async/ZmqTimeout.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>

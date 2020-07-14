@@ -375,8 +375,7 @@ main(int argc, char** argv) {
       orderedEvbs,
       watchdog,
       "ConfigStore",
-      std::make_unique<PersistentStore>(
-          config->getNodeName(), FLAGS_config_store_filepath, context));
+      std::make_unique<PersistentStore>(FLAGS_config_store_filepath));
 
   // Start monitor Module
   // for each log message it receives, we want to add the openr domain
@@ -537,8 +536,7 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
           kvStoreUpdatesQueue.getReader(),
           staticRoutesUpdateQueue.getReader(),
-          routeUpdatesQueue,
-          context));
+          routeUpdatesQueue));
 
   // Define and start Fib Module
   auto fib = startEventBase(

@@ -18,8 +18,6 @@
 #include <vector>
 
 #include <fb303/ServiceData.h>
-#include <fbzmq/service/if/gen-cpp2/Monitor_types.h>
-#include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/GLog.h>
 #include <folly/IPAddress.h>

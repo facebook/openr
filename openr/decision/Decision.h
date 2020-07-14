@@ -12,8 +12,6 @@
 #include <unordered_map>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
@@ -282,8 +280,7 @@ class Decision : public OpenrEventBase {
       std::chrono::milliseconds debounceMaxDur,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
-      messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue,
-      fbzmq::Context& zmqContext);
+      messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
 
   virtual ~Decision() = default;
 

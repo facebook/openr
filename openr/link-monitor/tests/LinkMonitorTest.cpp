@@ -221,8 +221,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         nlSock_.get());
 
     // spin up a config store
-    configStore = std::make_unique<PersistentStore>(
-        "1", kConfigStorePath, context, true /* dryrun */);
+    configStore =
+        std::make_unique<PersistentStore>(kConfigStorePath, true /* dryrun */);
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";

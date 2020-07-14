@@ -7,7 +7,6 @@
 
 #include <stdlib.h>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <glog/logging.h>

@@ -8,7 +8,6 @@
 #include <thread>
 #include <utility>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/Random.h>
 #include <gflags/gflags.h>
@@ -59,7 +58,6 @@ loadDatabaseFromDisk(const std::string& filePath) {
 }
 
 TEST(PersistentStoreTest, LoadStoreEraseTest) {
-  fbzmq::Context context;
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
   // Data types to store/load
@@ -75,7 +73,7 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   const std::string val2 = "5321";
 
   {
-    PersistentStoreWrapper store(context, tid);
+    PersistentStoreWrapper store(tid);
     store.run();
 
     // Store and verify Load
@@ -124,7 +122,7 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   // reloading of content on creation. Verify stored content is recovered.
   //
   {
-    PersistentStoreWrapper store(context, tid);
+    PersistentStoreWrapper store(tid);
     store.run();
 
     // Verify key2
@@ -183,13 +181,12 @@ TEST(PersistentStoreTest, EncodeDecodePersistentObject) {
 }
 
 TEST(PersistentStoreTest, BulkStoreLoad) {
-  fbzmq::Context context;
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
   thrift::StoreDatabase database;
   std::string filePath;
   {
-    PersistentStoreWrapper store(context, tid);
+    PersistentStoreWrapper store(tid);
     store.run();
     filePath = store.filePath;
 
