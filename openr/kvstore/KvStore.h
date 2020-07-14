@@ -190,6 +190,8 @@ class KvStoreDb : public DualNode {
       bool isFloodRoot,
       const std::string& nodeId);
 
+  ~KvStoreDb() override;
+
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
       const std::string& requestId, thrift::KvStoreRequest& thriftReq);
 
@@ -449,6 +451,15 @@ class KvStoreDb : public DualNode {
   // set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
+  // pending requestId for thrift client.
+  // NOTE: KvStoreDb processes full-sync/flooding/etc. in ASYNC fashion.
+  //       `thriftFs_` make sure all pending request finish processing before
+  //       shutting down.
+  uint64_t pendingThriftId_{0};
+
+  // collection of semifutures for thrift requests
+  std::unordered_map<uint64_t, folly::SemiFuture<folly::Unit>> thriftFs_{};
+
   // The peers we will be talking to: both PUB and CMD URLs for each. We use
   // peerAddCounter_ to uniquely identify a peering session's socket-id.
   uint64_t peerAddCounter_{0};
@@ -549,6 +560,11 @@ class KvStore final : public OpenrEventBase {
       // ZMQ high water mark
       int zmqHwm = Constants::kHighWaterMark,
       bool enableKvStoreThrift = false);
+
+  ~KvStore() override = default;
+
+  // override stop() method of OpenrEventBase
+  void stop() override;
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)

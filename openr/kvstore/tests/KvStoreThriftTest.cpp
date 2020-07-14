@@ -231,72 +231,83 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
   auto store1 = stores_.front();
   auto store2 = stores_.back();
 
-  //
-  // Step1: Add peer to each other's KvStore instances
-  //        Expect full-sync request exchanged;
-  //
-  EXPECT_TRUE(store1->addPeer(store2->getNodeId(), peerSpec1));
-  EXPECT_TRUE(store2->addPeer(store1->getNodeId(), peerSpec2));
+  // eventbase to schedule callbacks at certain time spot
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    //
+    // Step1: Add peer to each other's KvStore instances
+    //        Expect full-sync request exchanged;
+    //
+    EXPECT_TRUE(store1->addPeer(store2->getNodeId(), peerSpec1));
+    EXPECT_TRUE(store2->addPeer(store1->getNodeId(), peerSpec2));
 
-  // dump peers to make sure they are aware of each other
-  std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
-      {store2->getNodeId(), peerSpec1}};
-  std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
-      {store1->getNodeId(), peerSpec2}};
-  EXPECT_EQ(expPeer1_1, store1->getPeers());
-  EXPECT_EQ(expPeer2_1, store2->getPeers());
+    // dump peers to make sure they are aware of each other
+    std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
+        {store2->getNodeId(), peerSpec1}};
+    std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
+        {store1->getNodeId(), peerSpec2}};
+    EXPECT_EQ(expPeer1_1, store1->getPeers());
+    EXPECT_EQ(expPeer2_1, store2->getPeers());
 
-  // verifying keys are exchanged between peers
-  EXPECT_TRUE(verifyKvStorePeerState(
-      store1.get(), store2->getNodeId(), KvStorePeerState::INITIALIZED));
-  EXPECT_TRUE(verifyKvStorePeerState(
-      store2.get(), store1->getNodeId(), KvStorePeerState::INITIALIZED));
-  EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
-  EXPECT_TRUE(verifyKvStoreKeyVal(store2.get(), key1, thriftVal1));
+    // verifying keys are exchanged between peers
+    EXPECT_TRUE(verifyKvStorePeerState(
+        store1.get(), store2->getNodeId(), KvStorePeerState::INITIALIZED));
+    EXPECT_TRUE(verifyKvStorePeerState(
+        store2.get(), store1->getNodeId(), KvStorePeerState::INITIALIZED));
+    EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
+    EXPECT_TRUE(verifyKvStoreKeyVal(store2.get(), key1, thriftVal1));
 
-  EXPECT_EQ(2, store1->dumpAll().size());
-  EXPECT_EQ(2, store2->dumpAll().size());
+    EXPECT_EQ(2, store1->dumpAll().size());
+    EXPECT_EQ(2, store2->dumpAll().size());
 
-  //
-  // Step2: Update peer with different thrift peerAddr
-  //        Expect full-sync request being sent;
-  //
-  store2.reset(); // shared_ptr needs to be cleaned up everywhere!
-  stores_.back()->closeQueue();
-  thriftServers_.back()->stop();
-  thriftServers_.back().reset();
-  thriftServers_.pop_back();
-  stores_.back()->stop();
-  stores_.back().reset();
-  stores_.pop_back();
+    //
+    // Step2: Update peer with different thrift peerAddr
+    //        Expect full-sync request being sent;
+    //
+    store2.reset(); // shared_ptr needs to be cleaned up everywhere!
+    stores_.back()->closeQueue();
+    thriftServers_.back()->stop();
+    thriftServers_.back().reset();
+    thriftServers_.pop_back();
+    stores_.back()->stop();
+    stores_.back().reset();
+    stores_.pop_back();
+  });
 
-  // recreate store2 and corresponding thriftServer
-  createKvStore(node2);
-  createThriftServer(node2, stores_.back());
+  // ATTN: give 1000ms margin before recreate kvstore instance to avoid
+  //       situation of INPROC_URL of ZMQ still being occupied
+  evb.scheduleTimeout(std::chrono::milliseconds(1000), [&]() noexcept {
+    // recreate store2 and corresponding thriftServer
+    createKvStore(node2);
+    createThriftServer(node2, stores_.back());
 
-  store2 = stores_.back();
-  auto newPeerSpec = createPeerSpec(
-      "inproc://dummy-spec-2", // TODO: remove dummy url once zmq deprecated
-      Constants::kPlatformHost.toString(),
-      thriftServers_.back()->getOpenrCtrlThriftPort());
-  std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
-      {store2->getNodeId(), newPeerSpec}};
+    store2 = stores_.back();
+    auto newPeerSpec = createPeerSpec(
+        "inproc://dummy-spec-2", // TODO: remove dummy url once zmq deprecated
+        Constants::kPlatformHost.toString(),
+        thriftServers_.back()->getOpenrCtrlThriftPort());
+    std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
+        {store2->getNodeId(), newPeerSpec}};
 
-  // TODO: add counter verification for state change to IDLE
-  EXPECT_TRUE(store1->addPeer(store2->getNodeId(), newPeerSpec));
-  EXPECT_EQ(newExpPeer, store1->getPeers());
+    // TODO: add counter verification for state change to IDLE
+    EXPECT_TRUE(store1->addPeer(store2->getNodeId(), newPeerSpec));
+    EXPECT_EQ(newExpPeer, store1->getPeers());
 
-  // verify another full-sync request being sent
-  EXPECT_TRUE(verifyKvStorePeerState(
-      store1.get(), store2->getNodeId(), KvStorePeerState::INITIALIZED));
-  EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
+    // verify another full-sync request being sent
+    EXPECT_TRUE(verifyKvStorePeerState(
+        store1.get(), store2->getNodeId(), KvStorePeerState::INITIALIZED));
+    EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
+
+    evb.stop();
+  });
+
+  evb.run();
 
   //
   // Step3: Remove peers
   //
   EXPECT_TRUE(store1->delPeer(store2->getNodeId()));
   EXPECT_TRUE(store2->delPeer(store1->getNodeId()));
-
   EXPECT_EQ(0, store1->getPeers().size());
   EXPECT_EQ(0, store2->getPeers().size());
 }
