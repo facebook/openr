@@ -326,51 +326,6 @@ isMplsLabelValid(int32_t const mplsLabel) {
  */
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
-/**
- * Thrift is consuming DeprecatedOptionalField for optional fields.
- * Openr is using std::optional internally.
- * The utilities covert between these types.
- * Can be removed when thrift adopts std::optional.
- */
-template <class T>
-void
-fromStdOptional(
-    apache::thrift::DeprecatedOptionalField<T>& lhs,
-    const std::optional<T>& rhs) {
-  if (rhs) {
-    lhs = *rhs;
-  } else {
-    lhs.reset();
-  }
-}
-
-template <class T>
-std::optional<T>
-castToStd(const apache::thrift::DeprecatedOptionalField<T>& t) {
-  if (t) {
-    return *t;
-  }
-  return {};
-}
-
-template <class T>
-std::optional<T>
-castToStd(apache::thrift::DeprecatedOptionalField<T>& t) {
-  if (t) {
-    return *t;
-  }
-  return {};
-}
-
-template <class T>
-std::optional<T>
-castToStd(apache::thrift::DeprecatedOptionalField<T>&& t) {
-  if (t) {
-    return std::move(*t);
-  }
-  return {};
-}
-
 template <class T>
 void
 fromStdOptional(
