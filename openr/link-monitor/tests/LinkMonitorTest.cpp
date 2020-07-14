@@ -200,9 +200,11 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // Cleanup any existing config file on disk
     system(folly::sformat("rm -rf {}", kConfigStorePath).c_str());
 
-    mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(
-        context, "inproc://platform-pub-url");
+    // create fakeNetlinkProtocolSocket
+    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&nlEvb_);
 
+    // Setup system service by using MockSystemHandler
+    mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
     server = make_shared<ThriftServer>();
     server->setNumIOWorkerThreads(1);
     server->setNumAcceptThreads(1);
@@ -211,6 +213,12 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     systemThriftThread.start(server);
     port = systemThriftThread.getAddress()->getPort();
+
+    // Setup PlatformPublisher
+    platformPublisher_ = std::make_unique<PlatformPublisher>(
+        context,
+        PlatformPublisherUrl{"inproc://platform-pub-url"},
+        nlSock_.get());
 
     // spin up a config store
     configStore = std::make_unique<PersistentStore>(
@@ -286,9 +294,11 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // stop mocked nl platform
     LOG(INFO) << "Stopping mocked thrift handlers";
-    mockNlHandler->stop();
+    platformPublisher_->stop();
     systemThriftThread.stop();
+    server.reset();
     mockNlHandler.reset();
+    nlSock_.reset();
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
@@ -551,6 +561,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
   ScopedServerThread systemThriftThread;
 
   fbzmq::Context context{};
+  folly::EventBase nlEvb_;
+  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<PlatformPublisher> platformPublisher_{nullptr};
 
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
@@ -559,8 +572,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
 
-  unique_ptr<PersistentStore> configStore;
-  unique_ptr<std::thread> configStoreThread;
+  std::unique_ptr<PersistentStore> configStore;
+  std::unique_ptr<std::thread> configStoreThread;
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;

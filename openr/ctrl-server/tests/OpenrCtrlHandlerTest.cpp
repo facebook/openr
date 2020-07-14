@@ -116,15 +116,21 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::seconds(0));
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 
+    // create fakeNetlinkProtocolSocket
+    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb_);
+
     // Create MockNetlinkSystemHandler
-    mockNlHandler =
-        std::make_shared<MockNetlinkSystemHandler>(context_, platformPubUrl_);
+    mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
     systemServer = std::make_shared<apache::thrift::ThriftServer>();
     systemServer->setNumIOWorkerThreads(1);
     systemServer->setNumAcceptThreads(1);
     systemServer->setPort(0);
     systemServer->setInterface(mockNlHandler);
     systemThriftThread.start(systemServer);
+
+    // Setup PlatformPublisher
+    platformPublisher_ = std::make_unique<PlatformPublisher>(
+        context_, platformPubUrl_, nlSock_.get());
 
     // Create LinkMonitor
     re2::RE2::Options regexOpts;
@@ -195,8 +201,9 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManager->stop();
     prefixManagerThread_.join();
 
-    mockNlHandler->stop();
+    platformPublisher_->stop();
     systemThriftThread.stop();
+    systemServer.reset();
 
     fib->stop();
     fibThread_.join();
@@ -237,8 +244,10 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
       staticRoutesUpdatesQueue_;
 
-  fbzmq::Context context_;
+  fbzmq::Context context_{};
   folly::EventBase evb_;
+  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<PlatformPublisher> platformPublisher_{nullptr};
 
   std::thread zmqMonitorThread_;
   std::thread decisionThread_;

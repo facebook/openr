@@ -34,8 +34,7 @@ namespace openr {
 
 class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
  public:
-  MockNetlinkSystemHandler(
-      fbzmq::Context& context, const std::string& platformPublisherUrl);
+  explicit MockNetlinkSystemHandler(fbnl::FakeNetlinkProtocolSocket* nlSock);
 
   ~MockNetlinkSystemHandler() override = default;
 
@@ -53,12 +52,8 @@ class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   void stop();
 
  private:
-  // Create netlink socket
-  folly::EventBase nlEvb_;
-  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_;
-
-  // Used to publish Netlink event
-  std::unique_ptr<PlatformPublisher> platformPublisher_;
+  // mocked version of netlink protocols socket
+  fbnl::FakeNetlinkProtocolSocket* nlSock_{nullptr};
 
   // Interface/link name => link attributes mapping
   folly::Synchronized<fbnl::NlLinks> linkDb_{};

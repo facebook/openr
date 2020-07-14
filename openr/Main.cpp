@@ -338,6 +338,7 @@ main(int argc, char** argv) {
   }
 
   // Start NetlinkSystemHandler
+  auto nlSystemHandler = std::make_shared<NetlinkSystemHandler>(nlSock.get());
   netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
   netlinkSystemServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
   netlinkSystemServer->setThreadManager(thriftThreadMgr);
@@ -346,11 +347,9 @@ main(int argc, char** argv) {
   netlinkSystemServer->setPort(FLAGS_system_agent_port);
 
   netlinkSystemServerThread =
-      std::make_unique<std::thread>([&netlinkSystemServer, &nlSock]() {
+      std::make_unique<std::thread>([&netlinkSystemServer, &nlSystemHandler]() {
         folly::setThreadName("SystemService");
-        auto systemHandler =
-            std::make_unique<NetlinkSystemHandler>(nlSock.get());
-        netlinkSystemServer->setInterface(std::move(systemHandler));
+        netlinkSystemServer->setInterface(nlSystemHandler);
 
         LOG(INFO) << "Starting NetlinkSystem server...";
         netlinkSystemServer->serve();
@@ -677,13 +676,15 @@ main(int argc, char** argv) {
     netlinkFibServerThread.reset();
     netlinkFibServer.reset();
   }
-  if (netlinkSystemServer) {
-    CHECK(netlinkSystemServerThread);
-    netlinkSystemServer->stop();
-    netlinkSystemServerThread->join();
-    netlinkSystemServerThread.reset();
-    netlinkSystemServer.reset();
-  }
+
+  netlinkSystemServer->stop();
+  netlinkSystemServerThread->join();
+  netlinkSystemServerThread.reset();
+  netlinkSystemServer.reset();
+
+  // NOTE: Multiple instances can hold nlSystemHandler ptr.
+  //       Destruct it at the end.
+  nlSystemHandler.reset();
 
   if (thriftThreadMgr) {
     thriftThreadMgr->stop();
