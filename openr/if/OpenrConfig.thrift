@@ -151,6 +151,9 @@ struct OpenrConfig {
   7: optional bool enable_v4
   # do route programming through netlink
   8: optional bool enable_netlink_fib_handler
+  # listen for interface information (link status|addresses) through netlink
+  # [deprecated] TODO: remove after next push.
+  9: optional bool enable_netlink_system_handler
 
   /* Hard wait time before decision start to compute routes
    * if not set, first neighbor update will trigger route computation
