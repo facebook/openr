@@ -760,6 +760,10 @@ LinkMonitor::advertiseRedistAddrs() {
     for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
       prefix.forwardingType = prefixForwardingType_;
       prefix.forwardingAlgorithm = prefixForwardingAlgorithm_;
+      prefix.tags_ref()->emplace("INTERFACE_SUBNET");
+      prefix.tags_ref()->emplace(
+          folly::sformat("{}:{}", nodeId_, interface.getIfName()));
+      prefix.metrics_ref()->path_preference_ref() = Constants::kPathPreference;
       prefixes.emplace_back(std::move(prefix));
     }
   }

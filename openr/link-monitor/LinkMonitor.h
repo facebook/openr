@@ -115,7 +115,7 @@ class LinkMonitor final : public OpenrEventBase {
   void
   setAsMockMode() {
     mockMode_ = true;
-  };
+  }
 
   /*
    * Public APIs to change metric:

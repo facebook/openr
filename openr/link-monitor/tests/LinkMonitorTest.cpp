@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "MockNetlinkSystemHandler.h"
+#include "openr/link-monitor/tests/MockNetlinkSystemHandler.h"
 
 #include <algorithm>
 #include <chrono>
@@ -531,7 +531,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     EXPECT_EQ(peers.at(nodeName).ctrlPort, peerSpec.ctrlPort);
   }
 
-  std::unordered_set<thrift::IpPrefix>
+  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>
   getNextPrefixDb(
       std::string const& key,
       std::string const& area =
@@ -544,9 +544,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
           value->value_ref().value(), serializer);
-      std::unordered_set<thrift::IpPrefix> prefixes;
-      for (auto const& prefixEntry : prefixDb.prefixEntries) {
-        prefixes.insert(prefixEntry.prefix);
+      std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes;
+      for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
+        prefixes.emplace(*prefixEntry.prefix_ref(), prefixEntry);
       }
       return prefixes;
     }
@@ -1749,7 +1749,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
 TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   // Verify that initial DB has empty prefix entries
-  std::unordered_set<thrift::IpPrefix> prefixes;
+  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes;
 
   prefixes = getNextPrefixDb("prefix:node-1");
   EXPECT_EQ(0, prefixes.size());
@@ -1822,7 +1822,14 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
       LOG(INFO) << "Looking for 1 prefixes got " << prefixes.size();
       continue;
     }
-    EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
+    ASSERT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
+    auto& prefixEntry = prefixes.at(toIpPrefix("2803:6080:4958:b403::1/128"));
+    EXPECT_EQ(
+        Constants::kPathPreference,
+        prefixEntry.metrics_ref()->path_preference_ref());
+    EXPECT_EQ(
+        std::set<std::string>({"INTERFACE_SUBNET", "node-1:loopback"}),
+        prefixEntry.tags_ref());
   }
 
   //
