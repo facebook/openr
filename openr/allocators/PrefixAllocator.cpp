@@ -643,6 +643,8 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.forwardingType = prefixForwardingType_;
   prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
   prefixEntry.ephemeral_ref().reset();
+  prefixEntry.tags_ref()->emplace("AUTO-ALLOCATED");
+  prefixEntry.metrics_ref()->path_preference_ref() = Constants::kPathPreference;
 
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;

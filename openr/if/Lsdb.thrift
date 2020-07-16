@@ -239,7 +239,7 @@ struct PrefixMetrics {
   // Policy Compatibility: `transitive`, `mutable`
   // Network path preference for this route. This is set and updated as route
   // traverse the network.
-  2: i32 path_preferecnce = 0
+  2: i32 path_preference = 0
 
   // 2nd tie-breaker
   // Comparator: `prefer-higher`

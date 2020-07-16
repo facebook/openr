@@ -306,6 +306,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       EXPECT_GE(1, prefixes.size());
       if (prefixes.size()) {
         EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, prefixes[0].type);
+        EXPECT_EQ(
+            std::set<std::string>({"AUTO-ALLOCATED"}),
+            prefixes.at(0).tags_ref());
+        EXPECT_EQ(
+            Constants::kPathPreference,
+            prefixes.at(0).metrics_ref()->path_preference_ref());
         auto prefix = toIPNetwork(prefixes[0].prefix);
         EXPECT_EQ(kAllocPrefixLen, prefix.second);
         if (usingNewSeedPrefix) {
