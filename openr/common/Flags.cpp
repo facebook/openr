@@ -69,10 +69,6 @@ DEFINE_bool(
     dryrun, true, "Run the process in dryrun mode. No FIB programming!");
 DEFINE_string(loopback_iface, "lo", "The iface to configure with the prefix");
 DEFINE_string(
-    prefixes,
-    "",
-    "The prefix and loopback IP separated by comma for this node");
-DEFINE_string(
     seed_prefix,
     "",
     "The seed prefix all subprefixes are to be allocated from. If empty, "

@@ -84,8 +84,6 @@ class LinkMonitor final : public OpenrEventBase {
       std::shared_ptr<const Config> config,
       int32_t platformThriftPort,
       KvStore* kvstore,
-      // static list of prefixes to announce
-      std::vector<thrift::IpPrefix> const& staticPrefixes,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
       // Queue for spark and kv-store
@@ -261,10 +259,8 @@ class LinkMonitor final : public OpenrEventBase {
 
   /*
    * [PrefixManager] Advertise redistribute prefixes over prefixUpdatesQueue_ to
-   * prefix manager "redistribute prefixes" includes:
-   *   1. static configured prefixes with --prefixes
-   *      TODO: move --prefixes into PrefixManager
-   *   2. addresses read from interfaces match redistribute_interface_regexes
+   * prefix manager "redistribute prefixes" includes addresses of interfaces
+   * that match redistribute_interface_regexes
    *
    * Called in
    * - adjHoldTimer_ during initial start
@@ -280,8 +276,6 @@ class LinkMonitor final : public OpenrEventBase {
   const std::string nodeId_;
   // Switch agent thrift server port
   const int32_t platformThriftPort_{0};
-  // static list of prefixes to announce
-  const std::vector<thrift::IpPrefix> staticPrefixes_;
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
   // URL to receive netlink events from PlatformPublisher

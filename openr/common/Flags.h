@@ -32,7 +32,6 @@ DECLARE_bool(assume_drained);
 DECLARE_string(node_name);
 DECLARE_bool(dryrun);
 DECLARE_string(loopback_iface);
-DECLARE_string(prefixes);
 DECLARE_string(seed_prefix);
 
 DECLARE_bool(enable_prefix_alloc);

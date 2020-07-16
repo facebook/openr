@@ -74,7 +74,6 @@ LinkMonitor::LinkMonitor(
     std::shared_ptr<const Config> config,
     int32_t platformThriftPort,
     KvStore* kvStore,
-    std::vector<thrift::IpPrefix> const& staticPrefixes,
     bool enablePerfMeasurement,
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
@@ -87,7 +86,6 @@ LinkMonitor::LinkMonitor(
     std::chrono::seconds adjHoldTime)
     : nodeId_(config->getNodeName()),
       platformThriftPort_(platformThriftPort),
-      staticPrefixes_(staticPrefixes),
       enablePerfMeasurement_(enablePerfMeasurement),
       platformPubUrl_(platformPubUrl),
       enableV4_(config->isV4Enabled()),
@@ -746,17 +744,6 @@ LinkMonitor::advertiseRedistAddrs() {
     return;
   }
   std::vector<thrift::PrefixEntry> prefixes;
-
-  // Add static prefixes
-  for (auto const& prefix : staticPrefixes_) {
-    auto prefixEntry = openr::thrift::PrefixEntry();
-    prefixEntry.prefix = prefix;
-    prefixEntry.type = thrift::PrefixType::LOOPBACK;
-    prefixEntry.forwardingType = prefixForwardingType_;
-    prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
-    prefixEntry.ephemeral_ref().reset();
-    prefixes.push_back(prefixEntry);
-  }
 
   // Add redistribute addresses
   for (auto& kv : interfaces_) {

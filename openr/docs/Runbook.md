@@ -121,15 +121,6 @@ Network.
 DOMAIN=cluster10.dc3
 ```
 
-#### PREFIXES
-
-Static list of comma separate prefixes to announce from the current node. Can't
-be changed while running. Default value is empty
-
-```
-PREFIXES="face:cafe::1/128,face:b00c::/64"
-```
-
 #### LOOPBACK_IFACE
 
 Indicates loopback address to which auto elected prefix will be assigned if

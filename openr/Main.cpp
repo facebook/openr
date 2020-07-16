@@ -468,33 +468,6 @@ main(int argc, char** argv) {
           std::make_shared<IoProvider>(),
           config));
 
-  // Static list of prefixes to announce into the network as long as OpenR is
-  // running.
-  std::vector<openr::thrift::IpPrefix> networks;
-  try {
-    std::vector<std::string> prefixes;
-    folly::split(",", FLAGS_prefixes, prefixes, true /* ignore empty */);
-    for (auto const& prefix : prefixes) {
-      // Perform some sanity checks before announcing the list of prefixes
-      auto network = folly::IPAddress::createNetwork(prefix);
-      if (network.first.isLoopback()) {
-        LOG(FATAL) << "Default loopback addresses can't be announced "
-                   << prefix;
-      }
-      if (network.first.isLinkLocal()) {
-        LOG(FATAL) << "Link local addresses can't be announced " << prefix;
-      }
-      if (network.first.isMulticast()) {
-        LOG(FATAL) << "Multicast addresses can't be annouced " << prefix;
-      }
-      networks.emplace_back(toIpPrefix(network));
-    }
-  } catch (std::exception const& err) {
-    LOG(ERROR) << "Invalid Prefix string specified. Expeted comma separated "
-               << "list of IP/CIDR format, got '" << FLAGS_prefixes << "'";
-    return -1;
-  }
-
   // Create link monitor instance.
   auto linkMonitor = startEventBase(
       allThreads,
@@ -506,7 +479,6 @@ main(int argc, char** argv) {
           config,
           FLAGS_system_agent_port,
           kvStore,
-          networks,
           FLAGS_enable_perf_measurement,
           interfaceUpdatesQueue,
           peerUpdatesQueue,

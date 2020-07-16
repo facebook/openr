@@ -138,7 +138,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         config,
         systemThriftThread.getAddress()->getPort(),
         kvStoreWrapper->getKvStore(),
-        std::vector<thrift::IpPrefix>{},
         false /* enable perf measurement */,
         interfaceUpdatesQueue_,
         peerUpdatesQueue_,

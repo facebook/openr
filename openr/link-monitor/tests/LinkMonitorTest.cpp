@@ -141,9 +141,6 @@ const auto adj_3_1 = createThriftAdjacency(
     Constants::kDefaultAdjWeight /* weight */,
     "" /* otherIfName */);
 
-const auto staticPrefix1 = toIpPrefix("fc00:face:b00c::/64");
-const auto staticPrefix2 = toIpPrefix("fc00:cafe:babe::/64");
-
 thrift::SparkNeighborEvent
 createNeighborEvent(
     thrift::SparkNeighborEventType eventType,
@@ -349,7 +346,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         config,
         port, /* thrift service port */
         kvStoreWrapper->getKvStore(),
-        std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
         false /* enable perf measurement */,
         interfaceUpdatesQueue,
         peerUpdatesQueue,
@@ -1686,7 +1682,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         currConfig,
         0, // platform pub port
         kvStoreWrapper->getKvStore(),
-        std::vector<thrift::IpPrefix>(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue,
         peerUpdatesQueue,
@@ -1744,29 +1739,20 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
 }
 
 /**
- * Unit-test to test advertisement of static and loopback prefixes
- * - verify initial prefix-db is set to static prefixes
+ * Unit-test to test advertisement of loopback prefixes
  * - add addresses via addrEvent and verify from KvStore prefix-db
  * - remove address via addrEvent and verify from KvStore prefix-db
  * - announce network instead of address via addrEvent and verify it doesn't
  *   change anything
  * - set link to down state and verify that it removes all associated addresses
  */
-TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
+TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
-  // Verify that initial DB has static prefix entries
+  // Verify that initial DB has empty prefix entries
   std::unordered_set<thrift::IpPrefix> prefixes;
-  prefixes.clear();
-  while (prefixes.size() != 2) {
-    LOG(INFO) << "Testing initial prefix database";
-    prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 2) {
-      LOG(INFO) << "Looking for 2 prefixes got " << prefixes.size();
-      continue;
-    }
-    EXPECT_EQ(1, prefixes.count(staticPrefix1));
-    EXPECT_EQ(1, prefixes.count(staticPrefix2));
-  }
+
+  prefixes = getNextPrefixDb("prefix:node-1");
+  EXPECT_EQ(0, prefixes.size());
 
   //
   // Send link up event
@@ -1792,15 +1778,13 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
 
   // verify
   prefixes.clear();
-  while (prefixes.size() != 7) {
+  while (prefixes.size() != 5) {
     LOG(INFO) << "Testing address advertisements";
     prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 7) {
-      LOG(INFO) << "Looking for 7 prefixes got " << prefixes.size();
+    if (prefixes.size() != 5) {
+      LOG(INFO) << "Looking for 5 prefixes got " << prefixes.size();
       continue;
     }
-    EXPECT_EQ(1, prefixes.count(staticPrefix1));
-    EXPECT_EQ(1, prefixes.count(staticPrefix2));
     EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
     EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:cafe:babe::1/128")));
     EXPECT_EQ(1, prefixes.count(toIpPrefix("10.127.240.1/32")));
@@ -1831,15 +1815,13 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
 
   // verify
   prefixes.clear();
-  while (prefixes.size() != 3) {
+  while (prefixes.size() != 1) {
     LOG(INFO) << "Testing address withdraws";
     prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 3) {
-      LOG(INFO) << "Looking for 3 prefixes got " << prefixes.size();
+    if (prefixes.size() != 1) {
+      LOG(INFO) << "Looking for 1 prefixes got " << prefixes.size();
       continue;
     }
-    EXPECT_EQ(1, prefixes.count(staticPrefix1));
-    EXPECT_EQ(1, prefixes.count(staticPrefix2));
     EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
   }
 
@@ -1853,16 +1835,13 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   //
   // Verify all addresses are withdrawn on link down event
   //
-  prefixes.clear();
-  while (prefixes.size() != 2) {
+  while (prefixes.size() != 0) {
     LOG(INFO) << "Testing prefix withdraws";
     prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 2) {
-      LOG(INFO) << "Looking for 2 prefixes got " << prefixes.size();
+    if (prefixes.size() != 0) {
+      LOG(INFO) << "Looking for 0 prefixes got " << prefixes.size();
       continue;
     }
-    EXPECT_EQ(1, prefixes.count(staticPrefix1));
-    EXPECT_EQ(1, prefixes.count(staticPrefix2));
   }
 }
 

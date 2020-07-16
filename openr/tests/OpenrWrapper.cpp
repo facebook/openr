@@ -168,14 +168,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   // create link monitor
   //
-  std::vector<thrift::IpPrefix> networks;
-  networks.emplace_back(toIpPrefix(folly::IPAddress::createNetwork("::/0")));
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
       config_,
       static_cast<int32_t>(60099), // platfrom pub port
       kvStore_.get(),
-      networks,
       false /* enable perf measurement */,
       interfaceUpdatesQueue_,
       peerUpdatesQueue_,
