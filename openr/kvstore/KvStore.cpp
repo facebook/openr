@@ -1387,13 +1387,15 @@ KvStoreDb::requestThriftPeerSync() {
                 << peerSpec.peerAddr << ", port: " << peerSpec.ctrlPort
                 << ", peerName: " << peerName;
 
-      // TODO: tune `connectTimeout` and `processingTimeout` value
-      //       if necessary
       // TODO: migrate to secure thrift connection
       auto client = getOpenrCtrlPlainTextClient(
           *(evb_->getEvb()),
-          folly::IPAddress(peerSpec.peerAddr),
-          peerSpec.ctrlPort);
+          folly::IPAddress(*peerSpec.peerAddr_ref()), /* v6LinkLocal%iface */
+          *peerSpec.ctrlPort_ref(), /* port to establish TCP connection */
+          Constants::kServiceConnTimeout, /* client connection timeout */
+          Constants::kServiceProcTimeout, /* request processing timeout */
+          folly::AsyncSocket::anyAddress(), /* bindAddress */
+          kvParams_.maybeIpTos /* IP_TOS value for control plane */);
       thriftPeer.client = std::move(client);
 
       // schedule periodic keepAlive time with 20% jitter variance
