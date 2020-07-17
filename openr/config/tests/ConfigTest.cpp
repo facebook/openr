@@ -557,6 +557,9 @@ TEST(ConfigTest, GeneralGetter) {
     // isBgpPeeringEnabled
     EXPECT_TRUE(config.isBgpPeeringEnabled());
     EXPECT_EQ(bgpConf, config.getBgpConfig());
+    EXPECT_EQ(
+        0, bgpConf.translation_config_ref()->communities_to_name_ref()->size());
+    EXPECT_EQ(0, bgpConf.translation_config_ref()->asn_to_area_ref()->size());
   }
 
   // config with watchdog

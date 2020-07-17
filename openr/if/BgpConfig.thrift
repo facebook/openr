@@ -208,6 +208,26 @@ struct BgpPeer {
 }
 
 /**
+ * Configuration to facilitate route translation.
+ */
+struct RouteTranslationConfig {
+  /**
+   * Map that defines communities in '{asn}:{value}' format to their human
+   * readable names. Open/R will use the community name as tag
+   * If not available then string representation of community will be used as
+   * tag
+   */
+  1: map<string, string> communities_to_name;
+
+  /**
+   * Map that defines ASN to Area name mapping. Mostly for readability. Open/R
+   * will use this mapping to convert as-path to area_stack and vice versa.
+   * If not mapping is found then string representation of ASN will be used.
+   */
+  2: map<i32, string> asn_to_area;
+}
+
+/**
  * BGP configuration
  */
 struct BgpConfig {
@@ -255,4 +275,9 @@ struct BgpConfig {
    * Use received link bandwidth extended community to compute UCMP paths
    */
   17: optional bool compute_ucmp_from_link_bandwidth_community
+
+  /**
+   * Configuration to facilitate Open/R <-> BGP route conversions
+   */
+  18: RouteTranslationConfig translation_config
 }
