@@ -51,7 +51,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
       "terragraph",
-      std::nullopt, /* area config */
+      {}, /* area config */
       v4Enabled,
       true /*enableSegmentRouting*/,
       false /*orderedFibProgramming*/,

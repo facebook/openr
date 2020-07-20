@@ -1178,14 +1178,8 @@ TEST_F(SparkFixture, AreaMatch) {
   std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig11, areaConfig12};
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig21, areaConfig22};
 
-  auto tConfig1 = getBasicOpenrConfig(
-      nodeName1,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
-  auto tConfig2 = getBasicOpenrConfig(
-      nodeName2,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1248,14 +1242,8 @@ TEST_F(SparkFixture, NoAreaMatch) {
   std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig1};
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  auto tConfig1 = getBasicOpenrConfig(
-      nodeName1,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
-  auto tConfig2 = getBasicOpenrConfig(
-      nodeName2,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1325,14 +1313,8 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig1};
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  auto tConfig1 = getBasicOpenrConfig(
-      nodeName1,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
-  auto tConfig2 = getBasicOpenrConfig(
-      nodeName2,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1404,10 +1386,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
   auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
-  auto tConfig2 = getBasicOpenrConfig(
-      nodeName2,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1475,19 +1454,10 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
   std::vector<openr::thrift::AreaConfig> vec3 = {areaConfig31, areaConfig32};
 
-  auto tConfig1 = getBasicOpenrConfig(
-      nodeName1,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec1));
-  auto tConfig2 = getBasicOpenrConfig(
-      nodeName2,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec2));
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
-  auto tConfig3 = getBasicOpenrConfig(
-      nodeName3,
-      kDomainName,
-      std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec3));
+  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName, vec3);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);

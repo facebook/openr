@@ -7,8 +7,7 @@ openr::thrift::OpenrConfig
 getBasicOpenrConfig(
     const std::string nodeName = "",
     const std::string domainName = "domain",
-    std::optional<std::unique_ptr<std::vector<openr::thrift::AreaConfig>>>
-        areaCfg = std::nullopt,
+    const std::vector<openr::thrift::AreaConfig>& areaCfg = {},
     bool enableV4 = true,
     bool enableSegmentRouting = false,
     bool orderedFibProgramming = false,
@@ -45,14 +44,14 @@ getBasicOpenrConfig(
 
   config.enable_rib_policy = true;
 
-  if (not areaCfg.has_value()) {
+  if (areaCfg.empty()) {
     openr::thrift::AreaConfig areaConfig;
     areaConfig.area_id = "0";
     areaConfig.neighbor_regexes = {".*"};
     areaConfig.interface_regexes = {".*"};
     config.areas.emplace_back(areaConfig);
   } else {
-    for (const auto& areaCfg : *(areaCfg.value())) {
+    for (const auto& areaCfg : areaCfg) {
       config.areas.emplace_back(areaCfg);
     }
   }

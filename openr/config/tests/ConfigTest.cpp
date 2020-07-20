@@ -156,10 +156,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     openr::thrift::AreaConfig area;
     area.area_id = thrift::KvStore_constants::kDefaultArea();
     std::vector<openr::thrift::AreaConfig> vec = {area};
-    auto confInvalidArea = getBasicOpenrConfig(
-        "node-1",
-        "domain",
-        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    auto confInvalidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
   }
 
@@ -169,10 +166,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
     areaConfig.interface_regexes.emplace_back("iface.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig(
-        "node-1",
-        "domain",
-        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
   }
 
@@ -182,10 +176,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
     areaConfig.neighbor_regexes.emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig(
-        "node-1",
-        "domain",
-        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
   }
 
@@ -196,10 +187,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.interface_regexes.emplace_back("iface.*");
     areaConfig.neighbor_regexes.emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig(
-        "node-1",
-        "domain",
-        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
   }
 
@@ -209,10 +197,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.interface_regexes.emplace_back("iface.*");
     areaConfig.neighbor_regexes.emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig(
-        "node-1",
-        "domain",
-        std::make_unique<std::vector<openr::thrift::AreaConfig>>(vec));
+    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     Config cfg = Config(confValidArea);
     EXPECT_EQ(cfg.getAreaConfiguration().size(), 1);
     EXPECT_EQ(
@@ -512,7 +497,7 @@ TEST(ConfigTest, GeneralGetter) {
     auto tConfig = getBasicOpenrConfig(
         "node-1",
         "domain",
-        std::nullopt, /* area config */
+        {}, /* area config */
         true /* enableV4 */,
         false /* enableSegmentRouting */,
         false /* orderedFibProgramming */,

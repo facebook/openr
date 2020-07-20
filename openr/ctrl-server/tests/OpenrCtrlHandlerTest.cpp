@@ -47,7 +47,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     auto tConfig = getBasicOpenrConfig(
         nodeName,
         "domain",
-        std::make_unique<std::vector<openr::thrift::AreaConfig>>(areaConfig),
+        areaConfig,
         true /* enableV4 */,
         true /* enableSegmentRouting */);
 

@@ -314,12 +314,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
       area.neighbor_regexes.emplace_back(".*");
       areaConfig.emplace_back(std::move(area));
     }
-    auto tConfig = getBasicOpenrConfig(
-        "node-1",
-        "domain",
-        std::make_unique<std::vector<openr::thrift::AreaConfig>>(areaConfig),
-        true,
-        true);
+    auto tConfig =
+        getBasicOpenrConfig("node-1", "domain", areaConfig, true, true);
     // kvstore config
     tConfig.kvstore_config.sync_interval_s = 1;
     // link monitor config

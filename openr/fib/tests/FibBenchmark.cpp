@@ -82,7 +82,7 @@ class FibWrapper {
     auto tConfig = getBasicOpenrConfig(
         "node-1",
         "domain",
-        std::nullopt, /* area config */
+        {}, /* area config */
         true, /* enableV4 */
         false /*enableSegmentRouting*/,
         false /*orderedFibProgramming*/,

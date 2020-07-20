@@ -211,7 +211,7 @@ class FibTestFixture : public ::testing::Test {
     auto tConfig = getBasicOpenrConfig(
         "node-1",
         "domain",
-        std::nullopt, /* area config */
+        {}, /* area config */
         true, /* enableV4 */
         true /*enableSegmentRouting*/,
         false /*orderedFibProgramming*/,
