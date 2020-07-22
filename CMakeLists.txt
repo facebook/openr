@@ -552,8 +552,7 @@ if(BUILD_TESTS)
       openr/tests/OpenrSystemTest.cpp
       openr/tests/OpenrWrapper.cpp
       openr/spark/tests/MockIoProvider.cpp
-      openr/tests/MockSystemHandler.cpp
-      openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/MockNetlinkSystemHandler.cpp
     LIBRARIES
       fbzmq::fbzmq
       ${ZMQ}
@@ -589,7 +588,7 @@ if(BUILD_TESTS)
   add_openr_test(OpenrCtrlHandlerTest openr_ctrl_handler_test
     SOURCES
       openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
-      openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/MockNetlinkSystemHandler.cpp
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
@@ -687,7 +686,7 @@ if(BUILD_TESTS)
   add_openr_test(LinkMonitorTest link_monitor_test
     SOURCES
       openr/link-monitor/tests/LinkMonitorTest.cpp
-      openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/MockNetlinkSystemHandler.cpp
     DESTINATION sbin/tests/openr/link-monitor
   )
 

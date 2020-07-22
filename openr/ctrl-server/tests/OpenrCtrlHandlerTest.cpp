@@ -10,11 +10,7 @@
 
 #include <fbzmq/zmq/Context.h>
 #include <folly/init/Init.h>
-#include <glog/logging.h>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrClient.h>
@@ -25,11 +21,11 @@
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
+#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
 
 using namespace openr;
 

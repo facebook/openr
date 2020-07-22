@@ -16,10 +16,10 @@
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
+#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
 #include <openr/watchdog/Watchdog.h>
 
 namespace openr {

@@ -6,7 +6,6 @@
  */
 
 #include <atomic>
-#include <mutex>
 
 #include <fbzmq/zmq/Common.h>
 #include <folly/ScopeGuard.h>
@@ -17,20 +16,15 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/Thrift.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/prefix-manager/PrefixManager.h>
+#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
 
 using namespace std;
 using namespace folly;

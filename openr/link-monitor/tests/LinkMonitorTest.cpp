@@ -16,7 +16,6 @@
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/NetworkUtil.h>
@@ -27,9 +26,9 @@
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
+#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
 
 using namespace std;
 using namespace openr;
