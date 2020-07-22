@@ -28,7 +28,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds linkFlapMaxBackoff,
     std::chrono::seconds fibColdStartDuration,
     std::shared_ptr<IoProvider> ioProvider,
-    int32_t systemPort,
     uint32_t memLimit)
     : context_(context),
       nodeId_(nodeId),
@@ -38,8 +37,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreGlobalCmdUrl_(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
-      platformPubSock_(context),
-      systemPort_(systemPort) {
+      platformPubSock_(context) {
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
@@ -226,12 +224,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
       config_,
+      mockNlHandler_,
       kvStore_.get(),
       prefixUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
       context_,
-      systemPort_ /* system agent port*/,
       Constants::kPrefixAllocatorSyncInterval);
 
   // Watchdog thread to monitor thread aliveness
@@ -400,6 +398,9 @@ OpenrWrapper<Serializer>::stop() {
     t.join();
   }
 
+  // destroy netlink system handler
+  mockNlHandler_.reset();
+  nlSock_.reset();
   LOG(INFO) << "OpenR with nodeId: " << nodeId_ << " stopped";
 }
 

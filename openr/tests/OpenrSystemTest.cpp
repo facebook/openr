@@ -5,10 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "MockSystemHandler.h"
-
-#include <stdexcept>
-
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -182,18 +178,6 @@ class OpenrFixture : public ::testing::Test {
       LOG(INFO) << "mockIoProvider thread got stopped.";
     });
     mockIoProvider->waitUntilRunning();
-
-    // start mock netlinkSystemHandler
-    // [TO BE DEPRECATED]
-    mockServiceHandler_ = std::make_shared<MockSystemHandler>();
-    server_ = std::make_shared<apache::thrift::ThriftServer>();
-    server_->setNumIOWorkerThreads(1);
-    server_->setNumAcceptThreads(1);
-    server_->setPort(0);
-    server_->setInterface(mockServiceHandler_);
-
-    systemThriftThread_.start(server_);
-    port_ = systemThriftThread_.getAddress()->getPort();
   }
 
   void
@@ -202,8 +186,6 @@ class OpenrFixture : public ::testing::Test {
     LOG(INFO) << "Stopping mockIoProvider thread.";
     mockIoProvider->stop();
     mockIoProviderThread->join();
-    // ScopedServerThread will take care of join
-    systemThriftThread_.stop();
 
     // DO NOT explicitly call stop() method for Open/R instances
     // as DESCTRUCTOR in OpenrWrapper will take care of them.
@@ -234,7 +216,6 @@ class OpenrFixture : public ::testing::Test {
         kLinkFlapMaxBackoff,
         kFibColdStartDuration,
         mockIoProvider,
-        port_,
         memLimit);
     openrWrappers_.emplace_back(std::move(ptr));
     return openrWrappers_.back().get();
@@ -244,12 +225,6 @@ class OpenrFixture : public ::testing::Test {
   fbzmq::Context context;
   std::shared_ptr<MockIoProvider> mockIoProvider{nullptr};
   std::unique_ptr<std::thread> mockIoProviderThread{nullptr};
-
- protected:
-  std::shared_ptr<MockSystemHandler> mockServiceHandler_;
-  int32_t port_{0};
-  std::shared_ptr<apache::thrift::ThriftServer> server_;
-  apache::thrift::util::ScopedServerThread systemThriftThread_;
 
  private:
   std::vector<std::unique_ptr<OpenrWrapper<CompactSerializer>>>

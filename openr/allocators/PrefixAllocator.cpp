@@ -5,25 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "PrefixAllocator.h"
-
-#include <exception>
-
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
-#include <folly/Random.h>
-#include <folly/ScopeGuard.h>
-#include <folly/String.h>
-#include <folly/futures/Future.h>
-#include <thrift/lib/cpp/protocol/TProtocolTypes.h>
-#include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <folly/futures/Promise.h>
 
+#include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/nl/NetlinkTypes.h>
-
-using namespace fbzmq;
+#include <openr/platform/NetlinkSystemHandler.h>
 
 namespace {
 
@@ -36,15 +26,16 @@ namespace openr {
 
 PrefixAllocator::PrefixAllocator(
     std::shared_ptr<const Config> config,
-    KvStore* kvStore_,
+    std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
+    KvStore* kvStore,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     PersistentStore* configStore,
     fbzmq::Context& zmqContext,
-    int32_t systemServicePort,
     std::chrono::milliseconds syncInterval)
     : myNodeName_(config->getNodeName()),
       syncInterval_(syncInterval),
+      nlSystemHandler_(nlSystemHandler),
       setLoopbackAddress_(
           config->getPrefixAllocationConfig().set_loopback_addr),
       overrideGlobalAddress_(
@@ -57,15 +48,14 @@ PrefixAllocator::PrefixAllocator(
       area_(*config->getAreaIds().begin()),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
-      zmqMonitorClient_(zmqContext, monitorSubmitUrl),
-      systemServicePort_(systemServicePort) {
+      zmqMonitorClient_(zmqContext, monitorSubmitUrl) {
   // check non-empty module ptr
   CHECK(configStore_);
-  CHECK(kvStore_);
+  CHECK(kvStore);
 
   // Create KvStore client
   kvStoreClient_ =
-      std::make_unique<KvStoreClientInternal>(this, myNodeName_, kvStore_);
+      std::make_unique<KvStoreClientInternal>(this, myNodeName_, kvStore);
 
   // Let the magic begin. Start allocation as per allocMode
   switch (config->getPrefixAllocationConfig().prefix_allocation_mode) {
@@ -654,7 +644,14 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
 
   // existing global prefixes
   std::vector<folly::CIDRNetwork> oldPrefixes;
-  getIfacePrefixes(loopbackIfaceName_, prefix.first.family(), oldPrefixes);
+  try {
+    getIfacePrefixes(loopbackIfaceName_, prefix.first.family(), oldPrefixes);
+  } catch (const std::exception& e) {
+    LOG(ERROR)
+        << "Failed to get iface addresses from NetlinkSystemHandler. Error: "
+        << folly::exceptionStr(e);
+    return;
+  }
 
   // desired global prefixes
   auto loopbackPrefix = createLoopbackPrefix(prefix);
@@ -739,9 +736,14 @@ PrefixAllocator::getIfacePrefixes(
     const std::string& iface,
     int family,
     std::vector<folly::CIDRNetwork>& addrs) {
-  createThriftClient(evb_, socket_, client_, systemServicePort_);
-  std::vector<thrift::IpPrefix> prefixes;
-  client_->sync_getIfaceAddresses(prefixes, iface, family, RT_SCOPE_UNIVERSE);
+  CHECK(nlSystemHandler_) << "Null ptr for netlinkSystemHandler";
+  std::vector<thrift::IpPrefix> prefixes =
+      *(nlSystemHandler_
+            ->semifuture_getIfaceAddresses(
+                std::make_unique<std::string>(iface), family, RT_SCOPE_UNIVERSE)
+            .get());
+
+  // transform from IpPrefix to CIDRNetwork
   addrs.clear();
   for (const auto& prefix : prefixes) {
     addrs.emplace_back(toIPNetwork(prefix));
@@ -754,17 +756,25 @@ PrefixAllocator::syncIfaceAddrs(
     int family,
     int scope,
     const std::vector<folly::CIDRNetwork>& prefixes) {
-  createThriftClient(evb_, socket_, client_, systemServicePort_);
-
+  // transform from CIDRNetwork to IpPrefix
   std::vector<thrift::IpPrefix> addrs;
   for (const auto& prefix : prefixes) {
     addrs.emplace_back(toIpPrefix(prefix));
   }
+
   try {
-    client_->sync_syncIfaceAddresses(ifName, family, scope, addrs);
+    CHECK(nlSystemHandler_) << "Null ptr for netlinkSystemHandler";
+    nlSystemHandler_
+        ->semifuture_syncIfaceAddresses(
+            std::make_unique<std::string>(ifName),
+            family,
+            scope,
+            std::make_unique<std::vector<::openr::thrift::IpPrefix>>(addrs))
+        .get();
   } catch (const std::exception& ex) {
-    client_.reset();
-    LOG(ERROR) << "PrefixAllocator sync IfAddress failed";
+    LOG(ERROR)
+        << "Failed to sync iface addresses for interface: " << ifName
+        << " from NetlinkSystemHandler. Error: " << folly::exceptionStr(ex);
     throw;
   }
 }
@@ -772,16 +782,22 @@ PrefixAllocator::syncIfaceAddrs(
 void
 PrefixAllocator::delIfaceAddr(
     const std::string& ifName, const folly::CIDRNetwork& prefix) {
-  createThriftClient(evb_, socket_, client_, systemServicePort_);
-
+  // transform from CIDRNetwork to IpPrefix
   std::vector<thrift::IpPrefix> addrs;
   addrs.emplace_back(toIpPrefix(prefix));
+
   try {
-    client_->sync_removeIfaceAddresses(ifName, addrs);
+    CHECK(nlSystemHandler_) << "Null ptr for netlinkSystemHandler";
+    nlSystemHandler_
+        ->semifuture_removeIfaceAddresses(
+            std::make_unique<std::string>(ifName),
+            std::make_unique<std::vector<::openr::thrift::IpPrefix>>(addrs))
+        .get();
   } catch (const std::exception& ex) {
-    client_.reset();
-    LOG(ERROR) << "PrefixAllocator del IfAddress failed: "
-               << folly::IPAddress::networkToString(prefix);
+    LOG(ERROR)
+        << "Failed to del iface address: "
+        << folly::IPAddress::networkToString(prefix)
+        << " from NetlinkSystemHandler. Error: " << folly::exceptionStr(ex);
     throw;
   }
 }
@@ -833,43 +849,6 @@ PrefixAllocator::logPrefixEvent(
       apache::thrift::FRAGILE,
       Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
-}
-
-void
-PrefixAllocator::createThriftClient(
-    folly::EventBase& evb,
-    std::shared_ptr<folly::AsyncSocket>& socket,
-    std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
-    int32_t port) {
-  // Reset client if channel is not good
-  if (socket && (!socket->good() || socket->hangup())) {
-    client.reset();
-    socket.reset();
-  }
-
-  // Do not create new client if one exists already
-  if (client) {
-    return;
-  }
-
-  // Create socket to thrift server and set some connection parameters
-  socket = folly::AsyncSocket::newSocket(
-      &evb,
-      Constants::kPlatformHost.toString(),
-      port,
-      Constants::kPlatformConnTimeout.count());
-
-  // Create channel and set timeout
-  auto channel = apache::thrift::HeaderClientChannel::newChannel(socket);
-  channel->setTimeout(Constants::kPlatformIntfProcTimeout.count());
-
-  // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
-  channel->setProtocolId(apache::thrift::protocol::T_BINARY_PROTOCOL);
-  channel->setClientType(THRIFT_FRAMED_DEPRECATED);
-
-  // Reset client_
-  client =
-      std::make_unique<thrift::SystemServiceAsyncClient>(std::move(channel));
 }
 
 } // namespace openr

@@ -8,17 +8,12 @@
 #pragma once
 
 #include <chrono>
-#include <functional>
 #include <string>
 
-#include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <folly/IPAddress.h>
-#include <folly/Optional.h>
-#include <folly/io/async/AsyncSocket.h>
-#include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/allocators/RangeAllocator.h>
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/OpenrEventBase.h>
@@ -29,12 +24,10 @@
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
-#include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/ReplicateQueue.h>
-
-#include "RangeAllocator.h"
+#include <openr/platform/NetlinkSystemHandler.h>
 
 namespace openr {
 /**
@@ -46,12 +39,12 @@ class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
       std::shared_ptr<const Config> config,
+      std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
       KvStore* kvStore,
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       const MonitorSubmitUrl& monitorSubmitUrl,
       PersistentStore* configStore,
       fbzmq::Context& zmqContext,
-      int32_t systemServicePort,
       std::chrono::milliseconds syncInterval);
 
   PrefixAllocator(PrefixAllocator const&) = delete;
@@ -145,13 +138,6 @@ class PrefixAllocator : public OpenrEventBase {
       int family,
       std::vector<folly::CIDRNetwork>& addrs);
 
-  // Create client when necessary
-  void createThriftClient(
-      folly::EventBase& evb,
-      std::shared_ptr<folly::AsyncSocket>& socket,
-      std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
-      int32_t port);
-
   //
   // Const private variables
   //
@@ -165,6 +151,9 @@ class PrefixAllocator : public OpenrEventBase {
   // hash node ID into prefix space
   const std::hash<std::string> hasher{};
 
+  // netlink system handler
+  const std::shared_ptr<NetlinkSystemHandler> nlSystemHandler_{nullptr};
+
   //
   // Non-const private variables
   //
@@ -175,6 +164,7 @@ class PrefixAllocator : public OpenrEventBase {
   std::string loopbackIfaceName_;
   thrift::PrefixForwardingType prefixForwardingType_;
   thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;
+
   // areas
   std::string area_;
 
@@ -193,9 +183,6 @@ class PrefixAllocator : public OpenrEventBase {
   // module ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
 
-  // module ptr to interact with KvStore
-  KvStore* kvStore_{nullptr};
-
   // RangAlloctor to get unique prefix index for this node
   std::unique_ptr<RangeAllocator<uint32_t>> rangeAllocator_;
 
@@ -204,12 +191,6 @@ class PrefixAllocator : public OpenrEventBase {
 
   // Monitor client for submitting counters/logs
   fbzmq::ZmqMonitorClient zmqMonitorClient_;
-
-  // Thriftclient for system service
-  int32_t systemServicePort_{0};
-  folly::EventBase evb_;
-  std::shared_ptr<folly::AsyncSocket> socket_{nullptr};
-  std::unique_ptr<thrift::SystemServiceAsyncClient> client_{nullptr};
 
   // AsyncTimeout for initialization
   std::unique_ptr<folly::AsyncTimeout> initTimer_;

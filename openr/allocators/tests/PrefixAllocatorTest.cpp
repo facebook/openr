@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "MockSystemServiceHandler.h"
-
 #include <atomic>
 #include <mutex>
 
@@ -31,6 +29,7 @@
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
 using namespace std;
@@ -88,15 +87,12 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     configStore_->erase("prefix-allocator-config").get();
     configStore_->erase("prefix-manager-config").get();
 
-    mockServiceHandler_ = std::make_shared<MockSystemServiceHandler>();
-    server_ = std::make_shared<apache::thrift::ThriftServer>();
-    server_->setNumIOWorkerThreads(1);
-    server_->setNumAcceptThreads(1);
-    server_->setPort(0);
-    server_->setInterface(mockServiceHandler_);
+    // create fakeNetlinkProtocolSocket
+    folly::EventBase evb;
+    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb);
 
-    systemThriftThread_.start(server_);
-    port_ = systemThriftThread_.getAddress()->getPort();
+    // Create mockNetlinkSystemHandler
+    mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
 
     // Create prefixMgr
     createPrefixManager();
@@ -109,12 +105,12 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   createPrefixAllocator() {
     prefixAllocator_ = make_unique<PrefixAllocator>(
         config_,
+        mockNlHandler_,
         kvStoreWrapper_->getKvStore(),
         prefixUpdatesQueue_,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         configStore_.get(),
         zmqContext_,
-        port_,
         kSyncInterval);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
     prefixAllocator_->waitUntilRunning();
@@ -169,9 +165,12 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
       thread.join();
     }
 
+    // destroy mockNlHandler
+    mockNlHandler_.reset();
+    nlSock_.reset();
+
     // delete tempfile name
     ::unlink(tempFileName_.c_str());
-    systemThriftThread_.stop();
   }
 
  protected:
@@ -199,37 +198,31 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   // create serializer object for parsing kvstore key/values
   apache::thrift::CompactSerializer serializer;
 
-  std::shared_ptr<MockSystemServiceHandler> mockServiceHandler_;
-  int32_t port_{0};
-  std::shared_ptr<apache::thrift::ThriftServer> server_;
-  apache::thrift::util::ScopedServerThread systemThriftThread_;
+  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_;
+  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
 };
 
 class PrefixAllocTest : public ::testing::TestWithParam<bool> {
  public:
   void
   SetUp() override {
-    mockServiceHandler_ = std::make_shared<MockSystemServiceHandler>();
-    server_ = std::make_shared<apache::thrift::ThriftServer>();
-    server_->setNumIOWorkerThreads(1);
-    server_->setNumAcceptThreads(1);
-    server_->setPort(0);
-    server_->setInterface(mockServiceHandler_);
+    // create fakeNetlinkProtocolSocket
+    folly::EventBase evb;
+    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb);
 
-    systemThriftThread_.start(server_);
-    port_ = systemThriftThread_.getAddress()->getPort();
+    // Create mockNetlinkSystemHandler
+    mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
   }
 
   void
   TearDown() override {
-    systemThriftThread_.stop();
+    mockNlHandler_.reset();
+    nlSock_.reset();
   }
 
  protected:
-  std::shared_ptr<MockSystemServiceHandler> mockServiceHandler_;
-  int32_t port_{0};
-  std::shared_ptr<apache::thrift::ThriftServer> server_;
-  apache::thrift::util::ScopedServerThread systemThriftThread_;
+  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_;
+  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
 };
 
 INSTANTIATE_TEST_CASE_P(
@@ -345,9 +338,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     //
     // 1) spin up a kvstore and create KvStoreClientInternal
     //
-
     const auto nodeId = folly::sformat("test_store{}", round);
-
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
     auto store = std::make_shared<KvStoreWrapper>(zmqContext, config);
@@ -439,12 +430,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       auto allocator = make_unique<PrefixAllocator>(
           currConfig,
+          mockNlHandler_,
           store->getKvStore(),
           prefixQueues.at(i),
           MonitorSubmitUrl{"inproc://monitor_submit"},
           configStore.get(),
           zmqContext,
-          port_,
           kSyncInterval);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();
@@ -458,7 +449,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     //
     // 3) Now the distributed prefix allocation logic would kick in
     //
-
     LOG(INFO) << "waiting for full allocation to complete";
     while (shouldWait.load(std::memory_order_relaxed)) {
       std::this_thread::yield();

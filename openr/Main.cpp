@@ -444,12 +444,12 @@ main(int argc, char** argv) {
         "PrefixAllocator",
         std::make_unique<PrefixAllocator>(
             config,
+            nlSystemHandler,
             kvStore,
             prefixUpdateRequestQueue,
             monitorSubmitUrl,
             configStore,
             context,
-            FLAGS_system_agent_port,
             Constants::kPrefixAllocatorSyncInterval));
   }
 
