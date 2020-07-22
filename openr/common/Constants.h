@@ -60,7 +60,7 @@ class Constants {
   static constexpr std::pair<int32_t /* low */, int32_t /* high */>
       kSrLocalRange{50000, 59999};
   static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrStaticMplsRouteRange{60000, 62999};
+      kSrStaticMplsRouteRange{60000, 69999};
 
   // IP TOS to be used for all control IP packets in network flowing across
   // the nodes
