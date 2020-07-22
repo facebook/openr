@@ -477,7 +477,7 @@ main(int argc, char** argv) {
       std::make_unique<LinkMonitor>(
           context,
           config,
-          FLAGS_system_agent_port,
+          nlSystemHandler,
           kvStore,
           FLAGS_enable_perf_measurement,
           interfaceUpdatesQueue,

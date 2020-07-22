@@ -7,21 +7,7 @@
 
 #include "MockNetlinkSystemHandler.h"
 
-#include <algorithm>
-#include <functional>
-#include <thread>
-#include <utility>
-
-#include <folly/Format.h>
-#include <folly/MapUtil.h>
-#include <folly/futures/Promise.h>
-#include <folly/gen/Base.h>
-#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
-#include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
-
 #include <openr/common/NetworkUtil.h>
 #include <openr/nl/NetlinkTypes.h>
 
@@ -35,7 +21,7 @@ namespace openr {
 
 MockNetlinkSystemHandler::MockNetlinkSystemHandler(
     fbnl::FakeNetlinkProtocolSocket* nlSock)
-    : nlSock_(nlSock) {}
+    : NetlinkSystemHandler(nlSock), nlSock_(nlSock) {}
 
 void
 MockNetlinkSystemHandler::getAllLinks(std::vector<thrift::Link>& linkDb) {

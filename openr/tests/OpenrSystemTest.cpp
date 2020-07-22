@@ -183,6 +183,8 @@ class OpenrFixture : public ::testing::Test {
     });
     mockIoProvider->waitUntilRunning();
 
+    // start mock netlinkSystemHandler
+    // [TO BE DEPRECATED]
     mockServiceHandler_ = std::make_shared<MockSystemHandler>();
     server_ = std::make_shared<apache::thrift::ThriftServer>();
     server_->setNumIOWorkerThreads(1);
@@ -214,8 +216,7 @@ class OpenrFixture : public ::testing::Test {
   createOpenr(
       std::string nodeId,
       bool v4Enabled,
-      uint32_t memLimit = openr::memLimitMB,
-      bool per_prefix_keys = false) {
+      uint32_t memLimit = openr::memLimitMB) {
     auto ptr = std::make_unique<OpenrWrapper<CompactSerializer>>(
         context,
         nodeId,
@@ -234,8 +235,7 @@ class OpenrFixture : public ::testing::Test {
         kFibColdStartDuration,
         mockIoProvider,
         port_,
-        memLimit,
-        per_prefix_keys);
+        memLimit);
     openrWrappers_.emplace_back(std::move(ptr));
     return openrWrappers_.back().get();
   }
@@ -302,10 +302,10 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   bool v4Enabled(GetParam());
   v4Enabled = false;
 
-  auto openr1 = createOpenr("1", v4Enabled, openr::memLimitMB, true);
-  auto openr2 = createOpenr("2", v4Enabled, openr::memLimitMB, false);
-  auto openr3 = createOpenr("3", v4Enabled, openr::memLimitMB, true);
-  auto openr4 = createOpenr("4", v4Enabled, openr::memLimitMB, false);
+  auto openr1 = createOpenr("1", v4Enabled, openr::memLimitMB);
+  auto openr2 = createOpenr("2", v4Enabled, openr::memLimitMB);
+  auto openr3 = createOpenr("3", v4Enabled, openr::memLimitMB);
+  auto openr4 = createOpenr("4", v4Enabled, openr::memLimitMB);
 
   openr1->run();
   openr2->run();

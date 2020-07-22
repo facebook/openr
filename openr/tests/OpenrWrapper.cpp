@@ -5,12 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "OpenrWrapper.h"
-
-#include <folly/MapUtil.h>
-#include <re2/re2.h>
-#include <re2/set.h>
-
+#include <openr/tests/OpenrWrapper.h>
 #include <openr/config/tests/Utils.h>
 
 namespace openr {
@@ -34,8 +29,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::seconds fibColdStartDuration,
     std::shared_ptr<IoProvider> ioProvider,
     int32_t systemPort,
-    uint32_t memLimit,
-    bool per_prefix_keys)
+    uint32_t memLimit)
     : context_(context),
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
@@ -45,8 +39,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
       platformPubSock_(context),
-      systemPort_(systemPort),
-      per_prefix_keys_(per_prefix_keys) {
+      systemPort_(systemPort) {
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
@@ -85,6 +78,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   tConfig.watchdog_config_ref() = std::move(watchdogConf);
 
   config_ = std::make_shared<Config>(tConfig);
+
+  // create fakeNetlinkProtocolSocket
+  folly::EventBase evb;
+  nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb);
+
+  // create MockSystemHandler
+  mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
 
   // create zmq monitor
   monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
@@ -171,7 +171,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
       config_,
-      static_cast<int32_t>(60099), // platfrom pub port
+      mockNlHandler_,
       kvStore_.get(),
       false /* enable perf measurement */,
       interfaceUpdatesQueue_,

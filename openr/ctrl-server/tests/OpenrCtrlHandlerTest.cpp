@@ -27,6 +27,7 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
@@ -113,13 +114,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb_);
 
     // Create MockNetlinkSystemHandler
-    mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
-    systemServer = std::make_shared<apache::thrift::ThriftServer>();
-    systemServer->setNumIOWorkerThreads(1);
-    systemServer->setNumAcceptThreads(1);
-    systemServer->setPort(0);
-    systemServer->setInterface(mockNlHandler);
-    systemThriftThread.start(systemServer);
+    mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
 
     // Setup PlatformPublisher
     platformPublisher_ = std::make_unique<PlatformPublisher>(
@@ -136,7 +131,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     linkMonitor = std::make_shared<LinkMonitor>(
         context_,
         config,
-        systemThriftThread.getAddress()->getPort(),
+        mockNlHandler_,
         kvStoreWrapper->getKvStore(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue_,
@@ -194,8 +189,8 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManagerThread_.join();
 
     platformPublisher_->stop();
-    systemThriftThread.stop();
-    systemServer.reset();
+    mockNlHandler_.reset();
+    nlSock_.reset();
 
     fib->stop();
     fibThread_.join();
@@ -251,13 +246,10 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<PersistentStore> persistentStore;
   std::shared_ptr<LinkMonitor> linkMonitor;
 
-  apache::thrift::util::ScopedServerThread systemThriftThread;
-  std::shared_ptr<apache::thrift::ThriftServer> systemServer;
-
  public:
   const std::string nodeName{"thanos@universe"};
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler;
+  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
   std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient>
       openrCtrlThriftClient_{nullptr};
@@ -1006,7 +998,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
 TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   // create an interface
-  mockNlHandler->sendLinkEvent("po1011", 100, true);
+  mockNlHandler_->sendLinkEvent("po1011", 100, true);
   const std::string ifName = "po1011";
   const std::string adjName = "night@king";
 

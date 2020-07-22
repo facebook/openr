@@ -72,7 +72,7 @@ namespace openr {
 LinkMonitor::LinkMonitor(
     fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
-    int32_t platformThriftPort,
+    std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
     KvStore* kvStore,
     bool enablePerfMeasurement,
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
@@ -85,7 +85,7 @@ LinkMonitor::LinkMonitor(
     PlatformPublisherUrl const& platformPubUrl,
     std::chrono::seconds adjHoldTime)
     : nodeId_(config->getNodeName()),
-      platformThriftPort_(platformThriftPort),
+      nlSystemHandler_(nlSystemHandler),
       enablePerfMeasurement_(enablePerfMeasurement),
       platformPubUrl_(platformPubUrl),
       enableV4_(config->isV4Enabled()),
@@ -826,60 +826,22 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
   return &(res.first->second);
 }
 
-void
-LinkMonitor::createNetlinkSystemHandlerClient() {
-  // Reset client if channel is not good
-  if (socket_ && (!socket_->good() || socket_->hangup())) {
-    client_.reset();
-    socket_.reset();
-  }
-
-  // Do not create new client if one exists already
-  if (client_) {
-    return;
-  }
-
-  // Create socket to thrift server and set some connection parameters
-  socket_ = folly::AsyncSocket::newSocket(
-      &evb_,
-      Constants::kPlatformHost.toString(),
-      platformThriftPort_,
-      Constants::kPlatformConnTimeout.count());
-
-  // Create channel and set timeout
-  auto channel = apache::thrift::HeaderClientChannel::newChannel(socket_);
-  channel->setTimeout(Constants::kPlatformIntfProcTimeout.count());
-
-  // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
-  channel->setProtocolId(apache::thrift::protocol::T_BINARY_PROTOCOL);
-  channel->setClientType(THRIFT_FRAMED_DEPRECATED);
-
-  // Reset client_
-  client_ =
-      std::make_unique<thrift::SystemServiceAsyncClient>(std::move(channel));
-}
-
 bool
 LinkMonitor::syncInterfaces() {
   VLOG(1) << "Syncing Interface DB from Netlink Platform";
 
-  //
   // Retrieve latest link snapshot from SystemService
-  //
   std::vector<thrift::Link> links;
   try {
-    createNetlinkSystemHandlerClient();
-    client_->sync_getAllLinks(links);
+    CHECK(nlSystemHandler_) << "NetlinkSystemHandler ptr is empty";
+    links = *(nlSystemHandler_->semifuture_getAllLinks().get());
   } catch (const std::exception& e) {
-    client_.reset();
     LOG(ERROR) << "Failed to sync LinkDb from NetlinkSystemHandler. Error: "
                << folly::exceptionStr(e);
     return false;
   }
 
-  //
-  // Process received data and make updates in InterfaceEntry objects
-  //
+  // Make updates in InterfaceEntry objects
   for (const auto& link : links) {
     // Get interface entry
     auto interfaceEntry = getOrCreateInterfaceEntry(link.ifName);
@@ -917,7 +879,6 @@ LinkMonitor::syncInterfaces() {
       }
     }
   }
-
   return true;
 }
 

@@ -11,6 +11,7 @@
 
 namespace openr {
 
+// [TO BE DEPRECATED]
 void
 MockSystemHandler::getIfaceAddresses(
     std::vector<::openr::thrift::IpPrefix>& _return,

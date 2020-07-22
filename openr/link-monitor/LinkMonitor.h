@@ -41,6 +41,7 @@
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/spark/Spark.h>
 
 namespace openr {
@@ -82,7 +83,8 @@ class LinkMonitor final : public OpenrEventBase {
       fbzmq::Context& zmqContext,
       // config
       std::shared_ptr<const Config> config,
-      int32_t platformThriftPort,
+      // netlinkSystemHandler
+      std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
       KvStore* kvstore,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
@@ -183,11 +185,6 @@ class LinkMonitor final : public OpenrEventBase {
   // return true if sync is successful
   bool syncInterfaces();
 
-  // Create thrift client (client_) to NetlinkSystemHandler.
-  // Can throw exception if it fails to open transport to client on specified
-  // port. used by syncInterfaces()
-  void createNetlinkSystemHandlerClient();
-
   // Get or create InterfaceEntry object.
   // Returns nullptr if ifName doesn't qualify regex match
   // used in syncInterfaces() and LINK/ADDRESS EVENT
@@ -274,17 +271,12 @@ class LinkMonitor final : public OpenrEventBase {
 
   // used to build the key names for this node
   const std::string nodeId_;
-  // Switch agent thrift server port
-  const int32_t platformThriftPort_{0};
+  // netlink system handler
+  const std::shared_ptr<NetlinkSystemHandler> nlSystemHandler_;
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
   // URL to receive netlink events from PlatformPublisher
   const std::string platformPubUrl_;
-  // The IO primitives provider; this is used for mocking
-  // the IO during unit-tests.  It can be passed to other
-  // functions hence shared pointer.
-  const std::shared_ptr<IoProvider> ioProvider_;
-  // Use spark measured RTT to neighbor as link metric
 
   //
   // Mutable states that reads from config, can be reload by loadConfig
@@ -364,12 +356,6 @@ class LinkMonitor final : public OpenrEventBase {
   // Timer for resyncing InterfaceDb from netlink
   std::unique_ptr<folly::AsyncTimeout> interfaceDbSyncTimer_;
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
-
-  // Thrift client connection to switch SystemService, which we actually use to
-  // manipulate routes.
-  folly::EventBase evb_;
-  std::shared_ptr<folly::AsyncSocket> socket_;
-  std::unique_ptr<thrift::SystemServiceAsyncClient> client_;
 
   // client to interact with KvStore
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;

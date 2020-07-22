@@ -12,6 +12,7 @@
 
 namespace openr {
 
+// [TO BE DEPRECATED]
 class MockSystemHandler final : public thrift::SystemServiceSvIf {
  public:
   MockSystemHandler() {}

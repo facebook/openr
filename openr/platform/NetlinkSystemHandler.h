@@ -31,7 +31,7 @@ namespace openr {
  * the handlers
  */
 
-class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
+class NetlinkSystemHandler : public thrift::SystemServiceSvIf {
  public:
   explicit NetlinkSystemHandler(fbnl::NetlinkProtocolSocket* nlSock);
 

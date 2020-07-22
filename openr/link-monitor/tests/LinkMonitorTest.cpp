@@ -5,32 +5,19 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/link-monitor/tests/MockNetlinkSystemHandler.h"
-
-#include <algorithm>
 #include <chrono>
 #include <thread>
 
-#include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
-#include <folly/Memory.h>
-#include <folly/String.h>
-#include <folly/futures/Future.h>
-#include <folly/gen/Base.h>
 #include <folly/init/Init.h>
+#include <folly/io/async/EventBase.h>
 #include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <re2/re2.h>
-#include <re2/set.h>
-#include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/Thrift.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
@@ -38,17 +25,16 @@
 #include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
-#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
+#include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
 using namespace std;
 using namespace openr;
 
 using apache::thrift::FRAGILE;
-using apache::thrift::ThriftServer;
-using apache::thrift::util::ScopedServerThread;
 using ::testing::InSequence;
 
 // node-1 connects node-2 via interface iface_2_1 and iface_2_2, node-3 via
@@ -202,14 +188,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // Setup system service by using MockSystemHandler
     mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
-    server = make_shared<ThriftServer>();
-    server->setNumIOWorkerThreads(1);
-    server->setNumAcceptThreads(1);
-    server->setPort(0);
-    server->setInterface(mockNlHandler);
-
-    systemThriftThread.start(server);
-    port = systemThriftThread.getAddress()->getPort();
 
     // Setup PlatformPublisher
     platformPublisher_ = std::make_unique<PlatformPublisher>(
@@ -292,8 +270,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // stop mocked nl platform
     LOG(INFO) << "Stopping mocked thrift handlers";
     platformPublisher_->stop();
-    systemThriftThread.stop();
-    server.reset();
     mockNlHandler.reset();
     nlSock_.reset();
     LOG(INFO) << "Mocked thrift handlers got stopped";
@@ -340,7 +316,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     linkMonitor = std::make_unique<LinkMonitor>(
         context,
         config,
-        port, /* thrift service port */
+        mockNlHandler,
         kvStoreWrapper->getKvStore(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue,
@@ -547,10 +523,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
       return prefixes;
     }
   }
-
-  int port{0};
-  std::shared_ptr<ThriftServer> server;
-  ScopedServerThread systemThriftThread;
 
   fbzmq::Context context{};
   folly::EventBase nlEvb_;
@@ -1676,7 +1648,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
     auto lm = std::make_unique<LinkMonitor>(
         context,
         currConfig,
-        0, // platform pub port
+        mockNlHandler,
         kvStoreWrapper->getKvStore(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue,

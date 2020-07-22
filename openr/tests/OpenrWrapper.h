@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 
@@ -17,6 +16,7 @@
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
@@ -54,8 +54,7 @@ class OpenrWrapper {
       std::chrono::seconds fibColdStartDuration,
       std::shared_ptr<IoProvider> ioProvider,
       int32_t systemPort,
-      uint32_t memLimit = openr::memLimitMB,
-      bool per_prefix_keys = false);
+      uint32_t memLimit = openr::memLimitMB);
 
   ~OpenrWrapper() {
     stop();
@@ -130,7 +129,13 @@ class OpenrWrapper {
   const std::string nodeId_;
 
   // io provider
-  std::shared_ptr<IoProvider> ioProvider_;
+  std::shared_ptr<IoProvider> ioProvider_{nullptr};
+
+  // mocked version of netlinkProtocol socket
+  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_{nullptr};
+
+  // mocked version of netlink system handler
+  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_{nullptr};
 
   // IpPrefix
   folly::Synchronized<std::optional<thrift::IpPrefix>> ipPrefix_;
@@ -169,10 +174,8 @@ class OpenrWrapper {
   // socket to publish platform events
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;
 
+  // [TO BE DEPRECATED]
   int32_t systemPort_;
-
-  // create prefix keys for each prefix separately
-  bool per_prefix_keys_{false};
 };
 
 } // namespace openr

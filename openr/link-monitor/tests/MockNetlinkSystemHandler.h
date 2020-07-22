@@ -8,22 +8,10 @@
 #pragma once
 
 #include <syslog.h>
-#include <chrono>
-#include <functional>
-#include <memory>
 #include <string>
-#include <utility>
 
-#include <fbzmq/zmq/Zmq.h>
-#include <folly/futures/Future.h>
-#include <folly/io/async/AsyncSocket.h>
-#include <folly/io/async/EventBase.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
-
-#include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
-#include <openr/platform/PlatformPublisher.h>
+#include <openr/platform/NetlinkSystemHandler.h>
 
 namespace openr {
 
@@ -32,7 +20,7 @@ namespace openr {
  * NetlinkEvent Publisher as well as System Service on linux platform.
  */
 
-class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
+class MockNetlinkSystemHandler final : public NetlinkSystemHandler {
  public:
   explicit MockNetlinkSystemHandler(fbnl::FakeNetlinkProtocolSocket* nlSock);
 

@@ -553,6 +553,7 @@ if(BUILD_TESTS)
       openr/tests/OpenrWrapper.cpp
       openr/spark/tests/MockIoProvider.cpp
       openr/tests/MockSystemHandler.cpp
+      openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
     LIBRARIES
       fbzmq::fbzmq
       ${ZMQ}
