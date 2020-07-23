@@ -21,7 +21,9 @@ DECLARE_string(areas);
 DECLARE_int32(monitor_pub_port);
 DECLARE_int32(monitor_rep_port);
 
+// [TO BE DEPRECATED]
 DECLARE_int32(system_agent_port);
+
 DECLARE_int32(fib_handler_port);
 DECLARE_int32(spark_mcast_port);
 DECLARE_string(platform_pub_url);

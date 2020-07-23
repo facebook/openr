@@ -257,6 +257,7 @@ class Constants {
   static constexpr int32_t kMonitorRepPort{60008};
 
   // Switch agent thrift service port for Platform programming
+  // [TO BE DEPRECATED]
   static constexpr int32_t kSystemAgentPort{60099};
 
   // Switch agent thrift service port for FIB programming

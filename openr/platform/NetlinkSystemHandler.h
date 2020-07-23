@@ -15,11 +15,7 @@
 #include <utility>
 
 #include <folly/futures/Future.h>
-#include <folly/io/async/AsyncSocket.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
-
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr {
@@ -31,35 +27,36 @@ namespace openr {
  * the handlers
  */
 
-class NetlinkSystemHandler : public thrift::SystemServiceSvIf {
+class NetlinkSystemHandler {
  public:
   explicit NetlinkSystemHandler(fbnl::NetlinkProtocolSocket* nlSock);
 
+  virtual ~NetlinkSystemHandler() = default;
+
+  // disable coopying
   NetlinkSystemHandler(const NetlinkSystemHandler&) = delete;
   NetlinkSystemHandler& operator=(const NetlinkSystemHandler&) = delete;
 
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
-  semifuture_getAllLinks() override;
+  virtual folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
+  semifuture_getAllLinks();
 
-  folly::SemiFuture<folly::Unit> semifuture_addIfaceAddresses(
+  virtual folly::SemiFuture<folly::Unit> semifuture_addIfaceAddresses(
       std::unique_ptr<std::string> iface,
-      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs);
 
-  folly::SemiFuture<folly::Unit> semifuture_removeIfaceAddresses(
+  virtual folly::SemiFuture<folly::Unit> semifuture_removeIfaceAddresses(
       std::unique_ptr<std::string> iface,
-      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs);
 
-  folly::SemiFuture<folly::Unit> semifuture_syncIfaceAddresses(
+  virtual folly::SemiFuture<folly::Unit> semifuture_syncIfaceAddresses(
       std::unique_ptr<std::string> iface,
       int16_t family,
       int16_t scope,
-      std::unique_ptr<std::vector<thrift::IpPrefix>> addrs) override;
+      std::unique_ptr<std::vector<thrift::IpPrefix>> addrs);
 
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::IpPrefix>>>
+  virtual folly::SemiFuture<std::unique_ptr<std::vector<thrift::IpPrefix>>>
   semifuture_getIfaceAddresses(
-      std::unique_ptr<std::string> iface,
-      int16_t family,
-      int16_t scope) override;
+      std::unique_ptr<std::string> iface, int16_t family, int16_t scope);
 
  private:
   /**

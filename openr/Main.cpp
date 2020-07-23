@@ -284,9 +284,7 @@ main(int argc, char** argv) {
   std::unique_ptr<OpenrEventBase> nlEvb{nullptr};
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
-  std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer{nullptr};
   std::unique_ptr<std::thread> netlinkFibServerThread{nullptr};
-  std::unique_ptr<std::thread> netlinkSystemServerThread{nullptr};
   std::unique_ptr<PlatformPublisher> eventPublisher{nullptr};
 
   thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
@@ -339,22 +337,6 @@ main(int argc, char** argv) {
 
   // Start NetlinkSystemHandler
   auto nlSystemHandler = std::make_shared<NetlinkSystemHandler>(nlSock.get());
-  netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
-  netlinkSystemServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
-  netlinkSystemServer->setThreadManager(thriftThreadMgr);
-  netlinkSystemServer->setNumIOWorkerThreads(1);
-  netlinkSystemServer->setCpp2WorkerThreadName("SystemTWorker");
-  netlinkSystemServer->setPort(FLAGS_system_agent_port);
-
-  netlinkSystemServerThread =
-      std::make_unique<std::thread>([&netlinkSystemServer, &nlSystemHandler]() {
-        folly::setThreadName("SystemService");
-        netlinkSystemServer->setInterface(nlSystemHandler);
-
-        LOG(INFO) << "Starting NetlinkSystem server...";
-        netlinkSystemServer->serve();
-        LOG(INFO) << "NetlinkSystem server got stopped.";
-      });
 
   const MonitorSubmitUrl monitorSubmitUrl{
       folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
@@ -646,11 +628,6 @@ main(int argc, char** argv) {
     netlinkFibServerThread.reset();
     netlinkFibServer.reset();
   }
-
-  netlinkSystemServer->stop();
-  netlinkSystemServerThread->join();
-  netlinkSystemServerThread.reset();
-  netlinkSystemServer.reset();
 
   // NOTE: Multiple instances can hold nlSystemHandler ptr.
   //       Destruct it at the end.

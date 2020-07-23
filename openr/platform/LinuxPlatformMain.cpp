@@ -16,24 +16,22 @@
 
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
-#include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/platform/PlatformPublisher.h>
 
-DEFINE_int32(
-    system_thrift_port, 60099, "Thrift server port for NetlinkSystemHandler");
-DEFINE_int32(
-    fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
-DEFINE_string(
-    platform_pub_url,
-    "ipc:///tmp/platform-pub-url",
-    "Publisher URL for interface/address notifications");
 DEFINE_bool(
     enable_netlink_fib_handler,
     true,
     "If set, netlink fib handler will be started for route programming.");
+DEFINE_int32(
+    fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
+
+// [TO BE DEPRECATED]
+DEFINE_string(
+    platform_pub_url,
+    "ipc:///tmp/platform-pub-url",
+    "Publisher URL for interface/address notifications");
 
 using openr::NetlinkFibHandler;
-using openr::NetlinkSystemHandler;
 
 int
 main(int argc, char** argv) {
@@ -67,23 +65,6 @@ main(int argc, char** argv) {
       openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
       nlSock.get());
 
-  // start NetlinkSystem thread
-  apache::thrift::ThriftServer systemServiceServer;
-  auto nlHandler = std::make_shared<NetlinkSystemHandler>(nlSock.get());
-  auto systemThriftThread =
-      std::thread([nlHandler, &systemServiceServer]() noexcept {
-        folly::setThreadName("SystemService");
-        systemServiceServer.setNWorkerThreads(1);
-        systemServiceServer.setNPoolThreads(1);
-        systemServiceServer.setPort(FLAGS_system_thrift_port);
-        systemServiceServer.setInterface(nlHandler);
-
-        LOG(INFO) << "System Service starting...";
-        systemServiceServer.serve();
-        LOG(INFO) << "System Service stopped.";
-      });
-  allThreads.emplace_back(std::move(systemThriftThread));
-
   apache::thrift::ThriftServer linuxFibAgentServer;
   if (FLAGS_enable_netlink_fib_handler) {
     // start FibService thread
@@ -113,8 +94,6 @@ main(int argc, char** argv) {
   if (FLAGS_enable_netlink_fib_handler) {
     linuxFibAgentServer.stop();
   }
-
-  systemServiceServer.stop();
 
   // Wait for threads to finish
   for (auto& t : allThreads) {

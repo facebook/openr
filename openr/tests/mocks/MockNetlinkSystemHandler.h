@@ -29,7 +29,7 @@ class MockNetlinkSystemHandler final : public NetlinkSystemHandler {
   MockNetlinkSystemHandler(const MockNetlinkSystemHandler&) = delete;
   MockNetlinkSystemHandler& operator=(const MockNetlinkSystemHandler&) = delete;
 
-  void getAllLinks(std::vector<thrift::Link>& linkDb) override;
+  void getAllLinks(std::vector<thrift::Link>& linkDb);
 
   void sendLinkEvent(
       const std::string& ifName, const uint64_t ifIndex, const bool isUp);
