@@ -830,7 +830,7 @@ bool
 LinkMonitor::syncInterfaces() {
   VLOG(1) << "Syncing Interface DB from Netlink Platform";
 
-  // Retrieve latest link snapshot from SystemService
+  // Retrieve latest link snapshot from NetlinkProtocolSocket
   std::vector<thrift::Link> links;
   try {
     CHECK(nlSystemHandler_) << "NetlinkSystemHandler ptr is empty";

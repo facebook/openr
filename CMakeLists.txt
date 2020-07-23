@@ -177,7 +177,6 @@ add_fbthrift_cpp_library(
   openr/if/Platform.thrift
   SERVICES
     FibService
-    SystemService
     NeighborListenerClientForFibagent
   OPTIONS
     json
@@ -574,7 +573,7 @@ if(BUILD_TESTS)
     add_openr_test(PrefixAllocatorTest prefix_allocator_test
       SOURCES
         openr/allocators/tests/PrefixAllocatorTest.cpp
-        openr/allocators/tests/MockSystemServiceHandler.cpp
+        openr/tests/mocks/MockNetlinkSystemHandler.cpp
       DESTINATION sbin/tests/openr/allocators
     )
   endif()
@@ -683,7 +682,7 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/kvstore
   )
 
-  add_openr_test(LinkMonitorTest link_monitor_test
+ add_openr_test(LinkMonitorTest link_monitor_test
     SOURCES
       openr/link-monitor/tests/LinkMonitorTest.cpp
       openr/tests/mocks/MockNetlinkSystemHandler.cpp

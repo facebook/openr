@@ -6,11 +6,10 @@ Open/R. You should have the `openr` C++ binary, `run_openr.sh` script, and
 python tool `breeze` all installed under the appropriate bin directory on your
 system.
 
-There are two main external services required to make Open/R functional, both of
-which comes pre-compiled with the `openr` binary for Linux only and can be
-enabled or disabled via command line flag or configuration options. These are
 - `FibService` => route programming interface
-- `SystemService` => provides interface notifications to OpenR
+FibService is main external service required to make Open/R functional,
+which comes pre-compiled with the `openr` binary for Linux only and can be
+enabled or disabled via command line flag or configuration options.
 
 Checkout
 [Platform.thrift](https://github.com/facebook/openr/blob/master/openr/if/Platform.thrift)

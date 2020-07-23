@@ -94,48 +94,6 @@ exception PlatformError {
   1: string message
 } ( message = "message" )
 
-/**
- * Thrift Service API definitions for on-box system information like links,
- * addresses and neighbors. OpenR leverages links and address information as
- * a part of link discovery and uses it to perform neighbor discovery on
- * retrieved links. There is also PUB/SUB mechanism over which updates can be
- * relayed to OpenR in realtime.
- */
-service SystemService {
-  /**
-   * Get all the links on system. It is similar to `ip link show` commands.
-   * Returns the list of interfaces with it's state, name and addresses
-   */
-  list<Link> getAllLinks()
-    throws (1: PlatformError error)
-
-  /**
-   * Backward compatibility has been considered
-   * As of now all the production platforms use our own SystemHandler
-   * New platforms need implement those interfaces based on the platform APIs
-   */
-  void addIfaceAddresses(
-    1: string iface,
-    2: list<Network.IpPrefix> addrs)
-    throws (1: PlatformError error)
-
-  void removeIfaceAddresses(
-    1: string iface,
-    2: list<Network.IpPrefix> addrs)
-    throws (1: PlatformError error)
-
-  void syncIfaceAddresses(
-    1: string iface,
-    2: i16 family,
-    3: i16 scope,
-    4: list<Network.IpPrefix> addrs)
-    throws (1: PlatformError error)
-
-  list<Network.IpPrefix> getIfaceAddresses(
-    1: string iface, 2: i16 family, 3: i16 scope)
-    throws (1: PlatformError error)
-}
-
 // static mapping of clientId => protocolId, priority same of admin distance
 // For Open/R.
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
