@@ -145,8 +145,11 @@ KvStoreWrapper::dumpAll(
   thrift::KeyDumpParams params;
   if (filters.has_value()) {
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
-    params.prefix = keyPrefix;
-    params.originatorIds = filters.value().getOrigniatorIdList();
+    params.prefix_ref() = keyPrefix;
+    params.originatorIds_ref() = filters.value().getOriginatorIdList();
+    if (not keyPrefix.empty()) {
+      params.keys_ref() = filters.value().getKeyPrefixes();
+    }
   }
 
   auto pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
@@ -157,7 +160,8 @@ std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::dumpHashes(std::string const& prefix, std::string area) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
-  params.prefix = prefix;
+  params.prefix_ref() = prefix;
+  params.keys_ref() = {prefix};
 
   auto pub = *(kvStore_->dumpKvStoreHashes(std::move(params), area).get());
   return pub.keyVals;

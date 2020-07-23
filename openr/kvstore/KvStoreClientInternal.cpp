@@ -476,6 +476,9 @@ KvStoreClientInternal::dumpAllWithPrefix(
   try {
     thrift::KeyDumpParams params;
     params.prefix = prefix;
+    if (not prefix.empty()) {
+      params.keys_ref() = {prefix};
+    }
     pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to add peers to kvstore. Exception: " << ex.what();

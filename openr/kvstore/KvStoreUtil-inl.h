@@ -85,6 +85,9 @@ dumpAllWithThriftClientFromMultiple(
 
   thrift::KeyDumpParams params;
   params.prefix = keyPrefix;
+  if (not keyPrefix.empty()) {
+    params.keys_ref() = {keyPrefix};
+  }
 
   LOG(INFO) << "Prepare requests to all Open/R instances";
 

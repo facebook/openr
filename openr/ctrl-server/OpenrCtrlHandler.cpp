@@ -523,6 +523,7 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
 
   // Only care about "adj:" key
   params.prefix = Constants::kAdjDbMarker;
+  params.keys_ref() = {Constants::kAdjDbMarker.toString()};
   // Only dump difference between KvStore and client snapshot
   params.keyValHashes_ref() = std::move(adjKeyVals);
 
@@ -597,7 +598,7 @@ OpenrCtrlHandler::semifuture_getKvStorePeersArea(
 
 apache::thrift::ServerStream<thrift::Publication>
 OpenrCtrlHandler::subscribeKvStoreFilter(
-    std::unique_ptr<thrift::KvFilter> filter) {
+    std::unique_ptr<thrift::KeyDumpParams> filter) {
   // Get new client-ID (monotonically increasing)
   auto clientToken = publisherToken_++;
 
@@ -630,32 +631,19 @@ folly::SemiFuture<apache::thrift::ResponseAndServerStream<
     thrift::Publication>>
 OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
   return semifuture_subscribeAndGetKvStoreFiltered(
-      std::make_unique<thrift::KvFilter>());
+      std::make_unique<thrift::KeyDumpParams>());
 }
 
 folly::SemiFuture<apache::thrift::ResponseAndServerStream<
     thrift::Publication,
     thrift::Publication>>
 OpenrCtrlHandler::semifuture_subscribeAndGetKvStoreFiltered(
-    std::unique_ptr<thrift::KvFilter> filter) {
-  thrift::KeyDumpParams params;
-  if (filter->keys_ref().has_value() && (*filter->keys_ref()).size()) {
-    folly::join(",", *filter->keys_ref(), params.prefix);
-  }
-
-  if (filter->originatorIds_ref().has_value() &&
-      (*filter->originatorIds_ref()).size()) {
-    params.originatorIds = std::move(*filter->originatorIds_ref());
-  }
-
-  if (filter->oper_ref().has_value()) {
-    params.oper_ref() = std::move(*filter->oper_ref());
-  }
-
-  return semifuture_getKvStoreKeyValsFiltered(
-             std::make_unique<thrift::KeyDumpParams>(params))
+    std::unique_ptr<thrift::KeyDumpParams> dumpParams) {
+  auto subscriptionParams =
+      std::make_unique<thrift::KeyDumpParams>(*dumpParams);
+  return semifuture_getKvStoreKeyValsFiltered(std::move(dumpParams))
       .defer(
-          [stream = subscribeKvStoreFilter(std::move(filter))](
+          [stream = subscribeKvStoreFilter(std::move(subscriptionParams))](
               folly::Try<std::unique_ptr<thrift::Publication>>&& pub) mutable {
             pub.throwIfFailed();
             return apache::thrift::ResponseAndServerStream<

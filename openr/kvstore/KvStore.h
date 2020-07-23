@@ -88,16 +88,21 @@ class KvStoreFilters {
       std::set<std::string> const& originatorIds);
 
   // Check if key matches the filters
-  bool keyMatch(std::string const& key, thrift::Value const& value) const;
+  bool keyMatchAny(std::string const& key, thrift::Value const& value) const;
 
   // Check if key matches all the filters
   bool keyMatchAll(std::string const& key, thrift::Value const& value) const;
+
+  bool keyMatch(
+      std::string const& key,
+      thrift::Value const& value,
+      thrift::FilterOperator const& oper = thrift::FilterOperator::OR) const;
 
   // return comma separeated string prefix
   std::vector<std::string> getKeyPrefixes() const;
 
   // return set of origninator IDs
-  std::set<std::string> getOrigniatorIdList() const;
+  std::set<std::string> getOriginatorIdList() const;
 
   // print filters
   std::string str() const;

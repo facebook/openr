@@ -61,7 +61,7 @@ KvStoreFilters::KvStoreFilters(
       keyPrefixObjList_(KeyPrefix(keyPrefixList_)) {}
 
 bool
-KvStoreFilters::keyMatch(
+KvStoreFilters::keyMatchAny(
     std::string const& key, thrift::Value const& value) const {
   if (keyPrefixList_.empty() && originatorIds_.empty()) {
     return true;
@@ -73,6 +73,17 @@ KvStoreFilters::keyMatch(
     return true;
   }
   return false;
+}
+
+bool
+KvStoreFilters::keyMatch(
+    std::string const& key,
+    thrift::Value const& value,
+    thrift::FilterOperator const& oper) const {
+  if (oper == thrift::FilterOperator::OR) {
+    return keyMatchAny(key, value);
+  }
+  return keyMatchAll(key, value);
 }
 
 // The function return true if there is a match on all the attributes
@@ -102,7 +113,7 @@ KvStoreFilters::getKeyPrefixes() const {
 }
 
 std::set<std::string>
-KvStoreFilters::getOrigniatorIdList() const {
+KvStoreFilters::getOriginatorIdList() const {
   return originatorIds_;
 }
 
@@ -601,7 +612,11 @@ KvStore::dumpKvStoreKeys(
 
       auto& kvStoreDb = kvStoreDb_.at(area);
       std::vector<std::string> keyPrefixList;
-      folly::split(",", keyDumpParams.prefix, keyPrefixList, true);
+      if (keyDumpParams.keys_ref().has_value()) {
+        keyPrefixList = *keyDumpParams.keys_ref();
+      } else {
+        folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
+      }
       const auto keyPrefixMatch =
           KvStoreFilters(keyPrefixList, keyDumpParams.originatorIds);
 
@@ -620,7 +635,9 @@ KvStore::dumpKvStoreKeys(
       fromStdOptional(thriftPub.floodRootId_ref(), kvStoreDb.getSptRootId());
 
       if (keyDumpParams.keyValHashes_ref().has_value() and
-          keyDumpParams.prefix.empty()) {
+          (*keyDumpParams.prefix_ref()).empty() and
+          (not keyDumpParams.keys_ref().has_value() or
+           (*keyDumpParams.keys_ref()).empty())) {
         // This usually comes from neighbor nodes
         size_t numMissingKeys = 0;
         if (thriftPub.tobeUpdatedKeys_ref().has_value()) {
@@ -658,7 +675,11 @@ KvStore::dumpKvStoreHashes(
       auto& kvStoreDb = kvStoreDb_.at(area);
       std::set<std::string> originator{};
       std::vector<std::string> keyPrefixList{};
-      folly::split(",", keyDumpParams.prefix, keyPrefixList, true);
+      if (keyDumpParams.keys_ref().has_value()) {
+        keyPrefixList = *keyDumpParams.keys_ref();
+      } else {
+        folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
+      }
       KvStoreFilters kvFilters{keyPrefixList, originator};
       auto thriftPub = kvStoreDb.dumpHashWithFilters(kvFilters);
       kvStoreDb.updatePublicationTtl(thriftPub);
@@ -1433,8 +1454,13 @@ KvStoreDb::requestThriftPeerSync() {
     if (kvParams_.filters.has_value()) {
       std::string keyPrefix =
           folly::join(",", kvParams_.filters.value().getKeyPrefixes());
+      /* prefix is for backward compatibility */
       params.prefix = keyPrefix;
-      params.originatorIds = kvParams_.filters.value().getOrigniatorIdList();
+      if (not keyPrefix.empty()) {
+        params.keys_ref() = kvParams_.filters.value().getKeyPrefixes();
+      }
+      params.originatorIds_ref() =
+          kvParams_.filters.value().getOriginatorIdList();
     }
     KvStoreFilters kvFilters(
         std::vector<std::string>{}, /* keyPrefixList */
@@ -1932,8 +1958,9 @@ KvStoreDb::requestFullSyncFromPeers() {
     if (kvParams_.filters.has_value()) {
       std::string keyPrefix =
           folly::join(",", kvParams_.filters.value().getKeyPrefixes());
-      params.prefix = keyPrefix;
-      params.originatorIds = kvParams_.filters.value().getOrigniatorIdList();
+      params.prefix_ref() = keyPrefix;
+      params.originatorIds_ref() =
+          kvParams_.filters.value().getOriginatorIdList();
     }
     std::set<std::string> originator{};
     std::vector<std::string> keyPrefixList{};
@@ -2110,7 +2137,12 @@ KvStoreDb::processRequestMsgHelper(
     fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
     std::vector<std::string> keyPrefixList;
-    folly::split(",", keyDumpParamsVal.prefix, keyPrefixList, true);
+    if (keyDumpParamsVal.keys_ref().has_value()) {
+      keyPrefixList = *keyDumpParamsVal.keys_ref();
+    } else if (keyDumpParamsVal.prefix_ref().has_value()) {
+      folly::split(",", *keyDumpParamsVal.prefix_ref(), keyPrefixList, true);
+    }
+
     const auto keyPrefixMatch =
         KvStoreFilters(keyPrefixList, keyDumpParamsVal.originatorIds);
     auto thriftPub = dumpAllWithFilters(keyPrefixMatch);
@@ -2122,7 +2154,10 @@ KvStoreDb::processRequestMsgHelper(
     fromStdOptional(thriftPub.floodRootId_ref(), DualNode::getSptRootId());
 
     if (keyDumpParamsVal.keyValHashes_ref() and
-        keyDumpParamsVal.prefix.empty()) {
+        (not keyDumpParamsVal.prefix_ref().has_value() or
+         (*keyDumpParamsVal.prefix_ref()).empty()) and
+        (not keyDumpParamsVal.keys_ref().has_value() or
+         (*keyDumpParamsVal.keys_ref()).empty())) {
       // This usually comes from neighbor nodes
       size_t numMissingKeys = 0;
       if (thriftPub.tobeUpdatedKeys_ref().has_value()) {

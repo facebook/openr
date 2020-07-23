@@ -122,14 +122,13 @@ class PathCmd(OpenrCtrlCmd):
         self.prefix_dbs: Dict[str, lsdb_types.PrefixDatabase] = {}
         area = utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
+
+        params = kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
+        params.keys = [Consts.PREFIX_DB_MARKER]
         if area is None:
-            pub = client.getKvStoreKeyValsFiltered(
-                kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
-            )
+            pub = client.getKvStoreKeyValsFiltered(params)
         else:
-            pub = client.getKvStoreKeyValsFilteredArea(
-                kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER), area
-            )
+            pub = client.getKvStoreKeyValsFilteredArea(params, area)
         for value in pub.keyVals.values():
             utils.parse_prefix_database("", "", self.prefix_dbs, value)
 
@@ -444,14 +443,12 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         area = utils.get_area_id(client, area)
         # get LSDB from KvStore
+        params = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
+        params.keys = [Consts.ALL_DB_MARKER]
         if area is None:
-            kvstore_keyvals = client.getKvStoreKeyValsFiltered(
-                kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
-            ).keyVals
+            kvstore_keyvals = client.getKvStoreKeyValsFiltered(params).keyVals
         else:
-            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(
-                kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER), area
-            ).keyVals
+            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(params, area).keyVals
 
         return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
 

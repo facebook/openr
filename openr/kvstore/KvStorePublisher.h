@@ -20,7 +20,7 @@ namespace openr {
 class KvStorePublisher {
  public:
   KvStorePublisher(
-      thrift::KvFilter filter,
+      thrift::KeyDumpParams filter,
       apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher);
 
   ~KvStorePublisher() {}
@@ -34,7 +34,7 @@ class KvStorePublisher {
   }
 
  private:
-  thrift::KvFilter filter_;
+  thrift::KeyDumpParams filter_;
   KvStoreFilters keyPrefixFilter_{{}, {}};
   apache::thrift::ServerStreamPublisher<thrift::Publication> publisher_;
 };

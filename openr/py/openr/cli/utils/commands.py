@@ -79,6 +79,8 @@ class OpenrCtrlCmd(object):
         params = kv_store_types.KeyDumpParams(prefix)
         params.originatorIds = []
         params.keyValHashes = None
+        if prefix:
+            params.keys = [prefix]
 
         if originator_ids:
             params.originatorIds = originator_ids

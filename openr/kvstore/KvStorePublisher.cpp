@@ -21,43 +21,87 @@
 namespace openr {
 
 KvStorePublisher::KvStorePublisher(
-    thrift::KvFilter filter,
+    thrift::KeyDumpParams filter,
     apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher)
     : filter_(filter), publisher_(std::move(publisher)) {
   std::vector<std::string> keyPrefix;
-  std::set<std::string> originatorIds;
 
   if (filter.keys_ref().has_value()) {
     keyPrefix = std::move(*filter.keys_ref());
+  } else if (filter.prefix_ref().has_value()) {
+    folly::split(",", *filter.prefix_ref(), keyPrefix, true);
   }
 
-  if (filter.originatorIds_ref().has_value()) {
-    originatorIds = std::move(*filter.originatorIds_ref());
-  }
-
-  keyPrefixFilter_ = KvStoreFilters(keyPrefix, originatorIds);
+  keyPrefixFilter_ =
+      KvStoreFilters(keyPrefix, std::move(*filter.originatorIds_ref()));
 }
 
+/**
+ * A publication object (param) can have multiple key value pairs as follows.
+ * pub = {"prefix1": value1, "prefix2": value2, "random-key": random-value}
+ * The value objects also contain originator-id.
+ *
+ * A thrift client can specify filters to be applied on prefixes and
+ * originator-ids. Logical operator OR or AND is also specified for combining
+ * matches on prefix and originator-id.
+ *
+ * Suppose filter specified is {"prefix.*"} and logical operator is AND. After
+ * applying the filter, the filtered publication = {"prefix1": value1,
+ * "prefix2": value2} will be returned to the client (i.e., published) on the
+ * stream.
+ */
 void
 KvStorePublisher::publish(const thrift::Publication& pub) {
-  if (!filter_.keys_ref() && !filter_.originatorIds_ref()) {
-    auto publication = std::make_unique<thrift::Publication>(pub);
-    publisher_.next(std::move(*publication));
+  if ((not filter_.keys_ref().has_value() or (*filter_.keys_ref()).empty()) and
+      (not filter_.originatorIds_ref().has_value() or
+       (*filter_.originatorIds_ref()).empty())) {
+    // No filtering criteria. Accept all updates.
+    auto filteredPub = std::make_unique<thrift::Publication>(pub);
+    publisher_.next(std::move(*filteredPub));
     return;
   }
+
+  thrift::Publication publication_filtered;
+  if (pub.expiredKeys_ref().has_value()) {
+    publication_filtered.expiredKeys_ref() = *pub.expiredKeys_ref();
+  }
+
+  if (pub.nodeIds_ref().has_value()) {
+    publication_filtered.nodeIds_ref() = *pub.nodeIds_ref();
+  }
+
+  if (pub.tobeUpdatedKeys_ref().has_value()) {
+    publication_filtered.tobeUpdatedKeys_ref() = *pub.tobeUpdatedKeys_ref();
+  }
+
+  if (pub.floodRootId_ref().has_value()) {
+    publication_filtered.floodRootId_ref() = *pub.floodRootId_ref();
+  }
+
+  if (pub.area_ref().has_value()) {
+    publication_filtered.area_ref() = *pub.area_ref();
+  }
+
+  thrift::KeyVals keyvals;
+  thrift::FilterOperator op = filter_.oper_ref().has_value()
+      ? *filter_.oper_ref()
+      : thrift::FilterOperator::OR;
 
   for (auto& kv : pub.keyVals) {
     auto& key = kv.first;
     auto& val = kv.second;
-    if (!val.value_ref().has_value()) {
+    if (not val.value_ref().has_value()) {
       continue;
     }
 
-    if (keyPrefixFilter_.keyMatch(key, val)) {
-      auto publication = std::make_unique<thrift::Publication>(pub);
-      publisher_.next(std::move(*publication));
-      return;
+    if (keyPrefixFilter_.keyMatch(key, val, op)) {
+      keyvals.emplace(key, val);
     }
+  }
+  if (keyvals.size()) {
+    // There is at least one key value in the publication for the client
+    publication_filtered.keyVals_ref() = keyvals;
+    publisher_.next(std::move(publication_filtered));
   }
 }
 } // namespace openr

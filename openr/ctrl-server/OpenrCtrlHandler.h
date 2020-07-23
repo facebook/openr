@@ -205,7 +205,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler
   apache::thrift::ServerStream<thrift::Publication> subscribeKvStoreFilter(
-      std::unique_ptr<thrift::KvFilter>);
+      std::unique_ptr<thrift::KeyDumpParams>);
 
   folly::SemiFuture<apache::thrift::ResponseAndServerStream<
       thrift::Publication,
@@ -216,7 +216,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       thrift::Publication,
       thrift::Publication>>
   semifuture_subscribeAndGetKvStoreFiltered(
-      std::unique_ptr<thrift::KvFilter> filter) override;
+      std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
   // Long poll support
   folly::SemiFuture<bool> semifuture_longPollKvStoreAdj(

@@ -57,15 +57,6 @@ enum FilterOperator {
   AND = 2,
 }
 
-// KvFilter specifies which keys in Kv Store to
-// subscribe so that users receive only certain kinds of
-// updates. For example, DC Controller might be interesred in
-// getting "adj:.*" keys from open/r domain.
-struct KvFilter {
-  1: optional list<string> keys;
-  2: optional set<string> originatorIds;
-  3: optional FilterOperator oper // default is OR
-}
 
 struct KeySetParams {
   // NOTE: the struct is denormalized on purpose,
@@ -95,15 +86,27 @@ struct KeyGetParams {
   1: list<string> keys
 }
 
+// KeyDumpParams specifies which
 struct KeyDumpParams {
-  1: string prefix
+  1: string prefix    (deprecated)
   3: set<string> originatorIds
+  // TODO - if set to true (default), ignore TTL updates
+  // This field is more for subscriptions.
+  6: bool ignoreTtl = true
 
   // optional attribute to include keyValHashes information from peer.
   //  1) If NOT empty, ONLY respond with keyVals on which hash differs;
   //  2) Otherwise, respond with flooding element to signal DB change;
   2: optional KeyVals keyValHashes
+
+  // The default is OR for dumping KV store entries for backward compatibility.
+  // The default will be changed to AND later. We can also make `oper` mandatory later.
+  // The default for subscription is AND now.
   4: optional FilterOperator oper
+  // Keys to subscribe to in KV store so that consumers receive only certain
+  // kinds of updates. For example, a consumer might be interesred in
+  // getting "adj:.*" keys from open/r domain.
+  5: optional list<string> keys;
 }
 
 // Peer's publication and command socket URLs

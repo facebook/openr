@@ -26,5 +26,5 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
   KvStore.Publication, stream<KvStore.Publication> subscribeAndGetKvStore()
 
   KvStore.Publication, stream<KvStore.Publication>
-    subscribeAndGetKvStoreFiltered(1: KvStore.KvFilter filter)
+    subscribeAndGetKvStoreFiltered(1: KvStore.KeyDumpParams filter)
 }
