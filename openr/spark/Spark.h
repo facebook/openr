@@ -10,10 +10,7 @@
 #include <chrono>
 #include <functional>
 
-#include <boost/serialization/strong_typedef.hpp>
 #include <folly/SocketAddress.h>
-#include <folly/container/EvictingCacheMap.h>
-#include <folly/fibers/FiberManager.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>

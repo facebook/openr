@@ -6,17 +6,8 @@
  */
 
 #include <chrono>
-#include <forward_list>
-#include <mutex>
 #include <thread>
 
-#include <folly/MapUtil.h>
-#include <folly/Memory.h>
-#include <folly/Optional.h>
-#include <folly/Random.h>
-#include <folly/ScopeGuard.h>
-#include <folly/ThreadLocal.h>
-#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <sodium.h>
@@ -27,9 +18,8 @@
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
-#include <openr/spark/IoProvider.h>
 #include <openr/spark/SparkWrapper.h>
-#include <openr/spark/tests/MockIoProvider.h>
+#include <openr/tests/mocks/MockIoProvider.h>
 
 using namespace openr;
 

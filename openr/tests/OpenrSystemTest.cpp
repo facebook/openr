@@ -35,8 +35,8 @@
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/spark/tests/MockIoProvider.h>
 #include <openr/tests/OpenrWrapper.h>
+#include <openr/tests/mocks/MockIoProvider.h>
 
 using namespace std;
 using namespace openr;

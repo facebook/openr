@@ -7,17 +7,11 @@
 
 #pragma once
 
-#include <openr/spark/IoProvider.h>
-
-#include <list>
-#include <map>
-#include <mutex>
-#include <set>
-#include <string>
-#include <thread>
-#include <vector>
-
 #include <folly/IPAddress.h>
+#include <openr/spark/IoProvider.h>
+#include <list>
+#include <mutex>
+#include <thread>
 
 namespace openr {
 

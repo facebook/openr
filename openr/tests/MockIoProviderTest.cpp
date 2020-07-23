@@ -9,17 +9,13 @@
 #include <thread>
 
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/Memory.h>
-#include <folly/ScopeGuard.h>
 #include <folly/SocketAddress.h>
-#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
-
-#include "MockIoProvider.h"
+#include <openr/tests/mocks/MockIoProvider.h>
 
 namespace {
 

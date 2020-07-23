@@ -5,14 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "IoProvider.h"
-
-#include <net/if.h>
-
 #include <glog/logging.h>
+#include <net/if.h>
 
 #include <folly/Format.h>
 #include <folly/SocketAddress.h>
+#include <openr/spark/IoProvider.h>
 
 namespace openr {
 

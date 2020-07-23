@@ -551,7 +551,7 @@ if(BUILD_TESTS)
     SOURCES
       openr/tests/OpenrSystemTest.cpp
       openr/tests/OpenrWrapper.cpp
-      openr/spark/tests/MockIoProvider.cpp
+      openr/tests/mocks/MockIoProvider.cpp
       openr/tests/mocks/MockNetlinkSystemHandler.cpp
     LIBRARIES
       fbzmq::fbzmq
@@ -737,14 +737,14 @@ if(BUILD_TESTS)
   add_openr_test(SparkTest spark_test
     SOURCES
       openr/spark/tests/SparkTest.cpp
-      openr/spark/tests/MockIoProvider.cpp
+      openr/tests/mocks/MockIoProvider.cpp
     DESTINATION sbin/tests/openr/spark
   )
 
   add_openr_test(MockIoProviderTest mock_io_provider_test
     SOURCES
-      openr/spark/tests/MockIoProviderTest.cpp
-      openr/spark/tests/MockIoProvider.cpp
+      openr/tests/MockIoProviderTest.cpp
+      openr/tests/mocks/MockIoProvider.cpp
     DESTINATION sbin/tests/openr/spark
   )
 
