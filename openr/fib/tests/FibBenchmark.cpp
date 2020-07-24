@@ -18,10 +18,10 @@
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/fib/Fib.h>
-#include <openr/fib/tests/MockNetlinkFibHandler.h>
-#include <openr/fib/tests/PrefixGenerator.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
+#include <openr/tests/mocks/MockNetlinkFibHandler.h>
+#include <openr/tests/mocks/PrefixGenerator.h>
 
 /**
  * Defines a benchmark that allows users to record customized counter during

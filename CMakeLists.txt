@@ -303,7 +303,7 @@ add_library(openrlib
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
-  openr/fib/tests/PrefixGenerator.cpp
+  openr/tests/mocks/PrefixGenerator.cpp
   openr/tests/OpenrThriftServerWrapper.cpp
   openr/watchdog/Watchdog.cpp
 )
@@ -694,7 +694,7 @@ if(BUILD_TESTS)
     add_openr_test(FibTest fib_test
       SOURCES
         openr/fib/tests/FibTest.cpp
-        openr/fib/tests/MockNetlinkFibHandler.cpp
+        openr/tests/mocks/MockNetlinkFibHandler.cpp
       DESTINATION sbin/tests/openr/fib
     )
   endif()
@@ -797,7 +797,7 @@ if(BUILD_TESTS)
 
   add_executable(fib_benchmark
     openr/fib/tests/FibBenchmark.cpp
-    openr/fib/tests/MockNetlinkFibHandler.cpp
+    openr/tests/mocks/MockNetlinkFibHandler.cpp
   )
 
   target_link_libraries(fib_benchmark

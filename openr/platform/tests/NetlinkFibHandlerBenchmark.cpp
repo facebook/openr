@@ -21,9 +21,9 @@
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 
-#include <openr/fib/tests/PrefixGenerator.h>
 #include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
+#include <openr/tests/mocks/PrefixGenerator.h>
 
 using namespace openr;
 using namespace openr::fbnl;

@@ -5,26 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "MockNetlinkFibHandler.h"
-
 #include <chrono>
 #include <thread>
 
-#include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/Format.h>
-#include <folly/Memory.h>
-#include <folly/String.h>
 #include <folly/futures/Future.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
-#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/Thrift.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
@@ -38,6 +28,7 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
+#include <openr/tests/mocks/MockNetlinkFibHandler.h>
 
 using namespace std;
 using namespace openr;

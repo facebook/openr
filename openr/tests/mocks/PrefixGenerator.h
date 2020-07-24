@@ -5,11 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <syslog.h>
-#include <sstream>
-#include <string>
-#include <utility>
-
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 
