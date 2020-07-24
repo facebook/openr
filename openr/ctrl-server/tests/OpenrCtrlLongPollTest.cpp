@@ -132,8 +132,8 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
 
   // make sure we are receiving update and NOT timed out
   ASSERT_FALSE(isTimeout);
-  // make sure when there is publication, processing delay is less than 350ms
-  ASSERT_LE(endTime - startTime, std::chrono::milliseconds(350));
+  // make sure when there is publication, processing delay is less than 450ms
+  ASSERT_LE(endTime - startTime, std::chrono::milliseconds(450));
   ASSERT_TRUE(isAdjChanged);
 
   // wait for evl before cleanup
