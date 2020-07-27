@@ -109,7 +109,7 @@ directory to build openr with your changes.
 `openr` builds both static and dynamic libraries and the install step installs
 libraries and all header files to `/usr/local/lib/` and `/usr/local/include/`
 (under openr subdirectory) along with python modules in `site-packages`.
-Note: the `build_openr.sh` script will run this step for you.
+Note: the `build_openr.sh` script will run this step for you:
 
 ```
 sudo make install
