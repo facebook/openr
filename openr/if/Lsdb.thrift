@@ -273,10 +273,10 @@ struct PrefixEntry {
 
   // Indicates the type of prefix. This have no use except to indicate the
   // source of origination. e.g. Interface route, BGP route etc.
-  2: Network.PrefixType type
+  2: Network.PrefixType type (deprecated)
 
   // Optional additional metadata. Encoding depends on PrefixType
-  3: optional binary data
+  3: optional binary data (deprecated)
 
   // Default mode of forwarding for prefix is IP. If `forwardingType` is
   // set to SR_MPLS, then packet will be encapsulated via IP -> MPLS route will
@@ -299,12 +299,12 @@ struct PrefixEntry {
   // If optional value is not present, then entry is persistent.
   // Ephemeral entries are not saved into persistent store(file) and will be
   // lost with restart, if not refreshed before cold start time.
-  5: optional bool ephemeral
+  5: optional bool ephemeral (deprecated)
 
   // TODO has: This is deprecated. Instead use `metrics` field, it is compact
   // and concise.
   // Metric vector for externally injected routes into openr
-  6: optional MetricVector mv
+  6: optional MetricVector mv (deprecated)
 
   // If the # of nethops for this prefix is below certain threshold, Decision
   // will not program/anounce the routes. If this parameter is not set, Decision
