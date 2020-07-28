@@ -188,6 +188,11 @@ struct OpenrConfig {
   # Config for monitor module
   25: MonitorConfig monitor_config
 
+  # KvStore thrift migration flags
+  # TODO: the following flags serve as rolling-out purpose
+  26: bool enable_kvstore_thrift = 0
+  27: bool enable_periodic_sync = 1
+
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config

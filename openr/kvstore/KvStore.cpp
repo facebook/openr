@@ -141,7 +141,8 @@ KvStore::KvStore(
     std::shared_ptr<const Config> config,
     std::optional<int> maybeIpTos,
     int zmqHwm,
-    bool enableKvStoreThrift)
+    bool enableKvStoreThrift,
+    bool enablePeriodicSync)
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
@@ -153,6 +154,7 @@ KvStore::KvStore(
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
           enableKvStoreThrift,
+          enablePeriodicSync,
           maybeIpTos,
           std::chrono::seconds(config->getKvStoreConfig().sync_interval_s),
           getKvStoreFilters(config),
@@ -1508,10 +1510,6 @@ KvStoreDb::requestThriftPeerSync() {
               // record telemetry for thrift calls
               fb303::fbData->addStatValue(
                   "kvstore.thrift.num_full_sync_failure", 1, fb303::COUNT);
-              fb303::fbData->addStatValue(
-                  "kvstore.thrift.full_sync_duration_ms",
-                  timeDelta.count(),
-                  fb303::AVG);
             }));
 
     // in case pending peer size is over parallelSyncLimit,
@@ -2546,12 +2544,14 @@ KvStoreDb::attachCallbacks() {
   fullSyncTimer_ = folly::AsyncTimeout::make(
       *evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
 
-  // Define request sync timer
-  requestSyncTimer_ = folly::AsyncTimeout::make(
-      *evb_->getEvb(), [this]() noexcept { requestSync(); });
+  if (kvParams_.enablePeriodicSync) {
+    // Define request sync timer
+    requestSyncTimer_ = folly::AsyncTimeout::make(
+        *evb_->getEvb(), [this]() noexcept { requestSync(); });
 
-  // Schedule periodic call to re-sync with one of our peer
-  requestSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+    // Schedule periodic call to re-sync with one of our peer
+    requestSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  }
 
   // Define timer to scan peers in IDLE state to do initial syncing
   if (kvParams_.enableKvStoreThrift) {
@@ -2800,10 +2800,6 @@ KvStoreDb::finalizeFullSync(
               // record telemetry for thrift calls
               fb303::fbData->addStatValue(
                   "kvstore.thrift.num_finalized_sync_failure", 1, fb303::COUNT);
-              fb303::fbData->addStatValue(
-                  "kvstore.thrift.finalized_sync_duration_ms",
-                  timeDelta.count(),
-                  fb303::AVG);
             }));
   } else {
     VLOG(1) << "finalizeFullSync back to: " << senderId
@@ -2996,10 +2992,6 @@ KvStoreDb::floodPublication(
                 // record telemetry for thrift calls
                 fb303::fbData->addStatValue(
                     "kvstore.thrift.num_flood_pub_failure", 1, fb303::COUNT);
-                fb303::fbData->addStatValue(
-                    "kvstore.thrift.flood_pub_duration_ms",
-                    timeDelta.count(),
-                    fb303::AVG);
               }));
     }
   } else {

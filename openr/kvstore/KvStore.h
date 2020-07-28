@@ -133,6 +133,8 @@ struct KvStoreParams {
   int zmqHwm;
   // flag to enable KvStore external communication over thrift
   bool enableKvStoreThrift{false};
+  // flag to enable periodic sync over ZMQ
+  bool enablePeriodicSync{true};
   // IP ToS
   std::optional<int> maybeIpTos;
   // how often to request full db sync from peers
@@ -155,6 +157,8 @@ struct KvStoreParams {
       int zmqhwm,
       // flags for thrift communication
       bool enableKvStoreThrift,
+      // flags for periodic sync
+      bool enablePeriodicSync,
       // IP QoS
       std::optional<int> maybeipTos,
       // how often to request full db sync from peers
@@ -171,6 +175,7 @@ struct KvStoreParams {
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
         enableKvStoreThrift(enableKvStoreThrift),
+        enablePeriodicSync(enablePeriodicSync),
         maybeIpTos(std::move(maybeipTos)),
         dbSyncInterval(dbsyncInterval),
         filters(std::move(filter)),
@@ -564,7 +569,8 @@ class KvStore final : public OpenrEventBase {
       std::optional<int> ipTos,
       // ZMQ high water mark
       int zmqHwm = Constants::kHighWaterMark,
-      bool enableKvStoreThrift = false);
+      bool enableKvStoreThrift = false,
+      bool enablePeriodicSync = true);
 
   ~KvStore() override = default;
 

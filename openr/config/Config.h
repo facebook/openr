@@ -86,7 +86,17 @@ class Config {
 
   bool
   isRibPolicyEnabled() const {
-    return config_.enable_rib_policy;
+    return *config_.enable_rib_policy_ref();
+  }
+
+  bool
+  isKvStoreThriftEnabled() const {
+    return *config_.enable_kvstore_thrift_ref();
+  }
+
+  bool
+  isPeriodicSyncEnabled() const {
+    return *config_.enable_periodic_sync_ref();
   }
 
   //

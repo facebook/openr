@@ -219,6 +219,14 @@ class GflagConfig final {
     // RibPolicy
     config.enable_rib_policy = FLAGS_enable_rib_policy;
 
+    // KvStore thrift migration knobs
+    if (auto v = FLAGS_enable_kvstore_thrift) {
+      config.enable_kvstore_thrift = v;
+    }
+    if (auto v = FLAGS_enable_periodic_sync) {
+      config.enable_periodic_sync = v;
+    }
+
     return std::make_shared<Config>(config);
   }
 

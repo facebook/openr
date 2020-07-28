@@ -401,7 +401,8 @@ main(int argc, char** argv) {
           config,
           maybeIpTos,
           FLAGS_kvstore_zmq_hwm,
-          FLAGS_enable_kvstore_thrift));
+          config->isKvStoreThriftEnabled(),
+          config->isPeriodicSyncEnabled()));
 
   auto prefixManager = startEventBase(
       allThreads,
