@@ -950,19 +950,6 @@ createBgpWithdrawEntry(const thrift::IpPrefix& prefix) {
   return pfx;
 }
 
-thrift::MplsRoute
-createMplsRoute(const MplsLabelAndNextHops& prefixInfo) {
-  thrift::MplsRoute mplsRoute;
-  mplsRoute.topLabel = prefixInfo.label;
-  for (const auto& [key, _] : prefixInfo.multiNextHops) {
-    thrift::NextHopThrift nh;
-    nh.address = toBinaryAddress(key);
-    nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
-    mplsRoute.nextHops.emplace_back(std::move(nh));
-  }
-  return mplsRoute;
-}
-
 thrift::UnicastRoute
 createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops) {
