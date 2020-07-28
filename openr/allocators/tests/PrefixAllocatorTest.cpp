@@ -297,8 +297,11 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
             std::set<std::string>({"AUTO-ALLOCATED"}),
             prefixes.at(0).tags_ref());
         EXPECT_EQ(
-            Constants::kPathPreference,
+            Constants::kDefaultPathPreference,
             prefixes.at(0).metrics_ref()->path_preference_ref());
+        EXPECT_EQ(
+            Constants::kDefaultSourcePreference,
+            prefixes.at(0).metrics_ref()->source_preference_ref());
         auto prefix = toIPNetwork(prefixes[0].prefix);
         EXPECT_EQ(kAllocPrefixLen, prefix.second);
         if (usingNewSeedPrefix) {

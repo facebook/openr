@@ -634,7 +634,12 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
   prefixEntry.ephemeral_ref().reset();
   prefixEntry.tags_ref()->emplace("AUTO-ALLOCATED");
-  prefixEntry.metrics_ref()->path_preference_ref() = Constants::kPathPreference;
+  // Metrics
+  {
+    auto& metrics = prefixEntry.metrics_ref().value();
+    metrics.path_preference_ref() = Constants::kDefaultPathPreference;
+    metrics.source_preference_ref() = Constants::kDefaultSourcePreference;
+  }
 
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;

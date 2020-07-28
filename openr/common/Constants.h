@@ -235,12 +235,10 @@ class Constants {
   // the time we hold on to announce to KvStore
   static constexpr std::chrono::milliseconds kPrefixMgrKvThrottleTimeout{250};
 
-  // Path preference for Open/R originated routes (loopback address & interface
-  // subnets). This is kept higher than antipated path_preference value (1000)
-  // so that Open/R originated routes win over all other routes. It mimicks the
-  // currently implemented behavior. This will go away once we have PolicyEngine
-  // that will take care of assigning metric values to originated routes.
-  static constexpr int32_t kPathPreference{2000};
+  // Default metrics (path and source preference) for Open/R originated routes
+  // (loopback address & interface subnets).
+  static constexpr int32_t kDefaultPathPreference{1000}; // LIVE routes
+  static constexpr int32_t kDefaultSourcePreference{200}; // Source pref
 
   // OpenR ports
 

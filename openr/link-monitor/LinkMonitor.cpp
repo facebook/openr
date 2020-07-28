@@ -760,10 +760,18 @@ LinkMonitor::advertiseRedistAddrs() {
     for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
       prefix.forwardingType = prefixForwardingType_;
       prefix.forwardingAlgorithm = prefixForwardingAlgorithm_;
-      prefix.tags_ref()->emplace("INTERFACE_SUBNET");
-      prefix.tags_ref()->emplace(
-          folly::sformat("{}:{}", nodeId_, interface.getIfName()));
-      prefix.metrics_ref()->path_preference_ref() = Constants::kPathPreference;
+      // Tags
+      {
+        auto& tags = prefix.tags_ref().value();
+        tags.emplace("INTERFACE_SUBNET");
+        tags.emplace(folly::sformat("{}:{}", nodeId_, interface.getIfName()));
+      }
+      // Metrics
+      {
+        auto& metrics = prefix.metrics_ref().value();
+        metrics.path_preference_ref() = Constants::kDefaultPathPreference;
+        metrics.source_preference_ref() = Constants::kDefaultSourcePreference;
+      }
       prefixes.emplace_back(std::move(prefix));
     }
   }

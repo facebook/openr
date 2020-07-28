@@ -1792,8 +1792,11 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
     ASSERT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
     auto& prefixEntry = prefixes.at(toIpPrefix("2803:6080:4958:b403::1/128"));
     EXPECT_EQ(
-        Constants::kPathPreference,
+        Constants::kDefaultPathPreference,
         prefixEntry.metrics_ref()->path_preference_ref());
+    EXPECT_EQ(
+        Constants::kDefaultSourcePreference,
+        prefixEntry.metrics_ref()->source_preference_ref());
     EXPECT_EQ(
         std::set<std::string>({"INTERFACE_SUBNET", "node-1:loopback"}),
         prefixEntry.tags_ref());
