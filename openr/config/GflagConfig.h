@@ -207,6 +207,7 @@ class GflagConfig final {
     if (FLAGS_enable_plugin) {
       config.enable_bgp_peering_ref() = FLAGS_enable_plugin;
       config.bgp_config_ref() = getBgpConfig();
+      config.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
       if (auto v = FLAGS_bgp_use_igp_metric) {
         config.bgp_use_igp_metric_ref() = v;
       }

@@ -207,6 +207,12 @@ class Config {
     return *config_.bgp_config_ref();
   }
 
+  const thrift::BgpRouteTranslationConfig&
+  getBgpTranslationConfig() const {
+    CHECK(isBgpPeeringEnabled());
+    return *config_.bgp_translation_config_ref();
+  }
+
   //
   // watch dog
   //

@@ -478,6 +478,21 @@ TEST(ConfigTest, PopulateInternalDb) {
   {
     auto confInvalid = getBasicOpenrConfig();
     confInvalid.enable_bgp_peering_ref() = true;
+
+    // Both bgp-config & translation-config are none
+    confInvalid.bgp_config_ref().reset();
+    confInvalid.bgp_translation_config_ref().reset();
+    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
+
+    // bgp config is set but translation-config is not
+    confInvalid.bgp_config_ref() = thrift::BgpConfig();
+    confInvalid.bgp_translation_config_ref().reset();
+    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
+
+    // translation-config is set but bgp-config is not
+    confInvalid.bgp_config_ref().reset();
+    confInvalid.bgp_translation_config_ref() =
+        thrift::BgpRouteTranslationConfig();
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
 
@@ -536,6 +551,7 @@ TEST(ConfigTest, GeneralGetter) {
     FLAGS_node_name = "fsw001";
     const auto& bgpConf = GflagConfig::getBgpAutoConfig();
     tConfig.bgp_config_ref() = bgpConf;
+    tConfig.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
 
     auto config = Config(tConfig);
 
@@ -543,8 +559,7 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_TRUE(config.isBgpPeeringEnabled());
     EXPECT_EQ(bgpConf, config.getBgpConfig());
     EXPECT_EQ(
-        0, bgpConf.translation_config_ref()->communities_to_name_ref()->size());
-    EXPECT_EQ(0, bgpConf.translation_config_ref()->asn_to_area_ref()->size());
+        thrift::BgpRouteTranslationConfig(), config.getBgpTranslationConfig());
   }
 
   // config with watchdog

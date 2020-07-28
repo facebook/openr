@@ -138,6 +138,45 @@ struct AreaConfig {
   3: list<string> neighbor_regexes
 }
 
+/**
+ * Configuration to facilitate route translation between BGP <-> OpenR
+ * - BGP Communities <=> tags
+ * - BGP AS Path <=> area_stack
+ * - BGP Origin <=> metrics.path_preference (IGP=1000, EGP=900, INCOMPLETE=500)
+ * - BGP Special Source AS => metrics.source_preference
+ * - BGP AS Path Length => metrics.distance
+ */
+struct BgpRouteTranslationConfig {
+  /**
+   * Map that defines communities in '{asn}:{value}' format to their human
+   * readable names. Open/R will use the community name as tag
+   * If not available then string representation of community will be used as
+   * tag
+   */
+  1: map<string, string> communities_to_name;
+
+  /**
+   * Map that defines ASN to Area name mapping. Mostly for readability. Open/R
+   * will use this mapping to convert as-path to area_stack and vice versa.
+   * If not mapping is found then string representation of ASN will be used.
+   */
+  2: map<i32, string> asn_to_area;
+
+  /**
+   * Source preference settings
+   * The ASN if specified will add `5 * (3 - #count_asn)` to source preference
+   * e.g. if `source_preference_asn = 65000` and AS_PATH contains the 65000 asn
+   * twice, then `source_preference = 100 + 5 ( 3 - 2) = 105`
+   */
+  4: i32 default_source_preference = 100
+  5: optional i32 source_preference_asn
+
+  /**
+   * ASNs to ignore for distance computation
+   */
+  6: set<i32> asns_to_ignore_for_distance;
+}
+
 struct OpenrConfig {
   1: string node_name
   2: string domain
@@ -197,4 +236,10 @@ struct OpenrConfig {
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
   103: optional bool bgp_use_igp_metric
+
+  /**
+   * Configuration to facilitate Open/R <-> BGP route conversions.
+   * NOTE: This must be specified if bgp_peering is enabled
+   */
+  104: optional BgpRouteTranslationConfig bgp_translation_config
 }
