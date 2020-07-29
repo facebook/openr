@@ -455,8 +455,10 @@ Config::populateInternalDb() {
         "enable_bgp_peering = true, but bgp_config is empty");
   }
   if (isBgpPeeringEnabled() and not config_.bgp_translation_config_ref()) {
-    throw std::invalid_argument(
-        "enable_bgp_peering = true, but bgp_translation_config is empty");
+    // Hack for transioning phase. TODO: Remove after coop is on-boarded
+    config_.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
+    // throw std::invalid_argument(
+    //     "enable_bgp_peering = true, but bgp_translation_config is empty");
   }
 
   //

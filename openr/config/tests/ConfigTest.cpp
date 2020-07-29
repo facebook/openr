@@ -487,7 +487,11 @@ TEST(ConfigTest, PopulateInternalDb) {
     // bgp config is set but translation-config is not
     confInvalid.bgp_config_ref() = thrift::BgpConfig();
     confInvalid.bgp_translation_config_ref().reset();
-    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
+    // TODO: Expect an exception instead of default initialization
+    // EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
+    EXPECT_EQ(
+        thrift::BgpRouteTranslationConfig(),
+        Config(confInvalid).getBgpTranslationConfig());
 
     // translation-config is set but bgp-config is not
     confInvalid.bgp_config_ref().reset();
