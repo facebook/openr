@@ -168,13 +168,13 @@ struct BgpRouteTranslationConfig {
    * e.g. if `source_preference_asn = 65000` and AS_PATH contains the 65000 asn
    * twice, then `source_preference = 100 + 5 ( 3 - 2) = 105`
    */
-  4: i32 default_source_preference = 100
-  5: optional i32 source_preference_asn
+  4: i64 default_source_preference = 100
+  5: optional i64 source_preference_asn
 
   /**
    * ASNs to ignore for distance computation
    */
-  6: set<i32> asns_to_ignore_for_distance;
+  6: set<i64> asns_to_ignore_for_distance;
 }
 
 struct OpenrConfig {
