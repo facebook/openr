@@ -21,8 +21,8 @@
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 
-#include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
+#include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 
 using namespace openr;
@@ -50,7 +50,7 @@ class NetlinkFibWrapper {
  public:
   NetlinkFibWrapper() {
     // Create NetlinkProtocolSocket
-    nlSock = std::make_unique<FakeNetlinkProtocolSocket>(&evb);
+    nlSock = std::make_unique<MockNetlinkProtocolSocket>(&evb);
     nlSock->addLink(utils::createLink(0, kVethNameX)).get();
     nlSock->addLink(utils::createLink(1, kVethNameY)).get();
 
@@ -64,7 +64,7 @@ class NetlinkFibWrapper {
   }
 
   folly::EventBase evb;
-  std::unique_ptr<FakeNetlinkProtocolSocket> nlSock;
+  std::unique_ptr<MockNetlinkProtocolSocket> nlSock;
   std::unique_ptr<NetlinkFibHandler> fibHandler;
   PrefixGenerator prefixGenerator;
 };

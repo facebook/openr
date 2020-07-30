@@ -293,7 +293,6 @@ add_library(openrlib
   openr/nl/NetlinkRoute.cpp
   openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
-  openr/nl/tests/FakeNetlinkProtocolSocket.cpp
   openr/monitor/Monitor.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/platform/NetlinkSystemHandler.cpp
@@ -303,6 +302,7 @@ add_library(openrlib
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
+  openr/tests/mocks/MockNetlinkProtocolSocket.cpp
   openr/tests/mocks/PrefixGenerator.cpp
   openr/tests/OpenrThriftServerWrapper.cpp
   openr/watchdog/Watchdog.cpp

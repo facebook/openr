@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/nl/tests/FakeNetlinkProtocolSocket.h"
+#include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
 namespace openr::fbnl {
 
@@ -45,7 +45,7 @@ createIfAddress(const int ifIndex, const std::string& addrMask) {
 } // namespace utils
 
 folly::SemiFuture<int>
-FakeNetlinkProtocolSocket::addRoute(const fbnl::Route& route) {
+MockNetlinkProtocolSocket::addRoute(const fbnl::Route& route) {
   // Blindly replace existing route
   const auto proto = route.getProtocolId();
   if (route.getFamily() == AF_MPLS) {
@@ -57,7 +57,7 @@ FakeNetlinkProtocolSocket::addRoute(const fbnl::Route& route) {
 }
 
 folly::SemiFuture<int>
-FakeNetlinkProtocolSocket::deleteRoute(const fbnl::Route& route) {
+MockNetlinkProtocolSocket::deleteRoute(const fbnl::Route& route) {
   // Count number of elements erased
   int cnt{0};
   const auto proto = route.getProtocolId();
@@ -71,7 +71,7 @@ FakeNetlinkProtocolSocket::deleteRoute(const fbnl::Route& route) {
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-FakeNetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
+MockNetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
   const auto filterFamily = filter.getFamily();
   const auto filterProto = filter.getProtocolId();
   const auto filterType = filter.getType();
@@ -114,7 +114,7 @@ FakeNetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
 }
 
 folly::SemiFuture<int>
-FakeNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
+MockNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
   // Search for addr list of interface index (it must exists)
   auto it = ifAddrs_.find(addr.getIfIndex());
   if (it == ifAddrs_.end() or !addr.getPrefix().has_value()) {
@@ -141,7 +141,7 @@ FakeNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
 }
 
 folly::SemiFuture<int>
-FakeNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
+MockNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
   // Search for addr list of interface index (it must exists)
   auto it = ifAddrs_.find(addr.getIfIndex());
   if (it == ifAddrs_.end() or !addr.getPrefix().has_value()) {
@@ -168,7 +168,7 @@ FakeNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::IfAddress>, int>>
-FakeNetlinkProtocolSocket::getAllIfAddresses() {
+MockNetlinkProtocolSocket::getAllIfAddresses() {
   std::vector<fbnl::IfAddress> addrs;
   for (auto& [_, addrs_] : ifAddrs_) {
     addrs.insert(addrs.end(), addrs_.begin(), addrs_.end());
@@ -177,7 +177,7 @@ FakeNetlinkProtocolSocket::getAllIfAddresses() {
 }
 
 folly::SemiFuture<int>
-FakeNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
+MockNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
   // Add or update link
   links_[link.getIfIndex()] = link;
 
@@ -193,7 +193,7 @@ FakeNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
-FakeNetlinkProtocolSocket::getAllLinks() {
+MockNetlinkProtocolSocket::getAllLinks() {
   std::vector<fbnl::Link> links;
   for (auto& [_, link] : links_) {
     links.emplace_back(link);
@@ -202,7 +202,7 @@ FakeNetlinkProtocolSocket::getAllLinks() {
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
-FakeNetlinkProtocolSocket::getAllNeighbors() {
+MockNetlinkProtocolSocket::getAllNeighbors() {
   CHECK(false) << "Not implemented";
 }
 

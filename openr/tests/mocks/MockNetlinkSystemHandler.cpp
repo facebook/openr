@@ -5,8 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "MockNetlinkSystemHandler.h"
-
+#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
 #include <glog/logging.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/nl/NetlinkTypes.h>
@@ -20,7 +19,7 @@ using apache::thrift::FRAGILE;
 namespace openr {
 
 MockNetlinkSystemHandler::MockNetlinkSystemHandler(
-    fbnl::FakeNetlinkProtocolSocket* nlSock)
+    fbnl::MockNetlinkProtocolSocket* nlSock)
     : NetlinkSystemHandler(nlSock), nlSock_(nlSock) {}
 
 void

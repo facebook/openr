@@ -131,7 +131,7 @@ class OpenrWrapper {
   std::shared_ptr<IoProvider> ioProvider_{nullptr};
 
   // mocked version of netlinkProtocol socket
-  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
 
   // mocked version of netlink system handler
   std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_{nullptr};

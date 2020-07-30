@@ -38,9 +38,9 @@ fbnl::IfAddress createIfAddress(const int ifIndex, const std::string& addrMask);
  *
  * This class facilitates testing of application logic with unit-tests.
  */
-class FakeNetlinkProtocolSocket : public NetlinkProtocolSocket {
+class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
  public:
-  explicit FakeNetlinkProtocolSocket(folly::EventBase* evb)
+  explicit MockNetlinkProtocolSocket(folly::EventBase* evb)
       : NetlinkProtocolSocket(evb) {}
 
   /**

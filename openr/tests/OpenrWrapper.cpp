@@ -79,7 +79,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // create fakeNetlinkProtocolSocket
   folly::EventBase evb;
-  nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb);
+  nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
 
   // create MockSystemHandler
   mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());

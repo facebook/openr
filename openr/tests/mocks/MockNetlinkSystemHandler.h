@@ -10,8 +10,8 @@
 #include <syslog.h>
 #include <string>
 
-#include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkSystemHandler.h>
+#include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
 namespace openr {
 
@@ -22,7 +22,7 @@ namespace openr {
 
 class MockNetlinkSystemHandler final : public NetlinkSystemHandler {
  public:
-  explicit MockNetlinkSystemHandler(fbnl::FakeNetlinkProtocolSocket* nlSock);
+  explicit MockNetlinkSystemHandler(fbnl::MockNetlinkProtocolSocket* nlSock);
 
   ~MockNetlinkSystemHandler() override = default;
 
@@ -41,7 +41,7 @@ class MockNetlinkSystemHandler final : public NetlinkSystemHandler {
 
  private:
   // mocked version of netlink protocols socket
-  fbnl::FakeNetlinkProtocolSocket* nlSock_{nullptr};
+  fbnl::MockNetlinkProtocolSocket* nlSock_{nullptr};
 
   // Interface/link name => link attributes mapping
   folly::Synchronized<fbnl::NlLinks> linkDb_{};

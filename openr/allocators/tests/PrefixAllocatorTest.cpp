@@ -83,7 +83,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     // create fakeNetlinkProtocolSocket
     folly::EventBase evb;
-    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb);
+    nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
 
     // Create mockNetlinkSystemHandler
     mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
@@ -192,7 +192,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   // create serializer object for parsing kvstore key/values
   apache::thrift::CompactSerializer serializer;
 
-  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_;
+  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_;
   std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
 };
 
@@ -202,7 +202,7 @@ class PrefixAllocTest : public ::testing::TestWithParam<bool> {
   SetUp() override {
     // create fakeNetlinkProtocolSocket
     folly::EventBase evb;
-    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb);
+    nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
 
     // Create mockNetlinkSystemHandler
     mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
@@ -215,7 +215,7 @@ class PrefixAllocTest : public ::testing::TestWithParam<bool> {
   }
 
  protected:
-  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_;
+  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_;
   std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
 };
 

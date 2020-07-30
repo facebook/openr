@@ -20,8 +20,8 @@
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
-#include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
+#include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
 using namespace openr;
 
@@ -127,7 +127,7 @@ sortNextHops(std::vector<RouteType>& routes) {
 
 /**
  * Base class for test fixture. Provides FibHandler for testing.
- * Internally creates an instance of FakeNetlinkProtocolSocket for maintaining
+ * Internally creates an instance of MockNetlinkProtocolSocket for maintaining
  * in memory cache of routes added/removed. The whole testing is based on
  * public APIs of `NetlinkFibHandler`
  *
@@ -160,7 +160,7 @@ class FibHandlerFixture : public testing::TestWithParam<bool> {
  private:
   // Intentionally keeping private to not expose in UTs
   folly::EventBase nlEvb_;
-  fbnl::FakeNetlinkProtocolSocket nlSock_{&nlEvb_};
+  fbnl::MockNetlinkProtocolSocket nlSock_{&nlEvb_};
 
  public:
   // FibHandler is accessible in UTs for testing
@@ -212,7 +212,7 @@ TEST(NetlinkFibHandler, protocolToPriority) {
 TEST(NetlinkFibHandler, getRoutesWithInvalidClient) {
   const int16_t kInvalidClient = 111;
   folly::EventBase evb;
-  fbnl::FakeNetlinkProtocolSocket nlSock(&evb);
+  fbnl::MockNetlinkProtocolSocket nlSock(&evb);
   NetlinkFibHandler handler(&nlSock);
 
   EXPECT_THROW(
@@ -393,7 +393,7 @@ TEST_P(FibHandlerFixture, UnicastSync) {
       .get();
   routes = handler.semifuture_getRouteTableByClient(kClientId).get();
   ASSERT_EQ(4, routes->size());
-  // NOTE: FakeNetlinkSocket returns routes in sorted order
+  // NOTE: MockNetlinkSocket returns routes in sorted order
   sortNextHops(*routes);
   EXPECT_EQ(rts, *routes);
 
@@ -650,7 +650,7 @@ TEST_P(FibHandlerFixture, MplsSync) {
       .get();
   routes = handler.semifuture_getMplsRouteTableByClient(kClientId).get();
   ASSERT_EQ(4, routes->size());
-  // NOTE: FakeNetlinkSocket returns routes in sorted order
+  // NOTE: MockNetlinkSocket returns routes in sorted order
   sortNextHops(*routes);
   EXPECT_EQ(rts, *routes);
 

@@ -183,7 +183,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     system(folly::sformat("rm -rf {}", kConfigStorePath).c_str());
 
     // create fakeNetlinkProtocolSocket
-    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&nlEvb_);
+    nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&nlEvb_);
 
     // Setup system service by using MockSystemHandler
     mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
@@ -525,7 +525,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   fbzmq::Context context{};
   folly::EventBase nlEvb_;
-  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
   std::unique_ptr<PlatformPublisher> platformPublisher_{nullptr};
 
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;

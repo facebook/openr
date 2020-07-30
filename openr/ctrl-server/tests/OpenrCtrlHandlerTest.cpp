@@ -107,7 +107,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 
     // create fakeNetlinkProtocolSocket
-    nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evb_);
+    nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb_);
 
     // Create MockNetlinkSystemHandler
     mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
@@ -226,7 +226,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
   fbzmq::Context context_{};
   folly::EventBase evb_;
-  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
   std::unique_ptr<PlatformPublisher> platformPublisher_{nullptr};
 
   std::thread decisionThread_;
