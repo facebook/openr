@@ -187,6 +187,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   prefixManager_ = std::make_unique<PrefixManager>(
       prefixUpdatesQueue_.getReader(),
+      routeUpdatesQueue_.getReader(),
       config_,
       configStore_.get(),
       kvStore_.get(),

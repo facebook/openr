@@ -58,4 +58,17 @@ getBasicOpenrConfig(
 
   return config;
 }
+
+// utility function to construct thrift::AreaConfig
+openr::thrift::AreaConfig
+createAreaConfig(
+    const std::string& areaId,
+    const std::vector<std::string>& neighborRegexes,
+    const std::vector<std::string>& interfaceRegexes) {
+  openr::thrift::AreaConfig areaConfig;
+  areaConfig.area_id = areaId;
+  areaConfig.neighbor_regexes = neighborRegexes;
+  areaConfig.interface_regexes = interfaceRegexes;
+  return areaConfig;
+}
 } // namespace

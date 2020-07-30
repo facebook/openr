@@ -21,6 +21,7 @@
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
@@ -33,6 +34,7 @@ class PrefixManager final : public OpenrEventBase {
  public:
   PrefixManager(
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
+      messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
       std::shared_ptr<const Config> config,
       PersistentStore* configStore,
       KvStore* kvStore,
@@ -85,6 +87,24 @@ class PrefixManager final : public OpenrEventBase {
   getPrefixesByType(thrift::PrefixType prefixType);
 
  private:
+  // prefix entry with their destination areas
+  // if dstAreas become empty, entry should be withdrawn
+  struct PrefixEntry {
+    thrift::PrefixEntry tPrefixEntry;
+    std::unordered_set<std::string> dstAreas;
+
+    PrefixEntry() = default;
+    template <typename TPrefixEntry, typename AreaSet>
+    PrefixEntry(TPrefixEntry&& tPrefixEntry, AreaSet&& dstAreas)
+        : tPrefixEntry(std::forward<TPrefixEntry>(tPrefixEntry)),
+          dstAreas(std::forward<AreaSet>(dstAreas)) {}
+
+    bool
+    operator==(const PrefixEntry& other) const {
+      return tPrefixEntry == other.tPrefixEntry && dstAreas == other.dstAreas;
+    }
+  };
+
   /*
    * Private helpers to update prefixMap_ and send prefixes to KvStore
    *
@@ -95,21 +115,29 @@ class PrefixManager final : public OpenrEventBase {
    * modify prefix db and schedule syncKvStoreThrottled_ to update kvstore
    * @return true if the db is modified
    */
-  bool advertisePrefixesImpl(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool advertisePrefixesImpl(
+      const std::vector<thrift::PrefixEntry>& prefixes,
+      const std::unordered_set<std::string>& dstAreas);
+  bool advertisePrefixesImpl(const std::vector<PrefixEntry>& prefixes);
   bool withdrawPrefixesImpl(const std::vector<thrift::PrefixEntry>& prefixes);
   bool withdrawPrefixesByTypeImpl(thrift::PrefixType type);
   bool syncPrefixesByTypeImpl(
       thrift::PrefixType type,
-      const std::vector<thrift::PrefixEntry>& prefixes);
+      const std::vector<thrift::PrefixEntry>& prefixes,
+      const std::unordered_set<std::string>& dstAreas);
 
   // Update kvstore with both ephemeral and non-ephemeral prefixes
   void syncKvStore();
 
-  // add prefix entry in kvstore, return per prefix key name
-  std::string updateKvStorePrefixEntry(thrift::PrefixEntry& prefixEntry);
+  // add entry.tPrefixEntry in entry.dstAreas kvstore, return a set of per
+  // prefix key name for successful injected areas
+  std::unordered_set<std::string> updateKvStorePrefixEntry(PrefixEntry& entry);
 
   // Update persistent store with non-ephemeral prefix entries
   void persistPrefixDb();
+
+  // process decision route update, inject routes to different areas
+  void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
 
   // add event named updateEvent to perfEvents if it has value and the last
   // element is not already updateEvent
@@ -148,10 +176,21 @@ class PrefixManager final : public OpenrEventBase {
   // exists for a given prefix, lowest prefix-type is preferred. This is to
   // bring deterministic behavior for advertising routes.
   // IMP: Ordered
-  std::map<
-      thrift::PrefixType,
-      std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>>
-      prefixMap_;
+  std::
+      map<thrift::PrefixType, std::unordered_map<thrift::IpPrefix, PrefixEntry>>
+          prefixMap_;
+  // TODO: this could be <prefix, <type, OriginatePrefix>> structure
+  //   std::unordered_map<
+  //       folly::CIDRNetwork, /* prefix */
+  //       std::unordered_map<
+  //           thrift::PrefixType, /* different openr attributes */
+  //           OriginatePrefix>>
+  //       prefixMap_;
+  // TODO: tie break on attributes first, then choose the lowest prefix-type.
+  // Redistribute routes could come from remote node from area1, but showed as
+  // originated by me in area2. If I start to originate same prefix, I'll have
+  // to tie break first to choose which one I'd like to announce before it goes
+  // to Decision.
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
@@ -167,7 +206,18 @@ class PrefixManager final : public OpenrEventBase {
       addingEvents_;
 
   // area Id
-  const std::unordered_set<std::string> areas_{};
+  const std::unordered_set<std::string> allAreas_{};
+
+  // TODO:
+  //   struct AreaInfo {
+  //     // ingress policy
+  //     // AreaPolicy ingressPolicy;
+  //     // store post policy prefix entries
+  //     std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry>
+  //         postPolicyPrefixes;
+  //   }
+
+  //   std::unordered_map<std::string, AreaInfo> areaInfos_;
 }; // PrefixManager
 
 } // namespace openr

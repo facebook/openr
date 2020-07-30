@@ -114,6 +114,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   createPrefixManager() {
     prefixManager_ = std::make_unique<PrefixManager>(
         prefixUpdatesQueue_.getReader(),
+        routeUpdatesQueue_.getReader(),
         config_,
         configStore_.get(),
         kvStoreWrapper_->getKvStore(),
@@ -130,6 +131,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   void
   TearDown() override {
     prefixUpdatesQueue_.close();
+    routeUpdatesQueue_.close();
     kvStoreWrapper_->closeQueue();
 
     kvStoreClient_.reset();
@@ -188,6 +190,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   // Queue for publishing prefix-updates to PrefixManager
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
 
   // create serializer object for parsing kvstore key/values
   apache::thrift::CompactSerializer serializer;
@@ -270,6 +273,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     vector<std::unique_ptr<PersistentStore>> configStores;
     vector<std::unique_ptr<PrefixManager>> prefixManagers;
     vector<messaging::ReplicateQueue<thrift::PrefixUpdateRequest>> prefixQueues{
+        numAllocators};
+    vector<messaging::ReplicateQueue<DecisionRouteUpdate>> routeQueues{
         numAllocators};
     vector<std::unique_ptr<PrefixAllocator>> allocators;
     vector<thread> threads;
@@ -413,6 +418,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
           prefixQueues.at(i).getReader(),
+          routeQueues.at(i).getReader(),
           currConfig,
           tempConfigStore.get(),
           store->getKvStore(),
@@ -494,6 +500,10 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     }
     LOG(INFO) << "Stop all prefix update queues";
     for (auto& queue : prefixQueues) {
+      queue.close();
+    }
+    LOG(INFO) << "Stop all route update queues";
+    for (auto& queue : routeQueues) {
       queue.close();
     }
     LOG(INFO) << "Stop all prefix managers";
@@ -622,6 +632,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   //       resetQueue() will clean up ALL readers including kvStoreClient. Must
   //       recreate it to receive KvStore publication.
   prefixUpdatesQueue_.close();
+  routeUpdatesQueue_.close();
   kvStoreWrapper_->closeQueue();
   kvStoreClient_.reset();
   prefixAllocator_->stop();
@@ -633,6 +644,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
 
   // reopen queue and restart prefixAllocator/prefixManager
   prefixUpdatesQueue_.open();
+  routeUpdatesQueue_.open();
   kvStoreWrapper_->openQueue();
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
     kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -892,6 +904,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   //       resetQueue() will clean up ALL readers including kvStoreClient. Must
   //       recreate it to receive KvStore publication.
   prefixUpdatesQueue_.close();
+  routeUpdatesQueue_.close();
   kvStoreWrapper_->closeQueue();
   kvStoreClient_.reset();
   prefixAllocator_->stop();
@@ -903,6 +916,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
 
   // reopen queue and restart prefixAllocator/prefixManager
   prefixUpdatesQueue_.open();
+  routeUpdatesQueue_.open();
   kvStoreWrapper_->openQueue();
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
     kvStoreClient_ = std::make_unique<KvStoreClientInternal>(

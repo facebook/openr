@@ -37,6 +37,7 @@ getPrefixTypeName(thrift::PrefixType const& type) {
 
 PrefixManager::PrefixManager(
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
+    messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
     PersistentStore* configStore,
     KvStore* kvStore,
@@ -50,7 +51,7 @@ PrefixManager::PrefixManager(
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(
           std::chrono::milliseconds(config->getKvStoreConfig().key_ttl_ms)),
-      areas_{config->getAreaIds()} {
+      allAreas_{config->getAreaIds()} {
   CHECK(configStore_);
   CHECK(kvStore_);
 
@@ -73,7 +74,9 @@ PrefixManager::PrefixManager(
           "  > {}, type {}",
           toString(entry.prefix),
           getPrefixTypeName(entry.type));
-      prefixMap_[entry.type][entry.prefix] = entry;
+      // TODO: change persist store to use C++ struct prefixMap_
+      prefixMap_[*entry.type_ref()][*entry.prefix_ref()] =
+          PrefixEntry(entry, allAreas_);
       addPerfEventIfNotExist(
           addingEvents_[entry.type][entry.prefix], "LOADED_FROM_DISK");
     }
@@ -99,17 +102,27 @@ PrefixManager::PrefixManager(
           auto maybeUpdate = q.get(); // perform read
           VLOG(1) << "Received prefix update request";
           if (maybeUpdate.hasError()) {
-            LOG(INFO) << "Terminating route delta processing fiber";
+            LOG(INFO) << "Terminating prefix update request processing fiber";
             break;
           }
 
           auto& update = maybeUpdate.value();
+          // if no specified dstination areas, apply to all areas
+          std::unordered_set<std::string> dstAreas;
+          if (update.dstAreas_ref()->empty()) {
+            dstAreas = allAreas_;
+          } else {
+            for (const auto& area : *update.dstAreas_ref()) {
+              dstAreas.emplace(area);
+            }
+          }
+
           switch (update.cmd) {
           case thrift::PrefixUpdateCommand::ADD_PREFIXES:
-            advertisePrefixesImpl(update.prefixes);
+            advertisePrefixesImpl(*update.prefixes_ref(), dstAreas);
             break;
           case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES:
-            withdrawPrefixesImpl(update.prefixes);
+            withdrawPrefixesImpl(*update.prefixes_ref());
             break;
           case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE:
             CHECK(update.type_ref().has_value());
@@ -117,13 +130,29 @@ PrefixManager::PrefixManager(
             break;
           case thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE:
             CHECK(update.type_ref().has_value());
-            syncPrefixesByTypeImpl(update.type_ref().value(), update.prefixes);
+            syncPrefixesByTypeImpl(
+                update.type_ref().value(), *update.prefixes_ref(), dstAreas);
             break;
           default:
             LOG(FATAL) << "Unknown command received. "
                        << static_cast<int>(update.cmd);
             break;
           }
+        }
+      });
+
+  // Fiber to process route updates from Decision
+  addFiberTask(
+      [q = std::move(decisionRouteUpdatesQueue), this]() mutable noexcept {
+        while (true) {
+          auto maybeThriftObj = q.get(); // perform read
+          VLOG(1) << "Received route update from Decision";
+          if (maybeThriftObj.hasError()) {
+            LOG(INFO) << "Terminating route delta processing fiber";
+            break;
+          }
+
+          processDecisionRouteUpdates(std::move(maybeThriftObj).value());
         }
       });
 
@@ -149,7 +178,7 @@ PrefixManager::PrefixManager(
       });
 
   // get initial dump of keys related to us
-  for (const auto& area : areas_) {
+  for (const auto& area : allAreas_) {
     auto result =
         kvStoreClient_->dumpAllWithPrefix(keyPrefixList.front(), area);
     if (!result.has_value()) {
@@ -194,9 +223,10 @@ PrefixManager::persistPrefixDb() {
   thrift::PrefixDatabase persistentPrefixDb;
   persistentPrefixDb.thisNodeName = nodeId_;
   for (const auto& kv : prefixMap_) {
-    for (const auto& kv2 : kv.second) {
-      if (not kv2.second.ephemeral_ref().value_or(false)) {
-        persistentPrefixDb.prefixEntries.emplace_back(kv2.second);
+    for (const auto& [_, entry] : kv.second) {
+      if (not entry.tPrefixEntry.ephemeral_ref().value_or(false)) {
+        persistentPrefixDb.prefixEntries_ref()->emplace_back(
+            entry.tPrefixEntry);
       }
     }
   }
@@ -206,31 +236,38 @@ PrefixManager::persistPrefixDb() {
   }
 }
 
-std::string
-PrefixManager::updateKvStorePrefixEntry(thrift::PrefixEntry& prefixEntry) {
-  thrift::PrefixDatabase prefixDb;
-  prefixDb.thisNodeName = nodeId_;
-  prefixDb.prefixEntries.emplace_back(prefixEntry);
-  if (enablePerfMeasurement_) {
-    prefixDb.perfEvents_ref() =
-        addingEvents_[prefixEntry.type][prefixEntry.prefix];
+std::unordered_set<std::string>
+PrefixManager::updateKvStorePrefixEntry(PrefixEntry& entry) {
+  std::unordered_set<std::string> prefixKeys;
+
+  auto dstAreas = entry.dstAreas; // intended copy
+  auto& prefixEntry = entry.tPrefixEntry;
+  // prevent area_stack loop
+  for (const auto fromArea : *prefixEntry.area_stack_ref()) {
+    dstAreas.erase(fromArea);
   }
-  const auto prefixKey =
-      PrefixKey(
-          nodeId_,
-          folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
-          thrift::KvStore_constants::kDefaultArea())
-          .getPrefixKey();
-  for (const auto& area : areas_) {
-    bool const changed = kvStoreClient_->persistKey(
-        prefixKey,
-        fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_),
-        ttlKeyInKvStore_,
-        area);
+
+  for (const auto& toArea : dstAreas) {
+    // TODO: run ingress policy
+    auto prefixKey =
+        PrefixKey(nodeId_, toIPNetwork(*prefixEntry.prefix_ref()), toArea)
+            .getPrefixKey();
+    auto prefixDb = createPrefixDb(nodeId_, {prefixEntry}, toArea);
+    if (enablePerfMeasurement_) {
+      prefixDb.perfEvents_ref() =
+          addingEvents_[*prefixEntry.type_ref()][*prefixEntry.prefix_ref()];
+    }
+    auto prefixDbStr =
+        fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_);
+
+    bool changed = kvStoreClient_->persistKey(
+        prefixKey, prefixDbStr, ttlKeyInKvStore_, toArea);
+
     LOG_IF(INFO, changed) << "Advertising key: " << prefixKey
-                          << " to KvStore area: " << area;
+                          << " toArea KvStore area: " << toArea;
+    prefixKeys.emplace(std::move(prefixKey));
   }
-  return prefixKey;
+  return prefixKeys;
 }
 
 void
@@ -240,18 +277,20 @@ PrefixManager::syncKvStore() {
   std::unordered_set<thrift::IpPrefix> nowAdvertisingPrefixes;
 
   if (perPrefixKeys_) {
-    for (auto& kv : prefixMap_) {
-      for (auto& kv2 : kv.second) {
-        if (not nowAdvertisingPrefixes.count(kv2.first)) {
+    for (auto& [type, prefixToInfo] : prefixMap_) {
+      // TODO: tie break on prefix attributes
+      for (auto& [prefix, entry] : prefixToInfo) {
+        if (not nowAdvertisingPrefixes.count(prefix)) {
           addPerfEventIfNotExist(
-              addingEvents_[kv.first][kv2.first], "UPDATE_KVSTORE_THROTTLED");
-          auto const key = updateKvStorePrefixEntry(kv2.second);
-          nowAdvertisingKeys.emplace(key);
-          nowAdvertisingPrefixes.emplace(kv2.first);
-          keysToClear_.erase(key);
+              addingEvents_[type][prefix], "UPDATE_KVSTORE_THROTTLED");
+          nowAdvertisingPrefixes.emplace(prefix);
+          for (const auto& key : updateKvStorePrefixEntry(entry)) {
+            nowAdvertisingKeys.emplace(key);
+            keysToClear_.erase(key);
+          }
         } else {
           addPerfEventIfNotExist(
-              addingEvents_[kv.first][kv2.first], "COVERED_BY_HIGHER_TYPE");
+              addingEvents_[type][prefix], "COVERED_BY_HIGHER_TYPE");
         }
       }
     }
@@ -269,7 +308,7 @@ PrefixManager::syncKvStore() {
                   mostRecentEvents->events.back().unixTs) {
             mostRecentEvents = &addingEvents_[kv.first][kv2.first];
           }
-          prefixDb.prefixEntries.emplace_back(kv2.second);
+          prefixDb.prefixEntries_ref()->emplace_back(kv2.second.tPrefixEntry);
           nowAdvertisingPrefixes.emplace(kv2.first);
         } else {
           addPerfEventIfNotExist(
@@ -282,7 +321,7 @@ PrefixManager::syncKvStore() {
     }
     const auto prefixDbKey =
         folly::sformat("{}{}", Constants::kPrefixDbMarker.toString(), nodeId_);
-    for (const auto& area : areas_) {
+    for (const auto& area : allAreas_) {
       bool const changed = kvStoreClient_->persistKey(
           prefixDbKey,
           fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_),
@@ -305,24 +344,22 @@ PrefixManager::syncKvStore() {
         deletedPrefixDb.perfEvents_ref().value(), "WITHDRAW_THROTTLED");
   }
   for (auto const& key : keysToClear_) {
-    auto maybePerPrefixKey = PrefixKey::fromStr(key);
-    if (maybePerPrefixKey.hasValue()) {
+    auto prefixKey = PrefixKey::fromStr(key);
+    if (prefixKey.hasValue()) {
       // needed for backward compatibility
       thrift::PrefixEntry entry;
-      entry.prefix = maybePerPrefixKey.value().getIpPrefix();
+      entry.prefix_ref() = prefixKey.value().getIpPrefix();
       deletedPrefixDb.prefixEntries = {entry};
     }
-    for (const auto& area : areas_) {
-      LOG(INFO) << "Withdrawing key: " << key << " from KvStore area: " << area;
-      // one last key set with empty DB and deletePrefix set signifies withdraw
-      // then the key should ttl out
-      kvStoreClient_->clearKey(
-          key,
-          fbzmq::util::writeThriftObjStr(
-              std::move(deletedPrefixDb), serializer_),
-          ttlKeyInKvStore_,
-          area);
-    }
+    LOG(INFO) << "Withdrawing key: " << key
+              << " from KvStore area: " << prefixKey->getPrefixArea();
+    // one last key set with empty DB and deletePrefix set signifies withdraw
+    // then the key should ttl out
+    kvStoreClient_->clearKey(
+        key,
+        fbzmq::util::writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
+        ttlKeyInKvStore_,
+        prefixKey->getPrefixArea());
   }
 
   // anything we don't advertise next time, we need to clear
@@ -347,7 +384,9 @@ PrefixManager::advertisePrefixes(std::vector<thrift::PrefixEntry> prefixes) {
     this,
     p = std::move(p),
     prefixes = std::move(prefixes)
-  ]() mutable noexcept { p.setValue(advertisePrefixesImpl(prefixes)); });
+  ]() mutable noexcept {
+    p.setValue(advertisePrefixesImpl(prefixes, allAreas_));
+  });
   return sf;
 }
 
@@ -386,7 +425,7 @@ PrefixManager::syncPrefixesByType(
     prefixType = std::move(prefixType),
     prefixes = std::move(prefixes)
   ]() mutable noexcept {
-    p.setValue(syncPrefixesByTypeImpl(prefixType, prefixes));
+    p.setValue(syncPrefixesByTypeImpl(prefixType, prefixes, allAreas_));
   });
   return sf;
 }
@@ -397,9 +436,9 @@ PrefixManager::getPrefixes() {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p)]() mutable noexcept {
     std::vector<thrift::PrefixEntry> prefixes;
-    for (const auto& kv : prefixMap_) {
-      for (const auto& kv2 : kv.second) {
-        prefixes.emplace_back(kv2.second);
+    for (const auto& [_, prefixToInfo] : prefixMap_) {
+      for (const auto& [_, entry] : prefixToInfo) {
+        prefixes.emplace_back(entry.tPrefixEntry);
       }
     }
     p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
@@ -419,9 +458,9 @@ PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
   ]() mutable noexcept {
     std::vector<thrift::PrefixEntry> prefixes;
     auto const search = prefixMap_.find(prefixType);
-    if (search != prefixMap_.end()) {
-      for (const auto& kv : search->second) {
-        prefixes.emplace_back(kv.second);
+    if (prefixMap_.count(prefixType)) {
+      for (const auto& [_, entry] : prefixMap_.at(prefixType)) {
+        prefixes.emplace_back(entry.tPrefixEntry);
       }
     }
     p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
@@ -433,25 +472,53 @@ PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
 // helpers for modifying our Prefix Db
 bool
 PrefixManager::advertisePrefixesImpl(
-    const std::vector<thrift::PrefixEntry>& prefixEntries) {
-  bool updated{false};
-  for (const auto& prefixEntry : prefixEntries) {
-    auto& prefixes = prefixMap_[prefixEntry.type];
-    auto it = prefixes.find(prefixEntry.prefix);
-    if (it == prefixes.end() or it->second != prefixEntry) {
-      prefixes[prefixEntry.prefix] = prefixEntry;
-      addPerfEventIfNotExist(
-          addingEvents_[prefixEntry.type][prefixEntry.prefix],
-          it == prefixes.end() ? "ADD_PREFIX" : "UPDATE_PREFIX");
-      updated = true;
-      SYSLOG(INFO) << "Advertising prefix: " << toString(prefixEntry.prefix)
-                   << ", client: " << getPrefixTypeName(prefixEntry.type);
-    }
+    const std::vector<thrift::PrefixEntry>& prefixes,
+    const std::unordered_set<std::string>& dstAreas) {
+  std::vector<PrefixEntry> toAddOrUpdate;
+  for (const auto& prefix : prefixes) {
+    toAddOrUpdate.emplace_back(prefix, dstAreas);
   }
+  return advertisePrefixesImpl(toAddOrUpdate);
+}
+
+// helpers for modifying our Prefix Db
+bool
+PrefixManager::advertisePrefixesImpl(
+    const std::vector<PrefixEntry>& prefixeInfos) {
+  bool updated{false};
+
+  for (const auto& entry : prefixeInfos) {
+    const auto& type = *entry.tPrefixEntry.type_ref();
+    const auto& prefix = *entry.tPrefixEntry.prefix_ref();
+
+    auto& prefixes = prefixMap_[type];
+    auto prefixIt = prefixes.find(prefix);
+
+    // received same prefix entry, ignore
+    if (prefixIt != prefixes.end() and prefixIt->second == entry) {
+      continue;
+    }
+
+    if (prefixIt == prefixes.end()) {
+      prefixes.emplace(prefix, entry);
+      addPerfEventIfNotExist(addingEvents_[type][prefix], "ADD_PREFIX");
+    } else {
+      prefixIt->second = entry;
+      addPerfEventIfNotExist(addingEvents_[type][prefix], "UPDATE_PREFIX");
+    }
+    updated = true;
+
+    SYSLOG_IF(INFO, entry.dstAreas.size() > 0)
+        << "Advertising prefix: " << toString(prefix) << " to area  "
+        << folly::join(",", entry.dstAreas)
+        << ", client: " << getPrefixTypeName(type);
+  }
+
   if (updated) {
     persistPrefixDb();
     syncKvStoreThrottled_->operator()();
   }
+
   return updated;
 }
 
@@ -467,11 +534,14 @@ PrefixManager::withdrawPrefixesImpl(
       return false;
     }
   }
+
   for (const auto& prefix : prefixes) {
     prefixMap_.at(prefix.type).erase(prefix.prefix);
     addingEvents_.at(prefix.type).erase(prefix.prefix);
+
     SYSLOG(INFO) << "Withdrawing prefix: " << toString(prefix.prefix)
                  << ", client: " << getPrefixTypeName(prefix.type);
+
     if (prefixMap_[prefix.type].empty()) {
       prefixMap_.erase(prefix.type);
     }
@@ -479,17 +549,20 @@ PrefixManager::withdrawPrefixesImpl(
       addingEvents_.erase(prefix.type);
     }
   }
+
   if (!prefixes.empty()) {
     persistPrefixDb();
     syncKvStoreThrottled_->operator()();
   }
+
   return !prefixes.empty();
 }
 
 bool
 PrefixManager::syncPrefixesByTypeImpl(
     thrift::PrefixType type,
-    const std::vector<thrift::PrefixEntry>& prefixEntries) {
+    const std::vector<thrift::PrefixEntry>& prefixEntries,
+    const std::unordered_set<std::string>& dstAreas) {
   LOG(INFO) << "Syncing prefixes of type: " << getPrefixTypeName(type);
   // building these lists so we can call add and remove and get detailed logging
   std::vector<thrift::PrefixEntry> toAddOrUpdate, toRemove;
@@ -503,10 +576,10 @@ PrefixManager::syncPrefixesByTypeImpl(
     toAddOrUpdate.emplace_back(entry);
   }
   for (auto const& prefix : toRemoveSet) {
-    toRemove.emplace_back(prefixMap_[type][prefix]);
+    toRemove.emplace_back(prefixMap_[type][prefix].tPrefixEntry);
   }
   bool updated = false;
-  updated |= advertisePrefixesImpl(toAddOrUpdate);
+  updated |= advertisePrefixesImpl(toAddOrUpdate, dstAreas);
   updated |= withdrawPrefixesImpl(toRemove);
   return updated;
 }
@@ -524,6 +597,52 @@ PrefixManager::withdrawPrefixesByTypeImpl(thrift::PrefixType type) {
     syncKvStoreThrottled_->operator()();
   }
   return changed;
+}
+
+void
+PrefixManager::processDecisionRouteUpdates(
+    DecisionRouteUpdate&& decisionRouteUpdate) {
+  // if only one area is configured, no need to redisrtibute route
+  // We want to keep processDecisionRouteUpdates() running as dynamic
+  // configuration could add/remove areas.
+  if (allAreas_.size() == 1) {
+    return;
+  }
+
+  std::vector<PrefixEntry> advertisePrefixes;
+  std::vector<thrift::PrefixEntry> withdrawPrefixes;
+
+  // Add/Update unicast routes to update
+  // Self originated (include routes imported from local BGP)
+  // won't show up in decisionRouteUpdate.
+  for (auto& route : decisionRouteUpdate.unicastRoutesToUpdate) {
+    auto& prefixEntry = route.bestPrefixEntry;
+
+    // NOTE: future expansion - run egress policy here
+
+    // cross area, append area stack
+    prefixEntry.area_stack_ref()->emplace_back(route.bestArea);
+    // normalize to RIB routes
+    prefixEntry.type_ref() = thrift::PrefixType::RIB;
+
+    auto dstAreas = allAreas_;
+    for (const auto& nh : route.nexthops) {
+      dstAreas.erase(apache::thrift::can_throw(*nh.area_ref()));
+    }
+
+    advertisePrefixes.emplace_back(prefixEntry, dstAreas);
+  }
+
+  // Delete unicast routes
+  for (const auto& prefix : decisionRouteUpdate.unicastRoutesToDelete) {
+    withdrawPrefixes.emplace_back(
+        createPrefixEntry(toIpPrefix(prefix), thrift::PrefixType::RIB));
+  }
+
+  advertisePrefixesImpl(advertisePrefixes);
+  withdrawPrefixesImpl(withdrawPrefixes);
+
+  // ignore mpls updates
 }
 
 void

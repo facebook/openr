@@ -98,9 +98,7 @@ class PrefixManagerTestFixture : public testing::Test {
     configStore->waitUntilRunning();
 
     // create config
-    auto tConfig = getBasicOpenrConfig("node-1");
-    tConfig.kvstore_config.sync_interval_s = 1;
-    config = std::make_shared<Config>(tConfig);
+    config = std::make_shared<Config>(createConfig());
 
     // spin up a kvstore
     kvStoreWrapper = std::make_shared<KvStoreWrapper>(context, config);
@@ -110,6 +108,7 @@ class PrefixManagerTestFixture : public testing::Test {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         prefixUpdatesQueue.getReader(),
+        routeUpdatesQueue.getReader(),
         config,
         configStore.get(),
         kvStoreWrapper->getKvStore(),
@@ -128,6 +127,7 @@ class PrefixManagerTestFixture : public testing::Test {
   TearDown() override {
     // Close queues
     prefixUpdatesQueue.close();
+    routeUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
 
     // cleanup kvStoreClient
@@ -161,6 +161,13 @@ class PrefixManagerTestFixture : public testing::Test {
     }
   }
 
+  virtual thrift::OpenrConfig
+  createConfig() {
+    auto tConfig = getBasicOpenrConfig("node-1");
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    return tConfig;
+  }
+
   // In case of separate IP prefix keys, collect all the prefix Entries
   // (advertised from a specific node) and return as a list
   std::vector<thrift::PrefixEntry>
@@ -190,6 +197,7 @@ class PrefixManagerTestFixture : public testing::Test {
 
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
 
   std::string storageFilePath;
   std::unique_ptr<PersistentStore> configStore;
@@ -482,7 +490,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
         if (expectedPrefix.has_value() and db.prefixEntries.size() != 0) {
           // we should always be advertising one prefix until we withdraw all
           EXPECT_EQ(db.prefixEntries.size(), 1);
-          EXPECT_EQ(expectedPrefix, db.prefixEntries.at(0));
+          EXPECT_EQ(expectedPrefix, db.prefixEntries_ref()->at(0));
           gotExpected = true;
         } else {
           EXPECT_TRUE(db.deletePrefix);
@@ -801,6 +809,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       prefixUpdatesQueue.getReader(),
+      routeUpdatesQueue.getReader(),
       config,
       configStore.get(),
       kvStoreWrapper->getKvStore(),
@@ -883,6 +892,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
 
   // cleanup
   prefixUpdatesQueue.close();
+  routeUpdatesQueue.close();
   kvStoreWrapper->closeQueue();
   prefixManager2->stop();
   prefixManagerThread2->join();
@@ -898,6 +908,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       prefixUpdatesQueue.getReader(),
+      routeUpdatesQueue.getReader(),
       config,
       configStore.get(),
       kvStoreWrapper->getKvStore(),
@@ -919,6 +930,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
 
   // cleanup
   prefixUpdatesQueue.close();
+  routeUpdatesQueue.close();
   kvStoreWrapper->closeQueue();
   prefixManager2->stop();
   prefixManagerThread2->join();
@@ -969,6 +981,7 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
 TEST(PrefixManagerTest, HoldTimeout) {
   fbzmq::Context context;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
 
   // spin up a config store
   auto configStore = std::make_unique<PersistentStore>(
@@ -985,7 +998,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
 
   // spin up a kvstore
   auto tConfig = getBasicOpenrConfig("node-1");
-  tConfig.kvstore_config.sync_interval_s = 1;
+  tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
   auto config = std::make_shared<Config>(tConfig);
   auto kvStoreWrapper = std::make_unique<KvStoreWrapper>(context, config);
   kvStoreWrapper->run();
@@ -996,6 +1009,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
   const auto startTime = std::chrono::steady_clock::now();
   auto prefixManager = std::make_unique<PrefixManager>(
       prefixUpdatesQueue.getReader(),
+      routeUpdatesQueue.getReader(),
       config,
       configStore.get(),
       kvStoreWrapper->getKvStore(),
@@ -1022,6 +1036,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
 
   // Stop the test
   prefixUpdatesQueue.close();
+  routeUpdatesQueue.close();
   kvStoreWrapper->closeQueue();
   prefixManager->stop();
   prefixManagerThread.join();
@@ -1199,6 +1214,332 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
     EXPECT_EQ(0, prefixes->size());
+  }
+}
+
+class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
+  thrift::OpenrConfig
+  createConfig() override {
+    // config three areas A B C without policy
+    auto A = createAreaConfig("A", {"RSW.*"}, {".*"});
+    auto B = createAreaConfig("B", {"FSW.*"}, {".*"});
+    auto C = createAreaConfig("C", {"SSW.*"}, {".*"});
+
+    auto tConfig = getBasicOpenrConfig("node-1", "domain", {A, B, C});
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+
+    return tConfig;
+  }
+
+ public:
+  // return false if publication is tll update.
+  bool
+  readPublication(
+      thrift::Publication const& pub,
+      std::map<std::string, thrift::PrefixEntry>& got,
+      std::map<std::string, thrift::PrefixEntry>& gotDeleted) {
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+    auto kv = pub.keyVals_ref()->begin();
+
+    if (not kv->second.value_ref().has_value()) {
+      // skip TTL update
+      CHECK_GT(*kv->second.ttlVersion_ref(), 0);
+      return false;
+    }
+
+    auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        kv->second.value_ref().value(), serializer);
+    EXPECT_EQ(1, db.prefixEntries_ref()->size());
+    auto prefix = db.prefixEntries_ref()->at(0);
+    if (*db.deletePrefix_ref()) {
+      gotDeleted.emplace(kv->first, prefix);
+    } else {
+      got.emplace(kv->first, prefix);
+    }
+    return true;
+  }
+};
+
+/**
+ * Test prefix advertisement in KvStore with multiple clients.
+ * NOTE: Priority LOOPBACK > DEFAULT > BGP
+ * 1. Inject prefix1 with client-bgp - Verify KvStore
+ * 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
+ * 3. Withdraw prefix1 with client-loopback - Verify KvStore
+ * 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+ */
+TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
+  auto kvStoreUpdatesQueue = kvStoreWrapper->getReader();
+
+  auto path1_2_1 = createNextHop(
+      toBinaryAddress(folly::IPAddress("fe80::2")),
+      std::string("iface_1_2_1"),
+      1);
+  path1_2_1.area_ref() = "A";
+  auto path1_2_2 = createNextHop(
+      toBinaryAddress(folly::IPAddress("fe80::2")),
+      std::string("iface_1_2_2"),
+      2);
+  path1_2_2.area_ref() = "B";
+
+  // prefix key for addr1 in area A, B, C
+  auto keyStrA = PrefixKey("node-1", toIPNetwork(addr1), "A").getPrefixKey();
+  auto keyStrB = PrefixKey("node-1", toIPNetwork(addr1), "B").getPrefixKey();
+  auto keyStrC = PrefixKey("node-1", toIPNetwork(addr1), "C").getPrefixKey();
+
+  //
+  // 1. Inject prefix1 from area A, B and C should receive announcement
+  //
+
+  // create unicast route for addr1 from area "A"
+  auto prefixEntry1A = prefixEntry1;
+  prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
+  auto unicast1A = RibUnicastEntry(
+      toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, "A", false);
+  // expected kvstore announcement to other area, append "A" in area stack
+  auto expectedPrefixEntry1A = prefixEntry1A;
+  expectedPrefixEntry1A.area_stack_ref()->push_back("A");
+  expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
+
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
+    expected.emplace(keyStrB, expectedPrefixEntry1A);
+    expected.emplace(keyStrC, expectedPrefixEntry1A);
+
+    auto pub1 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub1, got, gotDeleted);
+
+    auto pub2 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub2, got, gotDeleted);
+
+    EXPECT_EQ(expected, got);
+    EXPECT_EQ(0, gotDeleted.size());
+  }
+
+  //
+  // 2. Inject prefix1 from area B
+  //    A, C receive announcement, B withdraw old prefix from A
+  //
+
+  // create unicast route for addr1 from area "B"
+  auto prefixEntry1B = prefixEntry1;
+  prefixEntry1B.metrics_ref()->source_preference_ref() = 100;
+  auto unicast1B = RibUnicastEntry(
+      toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, "B", false);
+  // expected kvstore announcement to other area, append "B" in area stack
+  auto expectedPrefixEntry1B = prefixEntry1B;
+  expectedPrefixEntry1B.area_stack_ref()->push_back("B");
+  expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
+
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1B);
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
+    expected.emplace(keyStrA, expectedPrefixEntry1B);
+    expected.emplace(keyStrC, expectedPrefixEntry1B);
+
+    auto pub1 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub1, got, gotDeleted);
+
+    auto pub2 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub2, got, gotDeleted);
+
+    auto pub3 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub3, got, gotDeleted);
+
+    EXPECT_EQ(expected, got);
+
+    EXPECT_EQ(1, gotDeleted.size());
+    EXPECT_EQ(addr1, *gotDeleted.at(keyStrB).prefix_ref());
+  }
+
+  //
+  // 3. Withdraw prefix1, A, C receive prefix withdrawal
+  //
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
+
+    auto pub1 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub1, got, gotDeleted);
+
+    auto pub2 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub2, got, gotDeleted);
+
+    EXPECT_EQ(0, got.size());
+
+    EXPECT_EQ(2, gotDeleted.size());
+    EXPECT_EQ(addr1, *gotDeleted.at(keyStrA).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(keyStrC).prefix_ref());
+  }
+}
+
+TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
+  auto kvStoreUpdatesQueue = kvStoreWrapper->getReader();
+
+  auto path1_2_1 = createNextHop(
+      toBinaryAddress(folly::IPAddress("fe80::2")),
+      std::string("iface_1_2_1"),
+      1);
+  path1_2_1.area_ref() = "A";
+  auto path1_2_2 = createNextHop(
+      toBinaryAddress(folly::IPAddress("fe80::2")),
+      std::string("iface_1_2_2"),
+      2);
+  path1_2_2.area_ref() = "B";
+  auto path1_2_3 = createNextHop(
+      toBinaryAddress(folly::IPAddress("fe80::2")),
+      std::string("iface_1_2_3"),
+      2);
+  path1_2_3.area_ref() = "C";
+
+  // prefix key for addr1 in area A, B, C
+  auto keyStrA = PrefixKey("node-1", toIPNetwork(addr1), "A").getPrefixKey();
+  auto keyStrB = PrefixKey("node-1", toIPNetwork(addr1), "B").getPrefixKey();
+  auto keyStrC = PrefixKey("node-1", toIPNetwork(addr1), "C").getPrefixKey();
+
+  //
+  // 1. Inject prefix1 with ecmp areas = [A, B], best area = A
+  //    => only C receive announcement
+  //
+
+  // create unicast route for addr1 from area "A"
+  auto prefixEntry1A = prefixEntry1;
+  prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
+  auto unicast1A = RibUnicastEntry(
+      toIPNetwork(addr1), {path1_2_1, path1_2_2}, prefixEntry1A, "A", false);
+
+  // expected kvstore announcement to other area, append "A" in area stack
+  auto expectedPrefixEntry1A = prefixEntry1A;
+  expectedPrefixEntry1A.area_stack_ref()->push_back("A");
+  expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
+
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
+    expected.emplace(keyStrC, expectedPrefixEntry1A);
+
+    auto pub1 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub1, got, gotDeleted);
+
+    EXPECT_EQ(expected, got);
+
+    EXPECT_EQ(0, gotDeleted.size());
+  }
+
+  //
+  // 2. add C into ecmp group, ecmp areas = [A, B, C], best area = A
+  //    => C receive withdraw
+  //
+  unicast1A.nexthops.emplace(path1_2_3);
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
+
+    auto pub1 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub1, got, gotDeleted);
+
+    EXPECT_EQ(0, got.size());
+    EXPECT_EQ(1, gotDeleted.size());
+    EXPECT_EQ(addr1, *gotDeleted.at(keyStrC).prefix_ref());
+  }
+
+  //
+  // 3. withdraw B from ecmp group, ecmp areas = [A, C], best area = A
+  //    => B receive update
+  //
+  unicast1A.nexthops.erase(path1_2_2);
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
+    expected.emplace(keyStrB, expectedPrefixEntry1A);
+
+    auto pub1 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub1, got, gotDeleted);
+
+    EXPECT_EQ(expected, got);
+    EXPECT_EQ(0, gotDeleted.size());
+  }
+
+  //
+  // 4. change ecmp group to [B], best area = B
+  //    => B receive withdraw, A, C receive update
+  //
+
+  // create unicast route for addr1 from area "B"
+  auto prefixEntry1B = prefixEntry1;
+  prefixEntry1B.metrics_ref()->source_preference_ref() = 100;
+  auto unicast1B = RibUnicastEntry(
+      toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, "B", false);
+
+  // expected kvstore announcement to other area, append "B" in area stack
+  auto expectedPrefixEntry1B = prefixEntry1B;
+  expectedPrefixEntry1B.area_stack_ref()->push_back("B");
+  expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
+
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1B);
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
+    expected.emplace(keyStrA, expectedPrefixEntry1B);
+    expected.emplace(keyStrC, expectedPrefixEntry1B);
+
+    // this test is long, we might hit ttl updates
+    // here skip ttl updates
+    int expectedPubCnt{3}, gotPubCnt{0};
+    while (gotPubCnt < expectedPubCnt) {
+      auto pub = kvStoreUpdatesQueue.get().value();
+      gotPubCnt += readPublication(pub, got, gotDeleted);
+    }
+
+    EXPECT_EQ(expected, got);
+
+    EXPECT_EQ(1, gotDeleted.size());
+    EXPECT_EQ(addr1, *gotDeleted.at(keyStrB).prefix_ref());
+  }
+
+  //
+  // 5. Withdraw prefix1
+  //    => A, C receive prefix withdrawal
+  //
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
+    routeUpdatesQueue.push(std::move(routeUpdate));
+
+    std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
+
+    auto pub1 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub1, got, gotDeleted);
+
+    auto pub2 = kvStoreUpdatesQueue.get().value();
+    readPublication(pub2, got, gotDeleted);
+
+    EXPECT_EQ(0, got.size());
+
+    EXPECT_EQ(2, gotDeleted.size());
+    EXPECT_EQ(addr1, *gotDeleted.at(keyStrA).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(keyStrC).prefix_ref());
   }
 }
 

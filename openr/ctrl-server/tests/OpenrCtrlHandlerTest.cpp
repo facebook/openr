@@ -99,6 +99,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
         prefixUpdatesQueue_.getReader(),
+        routeUpdatesQueue_.getReader(),
         config,
         persistentStore.get(),
         kvStoreWrapper->getKvStore(),

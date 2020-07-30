@@ -1154,10 +1154,10 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
 TEST_F(SparkFixture, AreaMatch) {
   // Explicitly set regex to be capital letters to make sure
   // regex is NOT case-sensative
-  auto areaConfig11 = SparkWrapper::createAreaConfig(area1, {"RSW.*"}, {".*"});
-  auto areaConfig12 = SparkWrapper::createAreaConfig(area2, {"FSW.*"}, {".*"});
-  auto areaConfig21 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
-  auto areaConfig22 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
+  auto areaConfig11 = createAreaConfig(area1, {"RSW.*"}, {".*"});
+  auto areaConfig12 = createAreaConfig(area2, {"FSW.*"}, {".*"});
+  auto areaConfig21 = createAreaConfig(area1, {"FSW.*"}, {".*"});
+  auto areaConfig22 = createAreaConfig(area2, {"RSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
@@ -1224,8 +1224,8 @@ TEST_F(SparkFixture, NoAreaMatch) {
   //  rsw001 and fsw002 will receive each other's helloMsg, but won't proceed.
   //  rsw001 can ONLY pair with "RSW.*", whereas fsw002 can ONLY pair with
   //  "FSW.*".
-  auto areaConfig1 = SparkWrapper::createAreaConfig(area1, {"RSW.*"}, {".*"});
-  auto areaConfig2 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
+  auto areaConfig1 = createAreaConfig(area1, {"RSW.*"}, {".*"});
+  auto areaConfig2 = createAreaConfig(area1, {"FSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
@@ -1294,8 +1294,8 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   //  area "1", whereas fsw002 thinks rsw001 should be in area "2".
   //
   //  AREA negotiation won't go through. Will fall back to WARM
-  auto areaConfig1 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
-  auto areaConfig2 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
+  auto areaConfig1 = createAreaConfig(area1, {"FSW.*"}, {".*"});
+  auto areaConfig2 = createAreaConfig(area2, {"RSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
@@ -1369,7 +1369,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   //  with areaConfig. Make sure AREA negotiation will go through
   //  rsw001 form adj inside `defaultArea`.
   //  fsw002 form adj inside `2`
-  auto areaConfig2 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
+  auto areaConfig2 = createAreaConfig(area2, {"RSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
@@ -1429,12 +1429,11 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   //    rsw001 <==> fsw002
   //    fsw002 <==> ssw003
   //    ssw003 <==> rsw001
-  auto areaConfig11 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
-  auto areaConfig12 = SparkWrapper::createAreaConfig(area2, {"SSW.*"}, {".*"});
-  auto areaConfig2 =
-      SparkWrapper::createAreaConfig(area1, {"RSW.*", "SSW.*"}, {".*"});
-  auto areaConfig31 = SparkWrapper::createAreaConfig(area1, {"fsw.*"}, {".*"});
-  auto areaConfig32 = SparkWrapper::createAreaConfig(area2, {"rsw.*"}, {".*"});
+  auto areaConfig11 = createAreaConfig(area1, {"FSW.*"}, {".*"});
+  auto areaConfig12 = createAreaConfig(area2, {"SSW.*"}, {".*"});
+  auto areaConfig2 = createAreaConfig(area1, {"RSW.*", "SSW.*"}, {".*"});
+  auto areaConfig31 = createAreaConfig(area1, {"fsw.*"}, {".*"});
+  auto areaConfig32 = createAreaConfig(area2, {"rsw.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";

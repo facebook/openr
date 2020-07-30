@@ -29,11 +29,49 @@ Supports the following commands
 
 ### Implementation
 ---
+There are two channels of information for managing route advertisements
 
-The `PrefixManager` module is quite simple. It stores the list of prefixes to be
-advertised by the node, listens on a ROUTER socket for commands that modify this
-list, and updates the PrefixDatabase advertised in `kvStore` and persisted on
-disk when the list changes.
+- `PrefixUpdateRequestQueue` -> Receives route advertise & withdraw commands.
+Multiple sources within Open/R (LinkMonitor, PrefixAllocator, BgpRib) uses this
+channel to manage their advertisements. Each source is assigned and expected to
+use a unique type.
+
+- `DecisionRouteUpdatesQueue` -> Received the computed (hence programmed)
+routes. The programmed routes are candidates for advertisements to other areas
+of which they're not part of. This is termed as route re-distribution across
+the areas. Each RibRoute is converted into a route advertisement or withdraw
+with a special type `RIB`.
+
+In both cases, `PrefixManager` updates the PrefixDatabase advertised in
+`kvStore` and persisted on disk when the list changes.
+
+### Redistribute Prefix Workflow
+
+For a route update (pfx1, node1, area1) from `decisionRouteUpdatesQueue`,
+workflow is as follows:
+- run area1 egress policy
+- append area1 to area_stack, this is considered as a route cross area boundary
+- run area2 ingress policy, if accepted => inject to area2.
+
+## Selecting Unique Prefix Advertisement
+A prefix can be requested to be advertised by multiple sources e.g. from
+configuration (originating route) or RIB (re-distributing route). However,
+only a single prefix information can be advertised to other nodes. We do so by
+following criteria:
+- Tie-breaking on Metrics
+- If still not unique, then tie-break on type (aka Source). The tie-breaking on
+source is statically defined in code
+
+Let's take the same (pfx1, node1, area1) example:
+- pfx1 is redistributed into area2, (pfx1(`RIB`), me, area2)
+- pfx1 is originated with type `DEFAULT` (pfx1(`DEFAULT`), me, all)
+
+To decide which prefix entry openr should originate. We'll compare their
+attributes first, if they are the same, `DEFAULT`(2) win over `RIB`(6).
+
+To conclude, attributes tie break happens in two places in openr:
+- in prefix Manager: same prefix of different typrs originated by me.
+- in decision: same prefix originated by different nodes.
 
 ### Interacting with PrefixManager
 ---

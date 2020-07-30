@@ -24,4 +24,6 @@ struct PrefixUpdateRequest {
   1: PrefixUpdateCommand cmd
   2: optional Network.PrefixType type
   3: list<Lsdb.PrefixEntry> prefixes
+  // empty list = inject to all configured areas
+  4: set<string> dstAreas = {} (cpp2.type = "std::unordered_set<std::string>")
 }

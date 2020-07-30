@@ -130,17 +130,4 @@ SparkWrapper::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
   return spark_->getSparkNeighState(ifName, neighborName).get();
 }
-
-thrift::AreaConfig
-SparkWrapper::createAreaConfig(
-    const std::string& areaId,
-    const std::vector<std::string>& neighborRegexes,
-    const std::vector<std::string>& interfaceRegexes) {
-  thrift::AreaConfig areaConfig;
-  areaConfig.area_id = areaId;
-  areaConfig.neighbor_regexes = neighborRegexes;
-  areaConfig.interface_regexes = interfaceRegexes;
-  return areaConfig;
-}
-
 } // namespace openr

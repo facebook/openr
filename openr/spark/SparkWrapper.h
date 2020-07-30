@@ -67,12 +67,6 @@ class SparkWrapper {
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
       const thrift::SparkNeighborEvent& event);
 
-  // utility function to construct thrift::AreaConfig
-  static thrift::AreaConfig createAreaConfig(
-      const std::string& areaId,
-      const std::vector<std::string>& nodeRegexes,
-      const std::vector<std::string>& interfaceRegexes);
-
   // utility function to construct thrift::AreaConfig.SparkConfigs
   const openr::thrift::SparkConfig
   getSparkConfig() {

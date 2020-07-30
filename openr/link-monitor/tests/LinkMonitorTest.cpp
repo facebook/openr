@@ -214,6 +214,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         prefixUpdatesQueue.getReader(),
+        routeUpdatesQueue.getReader(),
         config,
         configStore.get(),
         kvStoreWrapper->getKvStore(),
@@ -238,6 +239,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     peerUpdatesQueue.close();
     neighborUpdatesQueue.close();
     prefixUpdatesQueue.close();
+    routeUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
 
     LOG(INFO) << "Stopping the LinkMonitor thread";
@@ -532,6 +534,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
 

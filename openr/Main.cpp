@@ -411,6 +411,7 @@ main(int argc, char** argv) {
       "PrefixManager",
       std::make_unique<PrefixManager>(
           prefixUpdateRequestQueue.getReader(),
+          routeUpdatesQueue.getReader(),
           config,
           configStore,
           kvStore,
