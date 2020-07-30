@@ -72,6 +72,10 @@ PrefixAllocator::PrefixAllocator(
     staticAllocation();
     break;
   }
+
+  // create retryTimer for applying prefix
+  retryTimer_ = folly::AsyncTimeout::make(
+      *getEvb(), [this]() noexcept { applyMyPrefix(); });
 }
 
 void
@@ -614,10 +618,7 @@ PrefixAllocator::applyMyPrefix() {
         << (applyState_.second.has_value()
                 ? folly::IPAddress::networkToString(applyState_.second.value())
                 : "none");
-    scheduleTimeout(
-        Constants::kPrefixAllocatorRetryInterval, [this]() noexcept {
-          applyMyPrefix();
-        });
+    retryTimer_->scheduleTimeout(Constants::kPrefixAllocatorRetryInterval);
   }
 }
 

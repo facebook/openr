@@ -195,6 +195,9 @@ class PrefixAllocator : public OpenrEventBase {
   // AsyncTimeout for initialization
   std::unique_ptr<folly::AsyncTimeout> initTimer_;
 
+  // AsyncTimeout for prefix allocation retry
+  std::unique_ptr<folly::AsyncTimeout> retryTimer_;
+
   /**
    * applyMyPrefix use this state to decide how to program address to kernel
    * boolean field means the address is beed applied or not.
