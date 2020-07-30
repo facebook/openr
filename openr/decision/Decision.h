@@ -361,7 +361,7 @@ class Decision : public OpenrEventBase {
   std::chrono::milliseconds getMaxFib();
 
   // node to prefix entries database for nodes advertising per prefix keys
-  thrift::PrefixDatabase updateNodePrefixDatabase(
+  std::optional<thrift::PrefixDatabase> updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
 
   // cached routeDb

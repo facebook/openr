@@ -1581,25 +1581,30 @@ Decision::getRibPolicy() {
   return std::move(sf);
 }
 
-thrift::PrefixDatabase
+std::optional<thrift::PrefixDatabase>
 Decision::updateNodePrefixDatabase(
     const std::string& key, const thrift::PrefixDatabase& prefixDb) {
   auto const& nodeName = prefixDb.thisNodeName;
 
   auto prefixKey = PrefixKey::fromStr(key);
+  // per prefix key
   if (prefixKey.hasValue()) {
-    // per prefix key
     if (prefixDb.deletePrefix) {
       perPrefixPrefixEntries_[nodeName].erase(prefixKey.value().getIpPrefix());
     } else {
-      if (prefixDb.prefixEntries.empty()) {
-        LOG(ERROR) << "Received no entries for prefix db";
-      } else {
-        LOG_IF(ERROR, prefixDb.prefixEntries.size() > 1)
-            << "Received more than one prefix, only the first prefix is processed";
-        perPrefixPrefixEntries_[nodeName][prefixKey.value().getIpPrefix()] =
-            prefixDb.prefixEntries[0];
+      CHECK_EQ(1, prefixDb.prefixEntries_ref()->size());
+      auto prefixEntry = prefixDb.prefixEntries_ref()->at(0);
+
+      // Ignore self redistributed route reflection
+      // These routes are programmed by Decision,
+      // re-origintaed by me to areas that do not have the best prefix entry
+      if (nodeName == myNodeName_ && prefixEntry.area_stack_ref()->size() > 0 &&
+          areaLinkStates_.count(prefixEntry.area_stack_ref()->at(0))) {
+        return std::nullopt;
       }
+
+      perPrefixPrefixEntries_[nodeName][prefixKey.value().getIpPrefix()] =
+          prefixEntry;
     }
   } else {
     fullDbPrefixEntries_[nodeName].clear();
@@ -1690,7 +1695,11 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
         CHECK_EQ(nodeName, prefixDb.thisNodeName);
-        auto nodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
+        auto maybeNodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
+        if (not maybeNodePrefixDb.has_value()) {
+          continue;
+        }
+        auto nodePrefixDb = maybeNodePrefixDb.value();
         // TODO - this should directly come from KvStore.
         nodePrefixDb.area = area;
         VLOG(1) << "Updating prefix database for node " << nodeName
@@ -1737,7 +1746,13 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       thrift::PrefixDatabase deletePrefixDb;
       deletePrefixDb.thisNodeName = nodeName;
       deletePrefixDb.deletePrefix = true;
-      auto nodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
+
+      auto maybeNodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
+      if (not maybeNodePrefixDb.has_value()) {
+        continue;
+      }
+      auto nodePrefixDb = maybeNodePrefixDb.value();
+
       // TODO - this should directly come from KvStore.
       nodePrefixDb.area = area;
       pendingUpdates_.applyPrefixStateChange(

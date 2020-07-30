@@ -4500,7 +4500,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 //
 // area A: adj12, adj24
 // area B: adj13, adj34
-TEST_F(DecisionTestFixture, MultiArea) {
+TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   //
   // publish area A adj and prefix
   // "1" originate addr1 into A
@@ -4635,6 +4635,79 @@ TEST_F(DecisionTestFixture, MultiArea) {
          createNextHopFromAdj(adj42, false, 20, std::nullopt, false, "A")});
     EXPECT_THAT(routeDb4.unicastRoutes, testing::Contains(routeToAddr1));
   }
+}
+
+// MultiArea Tology topology is used:
+//  1--- A ---2
+//  |
+//  B
+//  |
+//  3
+//
+// area A: adj12
+// area B: adj13
+TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
+  //
+  // publish area A adj and prefix
+  // "2" originate addr2 into A
+  //
+  auto originKeyStr = PrefixKey("2", toIPNetwork(addr2), "A").getPrefixKey();
+  auto publication = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+       {originKeyStr, createPrefixValue("2", 1, {addr2}, "A")}},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      std::string(""), /*floodRootId */
+      "A");
+
+  sendKvPublication(publication);
+  recvMyRouteDb("1", serializer);
+  auto expectedPrefixDbs = *decision->getDecisionPrefixDbs().get();
+
+  //
+  // publish area B adj and prefix
+  //
+  publication = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj13}, false, 1)},
+       {"adj:3", createAdjValue("3", 1, {adj31}, false, 3)}},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      std::string(""), /*floodRootId */
+      "B");
+  sendKvPublication(publication);
+  recvMyRouteDb("1" /* node name */, serializer);
+
+  //
+  // "1" reditribute addr2 into B
+  //   - this should not cause prefix db update
+  //   - not route update
+  //
+  auto redistributeKeyStr =
+      PrefixKey("1", toIPNetwork(addr2), "B").getPrefixKey();
+  auto redistributePfx = createPrefixEntry(addr2, thrift::PrefixType::RIB);
+  redistributePfx.area_stack_ref()->emplace_back("A");
+  auto redistributePfxVal =
+      createPrefixValue("1", 1, createPrefixDb("1", {redistributePfx}, "B"));
+  publication = createThriftPublication(
+      {{redistributeKeyStr, redistributePfxVal}},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      std::string(""), /*floodRootId */
+      "B");
+  sendKvPublication(publication);
+
+  // wait for publication to be processed
+  /* sleep override */
+  std::this_thread::sleep_for(
+      debounceTimeoutMax + std::chrono::milliseconds(100));
+
+  auto prefixDbs = *decision->getDecisionPrefixDbs().get();
+  EXPECT_EQ(expectedPrefixDbs, prefixDbs);
+  EXPECT_EQ(0, routeUpdatesQueueReader.size());
 }
 
 /**
@@ -4801,8 +4874,9 @@ TEST(Decision, RibPolicyFeatureKnob) {
 //      \_ ____ _/
 //          800
 
-// We upload parallel link 1---2 with the initial sync and later bring down the
-// one with lower metric. We then verify updated route database is received
+// We upload parallel link 1---2 with the initial sync and later bring down
+// the one with lower metric. We then verify updated route database is
+// received
 //
 
 TEST_F(DecisionTestFixture, ParallelLinks) {
@@ -5730,7 +5804,8 @@ TEST_F(DecisionTestFixture, Counters) {
       {{"adj:1", createAdjValue("1", 1, {adj12, adj13}, false, 1)},
        {"adj:2", createAdjValue("2", 1, {adj21, adj23}, false, 2)},
        {"adj:3", createAdjValue("3", 1, {adj31}, false, 3 << 20)}, // invalid
-                                                                   // mpls label
+                                                                   // mpls
+                                                                   // label
        {"adj:4", createAdjValue("4", 1, {}, false, 4)}, // Disconnected node
        {"prefix:1", createPrefixValue("1", 1, prefixDb1)},
        {"prefix:2", createPrefixValue("2", 1, prefixDb2)},
