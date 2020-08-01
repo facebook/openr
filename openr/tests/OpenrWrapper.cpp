@@ -178,6 +178,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
       false, /* assumeDrained */
+      false, /* overrideDrainState */
       prefixUpdatesQueue_,
       PlatformPublisherUrl{platformPubUrl_},
       linkMonitorAdjHoldTime);

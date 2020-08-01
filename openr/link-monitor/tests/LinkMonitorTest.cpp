@@ -313,7 +313,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
   }
 
   void
-  createLinkMonitor(std::shared_ptr<Config> config) {
+  createLinkMonitor(
+      std::shared_ptr<Config> config,
+      bool assumeDrained = false,
+      bool overrideDrainState = false) {
     linkMonitor = std::make_unique<LinkMonitor>(
         context,
         config,
@@ -325,7 +328,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         neighborUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
-        false, /* assumeDrained */
+        assumeDrained,
+        overrideDrainState,
         prefixUpdatesQueue,
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         std::chrono::seconds(1) /* adjHoldTime */
@@ -525,6 +529,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
     }
   }
 
+  void
+  stopLinkMonitor() {
+    linkMonitor->stop();
+    linkMonitorThread->join();
+    linkMonitor.reset();
+  }
+
   fbzmq::Context context{};
   folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
@@ -566,6 +577,65 @@ TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
   // Verify that we receive empty adjacency database
   expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel));
   checkNextAdjPub("adj:node-1");
+}
+
+// Start LinkMonitor and ensure drain state are set correctly according to
+// parameters
+TEST_F(LinkMonitorTestFixture, DrainState) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+
+  // 1. default setup:
+  // persistent store == null, assume_drain = false, override_drain_state =
+  // isOverloaded should be read from assume_drain, = false
+  auto res = linkMonitor->getInterfaces().get();
+  ASSERT_NE(nullptr, res);
+  EXPECT_FALSE(res->isOverloaded);
+
+  // 2. restart with persistent store info
+  // override_drain_state = false, persistent store has overload = true
+  // isOverloaded should be read from persistent store, = true
+  neighborUpdatesQueue.close();
+  kvStoreWrapper->closeQueue();
+  stopLinkMonitor();
+
+  {
+    // Save isOverloaded to be true in config store
+    thrift::LinkMonitorState state;
+    state.isOverloaded = true;
+    auto resp = configStore->storeThriftObj(kConfigKey, state).get();
+    EXPECT_EQ(folly::Unit(), resp);
+  }
+
+  // Create new neighbor update queue. Previous one is closed
+  neighborUpdatesQueue.open();
+  kvStoreWrapper->openQueue();
+  createLinkMonitor(
+      config, false /*assumeDrained*/, false /*overrideDrainState*/);
+  // checkNextAdjPub("adj:node-1");
+
+  res = linkMonitor->getInterfaces().get();
+  ASSERT_NE(nullptr, res);
+  EXPECT_TRUE(res->isOverloaded);
+
+  LOG(INFO) << "3333333333333333";
+
+  // 3. restart with override_drain_state = true
+  // override_drain_state = true, assume_drain = false, persistent store has
+  // overload = true isOverloaded should be read from assume_drain store, =
+  // false
+  neighborUpdatesQueue.close();
+  kvStoreWrapper->closeQueue();
+  stopLinkMonitor();
+
+  // Create new neighbor update queue. Previous one is closed
+  neighborUpdatesQueue.open();
+  kvStoreWrapper->openQueue();
+  createLinkMonitor(
+      config, false /*assumeDrained*/, true /*overrideDrainState*/);
+
+  res = linkMonitor->getInterfaces().get();
+  ASSERT_NE(nullptr, res);
+  EXPECT_FALSE(res->isOverloaded);
 }
 
 // receive neighbor up/down events from "spark"
@@ -835,9 +905,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   neighborUpdatesQueue.close();
   kvStoreWrapper->stop();
   kvStoreWrapper.reset();
-  linkMonitor->stop();
-  linkMonitorThread->join();
-  linkMonitor.reset();
+  stopLinkMonitor();
 
   // Create new neighborUpdatesQueue/peerUpdatesQueue.
   // Previous one is closed
@@ -898,9 +966,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
     LOG(INFO) << "Mock restarting link monitor!";
     neighborUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
-    linkMonitor->stop();
-    linkMonitorThread->join();
-    linkMonitor.reset();
+    stopLinkMonitor();
 
     // Create new neighbor update queue. Previous one is closed
     neighborUpdatesQueue.open();
@@ -1658,7 +1724,8 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         neighborUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
-        false,
+        false, /* assumeDrained */
+        false, /* overrideDrainState */
         prefixUpdatesQueue,
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         std::chrono::seconds(1));

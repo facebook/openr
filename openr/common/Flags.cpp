@@ -56,11 +56,18 @@ DEFINE_string(
     config_store_filepath,
     "/tmp/aq_persistent_config_store.bin",
     "File name where to persist OpenR's internal state across restarts");
+
 DEFINE_bool(
     assume_drained,
     false,
     "If set, will assume node is drained if no drain state is found in the "
     "persistent store");
+DEFINE_bool(
+    override_drain_state,
+    false,
+    "If set, will override persistent store drain state with value passed in "
+    "--assume_drained");
+
 DEFINE_string(
     node_name,
     "node1",

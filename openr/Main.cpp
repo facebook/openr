@@ -470,6 +470,7 @@ main(int argc, char** argv) {
           monitorSubmitUrl,
           configStore,
           FLAGS_assume_drained,
+          FLAGS_override_drain_state,
           prefixUpdateRequestQueue,
           PlatformPublisherUrl{FLAGS_platform_pub_url},
           initialDumpTime));

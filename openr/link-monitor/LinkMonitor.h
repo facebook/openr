@@ -97,6 +97,9 @@ class LinkMonitor final : public OpenrEventBase {
       // if set, we will assume drained if no drain state is found in the
       // persitentStore
       bool assumeDrained,
+      // if set, we will override drain state from persistent store with
+      // assumeDrained value
+      bool overrideDrainState,
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       // URL for platform publisher
       PlatformPublisherUrl const& platformPubUrl,

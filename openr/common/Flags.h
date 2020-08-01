@@ -31,6 +31,7 @@ DECLARE_string(domain);
 DECLARE_string(listen_addr);
 DECLARE_string(config_store_filepath);
 DECLARE_bool(assume_drained);
+DECLARE_bool(override_drain_state);
 DECLARE_string(node_name);
 DECLARE_bool(dryrun);
 DECLARE_string(loopback_iface);

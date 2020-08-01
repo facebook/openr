@@ -81,6 +81,7 @@ LinkMonitor::LinkMonitor(
     MonitorSubmitUrl const& monitorSubmitUrl,
     PersistentStore* configStore,
     bool assumeDrained,
+    bool overrideDrainState,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     PlatformPublisherUrl const& platformPubUrl,
     std::chrono::seconds adjHoldTime)
@@ -153,9 +154,17 @@ LinkMonitor::LinkMonitor(
     state_ = state.value();
     printLinkMonitorState(state_);
   } else {
+    // no persistent store found, use assumeDrained
     state_.isOverloaded = assumeDrained;
     LOG(WARNING) << folly::sformat(
         "Failed to load link-monitor state from disk. Setting node as {}",
+        assumeDrained ? "DRAINED" : "UNDRAINED");
+  }
+  // overrideDrainState provided, use assumeDrained
+  if (overrideDrainState) {
+    state_.isOverloaded = assumeDrained;
+    LOG(WARNING) << folly::sformat(
+        "FLAGS_override_drain_state == true, setting drain state based on FLAGS_assume_drained to {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
   }
 

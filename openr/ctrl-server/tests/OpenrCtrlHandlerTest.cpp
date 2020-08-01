@@ -136,7 +136,8 @@ class OpenrCtrlFixture : public ::testing::Test {
         neighborUpdatesQueue_.getReader(),
         monitorSubmitUrl_,
         persistentStore.get(),
-        false,
+        false, /* assumeDrained */
+        false, /* overrideDrainState */
         prefixUpdatesQueue_,
         platformPubUrl_,
         std::chrono::seconds(1));
