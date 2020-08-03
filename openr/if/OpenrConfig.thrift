@@ -160,7 +160,7 @@ struct BgpRouteTranslationConfig {
    * will use this mapping to convert as-path to area_stack and vice versa.
    * If not mapping is found then string representation of ASN will be used.
    */
-  2: map<i32, string> asn_to_area;
+  2: map<i64, string> asn_to_area;
 
   /**
    * Source preference settings
