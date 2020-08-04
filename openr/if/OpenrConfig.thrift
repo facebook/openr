@@ -175,6 +175,11 @@ struct BgpRouteTranslationConfig {
    * ASNs to ignore for distance computation
    */
   6: set<i64> asns_to_ignore_for_distance;
+
+  /**
+   * Knob to enable translation incrementally
+   */
+  7: bool is_enabled = 0
 }
 
 struct OpenrConfig {
