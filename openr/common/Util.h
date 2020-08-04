@@ -276,24 +276,15 @@ thrift::RouteDatabaseDelta findDeltaRoutes(
 thrift::BuildInfo getBuildInfoThrift() noexcept;
 
 /**
- * Get forwarding type from list of prefixes. We're taking map as input for
- * efficiency purpose.
+ * Get forwarding algorithm and type from list of prefixes. We're taking map as
+ * input for efficiency purpose.
+ *
  * It is feasible that multiple nodes will advertise a same prefix and
- * will ask to forward on different modes. We will make sure that MPLS is used
- * if and only if everyone says MPLS else forwarding type will be IP.
+ * will ask to forward on different modes and algorithms. In case of conflict
+ * forwarding type and algorithm with the lowest enum value will be picked.
  */
-thrift::PrefixForwardingType getPrefixForwardingType(
-    const thrift::PrefixEntries& prefixEntries);
-
-/**
- * Get forwarding algorithm from list of prefixes. We're taking map as input for
- * efficiency purpose.
- * It is feasible that multiple nodes will advertise a same prefix and
- * will ask to forward on different algorithms. We will make sure that algorithm
- * with lowest enum value would be picked.
- */
-thrift::PrefixForwardingAlgorithm getPrefixForwardingAlgorithm(
-    const thrift::PrefixEntries& prefixEntries);
+std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
+getPrefixForwardingTypeAndAlgorithm(const thrift::PrefixEntries& prefixEntries);
 
 /**
  * Validates that label is 20 bit only and other bits are not set

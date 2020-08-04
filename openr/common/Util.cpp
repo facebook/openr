@@ -632,42 +632,31 @@ getBuildInfoThrift() noexcept {
       BuildInfo::getBuildMode());
 }
 
-thrift::PrefixForwardingType
-getPrefixForwardingType(const thrift::PrefixEntries& prefixEntries) {
+std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
+getPrefixForwardingTypeAndAlgorithm(
+    const thrift::PrefixEntries& prefixEntries) {
+  std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm> r;
+  r.first = thrift::PrefixForwardingType::SR_MPLS;
+  r.second = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+
   if (prefixEntries.empty()) {
-    return thrift::PrefixForwardingType::IP;
+    return {thrift::PrefixForwardingType::IP,
+            thrift::PrefixForwardingAlgorithm::SP_ECMP};
   }
 
   for (auto const& [_, areaToPrefixEntries] : prefixEntries) {
     for (auto const& [_, prefixEntry] : areaToPrefixEntries) {
-      if (prefixEntry.forwardingType == thrift::PrefixForwardingType::IP) {
-        return thrift::PrefixForwardingType::IP;
+      r.first = std::min(r.first, *prefixEntry.forwardingType_ref());
+      r.second = std::min(r.second, *prefixEntry.forwardingAlgorithm_ref());
+      // Optimization case for most common algorithm and forwarding type
+      if (r.first == thrift::PrefixForwardingType::IP &&
+          r.second == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
+        return r;
       }
-      DCHECK(
-          prefixEntry.forwardingType == thrift::PrefixForwardingType::SR_MPLS);
     }
   }
-  return thrift::PrefixForwardingType::SR_MPLS;
-}
 
-thrift::PrefixForwardingAlgorithm
-getPrefixForwardingAlgorithm(const thrift::PrefixEntries& prefixEntries) {
-  if (prefixEntries.empty()) {
-    return thrift::PrefixForwardingAlgorithm::SP_ECMP;
-  }
-
-  for (auto const& [_, areaToPrefixEntries] : prefixEntries) {
-    for (auto const& [_, prefixEntry] : areaToPrefixEntries) {
-      if (prefixEntry.forwardingAlgorithm ==
-          thrift::PrefixForwardingAlgorithm::SP_ECMP) {
-        return thrift::PrefixForwardingAlgorithm::SP_ECMP;
-      }
-      DCHECK(
-          prefixEntry.forwardingAlgorithm ==
-          thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP);
-    }
-  }
-  return thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+  return r;
 }
 
 void

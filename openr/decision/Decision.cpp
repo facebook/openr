@@ -173,6 +173,7 @@ class SpfSolver::SpfSolverImpl {
       thrift::IpPrefix const& prefix,
       thrift::PrefixEntries const& prefixEntries,
       bool const isV4,
+      thrift::PrefixForwardingType const& forwardingType,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
   // Given bgp prefixes and the nodes who announce it, get the ecmp routes.
@@ -360,12 +361,11 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       continue;
     }
 
-    const auto& prefixForwardingAlgo =
-        getPrefixForwardingAlgorithm(prefixEntries);
-    const auto& prefixForwardingType = getPrefixForwardingType(prefixEntries);
+    const auto [forwardingType, forwardingAlgo] =
+        getPrefixForwardingTypeAndAlgorithm(prefixEntries);
 
     // MPLS for SP_ECMP / KSP2_ED_ECMP
-    if (prefixForwardingType == thrift::PrefixForwardingType::SR_MPLS) {
+    if (forwardingType == thrift::PrefixForwardingType::SR_MPLS) {
       const auto nodes = getBestAnnouncingNodes(
           myNodeName, prefix, prefixEntries, hasBGP, true, areaLinkStates);
       if (not nodes.success or nodes.nodes.size() == 0) {
@@ -380,11 +380,11 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
           hasBGP,
           areaLinkStates,
           prefixState,
-          prefixForwardingAlgo);
+          forwardingAlgo);
     }
     // IP for SP_ECMP, KSP2_ED_ECMP is not supported in IP routing
     else {
-      if (prefixForwardingAlgo == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
+      if (forwardingAlgo == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
         if (hasBGP) {
           selectEcmpBgp(
               routeDb.unicastEntries,
@@ -401,6 +401,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
               prefix,
               prefixEntries,
               isV4Prefix,
+              forwardingType,
               areaLinkStates);
         }
       } else {
@@ -672,6 +673,7 @@ SpfSolver::SpfSolverImpl::selectEcmpOpenr(
     thrift::IpPrefix const& prefix,
     thrift::PrefixEntries const& prefixEntries,
     bool const isV4,
+    thrift::PrefixForwardingType const& forwardingType,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   // Prepare list of nodes announcing the prefix
   const auto& ret = getBestAnnouncingNodes(
@@ -682,8 +684,8 @@ SpfSolver::SpfSolverImpl::selectEcmpOpenr(
 
   std::set<std::string> prefixNodes = ret.nodes;
 
-  const bool perDestination = getPrefixForwardingType(prefixEntries) ==
-      thrift::PrefixForwardingType::SR_MPLS;
+  const bool perDestination =
+      forwardingType == thrift::PrefixForwardingType::SR_MPLS;
 
   const auto metricNhs = getNextHopsWithMetric(
       myNodeName, prefixNodes, perDestination, areaLinkStates);

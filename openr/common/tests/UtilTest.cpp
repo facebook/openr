@@ -18,6 +18,8 @@
 
 using namespace std;
 using namespace openr;
+using FwdType = openr::thrift::PrefixForwardingType;
+using FwdAlgo = openr::thrift::PrefixForwardingAlgorithm;
 
 const auto prefix1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto prefix2 = toIpPrefix("::ffff:10.2.2.2/128");
@@ -793,30 +795,52 @@ TEST(UtilTest, MplsActionValidate) {
   }
 }
 
-TEST(UtilTest, getPrefixForwardingType) {
+TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
   thrift::PrefixEntries prefixes;
+
+  // Default case (empty entries)
+  EXPECT_EQ(
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
 
   prefixes["node1"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
   prefixes["node2"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
   prefixes["node3"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
 
   EXPECT_EQ(
-      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node3"]["area1"].forwardingType =
-      thrift::PrefixForwardingType::SR_MPLS;
+  prefixes["node3"]["area1"].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
-      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node2"]["area1"].forwardingType =
-      thrift::PrefixForwardingType::SR_MPLS;
+  prefixes["node2"]["area1"].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
-      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node1"]["area1"].forwardingType =
-      thrift::PrefixForwardingType::SR_MPLS;
+  prefixes["node1"]["area1"].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
-      thrift::PrefixForwardingType::SR_MPLS, getPrefixForwardingType(prefixes));
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
+
+  prefixes["node3"]["area1"].forwardingAlgorithm_ref() = FwdAlgo::KSP2_ED_ECMP;
+  EXPECT_EQ(
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
+
+  prefixes["node2"]["area1"].forwardingAlgorithm_ref() = FwdAlgo::KSP2_ED_ECMP;
+  EXPECT_EQ(
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
+
+  prefixes["node1"]["area1"].forwardingAlgorithm_ref() = FwdAlgo::KSP2_ED_ECMP;
+  EXPECT_EQ(
+      (std::make_pair<FwdType, FwdAlgo>(
+          FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes));
 }
 
 using namespace openr::MetricVectorUtils;
