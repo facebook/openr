@@ -43,13 +43,29 @@
 
 namespace openr {
 
-struct BestPathCalResult {
+/**
+ * Captures the best route selection result. Especially highlights
+ * - Best announcing `pair<area, node>`
+ * - All best entries `list<pair<area, node>>`
+ */
+struct BestRouteSelectionResult {
+  // TODO: Remove once we move to metrics selection
   bool success{false};
+
+  // TODO: Create `set<pair<best-node, best-area>>` instead of two separate
+  // sets. Two separate sets loses information about area-node relationship and
+  // may generate more results.
   std::string bestNode{""};
   std::string bestArea{""};
   std::set<std::string> nodes;
   std::set<std::string> areas;
+
+  // TODO: This is not really a part of best route selection, rather best
+  // next-hops selection logic based on forwarding algorithm
   std::optional<int64_t> bestIgpMetric{std::nullopt};
+
+  // TODO: This is redundant information as it can be retrieved by looking up
+  // PrefixEntries by best announcing `<node, area>`
   std::optional<thrift::MetricVector> bestVector{std::nullopt};
 };
 
