@@ -316,7 +316,11 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   //
 
   for (const auto& [prefix, prefixEntries] : prefixState.prefixes()) {
+    // TODO: These variables are deprecated and should go away soon
     bool hasBGP = false, hasNonBGP = false, missingMv = false;
+
+    // Do the current node advertises the prefix entry with prepend label
+    bool hasSelfPrependLabel{true};
 
     //
     // TODO: Filter out `prefixEntries` with best MetricsSelector
@@ -331,6 +335,9 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
         bool isBGP = prefixEntry.type == thrift::PrefixType::BGP;
         hasBGP |= isBGP;
         hasNonBGP |= !isBGP;
+        if (node == myNodeName) {
+          hasSelfPrependLabel &= prefixEntry.prependLabel_ref().has_value();
+        }
         if (isBGP and not prefixEntry.mv_ref().has_value()) {
           missingMv = true;
           LOG(ERROR) << "Prefix entry for prefix "
@@ -384,9 +391,14 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       continue;
     }
 
-    // TODO: Use `labelPrepend` check instead of `not hasBGP`
-    // skip adding route for prefixes advertised by this node
-    if (prefixEntries.count(myNodeName) and not hasBGP) {
+    // Skip adding route for prefixes advertised by this node. The originated
+    // routes are already programmed on the system e.g. re-distributed from
+    // other area, re-distributed from other protocols, interface-subnets etc.
+    //
+    // TODO: We program self advertise prefix only iff, we're advertising our
+    // prefix-entry with the prepend label. Once we support multi-area routing,
+    // we can deprecate the check of hasSelfPrependLabel
+    if (bestPathCalResult.nodes.count(myNodeName) and not hasSelfPrependLabel) {
       VLOG(3) << "Ignoring route to the self advertised node";
       continue;
     }
