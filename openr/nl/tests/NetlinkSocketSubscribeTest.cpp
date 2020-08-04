@@ -127,8 +127,8 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     folly::Subprocess proc1(std::move(cmd));
     EXPECT_EQ(0, proc1.wait().exitStatus());
 
-    nlProtocolSocket =
-        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&nlEvb);
+    nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
+        &nlEvb, netlinkEventsQ);
     nlProtocolSocketThread = std::thread([&]() { nlEvb.loopForever(); });
     nlEvb.waitUntilRunning();
   }
@@ -154,6 +154,7 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
  protected:
   folly::EventBase nlEvb;
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
+  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
   std::thread nlProtocolSocketThread;
 };
 

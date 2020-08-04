@@ -18,9 +18,12 @@ namespace fb303 = facebook::fb303;
 namespace openr::fbnl {
 
 NetlinkProtocolSocket::NetlinkProtocolSocket(
-    folly::EventBase* evb, bool enableIPv6RouteReplaceSemantics)
+    folly::EventBase* evb,
+    messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQ,
+    bool enableIPv6RouteReplaceSemantics)
     : EventHandler(evb),
       evb_(evb),
+      netlinkEventsQueue_(netlinkEventsQ),
       enableIPv6RouteReplaceSemantics_(enableIPv6RouteReplaceSemantics) {
   CHECK_NOTNULL(evb_);
 

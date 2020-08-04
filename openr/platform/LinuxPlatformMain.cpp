@@ -49,8 +49,10 @@ main(int argc, char** argv) {
   std::vector<std::thread> allThreads{};
 
   auto nlEvb = std::make_unique<folly::EventBase>();
-  auto nlSock =
-      std::make_unique<openr::fbnl::NetlinkProtocolSocket>(nlEvb.get());
+  openr::messaging::ReplicateQueue<openr::fbnl::NetlinkEvent>
+      netlinkEventsQueue;
+  auto nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
+      nlEvb.get(), netlinkEventsQueue);
   allThreads.emplace_back(std::thread([&nlEvb]() {
     LOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
     folly::setThreadName("NetlinkProtolSocketEvl");
@@ -88,6 +90,9 @@ main(int argc, char** argv) {
   LOG(INFO) << "Main event loop starting...";
   mainEventLoop.run();
   LOG(INFO) << "Main event loop stopped.";
+
+  // close queue
+  netlinkEventsQueue.close();
 
   nlEvb->terminateLoopSoon();
 

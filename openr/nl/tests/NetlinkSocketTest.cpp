@@ -95,8 +95,8 @@ class NetlinkSocketFixture : public testing::Test {
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
 
-    nlProtocolSocket =
-        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evb);
+    nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
+        &evb, netlinkEventsQ);
     nlProtocolSocketThread = std::thread([&]() { evb.loopForever(); });
     evb.waitUntilRunning();
 
@@ -201,6 +201,8 @@ class NetlinkSocketFixture : public testing::Test {
 
   std::unique_ptr<NetlinkSocket> netlinkSocket;
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
+  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
+
   fbzmq::ZmqEventLoop evl;
   folly::EventBase evb;
   std::thread eventThread;

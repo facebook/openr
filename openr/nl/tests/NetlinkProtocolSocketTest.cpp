@@ -149,7 +149,7 @@ class NlMessageFixture : public ::testing::Test {
 
     // netlink protocol socket
     nlSock = std::make_unique<NetlinkProtocolSocket>(
-        &evb, FLAGS_enable_ipv6_rr_semantics);
+        &evb, netlinkEventsQ, FLAGS_enable_ipv6_rr_semantics);
 
     // start event thread
     eventThread = std::thread([&]() { evb.loopForever(); });
@@ -185,6 +185,9 @@ class NlMessageFixture : public ::testing::Test {
     folly::Subprocess proc(std::move(cmd));
     // Ignore result
     proc.wait();
+
+    // messaging::queue closing
+    netlinkEventsQ.close();
 
     evb.terminateLoopSoon();
     eventThread.join();
@@ -355,6 +358,7 @@ class NlMessageFixture : public ::testing::Test {
 
   folly::EventBase evb;
   std::thread eventThread;
+  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
 
  protected:
   openr::fbnl::NextHop
@@ -549,9 +553,10 @@ TEST(NetlinkRouteMessage, EncodeLabel) {
  */
 TEST(NetlinkProtocolSocket, DelayedEventBase) {
   folly::EventBase evb;
+  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
 
   // Create netlink protocol socket
-  NetlinkProtocolSocket nlSock(&evb);
+  NetlinkProtocolSocket nlSock(&evb, netlinkEventsQ);
 
   // Get the request
   // NOTE: Eventbase is not started yet
@@ -576,7 +581,8 @@ TEST(NetlinkProtocolSocket, DelayedEventBase) {
 TEST(NetlinkProtocolSocket, GetApiError) {
   // Create netlink protocol socket
   folly::EventBase evb;
-  auto nlSock = std::make_unique<NetlinkProtocolSocket>(&evb);
+  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
+  auto nlSock = std::make_unique<NetlinkProtocolSocket>(&evb, netlinkEventsQ);
 
   // Make requests
   auto addrs = nlSock->getAllIfAddresses();
@@ -606,9 +612,11 @@ TEST(NetlinkProtocolSocket, GetApiError) {
  */
 TEST(NetlinkProtocolSocket, SafeDestruction) {
   auto evb = std::make_unique<folly::EventBase>();
+  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
 
   // Create netlink protocol socket
-  auto nlSock = std::make_unique<NetlinkProtocolSocket>(evb.get());
+  auto nlSock =
+      std::make_unique<NetlinkProtocolSocket>(evb.get(), netlinkEventsQ);
 
   // Add a request
   // NOTE: Eventbase is not running

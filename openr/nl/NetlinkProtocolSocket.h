@@ -16,11 +16,15 @@
 #include <folly/io/async/EventHandler.h>
 #include <folly/io/async/NotificationQueue.h>
 
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkRoute.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr::fbnl {
+
+// Netlink event as union of LINK/ADDR/NEIGH event
+using NetlinkEvent = std::variant<fbnl::Link, fbnl::IfAddress, fbnl::Neighbor>;
 
 // Receive socket buffer for netlink socket
 constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
@@ -92,7 +96,9 @@ constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
 class NetlinkProtocolSocket : public folly::EventHandler {
  public:
   explicit NetlinkProtocolSocket(
-      folly::EventBase* evb, bool enableIPv6RouteReplaceSemantics = false);
+      folly::EventBase* evb,
+      messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQ,
+      bool enableIPv6RouteReplaceSemantics = false);
 
   virtual ~NetlinkProtocolSocket();
 
@@ -240,6 +246,9 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Event base for serializing read/write requests to netlink socket. Also
   // ensure thread safety of private member variables.
   folly::EventBase* evb_{nullptr};
+
+  // Queue to publish LINK/ADDR/NEIGHBOR update received from kernel
+  messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQueue_;
 
   // Notification queue for thread safe enqueuing of messages from external
   // threads. All the messages enqueued are processed by the event thread.

@@ -114,9 +114,6 @@ LinkMonitor::LinkMonitor(
   // Check non-empty module ptr
   CHECK(configStore_);
 
-  // initialize internal states with config
-  // loadConfig(config);
-
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     LOG(INFO) << "Hold time expired. Advertising adjacencies and addresses";

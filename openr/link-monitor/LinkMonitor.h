@@ -75,9 +75,6 @@ struct AdjacencyValue {
 class LinkMonitor final : public OpenrEventBase {
  public:
   LinkMonitor(
-      //
-      // Immutable state initializers
-      //
       // the zmq context to use for IO
       fbzmq::Context& zmqContext,
       // config

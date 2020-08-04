@@ -41,7 +41,7 @@ fbnl::IfAddress createIfAddress(const int ifIndex, const std::string& addrMask);
 class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
  public:
   explicit MockNetlinkProtocolSocket(folly::EventBase* evb)
-      : NetlinkProtocolSocket(evb) {}
+      : NetlinkProtocolSocket(evb, netlinkEventsQueue_) {}
 
   /**
    * API to create links for testing purposes
@@ -88,6 +88,9 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
   std::unordered_map<uint8_t, std::map<folly::CIDRNetwork, fbnl::Route>>
       unicastRoutes_;
   std::unordered_map<uint8_t, std::map<uint32_t, fbnl::Route>> mplsRoutes_;
+
+  // Queue to publish platform events
+  messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQueue_;
 };
 
 } // namespace openr::fbnl
