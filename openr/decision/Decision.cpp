@@ -314,6 +314,14 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   for (const auto& [prefix, prefixEntries] : prefixState.prefixes()) {
     bool hasBGP = false, hasNonBGP = false, missingMv = false;
 
+    //
+    // TODO: Filter out `prefixEntries` with best MetricsSelector
+    // Rest of the route computation code remains intact except BGP Metric
+    // vector selection.
+    //
+
+    // TODO: With new PrefixMetrics we no longer treat routes differently based
+    // on their origin source aka `prefixEntry.type`
     for (auto const& [node, areaToPrefixEntries] : prefixEntries) {
       for (auto const& [area, prefixEntry] : areaToPrefixEntries) {
         bool isBGP = prefixEntry.type == thrift::PrefixType::BGP;
@@ -328,6 +336,9 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
         }
       }
     }
+
+    // TODO: With new PrefixMetrics we no longer treat routes differently based
+    // on their origin source aka `prefixEntry.type`
     // skip adding route for BGP prefixes that have issues
     if (hasBGP) {
       if (hasNonBGP) {
@@ -346,6 +357,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       }
     }
 
+    // TODO: Use `labelPrepend` check instead of `not hasBGP`
     // skip adding route for prefixes advertised by this node
     if (prefixEntries.count(myNodeName) and not hasBGP) {
       continue;
@@ -364,8 +376,17 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
     const auto [forwardingType, forwardingAlgo] =
         getPrefixForwardingTypeAndAlgorithm(prefixEntries);
 
-    // MPLS for SP_ECMP / KSP2_ED_ECMP
+    //
+    // TODO: The logic for SP_ECMP and MPLS is not in a flow. Ideally we can set
+    // SR_MPLS as forwarding type for any route type. The ideal flow should be
+    // - Switch on algorithm type
+    // - Compute paths, algorithm type influences this step (ECMP or KSPF)
+    // - Create next-hops from paths, forwarding type influences this step
+    //
     if (forwardingType == thrift::PrefixForwardingType::SR_MPLS) {
+      //
+      // MPLS for SP_ECMP or KSP2_ED_ECMP
+      //
       const auto nodes = getBestAnnouncingNodes(
           myNodeName, prefix, prefixEntries, hasBGP, true, areaLinkStates);
       if (not nodes.success or nodes.nodes.size() == 0) {
@@ -381,33 +402,42 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
           areaLinkStates,
           prefixState,
           forwardingAlgo);
-    }
-    // IP for SP_ECMP, KSP2_ED_ECMP is not supported in IP routing
-    else {
-      if (forwardingAlgo == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
-        if (hasBGP) {
-          selectEcmpBgp(
-              routeDb.unicastEntries,
-              myNodeName,
-              prefix,
-              prefixEntries,
-              isV4Prefix,
-              areaLinkStates,
-              prefixState);
-        } else {
-          selectEcmpOpenr(
-              routeDb.unicastEntries,
-              myNodeName,
-              prefix,
-              prefixEntries,
-              isV4Prefix,
-              forwardingType,
-              areaLinkStates);
-        }
-      } else {
-        LOG(ERROR) << "prefix not supported: " << toString(prefix);
+    } else {
+      //
+      // IP for SP_ECMP, KSP2_ED_ECMP is not supported in IP routing
+      //
+
+      if (forwardingAlgo != thrift::PrefixForwardingAlgorithm::SP_ECMP) {
+        LOG(ERROR) << "Incompatible forwarding algorithm for IP routing. "
+                   << "Prefix: " << toString(prefix) << "Forwarding Algorithm: "
+                   << apache::thrift::util::enumNameSafe(forwardingAlgo);
         fb303::fbData->addStatValue(
             "decision.incompatible_forwarding_type", 1, fb303::COUNT);
+        continue;
+      }
+
+      // TODO: With new PrefixMetrics we no longer treat routes differently
+      // based on their origin source aka `prefixEntry.type`. They all first
+      // goes through best metrics selection followed by path selection based
+      // on algorithm type.
+      if (hasBGP) {
+        selectEcmpBgp(
+            routeDb.unicastEntries,
+            myNodeName,
+            prefix,
+            prefixEntries,
+            isV4Prefix,
+            areaLinkStates,
+            prefixState);
+      } else {
+        selectEcmpOpenr(
+            routeDb.unicastEntries,
+            myNodeName,
+            prefix,
+            prefixEntries,
+            isV4Prefix,
+            forwardingType,
+            areaLinkStates);
       }
     }
 
