@@ -340,9 +340,20 @@ class NlMessageFixture : public ::testing::Test {
   }
 
  private:
+  folly::EventBase evb;
+  std::thread eventThread;
+
+ protected:
   static void
   bringUpIntf(const std::string& ifName) {
     auto cmd = "ip link set dev {} up"_shellify(ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+  }
+
+  static void
+  bringDownIntf(const std::string& ifName) {
+    auto cmd = "ip link set dev {} down"_shellify(ifName.c_str());
     folly::Subprocess proc(std::move(cmd));
     EXPECT_EQ(0, proc.wait().exitStatus());
   }
@@ -356,11 +367,6 @@ class NlMessageFixture : public ::testing::Test {
     EXPECT_EQ(0, proc.wait().exitStatus());
   }
 
-  folly::EventBase evb;
-  std::thread eventThread;
-  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
-
- protected:
   openr::fbnl::NextHop
   // TODO: Convert `folly::Optional` to `std::optional`
   buildNextHop(
@@ -525,6 +531,7 @@ class NlMessageFixture : public ::testing::Test {
   };
   // netlink message socket
   std::unique_ptr<NetlinkProtocolSocket> nlSock{nullptr};
+  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
 };
 
 TEST(NetlinkRouteMessage, EncodeLabel) {
@@ -631,6 +638,104 @@ TEST(NetlinkProtocolSocket, SafeDestruction) {
 
   // Reset event base and it shouldn't throw
   EXPECT_NO_THROW(evb.reset());
+}
+
+/*
+ * Spawn RQueue of platformUpdateRequest to verify:
+ *  1) link DOWN events are populated through replicate queue;
+ *  2) RQueue spawned can receive requests from different interfaces;
+ *  3) attributes like ifName/isUp/weight is correct;
+ */
+TEST_F(NlMessageFixture, LinkEventPublication) {
+  // Spawn RQueue to receive platformUpdate request
+  auto netlinkEventsReader = netlinkEventsQ.getReader();
+  std::unordered_map<std::string, openr::fbnl::Link> linkEntryMap;
+
+  // bring DOWN link to trigger link DOWN event
+  bringDownIntf(kVethNameX);
+  bringDownIntf(kVethNameY);
+
+  while (linkEntryMap.size() < 2) {
+    auto req = netlinkEventsReader.get(); // perform read
+    ASSERT_TRUE(req.hasValue());
+    // get_if returns `nullptr` if targeted variant is NOT populated
+    if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
+      linkEntryMap.emplace(link->getLinkName(), *link);
+    }
+  }
+
+  // verify link DOWN for kVethNameX
+  auto linkEntryX = linkEntryMap.at(kVethNameX);
+  EXPECT_EQ(linkEntryX.getLinkName(), kVethNameX);
+  EXPECT_EQ(linkEntryX.isUp(), false);
+
+  // verify link DOWN for kVethNameY
+  auto linkEntryY = linkEntryMap.at(kVethNameY);
+  EXPECT_EQ(linkEntryY.getLinkName(), kVethNameY);
+  EXPECT_EQ(linkEntryY.isUp(), false);
+
+  // verify ifIndex is different for different veth interface
+  EXPECT_NE(linkEntryX.getIfIndex(), linkEntryY.getIfIndex());
+}
+
+/*
+ * Spawn RQueue of platformUpdateRequest to verify:
+ *  1) address ADD events are populated through replicate queue;
+ *  2) RQueue spawned can receive requests from different interfaces;
+ *  3) attributes is correct by cross reference between:
+ *      [ifName => openr::fbnl::IfAddress]
+ *      and
+ *      [ifIndex => ifName]
+ */
+TEST_F(NlMessageFixture, AddressEventPublication) {
+  // Spawn RQueue to receive platformUpdate request for addr event
+  auto netlinkEventsReader = netlinkEventsQ.getReader();
+  std::unordered_map<int64_t, std::string> ifIndexToName;
+  std::unordered_map<std::string, openr::fbnl::IfAddress> addrEntryMap;
+  uint64_t prefixLen = 64;
+  std::string prefixX = "fe80::303";
+  std::string prefixY = "fe80::404";
+  folly::CIDRNetwork ipAddrX = folly::IPAddress::createNetwork(
+      folly::sformat("{}/{}", prefixX, prefixLen));
+  folly::CIDRNetwork ipAddrY = folly::IPAddress::createNetwork(
+      folly::sformat("{}/{}", prefixY, prefixLen));
+
+  auto links = nlSock->getAllLinks().get().value();
+  for (const auto& link : links) {
+    ifIndexToName.emplace(link.getIfIndex(), link.getLinkName());
+  }
+
+  // add new address to interface to trigger ADDRESS_EVENT
+  addAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
+  addAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
+
+  while (addrEntryMap.size() < 2) {
+    auto req = netlinkEventsReader.get(); // perform read
+    ASSERT_TRUE(req.hasValue());
+    // get_if returns `nullptr` if targeted variant is NOT populated
+    if (auto* addr = std::get_if<openr::fbnl::IfAddress>(&req.value())) {
+      ASSERT_TRUE(ifIndexToName.count(addr->getIfIndex()));
+      auto ifName = ifIndexToName.at(addr->getIfIndex());
+      addrEntryMap.emplace(ifName, *addr);
+    }
+  }
+  ASSERT_TRUE(addrEntryMap.count(kVethNameX));
+  ASSERT_TRUE(addrEntryMap.count(kVethNameY));
+
+  // verify new address added for kVethNameX
+  auto addrEntryX = addrEntryMap.at(kVethNameX);
+  EXPECT_EQ(addrEntryX.isValid(), true);
+  ASSERT_TRUE(addrEntryX.getPrefix().has_value());
+  EXPECT_EQ(addrEntryX.getPrefix().value(), ipAddrX);
+
+  // verify new address added for kVethNameY
+  auto addrEntryY = addrEntryMap.at(kVethNameY);
+  EXPECT_EQ(addrEntryY.isValid(), true);
+  ASSERT_TRUE(addrEntryY.getPrefix().has_value());
+  EXPECT_EQ(addrEntryY.getPrefix().value(), ipAddrY);
+
+  // verify ifIndex is different for different veth interface
+  EXPECT_NE(addrEntryX.getIfIndex(), addrEntryY.getIfIndex());
 }
 
 TEST_F(NlMessageFixture, IpRouteSingleNextHop) {

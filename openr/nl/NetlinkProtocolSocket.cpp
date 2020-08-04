@@ -337,11 +337,14 @@ NetlinkProtocolSocket::processMessage(
         nlSeqIt->second->rcvdLink(std::move(link));
       } else {
         // Link notification
-        VLOG(2) << "Netlink link event. " << link.str();
+        VLOG(1) << "Link event. " << link.str();
         fbData->addStatValue("netlink.notifications.link", 1, fb303::SUM);
         if (linkEventCB_) {
-          linkEventCB_(std::move(link), true);
+          linkEventCB_(link, true);
         }
+
+        // notification via replicateQueue
+        netlinkEventsQueue_.push(link);
       }
     } break;
 
@@ -349,7 +352,8 @@ NetlinkProtocolSocket::processMessage(
     case RTM_NEWADDR: {
       // process interface address information received from netlink
       auto addr = NetlinkAddrMessage::parseMessage(nlh);
-      if (!addr.getPrefix().has_value()) {
+      if (not addr.getPrefix().has_value()) {
+        LOG(WARNING) << "Address event with empty address: " << addr.str();
         break;
       }
 
@@ -372,11 +376,14 @@ NetlinkProtocolSocket::processMessage(
 
       if (isNotification) {
         // IfAddress notification
-        VLOG(2) << "Netlink address event. " << addr.str();
+        VLOG(1) << "Address event. " << addr.str();
         fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
         if (addrEventCB_) {
-          addrEventCB_(std::move(addr), true);
+          addrEventCB_(addr, true);
         }
+
+        // notification via replicateQueue
+        netlinkEventsQueue_.push(addr);
       }
     } break;
 
@@ -397,6 +404,9 @@ NetlinkProtocolSocket::processMessage(
         if (neighborEventCB_) {
           neighborEventCB_(std::move(neighbor), true);
         }
+
+        // notification via replicateQueue
+        netlinkEventsQueue_.push(neighbor);
       }
     } break;
 

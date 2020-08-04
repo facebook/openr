@@ -59,7 +59,6 @@ PlatformPublisher::PlatformPublisher(
     event.ifName = link.getLinkName();
     event.isUp = link.isUp();
     event.weight = Constants::kDefaultAdjWeight;
-    LOG(INFO) << "Link Event: " << link.str();
     publishLinkEvent(event);
   });
 
@@ -82,7 +81,6 @@ PlatformPublisher::PlatformPublisher(
     event.ifName = it->second;
     event.ipPrefix = toIpPrefix(addr.getPrefix().value());
     event.isValid = addr.isValid();
-    LOG(INFO) << "Address Event: " << addr.str();
     publishAddrEvent(event);
   });
 }
