@@ -213,7 +213,7 @@ class SpfSolver::SpfSolverImpl {
       thrift::IpPrefix const& prefix,
       thrift::PrefixEntries const& prefixEntries,
       bool const hasBgp,
-      bool const useKsp2EdAlgo,
+      bool const hasSelfPrependLabel,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
   // helper to get min nexthop for a prefix, used in selectKsp2
@@ -379,7 +379,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
         prefix,
         prefixEntries,
         hasBGP,
-        forwardingAlgo == thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP,
+        hasSelfPrependLabel,
         areaLinkStates);
     if (not bestPathCalResult.success) {
       continue;
@@ -611,17 +611,17 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     thrift::PrefixEntries const& prefixEntries,
-    bool const hasBgp,
-    bool const useKsp2EdAlgo,
+    bool const isBgp,
+    bool const hasSelfPrependLabel,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   BestPathCalResult ret;
 
-  // if it is openr route, all nodes are considered as best nodes.
-  if (not hasBgp) {
-    if (prefixEntries.count(myNodeName) > 0) {
-      return BestPathCalResult{};
-    }
-
+  // TODO: Perform metrics selection here. Common for both Open/R or BGP
+  // If it is openr route, all nodes are considered as best nodes.
+  if (isBgp) {
+    ret = runBestPathSelectionBgp(
+        myNodeName, prefix, prefixEntries, areaLinkStates);
+  } else {
     for (auto const& [node, areaToPrefixEntries] : prefixEntries) {
       for (auto const& [area, prefixEntry] : areaToPrefixEntries) {
         auto const& linkState = areaLinkStates.at(area);
@@ -647,51 +647,9 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
       }
     }
     ret.success = true;
-    return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
   }
 
-  // for bgp route, we need to run best path calculation algorithm to get
-  // the nodes
-  ret = runBestPathSelectionBgp(
-      myNodeName, prefix, prefixEntries, areaLinkStates);
-
-  // best path calculation failure
-  if (not ret.success) {
-    LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
-    fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
-    return BestPathCalResult{};
-  }
-
-  // ecmp
-  if (not useKsp2EdAlgo) {
-    // not announcing BGP prefix originated by self
-    if (ret.nodes.count(myNodeName)) {
-      VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
-              << ". Best path originated by self.";
-      return BestPathCalResult{};
-    }
-
-    return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
-  }
-
-  // ksp2
-  bool labelExistForMyNode{false};
-  if (prefixEntries.count(myNodeName) > 0) {
-    for (const auto& [_, prefixEntry] : prefixEntries.at(myNodeName)) {
-      labelExistForMyNode |= prefixEntry.prependLabel_ref().has_value();
-    }
-  }
-  // In ksp2 algorithm, we consider program our own advertised prefix if
-  // there are other nodes announcing it and prepend label associated with
-  // it.
-  if (not ret.nodes.count(myNodeName) or
-      (ret.nodes.size() > 1 and labelExistForMyNode)) {
-    return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
-  }
-
-  VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
-          << ". Best path originated by self.";
-  return BestPathCalResult{};
+  return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
 }
 
 std::optional<int64_t>
