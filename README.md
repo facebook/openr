@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/facebook/openr/workflows/CI/badge.svg)](https://github.com/facebook/openr/actions?workflow=CI)
 
 Open Routing, OpenR, is Facebook's internally designed and developed Interior Routing
-Protocol/Platform. OpenR was originally desigbned and built for performing routing on the
+Protocol/Platform. OpenR was originally designed and built for performing routing on the
 [Terragraph](https://terragraph.com/) mesh network. OpenR's flexible design has led to
 its adoption in other networks, including Facebook's new WAN network, Express Backbone.
 
