@@ -1,14 +1,11 @@
-
-
-`OpenR: Open Routing`
----------------------
+# OpenR: Open Routing
 
 [![Build Status](https://github.com/facebook/openr/workflows/CI/badge.svg)](https://github.com/facebook/openr/actions?workflow=CI)
 
-Open Routing, OpenR, is Facebook's internally designed and developed routing
-protocol/platform. Originally built for performing routing on the `Terragraph`
-network, its awesome design and flexibility have led to its adoption in
-other networks at Facebook including our new WAN network, Express Backbone.
+Open Routing, OpenR, is Facebook's internally designed and developed Interior Routing
+Protocol/Platform. OpenR was originally desigbned and built for performing routing on the
+[Terragraph](https://terragraph.com/) mesh network. OpenR's flexible design has led to
+its adoption in other networks, including Facebook's new WAN network, Express Backbone.
 
 ### Documentation
 ---
@@ -27,6 +24,7 @@ leverage the openr and fbzmq libraries to build software to run with OpenR.
 
 * Developer Group: https://www.facebook.com/groups/openr/
 * Github: https://github.com/facebook/openr/
+* IRC: #openr on freenode
 
 ### Contribute
 ---
@@ -45,8 +43,8 @@ The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 ### Requirements
 ---
 
-We have tried `OpenR` on Ubuntu-14.04, Ubuntu-16.04 and CentOS-7.
-This should work on all Linux based platforms without any issues.
+We have tried `OpenR` on Ubuntu-16.04, Ubuntu-18.04 and CentOS 7/8.
+OpenR should work on all Linux based platforms.
 
 * Compiler supporting C++17 or higher
 * libzmq-4.0.6 or greater
@@ -57,12 +55,12 @@ This should work on all Linux based platforms without any issues.
 #### Repo Directory Structure
 
 At the top level of this repo are the `build` and `openr` directories. Under the
-former is a tool, `fbcode_builder`, that contains scripts for building the
+former is a tool, `gen`, that contains scripts for building the
 project. The `openr` directory contains the source for the project.
 
 #### Dependencies
 
-If docker is not a good option for you, you can install these dependencies for
+OpenR requires these dependencies for
 your system and follow the traditional cmake build steps below.
 
 * `cmake`
@@ -74,31 +72,26 @@ your system and follow the traditional cmake build steps below.
 * `folly`
 * `fbthrift`
 * `fbzmq`
-* `libnl`
 
-#### One Step Build - Ubuntu-16.04
+#### One Step Build - Ubuntu
 
-We've provided a script, `build/build_openr.sh`, well tested on
-Ubuntu-16.04, to install all necessary dependencies, compile OpenR and install
+We've provided a script, `build/build_openr.sh`, tested on Ubuntu LTS releases.
+It uses gendeps.py to install all necessary dependencies, compile OpenR and install
 C++ binaries as well as python tools. Please modify the script as needed for
 your platform. Also, note that some library dependencies require a newer version
 than provided by the default package manager on the system and hence we are
 compiling them from source instead of installing via the package manager. Please
 see the script for those instances and the required versions.
 
-> `libnl` also requires custom patch, included herewith, for correct handling
-of add/remove multicast routes.
-
 #### Build Steps
 
 ```
-// Step into `build` directory
+# Install dependencies and openr
 cd build
+bash ./build_openr.sh
 
-// Install dependencies and openr
-sudo bash ./build_openr.sh
-
-// Run tests (some tests requires sudo privileges)
+// To Run tests (some tests requires sudo privileges)
+cd build
 sudo make test
 ```
 
@@ -112,16 +105,19 @@ libraries and all header files to `/usr/local/lib/` and `/usr/local/include/`
 Note: the `build_openr.sh` script will run this step for you:
 
 ```
+cd build
 sudo make install
 ```
 
 #### Installing Python Libraries
 
-You will need python `setup-tools` to build and install python modules. All
-library dependencies will be automatically installed except the
+You will need python `pip` or `setuptools` to build and install python modules.
+All library dependencies will be automatically installed except the
 `fbthrift-python` module which you will need to install manually using steps
 similar to those described below. This will install `breeze`, a cli tool to
 interact with OpenR.
+
+- Python install requires a `fbthrift` / `thrift1` compiler to be installed and in PATH
 
 ```
 cd openr/openr/py
