@@ -7,6 +7,7 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+GETDEPS="$(dirname "$0")/fbcode_builder/getdeps.py"
 PYTHON3=$(command -v python3)
 
 if [ "$PYTHON3" == "" ]; then
@@ -14,4 +15,4 @@ if [ "$PYTHON3" == "" ]; then
   exit 1
 fi
 
-python3 build/fbcode_builder/getdeps.py build openr
+python3 "$GETDEPS" build openr --allow-system-packages --no-tests
