@@ -46,7 +46,6 @@
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
-#include <openr/platform/PlatformPublisher.h>
 #include <openr/plugin/Plugin.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/IoProvider.h>
@@ -286,7 +285,6 @@ main(int argc, char** argv) {
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
   std::unique_ptr<std::thread> netlinkFibServerThread{nullptr};
-  std::unique_ptr<PlatformPublisher> eventPublisher{nullptr};
 
   thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
       2 /* num of threads */, false /* task stats */);
@@ -310,10 +308,6 @@ main(int argc, char** argv) {
   if (watchdog) {
     watchdog->addEvb(nlEvb.get(), "NetlinkEvb");
   }
-
-  // Create event publisher to handle event subscription
-  eventPublisher = std::make_unique<PlatformPublisher>(
-      context, PlatformPublisherUrl{FLAGS_platform_pub_url}, nlSock.get());
 
   // Start NetlinkFibHandler if specified
   if (config->isNetlinkFibHandlerEnabled()) {
@@ -645,10 +639,6 @@ main(int argc, char** argv) {
 
   if (nlSock) {
     nlSock.reset();
-  }
-
-  if (eventPublisher) {
-    eventPublisher.reset();
   }
 
   // Wait for all threads to finish

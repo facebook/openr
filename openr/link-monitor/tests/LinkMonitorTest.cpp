@@ -26,7 +26,6 @@
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/MockNetlinkSystemHandler.h>
 

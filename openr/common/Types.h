@@ -31,7 +31,4 @@ BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 
-// PlatformPublisher Urls (right now we use global for everything)
-BOOST_STRONG_TYPEDEF(std::string, PlatformPublisherUrl);
-
 } // namespace openr

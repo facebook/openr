@@ -16,7 +16,6 @@
 
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
-#include <openr/platform/PlatformPublisher.h>
 
 DEFINE_bool(
     enable_netlink_fib_handler,
@@ -38,7 +37,6 @@ main(int argc, char** argv) {
   // Init everything
   folly::init(&argc, &argv);
 
-  fbzmq::Context context;
   fbzmq::ZmqEventLoop mainEventLoop;
 
   fbzmq::StopEventLoopSignalHandler eventLoopHandler(&mainEventLoop);
@@ -60,12 +58,6 @@ main(int argc, char** argv) {
     LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
   }));
   nlEvb->waitUntilRunning();
-
-  // Create event publisher to handle event subscription
-  auto eventPublisher = std::make_unique<openr::PlatformPublisher>(
-      context,
-      openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
-      nlSock.get());
 
   apache::thrift::ThriftServer linuxFibAgentServer;
   if (FLAGS_enable_netlink_fib_handler) {
@@ -107,10 +99,6 @@ main(int argc, char** argv) {
 
   if (nlSock) {
     nlSock.reset();
-  }
-
-  if (eventPublisher) {
-    eventPublisher.reset();
   }
 
   return 0;

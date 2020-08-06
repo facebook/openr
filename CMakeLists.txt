@@ -296,7 +296,6 @@ add_library(openrlib
   openr/monitor/Monitor.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/platform/NetlinkSystemHandler.cpp
-  openr/platform/PlatformPublisher.cpp
   openr/plugin/Plugin.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp

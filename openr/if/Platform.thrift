@@ -14,23 +14,6 @@ namespace lua openr.Platform
 include "fb303/thrift/fb303_core.thrift"
 include "Network.thrift"
 
-/**
- * We provide simple API to publish link/address updating events
- * through PUB-SUB mechanism to all of its subscriber modules in OpenR
- */
-struct LinkEntry {
-  1: string ifName;
-  2: i64 ifIndex;
-  3: bool isUp;
-  4: i64 weight = 1; // used for weighted ecmp
-}
-
-struct AddrEntry {
-  1: string ifName;
-  2: Network.IpPrefix ipPrefix;
-  3: bool isValid;
-}
-
 struct Link {
   1: i64 ifIndex;
   2: bool isUp;
@@ -66,28 +49,6 @@ enum SwitchRunState {
   CONFIGURED = 2,
   FIB_SYNCED = 3,
   EXITING = 4
-}
-
-/**
- * Message sent over to subscriber of Platform Event.
- * eventType to indicate type of netlink event to be updated
- * eventData to indicate exact object entry to be updated
- * Notice: when sending out PlatformEvent make sure to send multi part messages:
- * part1: header to indicate event type,
- * which is 2 byte of PlatformEventType cast to unsigned int
- * part2: real message
- */
- enum PlatformEventType {
-   /*
-    * Command type to publish changes of link/address
-    */
-   LINK_EVENT = 1,
-   ADDRESS_EVENT = 2,
- }
-
-struct PlatformEvent {
-  1: PlatformEventType eventType;
-  2: binary eventData;
 }
 
 exception PlatformError {
