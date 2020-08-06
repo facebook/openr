@@ -113,10 +113,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create MockNetlinkSystemHandler
     mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
 
-    // Setup PlatformPublisher
-    platformPublisher_ = std::make_unique<PlatformPublisher>(
-        context_, platformPubUrl_, nlSock_.get());
-
     // Create LinkMonitor
     re2::RE2::Options regexOpts;
     std::string regexErr;
@@ -129,17 +125,18 @@ class OpenrCtrlFixture : public ::testing::Test {
         context_,
         config,
         mockNlHandler_,
+        nlSock_.get(),
         kvStoreWrapper->getKvStore(),
+        persistentStore.get(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue_,
+        prefixUpdatesQueue_,
         peerUpdatesQueue_,
         neighborUpdatesQueue_.getReader(),
+        nlSock_->getReader(),
         monitorSubmitUrl_,
-        persistentStore.get(),
         false, /* assumeDrained */
         false, /* overrideDrainState */
-        prefixUpdatesQueue_,
-        platformPubUrl_,
         std::chrono::seconds(1));
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
 
@@ -173,6 +170,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     peerUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
+    nlSock_->closeQueue();
     kvStoreWrapper->closeQueue();
 
     openrThriftServerWrapper_->stop();
@@ -186,7 +184,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManager->stop();
     prefixManagerThread_.join();
 
-    platformPublisher_->stop();
     mockNlHandler_.reset();
     nlSock_.reset();
 
@@ -216,7 +213,6 @@ class OpenrCtrlFixture : public ::testing::Test {
 
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
-  const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
@@ -229,7 +225,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   fbzmq::Context context_{};
   folly::EventBase evb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
-  std::unique_ptr<PlatformPublisher> platformPublisher_{nullptr};
 
   std::thread decisionThread_;
   std::thread fibThread_;

@@ -159,9 +159,7 @@ class OpenrWrapper {
   int kvStoreGlobalCmdPort_{0};
   const std::string monitorSubmitUrl_;
   const std::string monitorPubUrl_;
-  const std::string kvStoreLocalPubUrl_;
   const std::string kvStoreGlobalCmdUrl_;
-  const std::string platformPubUrl_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
@@ -169,9 +167,6 @@ class OpenrWrapper {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesQueue_;
-
-  // socket to publish platform events
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;
 };
 
 } // namespace openr

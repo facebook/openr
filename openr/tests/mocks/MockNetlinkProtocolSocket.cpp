@@ -131,12 +131,8 @@ MockNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
   // Non existing address. Add
   it->second.emplace_back(addr); // Add
 
-  // Send address event
-  if (addrEventCB_) {
-    CHECK(addr.isValid());
-    addrEventCB_(addr, false);
-  }
-
+  // Publish update via queue
+  netlinkEventsQueue_.push(addr);
   return folly::SemiFuture<int>(0);
 }
 
@@ -153,12 +149,8 @@ MockNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
     if (addrIt->getPrefix() == addr.getPrefix()) {
       it->second.erase(addrIt);
 
-      // Send address event
-      if (addrEventCB_) {
-        CHECK(!addr.isValid());
-        addrEventCB_(addr, false);
-      }
-
+      // Publish update via queue
+      netlinkEventsQueue_.push(addr);
       return folly::SemiFuture<int>(0);
     }
   }
@@ -184,10 +176,8 @@ MockNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
   // Create entry in ifAddr_ for link if doesn't exists
   ifAddrs_.emplace(link.getIfIndex(), std::list<fbnl::IfAddress>());
 
-  // Send link event
-  if (linkEventCB_) {
-    linkEventCB_(link, false);
-  }
+  // Publish update via queue
+  netlinkEventsQueue_.push(link);
 
   return folly::SemiFuture<int>(0);
 }

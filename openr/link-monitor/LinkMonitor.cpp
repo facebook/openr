@@ -73,22 +73,22 @@ LinkMonitor::LinkMonitor(
     fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
     std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
+    fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
+    PersistentStore* configStore,
     bool enablePerfMeasurement,
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
+    messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
+    messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     MonitorSubmitUrl const& monitorSubmitUrl,
-    PersistentStore* configStore,
     bool assumeDrained,
     bool overrideDrainState,
-    messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
-    PlatformPublisherUrl const& platformPubUrl,
     std::chrono::seconds adjHoldTime)
     : nodeId_(config->getNodeName()),
       nlSystemHandler_(nlSystemHandler),
       enablePerfMeasurement_(enablePerfMeasurement),
-      platformPubUrl_(platformPubUrl),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
       prefixForwardingType_(config->getConfig().prefix_forwarding_type),
@@ -107,11 +107,11 @@ LinkMonitor::LinkMonitor(
       interfaceUpdatesQueue_(intfUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
-      nlEventSub_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
       configStore_(configStore) {
   // Check non-empty module ptr
+  CHECK(nlSock);
+  CHECK(kvStore);
   CHECK(configStore_);
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
@@ -139,11 +139,12 @@ LinkMonitor::LinkMonitor(
   advertiseIfaceAddrTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
 
-  LOG(INFO) << "Loading link-monitor state";
+  // [TO BE DEPRECATED]
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
   // Create config-store client
+  LOG(INFO) << "Loading link-monitor state";
   auto state =
       configStore_->loadThriftObj<thrift::LinkMonitorState>(kConfigKey).get();
   if (state.hasValue()) {
@@ -220,119 +221,17 @@ LinkMonitor::LinkMonitor(
     }
   });
 
-  // Initialize ZMQ sockets
-  prepare();
-
-  // Initialize stats keys
-  fb303::fbData->addStatExportType("link_monitor.neighbor_up", fb303::SUM);
-  fb303::fbData->addStatExportType("link_monitor.neighbor_down", fb303::SUM);
-  fb303::fbData->addStatExportType(
-      "link_monitor.advertise_adjacencies", fb303::SUM);
-  fb303::fbData->addStatExportType("link_monitor.advertise_links", fb303::SUM);
-}
-
-void
-LinkMonitor::prepare() noexcept {
-  //
-  // Prepare all sockets
-  //
-
-  // Subscribe to link/addr events published by NetlinkAgent
-  VLOG(2) << "Connect to PlatformPublisher to subscribe NetlinkEvent on "
-          << platformPubUrl_;
-  const auto linkEventType =
-      static_cast<uint16_t>(thrift::PlatformEventType::LINK_EVENT);
-  const auto addrEventType =
-      static_cast<uint16_t>(thrift::PlatformEventType::ADDRESS_EVENT);
-  auto nlLinkSubOpt =
-      nlEventSub_.setSockOpt(ZMQ_SUBSCRIBE, &linkEventType, sizeof(uint16_t));
-  if (nlLinkSubOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to " << linkEventType << " "
-               << nlLinkSubOpt.error();
-  }
-  auto nlAddrSubOpt =
-      nlEventSub_.setSockOpt(ZMQ_SUBSCRIBE, &addrEventType, sizeof(uint16_t));
-  if (nlAddrSubOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to " << addrEventType << " "
-               << nlAddrSubOpt.error();
-  }
-  const auto nlSub = nlEventSub_.connect(fbzmq::SocketUrl{platformPubUrl_});
-  if (nlSub.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << platformPubUrl_ << "' "
-               << nlSub.error();
-  }
-
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*nlEventSub_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(2) << "LinkMonitor: Netlink Platform message received....";
-        fbzmq::Message eventHeader, eventData;
-        const auto ret = nlEventSub_.recvMultiple(eventHeader, eventData);
-        if (ret.hasError()) {
-          LOG(ERROR) << "Error processing PlatformPublisher event "
-                     << "publication for node: " << nodeId_
-                     << ", exception: " << ret.error();
-          return;
-        }
-
-        auto eventMsg =
-            eventData.readThriftObj<thrift::PlatformEvent>(serializer_);
-        if (eventMsg.hasError()) {
-          LOG(ERROR) << "Error in reading publication eventData";
-          return;
-        }
-
-        const auto eventType = eventMsg.value().eventType;
-        CHECK_EQ(
-            static_cast<uint16_t>(eventType),
-            eventHeader.read<uint16_t>().value());
-
-        switch (eventType) {
-        case thrift::PlatformEventType::LINK_EVENT: {
-          VLOG(3) << "Received Link Event from Platform....";
-          try {
-            const auto linkEvt =
-                fbzmq::util::readThriftObjStr<thrift::LinkEntry>(
-                    eventMsg.value().eventData, serializer_);
-            auto interfaceEntry = getOrCreateInterfaceEntry(linkEvt.ifName);
-            if (interfaceEntry) {
-              const bool wasUp = interfaceEntry->isUp();
-              interfaceEntry->updateAttrs(
-                  linkEvt.ifIndex, linkEvt.isUp, linkEvt.weight);
-              logLinkEvent(
-                  interfaceEntry->getIfName(),
-                  wasUp,
-                  interfaceEntry->isUp(),
-                  interfaceEntry->getBackoffDuration());
-            }
-          } catch (std::exception const& e) {
-            LOG(ERROR) << "Error parsing linkEvt. Reason: "
-                       << folly::exceptionStr(e);
-          }
-        } break;
-
-        case thrift::PlatformEventType::ADDRESS_EVENT: {
-          VLOG(3) << "Received Address Event from Platform....";
-          try {
-            const auto addrEvt =
-                fbzmq::util::readThriftObjStr<thrift::AddrEntry>(
-                    eventMsg.value().eventData, serializer_);
-            auto interfaceEntry = getOrCreateInterfaceEntry(addrEvt.ifName);
-            if (interfaceEntry) {
-              interfaceEntry->updateAddr(
-                  toIPNetwork(addrEvt.ipPrefix, false /* no masking */),
-                  addrEvt.isValid);
-            }
-          } catch (std::exception const& e) {
-            LOG(ERROR) << "Error parsing addrEvt. Reason: "
-                       << folly::exceptionStr(e);
-          }
-        } break;
-
-        default:
-          LOG(ERROR) << "Wrong eventType received on " << nodeId_
-                     << ", eventType: " << static_cast<uint16_t>(eventType);
-        }
-      });
+  // Add fiber to process the LINK/ADDR events from platform
+  addFiberTask([q = std::move(netlinkEventsQueue), this]() mutable noexcept {
+    while (true) {
+      auto maybeEvent = q.get();
+      if (maybeEvent.hasError()) {
+        LOG(INFO) << "Terminating neighbor update processing fiber";
+        break;
+      }
+      processNetlinkEvent(std::move(maybeEvent).value());
+    }
+  });
 
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
   interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -344,17 +243,34 @@ LinkMonitor::prepare() noexcept {
     } else {
       fb303::fbData->addStatValue(
           "link_monitor.thrift.failure.getAllLinks", 1, fb303::SUM);
-      // Apply exponential backoff and schedule next run
-      expBackoff_.reportError();
-      interfaceDbSyncTimer_->scheduleTimeout(
-          expBackoff_.getTimeRemainingUntilRetry());
-      LOG(ERROR)
-          << "InterfaceDb Sync failed, apply exponential backoff and retry in "
-          << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
+
+      if (ifIndexToName_.empty()) {
+        // initial sync failed, immediately file re-sync
+        // instead of applying exponetial backoff
+        LOG(ERROR) << "Initial interfaceDb sync failed, re-sync immediately";
+
+        interfaceDbSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+      } else {
+        // Apply exponential backoff and schedule next run
+        expBackoff_.reportError();
+        interfaceDbSyncTimer_->scheduleTimeout(
+            expBackoff_.getTimeRemainingUntilRetry());
+        LOG(ERROR)
+            << "InterfaceDb Sync failed, apply exponential backoff and retry in "
+            << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
+      }
     }
   });
+
   // schedule immediate with small timeout
   interfaceDbSyncTimer_->scheduleTimeout(std::chrono::milliseconds(100));
+
+  // Initialize stats keys
+  fb303::fbData->addStatExportType("link_monitor.neighbor_up", fb303::SUM);
+  fb303::fbData->addStatExportType("link_monitor.neighbor_down", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "link_monitor.advertise_adjacencies", fb303::SUM);
+  fb303::fbData->addStatExportType("link_monitor.advertise_links", fb303::SUM);
 }
 
 void
@@ -857,6 +773,11 @@ LinkMonitor::syncInterfaces() {
 
   // Make updates in InterfaceEntry objects
   for (const auto& link : links) {
+    // update cache of ifIndex -> ifName mapping
+    //  1) if ifIndex exists, override it with new ifName;
+    //  2) if ifIndex does NOT exist, cache the ifName;
+    ifIndexToName_[*link.ifIndex_ref()] = *link.ifName_ref();
+
     // Get interface entry
     auto interfaceEntry = getOrCreateInterfaceEntry(link.ifName);
     if (not interfaceEntry) {
@@ -894,6 +815,52 @@ LinkMonitor::syncInterfaces() {
     }
   }
   return true;
+}
+
+void
+LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
+  if (auto* link = std::get_if<fbnl::Link>(&event)) {
+    VLOG(3) << "Received Link Event from NetlinkProtocolSocket...";
+
+    auto ifName = link->getLinkName();
+    auto ifIndex = link->getIfIndex();
+    auto isUp = link->isUp();
+
+    // Cache interface index name mapping
+    // ATTN: will create new ifIndex -> ifName mapping if it is unknown link
+    //       `[]` operator is used in purpose
+    ifIndexToName_[ifIndex] = ifName;
+
+    auto interfaceEntry = getOrCreateInterfaceEntry(ifName);
+    if (interfaceEntry) {
+      const bool wasUp = interfaceEntry->isUp();
+      interfaceEntry->updateAttrs(ifIndex, isUp, Constants::kDefaultAdjWeight);
+      logLinkEvent(
+          interfaceEntry->getIfName(),
+          wasUp,
+          interfaceEntry->isUp(),
+          interfaceEntry->getBackoffDuration());
+    }
+  } else if (auto* addr = std::get_if<fbnl::IfAddress>(&event)) {
+    VLOG(3) << "Received Address Event from NetlinkProtocolSocket...";
+
+    auto ifIndex = addr->getIfIndex();
+    auto prefix = addr->getPrefix(); // std::optional<folly::CIDRNetwork>
+    auto isValid = addr->isValid();
+
+    // Check for interface name
+    auto it = ifIndexToName_.find(ifIndex);
+    if (it == ifIndexToName_.end()) {
+      LOG(ERROR) << "Address event for unknown iface index: " << ifIndex;
+      return;
+    }
+
+    // Cached ifIndex -> ifName mapping
+    auto interfaceEntry = getOrCreateInterfaceEntry(it->second);
+    if (interfaceEntry) {
+      interfaceEntry->updateAddr(prefix.value(), isValid);
+    }
+  }
 }
 
 void

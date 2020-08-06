@@ -183,16 +183,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
     system(folly::sformat("rm -rf {}", kConfigStorePath).c_str());
 
     // create fakeNetlinkProtocolSocket
-    nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&nlEvb_);
+    nlSock = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&nlEvb_);
 
     // Setup system service by using MockSystemHandler
-    mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
-
-    // Setup PlatformPublisher
-    platformPublisher_ = std::make_unique<PlatformPublisher>(
-        context,
-        PlatformPublisherUrl{"inproc://platform-pub-url"},
-        nlSock_.get());
+    mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock.get());
 
     // spin up a config store
     configStore =
@@ -204,6 +198,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
       LOG(INFO) << "ConfigStore thread finishing";
     });
     configStore->waitUntilRunning();
+
     // create config
     config = std::make_shared<Config>(
         getTestOpenrConfig(areas, flapInitalBackoff, flapMaxBackoff));
@@ -240,6 +235,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     neighborUpdatesQueue.close();
     prefixUpdatesQueue.close();
     routeUpdatesQueue.close();
+    nlSock->closeQueue();
     kvStoreWrapper->closeQueue();
 
     LOG(INFO) << "Stopping the LinkMonitor thread";
@@ -270,9 +266,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // stop mocked nl platform
     LOG(INFO) << "Stopping mocked thrift handlers";
-    platformPublisher_->stop();
     mockNlHandler.reset();
-    nlSock_.reset();
+    nlSock.reset();
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
@@ -321,17 +316,18 @@ class LinkMonitorTestFixture : public ::testing::Test {
         context,
         config,
         mockNlHandler,
+        nlSock.get(),
         kvStoreWrapper->getKvStore(),
+        configStore.get(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue,
+        prefixUpdatesQueue,
         peerUpdatesQueue,
         neighborUpdatesQueue.getReader(),
+        nlSock->getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
-        configStore.get(),
         assumeDrained,
         overrideDrainState,
-        prefixUpdatesQueue,
-        PlatformPublisherUrl{"inproc://platform-pub-url"},
         std::chrono::seconds(1) /* adjHoldTime */
     );
 
@@ -531,6 +527,11 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   void
   stopLinkMonitor() {
+    // close queue first
+    neighborUpdatesQueue.close();
+    nlSock->closeQueue();
+    kvStoreWrapper->closeQueue();
+
     linkMonitor->stop();
     linkMonitorThread->join();
     linkMonitor.reset();
@@ -538,8 +539,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   fbzmq::Context context{};
   folly::EventBase nlEvb_;
-  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
-  std::unique_ptr<PlatformPublisher> platformPublisher_{nullptr};
+  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
@@ -594,8 +594,6 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   // 2. restart with persistent store info
   // override_drain_state = false, persistent store has overload = true
   // isOverloaded should be read from persistent store, = true
-  neighborUpdatesQueue.close();
-  kvStoreWrapper->closeQueue();
   stopLinkMonitor();
 
   {
@@ -608,6 +606,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
+  nlSock->openQueue();
   kvStoreWrapper->openQueue();
   createLinkMonitor(
       config, false /*assumeDrained*/, false /*overrideDrainState*/);
@@ -617,18 +616,15 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   ASSERT_NE(nullptr, res);
   EXPECT_TRUE(res->isOverloaded);
 
-  LOG(INFO) << "3333333333333333";
-
   // 3. restart with override_drain_state = true
   // override_drain_state = true, assume_drain = false, persistent store has
   // overload = true isOverloaded should be read from assume_drain store, =
   // false
-  neighborUpdatesQueue.close();
-  kvStoreWrapper->closeQueue();
   stopLinkMonitor();
 
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
+  nlSock->openQueue();
   kvStoreWrapper->openQueue();
   createLinkMonitor(
       config, false /*assumeDrained*/, true /*overrideDrainState*/);
@@ -902,16 +898,15 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // stop linkMonitor
   LOG(INFO) << "Mock restarting link monitor!";
   peerUpdatesQueue.close();
-  neighborUpdatesQueue.close();
+  stopLinkMonitor();
   kvStoreWrapper->stop();
   kvStoreWrapper.reset();
-  stopLinkMonitor();
 
-  // Create new neighborUpdatesQueue/peerUpdatesQueue.
-  // Previous one is closed
+  // Create new neighborUpdatesQ/peerUpdatesQ/platformUpdatesQ.
   neighborUpdatesQueue =
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
   peerUpdatesQueue = messaging::ReplicateQueue<thrift::PeerUpdateRequest>();
+  nlSock->openQueue();
 
   // Recreate KvStore as previous kvStoreUpdatesQueue is closed
   createKvStore(config);
@@ -964,12 +959,11 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
   {
     // stop linkMonitor
     LOG(INFO) << "Mock restarting link monitor!";
-    neighborUpdatesQueue.close();
-    kvStoreWrapper->closeQueue();
     stopLinkMonitor();
 
     // Create new neighbor update queue. Previous one is closed
     neighborUpdatesQueue.open();
+    nlSock->openQueue();
     kvStoreWrapper->openQueue();
 
     // ATTN: intentionally set `enableSegmentRouting = false` to test the
@@ -1717,17 +1711,18 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         context,
         currConfig,
         mockNlHandler,
+        nlSock.get(),
         kvStoreWrapper->getKvStore(),
+        configStore.get(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue,
+        prefixUpdatesQueue,
         peerUpdatesQueue,
         neighborUpdatesQueue.getReader(),
+        nlSock->getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
-        configStore.get(),
         false, /* assumeDrained */
         false, /* overrideDrainState */
-        prefixUpdatesQueue,
-        PlatformPublisherUrl{"inproc://platform-pub-url"},
         std::chrono::seconds(1));
     linkMonitors.emplace_back(std::move(lm));
     configs.emplace_back(std::move(currConfig));
@@ -1767,6 +1762,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
 
   EXPECT_EQ(kNumNodesToTest, labelSet.size());
   // cleanup
+  nlSock->closeQueue();
   neighborUpdatesQueue.close();
   kvStoreWrapper->closeQueue();
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {

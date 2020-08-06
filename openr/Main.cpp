@@ -248,7 +248,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
-  ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQueue_;
+  ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -297,7 +297,7 @@ main(int argc, char** argv) {
   // Create Netlink Protocol object in a new thread
   nlEvb = std::make_unique<OpenrEventBase>();
   nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
-      nlEvb->getEvb(), netlinkEventsQueue_);
+      nlEvb->getEvb(), netlinkEventsQueue);
   allThreads.emplace_back([&]() {
     LOG(INFO) << "Starting NetlinkEvb thread ...";
     folly::setThreadName("NetlinkEvb");
@@ -463,17 +463,18 @@ main(int argc, char** argv) {
           context,
           config,
           nlSystemHandler,
+          nlSock.get(),
           kvStore,
+          configStore,
           FLAGS_enable_perf_measurement,
           interfaceUpdatesQueue,
+          prefixUpdateRequestQueue,
           peerUpdatesQueue,
           neighborUpdatesQueue.getReader(),
+          netlinkEventsQueue.getReader(),
           monitorSubmitUrl,
-          configStore,
           FLAGS_assume_drained,
           FLAGS_override_drain_state,
-          prefixUpdateRequestQueue,
-          PlatformPublisherUrl{FLAGS_platform_pub_url},
           initialDumpTime));
 
   // Wait for the above two threads to start and run before running
@@ -606,7 +607,7 @@ main(int argc, char** argv) {
   prefixUpdateRequestQueue.close();
   kvStoreUpdatesQueue.close();
   staticRoutesUpdateQueue.close();
-  netlinkEventsQueue_.close();
+  netlinkEventsQueue.close();
 
   thriftCtrlServer.stop();
   ctrlHandler.reset();

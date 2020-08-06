@@ -81,25 +81,26 @@ class LinkMonitor final : public OpenrEventBase {
       std::shared_ptr<const Config> config,
       // netlinkSystemHandler
       std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
+      // raw ptr for modules
+      fbnl::NetlinkProtocolSocket* nlSock,
       KvStore* kvstore,
+      PersistentStore* configStore,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
       // Queue for spark and kv-store
       messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
+      messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
       messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
+      messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // URL for monitoring
       MonitorSubmitUrl const& monitorSubmitUrl,
-      PersistentStore* configStore,
       // if set, we will assume drained if no drain state is found in the
       // persitentStore
       bool assumeDrained,
       // if set, we will override drain state from persistent store with
       // assumeDrained value
       bool overrideDrainState,
-      messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
-      // URL for platform publisher
-      PlatformPublisherUrl const& platformPubUrl,
       // how long to wait before initial adjacency advertisement
       std::chrono::seconds adjHoldTime);
 
@@ -157,9 +158,11 @@ class LinkMonitor final : public OpenrEventBase {
   LinkMonitor(const LinkMonitor&) = delete;
   LinkMonitor& operator=(const LinkMonitor&) = delete;
 
-  //
-  // [Spark] neighbor event functions
-  //
+  /*
+   * [Spark] neighbor event functions
+   */
+
+  // process neighbor event updates from Spark module
   void processNeighborEvent(thrift::SparkNeighborEvent&& event);
 
   // individual neighbor event function
@@ -175,10 +178,8 @@ class LinkMonitor final : public OpenrEventBase {
    * [Netlink Platform] related functions
    */
 
-  // Initializes ZMQ sockets talking to  Netlink Platform
-  // nlEventSub_ listens for LINK UP/DOWN events
-  // client_ is used for periodical full sync
-  void prepare() noexcept;
+  // process LINK/ADDR event updates from platform
+  void processNetlinkEvent(fbnl::NetlinkEvent&& event);
 
   // Used for initial interface discovery and periodic sync with system handler
   // return true if sync is successful
@@ -274,8 +275,6 @@ class LinkMonitor final : public OpenrEventBase {
   const std::shared_ptr<NetlinkSystemHandler> nlSystemHandler_;
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
-  // URL to receive netlink events from PlatformPublisher
-  const std::string platformPubUrl_;
 
   //
   // Mutable states that reads from config, can be reload by loadConfig
@@ -322,9 +321,6 @@ class LinkMonitor final : public OpenrEventBase {
   // Queue to publish peer updates to KvStore
   messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue_;
 
-  // Used to subscribe to netlink events from PlatformPublisher
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> nlEventSub_;
-
   // used for communicating over thrift/zmq sockets
   apache::thrift::CompactSerializer serializer_;
 
@@ -343,6 +339,10 @@ class LinkMonitor final : public OpenrEventBase {
   // all interfaces states, including DOWN one
   // Keyed by interface Name
   std::unordered_map<std::string, InterfaceEntry> interfaces_;
+
+  // Cache of interface index to name. Used for resolving ifIndex
+  // on address events
+  std::unordered_map<int64_t, std::string> ifIndexToName_;
 
   // Throttled versions of "advertise<>" functions. It batches
   // up multiple calls and send them in one go!

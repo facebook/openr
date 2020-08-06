@@ -51,7 +51,6 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
   /**
    * Overrides API of NetlinkProtocolSocket for testing
    */
-
   folly::SemiFuture<int> addRoute(const fbnl::Route& route) override;
   folly::SemiFuture<int> deleteRoute(const fbnl::Route& route) override;
   folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>> getRoutes(
@@ -67,6 +66,24 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
 
   folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
   getAllNeighbors() override;
+
+  /*
+   * API to manipulate netlinkEvents queue
+   */
+  messaging::RQueue<fbnl::NetlinkEvent>
+  getReader() {
+    return netlinkEventsQueue_.getReader();
+  }
+
+  void
+  openQueue() {
+    netlinkEventsQueue_.open();
+  }
+
+  void
+  closeQueue() {
+    netlinkEventsQueue_.close();
+  }
 
  protected:
   void
@@ -89,7 +106,7 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
       unicastRoutes_;
   std::unordered_map<uint8_t, std::map<uint32_t, fbnl::Route>> mplsRoutes_;
 
-  // Queue to publish platform events
+  // queue to publish LINK/ADDR updates
   messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQueue_;
 };
 

@@ -35,9 +35,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       monitorSubmitUrl_(folly::sformat("inproc://{}-monitor-submit", nodeId_)),
       monitorPubUrl_(folly::sformat("inproc://{}-monitor-pub", nodeId_)),
       kvStoreGlobalCmdUrl_(
-          folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
-      platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
-      platformPubSock_(context) {
+          folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)) {
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
@@ -170,17 +168,18 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_,
       config_,
       mockNlHandler_,
+      nlSock_.get(),
       kvStore_.get(),
+      configStore_.get(),
       false /* enable perf measurement */,
       interfaceUpdatesQueue_,
+      prefixUpdatesQueue_,
       peerUpdatesQueue_,
       neighborUpdatesQueue_.getReader(),
+      nlSock_->getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
-      configStore_.get(),
       false, /* assumeDrained */
       false, /* overrideDrainState */
-      prefixUpdatesQueue_,
-      PlatformPublisherUrl{platformPubUrl_},
       linkMonitorAdjHoldTime);
 
   //
@@ -246,36 +245,14 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 template <class Serializer>
 void
 OpenrWrapper<Serializer>::run() {
-  try {
-    // bind out publisher socket
-    VLOG(2) << "Platform Publisher: Binding pub url '" << platformPubUrl_
-            << "'";
-    platformPubSock_.bind(fbzmq::SocketUrl{platformPubUrl_}).value();
-  } catch (std::exception const& e) {
-    LOG(FATAL) << "Platform Publisher: could not bind to '" << platformPubUrl_
-               << "'" << folly::exceptionStr(e);
-  }
-
   eventBase_.scheduleTimeout(std::chrono::milliseconds(100), [this]() {
-    auto link = thrift::LinkEntry(
-        apache::thrift::FRAGILE, "vethLMTest_" + nodeId_, 5, true, 1);
-
-    thrift::PlatformEvent msgLink;
-    msgLink.eventType = thrift::PlatformEventType::LINK_EVENT;
-    msgLink.eventData = fbzmq::util::writeThriftObjStr(link, serializer_);
-
-    // send header of event in the first 2 byte
-    platformPubSock_.sendMore(
-        fbzmq::Message::from(static_cast<uint16_t>(msgLink.eventType)).value());
-    const auto sendNeighEntryLink =
-        platformPubSock_.sendThriftObj(msgLink, serializer_);
-    if (sendNeighEntryLink.hasError()) {
-      LOG(ERROR) << "Error in sending PlatformEventType Entry, event Type: "
-                 << folly::get_default(
-                        thrift::_PlatformEventType_VALUES_TO_NAMES,
-                        msgLink.eventType,
-                        "UNKNOWN");
-    }
+    // mimick nlSock to generate LINK event
+    // ATTN: LinkMonitor will be notified as it holds the reader queue
+    //       from the same MockNetlinkProtocolSocket
+    mockNlHandler_->sendLinkEvent(
+        "vethLMTest_" + nodeId_, /* ifName */
+        5, /* ifIndex */
+        true /* isUp */);
   });
 
   // start monitor thread
@@ -367,6 +344,7 @@ OpenrWrapper<Serializer>::stop() {
   peerUpdatesQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
+  nlSock_->closeQueue();
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
   staticRoutesQueue_.close();
