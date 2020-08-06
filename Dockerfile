@@ -3,7 +3,7 @@ FROM ubuntu:20.04
 # Install tools needed for development
 RUN apt update
 RUN apt upgrade --yes
-RUN apt install --yes build-essential git m4 python3-pip
+RUN apt install --yes build-essential git libssl-dev m4 python3-pip
 
 # Copy needed source
 RUN mkdir /src
@@ -20,7 +20,7 @@ RUN pip --no-cache-dir install --upgrade pip setuptools wheel
 RUN cd /src/openr/py/ && python3 setup.py install
 
 # Cleanup all we can to keep container as lean as possible
-RUN apt remove --yes build-essential
+RUN apt remove --yes build-essential git libssl-dev m4
 RUN rm -r /src
 
 # TODO: Fix and make a sane default with a default config
