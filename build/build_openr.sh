@@ -15,4 +15,5 @@ if [ "$PYTHON3" == "" ]; then
   exit 1
 fi
 
-python3 "$GETDEPS" build openr --allow-system-packages --no-tests
+python3 "$GETDEPS" --allow-system-packages install-system-deps --recursive openr
+python3 "$GETDEPS" --allow-system-packages build --no-tests openr

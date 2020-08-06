@@ -3,7 +3,7 @@ FROM ubuntu:18.04
 # Install tools needed for development
 RUN apt update
 RUN apt upgrade --yes
-RUN apt install --yes build-essential python3-pip
+RUN apt install --yes build-essential git m4 python3-pip
 
 # Copy needed source
 RUN mkdir /src
