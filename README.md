@@ -99,8 +99,10 @@ cd build
 bash ./build_openr.sh
 
 # To Run tests (some tests requires sudo privileges)
-cd build
-sudo make test
+python3 build/fbcode_builder/getdeps.py test \
+  --src-dir=. \
+  --project-install-prefix openr:/opt/facebook \
+  openr
 ```
 
 If you make any changes you can run `cmake ../openr` and `make` from the build
@@ -109,14 +111,14 @@ directory to build openr with your changes.
 ### Installing
 
 `openr` builds both static and dynamic libraries and the install step installs
-libraries and all header files to `/usr/local/lib/` and `/usr/local/include/`
-(under openr subdirectory) along with python modules in `site-packages`.
-Note: the `build_openr.sh` script will run this step for you:
+libraries and all header files to `/opt/facebook/openr/lib` and
+`/opt/facebook/openr/include/` along with python modules in your Python's
+`site-packages` directory.
+Note: the `build_openr.sh` script will run this step for you
 
-```console
-cd build
-sudo make install
-```
+* Manually you can drive `getdeps.py` to install elsewhere
+  * refer to `build_openr.sh`
+
 
 #### Installing Python Libraries
 

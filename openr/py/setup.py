@@ -16,6 +16,9 @@ from sys import version_info
 from setuptools import find_packages, setup
 
 
+INSTALL_BASE = "/opt/facebook"
+
+
 def create_package_list(base):
     """
     Get all packages under the base directory
@@ -30,10 +33,25 @@ def generate_thrift_files():
     python definitions for all thrift files.
     """
 
+    install_base = INSTALL_BASE
+    if "OPENR_INSTALL_BASE" in os.environ:
+        install_base = os.environ["OPENR_INSTALL_BASE"]
+
     current_dir = os.path.dirname(os.path.realpath(__file__))
     root_dir = os.path.dirname(os.path.dirname(current_dir))
     top_dirs = [os.path.join(root_dir, "openr/if"), os.path.join(root_dir, "common")]
     exclude_files = ["OpenrCtrlCpp"]
+
+    def get_default_install_paths():
+        include_paths = (
+            install_base,
+            "{}/fb303/include/thrift-files/".format(install_base),
+            "{}/fbzmq/include/".format(install_base),
+        )
+        include_args = []
+        for include_path in include_paths:
+            include_args.extend(["-I", include_path])
+        return include_args
 
     def get_include_dir(base_path, pattern):
         for dir_name in Path(base_path).rglob("*/usr/include/"):
@@ -60,6 +78,7 @@ def generate_thrift_files():
                     root_dir,
                     "-I",
                     usr_include_dir,
+                    *get_default_install_paths(),
                     "--out",
                     current_dir,
                     str(thrift_file),
@@ -69,7 +88,14 @@ def generate_thrift_files():
 
 generate_thrift_files()
 
-INSTALL_REQUIRES = ["bunch", "click", "hexdump", "networkx", "tabulate"]
+INSTALL_REQUIRES = [
+    "bunch",
+    "click",
+    "hexdump",
+    "jsondiff",
+    "networkx",
+    "tabulate",
+]
 
 setup(
     name="py-openr",
@@ -80,7 +106,8 @@ setup(
         "OpenR python tools and bindings. Includes python bindings for various "
         + "OpenR modules, CLI tool for interacting with OpenR named as `breeze`."
     ),
-    packages=create_package_list("openr") + create_package_list("fb303"),
+    # TODO: Fix fb303 library installation
+    packages=create_package_list("openr"),  # + create_package_list("fb303"),
     entry_points={"console_scripts": ["breeze=openr.cli.breeze:main"]},
     license="MIT License",
     install_requires=INSTALL_REQUIRES,
