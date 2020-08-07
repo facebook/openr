@@ -1,10 +1,17 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #include <openr/monitor/MonitorBase.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <openr/common/Constants.h>
 #include <openr/config/Config.h>
+#include <openr/monitor/SystemMetrics.h>
 
 using namespace std;
 using namespace openr;
@@ -60,7 +67,7 @@ class MonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<LogSample> eventLogUpdatesQueue;
 
   // category for testing
-  std::string category = "openr_new_scribe_test";
+  std::string category = "openr_scribe_mock_test";
 };
 
 // Matcher macro for comparing LogSample in UT LogBasicOperation
@@ -97,6 +104,23 @@ TEST_F(MonitorTestFixture, LogBasicOperation) {
       // `domain` and `node_name` should be added to each log message
       EXPECT_FALSE(sample.getString("domain").empty());
       EXPECT_FALSE(sample.getString("node_name").empty());
+      break;
+    }
+    std::this_thread::yield();
+  }
+}
+
+TEST_F(MonitorTestFixture, ProcessCounterTest) {
+  // Wait for calling getCPUpercentage() twice for calculating the cpu% counter
+  while (true) {
+    auto counters = facebook::fb303::fbData->getCounters();
+    if (counters.find("process.cpu.pct") != counters.end()) {
+      EXPECT_GT(counters["process.cpu.pct"], 0);
+      EXPECT_GT(counters["process.memory.rss"], 0);
+      // Need kCounterSubmitInterval seconds to call getCPUpercentage() twice
+      EXPECT_GE(
+          counters["process.uptime.seconds"],
+          Constants::kCounterSubmitInterval.count());
       break;
     }
     std::this_thread::yield();

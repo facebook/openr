@@ -1,8 +1,15 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #include "openr/monitor/MonitorBase.h"
+#include <openr/common/Constants.h>
 
 namespace openr {
+
 MonitorBase::MonitorBase(
     std::shared_ptr<const Config> config,
     const std::string& category,
@@ -10,9 +17,20 @@ MonitorBase::MonitorBase(
     : category_{category},
       eventLogUpdatesQueue_{eventLogUpdatesQueue},
       maxLogEvents_{
-          folly::to<uint32_t>(config->getMonitorConfig().max_event_log)} {
+          folly::to<uint32_t>(*config->getMonitorConfig().max_event_log_ref())},
+      startTime_{std::chrono::steady_clock::now()} {
   // Initialize stats counter
   fb303::fbData->addStatExportType("monitor.log.publish.failure", fb303::COUNT);
+
+  // Periodically set process cpu/uptime/memory counter
+  setProcessCounterTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+        updateProcessCounters();
+        setProcessCounterTimer_->scheduleTimeout(
+            Constants::kCounterSubmitInterval);
+      });
+  // Schedule an immediate timeout
+  setProcessCounterTimer_->scheduleTimeout(0);
 
   // Fiber task to read the LogSample from queue and publish
   addFiberTask([
@@ -62,6 +80,28 @@ MonitorBase::MonitorBase(
 std::list<LogSample>
 MonitorBase::getRecentEventLogs() {
   return recentLog_;
+}
+
+void
+MonitorBase::updateProcessCounters() {
+  // set process.uptime.seconds counter
+  const auto now = std::chrono::steady_clock::now();
+  fb303::fbData->setCounter(
+      "process.uptime.seconds",
+      std::chrono::duration_cast<std::chrono::seconds>(now - startTime_)
+          .count());
+
+  // set process.memory.rss counter
+  const auto rssMem = systemMetrics_.getRSSMemBytes();
+  if (rssMem.has_value()) {
+    fb303::fbData->setCounter("process.memory.rss", rssMem.value());
+  }
+
+  // set process.cpu.pct counter
+  const auto cpuPct = systemMetrics_.getCPUpercentage();
+  if (cpuPct.has_value()) {
+    fb303::fbData->setCounter("process.cpu.pct", cpuPct.value());
+  }
 }
 
 } // namespace openr
