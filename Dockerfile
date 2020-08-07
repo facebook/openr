@@ -14,9 +14,6 @@ COPY openr /src/openr
 # Build OpenR + Dependencies via cmake
 RUN cd /src && build/build_openr.sh
 
-# TODO: Add FBTools to PATH
-RUN find /opt/facebook -type f
-
 # Install `breeze` OpenR CLI
 RUN pip3 --no-cache-dir install --upgrade pip setuptools wheel
 RUN PATH="${PATH}:/opt/facebook/fbthrift/bin" ; cd /src/openr/py/ && python3 setup.py install
@@ -24,7 +21,7 @@ RUN PATH="${PATH}:/opt/facebook/fbthrift/bin" ; cd /src/openr/py/ && python3 set
 # Cleanup all we can to keep container as lean as possible
 RUN apt remove --yes build-essential git libssl-dev m4
 RUN apt autoremove --yes
-RUN rm -r /src
+RUN rm -r /src /tmp/*
 
 # TODO: Fix and make a sane default with a default config
 # Also have ability for a bind mounted config directory + state file
