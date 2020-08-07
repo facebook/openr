@@ -280,6 +280,7 @@ add_library(openrlib
   openr/decision/LinkState.cpp
   openr/decision/PrefixState.cpp
   openr/decision/RibPolicy.cpp
+  openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/dual/Dual.cpp
   openr/fib/Fib.cpp
   openr/kvstore/KvStoreClientInternal.cpp
