@@ -72,6 +72,7 @@ your system and follow the traditional cmake build steps below.
 * `folly`
 * `fbthrift`
 * `fbzmq`
+* `re2-devel`
 
 #### One Step Build - Ubuntu
 
