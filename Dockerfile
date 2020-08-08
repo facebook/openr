@@ -13,6 +13,7 @@ COPY openr /src/openr
 
 # Build OpenR + Dependencies via cmake
 RUN cd /src && build/build_openr.sh
+RUN mkdir /opt/bin && cp /src/build/docker_openr_help_test.sh /opt/bin
 
 # Install `breeze` OpenR CLI
 RUN pip3 --no-cache-dir install --upgrade pip setuptools wheel
