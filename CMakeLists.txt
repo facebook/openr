@@ -157,6 +157,7 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     network_cpp2
+    kv_store_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} spark_cpp2)
 
