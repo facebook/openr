@@ -801,7 +801,11 @@ KvStore::addUpdateKvStorePeers(
                         p = std::move(p),
                         peerAddParams = std::move(peerAddParams),
                         area]() mutable {
-    VLOG(2) << "Peer addition requested for AREA: " << area;
+    auto peersToAdd = folly::gen::from(*peerAddParams.peers_ref()) |
+        folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
+
+    LOG(INFO) << "Peer addition for: [" << folly::join(",", peersToAdd)
+              << "] in area: " << area;
 
     if (!kvStoreDb_.count(area)) {
       p.setException(
@@ -828,7 +832,9 @@ KvStore::deleteKvStorePeers(
                         p = std::move(p),
                         peerDelParams = std::move(peerDelParams),
                         area]() mutable {
-    VLOG(2) << "Peer deletion requested for AREA: " << area;
+    LOG(INFO) << "Peer deletion for: ["
+              << folly::join(",", *peerDelParams.peerNames_ref())
+              << "] in area: " << area;
 
     if (!kvStoreDb_.count(area)) {
       p.setException(
