@@ -12,7 +12,6 @@ namespace py3 openr.thrift
 namespace lua openr.Spark
 
 include "Network.thrift"
-include "KvStore.thrift"
 
 //
 // Data structure to send with SparkNeighborEvent to convey
@@ -56,6 +55,23 @@ struct ReflectedNeighborInfo {
 //
 typedef i32 OpenrVersion
 
+//
+// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
+// 1. SparkHelloMsg;
+//    - Functionality:
+//      1) To advertise its own existence and basic neighbor information;
+//      2) To ask for immediate response for quick adjacency establishment;
+//      3) To notify for its own "RESTART" to neighbors;
+//    - SparkHelloMsg will be sent per interface;
+// 2. SparkHeartbeatMsg;
+//    - Functionality:
+//      To notify its own aliveness by advertising msg periodically;
+//    - SparkHeartbeatMsg will be sent per interface;
+// 3. SparkHandshakeMsg;
+//    - Functionality:
+//      To exchange param information to establish adjacency;
+//    - SparkHandshakeMsg will be sent per (interface, neighbor)
+//
 struct SparkHelloMsg {
   1: string domainName
   2: string nodeName
@@ -106,23 +122,6 @@ struct SparkHandshakeMsg {
   11: optional string neighborNodeName
 }
 
-//
-// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
-// 1. SparkHelloMsg;
-//    - Functionality:
-//      1) To advertise its own existence and basic neighbor information;
-//      2) To ask for immediate response for quick adjacency establishment;
-//      3) To notify for its own "RESTART" to neighbors;
-//    - SparkHelloMsg will be sent per interface;
-// 2. SparkHeartbeatMsg;
-//    - Functionality:
-//      To notify its own aliveness by advertising msg periodically;
-//    - SparkHeartbeatMsg will be sent per interface;
-// 3. SparkHandshakeMsg;
-//    - Functionality:
-//      To exchange param information to establish adjacency;
-//    - SparkHandshakeMsg will be sent per (interface, neighbor)
-//
 struct SparkHelloPacket {
   // - Msg to announce node's presence on link with its
   //   own params;
@@ -154,6 +153,7 @@ enum SparkNeighborEventType {
 // upper level module for neighbor event defined
 // in `SparkNeighborEventType`
 //
+// TODO: Migrate SparkNeighborEvent to NOT use thrift structure
 struct SparkNeighborEvent {
   1: required SparkNeighborEventType eventType
   2: required string ifName
@@ -163,7 +163,7 @@ struct SparkNeighborEvent {
   // support flood optimization or not
   6: bool supportFloodOptimization = 0
   // area ID
-  7: string area = KvStore.kDefaultArea
+  7: string area
 }
 
 //

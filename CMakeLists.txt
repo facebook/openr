@@ -134,6 +134,7 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     openr_config_cpp2
+    kv_store_cpp2
     network_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} lsdb_cpp2)
@@ -157,7 +158,6 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     network_cpp2
-    kv_store_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} spark_cpp2)
 
@@ -205,6 +205,7 @@ add_fbthrift_cpp_library(
   DEPENDS
     openr_config_cpp2
     lsdb_cpp2
+    network_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} prefix_manager_cpp2)
 
@@ -215,7 +216,6 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     lsdb_cpp2
-    fib_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} decision_cpp2)
 
@@ -252,7 +252,6 @@ add_fbthrift_cpp_library(
   DEPENDS
     openr_ctrl_cpp2
     kv_store_cpp2
-    fbzmq::monitor_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp_cpp2)
 
