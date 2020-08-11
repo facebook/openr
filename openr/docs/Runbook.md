@@ -313,46 +313,9 @@ will be declared as down. Default value is `30 seconds`.
 SPARK_HOLD_TIME_S=30
 ```
 
-#### SPARK_KEEPALIVE_TIME_S
-
-How often to send spark hello messages to neighbors. Default value is 3 seconds.
-
-```
-SPARK_KEEPALIVE_TIME_S=3
-```
-
-#### SPARK_FASTINIT_KEEPALIVE_TIME_MS
-
-When interface is detected UP, OpenR can perform fast initial neighbor discovery
-as opposed to slower keep alive packets. Default value is 100 which means
-neighbor will be discovered within 200ms on a link.
-
-```
-SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
-```
-
-#### ENABLE_SPARK2
-
-Enables Spark2 protocol when set to true. Spark2 will leverage 3 types of msgs:
-1) Spark2HelloMsg; 2) Spark2HandshakeMsg; 3) Spark2HeartbeatMsg
-to establish neighbor adjacency and monitor neighbor aliveness.
-
-```
-ENABLE_SPARK2=0
-```
-
-#### SPARK2_INCREASE_HELLO_INTERVAL
-
-Flag to determine whether node will send out hello in low frequency.
-This flag is for backward compatibility concern.
-
-```
-SPARK2_INCREASE_HELLO_INTERVAL=0
-```
-
 #### SPARK2_HELLO_TIME_S
 
-How often to send spark2 helloMsg to neighbors. Default value is 20 seconds.
+How often to send helloMsg to neighbors. Default value is 20 seconds.
 
 ```
 SPARK2_HELLO_TIME_S=20
@@ -365,15 +328,6 @@ Default value is 500 which means neighbor will be discovered within 1s on a link
 
 ```
 SPARK2_HELLO_FASTINIT_MS=500
-```
-
-#### SPARK2_HANDSHAKE_TIME_MS
-
-How often to send spark2 handshakeMsg to negotiate parameters with neighbor.
-Default value is 500ms.
-
-```
-SPARK2_HANDSHAKE_TIME_MS=20
 ```
 
 #### SPARK2_HEARTBEAT_TIME_S
@@ -392,16 +346,6 @@ Default value is 10s.
 
 ```
 SPARK2_HEARTBEAT_HOLD_TIME_S=10
-```
-
-#### SPARK2_NEGOTIATE_HOLD_TIME_S
-
-Expiration time to NEGOTIATE Spark2 param with neighbor
-sent. Default value is 5s. Expect we promote from NEGOTIATE to ESTABLISHED
-within this time.
-
-```
-SPARK2_NEGOTIATE_HOLD_TIME_S=5
 ```
 
 #### ENABLE_NETLINK_FIB_HANDLER

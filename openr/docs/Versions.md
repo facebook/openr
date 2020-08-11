@@ -2,6 +2,9 @@ Version history
 
 This version is carried in the Spark 'Hello' packet.
 --------------------------------------------------------------------------------
+* Version 20200701
+  - Area feature becomes mandatory
+
 * Version 20200421
   - Spark AREA feature support
 

@@ -56,7 +56,7 @@ struct ReflectedNeighborInfo {
 typedef i32 OpenrVersion
 
 //
-// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
+// Spark will define 3 types of msg and fit into SparkPacket thrift structure:
 // 1. SparkHelloMsg;
 //    - Functionality:
 //      1) To advertise its own existence and basic neighbor information;

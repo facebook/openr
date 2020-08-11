@@ -69,38 +69,36 @@ class SparkFixture : public testing::Test {
  protected:
   void
   SetUp() override {
-    mockIoProvider = std::make_shared<MockIoProvider>();
+    mockIoProvider_ = std::make_shared<MockIoProvider>();
 
     // Start mock IoProvider thread
-    mockIoProviderThread = std::make_unique<std::thread>([this]() {
+    mockIoProviderThread_ = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Starting mockIoProvider thread.";
-      mockIoProvider->start();
+      mockIoProvider_->start();
       LOG(INFO) << "mockIoProvider thread got stopped.";
     });
-    mockIoProvider->waitUntilRunning();
+    mockIoProvider_->waitUntilRunning();
   }
 
   void
   TearDown() override {
     LOG(INFO) << "Stopping mockIoProvider thread.";
-    mockIoProvider->stop();
-    mockIoProviderThread->join();
+    mockIoProvider_->stop();
+    mockIoProviderThread_->join();
   }
 
   std::shared_ptr<SparkWrapper>
   createSpark(
-      std::string const& domainName,
       std::string const& myNodeName,
-      uint32_t spark2Id,
       std::shared_ptr<const Config> config = nullptr,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion)) {
     return std::make_unique<SparkWrapper>(
-        myNodeName, version, mockIoProvider, config);
+        myNodeName, version, mockIoProvider_, config);
   }
 
-  std::shared_ptr<MockIoProvider> mockIoProvider{nullptr};
-  std::unique_ptr<std::thread> mockIoProviderThread{nullptr};
+  std::shared_ptr<MockIoProvider> mockIoProvider_{nullptr};
+  std::unique_ptr<std::thread> mockIoProviderThread_{nullptr};
 };
 
 class SimpleSparkFixture : public SparkFixture {
@@ -108,14 +106,14 @@ class SimpleSparkFixture : public SparkFixture {
   void
   createAndConnect() {
     // Define interface names for the test
-    mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+    mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
     // connect interfaces directly
     ConnectedIfPairs connectedPairs = {
         {iface1, {{iface2, 10}}},
         {iface2, {{iface1, 10}}},
     };
-    mockIoProvider->setConnectedPairs(connectedPairs);
+    mockIoProvider_->setConnectedPairs(connectedPairs);
 
     auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
     auto config1 = std::make_shared<Config>(tConfig1);
@@ -124,10 +122,10 @@ class SimpleSparkFixture : public SparkFixture {
     auto config2 = std::make_shared<Config>(tConfig2);
 
     // start one spark2 instance
-    node1 = createSpark(kDomainName, "node-1", 1, config1);
+    node1 = createSpark("node-1", config1);
 
     // start another spark2 instance
-    node2 = createSpark(kDomainName, "node-2", 2, config2);
+    node2 = createSpark("node-2", config2);
 
     // start tracking iface1
     EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -179,7 +177,7 @@ TEST_F(SimpleSparkFixture, RttTest) {
       {iface1, {{iface2, 15}}},
       {iface2, {{iface1, 25}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // wait for spark nodes to detecct Rtt change
   {
@@ -220,7 +218,7 @@ TEST_F(SimpleSparkFixture, UnidirectionTest) {
   ConnectedIfPairs connectedPairs = {
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // wait for sparks to lose each other
   {
@@ -257,7 +255,7 @@ TEST_F(SimpleSparkFixture, GRTest) {
   auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  node2 = createSpark(kDomainName, "node-2", 3 /* spark2Id change */, config2);
+  node2 = createSpark("node-2", config2);
 
   LOG(INFO) << "Adding iface2 to node-2 to let it start helloMsg adverstising";
 
@@ -342,7 +340,7 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
 
   // remove underneath connections between to nodes
   ConnectedIfPairs connectedPairs = {};
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // wait for sparks to lose each other
   {
@@ -453,7 +451,7 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
 //
 TEST_F(SparkFixture, VersionTest) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex(
+  mockIoProvider_->addIfNameIfIndex(
       {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
 
   // connect interfaces directly
@@ -462,7 +460,7 @@ TEST_F(SparkFixture, VersionTest) {
       {iface2, {{iface1, 10}, {iface3, 10}}},
       {iface3, {{iface1, 10}, {iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start node1, node2 with different but within supported range
   const std::string nodeName1 = "node-1";
@@ -478,8 +476,8 @@ TEST_F(SparkFixture, VersionTest) {
   auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
   auto config3 = std::make_shared<Config>(tConfig3);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -493,9 +491,7 @@ TEST_F(SparkFixture, VersionTest) {
   LOG(INFO) << "Starting: " << nodeName3;
 
   auto node3 = createSpark(
-      kDomainName,
       nodeName3,
-      3,
       config3,
       std::make_pair(
           Constants::kOpenrSupportedVersion - 1,
@@ -531,14 +527,14 @@ TEST_F(SparkFixture, VersionTest) {
 //
 TEST_F(SparkFixture, DomainTest) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start 2 spark instances within different domain
   std::string domainLannister = "A_Lannister_Always_Pays_His_Debts";
@@ -552,8 +548,8 @@ TEST_F(SparkFixture, DomainTest) {
   auto tConfig2 = getBasicOpenrConfig(nodeStark, domainStark);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto node1 = createSpark(domainLannister, nodeLannister, 1, config1);
-  auto node2 = createSpark(domainStark, nodeStark, 2, config2);
+  auto node1 = createSpark(nodeLannister, config1);
+  auto node2 = createSpark(nodeStark, config2);
 
   // start tracking iface1 and iface2
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -599,16 +595,16 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   auto ip1V6_3 = folly::IPAddress::createNetwork("fe80::13:1/128");
 
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1_2, ifIndex1_2},
-                                    {iface1_3, ifIndex1_3},
-                                    {iface2, ifIndex2},
-                                    {iface3, ifIndex3}});
+  mockIoProvider_->addIfNameIfIndex({{iface1_2, ifIndex1_2},
+                                     {iface1_3, ifIndex1_3},
+                                     {iface2, ifIndex2},
+                                     {iface3, ifIndex3}});
 
   ConnectedIfPairs connectedPairs = {{iface1_2, {{iface2, 10}}},
                                      {iface1_3, {{iface3, 10}}},
                                      {iface2, {{iface1_2, 10}}},
                                      {iface3, {{iface1_3, 10}}}};
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
   const std::string nodeName1 = "node-1";
@@ -624,9 +620,9 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
   auto config3 = std::make_shared<Config>(tConfig3);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
-  auto node3 = createSpark(kDomainName, nodeName3, 3, config3);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
+  auto node3 = createSpark(nodeName3, config3);
 
   EXPECT_TRUE(
       node1->updateInterfaceDb({{iface1_2, ifIndex1_2, ip1V4_2, ip1V6_2},
@@ -686,14 +682,14 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
 
 TEST_F(SparkFixture, FastInitTest) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // By default, helloMsg is sent out every "kFastInitHelloTime" interval
   const std::string nodeName1 = "node-1";
@@ -705,8 +701,8 @@ TEST_F(SparkFixture, FastInitTest) {
   auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   {
     // start tracking interfaces
@@ -730,7 +726,7 @@ TEST_F(SparkFixture, FastInitTest) {
   LOG(INFO) << "Killing and restarting: " << nodeName2;
 
   node2.reset();
-  node2 = createSpark(kDomainName, nodeName2, 3 /* changed */, config2);
+  node2 = createSpark(nodeName2, config2);
 
   {
     // start tracking interfaces
@@ -758,7 +754,7 @@ TEST_F(SparkFixture, FastInitTest) {
 //
 TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex(
+  mockIoProvider_->addIfNameIfIndex(
       {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
 
   // connect interfaces directly
@@ -767,7 +763,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       {iface2, {{iface1, 10}, {iface3, 10}}},
       {iface3, {{iface1, 10}, {iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
   const std::string nodeName1 = "node-1";
@@ -780,8 +776,8 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -798,7 +794,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
   auto config3 = std::make_shared<Config>(tConfig3);
 
-  auto node3 = createSpark(kDomainName, nodeName3, 3, config3);
+  auto node3 = createSpark(nodeName3, config3);
   EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 
   // node-1 and node-2 should hear from node-3
@@ -895,13 +891,13 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
 //
 TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
 
@@ -911,8 +907,8 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto node1 = createSpark(kDomainName, "node-1", 1, config1);
-  auto node2 = createSpark(kDomainName, "node-2", 2, config2);
+  auto node1 = createSpark("node-1", config1);
+  auto node2 = createSpark("node-2", config2);
 
   // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -955,20 +951,20 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
 //
 TEST_F(SparkFixture, LoopedHelloPktTest) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}});
 
   // connect iface1 directly with itself to mimick
   // self-looped helloPkt
   ConnectedIfPairs connectedPairs = {
       {iface1, {{iface1, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start one spark2 instance
 
   auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
   auto config1 = std::make_shared<Config>(tConfig1);
-  auto node1 = createSpark(kDomainName, "node-1", 1, config1);
+  auto node1 = createSpark("node-1", config1);
 
   // start tracking iface1.
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -995,14 +991,14 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
 //
 TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
   auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
@@ -1011,8 +1007,8 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto node1 = createSpark(kDomainName, "node-1", 1, config1);
-  auto node2 = createSpark(kDomainName, "node-2", 2, config2);
+  auto node1 = createSpark("node-1", config1);
+  auto node2 = createSpark("node-2", config2);
 
   // enable v4 subnet validation to put adddres in different /31 subnet
   // on purpose.
@@ -1079,14 +1075,14 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
 //
 TEST_F(SparkFixture, InvalidV4Subnet) {
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
   std::string nodeName1 = "node-1";
@@ -1098,8 +1094,8 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
   auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   // enable v4 subnet validation to put adddres in different /31 subnet
   // on purpose.
@@ -1175,17 +1171,17 @@ TEST_F(SparkFixture, AreaMatch) {
   auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1239,17 +1235,17 @@ TEST_F(SparkFixture, NoAreaMatch) {
   auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1310,17 +1306,17 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1382,17 +1378,17 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   auto config2 = std::make_shared<Config>(tConfig2);
 
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface2, {{iface1, 10}}},
       {iface1, {{iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1453,7 +1449,7 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   auto config3 = std::make_shared<Config>(tConfig3);
 
   // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex(
+  mockIoProvider_->addIfNameIfIndex(
       {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
 
   // connect interfaces directly
@@ -1462,10 +1458,10 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
       {iface2, {{iface1, 10}, {iface3, 10}}},
       {iface3, {{iface1, 10}, {iface2, 10}}},
   };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  mockIoProvider_->setConnectedPairs(connectedPairs);
 
-  auto node1 = createSpark(kDomainName, nodeName1, 1, config1);
-  auto node2 = createSpark(kDomainName, nodeName2, 2, config2);
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
 
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
@@ -1491,7 +1487,7 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
 
   // add third instance
 
-  auto node3 = createSpark(kDomainName, nodeName3, 3, config3);
+  auto node3 = createSpark(nodeName3, config3);
   EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 
   LOG(INFO) << nodeName3 << " being started...";

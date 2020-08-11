@@ -25,7 +25,6 @@ DECLARE_int32(monitor_rep_port);
 DECLARE_int32(system_agent_port);
 
 DECLARE_int32(fib_handler_port);
-DECLARE_int32(spark_mcast_port);
 DECLARE_string(platform_pub_url);
 DECLARE_string(domain);
 DECLARE_string(listen_addr);
@@ -61,10 +60,6 @@ DECLARE_bool(enable_bgp_route_programming);
 DECLARE_bool(bgp_use_igp_metric);
 
 DECLARE_int32(decision_graceful_restart_window_s);
-
-DECLARE_int32(spark_hold_time_s);
-DECLARE_int32(spark_keepalive_time_s);
-DECLARE_int32(spark_fastinit_keepalive_time_ms);
 
 DECLARE_uint64(step_detector_fast_window_size);
 DECLARE_uint64(step_detector_slow_window_size);
@@ -118,14 +113,12 @@ DECLARE_bool(enable_flood_optimization);
 DECLARE_bool(is_flood_root);
 DECLARE_bool(use_flood_optimization);
 
-DECLARE_bool(enable_spark2);
-DECLARE_bool(spark2_increase_hello_interval);
+DECLARE_int32(spark_mcast_port);
+DECLARE_int32(spark_hold_time_s);
+DECLARE_int32(spark2_heartbeat_hold_time_s);
 DECLARE_int32(spark2_hello_time_s);
 DECLARE_int32(spark2_hello_fastinit_time_ms);
 DECLARE_int32(spark2_heartbeat_time_s);
-DECLARE_int32(spark2_handshake_time_ms);
-DECLARE_int32(spark2_negotiate_hold_time_s);
-DECLARE_int32(spark2_heartbeat_hold_time_s);
 
 // Flags used for KvStore over thrift stage roll-out
 DECLARE_bool(enable_kvstore_thrift);

@@ -154,16 +154,6 @@ DEFINE_int32(
     "How long (in seconds) to keep neighbor adjacency without receiving any "
     "hello packets.");
 DEFINE_int32(
-    spark_keepalive_time_s,
-    2,
-    "Keep-alive message interval (in seconds) for spark hello message "
-    "exchanges. At most 2 hello message exchanges are required for graceful "
-    "restart.");
-DEFINE_int32(
-    spark_fastinit_keepalive_time_ms,
-    100,
-    "Fast initial keep alive time (in milliseconds)");
-DEFINE_int32(
     spark2_hello_time_s,
     20,
     "Hello msg interval (in seconds) to do node advertisement");
@@ -175,16 +165,6 @@ DEFINE_int32(
     spark2_heartbeat_time_s,
     1,
     "Heartbeat msg interval (in seconds) to keep alive for this node");
-DEFINE_int32(
-    spark2_handshake_time_ms,
-    500,
-    "Handshake msg interval (in milliseconds) to negotiate param for "
-    "adjacency establishment.");
-DEFINE_int32(
-    spark2_negotiate_hold_time_s,
-    5,
-    "How long (in seconds) to stay in negotiate state. Should form "
-    "adjacency within this period of time.");
 DEFINE_int32(
     spark2_heartbeat_hold_time_s,
     5,
@@ -343,11 +323,6 @@ DEFINE_bool(
     use_flood_optimization,
     false,
     "Enable this to use formed flooding topology to flood updates");
-DEFINE_bool(enable_spark2, false, "Enable Spark2 support");
-DEFINE_bool(
-    spark2_increase_hello_interval,
-    false,
-    "Increase Spark2 hello msg interval");
 DEFINE_bool(
     prefix_fwd_type_mpls,
     false,
