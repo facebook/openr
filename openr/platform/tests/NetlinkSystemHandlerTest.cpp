@@ -16,35 +16,6 @@ using namespace ::testing;
 using namespace openr;
 using namespace openr::fbnl;
 
-TEST(SystemHandler, getAllLinks) {
-  folly::EventBase evb;
-  fbnl::MockNetlinkProtocolSocket nlSock(&evb);
-  NetlinkSystemHandler handler(&nlSock);
-
-  // Empty links
-  auto links = handler.semifuture_getAllLinks().get();
-  EXPECT_EQ(0, links->size());
-
-  // Set addresses and links
-  EXPECT_EQ(0, nlSock.addLink(utils::createLink(1, "eth0")).get());
-  EXPECT_EQ(
-      0,
-      nlSock.addIfAddress(utils::createIfAddress(1, "192.168.0.3/31")).get());
-  EXPECT_EQ(
-      -ENXIO,
-      nlSock.addIfAddress(utils::createIfAddress(2, "fc00::3/127")).get());
-
-  // Verify link status and addresses shows up
-  links = handler.semifuture_getAllLinks().get();
-  ASSERT_EQ(1, links->size());
-
-  const auto& link = links->at(0);
-  EXPECT_TRUE(link.isUp);
-  EXPECT_EQ("eth0", link.ifName);
-  ASSERT_EQ(1, link.networks.size());
-  EXPECT_EQ("192.168.0.3/31", toString(link.networks.at(0)));
-}
-
 TEST(SystemHandler, addRemoveIfaceAddresses) {
   folly::EventBase evb;
   fbnl::MockNetlinkProtocolSocket nlSock(&evb);

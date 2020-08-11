@@ -37,9 +37,6 @@ class NetlinkSystemHandler {
   NetlinkSystemHandler(const NetlinkSystemHandler&) = delete;
   NetlinkSystemHandler& operator=(const NetlinkSystemHandler&) = delete;
 
-  virtual folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
-  semifuture_getAllLinks();
-
   virtual folly::SemiFuture<folly::Unit> semifuture_addIfaceAddresses(
       std::unique_ptr<std::string> iface,
       std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs);

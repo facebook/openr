@@ -167,7 +167,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
       config_,
-      mockNlHandler_,
       nlSock_.get(),
       kvStore_.get(),
       configStore_.get(),

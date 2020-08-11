@@ -72,7 +72,6 @@ namespace openr {
 LinkMonitor::LinkMonitor(
     fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
-    std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
     fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
     PersistentStore* configStore,
@@ -87,7 +86,6 @@ LinkMonitor::LinkMonitor(
     bool overrideDrainState,
     std::chrono::seconds adjHoldTime)
     : nodeId_(config->getNodeName()),
-      nlSystemHandler_(nlSystemHandler),
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
@@ -108,11 +106,12 @@ LinkMonitor::LinkMonitor(
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
-      configStore_(configStore) {
+      configStore_(configStore),
+      nlSock_(nlSock) {
   // Check non-empty module ptr
-  CHECK(nlSock);
   CHECK(kvStore);
   CHECK(configStore_);
+  CHECK(nlSock_);
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -763,10 +762,9 @@ LinkMonitor::syncInterfaces() {
   // Retrieve latest link snapshot from NetlinkProtocolSocket
   std::vector<thrift::Link> links;
   try {
-    CHECK(nlSystemHandler_) << "NetlinkSystemHandler ptr is empty";
-    links = *(nlSystemHandler_->semifuture_getAllLinks().get());
+    links = *(getAllLinks().get());
   } catch (const std::exception& e) {
-    LOG(ERROR) << "Failed to sync LinkDb from NetlinkSystemHandler. Error: "
+    LOG(ERROR) << "Failed to sync linkDb from NetlinkProtocolSocket. Error: "
                << folly::exceptionStr(e);
     return false;
   }
@@ -1168,6 +1166,49 @@ LinkMonitor::getLinkMonitorAdjacencies() {
     p.setValue(std::make_unique<thrift::AdjacencyDatabase>(std::move(adjDb)));
   });
   return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
+LinkMonitor::getAllLinks() {
+  VLOG(2) << "Querying all links and their addresses from system";
+  return collectAll(nlSock_->getAllLinks(), nlSock_->getAllIfAddresses())
+      .deferValue(
+          [](std::tuple<
+              folly::Try<folly::Expected<std::vector<fbnl::Link>, int>>,
+              folly::Try<folly::Expected<std::vector<fbnl::IfAddress>, int>>>&&
+                 res) {
+            std::unordered_map<int, thrift::Link> links;
+            // Create links
+            auto nlLinks = std::get<0>(res).value();
+            if (nlLinks.hasError()) {
+              throw fbnl::NlException("Failed fetching links", nlLinks.error());
+            }
+            for (auto& nlLink : nlLinks.value()) {
+              thrift::Link link;
+              link.ifName_ref() = nlLink.getLinkName();
+              link.ifIndex_ref() = nlLink.getIfIndex();
+              link.isUp_ref() = nlLink.isUp();
+              links.emplace(nlLink.getIfIndex(), std::move(link));
+            }
+
+            // Add addresses
+            auto nlAddrs = std::get<1>(res).value();
+            if (nlAddrs.hasError()) {
+              throw fbnl::NlException("Failed fetching addrs", nlAddrs.error());
+            }
+            for (auto& nlAddr : nlAddrs.value()) {
+              auto& link = links.at(nlAddr.getIfIndex());
+              link.networks_ref()->emplace_back(
+                  toIpPrefix(nlAddr.getPrefix().value()));
+            }
+
+            // Convert to list and return
+            auto result = std::make_unique<std::vector<thrift::Link>>();
+            for (auto& kv : links) {
+              result->emplace_back(std::move(kv.second));
+            }
+            return result;
+          });
 }
 
 void

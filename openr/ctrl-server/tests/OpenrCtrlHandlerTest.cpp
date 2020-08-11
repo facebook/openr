@@ -123,7 +123,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     linkMonitor = std::make_shared<LinkMonitor>(
         context_,
         config,
-        mockNlHandler_,
         nlSock_.get(),
         kvStoreWrapper->getKvStore(),
         persistentStore.get(),

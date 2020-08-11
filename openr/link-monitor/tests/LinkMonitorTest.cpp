@@ -314,7 +314,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     linkMonitor = std::make_unique<LinkMonitor>(
         context,
         config,
-        mockNlHandler,
         nlSock.get(),
         kvStoreWrapper->getKvStore(),
         configStore.get(),
@@ -1709,7 +1708,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
     auto lm = std::make_unique<LinkMonitor>(
         context,
         currConfig,
-        mockNlHandler,
         nlSock.get(),
         kvStoreWrapper->getKvStore(),
         configStore.get(),
@@ -1887,7 +1885,36 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   }
 }
 
-TEST(LinkMonitor, getPeersFromAdjacencies) {
+TEST_F(LinkMonitorTestFixture, GetAllLinks) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+
+  // Empty links
+  auto links = linkMonitor->getAllLinks().get();
+  EXPECT_EQ(0, links->size());
+
+  // Set addresses and links
+  EXPECT_EQ(0, nlSock->addLink(fbnl::utils::createLink(1, "eth0")).get());
+  EXPECT_EQ(
+      0,
+      nlSock->addIfAddress(fbnl::utils::createIfAddress(1, "192.168.0.3/31"))
+          .get());
+  EXPECT_EQ(
+      -ENXIO,
+      nlSock->addIfAddress(fbnl::utils::createIfAddress(2, "fc00::3/127"))
+          .get());
+
+  // Verify link status and addresses shows up
+  links = linkMonitor->getAllLinks().get();
+  ASSERT_EQ(1, links->size());
+
+  const auto& link = links->at(0);
+  EXPECT_TRUE(*link.isUp_ref());
+  EXPECT_EQ("eth0", *link.ifName_ref());
+  ASSERT_EQ(1, link.networks_ref()->size());
+  EXPECT_EQ("192.168.0.3/31", toString(link.networks_ref()->at(0)));
+}
+
+TEST(LinkMonitor, GetPeersFromAdjacencies) {
   std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies;
   std::unordered_map<std::string, thrift::PeerSpec> peers;
 

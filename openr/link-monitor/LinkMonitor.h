@@ -79,18 +79,17 @@ class LinkMonitor final : public OpenrEventBase {
       fbzmq::Context& zmqContext,
       // config
       std::shared_ptr<const Config> config,
-      // netlinkSystemHandler
-      std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
       // raw ptr for modules
       fbnl::NetlinkProtocolSocket* nlSock,
       KvStore* kvstore,
       PersistentStore* configStore,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
-      // Queue for spark and kv-store
+      // producer queue
       messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
+      // consumer queue
       messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // URL for monitoring
@@ -142,10 +141,12 @@ class LinkMonitor final : public OpenrEventBase {
    * Get APIs:
    * - Dump interface/link information
    * - Dump adjacency database information
+   * - Dump links information from netlinkProtocolSocket
    */
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   getLinkMonitorAdjacencies();
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>> getAllLinks();
 
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
   static std::unordered_map<std::string, thrift::PeerSpec>
@@ -271,8 +272,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   // used to build the key names for this node
   const std::string nodeId_;
-  // netlink system handler
-  const std::shared_ptr<NetlinkSystemHandler> nlSystemHandler_;
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
 
@@ -366,8 +365,11 @@ class LinkMonitor final : public OpenrEventBase {
   // client to interact with ZmqMonitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
-  // client to interact with ConfigStore
+  // Raw ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
+
+  // Raw ptr to interact with NetlinkProtocolSocket
+  fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 
   // Timer for starting range allocator
   // this is equal to adjHoldTimer_

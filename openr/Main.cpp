@@ -458,7 +458,6 @@ main(int argc, char** argv) {
       std::make_unique<LinkMonitor>(
           context,
           config,
-          nlSystemHandler,
           nlSock.get(),
           kvStore,
           configStore,

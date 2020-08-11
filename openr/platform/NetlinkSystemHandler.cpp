@@ -35,49 +35,6 @@ NetlinkSystemHandler::NetlinkSystemHandler(fbnl::NetlinkProtocolSocket* nlSock)
   CHECK(nlSock);
 }
 
-folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
-NetlinkSystemHandler::semifuture_getAllLinks() {
-  LOG(INFO) << "Querying all links and their addresses from system";
-  return collectAll(nlSock_->getAllLinks(), nlSock_->getAllIfAddresses())
-      .deferValue(
-          [](std::tuple<
-              folly::Try<folly::Expected<std::vector<fbnl::Link>, int>>,
-              folly::Try<folly::Expected<std::vector<fbnl::IfAddress>, int>>>&&
-                 res) {
-            std::unordered_map<int, thrift::Link> links;
-            // Create links
-            auto nlLinks = std::get<0>(res).value();
-            if (nlLinks.hasError()) {
-              throw fbnl::NlException("Failed fetching links", nlLinks.error());
-            }
-            for (auto& nlLink : nlLinks.value()) {
-              thrift::Link link;
-              link.ifName = nlLink.getLinkName();
-              link.ifIndex = nlLink.getIfIndex();
-              link.isUp = nlLink.isUp();
-              links.emplace(nlLink.getIfIndex(), std::move(link));
-            }
-
-            // Add addresses
-            auto nlAddrs = std::get<1>(res).value();
-            if (nlAddrs.hasError()) {
-              throw fbnl::NlException("Failed fetching addrs", nlAddrs.error());
-            }
-            for (auto& nlAddr : nlAddrs.value()) {
-              auto& link = links.at(nlAddr.getIfIndex());
-              link.networks.emplace_back(
-                  toIpPrefix(nlAddr.getPrefix().value()));
-            }
-
-            // Convert to list and return
-            auto result = std::make_unique<std::vector<thrift::Link>>();
-            for (auto& kv : links) {
-              result->emplace_back(std::move(kv.second));
-            }
-            return result;
-          });
-}
-
 folly::SemiFuture<folly::Unit>
 NetlinkSystemHandler::semifuture_addIfaceAddresses(
     std::unique_ptr<std::string> ifName,
