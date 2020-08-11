@@ -294,7 +294,10 @@ add_library(openrlib
   openr/nl/NetlinkRoute.cpp
   openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
+  openr/monitor/LogSample.cpp
   openr/monitor/Monitor.cpp
+  openr/monitor/MonitorBase.cpp
+  openr/monitor/SystemMetrics.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/platform/NetlinkSystemHandler.cpp
   openr/plugin/Plugin.cpp

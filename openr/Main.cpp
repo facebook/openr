@@ -44,6 +44,7 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/Monitor.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/plugin/Plugin.h>
@@ -248,6 +249,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
   ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQueue;
+  ReplicateQueue<openr::LogSample> logSampleQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -506,6 +508,17 @@ main(int argc, char** argv) {
           monitorSubmitUrl,
           kvStore,
           context));
+
+  // Start monitor Module
+  startEventBase(
+      allThreads,
+      orderedEvbs,
+      watchdog,
+      "Monitor",
+      std::make_unique<openr::Monitor>(
+          config,
+          Constants::kEventLogCategory.toString(),
+          logSampleQueue.getReader()));
 
   // Start OpenrCtrl thrift server
   apache::thrift::ThriftServer thriftCtrlServer;

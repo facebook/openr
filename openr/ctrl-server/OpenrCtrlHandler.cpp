@@ -223,9 +223,6 @@ OpenrCtrlHandler::semifuture_getEventLogs() {
 void
 OpenrCtrlHandler::getCounters(std::map<std::string, int64_t>& _return) {
   BaseService::getCounters(_return);
-  for (auto const& kv : zmqMonitorClient_->dumpCounters()) {
-    _return.emplace(kv.first, static_cast<int64_t>(kv.second.value));
-  }
 }
 
 void

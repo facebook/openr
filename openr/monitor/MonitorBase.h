@@ -34,7 +34,7 @@ class MonitorBase : public OpenrEventBase {
   MonitorBase(
       std::shared_ptr<const Config> config,
       const std::string& category,
-      messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue);
+      messaging::RQueue<LogSample> logSampleQueue);
 
   // Add an event log to queue
   void addEventLog(LogSample const& eventLog);
@@ -58,9 +58,6 @@ class MonitorBase : public OpenrEventBase {
 
   // Common information added to each log: "domain", "node-name", etc
   LogSample commonLogToMerge_;
-
-  // Queue to collect EventLog
-  messaging::ReplicateQueue<LogSample>& eventLogUpdatesQueue_;
 
   // Number of last log events to queue
   const uint32_t maxLogEvents_{0};
