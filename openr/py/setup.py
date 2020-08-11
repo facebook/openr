@@ -69,14 +69,7 @@ def generate_thrift_files():
 
 generate_thrift_files()
 
-# Have different install_requires for Python 2 + 3
 INSTALL_REQUIRES = ["bunch", "click", "hexdump", "networkx", "tabulate"]
-# Python 2 always needs these dependencies
-if version_info.major < 3:
-    INSTALL_REQUIRES.extend(["futures", "ipaddress", "typing"])
-# Only add typing before 3.5 for Python 3
-if version_info.major == 3 and version_info.minor < 5:
-    INSTALL_REQUIRES.append("typing")
 
 setup(
     name="py-openr",
@@ -85,10 +78,11 @@ setup(
     author_email="openr@fb.com",
     description=(
         "OpenR python tools and bindings. Includes python bindings for various "
-        "OpenR modules, CLI tool for interacting with OpenR named as `breeze`."
+        + "OpenR modules, CLI tool for interacting with OpenR named as `breeze`."
     ),
     packages=create_package_list("openr") + create_package_list("fb303"),
     entry_points={"console_scripts": ["breeze=openr.cli.breeze:main"]},
     license="MIT License",
     install_requires=INSTALL_REQUIRES,
+    python_requires=">=3.6",
 )
