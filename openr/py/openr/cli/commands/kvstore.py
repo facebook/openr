@@ -23,7 +23,6 @@ from typing import Any, Callable, Dict, List, Pattern, Set, Union
 
 import bunch
 import hexdump
-import networkx as nx
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
@@ -405,6 +404,7 @@ class KvNodesCmd(KvStoreCmdBase):
         Build graph of adjacencies and return list of connected node from
         current node-id
         """
+        import networkx as nx
 
         edges = set()
         graph = nx.Graph()
