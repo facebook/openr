@@ -224,7 +224,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
       config_,
-      mockNlHandler_,
       nlSock_.get(),
       kvStore_.get(),
       configStore_.get(),

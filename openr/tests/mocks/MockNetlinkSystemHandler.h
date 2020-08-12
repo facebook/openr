@@ -7,10 +7,7 @@
 
 #pragma once
 
-#include <syslog.h>
-#include <string>
-
-#include <openr/platform/NetlinkSystemHandler.h>
+#include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
 namespace openr {
@@ -20,11 +17,11 @@ namespace openr {
  * NetlinkEvent Publisher as well as System Service on linux platform.
  */
 
-class MockNetlinkSystemHandler final : public NetlinkSystemHandler {
+class MockNetlinkSystemHandler {
  public:
   explicit MockNetlinkSystemHandler(fbnl::MockNetlinkProtocolSocket* nlSock);
 
-  ~MockNetlinkSystemHandler() override = default;
+  ~MockNetlinkSystemHandler() = default;
 
   MockNetlinkSystemHandler(const MockNetlinkSystemHandler&) = delete;
   MockNetlinkSystemHandler& operator=(const MockNetlinkSystemHandler&) = delete;
@@ -36,8 +33,6 @@ class MockNetlinkSystemHandler final : public NetlinkSystemHandler {
 
   void sendAddrEvent(
       const std::string& ifName, const std::string& prefix, const bool isValid);
-
-  void stop();
 
  private:
   // mocked version of netlink protocols socket

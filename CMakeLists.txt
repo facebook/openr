@@ -299,7 +299,6 @@ add_library(openrlib
   openr/monitor/MonitorBase.cpp
   openr/monitor/SystemMetrics.cpp
   openr/platform/NetlinkFibHandler.cpp
-  openr/platform/NetlinkSystemHandler.cpp
   openr/plugin/Plugin.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
@@ -413,7 +412,6 @@ endif()
 add_executable(platform_linux
   openr/platform/LinuxPlatformMain.cpp
   openr/platform/NetlinkFibHandler.cpp
-  openr/platform/NetlinkSystemHandler.cpp
 )
 
 target_link_libraries(platform_linux
@@ -572,14 +570,12 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr
   )
 
-  if(ADD_ROOT_TESTS)
-    add_openr_test(PrefixAllocatorTest prefix_allocator_test
-      SOURCES
-        openr/allocators/tests/PrefixAllocatorTest.cpp
-        openr/tests/mocks/MockNetlinkSystemHandler.cpp
-      DESTINATION sbin/tests/openr/allocators
-    )
-  endif()
+  add_openr_test(PrefixAllocatorTest prefix_allocator_test
+    SOURCES
+      openr/allocators/tests/PrefixAllocatorTest.cpp
+      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+    DESTINATION sbin/tests/openr/allocators
+  )
 
   add_openr_test(RangeAllocatorTest range_allocator_test
     SOURCES
@@ -769,12 +765,6 @@ if(BUILD_TESTS)
   add_openr_test(NetlinkFibHandlerTest netlink_fib_handler_test
     SOURCES
       openr/platform/tests/NetlinkFibHandlerTest.cpp
-    DESTINATION sbin/tests/openr/platform
-  )
-
-  add_openr_test(NetlinkSystemHandlerTest netlink_system_handler_test
-    SOURCES
-      openr/platform/tests/NetlinkSystemHandlerTest.cpp
     DESTINATION sbin/tests/openr/platform
   )
 

@@ -41,7 +41,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     }
     // create config
     auto tConfig = getBasicOpenrConfig(
-        nodeName,
+        nodeName_,
         "domain",
         areaConfig,
         true /* enableV4 */,
@@ -68,8 +68,8 @@ class OpenrCtrlFixture : public ::testing::Test {
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module
-    kvStoreWrapper = std::make_unique<KvStoreWrapper>(context_, config);
-    kvStoreWrapper->run();
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config);
+    kvStoreWrapper_->run();
 
     // Create Decision module
     decision = std::make_shared<Decision>(
@@ -78,7 +78,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         false, /* bgpDryRun */
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
-        kvStoreWrapper->getReader(),
+        kvStoreWrapper_->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         routeUpdatesQueue_);
     decisionThread_ = std::thread([&]() { decision->run(); });
@@ -91,7 +91,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         interfaceUpdatesQueue_.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
-        kvStoreWrapper->getKvStore(),
+        kvStoreWrapper_->getKvStore(),
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
 
@@ -101,16 +101,13 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         config,
         persistentStore.get(),
-        kvStoreWrapper->getKvStore(),
+        kvStoreWrapper_->getKvStore(),
         false,
         std::chrono::seconds(0));
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 
     // create fakeNetlinkProtocolSocket
     nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb_);
-
-    // Create MockNetlinkSystemHandler
-    mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
 
     // Create LinkMonitor
     re2::RE2::Options regexOpts;
@@ -124,7 +121,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         context_,
         config,
         nlSock_.get(),
-        kvStoreWrapper->getKvStore(),
+        kvStoreWrapper_->getKvStore(),
         persistentStore.get(),
         false /* enable perf measurement */,
         interfaceUpdatesQueue_,
@@ -140,10 +137,10 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // spin up an openrThriftServer
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
-        nodeName,
+        nodeName_,
         decision.get() /* decision */,
         fib.get() /* fib */,
-        kvStoreWrapper->getKvStore() /* kvStore */,
+        kvStoreWrapper_->getKvStore() /* kvStore */,
         linkMonitor.get() /* linkMonitor */,
         persistentStore.get() /* configStore */,
         prefixManager.get() /* prefixManager */,
@@ -169,7 +166,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     nlSock_->closeQueue();
-    kvStoreWrapper->closeQueue();
+    kvStoreWrapper_->closeQueue();
 
     openrThriftServerWrapper_->stop();
 
@@ -182,7 +179,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManager->stop();
     prefixManagerThread_.join();
 
-    mockNlHandler_.reset();
     nlSock_.reset();
 
     fib->stop();
@@ -191,7 +187,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     decision->stop();
     decisionThread_.join();
 
-    kvStoreWrapper->stop();
+    kvStoreWrapper_->stop();
   }
 
   thrift::PeerSpec
@@ -222,7 +218,6 @@ class OpenrCtrlFixture : public ::testing::Test {
 
   fbzmq::Context context_{};
   folly::EventBase evb_;
-  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
 
   std::thread decisionThread_;
   std::thread fibThread_;
@@ -238,9 +233,9 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<LinkMonitor> linkMonitor;
 
  public:
-  const std::string nodeName{"thanos@universe"};
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
+  const std::string nodeName_{"thanos@universe"};
+  std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_{nullptr};
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
   std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient>
       openrCtrlThriftClient_{nullptr};
@@ -249,7 +244,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 TEST_F(OpenrCtrlFixture, getMyNodeName) {
   std::string res = "";
   openrCtrlThriftClient_->sync_getMyNodeName(res);
-  EXPECT_EQ(nodeName, res);
+  EXPECT_EQ(nodeName_, res);
 }
 
 TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
@@ -304,15 +299,15 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
   {
     thrift::RouteDatabase db;
     openrCtrlThriftClient_->sync_getRouteDb(db);
-    EXPECT_EQ(nodeName, db.thisNodeName);
+    EXPECT_EQ(nodeName_, db.thisNodeName_ref());
     EXPECT_EQ(0, db.unicastRoutes.size());
     EXPECT_EQ(0, db.mplsRoutes.size());
   }
 
   {
     thrift::RouteDatabase db;
-    openrCtrlThriftClient_->sync_getRouteDbComputed(db, nodeName);
-    EXPECT_EQ(nodeName, db.thisNodeName);
+    openrCtrlThriftClient_->sync_getRouteDbComputed(db, nodeName_);
+    EXPECT_EQ(nodeName_, db.thisNodeName_ref());
     EXPECT_EQ(0, db.unicastRoutes.size());
     EXPECT_EQ(0, db.mplsRoutes.size());
   }
@@ -354,7 +349,7 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
 TEST_F(OpenrCtrlFixture, PerfApis) {
   thrift::PerfDatabase db;
   openrCtrlThriftClient_->sync_getPerfDb(db);
-  EXPECT_EQ(nodeName, db.thisNodeName);
+  EXPECT_EQ(nodeName_, db.thisNodeName_ref());
 }
 
 TEST_F(OpenrCtrlFixture, DecisionApis) {
@@ -511,7 +506,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::FloodTopoSetParams params;
-    params.rootId = nodeName;
+    params.rootId_ref() = nodeName_;
     openrCtrlThriftClient_->sync_updateFloodTopologyChild(
         params, thrift::KvStore_constants::kDefaultArea());
   }
@@ -520,18 +515,18 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     thrift::SptInfos ret;
     openrCtrlThriftClient_->sync_getSpanningTreeInfos(
         ret, thrift::KvStore_constants::kDefaultArea());
-    EXPECT_EQ(1, ret.infos.size());
-    ASSERT_NE(ret.infos.end(), ret.infos.find(nodeName));
-    EXPECT_EQ(0, ret.counters.neighborCounters.size());
-    EXPECT_EQ(1, ret.counters.rootCounters.size());
-    EXPECT_EQ(nodeName, ret.floodRootId_ref());
-    EXPECT_EQ(0, ret.floodPeers.size());
+    EXPECT_EQ(1, ret.infos_ref()->size());
+    ASSERT_NE(ret.infos_ref()->end(), ret.infos_ref()->find(nodeName_));
+    EXPECT_EQ(0, ret.counters_ref()->neighborCounters_ref()->size());
+    EXPECT_EQ(1, ret.counters_ref()->rootCounters_ref()->size());
+    EXPECT_EQ(nodeName_, *ret.floodRootId_ref());
+    EXPECT_EQ(0, ret.floodPeers_ref()->size());
 
-    thrift::SptInfo sptInfo = ret.infos.at(nodeName);
-    EXPECT_EQ(0, sptInfo.cost);
+    thrift::SptInfo sptInfo = ret.infos_ref()->at(nodeName_);
+    EXPECT_EQ(0, *sptInfo.cost_ref());
     ASSERT_TRUE(sptInfo.parent_ref().has_value());
-    EXPECT_EQ(nodeName, sptInfo.parent_ref().value());
-    EXPECT_EQ(0, sptInfo.children.size());
+    EXPECT_EQ(nodeName_, sptInfo.parent_ref().value());
+    EXPECT_EQ(0, sptInfo.children_ref()->size());
   }
 
   //
@@ -549,10 +544,10 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     for (auto& peer : peers) {
-      kvStoreWrapper->addPeer(peer.first, peer.second);
+      kvStoreWrapper_->addPeer(peer.first, peer.second);
     }
     for (auto& peerPod : peersPod) {
-      kvStoreWrapper->addPeer(peerPod.first, peerPod.second, "pod");
+      kvStoreWrapper_->addPeer(peerPod.first, peerPod.second, "pod");
     }
 
     thrift::PeersMap ret;
@@ -566,7 +561,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   {
-    kvStoreWrapper->delPeer("peer2");
+    kvStoreWrapper_->delPeer("peer2");
 
     thrift::PeersMap ret;
     openrCtrlThriftClient_->sync_getKvStorePeersArea(
@@ -586,7 +581,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   {
-    kvStoreWrapper->delPeer("peer21", "pod");
+    kvStoreWrapper_->delPeer("peer21", "pod");
 
     thrift::PeersMap ret;
     openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, "pod");
@@ -710,13 +705,13 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
   {
     // Add more keys and values
     const std::string key{"snoop-key"};
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(1, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(1, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(2, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(3, "node1", std::string("value1")));
 
     std::vector<std::string> filterKeys{key};
@@ -759,20 +754,20 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
               received++;
             });
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(4, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(4, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(5, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(6, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key,
         createThriftValue(7, "node1", std::string("value1")),
         std::nullopt,
         "pod");
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key,
         createThriftValue(8, "node1", std::string("value1")),
         std::nullopt,
@@ -868,9 +863,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     EXPECT_EQ(2, handler_other->getNumKvStorePublishers());
 
     /* key4 and random_prefix keys are getting added for the first time */
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(1, "node1", std::string("value4")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         random_key, createThriftValue(1, "node1", std::string("value_random")));
 
     // Check we should receive 2 updates
@@ -934,7 +929,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             });
 
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(2, "node33", std::string("value333")));
 
     // Check we should receive-1 updates
@@ -1006,9 +1001,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 });
 
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key333", createThriftValue(3, "node33", std::string("value333")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key33", createThriftValue(3, "node33", std::string("value33")));
 
     // Check we should receive 2 updates
@@ -1088,11 +1083,11 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 });
 
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(4, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key1", createThriftValue(4, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key3", createThriftValue(4, "node3", std::string("value3")));
 
     // Check we should receive 3 updates
@@ -1173,13 +1168,13 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 });
 
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(5, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key1", createThriftValue(5, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key3", createThriftValue(5, "node3", std::string("value3")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "random-prefix", createThriftValue(1, "node1", std::string("value1")));
 
     // Check we should receive 4 updates
@@ -1234,7 +1229,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             });
 
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(10, "node10", std::string("value1")));
 
     // Check we should receive 1 updates
@@ -1303,15 +1298,15 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 });
 
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key1", createThriftValue(20, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key2", createThriftValue(20, "node2", std::string("value2")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "key3", createThriftValue(20, "node3", std::string("value3")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         key, createThriftValue(20, "node1", std::string("value1")));
-    kvStoreWrapper->setKey(
+    kvStoreWrapper_->setKey(
         "random-prefix-2",
         createThriftValue(20, "node1", std::string("value1")));
 
@@ -1391,7 +1386,7 @@ TEST_F(
 
     auto thriftValue = value;
     thriftValue.value_ref().reset();
-    kvStoreWrapper->setKey("key1", thriftValue);
+    kvStoreWrapper_->setKey("key1", thriftValue);
     auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
         handler
@@ -1447,7 +1442,7 @@ TEST_F(
     thriftValue2.value_ref().reset();
     thriftValue2.ttl_ref() = 50000;
     *thriftValue2.ttlVersion_ref() += 1;
-    kvStoreWrapper->setKey(key, thriftValue2);
+    kvStoreWrapper_->setKey(key, thriftValue2);
 
     // Check we should receive-1 updates
     while (received < 1) {
@@ -1488,7 +1483,7 @@ TEST_F(
 
     auto thriftValue = value;
     thriftValue.value_ref().reset();
-    kvStoreWrapper->setKey("key3", thriftValue);
+    kvStoreWrapper_->setKey("key3", thriftValue);
     auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
         handler
@@ -1543,7 +1538,7 @@ TEST_F(
     thriftValue2.ttl_ref() = 30000;
     *thriftValue2.ttlVersion_ref() += 1;
     /* No TTL update message should be received */
-    kvStoreWrapper->setKey(key, thriftValue2);
+    kvStoreWrapper_->setKey(key, thriftValue2);
 
     /* Check that the TTL version is updated */
     std::vector<std::string> filterKeys{key};
@@ -1572,6 +1567,9 @@ TEST_F(
 
 TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   // create an interface
+  auto mockNlHandler_ =
+      std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
+
   mockNlHandler_->sendLinkEvent("po1011", 100, true);
   const std::string ifName = "po1011";
   const std::string adjName = "night@king";
@@ -1599,7 +1597,7 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   {
     thrift::DumpLinksReply reply;
     openrCtrlThriftClient_->sync_getInterfaces(reply);
-    EXPECT_EQ(nodeName, reply.thisNodeName);
+    EXPECT_EQ(nodeName_, reply.thisNodeName_ref());
     EXPECT_FALSE(reply.isOverloaded);
     EXPECT_EQ(1, reply.interfaceDetails.size());
   }

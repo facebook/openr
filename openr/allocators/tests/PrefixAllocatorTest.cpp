@@ -20,10 +20,9 @@
 #include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
-#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
+#include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
 using namespace std;
-using namespace folly;
 using namespace openr;
 
 // prefix length
@@ -31,9 +30,6 @@ const uint64_t kSeedPrefixLen(125);
 
 // interval for periodic syncs
 const std::chrono::milliseconds kSyncInterval(10);
-
-// key marker for allocating prefix
-const AllocPrefixMarker kAllocPrefixMarker{"allocprefix:"};
 
 // length of allocated prefix
 const int kAllocPrefixLen = 128;
@@ -86,9 +82,6 @@ class PrefixAllocatorFixture : public ::testing::Test {
     folly::EventBase evb;
     nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
 
-    // Create mockNetlinkSystemHandler
-    mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
-
     // Create prefixMgr
     createPrefixManager();
 
@@ -98,9 +91,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
   void
   createPrefixAllocator() {
-    prefixAllocator_ = make_unique<PrefixAllocator>(
+    prefixAllocator_ = std::make_unique<PrefixAllocator>(
         config_,
-        mockNlHandler_,
         nlSock_.get(),
         kvStoreWrapper_->getKvStore(),
         configStore_.get(),
@@ -163,8 +155,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
       thread.join();
     }
 
-    // destroy mockNlHandler
-    mockNlHandler_.reset();
+    // destroy MockNetlinkProtocolSocket
     nlSock_.reset();
 
     // delete tempfile name
@@ -198,30 +189,24 @@ class PrefixAllocatorFixture : public ::testing::Test {
   apache::thrift::CompactSerializer serializer;
 
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_;
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
 };
 
 class PrefixAllocTest : public ::testing::TestWithParam<bool> {
  public:
   void
   SetUp() override {
-    // create fakeNetlinkProtocolSocket
+    // create mockNetlinkProtocolSocket
     folly::EventBase evb;
     nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
-
-    // Create mockNetlinkSystemHandler
-    mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
   }
 
   void
   TearDown() override {
-    mockNlHandler_.reset();
     nlSock_.reset();
   }
 
  protected:
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_;
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_;
 };
 
 INSTANTIATE_TEST_CASE_P(
@@ -374,12 +359,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     evl.waitUntilRunning();
 
     for (uint32_t i = 0; i < numAllocators; ++i) {
-      const auto myNodeName = sformat("node-{}", i);
+      const auto myNodeName = folly::sformat("node-{}", i);
 
       // subscribe to prefixDb updates from KvStore for node
       evl.getEvb()->runInEventBaseThreadAndWait([&]() {
         kvStoreClient->subscribeKey(
-            sformat("prefix:{}", myNodeName), prefixDbCb, false);
+            folly::sformat("prefix:{}", myNodeName), prefixDbCb, false);
       });
 
       // get a unique temp file name
@@ -435,7 +420,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       auto allocator = make_unique<PrefixAllocator>(
           currConfig,
-          mockNlHandler_,
           nlSock_.get(),
           store->getKvStore(),
           configStore.get(),
@@ -541,7 +525,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         EXPECT_EQ(lastPrefixes[i], *index);
       }
 
-      const auto myNodeName = sformat("node-{}", i);
+      const auto myNodeName = folly::sformat("node-{}", i);
       const auto prefix = getNthPrefix(
           usingNewSeedPrefix ? newSeedPrefix : seedPrefix,
           kAllocPrefixLen,
@@ -1000,12 +984,57 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   LOG(INFO) << "Step-5: Received withdraw for allocated prefix from KvStore.";
 }
 
+TEST_F(PrefixAllocatorFixture, SyncIfaceAddresses) {
+  SetUp(thrift::PrefixAllocationMode::STATIC);
+
+  const auto ifAddr = fbnl::utils::createIfAddress(1, "192.168.0.3/31");
+  const auto ifPrefix = toIpPrefix(ifAddr.getPrefix().value());
+  const auto ifAddr1 =
+      fbnl::utils::createIfAddress(1, "192.168.1.3/31"); // v4 global
+  const auto ifAddr2 =
+      fbnl::utils::createIfAddress(1, "192.168.2.3/31"); // v4 global
+  const auto ifAddr3 =
+      fbnl::utils::createIfAddress(1, "192.168.3.3/31"); // v4 global
+  const auto ifAddr4 =
+      fbnl::utils::createIfAddress(1, "127.0.0.1/32"); // v4 host
+  const auto ifAddr11 =
+      fbnl::utils::createIfAddress(1, "fc00::3/127"); // v6 global
+
+  // Add link eth0
+  EXPECT_EQ(0, nlSock_->addLink(fbnl::utils::createLink(1, "eth0")).get());
+
+  // Add addr2, addr3 and addr11 in nlSock
+  EXPECT_EQ(0, nlSock_->addIfAddress(ifAddr2).get());
+  EXPECT_EQ(0, nlSock_->addIfAddress(ifAddr3).get());
+  EXPECT_EQ(0, nlSock_->addIfAddress(ifAddr4).get());
+  EXPECT_EQ(0, nlSock_->addIfAddress(ifAddr11).get());
+
+  // Sync addr1 and addr2 for AF_INET family
+  {
+    std::vector<folly::CIDRNetwork> networks{ifAddr1.getPrefix().value(),
+                                             ifAddr2.getPrefix().value()};
+    auto retval = prefixAllocator_->semifuture_syncIfAddrs(
+        "eth0", AF_INET, RT_SCOPE_UNIVERSE, std::move(networks));
+    EXPECT_NO_THROW(std::move(retval).get());
+  }
+
+  // Verify that addr1 is added and addr3 no longer exists. In fake
+  // implementation addrs are returned in the order they're added.
+  {
+    auto addrs = nlSock_->getAllIfAddresses().get().value();
+    ASSERT_EQ(4, addrs.size());
+    EXPECT_EQ(ifAddr2, addrs.at(0));
+    EXPECT_EQ(ifAddr4, addrs.at(1));
+    EXPECT_EQ(ifAddr11, addrs.at(2));
+    EXPECT_EQ(ifAddr1, addrs.at(3));
+  }
+}
+
 TEST_F(PrefixAllocatorFixture, AddRemoveIfAddresses) {
   SetUp(thrift::PrefixAllocationMode::STATIC);
 
   const auto ifAddr = fbnl::utils::createIfAddress(1, "192.168.0.3/31");
   const auto network = ifAddr.getPrefix().value();
-  const std::vector<thrift::IpPrefix> ifPrefixes{toIpPrefix(network)};
 
   // Add link eth0
   EXPECT_EQ(0, nlSock_->addLink(fbnl::utils::createLink(1, "eth0")).get());
@@ -1013,7 +1042,7 @@ TEST_F(PrefixAllocatorFixture, AddRemoveIfAddresses) {
   // Add address on eth0 and verify
   {
     auto retval = prefixAllocator_->semifuture_addRemoveIfAddr(
-        true, std::string("eth0"), ifPrefixes);
+        true, std::string("eth0"), {network});
     EXPECT_NO_THROW(std::move(retval).get());
     auto addrs = nlSock_->getAllIfAddresses().get().value();
     ASSERT_EQ(1, addrs.size());
@@ -1031,7 +1060,7 @@ TEST_F(PrefixAllocatorFixture, AddRemoveIfAddresses) {
   // Remove address from eth0 and verify
   {
     auto retval = prefixAllocator_->semifuture_addRemoveIfAddr(
-        false, std::string("eth0"), ifPrefixes);
+        false, std::string("eth0"), {network});
     EXPECT_NO_THROW(std::move(retval).get());
     auto addrs = nlSock_->getAllIfAddresses().get().value();
     EXPECT_EQ(0, addrs.size());

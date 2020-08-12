@@ -20,14 +20,11 @@
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/ReplicateQueue.h>
-#include <openr/platform/NetlinkSystemHandler.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr {
 /**
@@ -39,8 +36,6 @@ class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
       std::shared_ptr<const Config> config,
-      // TODO: [TO BE DEPRECATED]
-      std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
       // raw ptr for modules
       fbnl::NetlinkProtocolSocket* nlSock,
       KvStore* kvStore,
@@ -73,10 +68,16 @@ class PrefixAllocator : public OpenrEventBase {
   /*
    * [Netlink Platform] util functions to add/del iface address
    */
+  folly::SemiFuture<folly::Unit> semifuture_syncIfAddrs(
+      std::string iface,
+      int16_t family,
+      int16_t scope,
+      std::vector<folly::CIDRNetwork> newAddrs);
+
   folly::SemiFuture<folly::Unit> semifuture_addRemoveIfAddr(
       const bool isAdd,
       const std::string& ifName,
-      const std::vector<thrift::IpPrefix>& addrs);
+      const std::vector<folly::CIDRNetwork>& networks);
 
   folly::SemiFuture<std::vector<folly::CIDRNetwork>> semifuture_getIfAddrs(
       std::string ifName, int16_t family, int16_t scope);
@@ -135,12 +136,6 @@ class PrefixAllocator : public OpenrEventBase {
       std::optional<PrefixAllocationParams> const& oldParams = std::nullopt,
       std::optional<PrefixAllocationParams> const& newParams = std::nullopt);
 
-  void syncIfaceAddrs(
-      const std::string& ifName,
-      int family,
-      int scope,
-      const std::vector<folly::CIDRNetwork>& prefixes);
-
   /*
    * Synchronous API to query interface index from kernel.
    * NOTE: We intentionally don't use cache to optimize this call as APIs of
@@ -160,9 +155,6 @@ class PrefixAllocator : public OpenrEventBase {
 
   // hash node ID into prefix space
   const std::hash<std::string> hasher{};
-
-  // netlink system handler
-  const std::shared_ptr<NetlinkSystemHandler> nlSystemHandler_{nullptr};
 
   //
   // Non-const private variables

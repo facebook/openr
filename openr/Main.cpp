@@ -45,8 +45,8 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/Monitor.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
-#include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/plugin/Plugin.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/IoProvider.h>
@@ -332,10 +332,7 @@ main(int argc, char** argv) {
         });
   }
 
-  // Start NetlinkSystemHandler
   // [TODO: TO BE DEPRECATED]
-  auto nlSystemHandler = std::make_shared<NetlinkSystemHandler>(nlSock.get());
-
   const MonitorSubmitUrl monitorSubmitUrl{
       folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
 
@@ -426,7 +423,6 @@ main(int argc, char** argv) {
         "PrefixAllocator",
         std::make_unique<PrefixAllocator>(
             config,
-            nlSystemHandler,
             nlSock.get(),
             kvStore,
             configStore,
@@ -642,10 +638,6 @@ main(int argc, char** argv) {
     netlinkFibServerThread.reset();
     netlinkFibServer.reset();
   }
-
-  // NOTE: Multiple instances can hold nlSystemHandler ptr.
-  //       Destruct it at the end.
-  nlSystemHandler.reset();
 
   if (thriftThreadMgr) {
     thriftThreadMgr->stop();

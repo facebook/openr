@@ -20,7 +20,7 @@ namespace openr {
 
 MockNetlinkSystemHandler::MockNetlinkSystemHandler(
     fbnl::MockNetlinkProtocolSocket* nlSock)
-    : NetlinkSystemHandler(nlSock), nlSock_(nlSock) {}
+    : nlSock_(nlSock) {}
 
 void
 MockNetlinkSystemHandler::getAllLinks(std::vector<thrift::Link>& linkDb) {
