@@ -214,6 +214,27 @@ createNextHopFromAdj(
       area);
 }
 
+thrift::PrefixMetrics
+createMetrics(int32_t pp, int32_t sp, int32_t d) {
+  thrift::PrefixMetrics metrics;
+  metrics.path_preference_ref() = pp;
+  metrics.source_preference_ref() = sp;
+  metrics.distance_ref() = d;
+  return metrics;
+}
+
+thrift::PrefixEntry
+createPrefixEntryWithMetrics(
+    thrift::IpPrefix const& prefix,
+    thrift::PrefixType const& type,
+    thrift::PrefixMetrics const& metrics) {
+  thrift::PrefixEntry entry;
+  entry.prefix_ref() = prefix;
+  entry.type_ref() = type;
+  entry.metrics_ref() = metrics;
+  return entry;
+}
+
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order
 using NextHops = unordered_set<thrift::NextHopThrift>;
 using RouteMap = unordered_map<
@@ -1037,6 +1058,86 @@ TEST(BGPRedistribution, IgpMetric) {
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 20),
                   createNextHopFromAdj(adj13, false, 20))))));
+}
+
+TEST(Decision, BestRouteSelection) {
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+      nodeName,
+      false /* enableV4 */,
+      false /* computeLfaPaths */,
+      false /* enableOrderedFib */,
+      false /* bgpDryRun */,
+      true /* enableBestRouteSelection */);
+
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+  PrefixState prefixState;
+
+  //
+  // Setup adjacencies
+  // 2 <--> 1 <--> 3
+  //
+  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
+  auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
+  auto adjacencyDb3 = createAdjDb("3", {adj31}, 0);
+  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
+  auto& linkState = areaLinkStates.at(kDefaultArea);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
+
+  //
+  // Setup prefixes. node2 and node3 announces the same prefix with same metrics
+  //
+  const auto node2Prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
+  const auto node3Prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
+  EXPECT_FALSE(
+      prefixState.updatePrefixDatabase(createPrefixDb("2", {node2Prefix}))
+          .empty());
+  EXPECT_FALSE(
+      prefixState.updatePrefixDatabase(createPrefixDb("3", {node3Prefix}))
+          .empty());
+
+  //
+  // Case-1 node1 ECMP towards {node2, node3}
+  //
+  auto decisionRouteDb =
+      *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
+  auto routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(1));
+  EXPECT_THAT(
+      *routeDb.unicastRoutes_ref(),
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHopFromAdj(adj12, false, 10),
+                  createNextHopFromAdj(adj13, false, 10))))));
+
+  //
+  // Case-2 node1 prefers node2 (prefix metrics)
+  //
+  const auto node2PrefixPreferred = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 100, 0));
+  EXPECT_FALSE(
+      prefixState
+          .updatePrefixDatabase(createPrefixDb("2", {node2PrefixPreferred}))
+          .empty());
+
+  decisionRouteDb = *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(1));
+  EXPECT_THAT(
+      *routeDb.unicastRoutes_ref(),
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHopFromAdj(adj12, false, 10))))));
 }
 
 //

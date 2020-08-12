@@ -94,12 +94,14 @@ class SpfSolver::SpfSolverImpl {
       bool enableV4,
       bool computeLfaPaths,
       bool enableOrderedFib,
-      bool bgpDryRun)
+      bool bgpDryRun,
+      bool enableBestRouteSelection)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
         computeLfaPaths_(computeLfaPaths),
         enableOrderedFib_(enableOrderedFib),
-        bgpDryRun_(bgpDryRun) {
+        bgpDryRun_(bgpDryRun),
+        enableBestRouteSelection_(enableBestRouteSelection) {
     // Initialize stat keys
     fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
     fb303::fbData->addStatExportType(
@@ -273,6 +275,8 @@ class SpfSolver::SpfSolverImpl {
   const bool enableOrderedFib_{false};
 
   const bool bgpDryRun_{false};
+
+  const bool enableBestRouteSelection_{false};
 };
 
 bool
@@ -605,8 +609,12 @@ SpfSolver::SpfSolverImpl::selectBestRoutes(
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
   BestRouteSelectionResult ret;
 
-  // TODO: Perform metrics selection here. Common for both Open/R or BGP
-  if (isBgp) {
+  if (enableBestRouteSelection_) {
+    // Perform best route selection based on metrics
+    ret.allNodeAreas = selectBestPrefixMetrics(prefixEntries);
+    ret.bestNodeArea = *ret.allNodeAreas.begin();
+    ret.success = true;
+  } else if (isBgp) {
     ret = runBestPathSelectionBgp(
         myNodeName, prefix, prefixEntries, areaLinkStates);
   } else {
@@ -1254,10 +1262,15 @@ SpfSolver::SpfSolver(
     bool enableV4,
     bool computeLfaPaths,
     bool enableOrderedFib,
-    bool bgpDryRun)
+    bool bgpDryRun,
+    bool enableBestRouteSelection)
     : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName, enableV4, computeLfaPaths, enableOrderedFib, bgpDryRun)) {
-}
+          myNodeName,
+          enableV4,
+          computeLfaPaths,
+          enableOrderedFib,
+          bgpDryRun,
+          enableBestRouteSelection)) {}
 
 SpfSolver::~SpfSolver() {}
 
@@ -1317,7 +1330,8 @@ Decision::Decision(
       tConfig.enable_v4_ref().value_or(false),
       computeLfaPaths,
       tConfig.enable_ordered_fib_programming_ref().value_or(false),
-      bgpDryRun);
+      bgpDryRun,
+      config->isBestRouteSelectionEnabled());
 
   coldStartTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     pendingUpdates_.setNeedsFullRebuild();

@@ -240,7 +240,8 @@ class SpfSolver {
       bool enableV4,
       bool computeLfaPaths,
       bool enableOrderedFib = false,
-      bool bgpDryRun = false);
+      bool bgpDryRun = false,
+      bool enableBestRouteSelection = false);
   ~SpfSolver();
 
   //
