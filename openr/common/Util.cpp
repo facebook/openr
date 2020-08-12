@@ -838,9 +838,9 @@ createPrefixEntry(
   }
   prefixEntry.forwardingType = forwardingType;
   prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
-  fromStdOptional(prefixEntry.ephemeral_ref(), ephemeral);
-  fromStdOptional(prefixEntry.mv_ref(), mv);
-  fromStdOptional(prefixEntry.minNexthop_ref(), minNexthop);
+  prefixEntry.ephemeral_ref().from_optional(ephemeral);
+  prefixEntry.mv_ref().from_optional(mv);
+  prefixEntry.minNexthop_ref().from_optional(minNexthop);
   return prefixEntry;
 }
 
@@ -855,11 +855,11 @@ createThriftValue(
   thrift::Value value;
   value.version = version;
   value.originatorId = originatorId;
-  fromStdOptional(value.value_ref(), data);
+  value.value_ref().from_optional(data);
   value.ttl = ttl;
   value.ttlVersion = ttlVersion;
   if (hash.has_value()) {
-    fromStdOptional(value.hash_ref(), hash);
+    value.hash_ref().from_optional(hash);
   } else {
     value.hash_ref() = generateHash(version, originatorId, data);
   }
@@ -878,9 +878,9 @@ createThriftPublication(
   thrift::Publication pub;
   pub.keyVals = kv;
   pub.expiredKeys = expiredKeys;
-  fromStdOptional(pub.nodeIds_ref(), nodeIds);
-  fromStdOptional(pub.tobeUpdatedKeys_ref(), keysToUpdate);
-  fromStdOptional(pub.floodRootId_ref(), floodRootId);
+  pub.nodeIds_ref().from_optional(nodeIds);
+  pub.tobeUpdatedKeys_ref().from_optional(keysToUpdate);
+  pub.floodRootId_ref().from_optional(floodRootId);
   pub.area = area;
   return pub;
 }
@@ -907,9 +907,9 @@ createNextHop(
     const std::string& area) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
-  fromStdOptional(nextHop.address.ifName_ref(), std::move(ifName));
+  nextHop.address_ref()->ifName_ref().from_optional(std::move(ifName));
   nextHop.metric = metric;
-  fromStdOptional(nextHop.mplsAction_ref(), maybeMplsAction);
+  nextHop.mplsAction_ref().from_optional(maybeMplsAction);
   nextHop.useNonShortestRoute = useNonShortestRoute;
   nextHop.area_ref() = area;
   return nextHop;
@@ -922,8 +922,8 @@ createMplsAction(
     std::optional<std::vector<int32_t>> maybePushLabels) {
   thrift::MplsAction mplsAction;
   mplsAction.action = mplsActionCode;
-  fromStdOptional(mplsAction.swapLabel_ref(), maybeSwapLabel);
-  fromStdOptional(mplsAction.pushLabels_ref(), maybePushLabels);
+  mplsAction.swapLabel_ref().from_optional(maybeSwapLabel);
+  mplsAction.pushLabels_ref().from_optional(maybePushLabels);
   checkMplsAction(mplsAction); // sanity checks
   return mplsAction;
 }

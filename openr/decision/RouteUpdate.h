@@ -41,7 +41,7 @@ struct DecisionRouteUpdate {
       delta.mplsRoutesToUpdate.emplace_back(route.toThrift());
     }
     delta.mplsRoutesToDelete = mplsRoutesToDelete;
-    fromStdOptional(delta.perfEvents_ref(), perfEvents);
+    delta.perfEvents_ref().from_optional(perfEvents);
 
     return delta;
   }

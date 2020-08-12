@@ -634,7 +634,7 @@ KvStore::dumpKvStoreKeys(
       }
       kvStoreDb.updatePublicationTtl(thriftPub);
       // I'm the initiator, set flood-root-id
-      fromStdOptional(thriftPub.floodRootId_ref(), kvStoreDb.getSptRootId());
+      thriftPub.floodRootId_ref().from_optional(kvStoreDb.getSptRootId());
 
       if (keyDumpParams.keyValHashes_ref().has_value() and
           (*keyDumpParams.prefix_ref()).empty() and
@@ -2155,7 +2155,7 @@ KvStoreDb::processRequestMsgHelper(
     }
     updatePublicationTtl(thriftPub);
     // I'm the initiator, set flood-root-id
-    fromStdOptional(thriftPub.floodRootId_ref(), DualNode::getSptRootId());
+    thriftPub.floodRootId_ref().from_optional(DualNode::getSptRootId());
 
     if (keyDumpParamsVal.keyValHashes_ref() and
         (not keyDumpParamsVal.prefix_ref().has_value() or
@@ -2222,7 +2222,7 @@ KvStoreDb::processFloodTopoGet() noexcept {
     if (info.nexthop.has_value()) {
       nexthop = info.nexthop.value();
     }
-    fromStdOptional(sptInfo.parent_ref(), nexthop);
+    sptInfo.parent_ref().from_optional(nexthop);
     sptInfo.children = kv.second.children();
     sptInfos.infos.emplace(rootId, sptInfo);
   }
@@ -2231,7 +2231,7 @@ KvStoreDb::processFloodTopoGet() noexcept {
   sptInfos.counters = DualNode::getCounters();
 
   // set flood root-id and peers
-  fromStdOptional(sptInfos.floodRootId_ref(), DualNode::getSptRootId());
+  sptInfos.floodRootId_ref().from_optional(DualNode::getSptRootId());
   std::optional<std::string> floodRootId{std::nullopt};
   if (sptInfos.floodRootId_ref().has_value()) {
     floodRootId = sptInfos.floodRootId_ref().value();
@@ -2685,7 +2685,7 @@ KvStoreDb::floodBufferedUpdates() {
     if (kv.first.has_value()) {
       floodRootId = kv.first.value();
     }
-    fromStdOptional(publication.floodRootId_ref(), floodRootId);
+    publication.floodRootId_ref().from_optional(floodRootId);
     for (const auto& key : kv.second) {
       auto kvStoreIt = kvStore_.find(key);
       if (kvStoreIt != kvStore_.end()) {
@@ -2732,7 +2732,7 @@ KvStoreDb::finalizeFullSync(
   params.keyVals = std::move(updates.keyVals);
   params.solicitResponse = false;
   // I'm the initiator, set flood-root-id
-  fromStdOptional(params.floodRootId_ref(), DualNode::getSptRootId());
+  params.floodRootId_ref().from_optional(DualNode::getSptRootId());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
 
   updateRequest.cmd = thrift::Command::KEY_SET;
@@ -2900,7 +2900,7 @@ KvStoreDb::floodPublication(
 
   if (setFloodRoot and not senderId.has_value()) {
     // I'm the initiator, set flood-root-id
-    fromStdOptional(publication.floodRootId_ref(), DualNode::getSptRootId());
+    publication.floodRootId_ref().from_optional(DualNode::getSptRootId());
   }
 
   // prepare thrift structure for flooding purpose
