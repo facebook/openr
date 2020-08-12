@@ -662,6 +662,7 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     thrift::PrefixEntries const& prefixEntries,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   BestRouteSelectionResult ret;
+  std::optional<thrift::MetricVector> bestVector;
   for (auto const& [nodeName, areaToPrefixEntries] : prefixEntries) {
     for (auto const& [area, prefixEntry] : areaToPrefixEntries) {
       auto const& linkState = areaLinkStates.at(area);
@@ -709,15 +710,15 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
                 << toString(prefix) << " for node " << nodeName;
       }
 
-      switch (ret.bestVector.has_value()
+      switch (bestVector.has_value()
                   ? MetricVectorUtils::compareMetricVectors(
-                        metricVector, *(ret.bestVector))
+                        metricVector, *bestVector)
                   : MetricVectorUtils::CompareResult::WINNER) {
       case MetricVectorUtils::CompareResult::WINNER:
         ret.nodes.clear();
         FOLLY_FALLTHROUGH;
       case MetricVectorUtils::CompareResult::TIE_WINNER:
-        ret.bestVector = std::move(metricVector);
+        bestVector = std::move(metricVector);
         ret.bestNode = nodeName;
         ret.bestArea = area;
         FOLLY_FALLTHROUGH;
