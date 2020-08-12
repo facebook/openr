@@ -478,6 +478,20 @@ std::string getNodeNameFromKey(const std::string& key);
 
 std::string createPeerSyncId(const std::string& node, const std::string& area);
 
+/**
+ * Implements Open/R best route selection based on `thrift::PrefixMetrics`. The
+ * metrics are compared and keys representing the best metric are returned. It
+ * is upto the caller of this function to determine the representative best
+ * key, if more than one keys are returned. Choosing a lowest key as the
+ * representative, will be deterministic and easier for implementation.
+ *
+ * NOTE: MetricsWrapper is expected to provide following API
+ *   apache::thrift::field_ref<const thrift::PrefixMetrics&> metrics_ref();
+ */
+template <typename Key, typename MetricsWrapper>
+std::set<Key> selectBestPrefixMetrics(
+    std::unordered_map<Key, MetricsWrapper> const& prefixes);
+
 namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };
@@ -513,5 +527,46 @@ void maybeUpdate(CompareResult& target, CompareResult update);
 CompareResult compareMetricVectors(
     thrift::MetricVector const& l, thrift::MetricVector const& r);
 } // namespace MetricVectorUtils
+
+} // namespace openr
+
+//
+// Implementation of templatized functions
+//
+
+namespace openr {
+
+template <typename Key, typename MetricsWrapper>
+std::set<Key>
+selectBestPrefixMetrics(
+    std::unordered_map<Key, MetricsWrapper> const& prefixes) {
+  // Leveraging tuple for ease of comparision
+  std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{0, 0, 0};
+
+  std::set<Key> bestKeys;
+  for (auto& [key, metricsWrapper] : prefixes) {
+    auto& metrics = metricsWrapper.metrics_ref().value();
+    std::tuple<int32_t, int32_t, int32_t> metricsTuple{
+        metrics.path_preference_ref().value(), /* prefer-higher */
+        metrics.source_preference_ref().value(), /* prefer-higher */
+        metrics.distance_ref().value() * -1 /* prefer-lower */};
+
+    // Skip if this is less than best metrics we've seen so far
+    if (metricsTuple < bestMetricsTuple) {
+      continue;
+    }
+
+    // Clear set and update best metric if this is a new best metric
+    if (metricsTuple > bestMetricsTuple) {
+      bestMetricsTuple = metricsTuple;
+      bestKeys.clear();
+    }
+
+    // Current metrics is either best or same as best metrics we've seen so far
+    bestKeys.emplace(key);
+  }
+
+  return bestKeys;
+}
 
 } // namespace openr

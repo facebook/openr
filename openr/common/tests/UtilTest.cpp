@@ -15,6 +15,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
+#include <openr/if/gen-cpp2/Lsdb_types.h>
 
 using namespace std;
 using namespace openr;
@@ -1013,6 +1014,93 @@ TEST(UtilTest, AddJitter) {
   CHECK(
       t2_jitter_s >= (1 - pct / 100.0) * t2_s and
       t2_jitter_s <= (1 + pct / 100.0) * t2_jitter_s);
+}
+
+TEST(UtilTest, BestMetricsSelection) {
+  auto createMetrics = [](int32_t pp, int32_t sp, int32_t d) {
+    thrift::PrefixEntry prefixEntry;
+    prefixEntry.metrics_ref()->path_preference_ref() = pp;
+    prefixEntry.metrics_ref()->source_preference_ref() = sp;
+    prefixEntry.metrics_ref()->distance_ref() = d;
+    return prefixEntry;
+  };
+
+  //
+  // No entry. Returns empty set
+  //
+  {
+    std::unordered_map<std::string, thrift::PrefixEntry> prefixes;
+    EXPECT_EQ(0, selectBestPrefixMetrics(prefixes).size());
+  }
+
+  //
+  // Single entry. Returns the entry itself
+  //
+  {
+    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+        {"KEY1", createMetrics(0, 0, 0)}};
+    const auto bestKeys = selectBestPrefixMetrics(prefixes);
+    EXPECT_EQ(1, bestKeys.size());
+    EXPECT_EQ(1, bestKeys.count("KEY1"));
+  }
+
+  //
+  // Multiple entries. Single best route, tie on source-preference
+  // (prefer higher)
+  //
+  {
+    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+        {"KEY1", createMetrics(100, 0, 0)},
+        {"KEY2", createMetrics(200, 0, 0)},
+        {"KEY3", createMetrics(300, 0, 0)}};
+    const auto bestKeys = selectBestPrefixMetrics(prefixes);
+    EXPECT_EQ(1, bestKeys.size());
+    EXPECT_EQ(1, bestKeys.count("KEY3"));
+  }
+
+  //
+  // Multiple entries. Single best route, tie on local-preference
+  // (prefer higher)
+  //
+  {
+    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+        {"KEY1", createMetrics(100, 10, 0)},
+        {"KEY2", createMetrics(100, 200, 0)},
+        {"KEY3", createMetrics(100, 30, 0)}};
+    const auto bestKeys = selectBestPrefixMetrics(prefixes);
+    EXPECT_EQ(1, bestKeys.size());
+    EXPECT_EQ(1, bestKeys.count("KEY2"));
+  }
+
+  //
+  // Multiple entries. Single best route, tie on distance (prefer lower)
+  //
+  {
+    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+        {"KEY1", createMetrics(100, 10, 1)},
+        {"KEY2", createMetrics(100, 10, 2)},
+        {"KEY3", createMetrics(100, 10, 3)}};
+    const auto bestKeys = selectBestPrefixMetrics(prefixes);
+    EXPECT_EQ(1, bestKeys.size());
+    EXPECT_EQ(1, bestKeys.count("KEY1"));
+  }
+
+  //
+  // Multiple entries. Multiple best routes
+  //
+  {
+    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+        {"KEY1", createMetrics(100, 10, 1)},
+        {"KEY2", createMetrics(100, 10, 2)},
+        {"KEY3", createMetrics(100, 10, 1)},
+        {"KEY4", createMetrics(100, 10, 1)},
+        {"KEY5", createMetrics(100, 10, 2)}};
+    const auto bestKeys = selectBestPrefixMetrics(prefixes);
+    EXPECT_EQ(3, bestKeys.size());
+    EXPECT_EQ(1, bestKeys.count("KEY1"));
+    EXPECT_EQ(1, bestKeys.count("KEY3"));
+    EXPECT_EQ(1, bestKeys.count("KEY4"));
+  }
 }
 
 int
