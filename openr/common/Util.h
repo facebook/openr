@@ -301,13 +301,6 @@ isMplsLabelValid(int32_t const mplsLabel) {
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
 template <class T>
-void
-fromStdOptional(
-    apache::thrift::optional_field_ref<T&> lhs, const std::optional<T>& rhs) {
-  lhs.from_optional(rhs);
-}
-
-template <class T>
 auto
 castToStd(apache::thrift::optional_field_ref<T> t) {
   return t.to_optional();
