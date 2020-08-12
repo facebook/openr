@@ -145,7 +145,6 @@ enum MetricEntityType {
   ROUTER_ID = 6,
   CLUSTER_LIST_LEN = 7,
   PEER_IP = 8,
-  OPENR_IGP_COST = 9,
 }
 
 /**
@@ -161,7 +160,6 @@ enum MetricEntityPriority {
   ORIGIN_CODE = 6000,
   EXTERNAL_ROUTE = 5000,
   CONFED_EXTERNAL_ROUTE = 4000,
-  OPENR_IGP_COST = 3500,
   ROUTER_ID = 3000,
   CLUSTER_LIST_LEN = 2000,
   PEER_IP = 1000,

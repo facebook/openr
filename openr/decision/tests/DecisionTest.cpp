@@ -885,8 +885,7 @@ TEST(BGPRedistribution, IgpMetric) {
       false /* enableV4 */,
       false /* computeLfaPaths */,
       false /* enableOrderedFib */,
-      false /* bgpDryRun */,
-      true /* bgpUseIgpMetric */);
+      false /* bgpDryRun */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));

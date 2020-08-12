@@ -73,10 +73,6 @@ struct BestRouteSelectionResult {
     }
     return false;
   }
-
-  // TODO: This is not really a part of best route selection, rather best
-  // next-hops selection logic based on forwarding algorithm
-  std::optional<int64_t> bestIgpMetric{std::nullopt};
 };
 
 struct DecisionRouteDb {
@@ -244,8 +240,7 @@ class SpfSolver {
       bool enableV4,
       bool computeLfaPaths,
       bool enableOrderedFib = false,
-      bool bgpDryRun = false,
-      bool bgpUseIgpMetric = false);
+      bool bgpDryRun = false);
   ~SpfSolver();
 
   //

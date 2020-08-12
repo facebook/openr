@@ -244,7 +244,6 @@ struct OpenrConfig {
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
-  103: optional bool bgp_use_igp_metric
 
   /**
    * Configuration to facilitate Open/R <-> BGP route conversions.

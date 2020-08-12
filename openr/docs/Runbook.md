@@ -595,18 +595,3 @@ Serves two purposes
   `LINK_FLAP_MAX_BACKOFF_MS` then all of its history is erased and link gets
   `LINK_FLAP_INITIAL_BACKOFF_MS` next time when it goes down.
 
-
-#### BGP_USE_IGP_METRIC
-
-Boolean flag. This attaches IGP metric for all received BGP routes. This metric
-is used as tie-breaker in MetricVector comparison mimicking BGP attributes.
-Refer to `enum MetricEntityPriority` in `openr/if/Lsdb.thrift` for relative
-order of BGP best path calculation.
-
-IGP metric for a node is calculated as sum of all adjacency metrics on the
-shortest path towards it.
-
-```
-// Set to false by default
-BGP_USE_IGP_METRIC=false
-```

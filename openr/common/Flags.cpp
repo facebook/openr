@@ -139,10 +139,6 @@ DEFINE_bool(
     enable_bgp_route_programming,
     true,
     "Enable programming routes with prefix type BGP to the system FIB");
-DEFINE_bool(
-    bgp_use_igp_metric,
-    false,
-    "Use IGP metric from Open/R for BGP metric vector comparision");
 DEFINE_int32(
     decision_graceful_restart_window_s,
     -1,

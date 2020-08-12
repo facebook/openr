@@ -57,7 +57,6 @@ DECLARE_bool(enable_v4);
 DECLARE_bool(enable_lfa);
 DECLARE_bool(enable_ordered_fib_programming);
 DECLARE_bool(enable_bgp_route_programming);
-DECLARE_bool(bgp_use_igp_metric);
 
 DECLARE_int32(decision_graceful_restart_window_s);
 

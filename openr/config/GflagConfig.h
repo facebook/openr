@@ -208,9 +208,6 @@ class GflagConfig final {
       config.enable_bgp_peering_ref() = FLAGS_enable_plugin;
       config.bgp_config_ref() = getBgpConfig();
       config.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
-      if (auto v = FLAGS_bgp_use_igp_metric) {
-        config.bgp_use_igp_metric_ref() = v;
-      }
       if (FLAGS_add_path) {
         (config.bgp_config_ref()->peers)[0].add_path_ref() =
             static_cast<thrift::AddPath>(FLAGS_add_path);

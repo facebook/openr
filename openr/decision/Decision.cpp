@@ -94,14 +94,12 @@ class SpfSolver::SpfSolverImpl {
       bool enableV4,
       bool computeLfaPaths,
       bool enableOrderedFib,
-      bool bgpDryRun,
-      bool bgpUseIgpMetric)
+      bool bgpDryRun)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
         computeLfaPaths_(computeLfaPaths),
         enableOrderedFib_(enableOrderedFib),
-        bgpDryRun_(bgpDryRun),
-        bgpUseIgpMetric_(bgpUseIgpMetric) {
+        bgpDryRun_(bgpDryRun) {
     // Initialize stat keys
     fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
     fb303::fbData->addStatExportType(
@@ -275,9 +273,6 @@ class SpfSolver::SpfSolverImpl {
   const bool enableOrderedFib_{false};
 
   const bool bgpDryRun_{false};
-
-  // Use IGP metric in metric vector comparision
-  const bool bgpUseIgpMetric_{false};
 };
 
 bool
@@ -677,52 +672,15 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
   std::optional<thrift::MetricVector> bestVector;
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
     auto const& [nodeName, area] = nodeAndArea;
-    auto const& linkState = areaLinkStates.at(area);
-    auto const& mySpfResult = linkState.getSpfResult(myNodeName);
-
-    // Sanity check that OPENR_IGP_COST shouldn't exist
-    if (MetricVectorUtils::getMetricEntityByType(
-            can_throw(*prefixEntry.mv_ref()),
-            static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST))) {
-      LOG(ERROR) << "Received unexpected metric entity OPENR_IGP_COST in metric"
-                 << " vector for prefix " << toString(prefix) << " from node "
-                 << nodeName << ". Ignoring";
-      continue;
-    }
-
-    // Copy is intentional - As we will need to augment metric vector with
-    // IGP_COST
-    thrift::MetricVector metricVector = can_throw(*prefixEntry.mv_ref());
-
-    // Associate IGP_COST to prefixEntry
-    if (bgpUseIgpMetric_) {
-      const auto igpMetric =
-          static_cast<int64_t>(mySpfResult.at(nodeName).metric());
-      if (not ret.bestIgpMetric.has_value() or
-          *(ret.bestIgpMetric) > igpMetric) {
-        ret.bestIgpMetric = igpMetric;
-      }
-      metricVector.metrics_ref()->emplace_back(
-          MetricVectorUtils::createMetricEntity(
-              static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST),
-              static_cast<int64_t>(
-                  thrift::MetricEntityPriority::OPENR_IGP_COST),
-              thrift::CompareType::WIN_IF_NOT_PRESENT,
-              false, /* isBestPathTieBreaker */
-              /* lowest metric wins */
-              {-1 * igpMetric}));
-      VLOG(2) << "Attaching IGP metric of " << igpMetric << " to prefix "
-              << toString(prefix) << " for node " << nodeName;
-    }
-
-    switch (bestVector.has_value() ? MetricVectorUtils::compareMetricVectors(
-                                         metricVector, *bestVector)
-                                   : MetricVectorUtils::CompareResult::WINNER) {
+    switch (bestVector.has_value()
+                ? MetricVectorUtils::compareMetricVectors(
+                      can_throw(*prefixEntry.mv_ref()), *bestVector)
+                : MetricVectorUtils::CompareResult::WINNER) {
     case MetricVectorUtils::CompareResult::WINNER:
       ret.allNodeAreas.clear();
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_WINNER:
-      bestVector = std::move(metricVector);
+      bestVector = can_throw(*prefixEntry.mv_ref());
       ret.bestNodeArea = nodeAndArea;
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_LOOSER:
@@ -1002,9 +960,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
   std::optional<thrift::NextHopThrift> bestLoopbackNextHop;
   if (isBgp) {
     auto bestNextHops = prefixState.getLoopbackVias(
-        {bestRouteSelectionResult.bestNodeArea.first},
-        prefix.first.isV4(),
-        bestRouteSelectionResult.bestIgpMetric);
+        {bestRouteSelectionResult.bestNodeArea.first}, prefix.first.isV4());
     if (bestNextHops.empty()) {
       fb303::fbData->addStatValue(
           "decision.missing_loopback_addr", 1, fb303::SUM);
@@ -1298,15 +1254,10 @@ SpfSolver::SpfSolver(
     bool enableV4,
     bool computeLfaPaths,
     bool enableOrderedFib,
-    bool bgpDryRun,
-    bool bgpUseIgpMetric)
+    bool bgpDryRun)
     : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName,
-          enableV4,
-          computeLfaPaths,
-          enableOrderedFib,
-          bgpDryRun,
-          bgpUseIgpMetric)) {}
+          myNodeName, enableV4, computeLfaPaths, enableOrderedFib, bgpDryRun)) {
+}
 
 SpfSolver::~SpfSolver() {}
 
@@ -1366,8 +1317,7 @@ Decision::Decision(
       tConfig.enable_v4_ref().value_or(false),
       computeLfaPaths,
       tConfig.enable_ordered_fib_programming_ref().value_or(false),
-      bgpDryRun,
-      tConfig.bgp_use_igp_metric_ref().value_or(false));
+      bgpDryRun);
 
   coldStartTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     pendingUpdates_.setNeedsFullRebuild();

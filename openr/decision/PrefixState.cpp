@@ -133,9 +133,7 @@ PrefixState::getPrefixDatabases() const {
 
 std::vector<thrift::NextHopThrift>
 PrefixState::getLoopbackVias(
-    std::unordered_set<std::string> const& nodes,
-    bool const isV4,
-    std::optional<int64_t> const& igpMetric) const {
+    std::unordered_set<std::string> const& nodes, bool const isV4) const {
   std::vector<thrift::NextHopThrift> result;
   result.reserve(nodes.size());
   auto const& hostLoopBacks =
@@ -144,8 +142,8 @@ PrefixState::getLoopbackVias(
     if (!hostLoopBacks.count(node)) {
       LOG(ERROR) << "No loopback for node " << node;
     } else {
-      result.emplace_back(createNextHop(
-          hostLoopBacks.at(node), std::nullopt, igpMetric.value_or(0)));
+      result.emplace_back(
+          createNextHop(hostLoopBacks.at(node), std::nullopt, 0));
     }
   }
   return result;
