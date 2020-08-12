@@ -4314,10 +4314,7 @@ class DecisionTestFixture : public ::testing::Test {
   }
 
   DecisionRouteUpdate
-  recvMyRouteDb(
-      const string& /* myNodeName */,
-      // TODO: Remove unused argument serializer
-      const apache::thrift::CompactSerializer& /* serializer */) {
+  recvRouteUpdates() {
     auto maybeRouteDb = routeUpdatesQueueReader.get();
     EXPECT_FALSE(maybeRouteDb.hasError());
     auto routeDbDelta = maybeRouteDb.value();
@@ -4474,7 +4471,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       std::string(""));
   auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
-  auto routeDbDelta = recvMyRouteDb("1", serializer);
+  auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   // self mpls route, node 2 mpls route and adj12 label route
   EXPECT_EQ(3, routeDbDelta.mplsRoutesToUpdate.size());
@@ -4519,7 +4516,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // validate routers
 
   // receive my local Decision routeDbDelta publication
-  routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
+  routeDbDelta = recvRouteUpdates();
   // only expect to add a route to addr3
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].prefix, toIPNetwork(addr3));
@@ -4582,7 +4579,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   std::sort(routeDbBefore.mplsRoutes.begin(), routeDbBefore.mplsRoutes.end());
 
   sendKvPublication(publication);
-  routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
+  routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
   EXPECT_EQ(1, routeDbDelta.mplsRoutesToDelete.size());
   routeDb = dumpRouteDb({"1"})["1"];
@@ -4612,7 +4609,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // validate routers
 
   // receive my local Decision routeDbDelta publication
-  routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
+  routeDbDelta = recvRouteUpdates();
   // only expect to add a route to addr3
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].prefix, toIPNetwork(addr3));
@@ -4746,7 +4743,7 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       "A");
 
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   //
   // publish area B adj and prefix
@@ -4765,7 +4762,7 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       std::string(""), /*floodRootId */
       "B");
   sendKvPublication(publication);
-  recvMyRouteDb("1" /* node name */, serializer);
+  recvRouteUpdates();
 
   auto routeDb1 = dumpRouteDb({"1"})["1"];
   auto routeDb2 = dumpRouteDb({"2"})["2"];
@@ -4841,7 +4838,7 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       std::string(""), /*floodRootId */
       "B");
   sendKvPublication(publication);
-  recvMyRouteDb("1" /* node name */, serializer);
+  recvRouteUpdates();
 
   routeDb3 = dumpRouteDb({"3"})["3"];
   routeDb4 = dumpRouteDb({"4"})["4"];
@@ -4890,7 +4887,7 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
       "A");
 
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
   auto expectedPrefixDbs = *decision->getDecisionPrefixDbs().get();
 
   //
@@ -4905,7 +4902,7 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
       std::string(""), /*floodRootId */
       "B");
   sendKvPublication(publication);
-  recvMyRouteDb("1" /* node name */, serializer);
+  recvRouteUpdates();
 
   //
   // "1" reditribute addr2 into B
@@ -4966,7 +4963,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
 
   // Expect route update. Verify next-hop weight to be 0 (ECMP)
   {
-    auto updates = recvMyRouteDb("1", serializer);
+    auto updates = recvRouteUpdates();
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
     EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight);
   }
@@ -4997,7 +4994,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
 
   // Expect the route database change with next-hop weight to be 2
   {
-    auto updates = recvMyRouteDb("1", serializer);
+    auto updates = recvRouteUpdates();
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
     EXPECT_EQ(2, updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight);
   }
@@ -5008,7 +5005,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
       ->area_to_weight[kDefaultArea] = 0;
   EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
   {
-    auto updates = recvMyRouteDb("1", serializer);
+    auto updates = recvRouteUpdates();
     EXPECT_EQ(0, updates.unicastRoutesToUpdate.size());
     ASSERT_EQ(1, updates.unicastRoutesToDelete.size());
     EXPECT_EQ(toIPNetwork(addr2), updates.unicastRoutesToDelete.at(0));
@@ -5016,7 +5013,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
 
   // Let the policy expire. Wait for another route database change
   {
-    auto updates = recvMyRouteDb("1", serializer);
+    auto updates = recvRouteUpdates();
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
     EXPECT_EQ(0, updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight);
 
@@ -5127,7 +5124,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       std::string(""));
   auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
-  auto routeDbDelta = recvMyRouteDb("1", serializer);
+  auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   auto routeDb = dumpRouteDb({"1"})["1"];
   auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
@@ -5150,7 +5147,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
-  routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
+  routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   routeDb = dumpRouteDb({"1"})["1"];
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
@@ -5171,7 +5168,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
-  routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
+  routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   routeDb = dumpRouteDb({"1"})["1"];
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
@@ -5196,7 +5193,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
-  routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
+  routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   routeDb = dumpRouteDb({"1"})["1"];
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
@@ -5236,7 +5233,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   EXPECT_EQ(0, counters["decision.route_build_runs.count"]);
 
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   // validate SPF after initial sync, no rebouncing here
   counters = fb303::fbData->getCounters();
@@ -5273,7 +5270,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(4, counters["decision.spf_runs.count"]);
@@ -5289,7 +5286,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(4, counters["decision.spf_runs.count"]);
@@ -5316,7 +5313,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(6, counters["decision.spf_runs.count"]);
@@ -5351,7 +5348,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(6, counters["decision.spf_runs.count"]);
@@ -5479,7 +5476,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
       std::string(""));
 
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   // validate routers
   auto routeMapList = dumpRouteDb({"1", "2", "3"});
@@ -5541,7 +5538,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   // Query new information
   // validate routers
@@ -5629,7 +5626,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
       std::string(""));
 
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   // Query new information
   // validate routers
@@ -5690,7 +5687,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   routeMapList = dumpRouteDb({"1"});
   RouteMap routeMap2;
@@ -5732,7 +5729,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   // Query new information
   // validate routers
@@ -5842,7 +5839,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   }
 
   // Receive RouteUpdate from Decision
-  auto routeUpdates1 = recvMyRouteDb("1", serializer);
+  auto routeUpdates1 = recvRouteUpdates();
   EXPECT_EQ(999, routeUpdates1.unicastRoutesToUpdate.size()); // Route to all
                                                               // nodes except
                                                               // mine
@@ -5862,7 +5859,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   LOG(INFO) << "Advertising prefix update";
   sendKvPublication(newPub);
   // Receive RouteDelta from Decision
-  auto routeUpdates2 = recvMyRouteDb("1", serializer);
+  auto routeUpdates2 = recvRouteUpdates();
   // Expect no routes delta
   EXPECT_EQ(0, routeUpdates2.unicastRoutesToUpdate.size());
 
@@ -5918,7 +5915,7 @@ TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
   std::sort(
       routeDbBefore.unicastRoutes.begin(), routeDbBefore.unicastRoutes.end());
   sendKvPublication(publication0);
-  auto routeDbDelta = recvMyRouteDb("1", serializer);
+  auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(5, routeDbDelta.unicastRoutesToUpdate.size());
   auto routeDb = dumpRouteDb({"1"})["1"];
   std::sort(routeDb.unicastRoutes.begin(), routeDb.unicastRoutes.end());
@@ -5948,13 +5945,13 @@ TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
   auto publication =
       createThriftPublication({}, {"prefix:2"}, {}, {}, std::string(""));
   sendKvPublication(publication);
-  routeDbDelta = recvMyRouteDb("1", serializer);
+  routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
   EXPECT_EQ(5, routeDbDelta.unicastRoutesToDelete.size());
 
   // add 5 routes using old foramt
   sendKvPublication(publication0);
-  routeDbDelta = recvMyRouteDb("1", serializer);
+  routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(5, routeDbDelta.unicastRoutesToUpdate.size());
 
   // re-add 4 routes using per prefix key format, one of the old key must
@@ -5974,7 +5971,7 @@ TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
   publication =
       createThriftPublication({}, {"prefix:2"}, {}, {}, std::string(""));
   sendKvPublication(publication);
-  routeDbDelta = recvMyRouteDb("1", serializer);
+  routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
   EXPECT_EQ(toIPNetwork(addr5), routeDbDelta.unicastRoutesToDelete.at(0));
@@ -6043,7 +6040,7 @@ TEST_F(DecisionTestFixture, Counters) {
       {},
       std::string(""));
   sendKvPublication(publication0);
-  const auto routeDb = recvMyRouteDb("1", serializer);
+  const auto routeDb = recvRouteUpdates();
   for (const auto& uniRoute : routeDb.unicastRoutesToUpdate) {
     EXPECT_NE(
         folly::IPAddress::networkToString(uniRoute.prefix), "10.1.0.0/16");
@@ -6074,7 +6071,7 @@ TEST_F(DecisionTestFixture, Counters) {
       std::string(""));
   sendKvPublication(publication1);
   // wait for update
-  recvMyRouteDb("1", serializer);
+  recvRouteUpdates();
 
   decision->updateGlobalCounters();
   EXPECT_EQ(
