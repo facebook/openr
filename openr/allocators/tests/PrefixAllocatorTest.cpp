@@ -8,12 +8,8 @@
 #include <atomic>
 
 #include <fbzmq/zmq/Common.h>
-#include <folly/ScopeGuard.h>
-#include <folly/Synchronized.h>
-#include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 #include <folly/synchronization/Baton.h>
-#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -30,7 +26,8 @@ using namespace std;
 using namespace folly;
 using namespace openr;
 
-DEFINE_int32(seed_prefix_len, 125, "length of seed prefix");
+// prefix length
+const uint64_t kSeedPrefixLen(125);
 
 // interval for periodic syncs
 const std::chrono::milliseconds kSyncInterval(10);
@@ -41,10 +38,14 @@ const AllocPrefixMarker kAllocPrefixMarker{"allocprefix:"};
 // length of allocated prefix
 const int kAllocPrefixLen = 128;
 
-class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
+class PrefixAllocatorFixture : public ::testing::Test {
  public:
   void
-  SetUp() override {
+  SetUp() override {}
+
+  // Override SetUp() call with parameter passed in
+  virtual void
+  SetUp(thrift::PrefixAllocationMode mode) {
     // threadID constant
     const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
@@ -53,11 +54,11 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     auto tConfig = getBasicOpenrConfig(myNodeName_);
     tConfig.enable_prefix_allocation_ref() = true;
+
     thrift::PrefixAllocationConfig pfxAllocationConf;
-    pfxAllocationConf.loopback_interface = "";
-    pfxAllocationConf.prefix_allocation_mode = GetParam()
-        ? thrift::PrefixAllocationMode::STATIC
-        : thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
+    pfxAllocationConf.loopback_interface_ref() = "";
+    pfxAllocationConf.prefix_allocation_mode_ref() = mode;
+
     tConfig.prefix_allocation_config_ref() = pfxAllocationConf;
     config_ = std::make_shared<Config>(tConfig);
 
@@ -100,10 +101,11 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     prefixAllocator_ = make_unique<PrefixAllocator>(
         config_,
         mockNlHandler_,
+        nlSock_.get(),
         kvStoreWrapper_->getKvStore(),
+        configStore_.get(),
         prefixUpdatesQueue_,
         MonitorSubmitUrl{"inproc://monitor_submit"},
-        configStore_.get(),
         zmqContext_,
         kSyncInterval);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
@@ -239,12 +241,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
   // Create seed prefix
   const auto seedPrefix = folly::IPAddress::createNetwork(
-      folly::sformat("fc00:cafe:babe::/{}", FLAGS_seed_prefix_len));
+      folly::sformat("fc00:cafe:babe::/{}", kSeedPrefixLen));
   const auto newSeedPrefix = folly::IPAddress::createNetwork(
-      folly::sformat("fc00:cafe:b00c::/{}", FLAGS_seed_prefix_len));
+      folly::sformat("fc00:cafe:b00c::/{}", kSeedPrefixLen));
 
   // allocate all subprefixes
-  auto numAllocators = 0x1U << (kAllocPrefixLen - FLAGS_seed_prefix_len);
+  auto numAllocators = 0x1U << (kAllocPrefixLen - kSeedPrefixLen);
 
   // ZMQ Context for IO processing
   fbzmq::Context zmqContext;
@@ -409,7 +411,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         pfxAllocationConf.prefix_allocation_mode =
             thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
         pfxAllocationConf.seed_prefix_ref() =
-            folly::sformat("fc00:cafe:babe::/{}", FLAGS_seed_prefix_len);
+            folly::sformat("fc00:cafe:babe::/{}", kSeedPrefixLen);
         pfxAllocationConf.allocate_prefix_len_ref() = kAllocPrefixLen;
       }
       currTConfig.prefix_allocation_config_ref() = pfxAllocationConf;
@@ -434,10 +436,11 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       auto allocator = make_unique<PrefixAllocator>(
           currConfig,
           mockNlHandler_,
+          nlSock_.get(),
           store->getKvStore(),
+          configStore.get(),
           prefixQueues.at(i),
           MonitorSubmitUrl{"inproc://monitor_submit"},
-          configStore.get(),
           zmqContext,
           kSyncInterval);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
@@ -554,11 +557,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
  * allocation parameters from KvStore and ConfigStore as well as update of
  * seed prefix.
  */
-TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
-  // Return immediately if static allocation parameter is set to true
-  if (GetParam()) {
-    return;
-  }
+TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
+  SetUp(thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE);
 
   folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
@@ -695,11 +695,8 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
  * When the static allocation key is received, prefix allocator should
  * detect a collion and reallocate a new prefix.
  */
-TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
-  // Return immediately if static allocation parameter is set to true
-  if (GetParam()) {
-    return;
-  }
+TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
+  SetUp(thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE);
 
   folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   folly::CIDRNetwork prevAllocPrefix;
@@ -830,11 +827,8 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
 /**
  * Tests static allocation mode of PrefixAllocator
  */
-TEST_P(PrefixAllocatorFixture, StaticAllocation) {
-  // Return immediately if static allocation parameter is set to false
-  if (not GetParam()) {
-    return;
-  }
+TEST_F(PrefixAllocatorFixture, StaticAllocation) {
+  SetUp(thrift::PrefixAllocationMode::STATIC);
 
   thrift::StaticAllocation staticAlloc;
   folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
@@ -1006,7 +1000,43 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   LOG(INFO) << "Step-5: Received withdraw for allocated prefix from KvStore.";
 }
 
-INSTANTIATE_TEST_CASE_P(FixtureTest, PrefixAllocatorFixture, ::testing::Bool());
+TEST_F(PrefixAllocatorFixture, AddRemoveIfAddresses) {
+  SetUp(thrift::PrefixAllocationMode::STATIC);
+
+  const auto ifAddr = fbnl::utils::createIfAddress(1, "192.168.0.3/31");
+  const auto network = ifAddr.getPrefix().value();
+  const std::vector<thrift::IpPrefix> ifPrefixes{toIpPrefix(network)};
+
+  // Add link eth0
+  EXPECT_EQ(0, nlSock_->addLink(fbnl::utils::createLink(1, "eth0")).get());
+
+  // Add address on eth0 and verify
+  {
+    auto retval = prefixAllocator_->semifuture_addRemoveIfAddr(
+        true, std::string("eth0"), ifPrefixes);
+    EXPECT_NO_THROW(std::move(retval).get());
+    auto addrs = nlSock_->getAllIfAddresses().get().value();
+    ASSERT_EQ(1, addrs.size());
+    EXPECT_EQ(ifAddr, addrs.at(0));
+  }
+
+  {
+    auto retval = prefixAllocator_->semifuture_getIfAddrs(
+        std::string("eth0"), AF_INET, RT_SCOPE_UNIVERSE);
+    auto addrs = std::move(retval).get();
+    ASSERT_EQ(1, addrs.size());
+    EXPECT_EQ(network, addrs.at(0));
+  }
+
+  // Remove address from eth0 and verify
+  {
+    auto retval = prefixAllocator_->semifuture_addRemoveIfAddr(
+        false, std::string("eth0"), ifPrefixes);
+    EXPECT_NO_THROW(std::move(retval).get());
+    auto addrs = nlSock_->getAllIfAddresses().get().value();
+    EXPECT_EQ(0, addrs.size());
+  }
+}
 
 TEST(PrefixAllocator, getPrefixCount) {
   {
@@ -1071,7 +1101,6 @@ main(int argc, char* argv[]) {
   folly::init(&argc, &argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InstallFailureSignalHandler();
-  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

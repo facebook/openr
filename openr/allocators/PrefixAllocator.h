@@ -39,11 +39,15 @@ class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
       std::shared_ptr<const Config> config,
+      // TODO: [TO BE DEPRECATED]
       std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
+      // raw ptr for modules
+      fbnl::NetlinkProtocolSocket* nlSock,
       KvStore* kvStore,
+      PersistentStore* configStore,
+      // producer queue
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       const MonitorSubmitUrl& monitorSubmitUrl,
-      PersistentStore* configStore,
       fbzmq::Context& zmqContext,
       std::chrono::milliseconds syncInterval);
 
@@ -66,11 +70,18 @@ class PrefixAllocator : public OpenrEventBase {
   static uint32_t getPrefixCount(
       PrefixAllocationParams const& allocParams) noexcept;
 
- private:
-  //
-  // Private methods
-  //
+  /*
+   * [Netlink Platform] util functions to add/del iface address
+   */
+  folly::SemiFuture<folly::Unit> semifuture_addRemoveIfAddr(
+      const bool isAdd,
+      const std::string& ifName,
+      const std::vector<thrift::IpPrefix>& addrs);
 
+  folly::SemiFuture<std::vector<folly::CIDRNetwork>> semifuture_getIfAddrs(
+      std::string ifName, int16_t family, int16_t scope);
+
+ private:
   // 3 different ways to initialize PrefixAllocator.
   void staticAllocation();
   void dynamicAllocationLeafNode();
@@ -130,13 +141,12 @@ class PrefixAllocator : public OpenrEventBase {
       int scope,
       const std::vector<folly::CIDRNetwork>& prefixes);
 
-  void delIfaceAddr(
-      const std::string& ifName, const folly::CIDRNetwork& prefix);
-
-  void getIfacePrefixes(
-      const std::string& iface,
-      int family,
-      std::vector<folly::CIDRNetwork>& addrs);
+  /*
+   * Synchronous API to query interface index from kernel.
+   * NOTE: We intentionally don't use cache to optimize this call as APIs of
+   * this handlers for add/remove/sync addresses are rarely invoked.
+   */
+  std::optional<int> getIfIndex(const std::string& ifName);
 
   //
   // Const private variables
@@ -179,6 +189,9 @@ class PrefixAllocator : public OpenrEventBase {
   // we'll use this to get the full dump from the KvStore
   // and get and set my assigned prefix
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
+
+  // raw ptr for netlinkProtocolSocket for addr add/del
+  fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 
   // module ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};

@@ -333,6 +333,7 @@ main(int argc, char** argv) {
   }
 
   // Start NetlinkSystemHandler
+  // [TODO: TO BE DEPRECATED]
   auto nlSystemHandler = std::make_shared<NetlinkSystemHandler>(nlSock.get());
 
   const MonitorSubmitUrl monitorSubmitUrl{
@@ -426,10 +427,11 @@ main(int argc, char** argv) {
         std::make_unique<PrefixAllocator>(
             config,
             nlSystemHandler,
+            nlSock.get(),
             kvStore,
+            configStore,
             prefixUpdateRequestQueue,
             monitorSubmitUrl,
-            configStore,
             context,
             Constants::kPrefixAllocatorSyncInterval));
   }

@@ -16,49 +16,6 @@ using namespace ::testing;
 using namespace openr;
 using namespace openr::fbnl;
 
-TEST(SystemHandler, addRemoveIfaceAddresses) {
-  folly::EventBase evb;
-  fbnl::MockNetlinkProtocolSocket nlSock(&evb);
-  NetlinkSystemHandler handler(&nlSock);
-  const auto ifAddr = utils::createIfAddress(1, "192.168.0.3/31");
-  const auto ifPrefix = toIpPrefix(ifAddr.getPrefix().value());
-  const std::vector<thrift::IpPrefix> ifPrefixes{ifPrefix};
-
-  // Add link eth0
-  EXPECT_EQ(0, nlSock.addLink(utils::createLink(1, "eth0")).get());
-
-  // Add address on eth0 and verify
-  {
-    auto retval = handler.semifuture_addIfaceAddresses(
-        std::make_unique<std::string>(std::string("eth0")),
-        std::make_unique<std::vector<thrift::IpPrefix>>(ifPrefixes));
-    EXPECT_NO_THROW(std::move(retval).get());
-    auto addrs = nlSock.getAllIfAddresses().get().value();
-    ASSERT_EQ(1, addrs.size());
-    EXPECT_EQ(ifAddr, addrs.at(0));
-  }
-
-  {
-    auto retval = handler.semifuture_getIfaceAddresses(
-        std::make_unique<std::string>(std::string("eth0")),
-        AF_INET,
-        RT_SCOPE_UNIVERSE);
-    auto addrs = std::move(retval).get();
-    ASSERT_EQ(1, addrs->size());
-    EXPECT_EQ(ifPrefix, addrs->at(0));
-  }
-
-  // Remove address from eth0 and verify
-  {
-    auto retval = handler.semifuture_removeIfaceAddresses(
-        std::make_unique<std::string>(std::string("eth0")),
-        std::make_unique<std::vector<thrift::IpPrefix>>(ifPrefixes));
-    EXPECT_NO_THROW(std::move(retval).get());
-    auto addrs = nlSock.getAllIfAddresses().get().value();
-    EXPECT_EQ(0, addrs.size());
-  }
-}
-
 TEST(SystemHandler, syncIfaceAddresses) {
   folly::EventBase evb;
   fbnl::MockNetlinkProtocolSocket nlSock(&evb);

@@ -37,14 +37,6 @@ class NetlinkSystemHandler {
   NetlinkSystemHandler(const NetlinkSystemHandler&) = delete;
   NetlinkSystemHandler& operator=(const NetlinkSystemHandler&) = delete;
 
-  virtual folly::SemiFuture<folly::Unit> semifuture_addIfaceAddresses(
-      std::unique_ptr<std::string> iface,
-      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs);
-
-  virtual folly::SemiFuture<folly::Unit> semifuture_removeIfaceAddresses(
-      std::unique_ptr<std::string> iface,
-      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs);
-
   virtual folly::SemiFuture<folly::Unit> semifuture_syncIfaceAddresses(
       std::unique_ptr<std::string> iface,
       int16_t family,
@@ -56,14 +48,6 @@ class NetlinkSystemHandler {
       std::unique_ptr<std::string> iface, int16_t family, int16_t scope);
 
  private:
-  /**
-   * Helper function to add/remove addresses
-   */
-  folly::SemiFuture<folly::Unit> addRemoveIfAddresses(
-      const bool isAdd,
-      const std::string& ifName,
-      const std::vector<thrift::IpPrefix>& addrs);
-
   /**
    * Synchronous API to query interface index from kernel.
    * NOTE: We intentionally don't use cache to optimize this call as APIs of

@@ -35,64 +35,6 @@ NetlinkSystemHandler::NetlinkSystemHandler(fbnl::NetlinkProtocolSocket* nlSock)
   CHECK(nlSock);
 }
 
-folly::SemiFuture<folly::Unit>
-NetlinkSystemHandler::semifuture_addIfaceAddresses(
-    std::unique_ptr<std::string> ifName,
-    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) {
-  return addRemoveIfAddresses(true, *ifName, *addrs);
-}
-
-folly::SemiFuture<folly::Unit>
-NetlinkSystemHandler::semifuture_removeIfaceAddresses(
-    std::unique_ptr<std::string> ifName,
-    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) {
-  return addRemoveIfAddresses(false, *ifName, *addrs);
-}
-
-folly::SemiFuture<folly::Unit>
-NetlinkSystemHandler::addRemoveIfAddresses(
-    const bool isAdd,
-    const std::string& ifName,
-    const std::vector<thrift::IpPrefix>& addrs) {
-  LOG(INFO) << (isAdd ? "Adding" : "Removing") << " addresses on interface "
-            << ifName << ", addresses=" << folly::join(",", toString(addrs));
-  // Get iface index
-  const int ifIndex = getIfIndex(ifName).value();
-
-  // Add netlink requests
-  std::vector<folly::SemiFuture<int>> futures;
-  for (const auto& addr : addrs) {
-    fbnl::IfAddressBuilder builder;
-    auto const network = toIPNetwork(addr, false /* applyMask */);
-    builder.setPrefix(network);
-    builder.setIfIndex(ifIndex);
-    if (network.first.isLoopback()) {
-      builder.setScope(RT_SCOPE_HOST);
-    } else if (network.first.isLinkLocal()) {
-      builder.setScope(RT_SCOPE_LINK);
-    } else {
-      builder.setScope(RT_SCOPE_UNIVERSE);
-    }
-    if (isAdd) {
-      futures.emplace_back(nlSock_->addIfAddress(builder.build()));
-    } else {
-      futures.emplace_back(nlSock_->deleteIfAddress(builder.build()));
-    }
-  }
-
-  // Accumulate futures into a single one
-  return collectAll(std::move(futures))
-      .deferValue([](std::vector<folly::Try<int>>&& retvals) {
-        for (auto& retval : retvals) {
-          const int ret = std::abs(retval.value());
-          if (ret != 0 && ret != EEXIST && ret != EADDRNOTAVAIL) {
-            throw fbnl::NlException("Address add/remove failed.", ret);
-          }
-        }
-        return folly::Unit();
-      });
-}
-
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::IpPrefix>>>
 NetlinkSystemHandler::semifuture_getIfaceAddresses(
     std::unique_ptr<std::string> ifName, int16_t family, int16_t scope) {

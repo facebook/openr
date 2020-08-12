@@ -27,10 +27,11 @@ namespace openr {
 PrefixAllocator::PrefixAllocator(
     std::shared_ptr<const Config> config,
     std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
+    fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
+    PersistentStore* configStore,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
-    PersistentStore* configStore,
     fbzmq::Context& zmqContext,
     std::chrono::milliseconds syncInterval)
     : myNodeName_(config->getNodeName()),
@@ -46,10 +47,12 @@ PrefixAllocator::PrefixAllocator(
       prefixForwardingAlgorithm_(
           config->getConfig().prefix_forwarding_algorithm),
       area_(*config->getAreaIds().begin()),
+      nlSock_(nlSock),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl) {
   // check non-empty module ptr
+  CHECK(nlSock_);
   CHECK(configStore_);
   CHECK(kvStore);
 
@@ -649,13 +652,16 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixUpdatesQueue_.push(std::move(request));
 
   // existing global prefixes
-  std::vector<folly::CIDRNetwork> oldPrefixes;
+  std::vector<folly::CIDRNetwork> oldPrefixes{};
   try {
-    getIfacePrefixes(loopbackIfaceName_, prefix.first.family(), oldPrefixes);
-  } catch (const std::exception& e) {
+    oldPrefixes =
+        semifuture_getIfAddrs(
+            loopbackIfaceName_, prefix.first.family(), RT_SCOPE_UNIVERSE)
+            .get();
+  } catch (const fbnl::NlException& ex) {
     LOG(ERROR)
         << "Failed to get iface addresses from NetlinkSystemHandler. Error: "
-        << folly::exceptionStr(e);
+        << folly::exceptionStr(ex);
     return;
   }
 
@@ -720,13 +726,24 @@ PrefixAllocator::withdrawMyPrefix() {
     LOG(INFO) << "Flushing existing addresses from interface "
               << loopbackIfaceName_;
 
+    const auto& prefix = allocParams_->first;
     if (overrideGlobalAddress_) {
       std::vector<folly::CIDRNetwork> addrs;
-      const auto& prefix = allocParams_->first;
       syncIfaceAddrs(
           loopbackIfaceName_, prefix.first.family(), RT_SCOPE_UNIVERSE, addrs);
     } else {
-      delIfaceAddr(loopbackIfaceName_, allocParams_->first);
+      try {
+        // delele interface address
+        semifuture_addRemoveIfAddr(
+            false, loopbackIfaceName_, {toIpPrefix(prefix)})
+            .get();
+      } catch (const fbnl::NlException& ex) {
+        LOG(ERROR)
+            << "Failed to del iface address: "
+            << folly::IPAddress::networkToString(prefix)
+            << " from NetlinkSystemHandler. Error: " << folly::exceptionStr(ex);
+        throw;
+      }
     }
   }
 
@@ -735,25 +752,6 @@ PrefixAllocator::withdrawMyPrefix() {
   request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
   request.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
   prefixUpdatesQueue_.push(std::move(request));
-}
-
-void
-PrefixAllocator::getIfacePrefixes(
-    const std::string& iface,
-    int family,
-    std::vector<folly::CIDRNetwork>& addrs) {
-  CHECK(nlSystemHandler_) << "Null ptr for netlinkSystemHandler";
-  std::vector<thrift::IpPrefix> prefixes =
-      *(nlSystemHandler_
-            ->semifuture_getIfaceAddresses(
-                std::make_unique<std::string>(iface), family, RT_SCOPE_UNIVERSE)
-            .get());
-
-  // transform from IpPrefix to CIDRNetwork
-  addrs.clear();
-  for (const auto& prefix : prefixes) {
-    addrs.emplace_back(toIPNetwork(prefix));
-  }
 }
 
 void
@@ -785,27 +783,99 @@ PrefixAllocator::syncIfaceAddrs(
   }
 }
 
-void
-PrefixAllocator::delIfaceAddr(
-    const std::string& ifName, const folly::CIDRNetwork& prefix) {
-  // transform from CIDRNetwork to IpPrefix
-  std::vector<thrift::IpPrefix> addrs;
-  addrs.emplace_back(toIpPrefix(prefix));
+folly::SemiFuture<std::vector<folly::CIDRNetwork>>
+PrefixAllocator::semifuture_getIfAddrs(
+    std::string ifName, int16_t family, int16_t scope) {
+  LOG(INFO) << "Querying addresses for interface " << ifName
+            << ", family=" << family << ", scope=" << scope;
 
-  try {
-    CHECK(nlSystemHandler_) << "Null ptr for netlinkSystemHandler";
-    nlSystemHandler_
-        ->semifuture_removeIfaceAddresses(
-            std::make_unique<std::string>(ifName),
-            std::make_unique<std::vector<::openr::thrift::IpPrefix>>(addrs))
-        .get();
-  } catch (const std::exception& ex) {
-    LOG(ERROR)
-        << "Failed to del iface address: "
-        << folly::IPAddress::networkToString(prefix)
-        << " from NetlinkSystemHandler. Error: " << folly::exceptionStr(ex);
-    throw;
+  // Get iface index
+  const int ifIndex = getIfIndex(ifName).value();
+
+  return nlSock_->getAllIfAddresses().deferValue(
+      [ifIndex, family, scope](
+          folly::Expected<std::vector<fbnl::IfAddress>, int>&& nlAddrs) {
+        if (nlAddrs.hasError()) {
+          throw fbnl::NlException("Failed fetching addrs", nlAddrs.error());
+        }
+
+        std::vector<folly::CIDRNetwork> addrs{};
+        for (auto& nlAddr : nlAddrs.value()) {
+          if (nlAddr.getIfIndex() != ifIndex) {
+            continue;
+          }
+          // Apply filter on family if specified
+          if (family && nlAddr.getFamily() != family) {
+            continue;
+          }
+          // Apply filter on scope. Must always be specified
+          if (nlAddr.getScope() != scope) {
+            continue;
+          }
+          addrs.emplace_back(nlAddr.getPrefix().value());
+        }
+        return addrs;
+      });
+}
+folly::SemiFuture<folly::Unit>
+PrefixAllocator::semifuture_addRemoveIfAddr(
+    const bool isAdd,
+    const std::string& ifName,
+    const std::vector<thrift::IpPrefix>& addrs) {
+  auto strs = folly::gen::from(addrs) |
+      folly::gen::mapped([](const thrift::IpPrefix& prefix) {
+                return toString(prefix);
+              }) |
+      folly::gen::as<std::vector<std::string>>();
+
+  LOG(INFO) << (isAdd ? "Adding" : "Removing") << " addresses on interface "
+            << ifName << ", addresses=" << folly::join(",", strs);
+  // Get iface index
+  const int ifIndex = getIfIndex(ifName).value();
+
+  // Add netlink requests
+  std::vector<folly::SemiFuture<int>> futures;
+  for (const auto& addr : addrs) {
+    fbnl::IfAddressBuilder builder;
+    auto const network = toIPNetwork(addr, false /* applyMask */);
+    builder.setPrefix(network);
+    builder.setIfIndex(ifIndex);
+    if (network.first.isLoopback()) {
+      builder.setScope(RT_SCOPE_HOST);
+    } else if (network.first.isLinkLocal()) {
+      builder.setScope(RT_SCOPE_LINK);
+    } else {
+      builder.setScope(RT_SCOPE_UNIVERSE);
+    }
+    if (isAdd) {
+      futures.emplace_back(nlSock_->addIfAddress(builder.build()));
+    } else {
+      futures.emplace_back(nlSock_->deleteIfAddress(builder.build()));
+    }
   }
+
+  // Accumulate futures into a single one
+  return collectAll(std::move(futures))
+      .deferValue([](std::vector<folly::Try<int>>&& retvals) {
+        for (auto& retval : retvals) {
+          const int ret = std::abs(retval.value());
+          if (ret != 0 && ret != EEXIST && ret != EADDRNOTAVAIL) {
+            throw fbnl::NlException("Address add/remove failed.", ret);
+          }
+        }
+        return folly::Unit();
+      });
+}
+
+std::optional<int>
+PrefixAllocator::getIfIndex(const std::string& ifName) {
+  auto links = nlSock_->getAllLinks().get().value();
+  for (auto& link : links) {
+    if (link.getLinkName() == ifName) {
+      return link.getIfIndex();
+    }
+  }
+  return std::nullopt;
 }
 
 void
