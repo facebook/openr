@@ -17,15 +17,11 @@
 
 namespace openr {
 
-namespace thrift {
-
 //
-// Aliases for data-structures over thrift objects
+// Aliases for data-structures
 //
 using NodeAndArea = std::pair<std::string, std::string>;
 using PrefixEntries = std::unordered_map<NodeAndArea, thrift::PrefixEntry>;
-
-} // namespace thrift
 
 // KvStore URLs
 BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);

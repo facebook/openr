@@ -155,8 +155,7 @@ class SpfSolver::SpfSolverImpl {
 
   // helpers used in best path calculation
   static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
-      const SpfResult& spfResult,
-      const std::set<thrift::NodeAndArea>& dstNodeAreas);
+      const SpfResult& spfResult, const std::set<NodeAndArea>& dstNodeAreas);
 
   // spf counters
   void updateGlobalCounters();
@@ -172,7 +171,7 @@ class SpfSolver::SpfSolverImpl {
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       BestRouteSelectionResult const& bestRouteSelectionResult,
-      thrift::PrefixEntries const& prefixEntries,
+      PrefixEntries const& prefixEntries,
       bool const isBgp,
       thrift::PrefixForwardingType const& forwardingType,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
@@ -184,7 +183,7 @@ class SpfSolver::SpfSolverImpl {
       const string& myNodeName,
       const thrift::IpPrefix& prefix,
       BestRouteSelectionResult const& bestRouteSelectionResult,
-      thrift::PrefixEntries const& prefixEntries,
+      PrefixEntries const& prefixEntries,
       bool isBgp,
       thrift::PrefixForwardingType const& forwardingType,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
@@ -195,7 +194,7 @@ class SpfSolver::SpfSolverImpl {
       const string& myNodeName,
       const thrift::IpPrefix& prefixThrift,
       const BestRouteSelectionResult& bestRouteSelectionResult,
-      const thrift::PrefixEntries& prefixEntries,
+      const PrefixEntries& prefixEntries,
       const PrefixState& prefixState,
       const bool isBgp,
       std::unordered_set<thrift::NextHopThrift>&& nextHops);
@@ -204,7 +203,7 @@ class SpfSolver::SpfSolverImpl {
   BestRouteSelectionResult runBestPathSelectionBgp(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
-      thrift::PrefixEntries const& prefixEntries,
+      PrefixEntries const& prefixEntries,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
   /**
@@ -213,14 +212,13 @@ class SpfSolver::SpfSolverImpl {
   BestRouteSelectionResult selectBestRoutes(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
-      thrift::PrefixEntries const& prefixEntries,
+      PrefixEntries const& prefixEntries,
       bool const hasBgp,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
   // helper to get min nexthop for a prefix, used in selectKsp2
   std::optional<int64_t> getMinNextHopThreshold(
-      BestRouteSelectionResult nodes,
-      thrift::PrefixEntries const& prefixEntries);
+      BestRouteSelectionResult nodes, PrefixEntries const& prefixEntries);
 
   // Helper to filter overloaded nodes for anycast addresses
   //
@@ -239,7 +237,7 @@ class SpfSolver::SpfSolverImpl {
           Metric /* the distance from the nexthop to the dest */>>
   getNextHopsWithMetric(
       const std::string& srcNodeName,
-      const std::set<thrift::NodeAndArea>& dstNodeAreas,
+      const std::set<NodeAndArea>& dstNodeAreas,
       bool perDestination,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
@@ -250,7 +248,7 @@ class SpfSolver::SpfSolverImpl {
   // mpls action
   std::unordered_set<thrift::NextHopThrift> getNextHopsThrift(
       const std::string& myNodeName,
-      const std::set<thrift::NodeAndArea>& dstNodeAreas,
+      const std::set<NodeAndArea>& dstNodeAreas,
       bool isV4,
       bool perDestination,
       const Metric minMetric,
@@ -258,7 +256,7 @@ class SpfSolver::SpfSolverImpl {
           nextHopNodes,
       std::optional<int32_t> swapLabel,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      thrift::PrefixEntries const& prefixEntries = {}) const;
+      PrefixEntries const& prefixEntries = {}) const;
 
   thrift::StaticRoutes staticRoutes_;
 
@@ -603,7 +601,7 @@ BestRouteSelectionResult
 SpfSolver::SpfSolverImpl::selectBestRoutes(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
-    thrift::PrefixEntries const& prefixEntries,
+    PrefixEntries const& prefixEntries,
     bool const isBgp,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
@@ -631,8 +629,7 @@ SpfSolver::SpfSolverImpl::selectBestRoutes(
 
 std::optional<int64_t>
 SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
-    BestRouteSelectionResult nodes,
-    thrift::PrefixEntries const& prefixEntries) {
+    BestRouteSelectionResult nodes, PrefixEntries const& prefixEntries) {
   std::optional<int64_t> maxMinNexthopForPrefix = std::nullopt;
   for (const auto& nodeArea : nodes.allNodeAreas) {
     const auto& prefixEntry = prefixEntries.at(nodeArea);
@@ -674,7 +671,7 @@ BestRouteSelectionResult
 SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
-    thrift::PrefixEntries const& prefixEntries,
+    PrefixEntries const& prefixEntries,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   BestRouteSelectionResult ret;
   std::optional<thrift::MetricVector> bestVector;
@@ -716,7 +713,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     BestRouteSelectionResult const& bestRouteSelectionResult,
-    thrift::PrefixEntries const& prefixEntries,
+    PrefixEntries const& prefixEntries,
     bool const isBgp,
     thrift::PrefixForwardingType const& forwardingType,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
@@ -820,7 +817,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
     const string& myNodeName,
     const thrift::IpPrefix& prefix,
     BestRouteSelectionResult const& bestRouteSelectionResult,
-    thrift::PrefixEntries const& prefixEntries,
+    PrefixEntries const& prefixEntries,
     bool isBgp,
     thrift::PrefixForwardingType const& forwardingType,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
@@ -945,7 +942,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
     const string& myNodeName,
     const thrift::IpPrefix& prefixThrift,
     const BestRouteSelectionResult& bestRouteSelectionResult,
-    const thrift::PrefixEntries& prefixEntries,
+    const PrefixEntries& prefixEntries,
     const PrefixState& prefixState,
     const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops) {
@@ -1028,8 +1025,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
 
 std::pair<Metric, std::unordered_set<std::string>>
 SpfSolver::SpfSolverImpl::getMinCostNodes(
-    const SpfResult& spfResult,
-    const std::set<thrift::NodeAndArea>& dstNodeAreas) {
+    const SpfResult& spfResult, const std::set<NodeAndArea>& dstNodeAreas) {
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
   // find the set of the closest nodes to our destination
@@ -1059,7 +1055,7 @@ std::pair<
         Metric /* the distance from the nexthop to the dest */>>
 SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
     const std::string& myNodeName,
-    const std::set<thrift::NodeAndArea>& dstNodeAreas,
+    const std::set<NodeAndArea>& dstNodeAreas,
     bool perDestination,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   // build up next hop nodes both nodes that are along a shortest path to the
@@ -1146,7 +1142,7 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
 std::unordered_set<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getNextHopsThrift(
     const std::string& myNodeName,
-    const std::set<thrift::NodeAndArea>& dstNodeAreas,
+    const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
     bool perDestination,
     const Metric minMetric,
@@ -1154,15 +1150,14 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
         nextHopNodes,
     std::optional<int32_t> swapLabel,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
-    thrift::PrefixEntries const& prefixEntries) const {
+    PrefixEntries const& prefixEntries) const {
   CHECK(not nextHopNodes.empty());
 
   std::unordered_set<thrift::NextHopThrift> nextHops;
   for (const auto& [area, linkState] : areaLinkStates) {
     for (const auto& link : linkState.linksFromNode(myNodeName)) {
-      for (const auto& [dstNode, dstArea] : perDestination
-               ? dstNodeAreas
-               : std::set<thrift::NodeAndArea>{{"", ""}}) {
+      for (const auto& [dstNode, dstArea] :
+           perDestination ? dstNodeAreas : std::set<NodeAndArea>{{"", ""}}) {
         // Only consider destinations within the area
         if (not dstArea.empty() and area != dstArea) {
           continue;

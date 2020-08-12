@@ -633,8 +633,7 @@ getBuildInfoThrift() noexcept {
 }
 
 std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
-getPrefixForwardingTypeAndAlgorithm(
-    const thrift::PrefixEntries& prefixEntries) {
+getPrefixForwardingTypeAndAlgorithm(const PrefixEntries& prefixEntries) {
   std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm> r;
   r.first = thrift::PrefixForwardingType::SR_MPLS;
   r.second = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;

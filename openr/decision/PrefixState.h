@@ -21,7 +21,7 @@ namespace openr {
 
 class PrefixState {
  public:
-  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntries> const&
+  std::unordered_map<thrift::IpPrefix, PrefixEntries> const&
   prefixes() const {
     return prefixes_;
   }
@@ -53,10 +53,10 @@ class PrefixState {
 
  private:
   // TODO: Maintain shared_ptr for `thrift::PrefixEntry` within
-  // `thrift::PrefixEntries` to avoid data-copy for best metric selection and
+  // `PrefixEntries` to avoid data-copy for best metric selection and
   // route re-distribution
   // For each prefix in the network, stores a set of nodes that advertise it
-  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntries> prefixes_;
+  std::unordered_map<thrift::IpPrefix, PrefixEntries> prefixes_;
   std::unordered_map<
       std::string /* node */,
       std::unordered_map<std::string /* area */, std::set<thrift::IpPrefix>>>

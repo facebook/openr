@@ -284,7 +284,7 @@ thrift::BuildInfo getBuildInfoThrift() noexcept;
  * forwarding type and algorithm with the lowest enum value will be picked.
  */
 std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
-getPrefixForwardingTypeAndAlgorithm(const thrift::PrefixEntries& prefixEntries);
+getPrefixForwardingTypeAndAlgorithm(const PrefixEntries& prefixEntries);
 
 /**
  * Validates that label is 20 bit only and other bits are not set

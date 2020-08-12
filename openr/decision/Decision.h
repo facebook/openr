@@ -55,11 +55,11 @@ struct BestRouteSelectionResult {
   // Representing all `<Node, Area>` pair announcing the best-metrics
   // NOTE: Using `std::set` helps ensuring uniqueness and ease code for electing
   // the best entry in some-cases.
-  std::set<thrift::NodeAndArea> allNodeAreas;
+  std::set<NodeAndArea> allNodeAreas;
 
   // The best entry among all entries with best-metrics. This should be used
   // for re-distributing across areas.
-  thrift::NodeAndArea bestNodeArea;
+  NodeAndArea bestNodeArea;
 
   /**
    * Function to check if provide node is one of the best node

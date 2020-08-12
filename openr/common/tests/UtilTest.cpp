@@ -797,7 +797,7 @@ TEST(UtilTest, MplsActionValidate) {
 }
 
 TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
-  thrift::PrefixEntries prefixes;
+  PrefixEntries prefixes;
 
   // Default case (empty entries)
   EXPECT_EQ(
