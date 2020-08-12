@@ -455,14 +455,36 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
  * 1. Inject prefix1 with client-bgp - Verify KvStore
  * 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
  * 3. Withdraw prefix1 with client-loopback - Verify KvStore
- * 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+ * 4. Withdraw prefix1 with client-bgp - Verify KvStore
+ * 5. Withdraw prefix1 with client-default - Verify KvStore
  */
 TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
-  const auto loopback_prefix =
-      createPrefixEntry(addr1, thrift::PrefixType::LOOPBACK);
-  const auto default_prefix =
-      createPrefixEntry(addr1, thrift::PrefixType::DEFAULT);
-  const auto bgp_prefix = createPrefixEntry(addr1, thrift::PrefixType::BGP);
+  auto createMetrics = [](int32_t pp, int32_t sp, int32_t d) {
+    thrift::PrefixMetrics metrics;
+    metrics.path_preference_ref() = pp;
+    metrics.source_preference_ref() = sp;
+    metrics.distance_ref() = d;
+    return metrics;
+  };
+  auto createPrefixEntryWithMetrics = [](thrift::IpPrefix const& prefix,
+                                         thrift::PrefixType const& type,
+                                         thrift::PrefixMetrics const& metrics) {
+    thrift::PrefixEntry entry;
+    entry.prefix_ref() = prefix;
+    entry.type_ref() = type;
+    entry.metrics_ref() = metrics;
+    return entry;
+  };
+
+  //
+  // Order of prefix-entries -> loopback > bgp > default
+  //
+  const auto loopback_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
+  const auto default_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
+  const auto bgp_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
 
   std::string keyStr{"prefix:node-1"};
   keyStr = PrefixKey(
@@ -528,18 +550,27 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   //
   // 3. Withdraw prefix1 with client-loopback - Verify KvStore
   //
-  expectedPrefix = default_prefix;
+  expectedPrefix = bgp_prefix;
   gotExpected = false;
   prefixManager->withdrawPrefixes({loopback_prefix}).get();
   baton.wait();
   baton.reset();
 
   //
-  // 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+  // 4. Withdraw prefix1 with client-bgp - Verify KvStore
+  //
+  expectedPrefix = default_prefix;
+  gotExpected = true;
+  prefixManager->withdrawPrefixes({bgp_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 4. Withdraw prefix1 with client-default - Verify KvStore
   //
   expectedPrefix = std::nullopt;
   gotExpected = true;
-  prefixManager->withdrawPrefixes({bgp_prefix, default_prefix}).get();
+  prefixManager->withdrawPrefixes({default_prefix}).get();
   baton.wait();
   baton.reset();
 }

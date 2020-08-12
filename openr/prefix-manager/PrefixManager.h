@@ -99,6 +99,11 @@ class PrefixManager final : public OpenrEventBase {
         : tPrefixEntry(std::forward<TPrefixEntry>(tPrefixEntry)),
           dstAreas(std::forward<AreaSet>(dstAreas)) {}
 
+    apache::thrift::field_ref<const thrift::PrefixMetrics&>
+    metrics_ref() const& {
+      return tPrefixEntry.metrics_ref();
+    }
+
     bool
     operator==(const PrefixEntry& other) const {
       return tPrefixEntry == other.tPrefixEntry && dstAreas == other.dstAreas;
@@ -131,7 +136,8 @@ class PrefixManager final : public OpenrEventBase {
 
   // add entry.tPrefixEntry in entry.dstAreas kvstore, return a set of per
   // prefix key name for successful injected areas
-  std::unordered_set<std::string> updateKvStorePrefixEntry(PrefixEntry& entry);
+  std::unordered_set<std::string> updateKvStorePrefixEntry(
+      PrefixEntry const& entry);
 
   // Update persistent store with non-ephemeral prefix entries
   void persistPrefixDb();
@@ -176,9 +182,10 @@ class PrefixManager final : public OpenrEventBase {
   // exists for a given prefix, lowest prefix-type is preferred. This is to
   // bring deterministic behavior for advertising routes.
   // IMP: Ordered
-  std::
-      unordered_map<thrift::IpPrefix, std::map<thrift::PrefixType, PrefixEntry>>
-          prefixMap_;
+  std::unordered_map<
+      thrift::IpPrefix,
+      std::unordered_map<thrift::PrefixType, PrefixEntry>>
+      prefixMap_;
   // TODO: tie break on attributes first, then choose the lowest prefix-type.
   // Redistribute routes could come from remote node from area1, but showed as
   // originated by me in area2. If I start to originate same prefix, I'll have

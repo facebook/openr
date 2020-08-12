@@ -237,7 +237,7 @@ PrefixManager::persistPrefixDb() {
 }
 
 std::unordered_set<std::string>
-PrefixManager::updateKvStorePrefixEntry(PrefixEntry& entry) {
+PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
   std::unordered_set<std::string> prefixKeys;
 
   auto dstAreas = entry.dstAreas; // intended copy
@@ -275,24 +275,17 @@ void
 PrefixManager::syncKvStore() {
   std::vector<std::pair<std::string, std::string>> keyVals;
   std::unordered_set<std::string> nowAdvertisingKeys;
-  std::unordered_set<thrift::IpPrefix> nowAdvertisingPrefixes;
 
   if (perPrefixKeys_) {
-    for (auto& [prefix, typeToPrefixes] : prefixMap_) {
-      // TODO: tie break on prefix attributes
-      for (auto& [type, entry] : typeToPrefixes) {
-        if (not nowAdvertisingPrefixes.count(prefix)) {
-          addPerfEventIfNotExist(
-              addingEvents_[type][prefix], "UPDATE_KVSTORE_THROTTLED");
-          nowAdvertisingPrefixes.emplace(prefix);
-          for (const auto& key : updateKvStorePrefixEntry(entry)) {
-            nowAdvertisingKeys.emplace(key);
-            keysToClear_.erase(key);
-          }
-        } else {
-          addPerfEventIfNotExist(
-              addingEvents_[type][prefix], "COVERED_BY_HIGHER_TYPE");
-        }
+    for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
+      CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
+      auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
+      auto& bestEntry = typeToPrefixes.at(bestType);
+      addPerfEventIfNotExist(
+          addingEvents_[bestType][prefix], "UPDATE_KVSTORE_THROTTLED");
+      for (const auto& key : updateKvStorePrefixEntry(bestEntry)) {
+        nowAdvertisingKeys.emplace(key);
+        keysToClear_.erase(key);
       }
     }
   } else {
@@ -300,22 +293,17 @@ PrefixManager::syncKvStore() {
     prefixDb.thisNodeName = nodeId_;
     thrift::PerfEvents* mostRecentEvents = nullptr;
     for (auto& [prefix, typeToPrefixes] : prefixMap_) {
-      for (auto& [type, entry] : typeToPrefixes) {
-        if (not nowAdvertisingPrefixes.count(prefix)) {
-          auto& perfEvent = addingEvents_[type][prefix];
-          addPerfEventIfNotExist(perfEvent, "UPDATE_KVSTORE_THROTTLED");
-          if (nullptr == mostRecentEvents or
-              perfEvent.events_ref()->back().unixTs_ref().value() >
-                  mostRecentEvents->events_ref()->back().unixTs_ref().value()) {
-            mostRecentEvents = &perfEvent;
-          }
-          prefixDb.prefixEntries_ref()->emplace_back(entry.tPrefixEntry);
-          nowAdvertisingPrefixes.emplace(prefix);
-        } else {
-          addPerfEventIfNotExist(
-              addingEvents_[type][prefix], "COVERED_BY_HIGHER_TYPE");
-        }
+      CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
+      auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
+      auto& bestEntry = typeToPrefixes.at(bestType);
+      auto& perfEvent = addingEvents_[bestType][prefix];
+      addPerfEventIfNotExist(perfEvent, "UPDATE_KVSTORE_THROTTLED");
+      if (nullptr == mostRecentEvents or
+          perfEvent.events_ref()->back().unixTs_ref().value() >
+              mostRecentEvents->events_ref()->back().unixTs_ref().value()) {
+        mostRecentEvents = &perfEvent;
       }
+      prefixDb.prefixEntries_ref()->emplace_back(bestEntry.tPrefixEntry);
     }
     if (enablePerfMeasurement_ and nullptr != mostRecentEvents) {
       prefixDb.perfEvents_ref() = *mostRecentEvents;
