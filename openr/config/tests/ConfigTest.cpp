@@ -542,6 +542,8 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isBgpPeeringEnabled());
     // enable_flood_optimization
     EXPECT_FALSE(config.isFloodOptimizationEnabled());
+    // enable_best_route_selection
+    EXPECT_FALSE(config.isBestRouteSelectionEnabled());
 
     // getSparkConfig
     EXPECT_EQ(tConfig.spark_config, config.getSparkConfig());

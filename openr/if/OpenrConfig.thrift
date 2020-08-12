@@ -237,6 +237,10 @@ struct OpenrConfig {
   26: bool enable_kvstore_thrift = 0
   27: bool enable_periodic_sync = 1
 
+  # Flag for enabling best route selection based on PrefixMetrics
+  # TODO: This is temporary & will go away once new prefix metrics is rolled out
+  51: bool enable_best_route_selection = 0
+
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
