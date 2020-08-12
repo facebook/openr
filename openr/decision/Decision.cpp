@@ -318,7 +318,36 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   // Calculate unicast route best paths: IP and IP2MPLS routes
   //
 
-  for (const auto& [prefix, prefixEntries] : prefixState.prefixes()) {
+  for (const auto& [prefix, allPrefixEntries] : prefixState.prefixes()) {
+    //
+    // Create list of prefix-entries from reachable nodes only
+    // NOTE: We're copying prefix-entries and it can be expensive. Using
+    // pointers for storing prefix information can be efficient (CPU & Memory)
+    //
+    auto prefixEntries = folly::copy(allPrefixEntries);
+    for (auto& [area, linkState] : areaLinkStates) {
+      auto const& mySpfResult = linkState.getSpfResult(myNodeName);
+
+      // Delete entries of unreachable nodes from prefixEntries
+      for (auto it = prefixEntries.begin(); it != prefixEntries.end();) {
+        const auto& [prefixNode, prefixArea] = it->first;
+        if (area != prefixArea || mySpfResult.count(prefixNode)) {
+          ++it; // retain
+        } else {
+          it = prefixEntries.erase(it); // erase the unreachable prefix entry
+        }
+      }
+    }
+
+    // Skip if no valid prefixes
+    if (prefixEntries.empty()) {
+      VLOG(2) << "Skipping route to " << toString(prefix)
+              << " with no reachable node.";
+      fb303::fbData->addStatValue(
+          "decision.no_route_to_prefix", 1, fb303::COUNT);
+      continue;
+    }
+
     // Sanity check for V4 prefixes
     const bool isV4Prefix =
         prefix.prefixAddress.addr.size() == folly::IPAddressV4::byteCount();
@@ -578,35 +607,19 @@ SpfSolver::SpfSolverImpl::selectBestRoutes(
     thrift::PrefixEntries const& prefixEntries,
     bool const isBgp,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
+  CHECK(prefixEntries.size()) << "No prefixes for best route selection";
   BestRouteSelectionResult ret;
 
   // TODO: Perform metrics selection here. Common for both Open/R or BGP
-  // If it is openr route, all nodes are considered as best nodes.
   if (isBgp) {
     ret = runBestPathSelectionBgp(
         myNodeName, prefix, prefixEntries, areaLinkStates);
   } else {
+    // If it is openr route, all nodes are considered as best nodes.
     for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-      auto const& [node, area] = nodeAndArea;
-      auto const& linkState = areaLinkStates.at(area);
-      auto const& mySpfResult = linkState.getSpfResult(myNodeName);
-
-      // Skip unreachable nodes
-      auto it = mySpfResult.find(node);
-      if (it == mySpfResult.end()) {
-        LOG(ERROR) << "No route to " << node << ". Skipping considering this.";
-        // skip if no route to node
-        continue;
-      }
-
-      // choose lowest node name
-      if (ret.allNodeAreas.empty() or nodeAndArea < ret.bestNodeArea) {
-        ret.bestNodeArea = nodeAndArea;
-      }
-
       ret.allNodeAreas.emplace(nodeAndArea);
     }
-
+    ret.bestNodeArea = *ret.allNodeAreas.begin();
     ret.success = true;
   }
 
@@ -667,15 +680,6 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     auto const& linkState = areaLinkStates.at(area);
     auto const& mySpfResult = linkState.getSpfResult(myNodeName);
 
-    // Skip unreachable nodes
-    auto it = mySpfResult.find(nodeName);
-    if (it == mySpfResult.end()) {
-      LOG(ERROR) << "No route to " << nodeName
-                 << ". Skipping considering this.";
-      // skip if no route to node
-      continue;
-    }
-
     // Sanity check that OPENR_IGP_COST shouldn't exist
     if (MetricVectorUtils::getMetricEntityByType(
             can_throw(*prefixEntry.mv_ref()),
@@ -692,7 +696,8 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
 
     // Associate IGP_COST to prefixEntry
     if (bgpUseIgpMetric_) {
-      const auto igpMetric = static_cast<int64_t>(it->second.metric());
+      const auto igpMetric =
+          static_cast<int64_t>(mySpfResult.at(nodeName).metric());
       if (not ret.bestIgpMetric.has_value() or
           *(ret.bestIgpMetric) > igpMetric) {
         ret.bestIgpMetric = igpMetric;

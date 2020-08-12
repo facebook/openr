@@ -6057,10 +6057,10 @@ TEST_F(DecisionTestFixture, Counters) {
   EXPECT_EQ(counters.at("decision.num_prefixes"), 9);
   EXPECT_EQ(counters.at("decision.num_nodes_v4_loopbacks"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes_v6_loopbacks"), 4);
-  EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 2);
   EXPECT_EQ(counters.at("decision.missing_loopback_addr.sum.60"), 1);
   EXPECT_EQ(counters.at("decision.incompatible_forwarding_type.count.60"), 1);
-  EXPECT_EQ(counters.at("decision.skipped_unicast_route.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.skipped_unicast_route.count.60"), 0);
   EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);
   EXPECT_EQ(counters.at("decision.no_route_to_label.count.60"), 1);
 
