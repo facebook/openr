@@ -177,15 +177,8 @@ class PrefixManager final : public OpenrEventBase {
   // bring deterministic behavior for advertising routes.
   // IMP: Ordered
   std::
-      map<thrift::PrefixType, std::unordered_map<thrift::IpPrefix, PrefixEntry>>
+      unordered_map<thrift::IpPrefix, std::map<thrift::PrefixType, PrefixEntry>>
           prefixMap_;
-  // TODO: this could be <prefix, <type, OriginatePrefix>> structure
-  //   std::unordered_map<
-  //       folly::CIDRNetwork, /* prefix */
-  //       std::unordered_map<
-  //           thrift::PrefixType, /* different openr attributes */
-  //           OriginatePrefix>>
-  //       prefixMap_;
   // TODO: tie break on attributes first, then choose the lowest prefix-type.
   // Redistribute routes could come from remote node from area1, but showed as
   // originated by me in area2. If I start to originate same prefix, I'll have
@@ -199,7 +192,7 @@ class PrefixManager final : public OpenrEventBase {
   // anything we no longer wish to advertise
   std::unordered_set<std::string> keysToClear_;
 
-  // perfEvents related to a given prefisEntry
+  // perfEvents related to a given prefixEntry
   std::unordered_map<
       thrift::PrefixType,
       std::unordered_map<thrift::IpPrefix, thrift::PerfEvents>>
