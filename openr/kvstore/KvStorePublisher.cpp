@@ -54,8 +54,11 @@ void
 KvStorePublisher::publish(const thrift::Publication& pub) {
   if ((not filter_.keys_ref().has_value() or (*filter_.keys_ref()).empty()) and
       (not filter_.originatorIds_ref().has_value() or
-       (*filter_.originatorIds_ref()).empty())) {
-    // No filtering criteria. Accept all updates.
+       (*filter_.originatorIds_ref()).empty()) and
+      not*filter_.ignoreTtl_ref()) {
+    // No filtering criteria. Accept all updates as TTL updates are not be
+    // to be updated. If we don't optimize here, we will have go through
+    // key values of a publication and copy them.
     auto filteredPub = std::make_unique<thrift::Publication>(pub);
     publisher_.next(std::move(*filteredPub));
     return;
@@ -90,7 +93,8 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   for (auto& kv : pub.keyVals) {
     auto& key = kv.first;
     auto& val = kv.second;
-    if (not val.value_ref().has_value()) {
+    if (*filter_.ignoreTtl_ref() and not val.value_ref().has_value()) {
+      // ignore TTL updates
       continue;
     }
 
