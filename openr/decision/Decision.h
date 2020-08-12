@@ -52,13 +52,27 @@ struct BestRouteSelectionResult {
   // TODO: Remove once we move to metrics selection
   bool success{false};
 
-  // TODO: Create `set<pair<best-node, best-area>>` instead of two separate
-  // sets. Two separate sets loses information about area-node relationship and
-  // may generate more results.
-  std::string bestNode{""};
-  std::string bestArea{""};
-  std::set<std::string> nodes;
-  std::set<std::string> areas;
+  // Representing all `<Node, Area>` pair announcing the best-metrics
+  // NOTE: Using `std::set` helps ensuring uniqueness and ease code for electing
+  // the best entry in some-cases.
+  std::set<thrift::NodeAndArea> allNodeAreas;
+
+  // The best entry among all entries with best-metrics. This should be used
+  // for re-distributing across areas.
+  thrift::NodeAndArea bestNodeArea;
+
+  /**
+   * Function to check if provide node is one of the best node
+   */
+  bool
+  hasNode(const std::string& node) const {
+    for (auto& [bestNode, _] : allNodeAreas) {
+      if (node == bestNode) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // TODO: This is not really a part of best route selection, rather best
   // next-hops selection logic based on forwarding algorithm

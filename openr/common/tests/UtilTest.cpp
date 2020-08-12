@@ -803,40 +803,43 @@ TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node1"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
-  prefixes["node2"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
-  prefixes["node3"]["area1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes[{"node1", "area1"}] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes[{"node2", "area1"}] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes[{"node3", "area1"}] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
 
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node3"]["area1"].forwardingType_ref() = FwdType::SR_MPLS;
+  prefixes[{"node3", "area1"}].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node2"]["area1"].forwardingType_ref() = FwdType::SR_MPLS;
+  prefixes[{"node2", "area1"}].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node1"]["area1"].forwardingType_ref() = FwdType::SR_MPLS;
+  prefixes[{"node1", "area1"}].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node3"]["area1"].forwardingAlgorithm_ref() = FwdAlgo::KSP2_ED_ECMP;
+  prefixes[{"node3", "area1"}].forwardingAlgorithm_ref() =
+      FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node2"]["area1"].forwardingAlgorithm_ref() = FwdAlgo::KSP2_ED_ECMP;
+  prefixes[{"node2", "area1"}].forwardingAlgorithm_ref() =
+      FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm(prefixes));
 
-  prefixes["node1"]["area1"].forwardingAlgorithm_ref() = FwdAlgo::KSP2_ED_ECMP;
+  prefixes[{"node1", "area1"}].forwardingAlgorithm_ref() =
+      FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(
           FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),

@@ -8,10 +8,24 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+#include <utility>
 
 #include <boost/serialization/strong_typedef.hpp>
 
+#include <openr/if/gen-cpp2/Lsdb_types.h>
+
 namespace openr {
+
+namespace thrift {
+
+//
+// Aliases for data-structures over thrift objects
+//
+using NodeAndArea = std::pair<std::string, std::string>;
+using PrefixEntries = std::unordered_map<NodeAndArea, thrift::PrefixEntry>;
+
+} // namespace thrift
 
 // KvStore URLs
 BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);

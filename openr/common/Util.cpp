@@ -644,15 +644,13 @@ getPrefixForwardingTypeAndAlgorithm(
             thrift::PrefixForwardingAlgorithm::SP_ECMP};
   }
 
-  for (auto const& [_, areaToPrefixEntries] : prefixEntries) {
-    for (auto const& [_, prefixEntry] : areaToPrefixEntries) {
-      r.first = std::min(r.first, *prefixEntry.forwardingType_ref());
-      r.second = std::min(r.second, *prefixEntry.forwardingAlgorithm_ref());
-      // Optimization case for most common algorithm and forwarding type
-      if (r.first == thrift::PrefixForwardingType::IP &&
-          r.second == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
-        return r;
-      }
+  for (auto const& [_, prefixEntry] : prefixEntries) {
+    r.first = std::min(r.first, *prefixEntry.forwardingType_ref());
+    r.second = std::min(r.second, *prefixEntry.forwardingAlgorithm_ref());
+    // Optimization case for most common algorithm and forwarding type
+    if (r.first == thrift::PrefixForwardingType::IP &&
+        r.second == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
+      return r;
     }
   }
 

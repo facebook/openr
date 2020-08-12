@@ -37,6 +37,8 @@ std::unordered_set<thrift::IpPrefix>
 PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   std::unordered_set<thrift::IpPrefix> changed;
 
+  auto const nodeAndArea =
+      std::make_pair(*prefixDb.thisNodeName_ref(), *prefixDb.area_ref());
   auto const& nodeName = prefixDb.thisNodeName;
   auto const& area = prefixDb.area;
 
@@ -61,21 +63,7 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
             << nodeName << " from area " << area;
 
     auto& entriesByOriginator = prefixes_.at(prefix);
-
-    // skip duplicate withdrawn
-    if (not entriesByOriginator.count(nodeName)) {
-      continue;
-    }
-
-    // remove route from advertised from <node, area>
-    entriesByOriginator.at(nodeName).erase(area);
-
-    // remove node map if routes from all areas are withdrawn
-    if (entriesByOriginator.at(nodeName).empty()) {
-      entriesByOriginator.erase(nodeName);
-    }
-
-    // remove prefix if routes are withdrawn
+    entriesByOriginator.erase(nodeAndArea);
     if (entriesByOriginator.empty()) {
       prefixes_.erase(prefix);
     }
@@ -88,15 +76,16 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   for (const auto& prefixEntry : prefixDb.prefixEntries) {
     auto& entriesByOriginator = prefixes_[prefixEntry.prefix];
 
-    // This prefix has no change. Skip rest of code!
-    if (entriesByOriginator.count(nodeName) > 0 and
-        entriesByOriginator.at(nodeName).count(area) > 0 and
-        entriesByOriginator.at(nodeName).at(area) == prefixEntry) {
+    // Skip rest of code, if prefix exists and has no change
+    auto [it, inserted] = entriesByOriginator.emplace(nodeAndArea, prefixEntry);
+    if (not inserted && it->second == prefixEntry) {
       continue;
     }
 
-    // Add or Update prefix
-    entriesByOriginator[nodeName][area] = prefixEntry;
+    // Update prefix
+    if (not inserted) {
+      it->second = prefixEntry;
+    }
     changed.insert(prefixEntry.prefix);
 
     VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
@@ -134,7 +123,7 @@ PrefixState::getPrefixDatabases() const {
       prefixDb.area_ref() = area;
       for (auto const& prefix : prefixes) {
         prefixDb.prefixEntries.emplace_back(
-            prefixes_.at(prefix).at(node).at(area));
+            prefixes_.at(prefix).at({node, area}));
       }
       prefixDatabases.emplace(node, std::move(prefixDb));
     }

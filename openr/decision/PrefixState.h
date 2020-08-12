@@ -12,11 +12,13 @@
 #include <vector>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 
 namespace openr {
+
 class PrefixState {
  public:
   std::unordered_map<thrift::IpPrefix, thrift::PrefixEntries> const&

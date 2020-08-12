@@ -4780,7 +4780,8 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
     // addr4 is only originated in area B
     auto routeToAddr4 = createUnicastRoute(
         addr4,
-        {createNextHopFromAdj(adj13, false, 20, std::nullopt, false, "B")});
+        {createNextHopFromAdj(adj12, false, 20, std::nullopt, false, "A"),
+         createNextHopFromAdj(adj13, false, 20, std::nullopt, false, "B")});
     EXPECT_THAT(routeDb1.unicastRoutes, testing::SizeIs(3));
     EXPECT_THAT(
         routeDb1.unicastRoutes,
@@ -4819,7 +4820,8 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
     // addr1 is only originated in area A
     auto routeToAddr1 = createUnicastRoute(
         addr1,
-        {createNextHopFromAdj(adj42, false, 20, std::nullopt, false, "A")});
+        {createNextHopFromAdj(adj42, false, 20, std::nullopt, false, "A"),
+         createNextHopFromAdj(adj43, false, 20, std::nullopt, false, "B")});
     EXPECT_THAT(routeDb4.unicastRoutes, testing::SizeIs(3));
     EXPECT_THAT(
         routeDb4.unicastRoutes,

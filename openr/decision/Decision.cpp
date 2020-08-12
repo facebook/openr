@@ -155,7 +155,8 @@ class SpfSolver::SpfSolverImpl {
 
   // helpers used in best path calculation
   static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
-      const SpfResult& spfResult, const std::set<std::string>& dstNodes);
+      const SpfResult& spfResult,
+      const std::set<thrift::NodeAndArea>& dstNodeAreas);
 
   // spf counters
   void updateGlobalCounters();
@@ -238,7 +239,7 @@ class SpfSolver::SpfSolverImpl {
           Metric /* the distance from the nexthop to the dest */>>
   getNextHopsWithMetric(
       const std::string& srcNodeName,
-      const std::set<std::string>& dstNodeNames,
+      const std::set<thrift::NodeAndArea>& dstNodeAreas,
       bool perDestination,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
@@ -249,7 +250,7 @@ class SpfSolver::SpfSolverImpl {
   // mpls action
   std::unordered_set<thrift::NextHopThrift> getNextHopsThrift(
       const std::string& myNodeName,
-      const std::set<std::string>& dstNodeNames,
+      const std::set<thrift::NodeAndArea>& dstNodeAreas,
       bool isV4,
       bool perDestination,
       const Metric minMetric,
@@ -257,7 +258,6 @@ class SpfSolver::SpfSolverImpl {
           nextHopNodes,
       std::optional<int32_t> swapLabel,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      std::set<std::string> const& prefixAreas,
       thrift::PrefixEntries const& prefixEntries = {}) const;
 
   thrift::StaticRoutes staticRoutes_;
@@ -337,21 +337,19 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
 
     // TODO: With new PrefixMetrics we no longer treat routes differently based
     // on their origin source aka `prefixEntry.type`
-    for (auto const& [node, areaToPrefixEntries] : prefixEntries) {
-      for (auto const& [area, prefixEntry] : areaToPrefixEntries) {
-        bool isBGP = prefixEntry.type == thrift::PrefixType::BGP;
-        hasBGP |= isBGP;
-        hasNonBGP |= !isBGP;
-        if (node == myNodeName) {
-          hasSelfPrependLabel &= prefixEntry.prependLabel_ref().has_value();
-        }
-        if (isBGP and not prefixEntry.mv_ref().has_value()) {
-          missingMv = true;
-          LOG(ERROR) << "Prefix entry for prefix "
-                     << toString(prefixEntry.prefix) << " advertised by "
-                     << node << ", area " << area
-                     << " is of type BGP but does not contain a metric vector.";
-        }
+    for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
+      bool isBGP = prefixEntry.type_ref().value() == thrift::PrefixType::BGP;
+      hasBGP |= isBGP;
+      hasNonBGP |= !isBGP;
+      if (nodeAndArea.first == myNodeName) {
+        hasSelfPrependLabel &= prefixEntry.prependLabel_ref().has_value();
+      }
+      if (isBGP and not prefixEntry.mv_ref().has_value()) {
+        missingMv = true;
+        LOG(ERROR) << "Prefix entry for prefix " << toString(prefix)
+                   << " advertised by " << nodeAndArea.first << ", area "
+                   << nodeAndArea.second
+                   << " is of type BGP and missing the metric vector.";
       }
     }
 
@@ -381,7 +379,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
     if (not bestRouteSelectionResult.success) {
       continue;
     }
-    if (bestRouteSelectionResult.nodes.empty()) {
+    if (bestRouteSelectionResult.allNodeAreas.empty()) {
       LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
       fb303::fbData->addStatValue(
           "decision.no_route_to_prefix", 1, fb303::COUNT);
@@ -395,8 +393,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
     // TODO: We program self advertise prefix only iff, we're advertising our
     // prefix-entry with the prepend label. Once we support multi-area routing,
     // we can deprecate the check of hasSelfPrependLabel
-    if (bestRouteSelectionResult.nodes.count(myNodeName) and
-        not hasSelfPrependLabel) {
+    if (bestRouteSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
       VLOG(3) << "Ignoring route to the self advertised node";
       continue;
     }
@@ -406,8 +403,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
         getPrefixForwardingTypeAndAlgorithm(prefixEntries);
 
     //
-    // TODO: The logic for SP_ECMP and MPLS is not in a flow. Ideally we can set
-    // SR_MPLS as forwarding type for any route type. The ideal flow should be
+    // Route computation flow
     // - Switch on algorithm type
     // - Compute paths, algorithm type influences this step (ECMP or KSPF)
     // - Create next-hops from paths, forwarding type influences this step
@@ -495,7 +491,10 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
 
       // Get best nexthop towards the node
       auto metricNhs = getNextHopsWithMetric(
-          myNodeName, {adjDb.thisNodeName}, false, areaLinkStates);
+          myNodeName,
+          {{adjDb.thisNodeName_ref().value(), area}},
+          false,
+          areaLinkStates);
       if (metricNhs.second.empty()) {
         LOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
                      << " of node " << adjDb.thisNodeName;
@@ -512,19 +511,18 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       labelToNode.emplace(
           topLabel,
           std::make_pair(
-              adjDb.thisNodeName,
+              adjDb.thisNodeName_ref().value(),
               RibMplsEntry(
                   topLabel,
                   getNextHopsThrift(
                       myNodeName,
-                      {adjDb.thisNodeName},
+                      {{adjDb.thisNodeName_ref().value(), area}},
                       false,
                       false,
                       metricNhs.first,
                       metricNhs.second,
                       topLabel,
-                      areaLinkStates,
-                      {area}))));
+                      areaLinkStates))));
     }
   }
 
@@ -588,30 +586,27 @@ SpfSolver::SpfSolverImpl::selectBestRoutes(
     ret = runBestPathSelectionBgp(
         myNodeName, prefix, prefixEntries, areaLinkStates);
   } else {
-    for (auto const& [node, areaToPrefixEntries] : prefixEntries) {
-      for (auto const& [area, prefixEntry] : areaToPrefixEntries) {
-        auto const& linkState = areaLinkStates.at(area);
-        auto const& mySpfResult = linkState.getSpfResult(myNodeName);
+    for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
+      auto const& [node, area] = nodeAndArea;
+      auto const& linkState = areaLinkStates.at(area);
+      auto const& mySpfResult = linkState.getSpfResult(myNodeName);
 
-        // Skip unreachable nodes
-        auto it = mySpfResult.find(node);
-        if (it == mySpfResult.end()) {
-          LOG(ERROR) << "No route to " << node
-                     << ". Skipping considering this.";
-          // skip if no route to node
-          continue;
-        }
-
-        // choose lowest node name
-        if (ret.bestNode.empty() or node.compare(ret.bestNode) < 0) {
-          ret.bestNode = node;
-          ret.bestArea = area;
-        }
-
-        ret.nodes.insert(node);
-        ret.areas.insert(area);
+      // Skip unreachable nodes
+      auto it = mySpfResult.find(node);
+      if (it == mySpfResult.end()) {
+        LOG(ERROR) << "No route to " << node << ". Skipping considering this.";
+        // skip if no route to node
+        continue;
       }
+
+      // choose lowest node name
+      if (ret.allNodeAreas.empty() or nodeAndArea < ret.bestNodeArea) {
+        ret.bestNodeArea = nodeAndArea;
+      }
+
+      ret.allNodeAreas.emplace(nodeAndArea);
     }
+
     ret.success = true;
   }
 
@@ -623,17 +618,14 @@ SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
     BestRouteSelectionResult nodes,
     thrift::PrefixEntries const& prefixEntries) {
   std::optional<int64_t> maxMinNexthopForPrefix = std::nullopt;
-  for (const auto& node : nodes.nodes) {
-    if (prefixEntries.count(node) > 0) {
-      for (const auto& [_, prefixEntry] : prefixEntries.at(node)) {
-        maxMinNexthopForPrefix = prefixEntry.minNexthop_ref().has_value() &&
-                (not maxMinNexthopForPrefix.has_value() ||
-                 prefixEntry.minNexthop_ref().value() >
-                     maxMinNexthopForPrefix.value())
-            ? prefixEntry.minNexthop_ref().value()
-            : maxMinNexthopForPrefix;
-      }
-    }
+  for (const auto& nodeArea : nodes.allNodeAreas) {
+    const auto& prefixEntry = prefixEntries.at(nodeArea);
+    maxMinNexthopForPrefix = prefixEntry.minNexthop_ref().has_value() &&
+            (not maxMinNexthopForPrefix.has_value() ||
+             prefixEntry.minNexthop_ref().value() >
+                 maxMinNexthopForPrefix.value())
+        ? prefixEntry.minNexthop_ref().value()
+        : maxMinNexthopForPrefix;
   }
   return maxMinNexthopForPrefix;
 }
@@ -642,17 +634,24 @@ BestRouteSelectionResult
 SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
     BestRouteSelectionResult&& result,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  BestRouteSelectionResult filtered = result;
-  for (const auto& [_, linkState] : areaLinkStates) {
-    for (auto iter = filtered.nodes.begin(); iter != filtered.nodes.end();) {
-      if (linkState.isNodeOverloaded(*iter)) {
-        iter = filtered.nodes.erase(iter);
-      } else {
-        ++iter;
-      }
+  BestRouteSelectionResult filtered = folly::copy(result);
+  for (auto iter = filtered.allNodeAreas.begin();
+       iter != filtered.allNodeAreas.end();) {
+    const auto& [node, area] = *iter;
+    if (areaLinkStates.at(area).isNodeOverloaded(node)) {
+      iter = filtered.allNodeAreas.erase(iter);
+    } else {
+      ++iter;
     }
   }
-  return filtered.nodes.empty() ? result : filtered;
+
+  // Update the bestNodeArea to a valid key
+  if (not filtered.allNodeAreas.empty() and
+      filtered.bestNodeArea != result.bestNodeArea) {
+    filtered.bestNodeArea = *filtered.allNodeAreas.begin();
+  }
+
+  return filtered.allNodeAreas.empty() ? result : filtered;
 }
 
 BestRouteSelectionResult
@@ -663,81 +662,77 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   BestRouteSelectionResult ret;
   std::optional<thrift::MetricVector> bestVector;
-  for (auto const& [nodeName, areaToPrefixEntries] : prefixEntries) {
-    for (auto const& [area, prefixEntry] : areaToPrefixEntries) {
-      auto const& linkState = areaLinkStates.at(area);
-      auto const& mySpfResult = linkState.getSpfResult(myNodeName);
+  for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
+    auto const& [nodeName, area] = nodeAndArea;
+    auto const& linkState = areaLinkStates.at(area);
+    auto const& mySpfResult = linkState.getSpfResult(myNodeName);
 
-      // Skip unreachable nodes
-      auto it = mySpfResult.find(nodeName);
-      if (it == mySpfResult.end()) {
-        LOG(ERROR) << "No route to " << nodeName
-                   << ". Skipping considering this.";
-        // skip if no route to node
-        continue;
+    // Skip unreachable nodes
+    auto it = mySpfResult.find(nodeName);
+    if (it == mySpfResult.end()) {
+      LOG(ERROR) << "No route to " << nodeName
+                 << ". Skipping considering this.";
+      // skip if no route to node
+      continue;
+    }
+
+    // Sanity check that OPENR_IGP_COST shouldn't exist
+    if (MetricVectorUtils::getMetricEntityByType(
+            can_throw(*prefixEntry.mv_ref()),
+            static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST))) {
+      LOG(ERROR) << "Received unexpected metric entity OPENR_IGP_COST in metric"
+                 << " vector for prefix " << toString(prefix) << " from node "
+                 << nodeName << ". Ignoring";
+      continue;
+    }
+
+    // Copy is intentional - As we will need to augment metric vector with
+    // IGP_COST
+    thrift::MetricVector metricVector = can_throw(*prefixEntry.mv_ref());
+
+    // Associate IGP_COST to prefixEntry
+    if (bgpUseIgpMetric_) {
+      const auto igpMetric = static_cast<int64_t>(it->second.metric());
+      if (not ret.bestIgpMetric.has_value() or
+          *(ret.bestIgpMetric) > igpMetric) {
+        ret.bestIgpMetric = igpMetric;
       }
+      metricVector.metrics_ref()->emplace_back(
+          MetricVectorUtils::createMetricEntity(
+              static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST),
+              static_cast<int64_t>(
+                  thrift::MetricEntityPriority::OPENR_IGP_COST),
+              thrift::CompareType::WIN_IF_NOT_PRESENT,
+              false, /* isBestPathTieBreaker */
+              /* lowest metric wins */
+              {-1 * igpMetric}));
+      VLOG(2) << "Attaching IGP metric of " << igpMetric << " to prefix "
+              << toString(prefix) << " for node " << nodeName;
+    }
 
-      // Sanity check that OPENR_IGP_COST shouldn't exist
-      if (MetricVectorUtils::getMetricEntityByType(
-              can_throw(*prefixEntry.mv_ref()),
-              static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST))) {
-        LOG(ERROR)
-            << "Received unexpected metric entity OPENR_IGP_COST in metric"
-            << " vector for prefix " << toString(prefix) << " from node "
-            << nodeName << ". Ignoring";
-        continue;
-      }
-
-      // Copy is intentional - As we will need to augment metric vector with
-      // IGP_COST
-      thrift::MetricVector metricVector = can_throw(*prefixEntry.mv_ref());
-
-      // Associate IGP_COST to prefixEntry
-      if (bgpUseIgpMetric_) {
-        const auto igpMetric = static_cast<int64_t>(it->second.metric());
-        if (not ret.bestIgpMetric.has_value() or
-            *(ret.bestIgpMetric) > igpMetric) {
-          ret.bestIgpMetric = igpMetric;
-        }
-        metricVector.metrics.emplace_back(MetricVectorUtils::createMetricEntity(
-            static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST),
-            static_cast<int64_t>(thrift::MetricEntityPriority::OPENR_IGP_COST),
-            thrift::CompareType::WIN_IF_NOT_PRESENT,
-            false, /* isBestPathTieBreaker */
-            /* lowest metric wins */
-            {-1 * igpMetric}));
-        VLOG(2) << "Attaching IGP metric of " << igpMetric << " to prefix "
-                << toString(prefix) << " for node " << nodeName;
-      }
-
-      switch (bestVector.has_value()
-                  ? MetricVectorUtils::compareMetricVectors(
-                        metricVector, *bestVector)
-                  : MetricVectorUtils::CompareResult::WINNER) {
-      case MetricVectorUtils::CompareResult::WINNER:
-        ret.nodes.clear();
-        FOLLY_FALLTHROUGH;
-      case MetricVectorUtils::CompareResult::TIE_WINNER:
-        bestVector = std::move(metricVector);
-        ret.bestNode = nodeName;
-        ret.bestArea = area;
-        FOLLY_FALLTHROUGH;
-      case MetricVectorUtils::CompareResult::TIE_LOOSER:
-        ret.nodes.emplace(nodeName);
-        ret.areas.emplace(area);
-        break;
-      case MetricVectorUtils::CompareResult::TIE:
-        LOG(ERROR) << "Tie ordering prefix entries. Skipping route for prefix: "
-                   << toString(prefix);
-        return ret;
-      case MetricVectorUtils::CompareResult::ERROR:
-        LOG(ERROR)
-            << "Error ordering prefix entries. Skipping route for prefix: "
-            << toString(prefix);
-        return ret;
-      default:
-        break;
-      }
+    switch (bestVector.has_value() ? MetricVectorUtils::compareMetricVectors(
+                                         metricVector, *bestVector)
+                                   : MetricVectorUtils::CompareResult::WINNER) {
+    case MetricVectorUtils::CompareResult::WINNER:
+      ret.allNodeAreas.clear();
+      FOLLY_FALLTHROUGH;
+    case MetricVectorUtils::CompareResult::TIE_WINNER:
+      bestVector = std::move(metricVector);
+      ret.bestNodeArea = nodeAndArea;
+      FOLLY_FALLTHROUGH;
+    case MetricVectorUtils::CompareResult::TIE_LOOSER:
+      ret.allNodeAreas.emplace(nodeAndArea);
+      break;
+    case MetricVectorUtils::CompareResult::TIE:
+      LOG(ERROR) << "Tie ordering prefix entries. Skipping route for prefix: "
+                 << toString(prefix);
+      return ret;
+    case MetricVectorUtils::CompareResult::ERROR:
+      LOG(ERROR) << "Error ordering prefix entries. Skipping route for prefix: "
+                 << toString(prefix);
+      return ret;
+    default:
+      break;
     }
   }
   ret.success = true;
@@ -767,21 +762,22 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
   // TODO: This is one off the hack to unblock special routing needs. With
   // complete support of multi-area setup, we can delete the following code
   // block.
-  auto filteredBestNodes = bestRouteSelectionResult.nodes;
-  if (filteredBestNodes.count(myNodeName) && perDestination) {
-    auto& myPrefixes = prefixEntries.at(myNodeName);
-    if (myPrefixes.begin()->second.prependLabel_ref().has_value()) {
-      filteredBestNodes.erase(myNodeName);
+  auto filteredBestNodeAreas = bestRouteSelectionResult.allNodeAreas;
+  if (bestRouteSelectionResult.hasNode(myNodeName) && perDestination) {
+    for (const auto& [nodeAndArea, prefixEntry] : prefixEntries) {
+      if (perDestination && nodeAndArea.first == myNodeName &&
+          prefixEntry.prependLabel_ref()) {
+        filteredBestNodeAreas.erase(nodeAndArea);
+        break;
+      }
     }
   }
 
   // Get next-hops
   const auto nextHopsWithMetric = getNextHopsWithMetric(
-      myNodeName, filteredBestNodes, perDestination, areaLinkStates);
+      myNodeName, filteredBestNodeAreas, perDestination, areaLinkStates);
   if (nextHopsWithMetric.second.empty()) {
-    LOG(WARNING) << "No route to prefix " << toString(prefix)
-                 << ", advertised by: "
-                 << folly::join(", ", bestRouteSelectionResult.nodes);
+    VLOG(2) << "No route to prefix " << toString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return;
   }
@@ -796,14 +792,13 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
       isBgp,
       getNextHopsThrift(
           myNodeName,
-          bestRouteSelectionResult.nodes,
+          bestRouteSelectionResult.allNodeAreas,
           isV4Prefix,
           perDestination,
           nextHopsWithMetric.first,
           nextHopsWithMetric.second,
           std::nullopt,
           areaLinkStates,
-          bestRouteSelectionResult.areas,
           prefixEntries));
 }
 
@@ -872,11 +867,11 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
   std::unordered_set<thrift::NextHopThrift> nextHops;
   std::vector<LinkState::Path> paths;
 
-  for (const auto& [_, linkState] : areaLinkStates) {
+  for (const auto& [area, linkState] : areaLinkStates) {
     // find shortest and sec shortest routes towards each node.
-    for (const auto& node : bestRouteSelectionResult.nodes) {
+    for (const auto& [node, bestArea] : bestRouteSelectionResult.allNodeAreas) {
       // if ourself is considered as ECMP nodes.
-      if (node == myNodeName) {
+      if (node == myNodeName && bestArea == area) {
         continue;
       }
       for (auto const& path : linkState.getKthPaths(myNodeName, node, 1)) {
@@ -888,7 +883,10 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
     // route is not part of second shortest route to avoid double spraying
     // issue
     size_t const firstPathsSize = paths.size();
-    for (const auto& node : bestRouteSelectionResult.nodes) {
+    for (const auto& [node, bestArea] : bestRouteSelectionResult.allNodeAreas) {
+      if (area != bestArea) {
+        continue;
+      }
       for (auto const& secPath : linkState.getKthPaths(myNodeName, node, 2)) {
         bool add = true;
         for (size_t i = 0; i < firstPathsSize; ++i) {
@@ -929,10 +927,10 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
             linkState.getAdjacencyDatabases().at(nextNodeName).nodeLabel);
       }
       labels.pop_back(); // Remove first node's label to respect PHP
-      if (prefixEntries.at(nextNodeName).at(area).prependLabel_ref()) {
+      auto& prefixEntry = prefixEntries.at({nextNodeName, area});
+      if (prefixEntry.prependLabel_ref()) {
         // add prepend label to bottom of the stack
-        labels.push_front(
-            *prefixEntries.at(nextNodeName).at(area).prependLabel_ref());
+        labels.push_front(prefixEntry.prependLabel_ref().value());
       }
 
       // Create nexthop
@@ -999,7 +997,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
   std::optional<thrift::NextHopThrift> bestLoopbackNextHop;
   if (isBgp) {
     auto bestNextHops = prefixState.getLoopbackVias(
-        {bestRouteSelectionResult.bestNode},
+        {bestRouteSelectionResult.bestNodeArea.first},
         prefix.first.isV4(),
         bestRouteSelectionResult.bestIgpMetric);
     if (bestNextHops.empty()) {
@@ -1018,17 +1016,20 @@ SpfSolver::SpfSolverImpl::addBestPaths(
   // importing route, along with the computed next-hops.
   // TODO: This is one off the hack to unblock special routing needs. With
   // complete support of multi-area setup, we won't need this any longer.
-  if (bestRouteSelectionResult.nodes.count(myNodeName)) {
-    auto& myPrefixes = prefixEntries.at(myNodeName);
-    auto prependLabelRef = myPrefixes.begin()->second.prependLabel_ref();
+  if (bestRouteSelectionResult.hasNode(myNodeName)) {
+    std::optional<int32_t> prependLabel;
+    for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
+      if (nodeAndArea.first == myNodeName and prefixEntry.prependLabel_ref()) {
+        prependLabel = prefixEntry.prependLabel_ref().value();
+        break;
+      }
+    }
 
-    // TODO: MPLS can only originate in one area
-    CHECK_EQ(1, myPrefixes.size());
     // Self route must be advertised with prepend label
-    CHECK(prependLabelRef.has_value());
+    CHECK(prependLabel.has_value());
 
     // Add static next-hops
-    auto routeIter = staticRoutes_.mplsRoutes_ref()->find(*prependLabelRef);
+    auto routeIter = staticRoutes_.mplsRoutes_ref()->find(prependLabel.value());
     if (routeIter != staticRoutes_.mplsRoutes_ref()->end()) {
       for (const auto& nh : routeIter->second) {
         nextHops.emplace(createNextHop(
@@ -1036,12 +1037,11 @@ SpfSolver::SpfSolverImpl::addBestPaths(
             std::nullopt,
             0,
             std::nullopt,
-            true /* useNonShortestRoute */,
-            myPrefixes.begin()->first));
+            true /* useNonShortestRoute */));
       }
     } else {
       LOG(ERROR) << "Static nexthops doesn't exist for static mpls label "
-                 << *prependLabelRef;
+                 << prependLabel.value();
     }
   }
 
@@ -1051,21 +1051,21 @@ SpfSolver::SpfSolverImpl::addBestPaths(
       RibUnicastEntry(
           prefix,
           std::move(nextHops),
-          prefixEntries.at(bestRouteSelectionResult.bestNode)
-              .at(bestRouteSelectionResult.bestArea),
-          bestRouteSelectionResult.bestArea,
+          prefixEntries.at(bestRouteSelectionResult.bestNodeArea),
+          bestRouteSelectionResult.bestNodeArea.second,
           isBgp & bgpDryRun_, // doNotInstall
           bestLoopbackNextHop));
 }
 
 std::pair<Metric, std::unordered_set<std::string>>
 SpfSolver::SpfSolverImpl::getMinCostNodes(
-    const SpfResult& spfResult, const std::set<std::string>& dstNodeNames) {
+    const SpfResult& spfResult,
+    const std::set<thrift::NodeAndArea>& dstNodeAreas) {
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
   // find the set of the closest nodes to our destination
   std::unordered_set<std::string> minCostNodes;
-  for (const auto& dstNode : dstNodeNames) {
+  for (const auto& [dstNode, _] : dstNodeAreas) {
     auto it = spfResult.find(dstNode);
     if (it == spfResult.end()) {
       continue;
@@ -1090,7 +1090,7 @@ std::pair<
         Metric /* the distance from the nexthop to the dest */>>
 SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
     const std::string& myNodeName,
-    const std::set<std::string>& dstNodeNames,
+    const std::set<thrift::NodeAndArea>& dstNodeAreas,
     bool perDestination,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   // build up next hop nodes both nodes that are along a shortest path to the
@@ -1101,10 +1101,10 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
       nextHopNodes;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
-  for (auto const& [_, linkState] : areaLinkStates) {
+  for (auto const& [area, linkState] : areaLinkStates) {
     auto const& shortestPathsFromHere = linkState.getSpfResult(myNodeName);
     auto const& minMetricNodes =
-        getMinCostNodes(shortestPathsFromHere, dstNodeNames);
+        getMinCostNodes(shortestPathsFromHere, dstNodeAreas);
 
     // Choose routes with lowest Metric
     // if Metric is the same, ecmp in multiple area
@@ -1145,7 +1145,10 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
 
         const auto neighborToHere =
             shortestPathsFromNeighbor.at(myNodeName).metric();
-        for (const auto& dstNode : dstNodeNames) {
+        for (const auto& [dstNode, dstArea] : dstNodeAreas) {
+          if (area != dstArea) {
+            continue;
+          }
           auto shortestPathItr = shortestPathsFromNeighbor.find(dstNode);
           if (shortestPathItr == shortestPathsFromNeighbor.end()) {
             continue;
@@ -1174,7 +1177,7 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
 std::unordered_set<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getNextHopsThrift(
     const std::string& myNodeName,
-    const std::set<std::string>& dstNodeNames,
+    const std::set<thrift::NodeAndArea>& dstNodeAreas,
     bool isV4,
     bool perDestination,
     const Metric minMetric,
@@ -1182,20 +1185,20 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
         nextHopNodes,
     std::optional<int32_t> swapLabel,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
-    std::set<std::string> const& prefixAreas,
     thrift::PrefixEntries const& prefixEntries) const {
   CHECK(not nextHopNodes.empty());
 
   std::unordered_set<thrift::NextHopThrift> nextHops;
   for (const auto& [area, linkState] : areaLinkStates) {
-    // ignore area that is not advertising the prefix
-    if (not prefixAreas.count(area)) {
-      continue;
-    }
-
     for (const auto& link : linkState.linksFromNode(myNodeName)) {
-      for (const auto& dstNode :
-           perDestination ? dstNodeNames : std::set<std::string>{""}) {
+      for (const auto& [dstNode, dstArea] : perDestination
+               ? dstNodeAreas
+               : std::set<thrift::NodeAndArea>{{"", ""}}) {
+        // Only consider destinations within the area
+        if (not dstArea.empty() and area != dstArea) {
+          continue;
+        }
+
         const auto neighborNode = link->getOtherNodeName(myNodeName);
         const auto search =
             nextHopNodes.find(std::make_pair(neighborNode, dstNode));
@@ -1208,7 +1211,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
         // Ignore link if other side of link is one of our destination and we
         // are trying to send to dstNode via neighbor (who is also our
         // destination)
-        if (not dstNode.empty() and dstNodeNames.count(neighborNode) and
+        if (not dstNode.empty() and dstNodeAreas.count({neighborNode, area}) and
             neighborNode != dstNode) {
           continue;
         }
@@ -1225,7 +1228,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
         std::optional<thrift::MplsAction> mplsAction;
         if (swapLabel.has_value()) {
           CHECK(not mplsAction.has_value());
-          const bool isNextHopAlsoDst = dstNodeNames.count(neighborNode);
+          bool isNextHopAlsoDst = dstNodeAreas.count({neighborNode, area});
           mplsAction = createMplsAction(
               isNextHopAlsoDst ? thrift::MplsActionCode::PHP
                                : thrift::MplsActionCode::SWAP,
@@ -1238,7 +1241,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
           std::vector<int32_t> pushLabels;
 
           // Add prepend label if any
-          auto& dstPrefixEntry = prefixEntries.at(dstNode).at(area);
+          auto& dstPrefixEntry = prefixEntries.at({dstNode, area});
           if (dstPrefixEntry.prependLabel_ref()) {
             pushLabels.emplace_back(dstPrefixEntry.prependLabel_ref().value());
             if (not isMplsLabelValid(pushLabels.back())) {
