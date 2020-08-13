@@ -126,6 +126,9 @@ class LinkMonitor final : public OpenrEventBase {
    * - Set/unset interface overload
    * - Set/unset interface metric
    * - Set/unset node adj metric
+   * - Dump interface/link information
+   * - Dump adjacency database information
+   * - Dump links information from netlinkProtocolSocket
    */
   folly::SemiFuture<folly::Unit> setNodeOverload(bool isOverloaded);
   folly::SemiFuture<folly::Unit> setInterfaceOverload(
@@ -136,17 +139,10 @@ class LinkMonitor final : public OpenrEventBase {
       std::string interfaceName,
       std::string adjNodeName,
       std::optional<int32_t> overrideMetric);
-
-  /*
-   * Get APIs:
-   * - Dump interface/link information
-   * - Dump adjacency database information
-   * - Dump links information from netlinkProtocolSocket
-   */
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   getLinkMonitorAdjacencies();
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>> getAllLinks();
+  folly::SemiFuture<std::vector<thrift::Link>> getAllLinks();
 
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
   static std::unordered_map<std::string, thrift::PeerSpec>

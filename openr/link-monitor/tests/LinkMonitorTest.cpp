@@ -1890,7 +1890,7 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
 
   // Empty links
   auto links = linkMonitor->getAllLinks().get();
-  EXPECT_EQ(0, links->size());
+  EXPECT_EQ(0, links.size());
 
   // Set addresses and links
   EXPECT_EQ(0, nlSock->addLink(fbnl::utils::createLink(1, "eth0")).get());
@@ -1905,9 +1905,9 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
 
   // Verify link status and addresses shows up
   links = linkMonitor->getAllLinks().get();
-  ASSERT_EQ(1, links->size());
+  ASSERT_EQ(1, links.size());
 
-  const auto& link = links->at(0);
+  const auto& link = links.at(0);
   EXPECT_TRUE(*link.isUp_ref());
   EXPECT_EQ("eth0", *link.ifName_ref());
   ASSERT_EQ(1, link.networks_ref()->size());

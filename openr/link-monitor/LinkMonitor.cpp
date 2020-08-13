@@ -762,7 +762,7 @@ LinkMonitor::syncInterfaces() {
   // Retrieve latest link snapshot from NetlinkProtocolSocket
   std::vector<thrift::Link> links;
   try {
-    links = *(getAllLinks().get());
+    links = getAllLinks().get();
   } catch (const std::exception& e) {
     LOG(ERROR) << "Failed to sync linkDb from NetlinkProtocolSocket. Error: "
                << folly::exceptionStr(e);
@@ -1168,7 +1168,7 @@ LinkMonitor::getLinkMonitorAdjacencies() {
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
+folly::SemiFuture<std::vector<thrift::Link>>
 LinkMonitor::getAllLinks() {
   VLOG(2) << "Querying all links and their addresses from system";
   return collectAll(nlSock_->getAllLinks(), nlSock_->getAllIfAddresses())
@@ -1203,9 +1203,9 @@ LinkMonitor::getAllLinks() {
             }
 
             // Convert to list and return
-            auto result = std::make_unique<std::vector<thrift::Link>>();
+            std::vector<thrift::Link> result{};
             for (auto& kv : links) {
-              result->emplace_back(std::move(kv.second));
+              result.emplace_back(std::move(kv.second));
             }
             return result;
           });
