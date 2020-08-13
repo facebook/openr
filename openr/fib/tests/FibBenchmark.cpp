@@ -158,18 +158,18 @@ class FibWrapper {
     // Get perfDB
     auto perfDB = getPerfDb();
     // If get empty perfDB, just log it
-    if (perfDB.eventInfo.size() == 0 or
-        perfDB.eventInfo[0].events.size() == 0) {
+    if (perfDB.eventInfo_ref()->size() == 0 or
+        perfDB.eventInfo_ref()[0].events_ref()->size() == 0) {
       LOG(INFO) << "perfDB is emtpy.";
     } else {
       // Accumulate time into processTimes
       // Each time get the latest perf event.
-      auto perfDBInfoSize = perfDB.eventInfo.size();
-      auto eventInfo = perfDB.eventInfo[perfDBInfoSize - 1];
-      for (size_t index = 1; index < eventInfo.events.size(); index++) {
+      auto perfDBInfoSize = perfDB.eventInfo_ref()->size();
+      auto eventInfo = perfDB.eventInfo_ref()[perfDBInfoSize - 1];
+      for (size_t index = 1; index < eventInfo.events_ref()->size(); index++) {
         processTimes[index - 1] +=
-            (eventInfo.events[index].unixTs -
-             eventInfo.events[index - 1].unixTs);
+            (*eventInfo.events_ref()[index].unixTs_ref() -
+             *eventInfo.events_ref()[index - 1].unixTs_ref());
       }
     }
   }

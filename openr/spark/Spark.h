@@ -269,12 +269,12 @@ class Spark final : public OpenrEventBase {
     thrift::SparkNeighbor
     toThrift() const {
       thrift::SparkNeighbor res;
-      res.nodeName = nodeName;
-      res.transportAddressV4 = transportAddressV4;
-      res.transportAddressV6 = transportAddressV6;
-      res.kvStoreCmdPort = kvStoreCmdPort;
-      res.openrCtrlThriftPort = openrCtrlThriftPort;
-      res.ifName = remoteIfName;
+      *res.nodeName_ref() = nodeName;
+      *res.transportAddressV4_ref() = transportAddressV4;
+      *res.transportAddressV6_ref() = transportAddressV6;
+      res.kvStoreCmdPort_ref() = kvStoreCmdPort;
+      res.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
+      *res.ifName_ref() = remoteIfName;
       return res;
     }
 

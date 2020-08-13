@@ -275,7 +275,7 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
       folly::gen::map([](std::pair<std::string, thrift::Value> const& kv) {
         return std::make_pair(
             details::binaryToPrimitive<T>(kv.second.value_ref().value()),
-            kv.second.originatorId);
+            *kv.second.originatorId_ref());
       }) |
       folly::gen::as<
           std::unordered_map<T /* value */, std::string /* owner */>>();
@@ -310,7 +310,7 @@ RangeAllocator<T>::keyValUpdated(
   const T val = details::binaryToPrimitive<T>(thriftVal.value_ref().value());
 
   // Some sanity checks
-  CHECK_EQ(1, thriftVal.version);
+  CHECK_EQ(1, *thriftVal.version_ref());
   // no timeout being scheduled
   CHECK(!timeout_->isScheduled());
   // only subscribed to requested/allocated value change
@@ -321,11 +321,11 @@ RangeAllocator<T>::keyValUpdated(
   // before my id or even higher id overrides it, an intermediate id2
   // (id1 < id2 < my id) overrides and triggers key update
   // just ignore it and wait for key update with my id or even higher id
-  if (thriftVal.originatorId < nodeName_) {
+  if (*thriftVal.originatorId_ref() < nodeName_) {
     return;
   }
 
-  if (nodeName_ == thriftVal.originatorId) {
+  if (nodeName_ == *thriftVal.originatorId_ref()) {
     VLOG(3) << "RangeAllocator " << nodeName_ << ": Won " << val;
     // Our own advertisement got echoed back
     // Let the application know of newly allocated value
@@ -337,11 +337,11 @@ RangeAllocator<T>::keyValUpdated(
   } else {
     // We lost the currently trying value or allocated value
     VLOG(3) << "RangeAllocator " << nodeName_ << ": Lost " << val
-            << " with battle against " << thriftVal.originatorId;
+            << " with battle against " << *thriftVal.originatorId_ref();
 
     // Let user know of withdrawal of key if it has been allocated before
     if (myValue_) {
-      CHECK_LT(nodeName_, thriftVal.originatorId)
+      CHECK_LT(nodeName_, *thriftVal.originatorId_ref())
           << "Lost to higher originatorId";
       CHECK_EQ(*myValue_, val);
       callback_(std::nullopt);

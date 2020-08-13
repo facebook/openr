@@ -85,11 +85,11 @@ struct DecisionRouteDb {
     thrift::RouteDatabase tRouteDb;
     // unicast routes
     for (const auto& [_, entry] : unicastEntries) {
-      tRouteDb.unicastRoutes.emplace_back(entry.toThrift());
+      tRouteDb.unicastRoutes_ref()->emplace_back(entry.toThrift());
     }
     // mpls routes
     for (const auto& [_, entry] : mplsEntries) {
-      tRouteDb.mplsRoutes.emplace_back(entry.toThrift());
+      tRouteDb.mplsRoutes_ref()->emplace_back(entry.toThrift());
     }
     return tRouteDb;
   }
@@ -203,8 +203,8 @@ class DecisionPendingUpdates {
     // oldest.
     if (!perfEvents_ ||
         (perfEvents &&
-         perfEvents_->events.front().unixTs >
-             perfEvents->events.front().unixTs)) {
+         *perfEvents_->events_ref()->front().unixTs_ref() >
+             *perfEvents->events_ref()->front().unixTs_ref())) {
       // if we don't have any perf events for this batch and this update also
       // doesn't have anything, let's start building the event list from now
       perfEvents_ = perfEvents ? perfEvents : thrift::PerfEvents{};

@@ -52,12 +52,12 @@ class Config {
 
   const std::string&
   getNodeName() const {
-    return config_.node_name;
+    return *config_.node_name_ref();
   }
 
   const std::string&
   getDomainName() const {
-    return config_.domain;
+    return *config_.domain_ref();
   }
 
   //
@@ -114,7 +114,7 @@ class Config {
 
   const std::vector<thrift::AreaConfig>&
   getAreas() const {
-    return config_.areas;
+    return *config_.areas_ref();
   }
 
   void addAreaRegex(
@@ -134,7 +134,7 @@ class Config {
   //
   const thrift::SparkConfig&
   getSparkConfig() const {
-    return config_.spark_config;
+    return *config_.spark_config_ref();
   }
 
   //
@@ -142,12 +142,13 @@ class Config {
   //
   const thrift::KvstoreConfig&
   getKvStoreConfig() const {
-    return config_.kvstore_config;
+    return *config_.kvstore_config_ref();
   }
 
   std::chrono::milliseconds
   getKvStoreKeyTtl() const {
-    return std::chrono::milliseconds(config_.kvstore_config.key_ttl_ms);
+    return std::chrono::milliseconds(
+        *config_.kvstore_config_ref()->key_ttl_ms_ref());
   }
 
   bool
@@ -160,7 +161,7 @@ class Config {
   //
   const thrift::LinkMonitorConfig&
   getLinkMonitorConfig() const {
-    return config_.link_monitor_config;
+    return *config_.link_monitor_config_ref();
   }
 
   std::shared_ptr<const re2::RE2::Set>
@@ -237,7 +238,7 @@ class Config {
   //
   const thrift::MonitorConfig&
   getMonitorConfig() const {
-    return config_.monitor_config;
+    return *config_.monitor_config_ref();
   }
 
  private:

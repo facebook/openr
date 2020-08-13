@@ -45,11 +45,11 @@ class StepDetector {
       TimeType samplePeriod,
       // callback when step is detected
       std::function<void(const ValueType&)> stepCb)
-      : fastWndSize_(stepConfig.fast_window_size),
-        slowWndSize_(stepConfig.slow_window_size),
-        loThreshold_(stepConfig.lower_threshold),
-        hiThreshold_(stepConfig.upper_threshold),
-        absThreshold_(stepConfig.ads_threshold),
+      : fastWndSize_(*stepConfig.fast_window_size_ref()),
+        slowWndSize_(*stepConfig.slow_window_size_ref()),
+        loThreshold_(*stepConfig.lower_threshold_ref()),
+        hiThreshold_(*stepConfig.upper_threshold_ref()),
+        absThreshold_(*stepConfig.ads_threshold_ref()),
         fastSlideWindow_(fastWndSize_, samplePeriod * fastWndSize_),
         slowSlideWindow_(slowWndSize_, samplePeriod * slowWndSize_),
         stepCb_(std::move(stepCb)) {

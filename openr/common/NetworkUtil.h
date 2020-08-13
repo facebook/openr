@@ -108,7 +108,9 @@ toIPAddress(const thrift::BinaryAddress& addr) {
 inline folly::CIDRNetwork
 toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
   return folly::IPAddress::createNetwork(
-      toIPAddress(prefix.prefixAddress).str(), prefix.prefixLength, applyMask);
+      toIPAddress(*prefix.prefixAddress_ref()).str(),
+      *prefix.prefixLength_ref(),
+      applyMask);
 }
 
 inline thrift::IpPrefix
@@ -130,14 +132,16 @@ toString(const thrift::BinaryAddress& addr) {
 inline std::string
 toString(const thrift::IpPrefix& ipPrefix) {
   return folly::sformat(
-      "{}/{}", toString(ipPrefix.prefixAddress), ipPrefix.prefixLength);
+      "{}/{}",
+      toString(*ipPrefix.prefixAddress_ref()),
+      *ipPrefix.prefixLength_ref());
 }
 
 inline std::string
 toString(const thrift::MplsAction& mplsAction) {
   return folly::sformat(
       "mpls {} {}{}",
-      apache::thrift::util::enumNameSafe(mplsAction.action),
+      apache::thrift::util::enumNameSafe(*mplsAction.action_ref()),
       mplsAction.swapLabel_ref() ? std::to_string(*mplsAction.swapLabel_ref())
                                  : "",
       mplsAction.pushLabels_ref()
@@ -149,10 +153,10 @@ inline std::string
 toString(const thrift::NextHopThrift& nextHop) {
   return folly::sformat(
       "via {} dev {} weight {} metric {} area {} {}",
-      toIPAddress(nextHop.address).str(),
-      nextHop.address.ifName_ref().value_or("N/A"),
-      nextHop.weight,
-      nextHop.metric,
+      toIPAddress(*nextHop.address_ref()).str(),
+      nextHop.address_ref()->ifName_ref().value_or("N/A"),
+      *nextHop.weight_ref(),
+      *nextHop.metric_ref(),
       nextHop.area_ref().value_or("N/A"),
       nextHop.mplsAction_ref().has_value()
           ? toString(nextHop.mplsAction_ref().value())
@@ -163,7 +167,7 @@ inline std::string
 toString(const thrift::UnicastRoute& route) {
   std::vector<std::string> lines;
   lines.emplace_back(folly::sformat("> Prefix: {}", toString(route.dest)));
-  for (const auto& nh : route.nextHops) {
+  for (const auto& nh : *route.nextHops_ref()) {
     lines.emplace_back("  " + toString(nh));
   }
   return folly::join("\n", lines);
@@ -173,7 +177,7 @@ inline std::string
 toString(const thrift::MplsRoute& route) {
   std::vector<std::string> lines;
   lines.emplace_back(folly::sformat("> Label: {}", route.topLabel));
-  for (const auto& nh : route.nextHops) {
+  for (const auto& nh : *route.nextHops_ref()) {
     lines.emplace_back("  " + toString(nh));
   }
   return folly::join("\n", lines);

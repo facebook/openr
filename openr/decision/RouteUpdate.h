@@ -31,16 +31,16 @@ struct DecisionRouteUpdate {
 
     // unicast
     for (const auto& route : unicastRoutesToUpdate) {
-      delta.unicastRoutesToUpdate.emplace_back(route.toThrift());
+      delta.unicastRoutesToUpdate_ref()->emplace_back(route.toThrift());
     }
     for (const auto& route : unicastRoutesToDelete) {
-      delta.unicastRoutesToDelete.emplace_back(toIpPrefix(route));
+      delta.unicastRoutesToDelete_ref()->emplace_back(toIpPrefix(route));
     }
     // mpls
     for (const auto& route : mplsRoutesToUpdate) {
-      delta.mplsRoutesToUpdate.emplace_back(route.toThrift());
+      delta.mplsRoutesToUpdate_ref()->emplace_back(route.toThrift());
     }
-    delta.mplsRoutesToDelete = mplsRoutesToDelete;
+    *delta.mplsRoutesToDelete_ref() = mplsRoutesToDelete;
     delta.perfEvents_ref().from_optional(perfEvents);
 
     return delta;
