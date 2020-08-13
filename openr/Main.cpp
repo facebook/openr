@@ -355,6 +355,17 @@ main(int argc, char** argv) {
       std::make_unique<PersistentStore>(FLAGS_config_store_filepath));
 
   // Start monitor Module
+  startEventBase(
+      allThreads,
+      orderedEvbs,
+      watchdog,
+      "Monitor",
+      std::make_unique<openr::Monitor>(
+          config,
+          Constants::kEventLogCategory.toString(),
+          logSampleQueue.getReader()));
+
+  // [TODO: TO BE DEPRECATED] Start ZmqMonitor
   // for each log message it receives, we want to add the openr domain
   fbzmq::LogSample sampleToMerge;
   sampleToMerge.addString("domain", config->getConfig().domain);
@@ -506,17 +517,6 @@ main(int argc, char** argv) {
           kvStore,
           context));
 
-  // Start monitor Module
-  startEventBase(
-      allThreads,
-      orderedEvbs,
-      watchdog,
-      "Monitor",
-      std::make_unique<openr::Monitor>(
-          config,
-          Constants::kEventLogCategory.toString(),
-          logSampleQueue.getReader()));
-
   // Start OpenrCtrl thrift server
   apache::thrift::ThriftServer thriftCtrlServer;
 
@@ -612,6 +612,7 @@ main(int argc, char** argv) {
   kvStoreUpdatesQueue.close();
   staticRoutesUpdateQueue.close();
   netlinkEventsQueue.close();
+  logSampleQueue.close();
 
   thriftCtrlServer.stop();
   ctrlHandler.reset();
