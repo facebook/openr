@@ -142,7 +142,15 @@ OpenR not has a `Dockerfile`. It uses `gendeps.py` to build all dependencies + O
 It also installs the OpenR CLI `breeze` into the container.
 
 ```console
- docker build .
+ docker build --network host .
+```
+
+#### Running
+
+You can specify a config file by bind mount a directory with a `openr.cfg` file in /config
+
+```console
+docker run --name openr --network host openr_ubuntu
 ```
 
 ### License

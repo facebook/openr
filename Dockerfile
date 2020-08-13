@@ -13,7 +13,7 @@ COPY openr /src/openr
 
 # Build OpenR + Dependencies via cmake
 RUN cd /src && build/build_openr.sh
-RUN mkdir /opt/bin && cp /src/build/docker_openr_help_test.sh /opt/bin
+RUN mkdir /opt/bin && cp /src/build/docker_openr_helper.sh /opt/bin
 
 # Install `breeze` OpenR CLI
 RUN pip3 --no-cache-dir install --upgrade pip setuptools wheel
@@ -26,4 +26,4 @@ RUN rm -r /src /tmp/*
 
 # TODO: Fix and make a sane default with a default config
 # Also have ability for a bind mounted config directory + state file
-CMD sleep 3600
+CMD ["/opt/bin/docker_openr_helper.sh"]
