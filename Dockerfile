@@ -14,6 +14,8 @@ COPY openr /src/openr
 # Build OpenR + Dependencies via cmake
 RUN cd /src && build/build_openr.sh
 RUN mkdir /opt/bin && cp /src/build/docker_openr_helper.sh /opt/bin
+COPY example_openr.conf /etc/openr.conf
+RUN chmod 644 /etc/openr.conf
 
 # Install `breeze` OpenR CLI
 RUN pip3 --no-cache-dir install --upgrade pip setuptools wheel
@@ -22,7 +24,7 @@ RUN PATH="${PATH}:/opt/facebook/fbthrift/bin" ; cd /src/openr/py/ && python3 set
 # Cleanup all we can to keep container as lean as possible
 RUN apt remove --yes build-essential git libssl-dev m4
 RUN apt autoremove --yes
-RUN rm -r /src /tmp/*
+RUN rm -rf /src /tmp/* /var/lib/apt/lists/*
 
 # TODO: Fix and make a sane default with a default config
 # Also have ability for a bind mounted config directory + state file

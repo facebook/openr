@@ -153,6 +153,9 @@ You can specify a config file by bind mount a directory with a `openr.cfg` file 
 docker run --name openr --network host openr_ubuntu
 ```
 
+- To use a custom config bind mount `/config` into the container
+  - OpenR binary will look for `/config/openr.conf`
+
 ### License
 
 OpenR is [MIT licensed](./LICENSE).
