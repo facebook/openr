@@ -97,6 +97,7 @@ class FibWrapper {
         std::chrono::seconds(2), // coldStartDuration
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
+        fibUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-sub"},
         nullptr, /* KvStore module ptr */
         context);
@@ -125,6 +126,7 @@ class FibWrapper {
 
   ~FibWrapper() {
     LOG(INFO) << "Stopping openr-ctrl thrift server";
+    fibUpdatesQueue.close();
     openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
@@ -180,6 +182,7 @@ class FibWrapper {
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
 
   fbzmq::Context context{};
 

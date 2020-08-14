@@ -57,6 +57,7 @@ class Fib final : public OpenrEventBase {
       std::chrono::seconds coldStartDuration,
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
+      messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       KvStore* kvStore,
       fbzmq::Context& zmqContext);
@@ -112,6 +113,11 @@ class Fib final : public OpenrEventBase {
    * Retrieve performance related information from FIB module
    */
   folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>> getPerfDb();
+
+  /**
+   * API to get reader for fibUpdatesQueue
+   */
+  messaging::RQueue<thrift::RouteDatabaseDelta> getFibUpdatesReader();
 
  private:
   // No-copy
@@ -254,6 +260,9 @@ class Fib final : public OpenrEventBase {
   // module ptr to refer to KvStore for KvStoreClientInternal usage
   KvStore* kvStore_{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
+
+  // Queue to publish fib updates (Fib streaming)
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue_;
 
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.

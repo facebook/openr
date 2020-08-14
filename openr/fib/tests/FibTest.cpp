@@ -219,6 +219,7 @@ class FibTestFixture : public ::testing::Test {
         std::chrono::seconds(2), /* coldStartDuration */
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
+        fibUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-sub"},
         nullptr, /* KvStore module ptr */
         context);
@@ -248,6 +249,7 @@ class FibTestFixture : public ::testing::Test {
   void
   TearDown() override {
     LOG(INFO) << "Stopping openr-ctrl thrift server";
+    fibUpdatesQueue.close();
     openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
@@ -317,6 +319,7 @@ class FibTestFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
 
   fbzmq::Context context{};
 

@@ -336,8 +336,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unordered_map<int64_t, std::pair<folly::Promise<bool>, int64_t>>>
       longPollReqs_;
 
-  // fiber task future hold
-  folly::Future<folly::Unit> taskFuture_;
-
+  // fiber task future hold for kvStore update, fib update reader's
+  std::vector<folly::Future<folly::Unit>> workers_;
 }; // class OpenrCtrlHandler
 } // namespace openr

@@ -90,6 +90,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::seconds(2),
         routeUpdatesQueue_.getReader(),
         interfaceUpdatesQueue_.getReader(),
+        fibUpdatesQueue_,
         MonitorSubmitUrl{"inproc://monitor-sub"},
         kvStoreWrapper_->getKvStore(),
         context_);
@@ -165,6 +166,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     peerUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
+    fibUpdatesQueue_.close();
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
 
@@ -215,6 +217,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
       staticRoutesUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue_;
 
   fbzmq::Context context_{};
   folly::EventBase evb_;

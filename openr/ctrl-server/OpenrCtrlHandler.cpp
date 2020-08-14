@@ -55,7 +55,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 
   // Add fiber task to receive publication from KvStore
   if (kvStore_) {
-    taskFuture_ = ctrlEvb->addFiberTaskFuture([
+    auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture([
       q = std::move(kvStore_->getKvStoreUpdatesReader()),
       this
     ]() mutable noexcept {
@@ -130,6 +130,29 @@ OpenrCtrlHandler::OpenrCtrlHandler(
         }
       }
     });
+
+    workers_.push_back(std::move(taskFutureKvStore));
+  }
+
+  // Add fiber task to receive fib streaming
+  if (fib_) {
+    auto taskFutureFib = ctrlEvb->addFiberTaskFuture(
+        [q = std::move(fib_->getFibUpdatesReader()), this]() mutable noexcept {
+          LOG(INFO) << "Starting Fib updates processing fiber";
+          while (true) {
+            auto maybeUpdate = q.get(); // perform read
+            VLOG(2) << "Received RouteDatabaseDelta from Fib";
+            if (maybeUpdate.hasError()) {
+              LOG(INFO)
+                  << "Terminating Fib RouteDatabaseDelta processing fiber";
+              break;
+            }
+
+            // TODO
+          }
+        });
+
+    workers_.push_back(std::move(taskFutureFib));
   }
 }
 
@@ -155,8 +178,10 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   LOG(INFO) << "Cleanup all pending request(s).";
   longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
 
-  LOG(INFO) << "Waiting for termination of kvStoreUpdatesQueue.";
-  taskFuture_.wait();
+  LOG(INFO)
+      << "Waiting for termination of kvStoreUpdatesQueue, FibUpdatesQueue";
+  folly::collectAll(workers_.begin(), workers_.end()).get();
+  LOG(INFO) << "Collected all workers";
 }
 
 void

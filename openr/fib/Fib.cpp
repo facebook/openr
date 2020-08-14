@@ -29,6 +29,7 @@ Fib::Fib(
     std::chrono::seconds coldStartDuration,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
+    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     KvStore* kvStore,
     fbzmq::Context& zmqContext)
@@ -36,7 +37,8 @@ Fib::Fib(
       thriftPort_(thriftPort),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)),
-      kvStore_(kvStore) {
+      kvStore_(kvStore),
+      fibUpdatesQueue_(fibUpdatesQueue) {
   auto tConfig = config->getConfig();
 
   dryrun_ = config->getConfig().dryrun_ref().value_or(false);
@@ -300,6 +302,11 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
   return retRouteVec;
 }
 
+messaging::RQueue<thrift::RouteDatabaseDelta>
+Fib::getFibUpdatesReader() {
+  return fibUpdatesQueue_.getReader();
+}
+
 void
 Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   routeState_.hasRoutesFromDecision = true;
@@ -550,10 +557,14 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
 
   if (dryrun_) {
     // Do not program routes in case of dryrun
-    LOG(INFO) << "Skipping programing of routes in dryrun ... ";
+    LOG(INFO) << "Skipping programming of routes in dryrun ... ";
     logPerfEvents(castToStd(routeDbDelta.perfEvents_ref()));
     return;
   }
+
+  // Publish the fib streaming routes after considering donotinstall
+  // and dryrun logic.
+  fibUpdatesQueue_.push(routeDbDelta);
 
   if (syncRoutesTimer_->isScheduled()) {
     // Check if there's any full sync scheduled,
@@ -620,7 +631,7 @@ Fib::syncRouteDb() {
 
   // In dry run we just print the routes. No real action
   if (dryrun_) {
-    LOG(INFO) << "Skipping programing of routes in dryrun ... ";
+    LOG(INFO) << "Skipping programming of routes in dryrun ... ";
     VLOG(2) << "Unicast routes to add/update";
     for (auto const& route : unicastRoutes) {
       VLOG(2) << "> " << toString(route.dest) << ", " << route.nextHops.size();
@@ -778,7 +789,7 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents> perfEvents) {
   if (enableOrderedFib_) {
     // Export convergence duration counter
     // this is the local time it takes to program a route after the hold expired
-    // we are using this for ordered fib programing
+    // we are using this for ordered fib programming
     auto localDuration = getDurationBetweenPerfEvents(
         *perfEvents,
         "ORDERED_FIB_HOLDS_EXPIRED",

@@ -248,6 +248,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
+  ReplicateQueue<openr::thrift::RouteDatabaseDelta> fibUpdatesQueue;
   ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<openr::LogSample> logSampleQueue;
 
@@ -513,6 +514,7 @@ main(int argc, char** argv) {
           std::chrono::seconds(3 * sparkConf.keepalive_time_s),
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
+          fibUpdatesQueue,
           monitorSubmitUrl,
           kvStore,
           context));
@@ -611,6 +613,7 @@ main(int argc, char** argv) {
   prefixUpdateRequestQueue.close();
   kvStoreUpdatesQueue.close();
   staticRoutesUpdateQueue.close();
+  fibUpdatesQueue.close();
   netlinkEventsQueue.close();
   logSampleQueue.close();
 

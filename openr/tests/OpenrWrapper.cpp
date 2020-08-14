@@ -215,6 +215,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       fibColdStartDuration,
       routeUpdatesQueue_.getReader(),
       interfaceUpdatesQueue_.getReader(),
+      fibUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       kvStore_.get(),
       context_);
@@ -347,6 +348,7 @@ OpenrWrapper<Serializer>::stop() {
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
   staticRoutesQueue_.close();
+  fibUpdatesQueue_.close();
 
   // stop all modules in reverse order
   eventBase_.stop();

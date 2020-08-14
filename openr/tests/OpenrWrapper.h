@@ -167,6 +167,7 @@ class OpenrWrapper {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesQueue_;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue_;
 };
 
 } // namespace openr
