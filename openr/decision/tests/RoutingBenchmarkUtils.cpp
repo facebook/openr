@@ -487,7 +487,10 @@ insertUserCounters(
 
   // Add customized counters to state.
   counters["adj_receive"] = processTimes[0];
+
+  // Counter for spf is for regular benchmark output
   counters["spf"] = processTimes[2];
+  counters["openr.rib_computation.benchmark_spf.time_ms"] = processTimes[2];
 }
 
 //
