@@ -15,7 +15,8 @@ SNAPPY="${FB_BASE}/snappy-*/lib/"
 # Hack to fix environment for openr linking
 for dep in $LIBZMQ $LIBSODIUM $GLOG $GFLAGS $SNAPPY
 do
-  export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$(eval echo ${dep})"
+  evaled_path=$(eval echo "${dep}")
+  export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$evaled_path"
 done
 export PATH="${PATH}:${FB_BASE}/openr/sbin"
 
@@ -26,5 +27,5 @@ then
   cp -vp "$DEFAULT_CFG" "$CFG_BASE"
 fi
 
-echo "[$(date)] Attempting to start Open/R using "$OPENR_CFG" $@"
-openr_bin -v 2 --config "$OPENR_CFG" $@
+echo "[$(date)] Attempting to start Open/R using $OPENR_CFG $*"
+openr_bin -v 2 --config "$OPENR_CFG" "$@"
