@@ -100,8 +100,8 @@ struct KeyDumpParams {
   2: optional KeyVals keyValHashes
 
   // The default is OR for dumping KV store entries for backward compatibility.
-  // The default will be changed to AND later. We can also make `oper` mandatory later.
-  // The default for subscription is AND now.
+  // The default will be changed to AND later. We can also make `oper`
+  // mandatory later. The default for subscription is AND now.
   4: optional FilterOperator oper
   // Keys to subscribe to in KV store so that consumers receive only certain
   // kinds of updates. For example, a consumer might be interesred in
@@ -244,6 +244,6 @@ struct Publication {
   // flooded on; if none, flood to all peers
   6: optional string floodRootId;
 
-  // area to which this publication belogs
+  // area to which this publication belongs
   7: string area = kDefaultArea;
 }

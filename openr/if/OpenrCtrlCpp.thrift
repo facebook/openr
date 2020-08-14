@@ -8,6 +8,7 @@
 namespace cpp2 openr.thrift
 namespace py3 openr.thrift
 
+include "openr/if/Fib.thrift"
 include "openr/if/KvStore.thrift"
 include "openr/if/OpenrCtrl.thrift"
 
@@ -27,4 +28,14 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
 
   KvStore.Publication, stream<KvStore.Publication>
     subscribeAndGetKvStoreFiltered(1: KvStore.KeyDumpParams filter)
+
+  /**
+   * Retrieve Fib snapshot and subscribe for subsequent updates.
+   * No update between snapshot and fullstream will be lost,
+   * though there may be some replicated entries in stream that
+   * are also in snapshot.
+   */
+
+  Fib.RouteDatabase, stream<Fib.RouteDatabaseDelta> subscribeAndGetFib()
+
 }
