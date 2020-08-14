@@ -1409,11 +1409,13 @@ TEST_F(
     EXPECT_LT(10000, *val1.ttl_ref());
     EXPECT_EQ(5, *val1.ttlVersion_ref()); /* Reflects updated TTL version */
 
+    std::atomic<bool> newTtlVersionSeen = false;
     auto subscription =
         std::move(responseAndSubscription.stream)
             .toClientStream()
             .subscribeExTry(
-                folly::getEventBase(), [&received, keyvals](auto&& t) {
+                folly::getEventBase(),
+                [&received, keyvals, &newTtlVersionSeen](auto&& t) {
                   if (not t.hasValue()) {
                     return;
                   }
@@ -1423,13 +1425,15 @@ TEST_F(
                       continue;
                     }
                     auto& pub = *t;
-                    EXPECT_EQ(1, (*pub.keyVals_ref()).size());
                     ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
                     if ((*pub.keyVals_ref()).count("key1") == 1) {
                       const auto& val = (*pub.keyVals_ref())["key1"];
-                      EXPECT_LE(6, *val.ttlVersion_ref());
-                      /* TTL update has no value */
-                      EXPECT_EQ(false, val.value_ref().has_value());
+                      if (*val.ttlVersion_ref() == 6) {
+                        newTtlVersionSeen = true;
+                        /* TTL update has no value */
+                        EXPECT_EQ(false, val.value_ref().has_value());
+                        EXPECT_EQ(1, (*pub.keyVals_ref()).size());
+                      }
                     }
                     received++;
                   }
@@ -1444,8 +1448,8 @@ TEST_F(
     *thriftValue2.ttlVersion_ref() += 1;
     kvStoreWrapper_->setKey(key, thriftValue2);
 
-    // Check we should receive-1 updates
-    while (received < 1) {
+    // Wait until new TTL version is seen.
+    while (not newTtlVersionSeen) {
       std::this_thread::yield();
     }
 
