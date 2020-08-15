@@ -404,9 +404,6 @@ NetlinkProtocolSocket::processMessage(
         if (neighborEventCB_) {
           neighborEventCB_(std::move(neighbor), true);
         }
-
-        // notification via replicateQueue
-        netlinkEventsQueue_.push(neighbor);
       }
     } break;
 
