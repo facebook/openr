@@ -35,7 +35,7 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_connect_timeout_ms),
           std::chrono::milliseconds(FLAGS_processing_timeout_ms));
   auto response = client->semifuture_subscribeAndGetKvStore().get();
-  auto& globalKeyVals = response.response.keyVals;
+  auto& globalKeyVals = *response.response.keyVals_ref();
   LOG(INFO) << "Stream is connected, updates will follow";
   LOG(INFO) << "Received " << globalKeyVals.size()
             << " entries in initial dump.";
@@ -53,23 +53,25 @@ main(int argc, char** argv) {
                 }
                 auto& pub = maybePub.value();
                 // Print expired key-vals
-                for (const auto& key : pub.expiredKeys) {
+                for (const auto& key : *pub.expiredKeys_ref()) {
                   std::cout << "Expired Key: " << key << std::endl;
                   std::cout << "" << std::endl;
                 }
 
                 // Print updates
-                auto updatedKeyVals =
-                    openr::KvStore::mergeKeyValues(globalKeyVals, pub.keyVals);
+                auto updatedKeyVals = openr::KvStore::mergeKeyValues(
+                    globalKeyVals, *pub.keyVals_ref());
                 for (auto& kv : updatedKeyVals) {
                   std::cout << (kv.second.value_ref().has_value() ? "Updated"
                                                                   : "Refreshed")
                             << " KeyVal: " << kv.first << std::endl;
-                  std::cout << "  version: " << kv.second.version << std::endl;
-                  std::cout << "  originatorId: " << kv.second.originatorId
+                  std::cout << "  version: " << *kv.second.version_ref()
                             << std::endl;
-                  std::cout << "  ttl: " << kv.second.ttl << std::endl;
-                  std::cout << "  ttlVersion: " << kv.second.ttlVersion
+                  std::cout
+                      << "  originatorId: " << *kv.second.originatorId_ref()
+                      << std::endl;
+                  std::cout << "  ttl: " << *kv.second.ttl_ref() << std::endl;
+                  std::cout << "  ttlVersion: " << *kv.second.ttlVersion_ref()
                             << std::endl;
                   std::cout << "  hash: " << kv.second.hash_ref().value()
                             << std::endl

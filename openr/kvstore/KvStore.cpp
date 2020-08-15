@@ -69,7 +69,8 @@ KvStoreFilters::keyMatchAny(
   if (!keyPrefixList_.empty() && keyPrefixObjList_.keyMatch(key)) {
     return true;
   }
-  if (!originatorIds_.empty() && originatorIds_.count(value.originatorId)) {
+  if (!originatorIds_.empty() &&
+      originatorIds_.count(*value.originatorId_ref())) {
     return true;
   }
   return false;
@@ -100,7 +101,8 @@ KvStoreFilters::keyMatchAll(
     return false;
   }
 
-  if (!originatorIds_.empty() && not originatorIds_.count(value.originatorId)) {
+  if (!originatorIds_.empty() &&
+      not originatorIds_.count(*value.originatorId_ref())) {
     return false;
   }
 
@@ -156,11 +158,12 @@ KvStore::KvStore(
           enableKvStoreThrift,
           enablePeriodicSync,
           maybeIpTos,
-          std::chrono::seconds(config->getKvStoreConfig().sync_interval_s),
+          std::chrono::seconds(
+              *config->getKvStoreConfig().sync_interval_s_ref()),
           getKvStoreFilters(config),
           config->getKvStoreConfig().flood_rate_ref().to_optional(),
           std::chrono::milliseconds(
-              config->getKvStoreConfig().ttl_decrement_ms),
+              *config->getKvStoreConfig().ttl_decrement_ms_ref()),
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
               false),
           config->getKvStoreConfig().is_flood_root_ref().value_or(false)),
@@ -270,18 +273,19 @@ KvStore::mergeKeyValues(
 
   for (const auto& [key, value] : keyVals) {
     if (filters.has_value() && not filters->keyMatch(key, value)) {
-      VLOG(4) << "key: " << key << " not adding from " << value.originatorId;
+      VLOG(4) << "key: " << key << " not adding from "
+              << *value.originatorId_ref();
       continue;
     }
 
     // versions must start at 1; setting this to zero here means
     // we would be beaten by any version supplied by the setter
     int64_t myVersion{0};
-    int64_t newVersion = value.version;
+    int64_t newVersion = *value.version_ref();
 
     // Check if TTL is valid. It must be infinite or positive number
     // Skip if invalid!
-    if (value.ttl != Constants::kTtlInfinity && value.ttl <= 0) {
+    if (*value.ttl_ref() != Constants::kTtlInfinity && *value.ttl_ref() <= 0) {
       continue;
     }
 
@@ -289,7 +293,7 @@ KvStore::mergeKeyValues(
     // if they are the same, no need to propagate changes
     auto kvStoreIt = kvStore.find(key);
     if (kvStoreIt != kvStore.end()) {
-      myVersion = kvStoreIt->second.version;
+      myVersion = *kvStoreIt->second.version_ref();
     } else {
       VLOG(4) << "(mergeKeyValues) key: '" << key << "' not found, adding";
     }
@@ -310,10 +314,12 @@ KvStore::mergeKeyValues(
         // Version is newer or
         // kvStoreIt is NULL(myVersion is set to 0)
         updateAllNeeded = true;
-      } else if (value.originatorId > kvStoreIt->second.originatorId) {
+      } else if (
+          *value.originatorId_ref() > *kvStoreIt->second.originatorId_ref()) {
         // versions are the same but originatorId is higher
         updateAllNeeded = true;
-      } else if (value.originatorId == kvStoreIt->second.originatorId) {
+      } else if (
+          *value.originatorId_ref() == *kvStoreIt->second.originatorId_ref()) {
         // This can occur after kvstore restarts or simply reconnects after
         // disconnection. We let one of the two values win if they
         // differ(higher in this case but can be lower as long as it's
@@ -327,7 +333,7 @@ KvStore::mergeKeyValues(
         } else if (rc == 0) {
           // versions, orginatorIds, value are all same
           // retain higher ttlVersion
-          if (value.ttlVersion > kvStoreIt->second.ttlVersion) {
+          if (*value.ttlVersion_ref() > *kvStoreIt->second.ttlVersion_ref()) {
             updateTtlNeeded = true;
           }
         }
@@ -338,9 +344,9 @@ KvStore::mergeKeyValues(
     // Check updateTtl
     //
     if (not value.value_ref().has_value() and kvStoreIt != kvStore.end() and
-        value.version == kvStoreIt->second.version and
-        value.originatorId == kvStoreIt->second.originatorId and
-        value.ttlVersion > kvStoreIt->second.ttlVersion) {
+        *value.version_ref() == *kvStoreIt->second.version_ref() and
+        *value.originatorId_ref() == *kvStoreIt->second.originatorId_ref() and
+        *value.ttlVersion_ref() > *kvStoreIt->second.ttlVersion_ref()) {
       updateTtlNeeded = true;
     }
 
@@ -350,15 +356,17 @@ KvStore::mergeKeyValues(
       continue;
     }
 
-    VLOG(3) << "Updating key: " << key << "\n  Version: " << myVersion << " -> "
-            << newVersion << "\n  Originator: "
-            << (kvStoreIt != kvStore.end() ? kvStoreIt->second.originatorId
-                                           : "null")
-            << " -> " << value.originatorId << "\n  TtlVersion: "
-            << (kvStoreIt != kvStore.end() ? kvStoreIt->second.ttlVersion : 0)
-            << " -> " << value.ttlVersion << "\n  Ttl: "
-            << (kvStoreIt != kvStore.end() ? kvStoreIt->second.ttl : 0)
-            << " -> " << value.ttl;
+    VLOG(3)
+        << "Updating key: " << key << "\n  Version: " << myVersion << " -> "
+        << newVersion << "\n  Originator: "
+        << (kvStoreIt != kvStore.end() ? *kvStoreIt->second.originatorId_ref()
+                                       : "null")
+        << " -> " << *value.originatorId_ref() << "\n  TtlVersion: "
+        << (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttlVersion_ref()
+                                       : 0)
+        << " -> " << *value.ttlVersion_ref() << "\n  Ttl: "
+        << (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttl_ref() : 0)
+        << " -> " << *value.ttl_ref();
 
     // grab the new value (this will copy, intended)
     thrift::Value newValue = value;
@@ -366,9 +374,11 @@ KvStore::mergeKeyValues(
     if (updateAllNeeded) {
       ++valUpdateCnt;
       FB_LOG_EVERY_MS(INFO, 500)
-          << "Updating key: " << key << ", Originator: " << value.originatorId
-          << ", Version: " << newVersion << ", TtlVersion: " << value.ttlVersion
-          << ", Ttl: " << value.ttl;
+          << "Updating key: " << key
+          << ", Originator: " << *value.originatorId_ref()
+          << ", Version: " << newVersion
+          << ", TtlVersion: " << *value.ttlVersion_ref()
+          << ", Ttl: " << *value.ttl_ref();
       //
       // update everything for such key
       //
@@ -385,8 +395,8 @@ KvStore::mergeKeyValues(
       }
       // update hash if it's not there
       if (not kvStoreIt->second.hash_ref().has_value()) {
-        kvStoreIt->second.hash_ref() =
-            generateHash(value.version, value.originatorId, value.value_ref());
+        kvStoreIt->second.hash_ref() = generateHash(
+            *value.version_ref(), *value.originatorId_ref(), value.value_ref());
       }
     } else if (updateTtlNeeded) {
       ++ttlUpdateCnt;
@@ -396,8 +406,8 @@ KvStore::mergeKeyValues(
       CHECK(kvStoreIt != kvStore.end());
 
       // update TTL only, nothing else
-      kvStoreIt->second.ttl = value.ttl;
-      kvStoreIt->second.ttlVersion = value.ttlVersion;
+      kvStoreIt->second.ttl_ref() = *value.ttl_ref();
+      kvStoreIt->second.ttlVersion_ref() = *value.ttlVersion_ref();
     }
 
     // announce the update
@@ -416,13 +426,13 @@ KvStore::mergeKeyValues(
 int
 KvStore::compareValues(const thrift::Value& v1, const thrift::Value& v2) {
   // compare version
-  if (v1.version != v2.version) {
-    return v1.version > v2.version ? 1 : -1;
+  if (*v1.version_ref() != *v2.version_ref()) {
+    return *v1.version_ref() > *v2.version_ref() ? 1 : -1;
   }
 
   // compare orginatorId
-  if (v1.originatorId != v2.originatorId) {
-    return v1.originatorId > v2.originatorId ? 1 : -1;
+  if (*v1.originatorId_ref() != *v2.originatorId_ref()) {
+    return *v1.originatorId_ref() > *v2.originatorId_ref() ? 1 : -1;
   }
 
   // compare value
@@ -432,8 +442,8 @@ KvStore::compareValues(const thrift::Value& v1, const thrift::Value& v2) {
     // The ttl-update should never be sent over the full-sync
     // hashes are same => (version, orginatorId, value are same)
     // compare ttl-version
-    if (v1.ttlVersion != v2.ttlVersion) {
-      return v1.ttlVersion > v2.ttlVersion ? 1 : -1;
+    if (*v1.ttlVersion_ref() != *v2.ttlVersion_ref()) {
+      return *v1.ttlVersion_ref() > *v2.ttlVersion_ref() ? 1 : -1;
     } else {
       return 0;
     }
@@ -525,8 +535,9 @@ KvStore::processRequestMsg(
   }
 
   auto& thriftRequest = maybeThriftReq.value();
-  CHECK(not thriftRequest.area.empty());
-  std::string area = thriftRequest.area; // NOTE: Non constness is intended
+  CHECK(not thriftRequest.area_ref()->empty());
+  std::string area =
+      *thriftRequest.area_ref(); // NOTE: Non constness is intended
   // TODO: migration workaround => if me/peer does is using default area,
   // always honor my config, ignore peer's config.
   if (areas_.size() == 1 and
@@ -561,10 +572,11 @@ void
 KvStore::processPeerUpdates(thrift::PeerUpdateRequest&& req) {
   // Req can contain peerAdd/peerDel simultaneously
   if (req.peerAddParams_ref().has_value()) {
-    addUpdateKvStorePeers(req.peerAddParams_ref().value(), req.area).get();
+    addUpdateKvStorePeers(req.peerAddParams_ref().value(), *req.area_ref())
+        .get();
   }
   if (req.peerDelParams_ref().has_value()) {
-    deleteKvStorePeers(req.peerDelParams_ref().value(), req.area).get();
+    deleteKvStorePeers(req.peerDelParams_ref().value(), *req.area_ref()).get();
   }
 }
 
@@ -586,7 +598,7 @@ KvStore::getKvStoreKeyVals(
       fb303::fbData->addStatValue("kvstore.cmd_key_get", 1, fb303::COUNT);
 
       auto& kvStoreDb = kvStoreDb_.at(area);
-      auto thriftPub = kvStoreDb.getKeyVals(keyGetParams.keys);
+      auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys_ref());
       kvStoreDb.updatePublicationTtl(thriftPub);
 
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
@@ -620,7 +632,7 @@ KvStore::dumpKvStoreKeys(
         folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
       }
       const auto keyPrefixMatch =
-          KvStoreFilters(keyPrefixList, keyDumpParams.originatorIds);
+          KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
 
       thrift::FilterOperator oper = thrift::FilterOperator::OR;
       if (keyDumpParams.oper_ref().has_value()) {
@@ -630,7 +642,7 @@ KvStore::dumpKvStoreKeys(
       auto thriftPub = kvStoreDb.dumpAllWithFilters(keyPrefixMatch, oper);
       if (keyDumpParams.keyValHashes_ref().has_value()) {
         thriftPub = kvStoreDb.dumpDifference(
-            thriftPub.keyVals, keyDumpParams.keyValHashes_ref().value());
+            *thriftPub.keyVals_ref(), keyDumpParams.keyValHashes_ref().value());
       }
       kvStoreDb.updatePublicationTtl(thriftPub);
       // I'm the initiator, set flood-root-id
@@ -648,7 +660,7 @@ KvStore::dumpKvStoreKeys(
         LOG(INFO) << "[Thrift Sync] Processed full-sync request with "
                   << keyDumpParams.keyValHashes_ref().value().size()
                   << " keyValHashes item(s). Sending "
-                  << thriftPub.keyVals.size() << " key-vals and "
+                  << thriftPub.keyVals_ref()->size() << " key-vals and "
                   << numMissingKeys << " missing keys";
       }
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
@@ -719,17 +731,19 @@ KvStore::setKvStoreKeyVals(
 
       // Update hash for key-values
       auto& kvStoreDb = kvStoreDb_.at(area);
-      for (auto& kv : keySetParams.keyVals) {
+      for (auto& kv : *keySetParams.keyVals_ref()) {
         auto& value = kv.second;
         if (value.value_ref().has_value()) {
           value.hash_ref() = generateHash(
-              value.version, value.originatorId, value.value_ref());
+              *value.version_ref(),
+              *value.originatorId_ref(),
+              value.value_ref());
         }
       }
 
       // Create publication and merge it with local KvStore
       thrift::Publication rcvdPublication;
-      rcvdPublication.keyVals = std::move(keySetParams.keyVals);
+      *rcvdPublication.keyVals_ref() = std::move(*keySetParams.keyVals_ref());
       rcvdPublication.nodeIds_ref().move_from(keySetParams.nodeIds_ref());
       rcvdPublication.floodRootId_ref().move_from(
           keySetParams.floodRootId_ref());
@@ -748,7 +762,7 @@ KvStore::getAreasConfig() {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p)]() mutable {
     auto areasConfig = thrift::AreasConfig{};
-    areasConfig.areas = areas_;
+    *areasConfig.areas_ref() = areas_;
     p.setValue(std::make_unique<thrift::AreasConfig>(std::move(areasConfig)));
   });
   return sf;
@@ -810,13 +824,13 @@ KvStore::addUpdateKvStorePeers(
     if (!kvStoreDb_.count(area)) {
       p.setException(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else if (peerAddParams.peers.empty()) {
+    } else if (peerAddParams.peers_ref()->empty()) {
       p.setException(thrift::OpenrError(
           "Empty peerNames from peer-add request, ignoring"));
     } else {
       fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
       auto& kvStoreDb = kvStoreDb_.at(area);
-      kvStoreDb.addPeers(peerAddParams.peers);
+      kvStoreDb.addPeers(*peerAddParams.peers_ref());
       p.setValue();
     }
   });
@@ -839,13 +853,13 @@ KvStore::deleteKvStorePeers(
     if (!kvStoreDb_.count(area)) {
       p.setException(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else if (peerDelParams.peerNames.empty()) {
+    } else if (peerDelParams.peerNames_ref()->empty()) {
       p.setException(thrift::OpenrError(
           "Empty peerNames from peer-del request, ignoring"));
     } else {
       fb303::fbData->addStatValue("kvstore.cmd_per_del", 1, fb303::COUNT);
       auto& kvStoreDb = kvStoreDb_.at(area);
-      kvStoreDb.delPeers(peerDelParams.peerNames);
+      kvStoreDb.delPeers(*peerDelParams.peerNames_ref());
       p.setValue();
     }
   });
@@ -908,7 +922,7 @@ KvStore::processKvStoreDualMessage(
     if (!kvStoreDb_.count(area)) {
       p.setException(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else if (dualMessages.messages.empty()) {
+    } else if (dualMessages.messages_ref()->empty()) {
       LOG(ERROR) << "Empty DUAL msg receved";
       p.setValue();
     } else {
@@ -1063,7 +1077,7 @@ KvStoreDb::KvStorePeer::KvStorePeer(
     const ExponentialBackoff<std::chrono::milliseconds>& expBackoff)
     : nodeName(nodeName), peerSpec(peerSpec), expBackoff(expBackoff) {
   CHECK(not this->nodeName.empty());
-  CHECK(not this->peerSpec.peerAddr.empty());
+  CHECK(not this->peerSpec.peerAddr_ref()->empty());
   CHECK(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
 }
@@ -1118,8 +1132,8 @@ KvStoreDb::KvStoreDb(
       evb_(evb) {
   if (kvParams_.floodRate) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
-        kvParams_.floodRate->flood_msg_per_sec,
-        kvParams_.floodRate->flood_msg_burst_size);
+        *kvParams_.floodRate->flood_msg_per_sec_ref(),
+        *kvParams_.floodRate->flood_msg_burst_size_ref());
     pendingPublicationTimer_ =
         folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
           if (!floodLimiter_->consume(1)) {
@@ -1236,25 +1250,25 @@ KvStoreDb::~KvStoreDb() {
 
 void
 KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
-  for (const auto& kv : publication.keyVals) {
+  for (const auto& kv : *publication.keyVals_ref()) {
     const auto& key = kv.first;
     const auto& value = kv.second;
 
-    if (value.ttl != Constants::kTtlInfinity) {
+    if (*value.ttl_ref() != Constants::kTtlInfinity) {
       TtlCountdownQueueEntry queueEntry;
       queueEntry.expiryTime = std::chrono::steady_clock::now() +
-          std::chrono::milliseconds(value.ttl);
+          std::chrono::milliseconds(*value.ttl_ref());
       queueEntry.key = key;
-      queueEntry.version = value.version;
-      queueEntry.ttlVersion = value.ttlVersion;
-      queueEntry.originatorId = value.originatorId;
+      queueEntry.version = *value.version_ref();
+      queueEntry.ttlVersion = *value.ttlVersion_ref();
+      queueEntry.originatorId = *value.originatorId_ref();
 
       if ((ttlCountdownQueue_.empty() or
            (queueEntry.expiryTime <= ttlCountdownQueue_.top().expiryTime)) and
           ttlCountdownTimer_) {
         // Reschedule the shorter timeout
         ttlCountdownTimer_->scheduleTimeout(
-            std::chrono::milliseconds(value.ttl));
+            std::chrono::milliseconds(*value.ttl_ref()));
       }
 
       ttlCountdownQueue_.push(std::move(queueEntry));
@@ -1267,14 +1281,14 @@ KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
 thrift::Publication
 KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
   thrift::Publication thriftPub;
-  thriftPub.area = area_;
+  *thriftPub.area_ref() = area_;
 
   for (auto const& key : keys) {
     // if requested key if found, respond with version and value
     auto it = kvStore_.find(key);
     if (it != kvStore_.end()) {
       // copy here
-      thriftPub.keyVals[key] = it->second;
+      thriftPub.keyVals_ref()[key] = it->second;
     }
   }
   return thriftPub;
@@ -1286,7 +1300,7 @@ thrift::Publication
 KvStoreDb::dumpAllWithFilters(
     KvStoreFilters const& kvFilters, thrift::FilterOperator oper) const {
   thrift::Publication thriftPub;
-  thriftPub.area = area_;
+  *thriftPub.area_ref() = area_;
 
   switch (oper) {
   case thrift::FilterOperator::AND:
@@ -1294,7 +1308,7 @@ KvStoreDb::dumpAllWithFilters(
       if (not kvFilters.keyMatchAll(kv.first, kv.second)) {
         continue;
       }
-      thriftPub.keyVals[kv.first] = kv.second;
+      thriftPub.keyVals_ref()[kv.first] = kv.second;
     }
     break;
   default:
@@ -1302,7 +1316,7 @@ KvStoreDb::dumpAllWithFilters(
       if (not kvFilters.keyMatch(kv.first, kv.second)) {
         continue;
       }
-      thriftPub.keyVals[kv.first] = kv.second;
+      thriftPub.keyVals_ref()[kv.first] = kv.second;
     }
   }
   return thriftPub;
@@ -1313,18 +1327,18 @@ KvStoreDb::dumpAllWithFilters(
 thrift::Publication
 KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
-  thriftPub.area = area_;
+  *thriftPub.area_ref() = area_;
   for (auto const& kv : kvStore_) {
     if (not kvFilters.keyMatch(kv.first, kv.second)) {
       continue;
     }
     DCHECK(kv.second.hash_ref().has_value());
-    auto& value = thriftPub.keyVals[kv.first];
-    value.version = kv.second.version;
-    value.originatorId = kv.second.originatorId;
+    auto& value = thriftPub.keyVals_ref()[kv.first];
+    value.version_ref() = *kv.second.version_ref();
+    *value.originatorId_ref() = *kv.second.originatorId_ref();
     value.hash_ref().copy_from(kv.second.hash_ref());
-    value.ttl = kv.second.ttl;
-    value.ttlVersion = kv.second.ttlVersion;
+    value.ttl_ref() = *kv.second.ttl_ref();
+    value.ttlVersion_ref() = *kv.second.ttlVersion_ref();
   }
   return thriftPub;
 }
@@ -1339,7 +1353,7 @@ KvStoreDb::dumpDifference(
     std::unordered_map<std::string, thrift::Value> const& myKeyVal,
     std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const {
   thrift::Publication thriftPub;
-  thriftPub.area = area_;
+  *thriftPub.area_ref() = area_;
 
   thriftPub.tobeUpdatedKeys_ref() = std::vector<std::string>{};
   std::unordered_set<std::string> allKeys;
@@ -1360,7 +1374,7 @@ KvStoreDb::dumpDifference(
     }
     if (reqKv == reqKeyVal.end()) {
       // not exist in reqKeyVal
-      thriftPub.keyVals.emplace(key, myKv->second);
+      thriftPub.keyVals_ref()->emplace(key, myKv->second);
       continue;
     }
     // common key
@@ -1369,7 +1383,7 @@ KvStoreDb::dumpDifference(
     int rc = KvStore::compareValues(myVal, reqVal);
     if (rc == 1 or rc == -2) {
       // myVal is better or unknown
-      thriftPub.keyVals.emplace(key, myVal);
+      thriftPub.keyVals_ref()->emplace(key, myVal);
     }
     if (rc == -1 or rc == -2) {
       // reqVal is better or unknown
@@ -1413,7 +1427,8 @@ KvStoreDb::requestThriftPeerSync() {
     // create thrift client and do backoff if can't go through
     try {
       LOG(INFO) << "[Thrift Sync] Creating kvstore thrift client with addr: "
-                << peerSpec.peerAddr << ", port: " << peerSpec.ctrlPort
+                << *peerSpec.peerAddr_ref()
+                << ", port: " << *peerSpec.ctrlPort_ref()
                 << ", peerName: " << peerName;
 
       // TODO: migrate to secure thrift connection
@@ -1433,7 +1448,7 @@ KvStoreDb::requestThriftPeerSync() {
       thriftPeer.keepAliveTimer->scheduleTimeout(period);
     } catch (std::exception const& e) {
       LOG(ERROR) << "[Thrift Sync] Failed to connect to node: " << peerName
-                 << "  with addr: " << peerSpec.peerAddr
+                 << "  with addr: " << *peerSpec.peerAddr_ref()
                  << ". Exception: " << folly::exceptionStr(e);
 
       // record telemetry for thrift calls
@@ -1463,7 +1478,7 @@ KvStoreDb::requestThriftPeerSync() {
       std::string keyPrefix =
           folly::join(",", kvParams_.filters.value().getKeyPrefixes());
       /* prefix is for backward compatibility */
-      params.prefix = keyPrefix;
+      *params.prefix_ref() = keyPrefix;
       if (not keyPrefix.empty()) {
         params.keys_ref() = kvParams_.filters.value().getKeyPrefixes();
       }
@@ -1474,7 +1489,7 @@ KvStoreDb::requestThriftPeerSync() {
         std::vector<std::string>{}, /* keyPrefixList */
         std::set<std::string>{} /* originator */);
     params.keyValHashes_ref() =
-        std::move(dumpHashWithFilters(kvFilters).keyVals);
+        std::move(*dumpHashWithFilters(kvFilters).keyVals_ref());
 
     // record telemetry for initial full-sync
     fb303::fbData->addStatValue(
@@ -1571,7 +1586,7 @@ KvStoreDb::processThriftSuccess(
       "kvstore.thrift.num_keyvals_update", kvUpdateCnt, fb303::SUM);
 
   LOG(INFO) << "[Thrift Sync] Full-sync response received from: " << peerName
-            << " with " << pub.keyVals.size() << " key-vals and "
+            << " with " << pub.keyVals_ref()->size() << " key-vals and "
             << numMissingKeys << " missing keys. Incured " << kvUpdateCnt
             << " key-value updates."
             << " Processing time: " << timeDelta.count() << "ms.";
@@ -1657,21 +1672,23 @@ KvStoreDb::addThriftPeers(
   for (auto const& peerKv : peers) {
     auto const& peerName = peerKv.first;
     auto const& newPeerSpec = peerKv.second;
-    auto const& supportFloodOptimization = newPeerSpec.supportFloodOptimization;
+    auto const& supportFloodOptimization =
+        *newPeerSpec.supportFloodOptimization_ref();
 
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter != thriftPeers_.end()) {
       LOG(INFO) << "[Peer Update] " << peerName << " is updated."
-                << " peerAddr: " << newPeerSpec.peerAddr
+                << " peerAddr: " << *newPeerSpec.peerAddr_ref()
                 << " flood-optimization:" << supportFloodOptimization;
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
-      if (oldPeerSpec.peerAddr != newPeerSpec.peerAddr) {
+      if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr_ref()) {
         // case1: peerSpec updated(i.e. parallel adjacencies can
         //        potentially have peerSpec updated by LM)
         LOG(INFO) << "[Peer Update] peerAddr is updated from: "
-                  << oldPeerSpec.peerAddr << " to: " << newPeerSpec.peerAddr;
+                  << *oldPeerSpec.peerAddr_ref()
+                  << " to: " << *newPeerSpec.peerAddr_ref();
       }
       logStateTransition(
           peerName, peerIter->second.state, KvStorePeerState::IDLE);
@@ -1683,7 +1700,7 @@ KvStoreDb::addThriftPeers(
     } else {
       // case 2: found a new peer coming up
       LOG(INFO) << "[Peer Add] " << peerName << " is added."
-                << " peerAddr: " << newPeerSpec.peerAddr
+                << " peerAddr: " << *newPeerSpec.peerAddr_ref()
                 << " flood-optimization:" << supportFloodOptimization;
 
       KvStorePeer peer(
@@ -1731,7 +1748,8 @@ KvStoreDb::addPeers(
         Constants::kGlobalCmdLocalIdTemplate.toString(),
         peerName,
         peerAddCounter_);
-    const auto& supportFloodOptimization = newPeerSpec.supportFloodOptimization;
+    const auto& supportFloodOptimization =
+        *newPeerSpec.supportFloodOptimization_ref();
 
     try {
       auto it = peers_.find(peerName);
@@ -1750,16 +1768,16 @@ KvStoreDb::addPeers(
 
         const auto& peerSpec = it->second.first;
 
-        if (peerSpec.cmdUrl != newPeerSpec.cmdUrl) {
+        if (*peerSpec.cmdUrl_ref() != *newPeerSpec.cmdUrl_ref()) {
           // case1: peer-spec updated (e.g parallel cases)
           cmdUrlUpdated = true;
-          LOG(INFO) << "Disconnecting from " << peerSpec.cmdUrl << " with id "
-                    << it->second.second;
-          const auto ret =
-              peerSyncSock_.disconnect(fbzmq::SocketUrl{peerSpec.cmdUrl});
+          LOG(INFO) << "Disconnecting from " << *peerSpec.cmdUrl_ref()
+                    << " with id " << it->second.second;
+          const auto ret = peerSyncSock_.disconnect(
+              fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
           if (ret.hasError()) {
-            LOG(FATAL) << "Error Disconnecting to URL '" << peerSpec.cmdUrl
-                       << "' " << ret.error();
+            LOG(FATAL) << "Error Disconnecting to URL '"
+                       << *peerSpec.cmdUrl_ref() << "' " << ret.error();
           }
           // Remove any pending expected response for old socket-id
           latestSentPeerSync_.erase(it->second.second);
@@ -1785,7 +1803,7 @@ KvStoreDb::addPeers(
 
       if (cmdUrlUpdated) {
         CHECK(newPeerCmdId == it->second.second);
-        LOG(INFO) << "Connecting sync channel to " << newPeerSpec.cmdUrl
+        LOG(INFO) << "Connecting sync channel to " << *newPeerSpec.cmdUrl_ref()
                   << " with id " << newPeerCmdId;
         auto const optStatus = peerSyncSock_.setSockOpt(
             ZMQ_CONNECT_RID, newPeerCmdId.data(), newPeerCmdId.size());
@@ -1793,9 +1811,9 @@ KvStoreDb::addPeers(
           LOG(FATAL) << "Error setting ZMQ_CONNECT_RID with value "
                      << newPeerCmdId;
         }
-        if (peerSyncSock_.connect(fbzmq::SocketUrl{newPeerSpec.cmdUrl})
+        if (peerSyncSock_.connect(fbzmq::SocketUrl{*newPeerSpec.cmdUrl_ref()})
                 .hasError()) {
-          LOG(FATAL) << "Error connecting to URL '" << newPeerSpec.cmdUrl
+          LOG(FATAL) << "Error connecting to URL '" << *newPeerSpec.cmdUrl_ref()
                      << "'";
         }
       }
@@ -1875,9 +1893,10 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
     }
     const auto& peerSpec = peerIter->second.peerSpec;
 
-    LOG(INFO) << "[Peer Delete] " << peerName
-              << " is detached from: " << peerSpec.peerAddr
-              << ", flood-optimization: " << peerSpec.supportFloodOptimization;
+    LOG(INFO)
+        << "[Peer Delete] " << peerName
+        << " is detached from: " << *peerSpec.peerAddr_ref()
+        << ", flood-optimization: " << *peerSpec.supportFloodOptimization_ref();
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
@@ -1904,14 +1923,15 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
     }
 
     const auto& peerSpec = it->second.first;
-    if (peerSpec.supportFloodOptimization) {
+    if (*peerSpec.supportFloodOptimization_ref()) {
       dualPeersToRemove.emplace_back(peerName);
     }
 
-    LOG(INFO) << "Detaching from: " << peerSpec.cmdUrl
+    LOG(INFO) << "Detaching from: " << *peerSpec.cmdUrl_ref()
               << ", support-flood-optimization: "
-              << peerSpec.supportFloodOptimization;
-    auto syncRes = peerSyncSock_.disconnect(fbzmq::SocketUrl{peerSpec.cmdUrl});
+              << *peerSpec.supportFloodOptimization_ref();
+    auto syncRes =
+        peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
     if (syncRes.hasError()) {
       LOG(ERROR) << "Failed to detach. " << syncRes.error();
     }
@@ -1970,11 +1990,11 @@ KvStoreDb::requestFullSyncFromPeers() {
     std::vector<std::string> keyPrefixList{};
     KvStoreFilters kvFilters{keyPrefixList, originator};
     params.keyValHashes_ref() =
-        std::move(dumpHashWithFilters(kvFilters).keyVals);
+        std::move(*dumpHashWithFilters(kvFilters).keyVals_ref());
 
-    dumpRequest.cmd = thrift::Command::KEY_DUMP;
+    dumpRequest.cmd_ref() = thrift::Command::KEY_DUMP;
     dumpRequest.keyDumpParams_ref() = params;
-    dumpRequest.area = area_;
+    *dumpRequest.area_ref() = area_;
 
     VLOG(1) << "Sending full-sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
@@ -2046,30 +2066,31 @@ KvStoreDb::updatePublicationTtl(
   auto timeNow = std::chrono::steady_clock::now();
   for (const auto& qE : ttlCountdownQueue_) {
     // Find key and ensure we are taking time from right entry from queue
-    auto kv = thriftPub.keyVals.find(qE.key);
-    if (kv == thriftPub.keyVals.end() or kv->second.version != qE.version or
-        kv->second.originatorId != qE.originatorId or
-        kv->second.ttlVersion != qE.ttlVersion) {
+    auto kv = thriftPub.keyVals_ref()->find(qE.key);
+    if (kv == thriftPub.keyVals_ref()->end() or
+        *kv->second.version_ref() != qE.version or
+        *kv->second.originatorId_ref() != qE.originatorId or
+        *kv->second.ttlVersion_ref() != qE.ttlVersion) {
       continue;
     }
 
     // Compute timeLeft and do sanity check on it
     auto timeLeft = duration_cast<milliseconds>(qE.expiryTime - timeNow);
     if (timeLeft <= kvParams_.ttlDecr) {
-      thriftPub.keyVals.erase(kv);
+      thriftPub.keyVals_ref()->erase(kv);
       continue;
     }
 
     // filter key from publication if time left is below ttl threshold
     if (removeAboutToExpire and timeLeft < Constants::kTtlThreshold) {
-      thriftPub.keyVals.erase(kv);
+      thriftPub.keyVals_ref()->erase(kv);
       continue;
     }
 
     // Set the time-left and decrement it by one so that ttl decrement
     // deterministically whenever it is exchanged between KvStores. This will
     // avoid looping of updates between stores.
-    kv->second.ttl = timeLeft.count() - kvParams_.ttlDecr.count();
+    kv->second.ttl_ref() = timeLeft.count() - kvParams_.ttlDecr.count();
   }
 }
 
@@ -2077,13 +2098,13 @@ KvStoreDb::updatePublicationTtl(
 folly::Expected<fbzmq::Message, fbzmq::Error>
 KvStoreDb::processRequestMsgHelper(
     const std::string& requestId, thrift::KvStoreRequest& thriftReq) {
-  VLOG(3)
-      << "processRequest: command: `"
-      << apache::thrift::TEnumTraits<thrift::Command>::findName(thriftReq.cmd)
-      << "` received";
+  VLOG(3) << "processRequest: command: `"
+          << apache::thrift::TEnumTraits<thrift::Command>::findName(
+                 *thriftReq.cmd_ref())
+          << "` received";
 
   std::vector<std::string> keys;
-  switch (thriftReq.cmd) {
+  switch (*thriftReq.cmd_ref()) {
   case thrift::Command::KEY_SET: {
     VLOG(3) << "Set key requested";
     if (not thriftReq.keySetParams_ref().has_value()) {
@@ -2102,30 +2123,30 @@ KvStoreDb::processRequestMsgHelper(
     }
 
     auto& ketSetParamsVal = thriftReq.keySetParams_ref().value();
-    if (ketSetParamsVal.keyVals.empty()) {
+    if (ketSetParamsVal.keyVals_ref()->empty()) {
       LOG(ERROR) << "Malformed set request, ignoring";
       return folly::makeUnexpected(fbzmq::Error());
     }
 
     // Update hash for key-values
-    for (auto& kv : ketSetParamsVal.keyVals) {
+    for (auto& kv : *ketSetParamsVal.keyVals_ref()) {
       auto& value = kv.second;
       if (value.value_ref().has_value()) {
-        value.hash_ref() =
-            generateHash(value.version, value.originatorId, value.value_ref());
+        value.hash_ref() = generateHash(
+            *value.version_ref(), *value.originatorId_ref(), value.value_ref());
       }
     }
 
     // Create publication and merge it with local KvStore
     thrift::Publication rcvdPublication;
-    rcvdPublication.keyVals = std::move(ketSetParamsVal.keyVals);
+    *rcvdPublication.keyVals_ref() = std::move(*ketSetParamsVal.keyVals_ref());
     rcvdPublication.nodeIds_ref().move_from(ketSetParamsVal.nodeIds_ref());
     rcvdPublication.floodRootId_ref().move_from(
         ketSetParamsVal.floodRootId_ref());
     mergePublication(rcvdPublication);
 
     // respond to the client
-    if (ketSetParamsVal.solicitResponse) {
+    if (*ketSetParamsVal.solicitResponse_ref()) {
       return fbzmq::Message::from(Constants::kSuccessResponse.toString());
     }
     return fbzmq::Message();
@@ -2148,10 +2169,10 @@ KvStoreDb::processRequestMsgHelper(
     }
 
     const auto keyPrefixMatch =
-        KvStoreFilters(keyPrefixList, keyDumpParamsVal.originatorIds);
+        KvStoreFilters(keyPrefixList, *keyDumpParamsVal.originatorIds_ref());
     auto thriftPub = dumpAllWithFilters(keyPrefixMatch);
     if (auto keyValHashes = keyDumpParamsVal.keyValHashes_ref()) {
-      thriftPub = dumpDifference(thriftPub.keyVals, *keyValHashes);
+      thriftPub = dumpDifference(*thriftPub.keyVals_ref(), *keyValHashes);
     }
     updatePublicationTtl(thriftPub);
     // I'm the initiator, set flood-root-id
@@ -2169,8 +2190,9 @@ KvStoreDb::processRequestMsgHelper(
       }
       LOG(INFO) << "Processed full-sync request from peer " << requestId
                 << " with " << (*keyDumpParamsVal.keyValHashes_ref()).size()
-                << " keyValHashes item(s). Sending " << thriftPub.keyVals.size()
-                << " key-vals and " << numMissingKeys << " missing keys";
+                << " keyValHashes item(s). Sending "
+                << thriftPub.keyVals_ref()->size() << " key-vals and "
+                << numMissingKeys << " missing keys";
     }
     return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
@@ -2180,7 +2202,7 @@ KvStoreDb::processRequestMsgHelper(
       LOG(ERROR) << "received none dualMessages";
       return fbzmq::Message(); // ignore it
     }
-    if (thriftReq.dualMessages_ref().value().messages.empty()) {
+    if (thriftReq.dualMessages_ref().value().messages_ref()->empty()) {
       LOG(ERROR) << "received empty dualMessages";
       return fbzmq::Message(); // ignore it
     }
@@ -2215,20 +2237,20 @@ KvStoreDb::processFloodTopoGet() noexcept {
     const auto& rootId = kv.first;
     const auto& info = kv.second.getInfo();
     thrift::SptInfo sptInfo;
-    sptInfo.passive = info.sm.state == DualState::PASSIVE;
-    sptInfo.cost = info.distance;
+    sptInfo.passive_ref() = info.sm.state == DualState::PASSIVE;
+    sptInfo.cost_ref() = info.distance;
     // convert from std::optional to std::optional
     std::optional<std::string> nexthop = std::nullopt;
     if (info.nexthop.has_value()) {
       nexthop = info.nexthop.value();
     }
     sptInfo.parent_ref().from_optional(nexthop);
-    sptInfo.children = kv.second.children();
-    sptInfos.infos.emplace(rootId, sptInfo);
+    *sptInfo.children_ref() = kv.second.children();
+    sptInfos.infos_ref()->emplace(rootId, sptInfo);
   }
 
   // set counters
-  sptInfos.counters = DualNode::getCounters();
+  *sptInfos.counters_ref() = DualNode::getCounters();
 
   // set flood root-id and peers
   sptInfos.floodRootId_ref().from_optional(DualNode::getSptRootId());
@@ -2236,7 +2258,7 @@ KvStoreDb::processFloodTopoGet() noexcept {
   if (sptInfos.floodRootId_ref().has_value()) {
     floodRootId = sptInfos.floodRootId_ref().value();
   }
-  sptInfos.floodPeers = getFloodPeers(floodRootId);
+  *sptInfos.floodPeers_ref() = getFloodPeers(floodRootId);
   return sptInfos;
 }
 
@@ -2244,30 +2266,31 @@ void
 KvStoreDb::processFloodTopoSet(
     const thrift::FloodTopoSetParams& setParams) noexcept {
   if (setParams.allRoots_ref().has_value() and *setParams.allRoots_ref() and
-      not setParams.setChild) {
+      not(*setParams.setChild_ref())) {
     // process unset-child for all-roots command
     auto& duals = DualNode::getDuals();
     for (auto& kv : duals) {
-      kv.second.removeChild(setParams.srcId);
+      kv.second.removeChild(*setParams.srcId_ref());
     }
     return;
   }
 
-  if (not DualNode::hasDual(setParams.rootId)) {
-    LOG(ERROR) << "processFloodTopoSet unknown root-id: " << setParams.rootId;
+  if (not DualNode::hasDual(*setParams.rootId_ref())) {
+    LOG(ERROR) << "processFloodTopoSet unknown root-id: "
+               << *setParams.rootId_ref();
     return;
   }
-  auto& dual = DualNode::getDual(setParams.rootId);
-  const auto& child = setParams.srcId;
-  if (setParams.setChild) {
+  auto& dual = DualNode::getDual(*setParams.rootId_ref());
+  const auto& child = *setParams.srcId_ref();
+  if (*setParams.setChild_ref()) {
     // set child command
-    LOG(INFO) << "dual child set: root-id: (" << setParams.rootId
-              << ") child: " << setParams.srcId;
+    LOG(INFO) << "dual child set: root-id: (" << *setParams.rootId_ref()
+              << ") child: " << *setParams.srcId_ref();
     dual.addChild(child);
   } else {
     // unset child command
-    LOG(INFO) << "dual child unset: root-id: (" << setParams.rootId
-              << ") child: " << setParams.srcId;
+    LOG(INFO) << "dual child unset: root-id: (" << *setParams.rootId_ref()
+              << ") child: " << *setParams.srcId_ref();
     dual.removeChild(child);
   }
 }
@@ -2280,17 +2303,17 @@ KvStoreDb::sendTopoSetCmd(
     bool allRoots) noexcept {
   const auto& dstCmdSocketId = peers_.at(peerName).second;
   thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::FLOOD_TOPO_SET;
+  request.cmd_ref() = thrift::Command::FLOOD_TOPO_SET;
 
   thrift::FloodTopoSetParams setParams;
-  setParams.rootId = rootId;
-  setParams.srcId = kvParams_.nodeId;
-  setParams.setChild = setChild;
+  *setParams.rootId_ref() = rootId;
+  *setParams.srcId_ref() = kvParams_.nodeId;
+  setParams.setChild_ref() = setChild;
   if (allRoots) {
     setParams.allRoots_ref() = allRoots;
   }
   request.floodTopoSetParams_ref() = setParams;
-  request.area = area_;
+  *request.area_ref() = area_;
 
   const auto ret = sendMessageToPeer(dstCmdSocketId, request);
   if (ret.hasError()) {
@@ -2409,8 +2432,9 @@ KvStoreDb::processSyncResponse(
   }
 
   LOG(INFO) << "full-sync response received from " << requestId << " with "
-            << syncPub.keyVals.size() << " key-vals and " << numMissingKeys
-            << " missing keys. Incured " << kvUpdateCnt << " key-value updates";
+            << syncPub.keyVals_ref()->size() << " key-vals and "
+            << numMissingKeys << " missing keys. Incured " << kvUpdateCnt
+            << " key-value updates";
 
   fb303::fbData->addStatValue(
       "kvstore.zmq.num_missing_keys", numMissingKeys, fb303::SUM);
@@ -2610,9 +2634,9 @@ KvStoreDb::cleanupTtlCountdownQueue() {
       break;
     }
     auto it = kvStore_.find(top.key);
-    if (it != kvStore_.end() and it->second.version == top.version and
-        it->second.originatorId == top.originatorId and
-        it->second.ttlVersion == top.ttlVersion) {
+    if (it != kvStore_.end() and *it->second.version_ref() == top.version and
+        *it->second.originatorId_ref() == top.originatorId and
+        *it->second.ttlVersion_ref() == top.ttlVersion) {
       expiredKeys.emplace_back(top.key);
       LOG(WARNING)
           << "Delete expired (key, version, originatorId, ttlVersion, ttl, "
@@ -2620,10 +2644,10 @@ KvStoreDb::cleanupTtlCountdownQueue() {
           << folly::sformat(
                  "({}, {}, {}, {}, {}, {}, {})",
                  top.key,
-                 it->second.version,
-                 it->second.originatorId,
-                 it->second.ttlVersion,
-                 it->second.ttl,
+                 *it->second.version_ref(),
+                 *it->second.originatorId_ref(),
+                 *it->second.ttlVersion_ref(),
+                 *it->second.ttl_ref(),
                  kvParams_.nodeId,
                  area_);
       logKvEvent("KEY_EXPIRE", top.key);
@@ -2646,7 +2670,7 @@ KvStoreDb::cleanupTtlCountdownQueue() {
   fb303::fbData->addStatValue(
       "kvstore.expired_key_vals", expiredKeys.size(), fb303::SUM);
   thrift::Publication expiredKeysPub{};
-  expiredKeysPub.expiredKeys = std::move(expiredKeys);
+  *expiredKeysPub.expiredKeys_ref() = std::move(expiredKeys);
   floodPublication(std::move(expiredKeysPub));
 }
 
@@ -2654,16 +2678,16 @@ void
 KvStoreDb::bufferPublication(thrift::Publication&& publication) {
   fb303::fbData->addStatValue("kvstore.rate_limit_suppress", 1, fb303::COUNT);
   fb303::fbData->addStatValue(
-      "kvstore.rate_limit_keys", publication.keyVals.size(), fb303::AVG);
+      "kvstore.rate_limit_keys", publication.keyVals_ref()->size(), fb303::AVG);
   std::optional<std::string> floodRootId{std::nullopt};
   if (publication.floodRootId_ref().has_value()) {
     floodRootId = publication.floodRootId_ref().value();
   }
   // update or add keys
-  for (auto const& kv : publication.keyVals) {
+  for (auto const& kv : *publication.keyVals_ref()) {
     publicationBuffer_[floodRootId].emplace(kv.first);
   }
-  for (auto const& key : publication.expiredKeys) {
+  for (auto const& key : *publication.expiredKeys_ref()) {
     publicationBuffer_[floodRootId].emplace(key);
   }
 }
@@ -2689,9 +2713,9 @@ KvStoreDb::floodBufferedUpdates() {
     for (const auto& key : kv.second) {
       auto kvStoreIt = kvStore_.find(key);
       if (kvStoreIt != kvStore_.end()) {
-        publication.keyVals.emplace(make_pair(key, kvStoreIt->second));
+        publication.keyVals_ref()->emplace(make_pair(key, kvStoreIt->second));
       } else {
-        publication.expiredKeys.emplace_back(key);
+        publication.expiredKeys_ref()->emplace_back(key);
       }
     }
     publications.emplace_back(std::move(publication));
@@ -2715,29 +2739,29 @@ KvStoreDb::finalizeFullSync(
   for (const auto& key : keys) {
     const auto& it = kvStore_.find(key);
     if (it != kvStore_.end()) {
-      updates.keyVals.emplace(key, it->second);
+      updates.keyVals_ref()->emplace(key, it->second);
     }
   }
 
   // Update ttl values to remove expiring keys. Ignore the response if no
   // keys to be sent
   updatePublicationTtl(updates);
-  if (not updates.keyVals.size()) {
+  if (not updates.keyVals_ref()->size()) {
     return;
   }
 
   thrift::KvStoreRequest updateRequest;
   thrift::KeySetParams params;
 
-  params.keyVals = std::move(updates.keyVals);
-  params.solicitResponse = false;
+  *params.keyVals_ref() = std::move(*updates.keyVals_ref());
+  params.solicitResponse_ref() = false;
   // I'm the initiator, set flood-root-id
   params.floodRootId_ref().from_optional(DualNode::getSptRootId());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
 
-  updateRequest.cmd = thrift::Command::KEY_SET;
+  updateRequest.cmd_ref() = thrift::Command::KEY_SET;
   updateRequest.keySetParams_ref() = params;
-  updateRequest.area = area_;
+  *updateRequest.area_ref() = area_;
 
   // ATTN: KvStore maintains different mechanism over 3-way full-sync.
   //  1) Over thrift peer connection;
@@ -2837,7 +2861,7 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
     const auto& peer = kv.first;
     const auto& peerSpec = kv.second.first;
     if (floodToAll or sptPeers.count(peer) != 0 or
-        not peerSpec.supportFloodOptimization) {
+        not(*peerSpec.supportFloodOptimization_ref())) {
       floodPeers.emplace(peer);
     }
   }
@@ -2873,7 +2897,8 @@ KvStoreDb::floodPublication(
   updatePublicationTtl(publication, true);
 
   // If there are no changes then return
-  if (publication.keyVals.empty() && publication.expiredKeys.empty()) {
+  if (publication.keyVals_ref()->empty() &&
+      publication.expiredKeys_ref()->empty()) {
     return;
   }
 
@@ -2894,7 +2919,7 @@ KvStoreDb::floodPublication(
   fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
 
   // Flood keyValue ONLY updates to external neighbors
-  if (publication.keyVals.empty()) {
+  if (publication.keyVals_ref()->empty()) {
     return;
   }
 
@@ -2907,16 +2932,16 @@ KvStoreDb::floodPublication(
   thrift::KvStoreRequest floodRequest;
   thrift::KeySetParams params;
 
-  params.keyVals = publication.keyVals;
+  *params.keyVals_ref() = *publication.keyVals_ref();
   // TODO: remove solicit response when all KEY_SET request is over thrift
-  params.solicitResponse = false;
+  params.solicitResponse_ref() = false;
   params.nodeIds_ref().copy_from(publication.nodeIds_ref());
   params.floodRootId_ref().copy_from(publication.floodRootId_ref());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
 
-  floodRequest.cmd = thrift::Command::KEY_SET;
+  floodRequest.cmd_ref() = thrift::Command::KEY_SET;
   floodRequest.keySetParams_ref() = params;
-  floodRequest.area = area_;
+  *floodRequest.area_ref() = area_;
 
   std::optional<std::string> floodRootId{std::nullopt};
   if (params.floodRootId_ref().has_value()) {
@@ -2953,7 +2978,7 @@ KvStoreDb::floodPublication(
           "kvstore.thrift.num_flood_pub", 1, fb303::COUNT);
       fb303::fbData->addStatValue(
           "kvstore.thrift.num_flood_key_vals",
-          publication.keyVals.size(),
+          publication.keyVals_ref()->size(),
           fb303::SUM);
 
       auto startTime = std::chrono::steady_clock::now();
@@ -3012,7 +3037,9 @@ KvStoreDb::floodPublication(
 
       fb303::fbData->addStatValue("kvstore.sent_publications", 1, fb303::COUNT);
       fb303::fbData->addStatValue(
-          "kvstore.sent_key_vals", publication.keyVals.size(), fb303::SUM);
+          "kvstore.sent_key_vals",
+          publication.keyVals_ref()->size(),
+          fb303::SUM);
 
       // Send flood request
       auto const& peerCmdSocketId = peers_.at(peer).second;
@@ -3035,14 +3062,16 @@ KvStoreDb::mergePublication(
   // Add counters
   fb303::fbData->addStatValue("kvstore.received_publications", 1, fb303::COUNT);
   fb303::fbData->addStatValue(
-      "kvstore.received_key_vals", rcvdPublication.keyVals.size(), fb303::SUM);
+      "kvstore.received_key_vals",
+      rcvdPublication.keyVals_ref()->size(),
+      fb303::SUM);
 
   const bool needFinalizeFullSync = senderId.has_value() and
       rcvdPublication.tobeUpdatedKeys_ref().has_value() and
       not rcvdPublication.tobeUpdatedKeys_ref()->empty();
 
   // This can happen when KvStore is emitting expired-key updates
-  if (rcvdPublication.keyVals.empty() and not needFinalizeFullSync) {
+  if (rcvdPublication.keyVals_ref()->empty() and not needFinalizeFullSync) {
     return 0;
   }
 
@@ -3057,13 +3086,13 @@ KvStoreDb::mergePublication(
 
   // Generate delta with local KvStore
   thrift::Publication deltaPublication;
-  deltaPublication.keyVals = KvStore::mergeKeyValues(
-      kvStore_, rcvdPublication.keyVals, kvParams_.filters);
+  *deltaPublication.keyVals_ref() = KvStore::mergeKeyValues(
+      kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters);
   deltaPublication.floodRootId_ref().copy_from(
       rcvdPublication.floodRootId_ref());
-  deltaPublication.area = area_;
+  *deltaPublication.area_ref() = area_;
 
-  const size_t kvUpdateCnt = deltaPublication.keyVals.size();
+  const size_t kvUpdateCnt = deltaPublication.keyVals_ref()->size();
   fb303::fbData->addStatValue(
       "kvstore.updated_key_vals", kvUpdateCnt, fb303::SUM);
 
@@ -3075,7 +3104,7 @@ KvStoreDb::mergePublication(
   // Update ttl values of keys
   updateTtlCountdownQueue(deltaPublication);
 
-  if (not deltaPublication.keyVals.empty()) {
+  if (not deltaPublication.keyVals_ref()->empty()) {
     // Flood change to all of our neighbors/subscribers
     floodPublication(std::move(deltaPublication));
   } else {
@@ -3104,8 +3133,8 @@ KvStoreDb::logSyncEvent(
   sample.addInt("duration_ms", syncDuration.count());
 
   fbzmq::thrift::EventLog eventLog;
-  eventLog.category = Constants::kEventLogCategory.toString();
-  eventLog.samples = {sample.toJson()};
+  *eventLog.category_ref() = Constants::kEventLogCategory.toString();
+  *eventLog.samples_ref() = {sample.toJson()};
   kvParams_.zmqMonitorClient->addEventLog(std::move(eventLog));
 }
 
@@ -3118,8 +3147,8 @@ KvStoreDb::logKvEvent(const std::string& event, const std::string& key) {
   sample.addString("key", key);
 
   fbzmq::thrift::EventLog eventLog;
-  eventLog.category = Constants::kEventLogCategory.toString();
-  eventLog.samples = {sample.toJson()};
+  *eventLog.category_ref() = Constants::kEventLogCategory.toString();
+  *eventLog.samples_ref() = {sample.toJson()};
   kvParams_.zmqMonitorClient->addEventLog(std::move(eventLog));
 }
 
@@ -3132,9 +3161,9 @@ KvStoreDb::sendDualMessages(
   }
   const auto& neighborCmdSocketId = peers_.at(neighbor).second;
   thrift::KvStoreRequest dualRequest;
-  dualRequest.cmd = thrift::Command::DUAL;
+  dualRequest.cmd_ref() = thrift::Command::DUAL;
   dualRequest.dualMessages_ref() = msgs;
-  dualRequest.area = area_;
+  *dualRequest.area_ref() = area_;
   const auto ret = sendMessageToPeer(neighborCmdSocketId, dualRequest);
   // NOTE: we rely on zmq (on top of tcp) to reliably deliver message,
   // if we switch to other protocols, we need to make sure its reliability.

@@ -131,10 +131,10 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
     }
 
     auto prefixEntry = openr::thrift::PrefixEntry();
-    prefixEntry.prefix =
+    *prefixEntry.prefix_ref() =
         toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second));
-    prefixEntry.type = thrift::PrefixType::LOOPBACK;
-    prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
+    prefixEntry.type_ref() = thrift::PrefixType::LOOPBACK;
+    prefixEntry.forwardingType_ref() = thrift::PrefixForwardingType::IP;
     prefixEntry.ephemeral_ref().reset();
     prefixes.push_back(prefixEntry);
   }

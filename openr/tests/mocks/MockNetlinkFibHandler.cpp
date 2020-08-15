@@ -30,13 +30,15 @@ MockNetlinkFibHandler::addUnicastRoute(
     int16_t, std::unique_ptr<openr::thrift::UnicastRoute> route) {
   SYNCHRONIZED(unicastRouteDb_) {
     auto prefix = std::make_pair(
-        toIPAddress((*route).dest.prefixAddress), (*route).dest.prefixLength);
+        toIPAddress(*(*route).dest_ref()->prefixAddress_ref()),
+        *(*route).dest_ref()->prefixLength_ref());
 
-    auto newNextHops =
-        from((*route).nextHops) | mapped([](const thrift::NextHopThrift& nh) {
-          return std::make_pair(
-              nh.address.ifName_ref().value(), toIPAddress(nh.address));
-        }) |
+    auto newNextHops = from(*(*route).nextHops_ref()) |
+        mapped([](const thrift::NextHopThrift& nh) {
+                         return std::make_pair(
+                             nh.address_ref()->ifName_ref().value(),
+                             toIPAddress(*nh.address_ref()));
+                       }) |
         as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
     unicastRouteDb_.emplace(prefix, newNextHops);
@@ -49,7 +51,8 @@ MockNetlinkFibHandler::deleteUnicastRoute(
   SYNCHRONIZED(unicastRouteDb_) {
     VLOG(3) << "Deleting routes of prefix" << toString(*prefix);
     auto myPrefix = std::make_pair(
-        toIPAddress((*prefix).prefixAddress), (*prefix).prefixLength);
+        toIPAddress(*(*prefix).prefixAddress_ref()),
+        *(*prefix).prefixLength_ref());
 
     unicastRouteDb_.erase(myPrefix);
   }
@@ -61,13 +64,14 @@ MockNetlinkFibHandler::addUnicastRoutes(
   SYNCHRONIZED(unicastRouteDb_) {
     for (auto const& route : *routes) {
       auto prefix = std::make_pair(
-          toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
+          toIPAddress(*route.dest_ref()->prefixAddress_ref()),
+          *route.dest_ref()->prefixLength_ref());
 
-      auto newNextHops = from(route.nextHops) |
+      auto newNextHops = from(*route.nextHops_ref()) |
           mapped([](const thrift::NextHopThrift& nh) {
                            return std::make_pair(
-                               nh.address.ifName_ref().value_or("none"),
-                               toIPAddress(nh.address));
+                               nh.address_ref()->ifName_ref().value_or("none"),
+                               toIPAddress(*nh.address_ref()));
                          }) |
           as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
@@ -84,7 +88,7 @@ MockNetlinkFibHandler::deleteUnicastRoutes(
   SYNCHRONIZED(unicastRouteDb_) {
     for (auto const& prefix : *prefixes) {
       auto myPrefix = std::make_pair(
-          toIPAddress(prefix.prefixAddress), prefix.prefixLength);
+          toIPAddress(*prefix.prefixAddress_ref()), *prefix.prefixLength_ref());
 
       unicastRouteDb_.erase(myPrefix);
     }
@@ -102,13 +106,14 @@ MockNetlinkFibHandler::syncFib(
     unicastRouteDb_.clear();
     for (auto const& route : *routes) {
       auto prefix = std::make_pair(
-          toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
+          toIPAddress(*route.dest_ref()->prefixAddress_ref()),
+          *route.dest_ref()->prefixLength_ref());
 
-      auto newNextHops = from(route.nextHops) |
+      auto newNextHops = from(*route.nextHops_ref()) |
           mapped([](const thrift::NextHopThrift& nh) {
                            return std::make_pair(
-                               nh.address.ifName_ref().value_or("none"),
-                               toIPAddress(nh.address));
+                               nh.address_ref()->ifName_ref().value_or("none"),
+                               toIPAddress(*nh.address_ref()));
                          }) |
           as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
@@ -124,7 +129,7 @@ MockNetlinkFibHandler::addMplsRoutes(
     int16_t, std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) {
   SYNCHRONIZED(mplsRouteDb_) {
     for (auto& route : *routes) {
-      mplsRouteDb_[route.topLabel] = std::move(route.nextHops);
+      mplsRouteDb_[*route.topLabel_ref()] = std::move(*route.nextHops_ref());
     }
   }
   addMplsRoutesCount_ += routes->size();
@@ -149,7 +154,7 @@ MockNetlinkFibHandler::syncMplsFib(
   SYNCHRONIZED(mplsRouteDb_) {
     mplsRouteDb_.clear();
     for (auto& route : *routes) {
-      mplsRouteDb_[route.topLabel] = std::move(route.nextHops);
+      mplsRouteDb_[*route.topLabel_ref()] = std::move(*route.nextHops_ref());
     }
   }
   fibMplsSyncCount_ += routes->size();
@@ -181,15 +186,15 @@ MockNetlinkFibHandler::getRouteTableByClient(
             VLOG(2) << "mapping next-hop " << nextHop.second.str() << " dev "
                     << nextHop.first;
             thrift::NextHopThrift thriftNextHop;
-            thriftNextHop.address = toBinaryAddress(nextHop.second);
-            thriftNextHop.address.ifName_ref() = nextHop.first;
+            *thriftNextHop.address_ref() = toBinaryAddress(nextHop.second);
+            thriftNextHop.address_ref()->ifName_ref() = nextHop.first;
             return thriftNextHop;
           }) |
           as<std::vector>();
 
       thrift::UnicastRoute route;
       route.dest = toIpPrefix(prefix);
-      route.nextHops = std::move(thriftNextHops);
+      *route.nextHops_ref() = std::move(thriftNextHops);
       routes.emplace_back(std::move(route));
     }
   }
@@ -203,7 +208,7 @@ MockNetlinkFibHandler::getMplsRouteTableByClient(
     for (auto const& kv : mplsRouteDb_) {
       thrift::MplsRoute route;
       route.topLabel = kv.first;
-      route.nextHops = kv.second;
+      *route.nextHops_ref() = kv.second;
       routes.emplace_back(std::move(route));
     }
   }

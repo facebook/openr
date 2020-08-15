@@ -385,7 +385,7 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
               for (auto& nlRoute : nlRoutes.value().value()) {
                 thrift::UnicastRoute route;
                 route.dest = toIpPrefix(nlRoute.getDestination());
-                route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+                *route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
                 routes->emplace_back(std::move(route));
               }
             }
@@ -415,7 +415,7 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
             for (auto& nlRoute : nlRoutes.value()) {
               thrift::MplsRoute route;
               route.topLabel = nlRoute.getMplsLabel().value();
-              route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+              *route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
               routes->emplace_back(std::move(route));
             }
             return routes;
@@ -432,10 +432,10 @@ NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
 
     // Add nexthop address
     if (nh.getGateway().has_value()) {
-      nextHop.address = toBinaryAddress(nh.getGateway().value());
+      *nextHop.address_ref() = toBinaryAddress(nh.getGateway().value());
       // Add nexthop interface if any
       if (nh.getIfIndex().has_value()) {
-        nextHop.address.ifName_ref() =
+        nextHop.address_ref()->ifName_ref() =
             getIfName(nh.getIfIndex().value()).value();
       }
     } else {
@@ -443,11 +443,11 @@ NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
       // valid but zeroed ipv6 address.
       CHECK(labelAction.has_value());
       CHECK(thrift::MplsActionCode::POP_AND_LOOKUP == labelAction.value());
-      nextHop.address = toBinaryAddress(folly::IPAddressV6("::"));
+      *nextHop.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
     }
 
     // Set nexthop weight
-    nextHop.weight = nh.getWeight();
+    nextHop.weight_ref() = nh.getWeight();
 
     // Add mpls action
     if (labelAction.has_value()) {
@@ -475,18 +475,19 @@ NetlinkFibHandler::buildMplsAction(
     return;
   }
   auto mplsAction = nhop.mplsAction_ref().value();
-  nhBuilder.setLabelAction(mplsAction.action);
-  if (mplsAction.action == thrift::MplsActionCode::SWAP) {
+  nhBuilder.setLabelAction(*mplsAction.action_ref());
+  if (*mplsAction.action_ref() == thrift::MplsActionCode::SWAP) {
     if (!mplsAction.swapLabel_ref().has_value()) {
       throw fbnl::NlException("Swap label not provided");
     }
     nhBuilder.setSwapLabel(mplsAction.swapLabel_ref().value());
-  } else if (mplsAction.action == thrift::MplsActionCode::PUSH) {
+  } else if (*mplsAction.action_ref() == thrift::MplsActionCode::PUSH) {
     if (!mplsAction.pushLabels_ref().has_value()) {
       throw fbnl::NlException("Push label(s) not provided");
     }
     nhBuilder.setPushLabels(mplsAction.pushLabels_ref().value());
-  } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
+  } else if (
+      *mplsAction.action_ref() == thrift::MplsActionCode::POP_AND_LOOKUP) {
     auto lpbkIfIndex = getLoopbackIfIndex();
     if (lpbkIfIndex.has_value()) {
       nhBuilder.setIfIndex(lpbkIfIndex.value());
@@ -505,12 +506,12 @@ NetlinkFibHandler::buildNextHop(
   // add nexthops
   fbnl::NextHopBuilder nhBuilder;
   for (const auto& nh : nhop) {
-    if (nh.address.ifName_ref()) {
-      nhBuilder.setIfIndex(getIfIndex(*nh.address.ifName_ref()).value());
+    if (nh.address_ref()->ifName_ref()) {
+      nhBuilder.setIfIndex(getIfIndex(*nh.address_ref()->ifName_ref()).value());
     }
-    nhBuilder.setGateway(toIPAddress(nh.address));
+    nhBuilder.setGateway(toIPAddress(*nh.address_ref()));
     buildMplsAction(nhBuilder, nh);
-    nhBuilder.setWeight(nh.weight);
+    nhBuilder.setWeight(*nh.weight_ref());
     rtBuilder.addNextHop(nhBuilder.build());
     nhBuilder.reset();
   }
@@ -526,12 +527,12 @@ NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
       .setFlags(0)
       .setValid(true);
 
-  if (route.nextHops.empty()) {
+  if (route.nextHops_ref()->empty()) {
     // Empty nexthops is same as DROP (aka RTN_BLACKHOLE)
     rtBuilder.setType(RTN_BLACKHOLE);
   } else {
     // Add nexthops
-    buildNextHop(rtBuilder, route.nextHops);
+    buildNextHop(rtBuilder, *route.nextHops_ref());
   }
 
   return rtBuilder.build();
@@ -548,12 +549,12 @@ NetlinkFibHandler::buildMplsRoute(
       .setFlags(0)
       .setValid(true);
 
-  if (mplsRoute.nextHops.empty()) {
+  if (mplsRoute.nextHops_ref()->empty()) {
     // Empty nexthops is same as DROP (aka RTN_BLACKHOLE)
     rtBuilder.setType(RTN_BLACKHOLE);
   } else {
     // Add nexthops
-    buildNextHop(rtBuilder, mplsRoute.nextHops);
+    buildNextHop(rtBuilder, *mplsRoute.nextHops_ref());
   }
 
   return rtBuilder.setValid(true).build();

@@ -84,7 +84,7 @@ dumpAllWithThriftClientFromMultiple(
   std::vector<fbzmq::SocketUrl> unreachedUrls;
 
   thrift::KeyDumpParams params;
-  params.prefix = keyPrefix;
+  *params.prefix_ref() = keyPrefix;
   if (not keyPrefix.empty()) {
     params.keys_ref() = {keyPrefix};
   }
@@ -147,7 +147,7 @@ dumpAllWithThriftClientFromMultiple(
                          << folly::exceptionStr(result.exception());
           } else if (result.hasValue()) {
             VLOG(3) << "KvStore publication received";
-            KvStore::mergeKeyValues(merged, result.value().keyVals);
+            KvStore::mergeKeyValues(merged, *result.value().keyVals_ref());
           }
         }
         evb.terminateLoopSoon();

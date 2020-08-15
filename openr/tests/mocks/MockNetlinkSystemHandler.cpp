@@ -28,11 +28,11 @@ MockNetlinkSystemHandler::getAllLinks(std::vector<thrift::Link>& linkDb) {
   SYNCHRONIZED(linkDb_) {
     for (const auto link : linkDb_) {
       thrift::Link linkEntry;
-      linkEntry.ifName = link.first;
-      linkEntry.ifIndex = link.second.ifIndex;
-      linkEntry.isUp = link.second.isUp;
+      *linkEntry.ifName_ref() = link.first;
+      linkEntry.ifIndex_ref() = link.second.ifIndex;
+      linkEntry.isUp_ref() = link.second.isUp;
       for (const auto network : link.second.networks) {
-        linkEntry.networks.push_back(thrift::IpPrefix(
+        linkEntry.networks_ref()->push_back(thrift::IpPrefix(
             FRAGILE, toBinaryAddress(network.first), network.second));
       }
       linkDb.push_back(linkEntry);

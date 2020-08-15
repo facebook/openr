@@ -56,11 +56,11 @@ ZmqMonitorPoller::recvPublication() {
     return;
   }
   auto pub = maybePub.value();
-  if (pub.pubType == fbzmq::thrift::PubType::EVENT_LOG_PUB) {
+  if (*pub.pubType_ref() == fbzmq::thrift::PubType::EVENT_LOG_PUB) {
     // look what we got
-    LOG(INFO) << "Log message recvd for ctaegory: " << pub.eventLogPub.category
-              << " samples: ";
-    for (const auto& sample : pub.eventLogPub.samples) {
+    LOG(INFO) << "Log message recvd for ctaegory: "
+              << *pub.eventLogPub_ref()->category_ref() << " samples: ";
+    for (const auto& sample : *pub.eventLogPub_ref()->samples_ref()) {
       LOG(INFO) << sample;
     }
   }
@@ -77,7 +77,7 @@ ZmqMonitorPoller::getZmqMonitorCounters(const fbzmq::SocketUrl& zmqUrl) {
 
   // Send request
   fbzmq::thrift::MonitorRequest request;
-  request.cmd = fbzmq::thrift::MonitorCommand::DUMP_ALL_COUNTER_DATA;
+  request.cmd_ref() = fbzmq::thrift::MonitorCommand::DUMP_ALL_COUNTER_DATA;
   dealerSock.sendThriftObj(request, compactSerializer_);
 
   auto maybeResult =
@@ -88,13 +88,13 @@ ZmqMonitorPoller::getZmqMonitorCounters(const fbzmq::SocketUrl& zmqUrl) {
                << maybeResult.error();
     return;
   }
-  auto& counters = maybeResult.value().counters;
+  auto& counters = *maybeResult.value().counters_ref();
   LOG(INFO) << "Got " << counters.size() << " counters from ZmqMonitor at "
             << static_cast<std::string>(zmqUrl);
 
   // Look at what wegot
   for (auto const& kv : counters) {
-    LOG(INFO) << "key: " << kv.first << ", value: " << kv.second.value;
+    LOG(INFO) << "key: " << kv.first << ", value: " << *kv.second.value_ref();
   }
 
   return;

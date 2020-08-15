@@ -346,8 +346,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
     }
 
     // Sanity check for V4 prefixes
-    const bool isV4Prefix =
-        prefix.prefixAddress.addr.size() == folly::IPAddressV4::byteCount();
+    const bool isV4Prefix = prefix.prefixAddress_ref()->addr_ref()->size() ==
+        folly::IPAddressV4::byteCount();
     if (isV4Prefix && !enableV4_) {
       LOG(WARNING) << "Received v4 prefix while v4 is not enabled.";
       fb303::fbData->addStatValue(
@@ -472,7 +472,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   std::unordered_map<int32_t, std::pair<std::string, RibMplsEntry>> labelToNode;
   for (const auto& [area, linkState] : areaLinkStates) {
     for (const auto& [_, adjDb] : linkState.getAdjacencyDatabases()) {
-      const auto topLabel = adjDb.nodeLabel;
+      const auto topLabel = *adjDb.nodeLabel_ref();
       // Top label is not set => Non-SR mode
       if (topLabel == 0) {
         continue;
@@ -480,7 +480,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       // If mpls label is not valid then ignore it
       if (not isMplsLabelValid(topLabel)) {
         LOG(ERROR) << "Ignoring invalid node label " << topLabel << " of node "
-                   << adjDb.thisNodeName;
+                   << *adjDb.thisNodeName_ref();
         fb303::fbData->addStatValue(
             "decision.skipped_mpls_route", 1, fb303::COUNT);
         continue;
@@ -493,25 +493,26 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       auto iter = labelToNode.find(topLabel);
       if (iter != labelToNode.end()) {
         LOG(INFO) << "Find duplicate label " << topLabel << "from "
-                  << iter->second.first << " " << adjDb.thisNodeName;
+                  << iter->second.first << " " << *adjDb.thisNodeName_ref();
         fb303::fbData->addStatValue(
             "decision.duplicate_node_label", 1, fb303::COUNT);
-        if (iter->second.first < adjDb.thisNodeName) {
+        if (iter->second.first < *adjDb.thisNodeName_ref()) {
           continue;
         }
       }
 
       // Install POP_AND_LOOKUP for next layer
-      if (adjDb.thisNodeName == myNodeName) {
+      if (*adjDb.thisNodeName_ref() == myNodeName) {
         thrift::NextHopThrift nh;
-        nh.address = toBinaryAddress(folly::IPAddressV6("::"));
+        *nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
         nh.area_ref() = area;
         nh.mplsAction_ref() =
             createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
         labelToNode.erase(topLabel);
         labelToNode.emplace(
             topLabel,
-            std::make_pair(adjDb.thisNodeName, RibMplsEntry(topLabel, {nh})));
+            std::make_pair(
+                *adjDb.thisNodeName_ref(), RibMplsEntry(topLabel, {nh})));
         continue;
       }
 
@@ -523,7 +524,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
           areaLinkStates);
       if (metricNhs.second.empty()) {
         LOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
-                     << " of node " << adjDb.thisNodeName;
+                     << " of node " << *adjDb.thisNodeName_ref();
         fb303::fbData->addStatValue(
             "decision.no_route_to_label", 1, fb303::COUNT);
         continue;
@@ -778,14 +779,14 @@ SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
   // squash the updates together.
   for (const auto& staticRoutesUpdate : staticRoutesUpdates_) {
     for (const auto& mplsRoutesToUpdate :
-         staticRoutesUpdate.mplsRoutesToUpdate) {
+         *staticRoutesUpdate.mplsRoutesToUpdate_ref()) {
       LOG(INFO) << "adding: " << mplsRoutesToUpdate.topLabel;
       routesToUpdate[mplsRoutesToUpdate.topLabel] = mplsRoutesToUpdate;
       routesToDel.erase(mplsRoutesToUpdate.topLabel);
     }
 
     for (const auto& mplsRoutesToDelete :
-         staticRoutesUpdate.mplsRoutesToDelete) {
+         *staticRoutesUpdate.mplsRoutesToDelete_ref()) {
       LOG(INFO) << "erasing: " << mplsRoutesToDelete;
       routesToDel.insert(mplsRoutesToDelete);
       routesToUpdate.erase(mplsRoutesToDelete);
@@ -799,12 +800,12 @@ SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
 
   DecisionRouteUpdate ret;
   for (const auto& [label, tMplsRoute] : routesToUpdate) {
-    staticRoutes_.mplsRoutes[label] = tMplsRoute.nextHops;
+    staticRoutes_.mplsRoutes_ref()[label] = *tMplsRoute.nextHops_ref();
     ret.mplsRoutesToUpdate.emplace_back(RibMplsEntry::fromThrift(tMplsRoute));
   }
 
   for (const auto& routeToDel : routesToDel) {
-    staticRoutes_.mplsRoutes.erase(routeToDel);
+    staticRoutes_.mplsRoutes_ref()->erase(routeToDel);
     ret.mplsRoutesToDelete.push_back(routeToDel);
   }
 
@@ -891,8 +892,9 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
       for (auto& link : path) {
         cost += link->getMetricFromNode(nextNodeName);
         nextNodeName = link->getOtherNodeName(nextNodeName);
-        labels.push_front(
-            linkState.getAdjacencyDatabases().at(nextNodeName).nodeLabel);
+        labels.push_front(*linkState.getAdjacencyDatabases()
+                               .at(nextNodeName)
+                               .nodeLabel_ref());
       }
       labels.pop_back(); // Remove first node's label to respect PHP
       auto& prefixEntry = prefixEntries.at({nextNodeName, area});
@@ -911,7 +913,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
             thrift::MplsActionCode::PUSH, std::nullopt, std::move(labelVec));
       }
 
-      auto const& prefixStr = prefix.prefixAddress.addr;
+      auto const& prefixStr = *prefix.prefixAddress_ref()->addr_ref();
       bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
 
       nextHops.emplace(createNextHop(
@@ -1313,15 +1315,15 @@ Decision::Decision(
     messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
     : config_(config),
       routeUpdatesQueue_(routeUpdatesQueue),
-      myNodeName_(config->getConfig().node_name),
-      pendingUpdates_(config->getConfig().node_name),
+      myNodeName_(*config->getConfig().node_name_ref()),
+      pendingUpdates_(*config->getConfig().node_name_ref()),
       rebuildRoutesDebounced_(
           getEvb(), debounceMinDur, debounceMaxDur, [this]() noexcept {
             rebuildRoutes("DECISION_DEBOUNCE");
           }) {
   auto tConfig = config->getConfig();
   spfSolver_ = std::make_unique<SpfSolver>(
-      tConfig.node_name,
+      *tConfig.node_name_ref(),
       tConfig.enable_v4_ref().value_or(false),
       computeLfaPaths,
       tConfig.enable_ordered_fib_programming_ref().value_or(false),
@@ -1429,11 +1431,12 @@ Decision::getDecisionRouteDb(std::string nodeName) {
     }
 
     // static routes
-    for (const auto& [key, val] : spfSolver_->getStaticRoutes().mplsRoutes) {
-      routeDb.mplsRoutes.emplace_back(createMplsRoute(key, val));
+    for (const auto& [key, val] :
+         *spfSolver_->getStaticRoutes().mplsRoutes_ref()) {
+      routeDb.mplsRoutes_ref()->emplace_back(createMplsRoute(key, val));
     }
 
-    routeDb.thisNodeName = nodeName;
+    *routeDb.thisNodeName_ref() = nodeName;
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
   });
   return sf;
@@ -1496,7 +1499,7 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();
   if (not config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
-    error.message = "RibPolicy feature is not enabled";
+    *error.message_ref() = "RibPolicy feature is not enabled";
     p.setException(error);
     return std::move(sf);
   }
@@ -1542,7 +1545,7 @@ Decision::getRibPolicy() {
   auto [p, sf] = folly::makePromiseContract<thrift::RibPolicy>();
   if (not config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
-    error.message = "RibPolicy feature is not enabled";
+    *error.message_ref() = "RibPolicy feature is not enabled";
     p.setException(error);
     return std::move(sf);
   }
@@ -1552,7 +1555,7 @@ Decision::getRibPolicy() {
       p.setValue(ribPolicy_->toThrift());
     } else {
       thrift::OpenrError e;
-      e.message = "RibPolicy is not configured";
+      *e.message_ref() = "RibPolicy is not configured";
       p.setException(e);
     }
   });
@@ -1562,12 +1565,12 @@ Decision::getRibPolicy() {
 std::optional<thrift::PrefixDatabase>
 Decision::updateNodePrefixDatabase(
     const std::string& key, const thrift::PrefixDatabase& prefixDb) {
-  auto const& nodeName = prefixDb.thisNodeName;
+  auto const& nodeName = *prefixDb.thisNodeName_ref();
 
   auto prefixKey = PrefixKey::fromStr(key);
   // per prefix key
   if (prefixKey.hasValue()) {
-    if (prefixDb.deletePrefix) {
+    if (*prefixDb.deletePrefix_ref()) {
       perPrefixPrefixEntries_[nodeName].erase(prefixKey.value().getIpPrefix());
     } else {
       CHECK_EQ(1, prefixDb.prefixEntries_ref()->size());
@@ -1586,21 +1589,22 @@ Decision::updateNodePrefixDatabase(
     }
   } else {
     fullDbPrefixEntries_[nodeName].clear();
-    for (auto const& entry : prefixDb.prefixEntries) {
-      fullDbPrefixEntries_[nodeName][entry.prefix] = entry;
+    for (auto const& entry : *prefixDb.prefixEntries_ref()) {
+      fullDbPrefixEntries_[nodeName][*entry.prefix_ref()] = entry;
     }
   }
 
   thrift::PrefixDatabase nodePrefixDb;
-  nodePrefixDb.thisNodeName = nodeName;
+  *nodePrefixDb.thisNodeName_ref() = nodeName;
   nodePrefixDb.perfEvents_ref().copy_from(prefixDb.perfEvents_ref());
-  nodePrefixDb.prefixEntries.reserve(perPrefixPrefixEntries_[nodeName].size());
+  nodePrefixDb.prefixEntries_ref()->reserve(
+      perPrefixPrefixEntries_[nodeName].size());
   for (auto& kv : perPrefixPrefixEntries_[nodeName]) {
-    nodePrefixDb.prefixEntries.emplace_back(kv.second);
+    nodePrefixDb.prefixEntries_ref()->emplace_back(kv.second);
   }
   for (auto& kv : fullDbPrefixEntries_[nodeName]) {
     if (not perPrefixPrefixEntries_[nodeName].count(kv.first)) {
-      nodePrefixDb.prefixEntries.emplace_back(kv.second);
+      nodePrefixDb.prefixEntries_ref()->emplace_back(kv.second);
     }
   }
   return nodePrefixDb;
@@ -1608,8 +1612,8 @@ Decision::updateNodePrefixDatabase(
 
 void
 Decision::processPublication(thrift::Publication const& thriftPub) {
-  CHECK(not thriftPub.area.empty());
-  auto const& area = thriftPub.area;
+  CHECK(not thriftPub.area_ref()->empty());
+  auto const& area = *thriftPub.area_ref();
 
   if (!areaLinkStates_.count(area)) {
     areaLinkStates_.emplace(area, area);
@@ -1620,18 +1624,19 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   // deserialize contents of every LSDB key
 
   // Nothing to process if no adj/prefix db changes
-  if (thriftPub.keyVals.empty() and thriftPub.expiredKeys.empty()) {
+  if (thriftPub.keyVals_ref()->empty() and
+      thriftPub.expiredKeys_ref()->empty()) {
     return;
   }
 
-  for (const auto& kv : thriftPub.keyVals) {
+  for (const auto& kv : *thriftPub.keyVals_ref()) {
     const auto& key = kv.first;
     const auto& rawVal = kv.second;
     std::string nodeName = getNodeNameFromKey(key);
 
     if (not rawVal.value_ref().has_value()) {
       // skip TTL update
-      DCHECK(rawVal.ttlVersion > 0);
+      DCHECK(*rawVal.ttlVersion_ref() > 0);
       continue;
     }
 
@@ -1643,21 +1648,21 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
                 rawVal.value_ref().value(), serializer_);
         // TODO this sould come from KvStore.
         adjacencyDb.area_ref() = area;
-        CHECK_EQ(nodeName, adjacencyDb.thisNodeName);
+        CHECK_EQ(nodeName, *adjacencyDb.thisNodeName_ref());
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
         if (config_->getConfig().enable_ordered_fib_programming_ref().value_or(
                 false)) {
           if (auto maybeHoldUpTtl = areaLinkState.getHopsFromAToB(
-                  myNodeName_, adjacencyDb.thisNodeName)) {
+                  myNodeName_, *adjacencyDb.thisNodeName_ref())) {
             holdUpTtl = maybeHoldUpTtl.value();
-            holdDownTtl =
-                areaLinkState.getMaxHopsToNode(adjacencyDb.thisNodeName) -
+            holdDownTtl = areaLinkState.getMaxHopsToNode(
+                              *adjacencyDb.thisNodeName_ref()) -
                 holdUpTtl;
           }
         }
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyLinkStateChange(
-            adjacencyDb.thisNodeName,
+            *adjacencyDb.thisNodeName_ref(),
             areaLinkState.updateAdjacencyDatabase(
                 adjacencyDb, holdUpTtl, holdDownTtl),
             castToStd(adjacencyDb.perfEvents_ref()));
@@ -1672,14 +1677,14 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         // update prefixDb
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
-        CHECK_EQ(nodeName, prefixDb.thisNodeName);
+        CHECK_EQ(nodeName, *prefixDb.thisNodeName_ref());
         auto maybeNodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
         if (not maybeNodePrefixDb.has_value()) {
           continue;
         }
         auto nodePrefixDb = maybeNodePrefixDb.value();
         // TODO - this should directly come from KvStore.
-        nodePrefixDb.area = area;
+        *nodePrefixDb.area_ref() = area;
         VLOG(1) << "Updating prefix database for node " << nodeName
                 << " from area " << area;
         fb303::fbData->addStatValue(
@@ -1708,7 +1713,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   }
 
   // LSDB deletion
-  for (const auto& key : thriftPub.expiredKeys) {
+  for (const auto& key : *thriftPub.expiredKeys_ref()) {
     std::string nodeName = getNodeNameFromKey(key);
 
     if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
@@ -1722,8 +1727,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
       // manually build delete prefix db to signal delete just as a client would
       thrift::PrefixDatabase deletePrefixDb;
-      deletePrefixDb.thisNodeName = nodeName;
-      deletePrefixDb.deletePrefix = true;
+      *deletePrefixDb.thisNodeName_ref() = nodeName;
+      deletePrefixDb.deletePrefix_ref() = true;
 
       auto maybeNodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
       if (not maybeNodePrefixDb.has_value()) {
@@ -1732,7 +1737,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       auto nodePrefixDb = maybeNodePrefixDb.value();
 
       // TODO - this should directly come from KvStore.
-      nodePrefixDb.area = area;
+      *nodePrefixDb.area_ref() = area;
       pendingUpdates_.applyPrefixStateChange(
           prefixState_.updatePrefixDatabase(nodePrefixDb));
       continue;
@@ -1863,9 +1868,9 @@ Decision::updateGlobalCounters() const {
       const auto& adjDb = kv.second;
       size_t numLinks = linkState.linksFromNode(kv.first).size();
       // Consider partial adjacency only iff node is reachable from current node
-      if (mySpfResult.count(adjDb.thisNodeName) && 0 != numLinks) {
+      if (mySpfResult.count(*adjDb.thisNodeName_ref()) && 0 != numLinks) {
         // only add to the count if this node is not completely disconnected
-        size_t diff = adjDb.adjacencies.size() - numLinks;
+        size_t diff = adjDb.adjacencies_ref()->size() - numLinks;
         // Number of links (bi-directional) must be <= number of adjacencies
         CHECK_GE(diff, 0);
         numPartialAdjacencies += diff;

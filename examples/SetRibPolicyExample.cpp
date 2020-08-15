@@ -36,19 +36,19 @@ main(int argc, char* argv[]) {
 
   // Action weight
   thrift::RibRouteActionWeight actionWeight;
-  actionWeight.default_weight = FLAGS_default_weight;
-  actionWeight.area_to_weight.emplace(
+  actionWeight.default_weight_ref() = FLAGS_default_weight;
+  actionWeight.area_to_weight_ref()->emplace(
       thrift::KvStore_constants::kDefaultArea(), FLAGS_area0_weight);
 
   // Create PolicyStatement
   thrift::RibPolicyStatement policyStatement;
-  policyStatement.matcher.prefixes_ref() = prefixes;
-  policyStatement.action.set_weight_ref() = actionWeight;
+  policyStatement.matcher_ref()->prefixes_ref() = prefixes;
+  policyStatement.action_ref()->set_weight_ref() = actionWeight;
 
   // Create RibPolicy
   thrift::RibPolicy policy;
-  policy.statements.emplace_back(policyStatement);
-  policy.ttl_secs = FLAGS_ttl_secs;
+  policy.statements_ref()->emplace_back(policyStatement);
+  policy.ttl_secs_ref() = FLAGS_ttl_secs;
 
   // Create OpenrClient and set policy
   LOG(INFO) << "Creating connection to host " << FLAGS_host;

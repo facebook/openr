@@ -449,7 +449,7 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
       EXPECT_TRUE(val1.has_value());
       EXPECT_TRUE(val2.has_value());
       EXPECT_EQ(val1->value_ref().value(), val2->value_ref().value());
-      EXPECT_EQ(val1->version, val2->version);
+      EXPECT_EQ(*val1->version_ref(), *val2->version_ref());
     }
   });
 
@@ -492,19 +492,19 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
   EXPECT_EQ(5, store2->dumpAll().size());
 
   auto v0 = store1->getKey(k0);
-  EXPECT_EQ(v0->version, 5);
+  EXPECT_EQ(*v0->version_ref(), 5);
   EXPECT_EQ(v0->value_ref().value(), value1);
   auto v1 = store1->getKey(k1);
-  EXPECT_EQ(v1->version, 1);
+  EXPECT_EQ(*v1->version_ref(), 1);
   EXPECT_EQ(v1->value_ref().value(), value1);
   auto v2 = store1->getKey(k2);
-  EXPECT_EQ(v2->version, 9);
+  EXPECT_EQ(*v2->version_ref(), 9);
   EXPECT_EQ(v2->value_ref().value(), value1);
   auto v3 = store1->getKey(k3);
-  EXPECT_EQ(v3->version, 9);
+  EXPECT_EQ(*v3->version_ref(), 9);
   EXPECT_EQ(v3->value_ref().value(), value2);
   auto v4 = store1->getKey(k4);
-  EXPECT_EQ(v4->version, 6);
+  EXPECT_EQ(*v4->version_ref(), 6);
   EXPECT_EQ(v4->value_ref().value(), value2);
 }
 

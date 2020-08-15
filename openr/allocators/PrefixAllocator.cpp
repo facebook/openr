@@ -35,14 +35,14 @@ PrefixAllocator::PrefixAllocator(
     : myNodeName_(config->getNodeName()),
       syncInterval_(syncInterval),
       setLoopbackAddress_(
-          config->getPrefixAllocationConfig().set_loopback_addr),
+          *config->getPrefixAllocationConfig().set_loopback_addr_ref()),
       overrideGlobalAddress_(
-          config->getPrefixAllocationConfig().override_loopback_addr),
+          *config->getPrefixAllocationConfig().override_loopback_addr_ref()),
       loopbackIfaceName_(
-          config->getPrefixAllocationConfig().loopback_interface),
-      prefixForwardingType_(config->getConfig().prefix_forwarding_type),
+          *config->getPrefixAllocationConfig().loopback_interface_ref()),
+      prefixForwardingType_(*config->getConfig().prefix_forwarding_type_ref()),
       prefixForwardingAlgorithm_(
-          config->getConfig().prefix_forwarding_algorithm),
+          *config->getConfig().prefix_forwarding_algorithm_ref()),
       area_(*config->getAreaIds().begin()),
       nlSock_(nlSock),
       configStore_(configStore),
@@ -58,7 +58,7 @@ PrefixAllocator::PrefixAllocator(
       std::make_unique<KvStoreClientInternal>(this, myNodeName_, kvStore);
 
   // Let the magic begin. Start allocation as per allocMode
-  switch (config->getPrefixAllocationConfig().prefix_allocation_mode) {
+  switch (*config->getPrefixAllocationConfig().prefix_allocation_mode_ref()) {
   case thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE:
     LOG(INFO) << "DYNAMIC_LEAF_NODE";
     dynamicAllocationLeafNode();
@@ -127,10 +127,10 @@ PrefixAllocator::staticAllocation() {
         configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
     if (maybeThriftAllocPrefix.hasValue()) {
       const auto oldAllocParams = std::make_pair(
-          toIPNetwork(maybeThriftAllocPrefix->seedPrefix),
-          static_cast<uint8_t>(maybeThriftAllocPrefix->allocPrefixLen));
+          toIPNetwork(*maybeThriftAllocPrefix->seedPrefix_ref()),
+          static_cast<uint8_t>(*maybeThriftAllocPrefix->allocPrefixLen_ref()));
       allocParams_ = oldAllocParams;
-      applyMyPrefixIndex(maybeThriftAllocPrefix->allocPrefixIndex);
+      applyMyPrefixIndex(*maybeThriftAllocPrefix->allocPrefixIndex_ref());
       return;
     }
 
@@ -200,8 +200,8 @@ PrefixAllocator::dynamicAllocationLeafNode() {
         configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
     if (maybeThriftAllocPrefix.hasValue()) {
       const auto oldAllocParams = std::make_pair(
-          toIPNetwork(maybeThriftAllocPrefix->seedPrefix),
-          static_cast<uint8_t>(maybeThriftAllocPrefix->allocPrefixLen));
+          toIPNetwork(*maybeThriftAllocPrefix->seedPrefix_ref()),
+          static_cast<uint8_t>(*maybeThriftAllocPrefix->allocPrefixLen_ref()));
       startAllocation(oldAllocParams);
       return;
     }
@@ -287,10 +287,10 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
   VLOG(1) << "Processing static prefix allocation update";
 
   // Look for my prefix in static allocation map
-  auto myPrefixIt = staticAlloc.nodePrefixes.find(myNodeName_);
+  auto myPrefixIt = staticAlloc.nodePrefixes_ref()->find(myNodeName_);
 
   // Withdraw my prefix if not found
-  if (myPrefixIt == staticAlloc.nodePrefixes.end() and allocParams_) {
+  if (myPrefixIt == staticAlloc.nodePrefixes_ref()->end() and allocParams_) {
     VLOG(2) << "Lost prefix";
     applyState_ = std::make_pair(true, std::nullopt);
     applyMyPrefixIndex(std::nullopt);
@@ -298,7 +298,7 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
   }
 
   // Advertise my prefix if found
-  if (myPrefixIt != staticAlloc.nodePrefixes.end()) {
+  if (myPrefixIt != staticAlloc.nodePrefixes_ref()->end()) {
     VLOG(2) << "Received new prefix";
     const auto prefix = toIPNetwork(myPrefixIt->second);
     const auto newParams = std::make_pair(prefix, prefix.second);
@@ -353,16 +353,16 @@ PrefixAllocator::processNetworkAllocationsUpdate(
     staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
         *e2eValue.value_ref(), serializer_);
     /* skip if same version */
-    if (e2eAllocIndex_.first == e2eValue.version) {
+    if (e2eAllocIndex_.first == *e2eValue.version_ref()) {
       return;
     }
     LOG(INFO) << folly::sformat(
         "Updating prefix index from {}",
         Constants::kStaticPrefixAllocParamKey.toString());
     e2eAllocIndex_.second.clear();
-    e2eAllocIndex_.first = e2eValue.version;
+    e2eAllocIndex_.first = *e2eValue.version_ref();
     // extract prefix index from e2e network allocations
-    for (auto const& ip : staticAlloc.nodePrefixes) {
+    for (auto const& ip : *staticAlloc.nodePrefixes_ref()) {
       const auto pfix = toIPNetwork(ip.second);
       auto index = bitStrValue(pfix.first, prefixLen, allocPrefixLen - 1);
       e2eAllocIndex_.second.emplace(index);
@@ -411,7 +411,7 @@ PrefixAllocator::loadPrefixIndexFromDisk() {
   if (maybeThriftAllocPrefix.hasError()) {
     return std::nullopt;
   }
-  return static_cast<uint32_t>(maybeThriftAllocPrefix->allocPrefixIndex);
+  return static_cast<uint32_t>(*maybeThriftAllocPrefix->allocPrefixIndex_ref());
 }
 
 void
@@ -629,10 +629,10 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   // PrefixManager
 
   auto prefixEntry = openr::thrift::PrefixEntry();
-  prefixEntry.prefix = toIpPrefix(prefix);
-  prefixEntry.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
-  prefixEntry.forwardingType = prefixForwardingType_;
-  prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
+  *prefixEntry.prefix_ref() = toIpPrefix(prefix);
+  prefixEntry.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  prefixEntry.forwardingType_ref() = prefixForwardingType_;
+  prefixEntry.forwardingAlgorithm_ref() = prefixForwardingAlgorithm_;
   prefixEntry.ephemeral_ref().reset();
   prefixEntry.tags_ref()->emplace("AUTO-ALLOCATED");
   // Metrics
@@ -643,9 +643,9 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   }
 
   thrift::PrefixUpdateRequest request;
-  request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+  request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
   request.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
-  request.prefixes = {prefixEntry};
+  *request.prefixes_ref() = {prefixEntry};
   prefixUpdatesQueue_.push(std::move(request));
 
   // existing global prefixes
@@ -766,7 +766,7 @@ PrefixAllocator::withdrawMyPrefix() {
 
   // withdraw prefix via prefixMgrClient
   thrift::PrefixUpdateRequest request;
-  request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
+  request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
   request.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
   prefixUpdatesQueue_.push(std::move(request));
 }

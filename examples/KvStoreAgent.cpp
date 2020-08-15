@@ -28,9 +28,10 @@ KvStoreAgent::KvStoreAgent(std::string nodeId, KvStore* kvStore)
       [this, nodeId](
           const std::string& key, const std::optional<thrift::Value>& value) {
         if (0 == key.find(agentKeyPrefix) &&
-            value.value().originatorId != nodeId && value.value().value_ref()) {
+            *value.value().originatorId_ref() != nodeId &&
+            value.value().value_ref()) {
           // Lets check out what some other node's value is
-          LOG(INFO) << "Got data from: " << value.value().originatorId
+          LOG(INFO) << "Got data from: " << *value.value().originatorId_ref()
                     << " Data: " << value.value().value_ref().value();
         }
       });

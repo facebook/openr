@@ -96,16 +96,16 @@ TEST(LinkTest, BasicOperation) {
   EXPECT_EQ(n1, l1.getOtherNodeName(n2));
   EXPECT_THROW(l1.getOtherNodeName("node3"), std::invalid_argument);
 
-  EXPECT_EQ(adj1.ifName, l1.getIfaceFromNode(n1));
-  EXPECT_EQ(adj2.ifName, l1.getIfaceFromNode(n2));
+  EXPECT_EQ(*adj1.ifName_ref(), l1.getIfaceFromNode(n1));
+  EXPECT_EQ(*adj2.ifName_ref(), l1.getIfaceFromNode(n2));
   EXPECT_THROW(l1.getIfaceFromNode("node3"), std::invalid_argument);
 
-  EXPECT_EQ(adj1.metric, l1.getMetricFromNode(n1));
-  EXPECT_EQ(adj2.metric, l1.getMetricFromNode(n2));
+  EXPECT_EQ(*adj1.metric_ref(), l1.getMetricFromNode(n1));
+  EXPECT_EQ(*adj2.metric_ref(), l1.getMetricFromNode(n2));
   EXPECT_THROW(l1.getMetricFromNode("node3"), std::invalid_argument);
 
-  EXPECT_EQ(adj1.adjLabel, l1.getAdjLabelFromNode(n1));
-  EXPECT_EQ(adj2.adjLabel, l1.getAdjLabelFromNode(n2));
+  EXPECT_EQ(*adj1.adjLabel_ref(), l1.getAdjLabelFromNode(n1));
+  EXPECT_EQ(*adj2.adjLabel_ref(), l1.getAdjLabelFromNode(n2));
   EXPECT_THROW(l1.getAdjLabelFromNode("node3"), std::invalid_argument);
 
   EXPECT_FALSE(l1.getOverloadFromNode(n1));
@@ -178,11 +178,11 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_THAT(state.linksFromNode("node4"), testing::IsEmpty());
 
   EXPECT_FALSE(state.isNodeOverloaded(n1));
-  adjDb1.isOverloaded = true;
+  adjDb1.isOverloaded_ref() = true;
   EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
   EXPECT_TRUE(state.isNodeOverloaded(n1));
   EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
-  adjDb1.isOverloaded = false;
+  adjDb1.isOverloaded_ref() = false;
   EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
   EXPECT_FALSE(state.isNodeOverloaded(n1));
 

@@ -48,10 +48,10 @@ loadDatabaseFromDisk(const std::string& filePath) {
 
     // Add/Delete persistentObject to/from 'database'
     if (pObject.type == ActionType::ADD) {
-      newDatabase.keyVals[pObject.key] =
+      newDatabase.keyVals_ref()[pObject.key] =
           pObject.data.has_value() ? pObject.data.value() : "";
     } else if (pObject.type == ActionType::DEL) {
-      newDatabase.keyVals.erase(pObject.key);
+      newDatabase.keyVals_ref()->erase(pObject.key);
     }
   }
   return newDatabase;
@@ -199,7 +199,7 @@ TEST(PersistentStoreTest, BulkStoreLoad) {
           folly::sformat("key-{}", index),
           folly::sformat("val-{}", folly::Random::rand32())};
 
-      database.keyVals[tmpKeyVal.first] = tmpKeyVal.second;
+      database.keyVals_ref()[tmpKeyVal.first] = tmpKeyVal.second;
       auto responseStoreTmpKey =
           store->store(tmpKeyVal.first, tmpKeyVal.second).get();
       EXPECT_EQ(folly::Unit(), responseStoreTmpKey);

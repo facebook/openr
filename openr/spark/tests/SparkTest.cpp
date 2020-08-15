@@ -21,6 +21,8 @@
 #include <openr/spark/SparkWrapper.h>
 #include <openr/tests/mocks/MockIoProvider.h>
 
+#include "folly/Utility.h"
+
 using namespace openr;
 
 using apache::thrift::CompactSerializer;
@@ -140,7 +142,7 @@ class SimpleSparkFixture : public SparkFixture {
       auto event = node1->waitForEvent(NB_UP);
       ASSERT_TRUE(event.has_value());
       EXPECT_EQ(iface1, event->ifName);
-      EXPECT_EQ("node-2", event->neighbor.nodeName);
+      EXPECT_EQ("node-2", *event->neighbor_ref()->nodeName_ref());
       EXPECT_EQ(
           std::make_pair(ip2V4.first, ip2V6.first),
           SparkWrapper::getTransportAddrs(*event));
@@ -151,7 +153,7 @@ class SimpleSparkFixture : public SparkFixture {
       auto event = node2->waitForEvent(NB_UP);
       ASSERT_TRUE(event.has_value());
       EXPECT_EQ(iface2, event->ifName);
-      EXPECT_EQ("node-1", event->neighbor.nodeName);
+      EXPECT_EQ("node-1", *event->neighbor_ref()->nodeName_ref());
       EXPECT_EQ(
           std::make_pair(ip1V4.first, ip1V6.first),
           SparkWrapper::getTransportAddrs(*event));
@@ -276,10 +278,10 @@ TEST_F(SimpleSparkFixture, GRTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    const auto& graceful_restart_time_s1 =
-        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s);
-    const auto& graceful_restart_time_s2 =
-        std::chrono::seconds(node2->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        folly::copy(*node1->getSparkConfig().graceful_restart_time_s_ref()));
+    const auto& graceful_restart_time_s2 = std::chrono::seconds(
+        folly::copy(*node2->getSparkConfig().graceful_restart_time_s_ref()));
     EXPECT_FALSE(
         node1
             ->waitForEvent(
@@ -316,13 +318,13 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
     // Make sure 'down' event is triggered by GRTimer expire
     // and NOT related with heartbeat holdTimer( no hearbeatTimer started )
     auto endTime = std::chrono::steady_clock::now();
-    const auto& graceful_restart_time_s1 =
-        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        folly::copy(*node1->getSparkConfig().graceful_restart_time_s_ref()));
     ASSERT_TRUE(endTime - startTime >= graceful_restart_time_s1);
 
     ASSERT_TRUE(
         endTime - startTime <= graceful_restart_time_s1 +
-            std::chrono::seconds(node1->getSparkConfig().hold_time_s));
+            std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()));
   }
 }
 
@@ -353,10 +355,11 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(
         endTime - startTime >=
-        std::chrono::seconds(node1->getSparkConfig().hold_time_s));
+        std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()));
     ASSERT_TRUE(
         endTime - startTime <=
-        std::chrono::seconds(node1->getSparkConfig().graceful_restart_time_s));
+        std::chrono::seconds(
+            *node1->getSparkConfig().graceful_restart_time_s_ref()));
   }
 }
 
@@ -385,8 +388,8 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
         endTime - startTime <=
         std::min(
             std::chrono::seconds(
-                node1->getSparkConfig().graceful_restart_time_s),
-            std::chrono::seconds(node1->getSparkConfig().hold_time_s)));
+                *node1->getSparkConfig().graceful_restart_time_s_ref()),
+            std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref())));
     LOG(INFO)
         << "node-1 reported down adjacency to node-2 due to interface removal";
   }
@@ -397,7 +400,8 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(
         endTime - startTime <=
-        std::chrono::seconds(node2->getSparkConfig().graceful_restart_time_s));
+        std::chrono::seconds(
+            *node2->getSparkConfig().graceful_restart_time_s_ref()));
     LOG(INFO)
         << "node-2 reported down adjacency to node-2 due to heartbeat expired";
   }
@@ -406,11 +410,11 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     // should NOT receive any event after down adj
     EXPECT_TRUE(node1
                     ->recvNeighborEvent(std::chrono::seconds(
-                        node1->getSparkConfig().graceful_restart_time_s))
+                        *node1->getSparkConfig().graceful_restart_time_s_ref()))
                     .hasError());
     EXPECT_TRUE(node2
                     ->recvNeighborEvent(std::chrono::seconds(
-                        node2->getSparkConfig().graceful_restart_time_s))
+                        *node2->getSparkConfig().graceful_restart_time_s_ref()))
                     .hasError());
   }
 
@@ -426,8 +430,9 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(
         endTime - startTime <=
-        std::chrono::seconds(node1->getSparkConfig().hold_time_s) +
-            std::chrono::seconds(node1->getSparkConfig().keepalive_time_s));
+        std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()) +
+            std::chrono::seconds(
+                *node1->getSparkConfig().keepalive_time_s_ref()));
     LOG(INFO) << "node-1 reported up adjacency to node-2";
   }
 
@@ -437,8 +442,9 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(
         endTime - startTime <=
-        std::chrono::seconds(node1->getSparkConfig().hold_time_s) +
-            std::chrono::seconds(node1->getSparkConfig().keepalive_time_s));
+        std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()) +
+            std::chrono::seconds(
+                *node1->getSparkConfig().keepalive_time_s_ref()));
     LOG(INFO) << "node-2 reported up adjacency to node-1";
   }
 }
@@ -502,12 +508,12 @@ TEST_F(SparkFixture, VersionTest) {
 
   // node3 can't form adj with neither node1 nor node2
   {
-    const auto& restart_time_s1 =
-        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
-    const auto& restart_time_s2 =
-        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
-    const auto& restart_time_s3 =
-        std::chrono::seconds(config3->getSparkConfig().graceful_restart_time_s);
+    const auto& restart_time_s1 = std::chrono::seconds(
+        *config1->getSparkConfig().graceful_restart_time_s_ref());
+    const auto& restart_time_s2 = std::chrono::seconds(
+        *config2->getSparkConfig().graceful_restart_time_s_ref());
+    const auto& restart_time_s3 = std::chrono::seconds(
+        *config3->getSparkConfig().graceful_restart_time_s_ref());
 
     EXPECT_FALSE(
         node1->waitForEvent(NB_UP, restart_time_s1, restart_time_s1 * 2)
@@ -556,10 +562,10 @@ TEST_F(SparkFixture, DomainTest) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    const auto& restart_time_s1 =
-        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
-    const auto& restart_time_s2 =
-        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+    const auto& restart_time_s1 = std::chrono::seconds(
+        *config1->getSparkConfig().graceful_restart_time_s_ref());
+    const auto& restart_time_s2 = std::chrono::seconds(
+        *config2->getSparkConfig().graceful_restart_time_s_ref());
 
     EXPECT_FALSE(
         node1->waitForEvent(NB_UP, restart_time_s1, restart_time_s1 * 2)
@@ -636,7 +642,9 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
     for (size_t i = 0; i < 2; i++) {
       auto maybeEvent = node1->waitForEvent(NB_UP);
       EXPECT_TRUE(maybeEvent.has_value());
-      events.emplace(maybeEvent.value().neighbor.nodeName, maybeEvent.value());
+      events.emplace(
+          *maybeEvent.value().neighbor_ref()->nodeName_ref(),
+          maybeEvent.value());
     }
 
     ASSERT_EQ(1, events.count(nodeName2));
@@ -644,14 +652,14 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
 
     auto event1 = events.at(nodeName2);
     EXPECT_EQ(iface1_2, event1.ifName);
-    EXPECT_TRUE(nodeName2 == event1.neighbor.nodeName);
+    EXPECT_TRUE(nodeName2 == *event1.neighbor_ref()->nodeName_ref());
     EXPECT_EQ(
         std::make_pair(ip2V4.first, ip2V6.first),
         SparkWrapper::getTransportAddrs(event1));
 
     auto event2 = events.at(nodeName3);
     EXPECT_EQ(iface1_3, event2.ifName);
-    EXPECT_TRUE(nodeName3 == event2.neighbor.nodeName);
+    EXPECT_TRUE(nodeName3 == *event2.neighbor_ref()->nodeName_ref());
     EXPECT_EQ(
         std::make_pair(ip3V4.first, ip3V6.first),
         SparkWrapper::getTransportAddrs(event2));
@@ -668,11 +676,11 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   {
     auto event1 = node2->waitForEvent(NB_RESTARTING);
     ASSERT_TRUE(event1.has_value());
-    EXPECT_TRUE(event1.value().neighbor.nodeName == nodeName1);
+    EXPECT_TRUE(*event1.value().neighbor_ref()->nodeName_ref() == nodeName1);
 
     auto event2 = node3->waitForEvent(NB_RESTARTING);
     ASSERT_TRUE(event2.has_value());
-    EXPECT_TRUE(event2.value().neighbor.nodeName == nodeName1);
+    EXPECT_TRUE(*event2.value().neighbor_ref()->nodeName_ref() == nodeName1);
 
     // eventually will lose adjacency as node1 never come back
     EXPECT_TRUE(node2->waitForEvent(NB_DOWN).has_value());
@@ -719,7 +727,8 @@ TEST_F(SparkFixture, FastInitTest) {
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
     EXPECT_GE(
-        5 * config1->getSparkConfig().fastinit_hello_time_ms, duration.count());
+        5 * *config1->getSparkConfig().fastinit_hello_time_ms_ref(),
+        duration.count());
   }
 
   // kill and restart node-2
@@ -741,7 +750,8 @@ TEST_F(SparkFixture, FastInitTest) {
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
     EXPECT_GE(
-        5 * config2->getSparkConfig().fastinit_hello_time_ms, duration.count());
+        5 * *config2->getSparkConfig().fastinit_hello_time_ms_ref(),
+        duration.count());
   }
 }
 
@@ -802,7 +812,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     auto event1 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
     EXPECT_EQ(iface1, event1->ifName);
-    EXPECT_EQ(nodeName3, event1->neighbor.nodeName);
+    EXPECT_EQ(nodeName3, *event1->neighbor_ref()->nodeName_ref());
     // ifIndex already used for assigning label to node-2 via iface1. So next
     // label will be assigned from the end.
     EXPECT_EQ(Constants::kSrLocalRange.second, event1->label);
@@ -811,7 +821,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
     EXPECT_EQ(iface2, event2->ifName);
-    EXPECT_EQ(nodeName3, event2->neighbor.nodeName);
+    EXPECT_EQ(nodeName3, *event2->neighbor_ref()->nodeName_ref());
     // ifIndex already used for assigning label to node-1 via iface2. So next
     // label will be assigned from the end.
     EXPECT_EQ(Constants::kSrLocalRange.second, event2->label);
@@ -824,7 +834,9 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     for (int i = 0; i < 2; i++) {
       auto maybeEvent = node3->waitForEvent(NB_UP);
       EXPECT_TRUE(maybeEvent.has_value());
-      events.emplace(maybeEvent.value().neighbor.nodeName, maybeEvent.value());
+      events.emplace(
+          *maybeEvent.value().neighbor_ref()->nodeName_ref(),
+          maybeEvent.value());
     }
 
     std::set<int32_t> expectedLabels = {
@@ -837,7 +849,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
 
     auto event1 = events.at(nodeName1);
     EXPECT_EQ(iface3, event1.ifName);
-    EXPECT_TRUE(nodeName1 == event1.neighbor.nodeName);
+    EXPECT_TRUE(nodeName1 == *event1.neighbor_ref()->nodeName_ref());
     EXPECT_EQ(
         std::make_pair(ip1V4.first, ip1V6.first),
         SparkWrapper::getTransportAddrs(event1));
@@ -845,7 +857,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
 
     auto event2 = events.at(nodeName2);
     EXPECT_EQ(iface3, event2.ifName);
-    EXPECT_TRUE(nodeName2 == event2.neighbor.nodeName);
+    EXPECT_TRUE(nodeName2 == *event2.neighbor_ref()->nodeName_ref());
     EXPECT_EQ(
         std::make_pair(ip2V4.first, ip2V6.first),
         SparkWrapper::getTransportAddrs(event2));
@@ -865,12 +877,12 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   {
     auto event1 = node1->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event1.has_value());
-    EXPECT_EQ("node-3", event1->neighbor.nodeName);
+    EXPECT_EQ("node-3", *event1->neighbor_ref()->nodeName_ref());
     LOG(INFO) << nodeName1 << " reported down adjacency towards " << nodeName3;
 
     auto event2 = node2->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event2.has_value());
-    EXPECT_EQ("node-3", event2->neighbor.nodeName);
+    EXPECT_EQ("node-3", *event2->neighbor_ref()->nodeName_ref());
     LOG(INFO) << nodeName2 << " reported down adjacency towards" << nodeName3;
   }
 
@@ -915,20 +927,22 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    EXPECT_TRUE(node1
-                    ->recvNeighborEvent(
-                        std::chrono::seconds(
-                            config1->getSparkConfig().graceful_restart_time_s) *
-                        2)
-                    .hasError());
+    EXPECT_TRUE(
+        node1
+            ->recvNeighborEvent(
+                std::chrono::seconds(
+                    *config1->getSparkConfig().graceful_restart_time_s_ref()) *
+                2)
+            .hasError());
     LOG(INFO) << "node-1 doesn't have any neighbor event";
 
-    EXPECT_TRUE(node2
-                    ->recvNeighborEvent(
-                        std::chrono::seconds(
-                            config2->getSparkConfig().graceful_restart_time_s) *
-                        2)
-                    .hasError());
+    EXPECT_TRUE(
+        node2
+            ->recvNeighborEvent(
+                std::chrono::seconds(
+                    *config2->getSparkConfig().graceful_restart_time_s_ref()) *
+                2)
+            .hasError());
     LOG(INFO) << "node-2 doesn't have any neighbor event";
   }
 
@@ -971,8 +985,8 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    const auto& graceful_restart_time_s1 =
-        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        *config1->getSparkConfig().graceful_restart_time_s_ref());
     EXPECT_FALSE(
         node1
             ->waitForEvent(
@@ -1029,10 +1043,10 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
 
   // won't form adj as v4 validation should fail
   {
-    const auto& graceful_restart_time_s1 =
-        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
-    const auto& graceful_restart_time_s2 =
-        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        *config1->getSparkConfig().graceful_restart_time_s_ref());
+    const auto& graceful_restart_time_s2 = std::chrono::seconds(
+        *config2->getSparkConfig().graceful_restart_time_s_ref());
     EXPECT_FALSE(
         node1
             ->waitForEvent(
@@ -1112,11 +1126,11 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
 
   // won't form adj as v4 validation should fail
   {
-    const auto& graceful_restart_time_s1 =
-        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        *config1->getSparkConfig().graceful_restart_time_s_ref());
 
-    const auto& graceful_restart_time_s2 =
-        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s2 = std::chrono::seconds(
+        *config2->getSparkConfig().graceful_restart_time_s_ref());
 
     EXPECT_FALSE(
         node1
@@ -1193,13 +1207,13 @@ TEST_F(SparkFixture, AreaMatch) {
   {
     auto event1 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
-    EXPECT_EQ(event1.value().neighbor.nodeName, nodeName2);
-    EXPECT_EQ(event1.value().area, area2);
+    EXPECT_EQ(*event1.value().neighbor_ref()->nodeName_ref(), nodeName2);
+    EXPECT_EQ(*event1.value().area_ref(), area2);
 
     auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
-    EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
-    EXPECT_EQ(event2.value().area, area2);
+    EXPECT_EQ(*event2.value().neighbor_ref()->nodeName_ref(), nodeName1);
+    EXPECT_EQ(*event2.value().area_ref(), area2);
 
     LOG(INFO) << nodeName1 << " and " << nodeName2
               << " formed adjacency with each other...";
@@ -1254,10 +1268,10 @@ TEST_F(SparkFixture, NoAreaMatch) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    const auto& graceful_restart_time_s1 =
-        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
-    const auto& graceful_restart_time_s2 =
-        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        *config1->getSparkConfig().graceful_restart_time_s_ref());
+    const auto& graceful_restart_time_s2 = std::chrono::seconds(
+        *config2->getSparkConfig().graceful_restart_time_s_ref());
 
     EXPECT_FALSE(
         node1
@@ -1325,10 +1339,10 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    const auto& graceful_restart_time_s1 =
-        std::chrono::seconds(config1->getSparkConfig().graceful_restart_time_s);
-    const auto& graceful_restart_time_s2 =
-        std::chrono::seconds(config2->getSparkConfig().graceful_restart_time_s);
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        *config1->getSparkConfig().graceful_restart_time_s_ref());
+    const auto& graceful_restart_time_s2 = std::chrono::seconds(
+        *config2->getSparkConfig().graceful_restart_time_s_ref());
 
     EXPECT_FALSE(
         node1
@@ -1399,13 +1413,13 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   {
     auto event1 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
-    EXPECT_EQ(event1.value().neighbor.nodeName, nodeName2);
-    EXPECT_EQ(event1.value().area, defaultArea);
+    EXPECT_EQ(*event1.value().neighbor_ref()->nodeName_ref(), nodeName2);
+    EXPECT_EQ(*event1.value().area_ref(), defaultArea);
 
     auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
-    EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
-    EXPECT_EQ(event2.value().area, area2);
+    EXPECT_EQ(*event2.value().neighbor_ref()->nodeName_ref(), nodeName1);
+    EXPECT_EQ(*event2.value().area_ref(), area2);
   }
 }
 
@@ -1473,15 +1487,15 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     auto event1 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
     EXPECT_EQ(iface1, event1->ifName);
-    EXPECT_EQ(nodeName2, event1->neighbor.nodeName);
-    EXPECT_EQ(event1->area, area1);
+    EXPECT_EQ(nodeName2, *event1->neighbor_ref()->nodeName_ref());
+    EXPECT_EQ(*event1->area_ref(), area1);
     LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName2;
 
     auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
     EXPECT_EQ(iface2, event2->ifName);
-    EXPECT_EQ(nodeName1, event2->neighbor.nodeName);
-    EXPECT_EQ(event1->area, area1);
+    EXPECT_EQ(nodeName1, *event2->neighbor_ref()->nodeName_ref());
+    EXPECT_EQ(*event1->area_ref(), area1);
     LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName1;
   }
 
@@ -1497,15 +1511,15 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     auto event1 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
     EXPECT_EQ(iface2, event1->ifName);
-    EXPECT_EQ(nodeName3, event1->neighbor.nodeName);
-    EXPECT_EQ(event1->area, area1);
+    EXPECT_EQ(nodeName3, *event1->neighbor_ref()->nodeName_ref());
+    EXPECT_EQ(*event1->area_ref(), area1);
     LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName3;
 
     auto event2 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
     EXPECT_EQ(iface1, event2->ifName);
-    EXPECT_EQ(nodeName3, event2->neighbor.nodeName);
-    EXPECT_EQ(event2->area, area2);
+    EXPECT_EQ(nodeName3, *event2->neighbor_ref()->nodeName_ref());
+    EXPECT_EQ(*event2->area_ref(), area2);
     LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName3;
   }
 
@@ -1515,19 +1529,21 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     for (int i = 0; i < 2; i++) {
       auto maybeEvent = node3->waitForEvent(NB_UP);
       EXPECT_TRUE(maybeEvent.has_value());
-      events.emplace(maybeEvent.value().neighbor.nodeName, maybeEvent.value());
+      events.emplace(
+          *maybeEvent.value().neighbor_ref()->nodeName_ref(),
+          maybeEvent.value());
     }
 
     auto event1 = events.at(nodeName1);
     EXPECT_EQ(iface3, event1.ifName);
-    EXPECT_EQ(nodeName1, event1.neighbor.nodeName);
-    EXPECT_EQ(area2, event1.area);
+    EXPECT_EQ(nodeName1, *event1.neighbor_ref()->nodeName_ref());
+    EXPECT_EQ(area2, *event1.area_ref());
     LOG(INFO) << nodeName3 << " reported adjacency to " << nodeName1;
 
     auto event2 = events.at(nodeName2);
     EXPECT_EQ(iface3, event2.ifName);
-    EXPECT_TRUE(nodeName2 == event2.neighbor.nodeName);
-    EXPECT_EQ(area1, event2.area);
+    EXPECT_TRUE(nodeName2 == *event2.neighbor_ref()->nodeName_ref());
+    EXPECT_EQ(area1, *event2.area_ref());
     LOG(INFO) << nodeName3 << " reported adjacency to " << nodeName2;
   }
 }

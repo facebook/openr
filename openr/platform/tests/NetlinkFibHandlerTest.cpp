@@ -41,10 +41,10 @@ createNextHop(
   CHECK(kInterfaces.size());
   thrift::NextHopThrift nh;
   const auto& nhFormat = isV4 ? kNextHopV4 : kNextHopV6;
-  nh.address = toBinaryAddress(folly::sformat(nhFormat, 1 + index));
-  nh.address.ifName_ref() =
+  *nh.address_ref() = toBinaryAddress(folly::sformat(nhFormat, 1 + index));
+  nh.address_ref()->ifName_ref() =
       kInterfaces.at(folly::Random::rand32() % kInterfaces.size());
-  nh.weight = 0;
+  nh.weight_ref() = 0;
   if (mplsAction.has_value()) {
     nh.mplsAction_ref() = mplsAction.value();
   }
@@ -71,7 +71,7 @@ createUnicastRoute(size_t index, size_t numNhs, bool isV4) {
   thrift::UnicastRoute route;
   const auto& format = isV4 ? kPrefixV4 : kPrefixV6;
   route.dest = toIpPrefix(folly::sformat(format, index / 255, 1 + index % 255));
-  route.nextHops = createNextHops(numNhs, isV4);
+  *route.nextHops_ref() = createNextHops(numNhs, isV4);
   return route;
 }
 
@@ -94,7 +94,7 @@ createMplsRoute(
     const thrift::MplsAction& mplsAction) {
   thrift::MplsRoute route;
   route.topLabel = index + 1;
-  route.nextHops = createNextHops(numNhs, isV4, mplsAction);
+  *route.nextHops_ref() = createNextHops(numNhs, isV4, mplsAction);
   return route;
 }
 
@@ -119,7 +119,7 @@ template <typename RouteType>
 void
 sortNextHops(std::vector<RouteType>& routes) {
   for (auto& route : routes) {
-    sortNextHops(route.nextHops);
+    sortNextHops(*route.nextHops_ref());
   }
 }
 
@@ -264,7 +264,7 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
   EXPECT_EQ(r1, routes->at(0));
 
   // Add a nexthop - Expand ECMP group
-  r1.nextHops.push_back(createNextHop(2 /* index */, isV4));
+  r1.nextHops_ref()->push_back(createNextHop(2 /* index */, isV4));
   handler
       .semifuture_addUnicastRoute(
           kClientId, std::make_unique<thrift::UnicastRoute>(r1))
@@ -275,7 +275,7 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
   EXPECT_EQ(r1, routes->at(0));
 
   // Remove one nexthop - Shrink ECMP group
-  r1.nextHops.pop_back();
+  r1.nextHops_ref()->pop_back();
   handler
       .semifuture_addUnicastRoute(
           kClientId, std::make_unique<thrift::UnicastRoute>(r1))
@@ -287,16 +287,16 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
 
   // Update route with new nexthops (remove first nexthop, add 2 more nexthops)
   // NOTE: NetlinkTypes may organize nexthops in the arbitrary order
-  r1.nextHops = createNextHops(5, isV4);
-  r1.nextHops.at(0) = r1.nextHops.at(4);
-  r1.nextHops.pop_back();
+  *r1.nextHops_ref() = createNextHops(5, isV4);
+  r1.nextHops_ref()->at(0) = r1.nextHops_ref()->at(4);
+  r1.nextHops_ref()->pop_back();
   handler
       .semifuture_addUnicastRoute(
           kClientId, std::make_unique<thrift::UnicastRoute>(r1))
       .get();
   routes = handler.semifuture_getRouteTableByClient(kClientId).get();
   ASSERT_EQ(1, routes->size());
-  sortNextHops(r1.nextHops);
+  sortNextHops(*r1.nextHops_ref());
   sortNextHops(*routes);
   EXPECT_EQ(r1, routes->at(0));
 
@@ -327,8 +327,8 @@ TEST_P(FibHandlerFixture, UnicastAddUcmp) {
 
   // Create route with two nexthops
   thrift::UnicastRoute r1 = createUnicastRoute(0, 2, isV4);
-  r1.nextHops.at(0).weight = 3;
-  r1.nextHops.at(1).weight = 7;
+  r1.nextHops_ref()->at(0).weight_ref() = 3;
+  r1.nextHops_ref()->at(1).weight_ref() = 7;
 
   // Expect no routes in the beginning
   auto routes = handler.semifuture_getRouteTableByClient(kClientId).get();
@@ -354,7 +354,7 @@ TEST_P(FibHandlerFixture, UnicastAddRouteWithLabelPush) {
 
   // Create route with one nexthop and add an MplsAction to it
   thrift::UnicastRoute r1 = createUnicastRoute(0, 1, isV4);
-  r1.nextHops.at(0).mplsAction_ref() = createMplsAction(
+  r1.nextHops_ref()->at(0).mplsAction_ref() = createMplsAction(
       thrift::MplsActionCode::PUSH, std::nullopt, std::vector<int32_t>{2, 1});
 
   // Expect no routes in the beginning
@@ -505,12 +505,12 @@ TEST_P(FibHandlerFixture, MplsAddDelPop) {
   const int16_t kClientId = 786;
 
   thrift::NextHopThrift popNh;
-  popNh.address = toBinaryAddress(folly::IPAddressV6("::"));
+  *popNh.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
   popNh.mplsAction_ref() =
       createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
   thrift::MplsRoute r1;
   r1.topLabel = 1;
-  r1.nextHops.emplace_back(popNh);
+  r1.nextHops_ref()->emplace_back(popNh);
 
   // Add route with pop action
   {
@@ -577,7 +577,7 @@ TEST_P(FibHandlerFixture, MplsAddUpdateDelSwapPhp) {
   EXPECT_EQ(r1, routes->at(0));
 
   // Add a nexthop - Expand ECMP group (with PHP action)
-  r1.nextHops.push_back(createNextHop(2 /* index */, isV4, phpAction));
+  r1.nextHops_ref()->push_back(createNextHop(2 /* index */, isV4, phpAction));
   handler
       .semifuture_addMplsRoutes(
           kClientId,
@@ -590,7 +590,7 @@ TEST_P(FibHandlerFixture, MplsAddUpdateDelSwapPhp) {
   EXPECT_EQ(r1, routes->at(0));
 
   // Remove one nexthop - Shrink ECMP group
-  r1.nextHops.pop_back();
+  r1.nextHops_ref()->pop_back();
   handler
       .semifuture_addMplsRoutes(
           kClientId,
@@ -604,7 +604,7 @@ TEST_P(FibHandlerFixture, MplsAddUpdateDelSwapPhp) {
 
   // Update route with new nexthops (remove first nexthop, add 2 more nexthops)
   // NOTE: NetlinkTypes may organize nexthops in the arbitrary order
-  r1.nextHops = createNextHops(5, isV4, phpAction);
+  *r1.nextHops_ref() = createNextHops(5, isV4, phpAction);
   handler
       .semifuture_addMplsRoutes(
           kClientId,

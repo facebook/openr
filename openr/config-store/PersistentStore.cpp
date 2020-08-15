@@ -73,7 +73,7 @@ PersistentStore::store(std::string key, std::string value) {
     SYSLOG(INFO) << "Store key: " << key << ", value: " << value
                  << " to config-store";
     // Override previous value if any
-    database_.keyVals[key] = value;
+    database_.keyVals_ref()[key] = value;
     auto pObject = toPersistentObject(ActionType::ADD, key, value);
     pObjects_.emplace_back(std::move(pObject));
     maybeSaveObjectToDisk();
@@ -89,7 +89,7 @@ PersistentStore::erase(std::string key) {
   runInEventBaseThread(
       [this, p = std::move(p), key = std::move(key)]() mutable noexcept {
         SYSLOG(INFO) << "Erase key: " << key << " from config-store";
-        if (database_.keyVals.erase(key) > 0) {
+        if (database_.keyVals_ref()->erase(key) > 0) {
           auto pObject = toPersistentObject(ActionType::DEL, key, "");
           pObjects_.emplace_back(std::move(pObject));
           maybeSaveObjectToDisk();
@@ -108,8 +108,8 @@ PersistentStore::load(std::string key) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread(
       [this, p = std::move(p), key = std::move(key)]() mutable {
-        auto it = database_.keyVals.find(key);
-        if (it != database_.keyVals.end()) {
+        auto it = database_.keyVals_ref()->find(key);
+        if (it != database_.keyVals_ref()->end()) {
           p.setValue(it->second);
         } else {
           p.setValue(std::nullopt);
@@ -186,7 +186,7 @@ bool
 PersistentStore::saveDatabaseToDisk() noexcept {
   std::unique_ptr<folly::IOBuf> ioBuf;
   // If database is empty, write 'kTlvFormatMarker' to disk and return
-  if (database_.keyVals.size() == 0) {
+  if (database_.keyVals_ref()->size() == 0) {
     ioBuf = folly::IOBuf::copyBuffer(
         kTlvFormatMarker.data(), kTlvFormatMarker.size());
   } else {
@@ -195,7 +195,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
     queue.append(kTlvFormatMarker.data(), kTlvFormatMarker.size());
 
     // Encode database_ and append to queue
-    for (auto& keyPair : database_.keyVals) {
+    for (auto& keyPair : *database_.keyVals_ref()) {
       PersistentObject pObject;
       pObject =
           toPersistentObject(ActionType::ADD, keyPair.first, keyPair.second);
@@ -312,10 +312,10 @@ PersistentStore::loadDatabaseTlvFormat(
 
     // Add/Delete persistentObject to/from 'newDatabase'
     if (pObject.type == ActionType::ADD) {
-      newDatabase.keyVals[pObject.key] =
+      newDatabase.keyVals_ref()[pObject.key] =
           pObject.data.has_value() ? pObject.data.value() : "";
     } else if (pObject.type == ActionType::DEL) {
-      newDatabase.keyVals.erase(pObject.key);
+      newDatabase.keyVals_ref()->erase(pObject.key);
     }
   }
   database_ = std::move(newDatabase);

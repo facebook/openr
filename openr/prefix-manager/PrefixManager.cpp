@@ -49,8 +49,8 @@ PrefixManager::PrefixManager(
       kvStore_(kvStore),
       perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
-      ttlKeyInKvStore_(
-          std::chrono::milliseconds(config->getKvStoreConfig().key_ttl_ms)),
+      ttlKeyInKvStore_(std::chrono::milliseconds(
+          *config->getKvStoreConfig().key_ttl_ms_ref())),
       allAreas_{config->getAreaIds()} {
   CHECK(configStore_);
   CHECK(kvStore_);
@@ -67,18 +67,19 @@ PrefixManager::PrefixManager(
     diskState_ = std::move(maybePrefixDb.value());
     LOG(INFO) << folly::sformat(
         "Successfully loaded {} prefixes from disk.",
-        diskState_.prefixEntries.size());
+        diskState_.prefixEntries_ref()->size());
 
-    for (const auto& entry : diskState_.prefixEntries) {
+    for (const auto& entry : *diskState_.prefixEntries_ref()) {
       LOG(INFO) << folly::sformat(
           "  > {}, type {}",
-          toString(entry.prefix),
-          getPrefixTypeName(entry.type));
+          toString(*entry.prefix_ref()),
+          getPrefixTypeName(*entry.type_ref()));
       // TODO: change persist store to use C++ struct prefixMap_
       prefixMap_[*entry.prefix_ref()][*entry.type_ref()] =
           PrefixEntry(entry, allAreas_);
       addPerfEventIfNotExist(
-          addingEvents_[entry.type][entry.prefix], "LOADED_FROM_DISK");
+          addingEvents_[*entry.type_ref()][*entry.prefix_ref()],
+          "LOADED_FROM_DISK");
     }
   }
 
@@ -117,7 +118,7 @@ PrefixManager::PrefixManager(
             }
           }
 
-          switch (update.cmd) {
+          switch (*update.cmd_ref()) {
           case thrift::PrefixUpdateCommand::ADD_PREFIXES:
             advertisePrefixesImpl(*update.prefixes_ref(), dstAreas);
             break;
@@ -135,7 +136,7 @@ PrefixManager::PrefixManager(
             break;
           default:
             LOG(FATAL) << "Unknown command received. "
-                       << static_cast<int>(update.cmd);
+                       << static_cast<int>(*update.cmd_ref());
             break;
           }
         }
@@ -169,7 +170,8 @@ PrefixManager::PrefixManager(
           const auto prefixDb =
               fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
                   value.value().value_ref().value(), serializer_);
-          if (not prefixDb.deletePrefix && nodeId_ == prefixDb.thisNodeName) {
+          if (not(*prefixDb.deletePrefix_ref()) &&
+              nodeId_ == *prefixDb.thisNodeName_ref()) {
             LOG(INFO) << "keysToClear_.emplace(" << key << ")";
             keysToClear_.emplace(key);
             syncKvStoreThrottled_->operator()();
@@ -221,7 +223,7 @@ PrefixManager::persistPrefixDb() {
   // prefixDb persistent entries have changed,
   // save the newest persistent entries to disk.
   thrift::PrefixDatabase persistentPrefixDb;
-  persistentPrefixDb.thisNodeName = nodeId_;
+  *persistentPrefixDb.thisNodeName_ref() = nodeId_;
   for (const auto& kv : prefixMap_) {
     for (const auto& [_, entry] : kv.second) {
       if (not entry.tPrefixEntry.ephemeral_ref().value_or(false)) {
@@ -290,7 +292,7 @@ PrefixManager::syncKvStore() {
     }
   } else {
     thrift::PrefixDatabase prefixDb;
-    prefixDb.thisNodeName = nodeId_;
+    *prefixDb.thisNodeName_ref() = nodeId_;
     thrift::PerfEvents* mostRecentEvents = nullptr;
     for (auto& [prefix, typeToPrefixes] : prefixMap_) {
       CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
@@ -317,7 +319,7 @@ PrefixManager::syncKvStore() {
           ttlKeyInKvStore_,
           area);
       LOG_IF(INFO, changed)
-          << "Updating all " << prefixDb.prefixEntries.size()
+          << "Updating all " << prefixDb.prefixEntries_ref()->size()
           << " prefixes in KvStore " << prefixDbKey << " area: " << area;
     }
     nowAdvertisingKeys.emplace(prefixDbKey);
@@ -325,8 +327,8 @@ PrefixManager::syncKvStore() {
   }
 
   thrift::PrefixDatabase deletedPrefixDb;
-  deletedPrefixDb.thisNodeName = nodeId_;
-  deletedPrefixDb.deletePrefix = true;
+  *deletedPrefixDb.thisNodeName_ref() = nodeId_;
+  deletedPrefixDb.deletePrefix_ref() = true;
   if (enablePerfMeasurement_) {
     deletedPrefixDb.perfEvents_ref() = thrift::PerfEvents{};
     addPerfEventIfNotExist(
@@ -338,7 +340,7 @@ PrefixManager::syncKvStore() {
       // needed for backward compatibility
       thrift::PrefixEntry entry;
       entry.prefix_ref() = prefixKey.value().getIpPrefix();
-      deletedPrefixDb.prefixEntries = {entry};
+      *deletedPrefixDb.prefixEntries_ref() = {entry};
     }
     LOG(INFO) << "Withdrawing key: " << key
               << " from KvStore area: " << prefixKey->getPrefixArea();
@@ -521,8 +523,8 @@ PrefixManager::withdrawPrefixesImpl(
     }
     auto it = typeIt->second.find(*prefix.type_ref());
     if (it == typeIt->second.end()) {
-      LOG(ERROR) << "Cannot withdraw prefix: " << toString(prefix.prefix)
-                 << ", client: " << getPrefixTypeName(prefix.type);
+      LOG(ERROR) << "Cannot withdraw prefix: " << toString(*prefix.prefix_ref())
+                 << ", client: " << getPrefixTypeName(*prefix.type_ref());
       return false;
     }
   }
@@ -537,8 +539,8 @@ PrefixManager::withdrawPrefixesImpl(
     if (prefixMap_.at(*prefix.prefix_ref()).empty()) {
       prefixMap_.erase(*prefix.prefix_ref());
     }
-    if (addingEvents_[prefix.type].empty()) {
-      addingEvents_.erase(prefix.type);
+    if (addingEvents_[*prefix.type_ref()].empty()) {
+      addingEvents_.erase(*prefix.type_ref());
     }
   }
 
@@ -565,8 +567,8 @@ PrefixManager::syncPrefixesByTypeImpl(
     }
   }
   for (auto const& entry : prefixEntries) {
-    CHECK(type == entry.type);
-    toRemoveSet.erase(entry.prefix);
+    CHECK(type == *entry.type_ref());
+    toRemoveSet.erase(*entry.prefix_ref());
     toAddOrUpdate.emplace_back(entry);
   }
   for (auto const& prefix : toRemoveSet) {
@@ -640,8 +642,8 @@ PrefixManager::processDecisionRouteUpdates(
 void
 PrefixManager::addPerfEventIfNotExist(
     thrift::PerfEvents& perfEvents, std::string const& updateEvent) {
-  if (perfEvents.events.empty() or
-      perfEvents.events.back().eventDescr != updateEvent) {
+  if (perfEvents.events_ref()->empty() or
+      *perfEvents.events_ref()->back().eventDescr_ref() != updateEvent) {
     addPerfEvent(perfEvents, nodeId_, updateEvent);
   }
 }

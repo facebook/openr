@@ -35,8 +35,8 @@ class OpenrCtrlFixture : public ::testing::Test {
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : {"0", "plane", "pod"}) {
       thrift::AreaConfig area;
-      area.area_id = id;
-      area.neighbor_regexes.emplace_back(".*");
+      *area.area_id_ref() = id;
+      area.neighbor_regexes_ref()->emplace_back(".*");
       areaConfig.emplace_back(std::move(area));
     }
     // create config
@@ -48,15 +48,15 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* enableSegmentRouting */);
 
     // kvstore config
-    tConfig.kvstore_config.sync_interval_s = 1;
-    tConfig.kvstore_config.enable_flood_optimization_ref() = true;
-    tConfig.kvstore_config.is_flood_root_ref() = true;
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    tConfig.kvstore_config_ref()->enable_flood_optimization_ref() = true;
+    tConfig.kvstore_config_ref()->is_flood_root_ref() = true;
     // link monitor config
-    auto& lmConf = tConfig.link_monitor_config;
-    lmConf.linkflap_initial_backoff_ms = 1;
-    lmConf.linkflap_max_backoff_ms = 8;
-    lmConf.use_rtt_metric = false;
-    lmConf.include_interface_regexes = {"po.*"};
+    auto& lmConf = *tConfig.link_monitor_config_ref();
+    lmConf.linkflap_initial_backoff_ms_ref() = 1;
+    lmConf.linkflap_max_backoff_ms_ref() = 8;
+    lmConf.use_rtt_metric_ref() = false;
+    *lmConf.include_interface_regexes_ref() = {"po.*"};
     config = std::make_shared<Config>(tConfig);
 
     // Create PersistentStore
@@ -195,15 +195,15 @@ class OpenrCtrlFixture : public ::testing::Test {
   thrift::PeerSpec
   createPeerSpec(const std::string& cmdUrl) {
     thrift::PeerSpec peerSpec;
-    peerSpec.cmdUrl = cmdUrl;
+    *peerSpec.cmdUrl_ref() = cmdUrl;
     return peerSpec;
   }
 
   thrift::PrefixEntry
   createPrefixEntry(const std::string& prefix, thrift::PrefixType prefixType) {
     thrift::PrefixEntry prefixEntry;
-    prefixEntry.prefix = toIpPrefix(prefix);
-    prefixEntry.type = prefixType;
+    *prefixEntry.prefix_ref() = toIpPrefix(prefix);
+    prefixEntry.type_ref() = prefixType;
     return prefixEntry;
   }
 
@@ -303,25 +303,25 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
     thrift::RouteDatabase db;
     openrCtrlThriftClient_->sync_getRouteDb(db);
     EXPECT_EQ(nodeName_, db.thisNodeName_ref());
-    EXPECT_EQ(0, db.unicastRoutes.size());
-    EXPECT_EQ(0, db.mplsRoutes.size());
+    EXPECT_EQ(0, db.unicastRoutes_ref()->size());
+    EXPECT_EQ(0, db.mplsRoutes_ref()->size());
   }
 
   {
     thrift::RouteDatabase db;
     openrCtrlThriftClient_->sync_getRouteDbComputed(db, nodeName_);
     EXPECT_EQ(nodeName_, db.thisNodeName_ref());
-    EXPECT_EQ(0, db.unicastRoutes.size());
-    EXPECT_EQ(0, db.mplsRoutes.size());
+    EXPECT_EQ(0, db.unicastRoutes_ref()->size());
+    EXPECT_EQ(0, db.mplsRoutes_ref()->size());
   }
 
   {
     const std::string testNode("avengers@universe");
     thrift::RouteDatabase db;
     openrCtrlThriftClient_->sync_getRouteDbComputed(db, testNode);
-    EXPECT_EQ(testNode, db.thisNodeName);
-    EXPECT_EQ(0, db.unicastRoutes.size());
-    EXPECT_EQ(0, db.mplsRoutes.size());
+    EXPECT_EQ(testNode, *db.thisNodeName_ref());
+    EXPECT_EQ(0, db.unicastRoutes_ref()->size());
+    EXPECT_EQ(0, db.mplsRoutes_ref()->size());
   }
 
   {
@@ -436,8 +436,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     thrift::Publication pub;
     openrCtrlThriftClient_->sync_getKvStoreKeyVals(pub, filterKeys);
     EXPECT_EQ(2, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyVals.at("key2"), pub.keyVals["key2"]);
-    EXPECT_EQ(keyVals.at("key11"), pub.keyVals["key11"]);
+    EXPECT_EQ(keyVals.at("key2"), pub.keyVals_ref()["key2"]);
+    EXPECT_EQ(keyVals.at("key11"), pub.keyVals_ref()["key11"]);
   }
 
   // pod keys
@@ -446,43 +446,43 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     thrift::Publication pub;
     openrCtrlThriftClient_->sync_getKvStoreKeyValsArea(pub, filterKeys, "pod");
     EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyValsPod.at("keyPod1"), pub.keyVals["keyPod1"]);
+    EXPECT_EQ(keyValsPod.at("keyPod1"), pub.keyVals_ref()["keyPod1"]);
   }
 
   {
     thrift::Publication pub;
     thrift::KeyDumpParams params;
-    params.prefix = "key3";
-    params.originatorIds.insert("node3");
+    *params.prefix_ref() = "key3";
+    params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
     openrCtrlThriftClient_->sync_getKvStoreKeyValsFiltered(pub, params);
     EXPECT_EQ(3, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyVals.at("key3"), pub.keyVals["key3"]);
-    EXPECT_EQ(keyVals.at("key33"), pub.keyVals["key33"]);
-    EXPECT_EQ(keyVals.at("key333"), pub.keyVals["key333"]);
+    EXPECT_EQ(keyVals.at("key3"), pub.keyVals_ref()["key3"]);
+    EXPECT_EQ(keyVals.at("key33"), pub.keyVals_ref()["key33"]);
+    EXPECT_EQ(keyVals.at("key333"), pub.keyVals_ref()["key333"]);
   }
 
   // with areas
   {
     thrift::Publication pub;
     thrift::KeyDumpParams params;
-    params.prefix = "keyP";
-    params.originatorIds.insert("node1");
+    *params.prefix_ref() = "keyP";
+    params.originatorIds_ref()->insert("node1");
     params.keys_ref() = {"keyP"};
 
     openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
         pub, params, "plane");
     EXPECT_EQ(2, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyValsPlane.at("keyPlane1"), pub.keyVals["keyPlane1"]);
-    EXPECT_EQ(keyValsPlane.at("keyPlane2"), pub.keyVals["keyPlane2"]);
+    EXPECT_EQ(keyValsPlane.at("keyPlane1"), pub.keyVals_ref()["keyPlane1"]);
+    EXPECT_EQ(keyValsPlane.at("keyPlane2"), pub.keyVals_ref()["keyPlane2"]);
   }
 
   {
     thrift::Publication pub;
     thrift::KeyDumpParams params;
-    params.prefix = "key3";
-    params.originatorIds.insert("node3");
+    *params.prefix_ref() = "key3";
+    params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
     openrCtrlThriftClient_->sync_getKvStoreHashFiltered(pub, params);
@@ -493,9 +493,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     value33.value_ref().reset();
     auto value333 = keyVals.at("key333");
     value333.value_ref().reset();
-    EXPECT_EQ(value3, pub.keyVals["key3"]);
-    EXPECT_EQ(value33, pub.keyVals["key33"]);
-    EXPECT_EQ(value333, pub.keyVals["key333"]);
+    EXPECT_EQ(value3, pub.keyVals_ref()["key3"]);
+    EXPECT_EQ(value33, pub.keyVals_ref()["key33"]);
+    EXPECT_EQ(value333, pub.keyVals_ref()["key333"]);
   }
 
   //
@@ -736,7 +736,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     EXPECT_LE(10, (*responseAndSubscription.response.keyVals_ref()).size());
     ASSERT_EQ(1, (*responseAndSubscription.response.keyVals_ref()).count(key));
     EXPECT_EQ(
-        responseAndSubscription.response.keyVals.at(key),
+        responseAndSubscription.response.keyVals_ref()->at(key),
         createThriftValue(3, "node1", std::string("value1")));
 
     auto subscription =
@@ -745,7 +745,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals.count(key)) {
+              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -753,7 +753,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
               ASSERT_EQ(1, (*pub.keyVals_ref()).count(key));
               EXPECT_EQ(
                   "value1", (*pub.keyVals_ref()).at(key).value_ref().value());
-              EXPECT_EQ(received + 4, (*pub.keyVals_ref()).at(key).version);
+              EXPECT_EQ(
+                  received + 4, *(*pub.keyVals_ref()).at(key).version_ref());
               received++;
             });
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
@@ -833,7 +834,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals.count(key)) {
+              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -849,7 +850,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .toClientStream()
             .subscribeExTry(
                 folly::getEventBase(), [&received, random_key](auto&& t) {
-                  if (!t.hasValue() or not t->keyVals.count(random_key)) {
+                  if (!t.hasValue() or
+                      not t->keyVals_ref()->count(random_key)) {
                     return;
                   }
                   auto& pub = *t;
@@ -920,7 +922,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals.count(key)) {
+              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -990,7 +992,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals.count(kv.first)) {
+                    if (not t->keyVals_ref()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
@@ -1067,7 +1069,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   bool found = false;
                   auto& pub = *t;
                   for (const auto& kv : keyvals) {
-                    if (t->keyVals.count(kv.first)) {
+                    if (t->keyVals_ref()->count(kv.first)) {
                       EXPECT_EQ(1, (*pub.keyVals_ref()).size());
                       ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
                       EXPECT_EQ(
@@ -1152,7 +1154,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   bool found = false;
                   auto& pub = *t;
                   for (const auto& kv : keyvals) {
-                    if (t->keyVals.count(kv.first)) {
+                    if (t->keyVals_ref()->count(kv.first)) {
                       EXPECT_EQ(1, (*pub.keyVals_ref()).size());
                       ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
                       EXPECT_EQ(
@@ -1220,7 +1222,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         std::move(responseAndSubscription.stream)
             .toClientStream()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              if (!t.hasValue() or not t->keyVals.count(key)) {
+              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -1287,7 +1289,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals.count(kv.first)) {
+                    if (not t->keyVals_ref()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
@@ -1424,7 +1426,7 @@ TEST_F(
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals.count(kv.first)) {
+                    if (not t->keyVals_ref()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
@@ -1523,7 +1525,7 @@ TEST_F(
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals.count(kv.first)) {
+                    if (not t->keyVals_ref()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
@@ -1605,26 +1607,26 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
     thrift::DumpLinksReply reply;
     openrCtrlThriftClient_->sync_getInterfaces(reply);
     EXPECT_EQ(nodeName_, reply.thisNodeName_ref());
-    EXPECT_FALSE(reply.isOverloaded);
-    EXPECT_EQ(1, reply.interfaceDetails.size());
+    EXPECT_FALSE(*reply.isOverloaded_ref());
+    EXPECT_EQ(1, reply.interfaceDetails_ref()->size());
   }
 
   {
     thrift::OpenrVersions ret;
     openrCtrlThriftClient_->sync_getOpenrVersion(ret);
-    EXPECT_LE(ret.lowestSupportedVersion, ret.version);
+    EXPECT_LE(*ret.lowestSupportedVersion_ref(), *ret.version_ref());
   }
 
   {
     thrift::BuildInfo info;
     openrCtrlThriftClient_->sync_getBuildInfo(info);
-    EXPECT_NE("", info.buildMode);
+    EXPECT_NE("", *info.buildMode_ref());
   }
 
   {
     thrift::AdjacencyDatabase adjDb;
     openrCtrlThriftClient_->sync_getLinkMonitorAdjacencies(adjDb);
-    EXPECT_EQ(0, adjDb.adjacencies.size());
+    EXPECT_EQ(0, adjDb.adjacencies_ref()->size());
   }
 }
 
@@ -1667,13 +1669,14 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
   {
     // Create valid rib policy
     thrift::RibRouteActionWeight actionWeight;
-    actionWeight.area_to_weight.emplace("test-area", 2);
+    actionWeight.area_to_weight_ref()->emplace("test-area", 2);
     thrift::RibPolicyStatement policyStatement;
-    policyStatement.matcher.prefixes_ref() = std::vector<thrift::IpPrefix>();
-    policyStatement.action.set_weight_ref() = actionWeight;
+    policyStatement.matcher_ref()->prefixes_ref() =
+        std::vector<thrift::IpPrefix>();
+    policyStatement.action_ref()->set_weight_ref() = actionWeight;
     thrift::RibPolicy policy;
-    policy.statements.emplace_back(policyStatement);
-    policy.ttl_secs = 1;
+    policy.statements_ref()->emplace_back(policyStatement);
+    policy.ttl_secs_ref() = 1;
 
     EXPECT_NO_THROW(openrCtrlThriftClient_->sync_setRibPolicy(policy));
   }

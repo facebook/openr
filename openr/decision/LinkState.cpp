@@ -147,17 +147,17 @@ Link::Link(
     const openr::thrift::Adjacency& adj1,
     const std::string& nodeName2,
     const openr::thrift::Adjacency& adj2)
-    : Link(area, nodeName1, adj1.ifName, nodeName2, adj2.ifName) {
-  metric1_ = adj1.metric;
-  metric2_ = adj2.metric;
-  overload1_ = adj1.isOverloaded;
-  overload2_ = adj2.isOverloaded;
-  adjLabel1_ = adj1.adjLabel;
-  adjLabel2_ = adj2.adjLabel;
-  nhV41_ = adj1.nextHopV4;
-  nhV42_ = adj2.nextHopV4;
-  nhV61_ = adj1.nextHopV6;
-  nhV62_ = adj2.nextHopV6;
+    : Link(area, nodeName1, *adj1.ifName_ref(), nodeName2, *adj2.ifName_ref()) {
+  metric1_ = *adj1.metric_ref();
+  metric2_ = *adj2.metric_ref();
+  overload1_ = *adj1.isOverloaded_ref();
+  overload2_ = *adj2.isOverloaded_ref();
+  adjLabel1_ = *adj1.adjLabel_ref();
+  adjLabel2_ = *adj2.adjLabel_ref();
+  nhV41_ = *adj1.nextHopV4_ref();
+  nhV42_ = *adj2.nextHopV4_ref();
+  nhV61_ = *adj1.nextHopV6_ref();
+  nhV62_ = *adj2.nextHopV6_ref();
 }
 
 const std::string&
@@ -532,14 +532,14 @@ std::shared_ptr<Link>
 LinkState::maybeMakeLink(
     const std::string& nodeName, const thrift::Adjacency& adj) const {
   // only return Link if it is bidirectional.
-  auto search = adjacencyDatabases_.find(adj.otherNodeName);
+  auto search = adjacencyDatabases_.find(*adj.otherNodeName_ref());
   if (search != adjacencyDatabases_.end()) {
-    for (const auto& otherAdj : search->second.adjacencies) {
-      if (nodeName == otherAdj.otherNodeName &&
-          adj.otherIfName == otherAdj.ifName &&
-          adj.ifName == otherAdj.otherIfName) {
+    for (const auto& otherAdj : *search->second.adjacencies_ref()) {
+      if (nodeName == *otherAdj.otherNodeName_ref() &&
+          *adj.otherIfName_ref() == *otherAdj.ifName_ref() &&
+          *adj.ifName_ref() == *otherAdj.otherIfName_ref()) {
         return std::make_shared<Link>(
-            area_, nodeName, adj, adj.otherNodeName, otherAdj);
+            area_, nodeName, adj, *adj.otherNodeName_ref(), otherAdj);
       }
     }
   }
@@ -549,9 +549,9 @@ LinkState::maybeMakeLink(
 std::vector<std::shared_ptr<Link>>
 LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
   std::vector<std::shared_ptr<Link>> links;
-  links.reserve(adjDb.adjacencies.size());
-  for (const auto& adj : adjDb.adjacencies) {
-    auto linkPtr = maybeMakeLink(adjDb.thisNodeName, adj);
+  links.reserve(adjDb.adjacencies_ref()->size());
+  for (const auto& adj : *adjDb.adjacencies_ref()) {
+    auto linkPtr = maybeMakeLink(*adjDb.thisNodeName_ref(), adj);
     if (nullptr != linkPtr) {
       links.emplace_back(linkPtr);
     }
@@ -567,18 +567,20 @@ LinkState::updateAdjacencyDatabase(
     LinkStateMetric holdUpTtl,
     LinkStateMetric holdDownTtl) {
   LinkStateChange change;
-  auto const& nodeName = newAdjacencyDb.thisNodeName;
+  auto const& nodeName = *newAdjacencyDb.thisNodeName_ref();
   VLOG(1) << "Updating adjacency database for node " << nodeName << ", area "
-          << newAdjacencyDb.area;
+          << *newAdjacencyDb.area_ref();
 
   // Area field must be specified and match with area_
-  DCHECK_EQ(area_, newAdjacencyDb.area);
+  DCHECK_EQ(area_, *newAdjacencyDb.area_ref());
 
-  for (auto const& adj : newAdjacencyDb.adjacencies) {
-    VLOG(3) << "  neighbor: " << adj.otherNodeName
+  for (auto const& adj : *newAdjacencyDb.adjacencies_ref()) {
+    VLOG(3) << "  neighbor: " << *adj.otherNodeName_ref()
             << ", remoteIfName: " << getRemoteIfName(adj)
-            << ", ifName: " << adj.ifName << ", metric: " << adj.metric
-            << ", overloaded: " << adj.isOverloaded << ", rtt: " << adj.rtt;
+            << ", ifName: " << *adj.ifName_ref()
+            << ", metric: " << *adj.metric_ref()
+            << ", overloaded: " << *adj.isOverloaded_ref()
+            << ", rtt: " << *adj.rtt_ref();
   }
 
   // Default construct if it did not exist
@@ -598,10 +600,10 @@ LinkState::updateAdjacencyDatabase(
   std::unordered_set<Link> linksDown;
 
   change.topologyChanged |= updateNodeOverloaded(
-      nodeName, newAdjacencyDb.isOverloaded, holdUpTtl, holdDownTtl);
+      nodeName, *newAdjacencyDb.isOverloaded_ref(), holdUpTtl, holdDownTtl);
 
   change.nodeLabelChanged =
-      priorAdjacencyDb.nodeLabel != newAdjacencyDb.nodeLabel;
+      *priorAdjacencyDb.nodeLabel_ref() != *newAdjacencyDb.nodeLabel_ref();
 
   auto newIter = newLinks.begin();
   auto oldIter = oldLinks.begin();

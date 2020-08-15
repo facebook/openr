@@ -49,14 +49,16 @@ getRttMetric(int64_t rttUs) {
 void
 printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   VLOG(1) << "LinkMonitor state .... ";
-  VLOG(1) << "\tnodeLabel: " << state.nodeLabel;
-  VLOG(1) << "\tisOverloaded: " << (state.isOverloaded ? "true" : "false");
-  if (not state.overloadedLinks.empty()) {
-    VLOG(1) << "\toverloadedLinks: " << folly::join(",", state.overloadedLinks);
+  VLOG(1) << "\tnodeLabel: " << *state.nodeLabel_ref();
+  VLOG(1) << "\tisOverloaded: "
+          << (*state.isOverloaded_ref() ? "true" : "false");
+  if (not state.overloadedLinks_ref()->empty()) {
+    VLOG(1) << "\toverloadedLinks: "
+            << folly::join(",", *state.overloadedLinks_ref());
   }
-  if (not state.linkMetricOverrides.empty()) {
+  if (not state.linkMetricOverrides_ref()->empty()) {
     VLOG(1) << "\tlinkMetricOverrides: ";
-    for (auto const& kv : state.linkMetricOverrides) {
+    for (auto const& kv : *state.linkMetricOverrides_ref()) {
       VLOG(1) << "\t\t" << kv.first << ": " << kv.second;
     }
   }
@@ -89,14 +91,14 @@ LinkMonitor::LinkMonitor(
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
-      prefixForwardingType_(config->getConfig().prefix_forwarding_type),
+      prefixForwardingType_(*config->getConfig().prefix_forwarding_type_ref()),
       prefixForwardingAlgorithm_(
-          config->getConfig().prefix_forwarding_algorithm),
-      useRttMetric_(config->getLinkMonitorConfig().use_rtt_metric),
+          *config->getConfig().prefix_forwarding_algorithm_ref()),
+      useRttMetric_(*config->getLinkMonitorConfig().use_rtt_metric_ref()),
       linkflapInitBackoff_(std::chrono::milliseconds(
-          config->getLinkMonitorConfig().linkflap_initial_backoff_ms)),
+          *config->getLinkMonitorConfig().linkflap_initial_backoff_ms_ref())),
       linkflapMaxBackoff_(std::chrono::milliseconds(
-          config->getLinkMonitorConfig().linkflap_max_backoff_ms)),
+          *config->getLinkMonitorConfig().linkflap_max_backoff_ms_ref())),
       ttlKeyInKvStore_(config->getKvStoreKeyTtl()),
       includeItfRegexes_(config->getIncludeItfRegexes()),
       excludeItfRegexes_(config->getExcludeItfRegexes()),
@@ -152,14 +154,14 @@ LinkMonitor::LinkMonitor(
     printLinkMonitorState(state_);
   } else {
     // no persistent store found, use assumeDrained
-    state_.isOverloaded = assumeDrained;
+    state_.isOverloaded_ref() = assumeDrained;
     LOG(WARNING) << folly::sformat(
         "Failed to load link-monitor state from disk. Setting node as {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
   }
   // overrideDrainState provided, use assumeDrained
   if (overrideDrainState) {
-    state_.isOverloaded = assumeDrained;
+    state_.isOverloaded_ref() = assumeDrained;
     LOG(WARNING) << folly::sformat(
         "FLAGS_override_drain_state == true, setting drain state based on FLAGS_assume_drained to {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
@@ -180,7 +182,7 @@ LinkMonitor::LinkMonitor(
               Constants::kNodeLabelRangePrefix.toString(),
               kvStoreClient_.get(),
               [&](std::optional<int32_t> newVal) noexcept {
-                state_.nodeLabel = newVal ? newVal.value() : 0;
+                state_.nodeLabel_ref() = newVal ? newVal.value() : 0;
                 advertiseAdjacencies();
               }, /* callback */
               std::chrono::milliseconds(100), /* minBackoffDur */
@@ -194,8 +196,8 @@ LinkMonitor::LinkMonitor(
       auto startAllocTimer =
           folly::AsyncTimeout::make(*getEvb(), [this, area]() noexcept {
             std::optional<int32_t> initValue;
-            if (state_.nodeLabel != 0) {
-              initValue = state_.nodeLabel;
+            if (*state_.nodeLabel_ref() != 0) {
+              initValue = *state_.nodeLabel_ref();
             }
             rangeAllocator_.at(area).startAllocator(
                 Constants::kSrGlobalRange, initValue);
@@ -283,15 +285,16 @@ LinkMonitor::stop() {
 
 void
 LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& neighborAddrV4 = event.neighbor.transportAddressV4;
-  const auto& neighborAddrV6 = event.neighbor.transportAddressV6;
+  const auto& neighborAddrV4 = *event.neighbor_ref()->transportAddressV4_ref();
+  const auto& neighborAddrV6 = *event.neighbor_ref()->transportAddressV6_ref();
   const std::string& ifName = event.ifName;
-  const std::string& remoteNodeName = event.neighbor.nodeName;
-  const std::string& remoteIfName = event.neighbor.ifName;
-  const std::string& area = event.area;
+  const std::string& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
+  const std::string& remoteIfName = *event.neighbor_ref()->ifName_ref();
+  const std::string& area = *event.area_ref();
   const auto adjId = std::make_pair(remoteNodeName, ifName);
-  const int32_t kvStoreCmdPort = event.neighbor.kvStoreCmdPort;
-  const int32_t openrCtrlThriftPort = event.neighbor.openrCtrlThriftPort;
+  const int32_t kvStoreCmdPort = *event.neighbor_ref()->kvStoreCmdPort_ref();
+  const int32_t openrCtrlThriftPort =
+      *event.neighbor_ref()->openrCtrlThriftPort_ref();
   auto rttMetric = getRttMetric(event.rttUs);
   auto now = std::chrono::system_clock::now();
   // current unixtime in s
@@ -317,11 +320,13 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
       weight,
       remoteIfName /* otherIfName */);
 
-  SYSLOG(INFO)
-      << "Neighbor " << remoteNodeName << " is up on interface " << ifName
-      << ". Remote Interface: " << remoteIfName << ", metric: " << newAdj.metric
-      << ", rttUs: " << event.rttUs << ", addrV4: " << toString(neighborAddrV4)
-      << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area;
+  SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is up on interface "
+               << ifName << ". Remote Interface: " << remoteIfName
+               << ", metric: " << *newAdj.metric_ref()
+               << ", rttUs: " << *event.rttUs_ref()
+               << ", addrV4: " << toString(neighborAddrV4)
+               << ", addrV6: " << toString(neighborAddrV6)
+               << ", area: " << area;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
   std::string repUrl{""};
@@ -347,10 +352,11 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   // be overridden by KvStoreClientInternal, thus no need to explicitly remove
   // it 2) does not change: the existing connection to a neighbor is retained
   thrift::PeerSpec peerSpec;
-  peerSpec.cmdUrl = repUrl;
-  peerSpec.peerAddr = peerAddr;
-  peerSpec.ctrlPort = openrCtrlThriftPort;
-  peerSpec.supportFloodOptimization = event.supportFloodOptimization;
+  *peerSpec.cmdUrl_ref() = repUrl;
+  *peerSpec.peerAddr_ref() = peerAddr;
+  peerSpec.ctrlPort_ref() = openrCtrlThriftPort;
+  peerSpec.supportFloodOptimization_ref() =
+      *event.supportFloodOptimization_ref();
   adjacencies_[adjId] =
       AdjacencyValue(peerSpec, std::move(newAdj), false, area);
 
@@ -363,9 +369,9 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
 
 void
 LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& remoteNodeName = event.neighbor.nodeName;
+  const auto& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
   const auto& ifName = event.ifName;
-  const auto& area = event.area;
+  const auto& area = *event.area_ref();
   const auto adjId = std::make_pair(remoteNodeName, ifName);
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is down on interface "
@@ -384,9 +390,9 @@ LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
 
 void
 LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& remoteNodeName = event.neighbor.nodeName;
+  const auto& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
   const auto& ifName = event.ifName;
-  const auto& area = event.area;
+  const auto& area = *event.area_ref();
   const auto adjId = std::make_pair(remoteNodeName, ifName);
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName
@@ -404,7 +410,7 @@ LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
 
 void
 LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& remoteNodeName = event.neighbor.nodeName;
+  const auto& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
   const auto& ifName = event.ifName;
   int32_t newRttMetric = getRttMetric(event.rttUs);
 
@@ -414,8 +420,8 @@ LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighborEvent& event) {
   auto it = adjacencies_.find({remoteNodeName, ifName});
   if (it != adjacencies_.end()) {
     auto& adj = it->second.adjacency;
-    adj.metric = newRttMetric;
-    adj.rtt = event.rttUs;
+    adj.metric_ref() = newRttMetric;
+    adj.rtt_ref() = *event.rttUs_ref();
     advertiseAdjacenciesThrottled_->operator()();
   }
 }
@@ -456,7 +462,7 @@ LinkMonitor::advertiseKvStorePeers(
     const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
   // Prepare peer update request
   thrift::PeerUpdateRequest req;
-  req.area = area;
+  *req.area_ref() = area;
 
   // Get old and new peer list. Also update local state
   const auto oldPeers = std::move(peers_[area]);
@@ -476,7 +482,7 @@ LinkMonitor::advertiseKvStorePeers(
   // Delete old peers
   if (toDelPeers.size() > 0) {
     thrift::PeerDelParams params;
-    params.peerNames = std::move(toDelPeers);
+    *params.peerNames_ref() = std::move(toDelPeers);
     req.peerDelParams_ref() = std::move(params);
   }
 
@@ -514,7 +520,7 @@ LinkMonitor::advertiseKvStorePeers(
   // Add new peers
   if (toAddPeers.size() > 0) {
     thrift::PeerAddParams params;
-    params.peers = std::move(toAddPeers);
+    *params.peers_ref() = std::move(toAddPeers);
     req.peerAddParams_ref() = std::move(params);
   }
 
@@ -545,10 +551,10 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   }
 
   auto adjDb = thrift::AdjacencyDatabase();
-  adjDb.thisNodeName = nodeId_;
-  adjDb.isOverloaded = state_.isOverloaded;
-  adjDb.nodeLabel = enableSegmentRouting_ ? state_.nodeLabel : 0;
-  adjDb.area = area;
+  *adjDb.thisNodeName_ref() = nodeId_;
+  adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
+  adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
+  *adjDb.area_ref() = area;
   for (const auto& adjKv : adjacencies_) {
     // 'second.second' is the adj object for this peer
     // must match the area
@@ -559,20 +565,23 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
     auto adj = folly::copy(adjKv.second.adjacency);
 
     // Set link overload bit
-    adj.isOverloaded = state_.overloadedLinks.count(adj.ifName) > 0;
+    adj.isOverloaded_ref() =
+        state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
 
     // Override metric with link metric if it exists
-    adj.metric =
-        folly::get_default(state_.linkMetricOverrides, adj.ifName, adj.metric);
+    adj.metric_ref() = folly::get_default(
+        *state_.linkMetricOverrides_ref(),
+        *adj.ifName_ref(),
+        *adj.metric_ref());
 
     // Override metric with adj metric if it exists
     thrift::AdjKey adjKey;
-    adjKey.nodeName = adj.otherNodeName;
-    adjKey.ifName = adj.ifName;
-    adj.metric =
-        folly::get_default(state_.adjMetricOverrides, adjKey, adj.metric);
+    *adjKey.nodeName_ref() = *adj.otherNodeName_ref();
+    *adjKey.ifName_ref() = *adj.ifName_ref();
+    adj.metric_ref() = folly::get_default(
+        *state_.adjMetricOverrides_ref(), adjKey, *adj.metric_ref());
 
-    adjDb.adjacencies.emplace_back(std::move(adj));
+    adjDb.adjacencies_ref()->emplace_back(std::move(adj));
   }
 
   // Add perf information if enabled
@@ -585,7 +594,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   }
 
   LOG(INFO) << "Updating adjacency database in KvStore with "
-            << adjDb.adjacencies.size() << " entries in area: " << area;
+            << adjDb.adjacencies_ref()->size() << " entries in area: " << area;
   const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
   kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_, area);
@@ -600,7 +609,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   for (const auto& kv : adjacencies_) {
     auto& adj = kv.second.adjacency;
     fb303::fbData->setCounter(
-        "link_monitor.metric." + adj.otherNodeName, adj.metric);
+        "link_monitor.metric." + *adj.otherNodeName_ref(), *adj.metric_ref());
   }
 }
 void
@@ -640,7 +649,7 @@ LinkMonitor::advertiseInterfaces() {
 
   // Create interface database
   thrift::InterfaceDatabase ifDb;
-  ifDb.thisNodeName = nodeId_;
+  *ifDb.thisNodeName_ref() = nodeId_;
   for (auto& kv : interfaces_) {
     auto& ifName = kv.first;
     auto& interface = kv.second;
@@ -652,7 +661,7 @@ LinkMonitor::advertiseInterfaces() {
     // Get interface info and override active status
     auto interfaceInfo = interface.getInterfaceInfo();
     interfaceInfo.isUp = interface.isActive();
-    ifDb.interfaces.emplace(ifName, std::move(interfaceInfo));
+    ifDb.interfaces_ref()->emplace(ifName, std::move(interfaceInfo));
   }
 
   // publish new interface database to other modules (Fib & Spark)
@@ -679,8 +688,8 @@ LinkMonitor::advertiseRedistAddrs() {
     }
     // Add all prefixes of this interface
     for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
-      prefix.forwardingType = prefixForwardingType_;
-      prefix.forwardingAlgorithm = prefixForwardingAlgorithm_;
+      prefix.forwardingType_ref() = prefixForwardingType_;
+      prefix.forwardingAlgorithm_ref() = prefixForwardingAlgorithm_;
       // Tags
       {
         auto& tags = prefix.tags_ref().value();
@@ -700,9 +709,9 @@ LinkMonitor::advertiseRedistAddrs() {
   LOG_IF(INFO, prefixes.empty()) << "Advertising empty LOOPBACK addresses.";
   // Advertise via prefix manager client
   thrift::PrefixUpdateRequest request;
-  request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+  request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
   request.type_ref() = openr::thrift::PrefixType::LOOPBACK;
-  request.prefixes = std::move(prefixes);
+  *request.prefixes_ref() = std::move(prefixes);
   // publish LOOPBACK prefixes to prefix manager
   prefixUpdatesQueue_.push(std::move(request));
 }
@@ -777,7 +786,7 @@ LinkMonitor::syncInterfaces() {
     ifIndexToName_[*link.ifIndex_ref()] = *link.ifName_ref();
 
     // Get interface entry
-    auto interfaceEntry = getOrCreateInterfaceEntry(link.ifName);
+    auto interfaceEntry = getOrCreateInterfaceEntry(*link.ifName_ref());
     if (not interfaceEntry) {
       continue;
     }
@@ -785,13 +794,14 @@ LinkMonitor::syncInterfaces() {
     const std::unordered_set<folly::CIDRNetwork> oldNetworks =
         interfaceEntry->getNetworks(); // NOTE: Copy intended
     std::unordered_set<folly::CIDRNetwork> newNetworks;
-    for (const auto& network : link.networks) {
+    for (const auto& network : *link.networks_ref()) {
       newNetworks.emplace(toIPNetwork(network, false /* no masking */));
     }
 
     // Update link attributes
     const bool wasUp = interfaceEntry->isUp();
-    interfaceEntry->updateAttrs(link.ifIndex, link.isUp, link.weight);
+    interfaceEntry->updateAttrs(
+        *link.ifIndex_ref(), *link.isUp_ref(), *link.weight_ref());
     logLinkEvent(
         interfaceEntry->getIfName(),
         wasUp,
@@ -863,15 +873,16 @@ LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
 
 void
 LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
-  auto neighborAddrV4 = event.neighbor.transportAddressV4;
-  auto neighborAddrV6 = event.neighbor.transportAddressV6;
+  auto neighborAddrV4 = *event.neighbor_ref()->transportAddressV4_ref();
+  auto neighborAddrV6 = *event.neighbor_ref()->transportAddressV6_ref();
 
-  VLOG(1)
-      << "Received neighbor event for " << event.neighbor.nodeName << " from "
-      << event.neighbor.ifName << " at " << event.ifName << " with addrs "
-      << toString(neighborAddrV6) << " and "
-      << (enableV4_ ? toString(neighborAddrV4) : "") << " Area:" << event.area
-      << " Event Type: " << apache::thrift::util::enumNameSafe(event.eventType);
+  VLOG(1) << "Received neighbor event for "
+          << *event.neighbor_ref()->nodeName_ref() << " from "
+          << *event.neighbor_ref()->ifName_ref() << " at "
+          << *event.ifName_ref() << " with addrs " << toString(neighborAddrV6)
+          << " and " << (enableV4_ ? toString(neighborAddrV4) : "")
+          << " Area:" << *event.area_ref() << " Event Type: "
+          << apache::thrift::util::enumNameSafe(*event.eventType_ref());
 
   switch (event.eventType) {
   case thrift::SparkNeighborEventType::NEIGHBOR_UP:
@@ -912,11 +923,11 @@ LinkMonitor::setNodeOverload(bool isOverloaded) {
   runInEventBaseThread([this, p = std::move(p), isOverloaded]() mutable {
     std::string cmd =
         isOverloaded ? "SET_NODE_OVERLOAD" : "UNSET_NODE_OVERLOAD";
-    if (state_.isOverloaded == isOverloaded) {
+    if (*state_.isOverloaded_ref() == isOverloaded) {
       LOG(INFO) << "Skip cmd: [" << cmd << "]. Node already in target state: ["
                 << (isOverloaded ? "OVERLOADED" : "NOT OVERLOADED") << "]";
     } else {
-      state_.isOverloaded = isOverloaded;
+      state_.isOverloaded_ref() = isOverloaded;
       SYSLOG(INFO) << (isOverloaded ? "Setting" : "Unsetting")
                    << " overload bit for node";
       advertiseAdjacencies();
@@ -931,43 +942,43 @@ LinkMonitor::setInterfaceOverload(
     std::string interfaceName, bool isOverloaded) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread(
-      [this, p = std::move(p), interfaceName, isOverloaded]() mutable {
-        std::string cmd =
-            isOverloaded ? "SET_LINK_OVERLOAD" : "UNSET_LINK_OVERLOAD";
-        if (0 == interfaces_.count(interfaceName)) {
-          LOG(ERROR) << "Skip cmd: [" << cmd
-                     << "] due to unknown interface: " << interfaceName;
-          p.setValue();
-          return;
-        }
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        interfaceName,
+                        isOverloaded]() mutable {
+    std::string cmd =
+        isOverloaded ? "SET_LINK_OVERLOAD" : "UNSET_LINK_OVERLOAD";
+    if (0 == interfaces_.count(interfaceName)) {
+      LOG(ERROR) << "Skip cmd: [" << cmd
+                 << "] due to unknown interface: " << interfaceName;
+      p.setValue();
+      return;
+    }
 
-        if (isOverloaded && state_.overloadedLinks.count(interfaceName)) {
-          LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
-                    << " is already overloaded";
-          p.setValue();
-          return;
-        }
+    if (isOverloaded && state_.overloadedLinks_ref()->count(interfaceName)) {
+      LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
+                << " is already overloaded";
+      p.setValue();
+      return;
+    }
 
-        if (!isOverloaded && !state_.overloadedLinks.count(interfaceName)) {
-          LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
-                    << " is currently NOT overloaded";
-          p.setValue();
-          return;
-        }
+    if (!isOverloaded && !state_.overloadedLinks_ref()->count(interfaceName)) {
+      LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
+                << " is currently NOT overloaded";
+      p.setValue();
+      return;
+    }
 
-        if (isOverloaded) {
-          state_.overloadedLinks.insert(interfaceName);
-          SYSLOG(INFO) << "Setting overload bit for interface "
-                       << interfaceName;
-        } else {
-          state_.overloadedLinks.erase(interfaceName);
-          SYSLOG(INFO) << "Unsetting overload bit for interface "
-                       << interfaceName;
-        }
-        advertiseAdjacenciesThrottled_->operator()();
-        p.setValue();
-      });
+    if (isOverloaded) {
+      state_.overloadedLinks_ref()->insert(interfaceName);
+      SYSLOG(INFO) << "Setting overload bit for interface " << interfaceName;
+    } else {
+      state_.overloadedLinks_ref()->erase(interfaceName);
+      SYSLOG(INFO) << "Unsetting overload bit for interface " << interfaceName;
+    }
+    advertiseAdjacenciesThrottled_->operator()();
+    p.setValue();
+  });
   return sf;
 }
 
@@ -988,8 +999,8 @@ LinkMonitor::setLinkMetric(
         }
 
         if (overrideMetric.has_value() &&
-            state_.linkMetricOverrides.count(interfaceName) &&
-            state_.linkMetricOverrides[interfaceName] ==
+            state_.linkMetricOverrides_ref()->count(interfaceName) &&
+            state_.linkMetricOverrides_ref()[interfaceName] ==
                 overrideMetric.value()) {
           LOG(INFO) << "Skip cmd: " << cmd
                     << ". Overridden metric: " << overrideMetric.value()
@@ -999,7 +1010,7 @@ LinkMonitor::setLinkMetric(
         }
 
         if (!overrideMetric.has_value() &&
-            !state_.linkMetricOverrides.count(interfaceName)) {
+            !state_.linkMetricOverrides_ref()->count(interfaceName)) {
           LOG(INFO) << "Skip cmd: " << cmd
                     << ". No overridden metric found for interface: "
                     << interfaceName;
@@ -1008,11 +1019,12 @@ LinkMonitor::setLinkMetric(
         }
 
         if (overrideMetric.has_value()) {
-          state_.linkMetricOverrides[interfaceName] = overrideMetric.value();
+          state_.linkMetricOverrides_ref()[interfaceName] =
+              overrideMetric.value();
           SYSLOG(INFO) << "Overriding metric for interface " << interfaceName
                        << " to " << overrideMetric.value();
         } else {
-          state_.linkMetricOverrides.erase(interfaceName);
+          state_.linkMetricOverrides_ref()->erase(interfaceName);
           SYSLOG(INFO) << "Removing metric override for interface "
                        << interfaceName;
         }
@@ -1037,8 +1049,8 @@ LinkMonitor::setAdjacencyMetric(
     std::string cmd = overrideMetric.has_value() ? "SET_ADJACENCY_METRIC"
                                                  : "UNSET_ADJACENCY_METRIC";
     thrift::AdjKey adjKey;
-    adjKey.ifName = interfaceName;
-    adjKey.nodeName = adjNodeName;
+    *adjKey.ifName_ref() = interfaceName;
+    *adjKey.nodeName_ref() = adjNodeName;
 
     // Invalid adj encountered. Ignore
     if (!adjacencies_.count(std::make_pair(adjNodeName, interfaceName))) {
@@ -1048,8 +1060,9 @@ LinkMonitor::setAdjacencyMetric(
       return;
     }
 
-    if (overrideMetric.has_value() && state_.adjMetricOverrides.count(adjKey) &&
-        state_.adjMetricOverrides[adjKey] == overrideMetric.value()) {
+    if (overrideMetric.has_value() &&
+        state_.adjMetricOverrides_ref()->count(adjKey) &&
+        state_.adjMetricOverrides_ref()[adjKey] == overrideMetric.value()) {
       LOG(INFO) << "Skip cmd: " << cmd
                 << ". Overridden metric: " << overrideMetric.value()
                 << " already set for: [" << adjNodeName << ":" << interfaceName
@@ -1059,7 +1072,7 @@ LinkMonitor::setAdjacencyMetric(
     }
 
     if (!overrideMetric.has_value() &&
-        !state_.adjMetricOverrides.count(adjKey)) {
+        !state_.adjMetricOverrides_ref()->count(adjKey)) {
       LOG(INFO) << "Skip cmd: " << cmd << ". No overridden metric found for: ["
                 << adjNodeName << ":" << interfaceName << "]";
       p.setValue();
@@ -1067,11 +1080,11 @@ LinkMonitor::setAdjacencyMetric(
     }
 
     if (overrideMetric.has_value()) {
-      state_.adjMetricOverrides[adjKey] = overrideMetric.value();
+      state_.adjMetricOverrides_ref()[adjKey] = overrideMetric.value();
       SYSLOG(INFO) << "Overriding metric for adjacency: [" << adjNodeName << ":"
                    << interfaceName << "] to " << overrideMetric.value();
     } else {
-      state_.adjMetricOverrides.erase(adjKey);
+      state_.adjMetricOverrides_ref()->erase(adjKey);
       SYSLOG(INFO) << "Removing metric override for adjacency: [" << adjNodeName
                    << ":" << interfaceName << "]";
     }
@@ -1091,8 +1104,8 @@ LinkMonitor::getInterfaces() {
   runInEventBaseThread([this, p = std::move(p)]() mutable {
     // reply with the dump of known interfaces and their states
     thrift::DumpLinksReply reply;
-    reply.thisNodeName = nodeId_;
-    reply.isOverloaded = state_.isOverloaded;
+    *reply.thisNodeName_ref() = nodeId_;
+    reply.isOverloaded_ref() = *state_.isOverloaded_ref();
 
     // Fill interface details
     for (auto& kv : interfaces_) {
@@ -1101,14 +1114,14 @@ LinkMonitor::getInterfaces() {
       auto ifDetails = thrift::InterfaceDetails(
           apache::thrift::FRAGILE,
           interface.getInterfaceInfo(),
-          state_.overloadedLinks.count(ifName) > 0,
+          state_.overloadedLinks_ref()->count(ifName) > 0,
           0 /* custom metric value */,
           0 /* link flap back off time */);
 
       // Add metric override if any
       folly::Optional<int32_t> maybeMetric;
-      if (state_.linkMetricOverrides.count(ifName) > 0) {
-        maybeMetric.assign(state_.linkMetricOverrides.at(ifName));
+      if (state_.linkMetricOverrides_ref()->count(ifName) > 0) {
+        maybeMetric.assign(state_.linkMetricOverrides_ref()->at(ifName));
       }
       apache::thrift::fromFollyOptional(
           ifDetails.metricOverride_ref(), maybeMetric);
@@ -1121,7 +1134,7 @@ LinkMonitor::getInterfaces() {
         ifDetails.linkFlapBackOffMs_ref().reset();
       }
 
-      reply.interfaceDetails.emplace(ifName, std::move(ifDetails));
+      reply.interfaceDetails_ref()->emplace(ifName, std::move(ifDetails));
     }
     p.setValue(std::make_unique<thrift::DumpLinksReply>(std::move(reply)));
   });
@@ -1138,9 +1151,9 @@ LinkMonitor::getLinkMonitorAdjacencies() {
   runInEventBaseThread([this, p = std::move(p)]() mutable {
     // build adjacency database
     thrift::AdjacencyDatabase adjDb;
-    adjDb.thisNodeName = nodeId_;
-    adjDb.isOverloaded = state_.isOverloaded;
-    adjDb.nodeLabel = enableSegmentRouting_ ? state_.nodeLabel : 0;
+    *adjDb.thisNodeName_ref() = nodeId_;
+    adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
+    adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
 
     // fill adjacency details
     for (const auto& adjKv : adjacencies_) {
@@ -1148,20 +1161,23 @@ LinkMonitor::getLinkMonitorAdjacencies() {
       auto adj = folly::copy(adjKv.second.adjacency);
 
       // Set link overload bit
-      adj.isOverloaded = state_.overloadedLinks.count(adj.ifName) > 0;
+      adj.isOverloaded_ref() =
+          state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
 
       // Override metric with link metric if it exists
-      adj.metric = folly::get_default(
-          state_.linkMetricOverrides, adj.ifName, adj.metric);
+      adj.metric_ref() = folly::get_default(
+          *state_.linkMetricOverrides_ref(),
+          *adj.ifName_ref(),
+          *adj.metric_ref());
 
       // Override metric with adj metric if it exists
       thrift::AdjKey adjKey;
-      adjKey.nodeName = adj.otherNodeName;
-      adjKey.ifName = adj.ifName;
-      adj.metric =
-          folly::get_default(state_.adjMetricOverrides, adjKey, adj.metric);
+      *adjKey.nodeName_ref() = *adj.otherNodeName_ref();
+      *adjKey.ifName_ref() = *adj.ifName_ref();
+      adj.metric_ref() = folly::get_default(
+          *state_.adjMetricOverrides_ref(), adjKey, *adj.metric_ref());
 
-      adjDb.adjacencies.emplace_back(std::move(adj));
+      adjDb.adjacencies_ref()->emplace_back(std::move(adj));
     }
     p.setValue(std::make_unique<thrift::AdjacencyDatabase>(std::move(adjDb)));
   });
@@ -1219,10 +1235,10 @@ LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
       apache::thrift::TEnumTraits<thrift::SparkNeighborEventType>::findName(
           event.eventType));
   sample.addString("node_name", nodeId_);
-  sample.addString("neighbor", event.neighbor.nodeName);
+  sample.addString("neighbor", *event.neighbor_ref()->nodeName_ref());
   sample.addString("interface", event.ifName);
-  sample.addString("remote_interface", event.neighbor.ifName);
-  sample.addString("area", event.area);
+  sample.addString("remote_interface", *event.neighbor_ref()->ifName_ref());
+  sample.addString("area", *event.area_ref());
   sample.addInt("rtt_us", event.rttUs);
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
@@ -1269,7 +1285,7 @@ LinkMonitor::logPeerEvent(
   sample.addString("event", event);
   sample.addString("node_name", nodeId_);
   sample.addString("peer_name", peerName);
-  sample.addString("cmd_url", peerSpec.cmdUrl);
+  sample.addString("cmd_url", *peerSpec.cmdUrl_ref());
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,

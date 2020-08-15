@@ -46,20 +46,21 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /*orderedFibProgramming*/,
       true /*dryrun*/);
 
-  tConfig.kvstore_config.sync_interval_s = kvStoreDbSyncInterval.count();
+  *tConfig.kvstore_config_ref()->sync_interval_s_ref() =
+      kvStoreDbSyncInterval.count();
 
   // link monitor config
-  auto& lmConf = tConfig.link_monitor_config;
-  lmConf.linkflap_initial_backoff_ms = linkFlapInitialBackoff.count();
-  lmConf.linkflap_max_backoff_ms = linkFlapMaxBackoff.count();
-  lmConf.use_rtt_metric = false;
-  lmConf.include_interface_regexes = {"vethLMTest_" + nodeId_ + ".*"};
+  auto& lmConf = *tConfig.link_monitor_config_ref();
+  *lmConf.linkflap_initial_backoff_ms_ref() = linkFlapInitialBackoff.count();
+  *lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
+  *lmConf.use_rtt_metric_ref() = false;
+  *lmConf.include_interface_regexes_ref() = {"vethLMTest_" + nodeId_ + ".*"};
 
   // prefix allocation config
   tConfig.enable_prefix_allocation_ref() = true;
   thrift::PrefixAllocationConfig pfxAllocationConf;
-  pfxAllocationConf.loopback_interface = "";
-  pfxAllocationConf.prefix_allocation_mode =
+  *pfxAllocationConf.loopback_interface_ref() = "";
+  pfxAllocationConf.prefix_allocation_mode_ref() =
       thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
   pfxAllocationConf.seed_prefix_ref() = "fc00:cafe:babe::/62";
   pfxAllocationConf.allocate_prefix_len_ref() = 64;
@@ -68,9 +69,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // watchdog
   tConfig.enable_watchdog_ref() = true;
   thrift::WatchdogConfig watchdogConf;
-  watchdogConf.interval_s = 1;
-  watchdogConf.thread_timeout_s = 60;
-  watchdogConf.max_memory_mb = memLimit;
+  watchdogConf.interval_s_ref() = 1;
+  watchdogConf.thread_timeout_s_ref() = 60;
+  watchdogConf.max_memory_mb_ref() = memLimit;
   tConfig.watchdog_config_ref() = std::move(watchdogConf);
 
   config_ = std::make_shared<Config>(tConfig);
@@ -135,10 +136,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
         SYNCHRONIZED(ipPrefix_) {
           bool received = false;
 
-          for (auto& prefix : prefixDb.prefixEntries) {
-            if (prefix.type == thrift::PrefixType::PREFIX_ALLOCATOR) {
+          for (auto& prefix : *prefixDb.prefixEntries_ref()) {
+            if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
               received = true;
-              ipPrefix_ = prefix.prefix;
+              ipPrefix_ = *prefix.prefix_ref();
               break;
             }
           }
@@ -404,14 +405,14 @@ OpenrWrapper<Serializer>::getIpPrefix() {
     for (const auto& key : keys.value()) {
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
           key.second.value_ref().value(), serializer_);
-      if (prefixDb.deletePrefix) {
+      if (*prefixDb.deletePrefix_ref()) {
         // Skip prefixes which are about to be deleted
         continue;
       }
 
-      for (auto& prefix : prefixDb.prefixEntries) {
-        if (prefix.type == thrift::PrefixType::PREFIX_ALLOCATOR) {
-          ipPrefix_ = prefix.prefix;
+      for (auto& prefix : *prefixDb.prefixEntries_ref()) {
+        if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
+          ipPrefix_ = *prefix.prefix_ref();
           break;
         }
       }
@@ -440,7 +441,7 @@ OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
   ifDb.perfEvents_ref().reset();
 
   for (const auto& interface : interfaceEntries) {
-    ifDb.interfaces.emplace(
+    ifDb.interfaces_ref()->emplace(
         interface.ifName,
         createThriftInterfaceInfo(
             true,
@@ -465,8 +466,8 @@ bool
 OpenrWrapper<Serializer>::addPrefixEntries(
     const std::vector<thrift::PrefixEntry>& prefixes) {
   thrift::PrefixUpdateRequest request;
-  request.cmd = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-  request.prefixes = prefixes;
+  request.cmd_ref() = thrift::PrefixUpdateCommand::ADD_PREFIXES;
+  *request.prefixes_ref() = prefixes;
   prefixUpdatesQueue_.push(std::move(request));
   return true;
 }
@@ -476,8 +477,8 @@ bool
 OpenrWrapper<Serializer>::withdrawPrefixEntries(
     const std::vector<thrift::PrefixEntry>& prefixes) {
   thrift::PrefixUpdateRequest request;
-  request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
-  request.prefixes = prefixes;
+  request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
+  *request.prefixes_ref() = prefixes;
   prefixUpdatesQueue_.push(std::move(request));
   return true;
 }
@@ -486,7 +487,7 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::checkPrefixExists(
     const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : routeDb.unicastRoutes) {
+  for (auto const& route : *routeDb.unicastRoutes_ref()) {
     if (prefix == route.dest) {
       return true;
     }

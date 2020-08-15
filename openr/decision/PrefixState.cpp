@@ -16,18 +16,18 @@ namespace openr {
 void
 PrefixState::deleteLoopbackPrefix(
     thrift::IpPrefix const& prefix, const std::string& nodeName) {
-  auto addrSize = prefix.prefixAddress.addr.size();
+  auto addrSize = prefix.prefixAddress_ref()->addr_ref()->size();
   if (addrSize == folly::IPAddressV4::byteCount() &&
-      folly::IPAddressV4::bitCount() == prefix.prefixLength) {
+      folly::IPAddressV4::bitCount() == *prefix.prefixLength_ref()) {
     if (nodeHostLoopbacksV4_.find(nodeName) != nodeHostLoopbacksV4_.end() &&
-        prefix.prefixAddress == nodeHostLoopbacksV4_.at(nodeName)) {
+        *prefix.prefixAddress_ref() == nodeHostLoopbacksV4_.at(nodeName)) {
       nodeHostLoopbacksV4_.erase(nodeName);
     }
   }
   if (addrSize == folly::IPAddressV6::byteCount() &&
-      folly::IPAddressV6::bitCount() == prefix.prefixLength) {
+      folly::IPAddressV6::bitCount() == *prefix.prefixLength_ref()) {
     if (nodeHostLoopbacksV6_.find(nodeName) != nodeHostLoopbacksV6_.end() &&
-        nodeHostLoopbacksV6_.at(nodeName) == prefix.prefixAddress) {
+        nodeHostLoopbacksV6_.at(nodeName) == *prefix.prefixAddress_ref()) {
       nodeHostLoopbacksV6_.erase(nodeName);
     }
   }
@@ -39,8 +39,8 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
 
   auto const nodeAndArea =
       std::make_pair(*prefixDb.thisNodeName_ref(), *prefixDb.area_ref());
-  auto const& nodeName = prefixDb.thisNodeName;
-  auto const& area = prefixDb.area;
+  auto const& nodeName = *prefixDb.thisNodeName_ref();
+  auto const& area = *prefixDb.area_ref();
 
   // Get old and new set of prefixes - NOTE explicit copy
   const std::set<thrift::IpPrefix> oldPrefixSet =
@@ -49,8 +49,8 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   // update the entry
   auto& newPrefixSet = nodeToPrefixes_[nodeName][area];
   newPrefixSet.clear();
-  for (const auto& prefixEntry : prefixDb.prefixEntries) {
-    newPrefixSet.emplace(prefixEntry.prefix);
+  for (const auto& prefixEntry : *prefixDb.prefixEntries_ref()) {
+    newPrefixSet.emplace(*prefixEntry.prefix_ref());
   }
 
   // Remove old prefixes first
@@ -73,8 +73,8 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   }
 
   // update prefix entry for new announcement
-  for (const auto& prefixEntry : prefixDb.prefixEntries) {
-    auto& entriesByOriginator = prefixes_[prefixEntry.prefix];
+  for (const auto& prefixEntry : *prefixDb.prefixEntries_ref()) {
+    auto& entriesByOriginator = prefixes_[*prefixEntry.prefix_ref()];
 
     // Skip rest of code, if prefix exists and has no change
     auto [it, inserted] = entriesByOriginator.emplace(nodeAndArea, prefixEntry);
@@ -86,22 +86,27 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     if (not inserted) {
       it->second = prefixEntry;
     }
-    changed.insert(prefixEntry.prefix);
+    changed.insert(*prefixEntry.prefix_ref());
 
-    VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
+    VLOG(1) << "Prefix " << toString(*prefixEntry.prefix_ref())
             << " has been advertised/updated by node " << nodeName
             << " from area " << area;
 
     // Keep track of loopback addresses (v4 / v6) for each node
-    if (thrift::PrefixType::LOOPBACK == prefixEntry.type) {
-      auto addrSize = prefixEntry.prefix.prefixAddress.addr.size();
+    if (thrift::PrefixType::LOOPBACK == *prefixEntry.type_ref()) {
+      auto addrSize =
+          prefixEntry.prefix_ref()->prefixAddress_ref()->addr_ref()->size();
       if (addrSize == folly::IPAddressV4::byteCount() &&
-          folly::IPAddressV4::bitCount() == prefixEntry.prefix.prefixLength) {
-        nodeHostLoopbacksV4_[nodeName] = prefixEntry.prefix.prefixAddress;
+          folly::IPAddressV4::bitCount() ==
+              *prefixEntry.prefix_ref()->prefixLength_ref()) {
+        nodeHostLoopbacksV4_[nodeName] =
+            *prefixEntry.prefix_ref()->prefixAddress_ref();
       }
       if (addrSize == folly::IPAddressV6::byteCount() &&
-          folly::IPAddressV6::bitCount() == prefixEntry.prefix.prefixLength) {
-        nodeHostLoopbacksV6_[nodeName] = prefixEntry.prefix.prefixAddress;
+          folly::IPAddressV6::bitCount() ==
+              *prefixEntry.prefix_ref()->prefixLength_ref()) {
+        nodeHostLoopbacksV6_[nodeName] =
+            *prefixEntry.prefix_ref()->prefixAddress_ref();
       }
     }
   }
@@ -119,10 +124,10 @@ PrefixState::getPrefixDatabases() const {
   for (auto const& [node, areaToPrefixes] : nodeToPrefixes_) {
     for (auto const& [area, prefixes] : areaToPrefixes) {
       thrift::PrefixDatabase prefixDb;
-      prefixDb.thisNodeName = node;
+      *prefixDb.thisNodeName_ref() = node;
       prefixDb.area_ref() = area;
       for (auto const& prefix : prefixes) {
-        prefixDb.prefixEntries.emplace_back(
+        prefixDb.prefixEntries_ref()->emplace_back(
             prefixes_.at(prefix).at({node, area}));
       }
       prefixDatabases.emplace(node, std::move(prefixDb));

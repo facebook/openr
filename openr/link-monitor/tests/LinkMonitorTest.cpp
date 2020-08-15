@@ -150,15 +150,18 @@ createAdjDatabase(
 
 void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
-  LOG(INFO) << "Node: " << adjDb.thisNodeName
-            << ", Overloaded: " << adjDb.isOverloaded
-            << ", Label: " << adjDb.nodeLabel << ", area: " << adjDb.area;
-  for (auto const& adj : adjDb.adjacencies) {
-    LOG(INFO) << "  " << adj.otherNodeName << "@" << adj.ifName
-              << ", metric: " << adj.metric << ", label: " << adj.adjLabel
-              << ", overloaded: " << adj.isOverloaded << ", rtt: " << adj.rtt
-              << ", ts: " << adj.timestamp << ", " << toString(adj.nextHopV4)
-              << ", " << toString(adj.nextHopV6);
+  LOG(INFO) << "Node: " << *adjDb.thisNodeName_ref()
+            << ", Overloaded: " << *adjDb.isOverloaded_ref()
+            << ", Label: " << *adjDb.nodeLabel_ref()
+            << ", area: " << *adjDb.area_ref();
+  for (auto const& adj : *adjDb.adjacencies_ref()) {
+    LOG(INFO) << "  " << *adj.otherNodeName_ref() << "@" << *adj.ifName_ref()
+              << ", metric: " << *adj.metric_ref()
+              << ", label: " << *adj.adjLabel_ref()
+              << ", overloaded: " << *adj.isOverloaded_ref()
+              << ", rtt: " << *adj.rtt_ref() << ", ts: " << *adj.timestamp_ref()
+              << ", " << toString(*adj.nextHopV4_ref()) << ", "
+              << toString(*adj.nextHopV6_ref());
   }
 }
 
@@ -281,21 +284,22 @@ class LinkMonitorTestFixture : public ::testing::Test {
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : areas) {
       thrift::AreaConfig area;
-      area.area_id = id;
-      area.neighbor_regexes.emplace_back(".*");
+      *area.area_id_ref() = id;
+      area.neighbor_regexes_ref()->emplace_back(".*");
       areaConfig.emplace_back(std::move(area));
     }
     auto tConfig =
         getBasicOpenrConfig("node-1", "domain", areaConfig, true, true);
     // kvstore config
-    tConfig.kvstore_config.sync_interval_s = 1;
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     // link monitor config
-    auto& lmConf = tConfig.link_monitor_config;
-    lmConf.linkflap_initial_backoff_ms = flapInitalBackoff.count();
-    lmConf.linkflap_max_backoff_ms = flapMaxBackoff.count();
-    lmConf.use_rtt_metric = false;
-    lmConf.include_interface_regexes = {kTestVethNamePrefix + ".*", "iface.*"};
-    lmConf.redistribute_interface_regexes = {"loopback"};
+    auto& lmConf = *tConfig.link_monitor_config_ref();
+    lmConf.linkflap_initial_backoff_ms_ref() = flapInitalBackoff.count();
+    lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
+    lmConf.use_rtt_metric_ref() = false;
+    *lmConf.include_interface_regexes_ref() = {kTestVethNamePrefix + ".*",
+                                               "iface.*"};
+    *lmConf.redistribute_interface_regexes_ref() = {"loopback"};
     return tConfig;
   }
 
@@ -343,12 +347,12 @@ class LinkMonitorTestFixture : public ::testing::Test {
   recvAndReplyIfUpdate() {
     auto ifDb = interfaceUpdatesReader.get();
     ASSERT_TRUE(ifDb.hasValue());
-    sparkIfDb = std::move(ifDb.value().interfaces);
+    sparkIfDb = std::move(*ifDb.value().interfaces_ref());
     LOG(INFO) << "----------- Interface Updates ----------";
     for (const auto& kv : sparkIfDb) {
       LOG(INFO) << "  Name=" << kv.first << ", Status=" << kv.second.isUp
                 << ", IfIndex=" << kv.second.ifIndex
-                << ", networks=" << kv.second.networks.size();
+                << ", networks=" << kv.second.networks_ref()->size();
     }
   }
 
@@ -390,7 +394,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
       }
       int v4AddrsCount = 0;
       int v6LinkLocalAddrsCount = 0;
-      for (const auto& network : kv.second.networks) {
+      for (const auto& network : *kv.second.networks_ref()) {
         const auto& ipNetwork = toIPNetwork(network);
         if (ipNetwork.first.isV4()) {
           v4AddrsCount++;
@@ -422,17 +426,17 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Waiting to receive publication for key " << key << " area "
               << area;
     auto pub = kvStoreWrapper->recvPublication();
-    if (pub.area != area) {
+    if (*pub.area_ref() != area) {
       return std::nullopt;
     }
 
-    VLOG(1) << "Received publication with keys in area " << pub.area;
-    for (auto const& kv : pub.keyVals) {
+    VLOG(1) << "Received publication with keys in area " << *pub.area_ref();
+    for (auto const& kv : *pub.keyVals_ref()) {
       VLOG(1) << "  " << kv.first;
     }
 
-    auto kv = pub.keyVals.find(key);
-    if (kv == pub.keyVals.end() or !kv->second.value_ref()) {
+    auto kv = pub.keyVals_ref()->find(key);
+    if (kv == pub.keyVals_ref()->end() or !kv->second.value_ref()) {
       return std::nullopt;
     }
 
@@ -467,10 +471,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
       auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
           value->value_ref().value(), serializer);
       // we can not know what the nodeLabel will be
-      adjDb.nodeLabel = kNodeLabel;
+      adjDb.nodeLabel_ref() = kNodeLabel;
       // nor the timestamp, so we override with our predefinded const values
-      for (auto& adj : adjDb.adjacencies) {
-        adj.timestamp = kTimestamp;
+      for (auto& adj : *adjDb.adjacencies_ref()) {
+        adj.timestamp_ref() = kTimestamp;
       }
 
       LOG(INFO) << "[RECEIVED ADJ]";
@@ -497,9 +501,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
     if (!peers.count(nodeName)) {
       return;
     }
-    EXPECT_EQ(peers.at(nodeName).cmdUrl, peerSpec.cmdUrl);
-    EXPECT_EQ(peers.at(nodeName).peerAddr, peerSpec.peerAddr);
-    EXPECT_EQ(peers.at(nodeName).ctrlPort, peerSpec.ctrlPort);
+    EXPECT_EQ(*peers.at(nodeName).cmdUrl_ref(), *peerSpec.cmdUrl_ref());
+    EXPECT_EQ(*peers.at(nodeName).peerAddr_ref(), *peerSpec.peerAddr_ref());
+    EXPECT_EQ(*peers.at(nodeName).ctrlPort_ref(), *peerSpec.ctrlPort_ref());
   }
 
   std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>
@@ -587,7 +591,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   // isOverloaded should be read from assume_drain, = false
   auto res = linkMonitor->getInterfaces().get();
   ASSERT_NE(nullptr, res);
-  EXPECT_FALSE(res->isOverloaded);
+  EXPECT_FALSE(*res->isOverloaded_ref());
 
   // 2. restart with persistent store info
   // override_drain_state = false, persistent store has overload = true
@@ -597,7 +601,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   {
     // Save isOverloaded to be true in config store
     thrift::LinkMonitorState state;
-    state.isOverloaded = true;
+    state.isOverloaded_ref() = true;
     auto resp = configStore->storeThriftObj(kConfigKey, state).get();
     EXPECT_EQ(folly::Unit(), resp);
   }
@@ -612,7 +616,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   res = linkMonitor->getInterfaces().get();
   ASSERT_NE(nullptr, res);
-  EXPECT_TRUE(res->isOverloaded);
+  EXPECT_TRUE(*res->isOverloaded_ref());
 
   // 3. restart with override_drain_state = true
   // override_drain_state = true, assume_drain = false, persistent store has
@@ -629,7 +633,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   res = linkMonitor->getInterfaces().get();
   ASSERT_NE(nullptr, res);
-  EXPECT_FALSE(res->isOverloaded);
+  EXPECT_FALSE(*res->isOverloaded_ref());
 }
 
 // receive neighbor up/down events from "spark"
@@ -657,36 +661,36 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     {
       // expect node overload bit set
       auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect link metric value override
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = linkMetric;
+      adj_2_1_modified.metric_ref() = linkMetric;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect link overloaded bit set
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = linkMetric;
-      adj_2_1_modified.isOverloaded = true;
+      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.isOverloaded_ref() = true;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect node overloaded bit unset
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = linkMetric;
-      adj_2_1_modified.isOverloaded = true;
+      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.isOverloaded_ref() = true;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
@@ -695,7 +699,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     {
       // expect link overloaded bit unset
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = linkMetric;
+      adj_2_1_modified.metric_ref() = linkMetric;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
@@ -710,44 +714,44 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     {
       // expect node overload bit set
       auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect link metric value override
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = linkMetric;
+      adj_2_1_modified.metric_ref() = linkMetric;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // set adjacency metric, this should override the link metric
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = adjMetric;
+      adj_2_1_modified.metric_ref() = adjMetric;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // unset adjacency metric, this will remove the override
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = linkMetric;
+      adj_2_1_modified.metric_ref() = linkMetric;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect neighbor down
       auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -755,17 +759,17 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       // link-monitor and config-store is restarted but state will be
       // retained. expect neighbor up with overrides
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric = linkMetric;
+      adj_2_1_modified.metric_ref() = linkMetric;
 
       auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect neighbor down
       auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel);
-      adjDb.isOverloaded = true;
+      adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
   }
@@ -805,10 +809,12 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
     auto res = linkMonitor->getInterfaces().get();
     ASSERT_NE(nullptr, res);
-    EXPECT_TRUE(res->isOverloaded);
-    EXPECT_EQ(1, res->interfaceDetails.size());
-    EXPECT_FALSE(res->interfaceDetails.at(interfaceName).isOverloaded);
-    EXPECT_FALSE(res->interfaceDetails.at(interfaceName)
+    EXPECT_TRUE(*res->isOverloaded_ref());
+    EXPECT_EQ(1, res->interfaceDetails_ref()->size());
+    EXPECT_FALSE(
+        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
+    EXPECT_FALSE(res->interfaceDetails_ref()
+                     ->at(interfaceName)
                      .metricOverride_ref()
                      .has_value());
 
@@ -823,22 +829,30 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
     res = linkMonitor->getInterfaces().get();
     ASSERT_NE(nullptr, res);
-    EXPECT_TRUE(res->isOverloaded);
-    EXPECT_TRUE(res->interfaceDetails.at(interfaceName).isOverloaded);
+    EXPECT_TRUE(*res->isOverloaded_ref());
+    EXPECT_TRUE(
+        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
     EXPECT_EQ(
         linkMetric,
-        res->interfaceDetails.at(interfaceName).metricOverride_ref().value());
+        res->interfaceDetails_ref()
+            ->at(interfaceName)
+            .metricOverride_ref()
+            .value());
 
     LOG(INFO) << "Testing unset node overload command!";
     ret = linkMonitor->setNodeOverload(false).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
     res = linkMonitor->getInterfaces().get();
-    EXPECT_FALSE(res->isOverloaded);
-    EXPECT_TRUE(res->interfaceDetails.at(interfaceName).isOverloaded);
+    EXPECT_FALSE(*res->isOverloaded_ref());
+    EXPECT_TRUE(
+        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
     EXPECT_EQ(
         linkMetric,
-        res->interfaceDetails.at(interfaceName).metricOverride_ref().value());
+        res->interfaceDetails_ref()
+            ->at(interfaceName)
+            .metricOverride_ref()
+            .value());
 
     LOG(INFO) << "Testing unset link overload command!";
     ret = linkMonitor->setInterfaceOverload(interfaceName, false).get();
@@ -851,9 +865,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
 
     res = linkMonitor->getInterfaces().get();
-    EXPECT_FALSE(res->isOverloaded);
-    EXPECT_FALSE(res->interfaceDetails.at(interfaceName).isOverloaded);
-    EXPECT_FALSE(res->interfaceDetails.at(interfaceName)
+    EXPECT_FALSE(*res->isOverloaded_ref());
+    EXPECT_FALSE(
+        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
+    EXPECT_FALSE(res->interfaceDetails_ref()
+                     ->at(interfaceName)
                      .metricOverride_ref()
                      .has_value());
 
@@ -929,8 +945,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   {
     thrift::BinaryAddress empty;
     auto cp = nb2;
-    cp.transportAddressV4 = empty;
-    cp.transportAddressV6 = empty;
+    *cp.transportAddressV4_ref() = empty;
+    *cp.transportAddressV6_ref() = empty;
     auto neighborEvent = createNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
         "iface_2_1",
@@ -949,7 +965,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
   {
     // Intertionally save nodeLabel to be non-zero value
     thrift::LinkMonitorState state;
-    state.nodeLabel = 1 + rand(); // non-zero random number
+    state.nodeLabel_ref() = 1 + rand(); // non-zero random number
     auto resp = configStore->storeThriftObj(kConfigKey, state).get();
     EXPECT_EQ(folly::Unit(), resp);
   }
@@ -975,7 +991,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
     // honor flag.
     auto thriftAdjDb = linkMonitor->getLinkMonitorAdjacencies().get();
     EXPECT_TRUE(thriftAdjDb);
-    EXPECT_EQ(0, thriftAdjDb->nodeLabel);
+    EXPECT_EQ(0, *thriftAdjDb->nodeLabel_ref());
   }
 }
 
@@ -1071,7 +1087,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
 
   // neighbor up on another interface
   {
@@ -1088,7 +1104,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
 
   // neighbor down
   {
@@ -1105,7 +1121,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_2.otherNodeName, peerSpec_2_2);
+  checkPeerDump(*adj_2_2.otherNodeName_ref(), peerSpec_2_2);
 }
 
 // Verify neighbor-restarting event (including parallel case)
@@ -1127,7 +1143,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
 
   // neighbor restart
   {
@@ -1158,7 +1174,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
 
   /* Parallel case */
   // neighbor up on another interface
@@ -1175,7 +1191,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
 
   // neighbor restarting on iface_2_1
   {
@@ -1190,7 +1206,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_2.otherNodeName, peerSpec_2_2);
+  checkPeerDump(*adj_2_2.otherNodeName_ref(), peerSpec_2_2);
 
   // neighbor restarted
   {
@@ -1205,7 +1221,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
 
   // neighbor restarting iface_2_2
   {
@@ -1220,7 +1236,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
-  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
 
   // neighbor restarting iface_2_1
   {
@@ -1291,10 +1307,12 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
   // at this point, both interface should have no backoff
   auto links = linkMonitor->getInterfaces().get();
-  EXPECT_EQ(2, links->interfaceDetails.size());
+  EXPECT_EQ(2, links->interfaceDetails_ref()->size());
   for (const auto& ifName : ifNames) {
-    EXPECT_FALSE(
-        links->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().has_value());
+    EXPECT_FALSE(links->interfaceDetails_ref()
+                     ->at(ifName)
+                     .linkFlapBackOffMs_ref()
+                     .has_value());
   }
 
   VLOG(2) << "*** bring down 2 interfaces ***";
@@ -1317,15 +1335,21 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
     auto res = collateIfUpdates(sparkIfDb);
     auto links1 = linkMonitor->getInterfaces().get();
     EXPECT_EQ(2, res.size());
-    EXPECT_EQ(2, links1->interfaceDetails.size());
+    EXPECT_EQ(2, links1->interfaceDetails_ref()->size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
       EXPECT_GE(
-          links1->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          links1->interfaceDetails_ref()
+              ->at(ifName)
+              .linkFlapBackOffMs_ref()
+              .value(),
           0);
       EXPECT_LE(
-          links1->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          links1->interfaceDetails_ref()
+              ->at(ifName)
+              .linkFlapBackOffMs_ref()
+              .value(),
           2000);
     }
   }
@@ -1394,7 +1418,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());
-    EXPECT_EQ(2, links2->interfaceDetails.size());
+    EXPECT_EQ(2, links2->interfaceDetails_ref()->size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
@@ -1403,10 +1427,16 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
       EXPECT_GE(
-          links2->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          links2->interfaceDetails_ref()
+              ->at(ifName)
+              .linkFlapBackOffMs_ref()
+              .value(),
           2000);
       EXPECT_LE(
-          links2->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          links2->interfaceDetails_ref()
+              ->at(ifName)
+              .linkFlapBackOffMs_ref()
+              .value(),
           4000);
     }
   }
@@ -1444,7 +1474,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());
-    EXPECT_EQ(2, links3->interfaceDetails.size());
+    EXPECT_EQ(2, links3->interfaceDetails_ref()->size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(1, res.at(ifName).isUpCount);
       EXPECT_EQ(0, res.at(ifName).isDownCount);
@@ -1452,7 +1482,8 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v4AddrsMinCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
-      EXPECT_FALSE(links3->interfaceDetails.at(ifName)
+      EXPECT_FALSE(links3->interfaceDetails_ref()
+                       ->at(ifName)
                        .linkFlapBackOffMs_ref()
                        .has_value());
     }
@@ -1703,7 +1734,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   std::vector<std::shared_ptr<Config>> configs;
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
     auto tConfigCopy = getTestOpenrConfig();
-    tConfigCopy.node_name = folly::sformat("lm{}", i + 1);
+    *tConfigCopy.node_name_ref() = folly::sformat("lm{}", i + 1);
     auto currConfig = std::make_shared<Config>(tConfigCopy);
     auto lm = std::make_unique<LinkMonitor>(
         context,
@@ -1739,13 +1770,13 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   // recv kv store publications until we have valid labels from each node
   while (nodeLabels.size() < kNumNodesToTest) {
     auto pub = kvStoreWrapper->recvPublication();
-    for (auto const& kv : pub.keyVals) {
+    for (auto const& kv : *pub.keyVals_ref()) {
       if (kv.first.find("adj:") == 0 and kv.second.value_ref()) {
         auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
             kv.second.value_ref().value(), serializer);
-        nodeLabels[adjDb.thisNodeName] = adjDb.nodeLabel;
-        if (adjDb.nodeLabel == 0) {
-          nodeLabels.erase(adjDb.thisNodeName);
+        nodeLabels[*adjDb.thisNodeName_ref()] = *adjDb.nodeLabel_ref();
+        if (*adjDb.nodeLabel_ref() == 0) {
+          nodeLabels.erase(*adjDb.thisNodeName_ref());
         }
       }
     }
@@ -2058,7 +2089,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub(
         "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
-    checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
   }
   // neighbor up on "plane" area
   {
@@ -2074,7 +2105,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", "plane");
-    checkPeerDump(adj_3_1.otherNodeName, peerSpec_3_1, "plane");
+    checkPeerDump(*adj_3_1.otherNodeName_ref(), peerSpec_3_1, "plane");
   }
   // verify neighbor down in "plane" area
   {

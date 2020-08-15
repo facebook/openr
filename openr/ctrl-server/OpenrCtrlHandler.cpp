@@ -76,7 +76,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 
         bool isAdjChanged = false;
         // check if any of KeyVal has 'adj' update
-        for (auto& kv : maybePublication.value().keyVals) {
+        for (auto& kv : *maybePublication.value().keyVals_ref()) {
           auto& key = kv.first;
           auto& val = kv.second;
           // check if we have any value update.
@@ -293,7 +293,7 @@ int64_t
 OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
   auto counter = zmqMonitorClient_->getCounter(*key);
   if (counter.has_value()) {
-    return static_cast<int64_t>(counter->value);
+    return static_cast<int64_t>(*counter->value_ref());
   }
   return 0;
 }
@@ -305,8 +305,9 @@ OpenrCtrlHandler::getMyNodeName(std::string& _return) {
 
 void
 OpenrCtrlHandler::getOpenrVersion(thrift::OpenrVersions& _openrVersion) {
-  _openrVersion.version = Constants::kOpenrVersion;
-  _openrVersion.lowestSupportedVersion = Constants::kOpenrSupportedVersion;
+  _openrVersion.version_ref() = Constants::kOpenrVersion;
+  _openrVersion.lowestSupportedVersion_ref() =
+      Constants::kOpenrSupportedVersion;
 }
 
 void
@@ -468,7 +469,7 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
   thrift::KeyGetParams params;
-  params.keys = std::move(*filterKeys);
+  *params.keys_ref() = std::move(*filterKeys);
 
   CHECK(kvStore_);
   return kvStore_->getKvStoreKeyVals(std::move(params));
@@ -479,7 +480,7 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
   thrift::KeyGetParams params;
-  params.keys = std::move(*filterKeys);
+  *params.keys_ref() = std::move(*filterKeys);
 
   CHECK(kvStore_);
   return kvStore_->getKvStoreKeyVals(std::move(params), std::move(*area));
@@ -544,7 +545,7 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
   }
 
   // Only care about "adj:" key
-  params.prefix = Constants::kAdjDbMarker;
+  *params.prefix_ref() = Constants::kAdjDbMarker;
   params.keys_ref() = {Constants::kAdjDbMarker.toString()};
   // Only dump difference between KvStore and client snapshot
   params.keyValHashes_ref() = std::move(adjKeyVals);
@@ -560,7 +561,7 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
     return sf;
   }
 
-  if (thriftPub->keyVals.size() > 0) {
+  if (thriftPub->keyVals_ref()->size() > 0) {
     VLOG(3) << "AdjKey has been added/modified. Notify immediately";
     p.setValue(true);
   } else if (

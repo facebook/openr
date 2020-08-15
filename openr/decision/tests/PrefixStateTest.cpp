@@ -56,27 +56,28 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
   EXPECT_TRUE(state_.updatePrefixDatabase(dbEntry.second).empty());
 
   auto prefixDb1Updated = dbEntry.second;
-  prefixDb1Updated.prefixEntries.at(0).type = thrift::PrefixType::BREEZE;
+  prefixDb1Updated.prefixEntries_ref()->at(0).type_ref() =
+      thrift::PrefixType::BREEZE;
   EXPECT_THAT(
       state_.updatePrefixDatabase(prefixDb1Updated),
       testing::UnorderedElementsAre(
-          prefixDb1Updated.prefixEntries.at(0).prefix));
+          *prefixDb1Updated.prefixEntries_ref()->at(0).prefix_ref()));
   EXPECT_TRUE(state_.updatePrefixDatabase(prefixDb1Updated).empty());
   EXPECT_EQ(prefixDb1Updated, state_.getPrefixDatabases().at(dbEntry.first));
 
-  prefixDb1Updated.prefixEntries.at(0).forwardingType =
+  prefixDb1Updated.prefixEntries_ref()->at(0).forwardingType_ref() =
       thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_THAT(
       state_.updatePrefixDatabase(prefixDb1Updated),
       testing::UnorderedElementsAre(
-          prefixDb1Updated.prefixEntries.at(0).prefix));
+          *prefixDb1Updated.prefixEntries_ref()->at(0).prefix_ref()));
   EXPECT_TRUE(state_.updatePrefixDatabase(prefixDb1Updated).empty());
   EXPECT_EQ(prefixDb1Updated, state_.getPrefixDatabases().at(dbEntry.first));
 
   auto emptyPrefixDb = createPrefixDb(dbEntry.first);
   std::unordered_set<thrift::IpPrefix> affectedPrefixes;
-  for (auto const& entry : prefixDb1Updated.prefixEntries) {
-    affectedPrefixes.insert(entry.prefix);
+  for (auto const& entry : *prefixDb1Updated.prefixEntries_ref()) {
+    affectedPrefixes.insert(*entry.prefix_ref());
   }
   EXPECT_THAT(
       state_.updatePrefixDatabase(emptyPrefixDb),
@@ -85,7 +86,7 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
   modifiedPrefixDbs.erase(dbEntry.first);
   EXPECT_NE(prefixDbs_, modifiedPrefixDbs);
   EXPECT_EQ(state_.getPrefixDatabases(), modifiedPrefixDbs);
-  emptyPrefixDb.thisNodeName = dbEntry.first;
+  *emptyPrefixDb.thisNodeName_ref() = dbEntry.first;
   EXPECT_TRUE(state_.updatePrefixDatabase(emptyPrefixDb).empty());
   EXPECT_THAT(
       state_.updatePrefixDatabase(dbEntry.second),
@@ -113,12 +114,18 @@ TEST_P(GetLoopbackViasTest, basicOperation) {
             loopbacks.begin(),
             loopbacks.end(),
             [&prefixDb, isV4](thrift::NextHopThrift const& nh) {
-              for (auto const& prefixEntry : prefixDb.prefixEntries) {
+              for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
                 auto byteCount = isV4 ? folly::IPAddressV4::byteCount()
                                       : folly::IPAddressV6::byteCount();
-                if (prefixEntry.type == thrift::PrefixType::LOOPBACK &&
-                    prefixEntry.prefix.prefixAddress.addr.size() == byteCount &&
-                    nh.address.addr == prefixEntry.prefix.prefixAddress.addr) {
+                if (*prefixEntry.type_ref() == thrift::PrefixType::LOOPBACK &&
+                    prefixEntry.prefix_ref()
+                            ->prefixAddress_ref()
+                            ->addr_ref()
+                            ->size() == byteCount &&
+                    *nh.address_ref()->addr_ref() ==
+                        *prefixEntry.prefix_ref()
+                             ->prefixAddress_ref()
+                             ->addr_ref()) {
                   return true;
                 }
               }
@@ -129,8 +136,8 @@ TEST_P(GetLoopbackViasTest, basicOperation) {
   // delete loopback for each node
   for (auto const& node : nodes) {
     auto const& prefixDb = prefixDbs_.at(node);
-    for (auto const& prefixEntry : prefixDb.prefixEntries) {
-      state_.deleteLoopbackPrefix(prefixEntry.prefix, node);
+    for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
+      state_.deleteLoopbackPrefix(*prefixEntry.prefix_ref(), node);
     }
   }
 
@@ -143,9 +150,9 @@ INSTANTIATE_TEST_CASE_P(
 
 TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV4) {
   std::pair<std::string, thrift::BinaryAddress> pair1(
-      "0", getAddrFromSeed(0, true).prefixAddress);
+      "0", *getAddrFromSeed(0, true).prefixAddress_ref());
   std::pair<std::string, thrift::BinaryAddress> pair2(
-      "1", getAddrFromSeed(1, true).prefixAddress);
+      "1", *getAddrFromSeed(1, true).prefixAddress_ref());
   EXPECT_THAT(
       state_.getNodeHostLoopbacksV4(),
       testing::UnorderedElementsAre(pair1, pair2));
@@ -158,9 +165,9 @@ TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV4) {
 
 TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV6) {
   std::pair<std::string, thrift::BinaryAddress> pair1(
-      "0", getAddrFromSeed(0, false).prefixAddress);
+      "0", *getAddrFromSeed(0, false).prefixAddress_ref());
   std::pair<std::string, thrift::BinaryAddress> pair2(
-      "1", getAddrFromSeed(1, false).prefixAddress);
+      "1", *getAddrFromSeed(1, false).prefixAddress_ref());
   EXPECT_THAT(
       state_.getNodeHostLoopbacksV6(),
       testing::UnorderedElementsAre(pair1, pair2));
@@ -179,9 +186,9 @@ class LoopbackTestWithParam : public PrefixStateTestFixture,
 TEST_P(LoopbackTestWithParam, AddRemoveLoopbackV4orV6) {
   auto isV4 = GetParam();
   std::pair<std::string, thrift::BinaryAddress> pair1(
-      "0", getAddrFromSeed(0, isV4).prefixAddress);
+      "0", *getAddrFromSeed(0, isV4).prefixAddress_ref());
   std::pair<std::string, thrift::BinaryAddress> pair2(
-      "1", getAddrFromSeed(1, isV4).prefixAddress);
+      "1", *getAddrFromSeed(1, isV4).prefixAddress_ref());
   if (isV4) {
     EXPECT_THAT(
         state_.getNodeHostLoopbacksV4(),
@@ -209,7 +216,7 @@ TEST_P(LoopbackTestWithParam, AddRemoveLoopbackV4orV6) {
 
   // withdraw loopback and p1, announcing p2, expect no loopback is there
   // anymore
-  prefixDb.prefixEntries = {p2};
+  *prefixDb.prefixEntries_ref() = {p2};
   EXPECT_FALSE(state_.updatePrefixDatabase(prefixDb).empty());
   if (isV4) {
     EXPECT_THAT(

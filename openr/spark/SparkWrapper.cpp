@@ -61,7 +61,7 @@ SparkWrapper::updateInterfaceDb(
   ifDb.perfEvents_ref().reset();
 
   for (const auto& interface : interfaceEntries) {
-    ifDb.interfaces.emplace(
+    ifDb.interfaces_ref()->emplace(
         interface.ifName,
         createThriftInterfaceInfo(
             true,
@@ -121,8 +121,8 @@ SparkWrapper::waitForEvent(
 
 std::pair<folly::IPAddress, folly::IPAddress>
 SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
-  return {toIPAddress(event.neighbor.transportAddressV4),
-          toIPAddress(event.neighbor.transportAddressV6)};
+  return {toIPAddress(*event.neighbor_ref()->transportAddressV4_ref()),
+          toIPAddress(*event.neighbor_ref()->transportAddressV6_ref())};
 }
 
 std::optional<SparkNeighState>

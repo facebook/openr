@@ -33,7 +33,7 @@ Fib::Fib(
     const MonitorSubmitUrl& monitorSubmitUrl,
     KvStore* kvStore,
     fbzmq::Context& zmqContext)
-    : myNodeName_(config->getConfig().node_name),
+    : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)),
@@ -121,7 +121,7 @@ Fib::Fib(
         break;
       }
 
-      CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
+      CHECK_EQ(myNodeName_, *maybeThriftObj.value().thisNodeName_ref());
       processInterfaceDb(std::move(maybeThriftObj).value());
     }
   });
@@ -167,8 +167,8 @@ Fib::longestPrefixMatch(
 
   // longest prefix matching
   for (const auto& route : unicastRoutes) {
-    const auto& dbIP = toIPAddress(route.first.prefixAddress);
-    const auto& dbMask = route.first.prefixLength;
+    const auto& dbIP = toIPAddress(*route.first.prefixAddress_ref());
+    const auto& dbMask = *route.first.prefixLength_ref();
 
     if (maxMask < dbMask && inputMask >= dbMask &&
         inputIP.mask(dbMask) == dbIP) {
@@ -185,12 +185,12 @@ Fib::getRouteDb() {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([p = std::move(p), this]() mutable {
     thrift::RouteDatabase routeDb;
-    routeDb.thisNodeName = myNodeName_;
+    *routeDb.thisNodeName_ref() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
-      routeDb.unicastRoutes.emplace_back(route.second);
+      routeDb.unicastRoutes_ref()->emplace_back(route.second);
     }
     for (const auto& route : routeState_.mplsRoutes) {
-      routeDb.mplsRoutes.emplace_back(route.second);
+      routeDb.mplsRoutes_ref()->emplace_back(route.second);
     }
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
   });
@@ -318,36 +318,36 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   }
 
   // Before anything, get rid of doNotInstall routes
-  auto i = routeDelta.unicastRoutesToUpdate.begin();
-  while (i != routeDelta.unicastRoutesToUpdate.end()) {
-    if (i->doNotInstall) {
+  auto i = routeDelta.unicastRoutesToUpdate_ref()->begin();
+  while (i != routeDelta.unicastRoutesToUpdate_ref()->end()) {
+    if (*i->doNotInstall_ref()) {
       LOG(INFO) << "Not installing route for prefix " << toString(i->dest);
-      i = routeDelta.unicastRoutesToUpdate.erase(i);
+      i = routeDelta.unicastRoutesToUpdate_ref()->erase(i);
     } else {
       ++i;
     }
   }
 
   // Add/Update unicast routes to update
-  for (const auto& route : routeDelta.unicastRoutesToUpdate) {
+  for (const auto& route : *routeDelta.unicastRoutesToUpdate_ref()) {
     routeState_.unicastRoutes[route.dest] = route;
     routeState_.dirtyPrefixes.erase(route.dest);
   }
 
   // Add mpls routes to update
-  for (const auto& route : routeDelta.mplsRoutesToUpdate) {
+  for (const auto& route : *routeDelta.mplsRoutesToUpdate_ref()) {
     routeState_.mplsRoutes[route.topLabel] = route;
     routeState_.dirtyLabels.erase(route.topLabel);
   }
 
   // Delete unicast routes
-  for (const auto& dest : routeDelta.unicastRoutesToDelete) {
+  for (const auto& dest : *routeDelta.unicastRoutesToDelete_ref()) {
     routeState_.unicastRoutes.erase(dest);
     routeState_.dirtyPrefixes.erase(dest);
   }
 
   // Delete mpls routes
-  for (const auto& topLabel : routeDelta.mplsRoutesToDelete) {
+  for (const auto& topLabel : *routeDelta.mplsRoutesToDelete_ref()) {
     routeState_.mplsRoutes.erase(topLabel);
     routeState_.dirtyLabels.erase(topLabel);
   }
@@ -370,7 +370,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   //
   // Update interface states
   //
-  for (auto const& kv : interfaceDb.interfaces) {
+  for (auto const& kv : *interfaceDb.interfaces_ref()) {
     const auto& ifName = kv.first;
     const auto isUp = kv.second.isUp;
     const auto wasUp = folly::get_default(interfaceStatusDb_, ifName, false);
@@ -399,8 +399,8 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
 
     // Find valid nexthops for route
     std::vector<thrift::NextHopThrift> validNextHops;
-    for (auto const& nextHop : route.nextHops) {
-      const auto ifName = nextHop.address.ifName_ref();
+    for (auto const& nextHop : *route.nextHops_ref()) {
+      const auto ifName = nextHop.address_ref()->ifName_ref();
       if (not ifName.has_value() ||
           (folly::get_default(interfaceStatusDb_, *ifName, false))) {
         validNextHops.emplace_back(nextHop);
@@ -408,7 +408,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     } // end for ... kv.second
 
     // Find previous best nexthops
-    auto prevBestNextHops = getBestNextHopsUnicast(route.nextHops);
+    auto prevBestNextHops = getBestNextHopsUnicast(*route.nextHops_ref());
 
     // Find new valid best nexthops
     auto validBestNextHops = getBestNextHopsUnicast(validNextHops);
@@ -417,7 +417,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     if (not validBestNextHops.size()) {
       VLOG(1) << "Removing prefix " << toString(route.dest)
               << " because of no valid nextHops.";
-      routeDbDelta.unicastRoutesToDelete.emplace_back(route.dest);
+      routeDbDelta.unicastRoutesToDelete_ref()->emplace_back(*route.dest_ref());
       routeState_.dirtyPrefixes.emplace(route.dest); // Mark prefix as dirty
       continue; // Skip rest
     }
@@ -429,12 +429,13 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
               << ", new: " << validBestNextHops.size();
       thrift::UnicastRoute newRoute;
       newRoute.dest = route.dest;
-      newRoute.nextHops = std::move(validBestNextHops);
-      routeDbDelta.unicastRoutesToUpdate.emplace_back(std::move(newRoute));
+      *newRoute.nextHops_ref() = std::move(validBestNextHops);
+      routeDbDelta.unicastRoutesToUpdate_ref()->emplace_back(
+          std::move(newRoute));
       routeState_.dirtyPrefixes.emplace(route.dest); // Mark prefix as dirty
     } else if (routeState_.dirtyPrefixes.count(route.dest)) {
       // Nexthop group restore - previously best
-      routeDbDelta.unicastRoutesToUpdate.emplace_back(route);
+      routeDbDelta.unicastRoutesToUpdate_ref()->emplace_back(route);
       routeState_.dirtyPrefixes.erase(route.dest); // Remove from dirty list
     }
   } // end for ... routeDb_.unicastRoutes
@@ -447,9 +448,9 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
 
     // Find valid nexthops for route
     std::vector<thrift::NextHopThrift> validNextHops;
-    for (auto const& nextHop : route.nextHops) {
+    for (auto const& nextHop : *route.nextHops_ref()) {
       // We don't have ifName for `POP_AND_LOOKUP` mpls action
-      auto const ifName = nextHop.address.ifName_ref();
+      auto const ifName = nextHop.address_ref()->ifName_ref();
       if (not ifName.has_value() or
           folly::get_default(interfaceStatusDb_, *ifName, false)) {
         validNextHops.emplace_back(nextHop);
@@ -457,17 +458,19 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     }
 
     // Find previous best nexthops
-    auto prevBestNextHops = getBestNextHopsMpls(route.nextHops);
+    auto prevBestNextHops = getBestNextHopsMpls(*route.nextHops_ref());
 
     // Find new valid best nexthops
     auto validBestNextHops = getBestNextHopsMpls(validNextHops);
 
     // Remove route if no valid nexthops
     if (not validBestNextHops.size()) {
-      VLOG(1) << "Removing label route " << route.topLabel
+      VLOG(1) << "Removing label route " << *route.topLabel_ref()
               << " because of no valid nextHops.";
-      routeDbDelta.mplsRoutesToDelete.emplace_back(route.topLabel);
-      routeState_.dirtyLabels.emplace(route.topLabel); // Mark prefix as dirty
+      routeDbDelta.mplsRoutesToDelete_ref()->emplace_back(
+          *route.topLabel_ref());
+      routeState_.dirtyLabels.emplace(*route.topLabel_ref()); // Mark prefix as
+                                                              // dirty
       continue; // Skip rest
     }
 
@@ -478,12 +481,12 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
               << ", new: " << validBestNextHops.size();
       thrift::MplsRoute newRoute;
       newRoute.topLabel = route.topLabel;
-      newRoute.nextHops = std::move(validBestNextHops);
-      routeDbDelta.mplsRoutesToUpdate.emplace_back(std::move(newRoute));
+      *newRoute.nextHops_ref() = std::move(validBestNextHops);
+      routeDbDelta.mplsRoutesToUpdate_ref()->emplace_back(std::move(newRoute));
       routeState_.dirtyLabels.emplace(route.topLabel);
     } else if (routeState_.dirtyLabels.count(route.topLabel)) {
       // Nexthop group restore - previously best
-      routeDbDelta.mplsRoutesToUpdate.emplace_back(route);
+      routeDbDelta.mplsRoutesToUpdate_ref()->emplace_back(route);
       routeState_.dirtyLabels.erase(route.topLabel); // Remove from dirty list
     }
   } // end for ... routeDb_.mplsRoutes
@@ -494,9 +497,9 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
 thrift::PerfDatabase
 Fib::dumpPerfDb() const {
   thrift::PerfDatabase perfDb;
-  perfDb.thisNodeName = myNodeName_;
+  *perfDb.thisNodeName_ref() = myNodeName_;
   for (auto const& perf : perfDb_) {
-    perfDb.eventInfo.emplace_back(perf);
+    perfDb.eventInfo_ref()->emplace_back(perf);
   }
   return perfDb;
 }
@@ -509,33 +512,35 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   updateRoutesSemaphore_.wait();
 
   LOG(INFO) << "Processing route add/update for "
-            << routeDbDelta.unicastRoutesToUpdate.size() << " unicast, "
-            << routeDbDelta.mplsRoutesToUpdate.size() << " mpls, "
+            << routeDbDelta.unicastRoutesToUpdate_ref()->size() << " unicast, "
+            << routeDbDelta.mplsRoutesToUpdate_ref()->size() << " mpls, "
             << "and route delete for "
-            << routeDbDelta.unicastRoutesToDelete.size() << "-unicast, "
-            << routeDbDelta.mplsRoutesToDelete.size() << "-mpls, ";
+            << routeDbDelta.unicastRoutesToDelete_ref()->size() << "-unicast, "
+            << routeDbDelta.mplsRoutesToDelete_ref()->size() << "-mpls, ";
 
   // update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
 
   // Only for backward compatibility
   auto const& patchedUnicastRoutesToUpdate =
-      createUnicastRoutesWithBestNexthops(routeDbDelta.unicastRoutesToUpdate);
+      createUnicastRoutesWithBestNexthops(
+          *routeDbDelta.unicastRoutesToUpdate_ref());
 
   auto const& mplsRoutesToUpdate =
-      createMplsRoutesWithBestNextHops(routeDbDelta.mplsRoutesToUpdate);
+      createMplsRoutesWithBestNextHops(*routeDbDelta.mplsRoutesToUpdate_ref());
 
   VLOG(2) << "Unicast routes to add/update";
   for (auto const& route : patchedUnicastRoutesToUpdate) {
-    VLOG(2) << "> " << toString(route.dest) << ", " << route.nextHops.size();
-    for (auto const& nh : route.nextHops) {
+    VLOG(2) << "> " << toString(*route.dest_ref()) << ", "
+            << route.nextHops_ref()->size();
+    for (auto const& nh : *route.nextHops_ref()) {
       VLOG(2) << "  " << toString(nh);
     }
   }
 
   VLOG(2) << "";
   VLOG(2) << "Unicast routes to delete";
-  for (auto const& prefix : routeDbDelta.unicastRoutesToDelete) {
+  for (auto const& prefix : *routeDbDelta.unicastRoutesToDelete_ref()) {
     VLOG(2) << "> " << toString(prefix);
   }
 
@@ -543,15 +548,15 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   VLOG(2) << "Mpls routes to add/update";
   for (auto const& route : mplsRoutesToUpdate) {
     VLOG(2) << "> " << std::to_string(route.topLabel) << ", "
-            << route.nextHops.size();
-    for (auto const& nh : route.nextHops) {
+            << route.nextHops_ref()->size();
+    for (auto const& nh : *route.nextHops_ref()) {
       VLOG(2) << "  " << toString(nh);
     }
   }
 
   VLOG(2) << "";
   VLOG(2) << "MPLS routes to delete";
-  for (auto const& topLabel : routeDbDelta.mplsRoutesToDelete) {
+  for (auto const& topLabel : *routeDbDelta.mplsRoutesToDelete_ref()) {
     VLOG(2) << "> " << std::to_string(topLabel);
   }
 
@@ -586,18 +591,20 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   try {
     uint32_t numOfRouteUpdates = 0;
     createFibClient(evb_, socket_, client_, thriftPort_);
-    if (routeDbDelta.unicastRoutesToDelete.size()) {
-      numOfRouteUpdates += routeDbDelta.unicastRoutesToDelete.size();
+    if (routeDbDelta.unicastRoutesToDelete_ref()->size()) {
+      numOfRouteUpdates += routeDbDelta.unicastRoutesToDelete_ref()->size();
       client_->sync_deleteUnicastRoutes(
-          kFibId_, routeDbDelta.unicastRoutesToDelete);
+          kFibId_, *routeDbDelta.unicastRoutesToDelete_ref());
     }
     if (patchedUnicastRoutesToUpdate.size()) {
       numOfRouteUpdates += patchedUnicastRoutesToUpdate.size();
       client_->sync_addUnicastRoutes(kFibId_, patchedUnicastRoutesToUpdate);
     }
-    if (enableSegmentRouting_ && routeDbDelta.mplsRoutesToDelete.size()) {
-      numOfRouteUpdates += routeDbDelta.mplsRoutesToDelete.size();
-      client_->sync_deleteMplsRoutes(kFibId_, routeDbDelta.mplsRoutesToDelete);
+    if (enableSegmentRouting_ &&
+        routeDbDelta.mplsRoutesToDelete_ref()->size()) {
+      numOfRouteUpdates += routeDbDelta.mplsRoutesToDelete_ref()->size();
+      client_->sync_deleteMplsRoutes(
+          kFibId_, *routeDbDelta.mplsRoutesToDelete_ref());
     }
     if (enableSegmentRouting_ && mplsRoutesToUpdate.size()) {
       numOfRouteUpdates += mplsRoutesToUpdate.size();
@@ -634,8 +641,9 @@ Fib::syncRouteDb() {
     LOG(INFO) << "Skipping programming of routes in dryrun ... ";
     VLOG(2) << "Unicast routes to add/update";
     for (auto const& route : unicastRoutes) {
-      VLOG(2) << "> " << toString(route.dest) << ", " << route.nextHops.size();
-      for (auto const& nh : route.nextHops) {
+      VLOG(2) << "> " << toString(*route.dest_ref()) << ", "
+              << route.nextHops_ref()->size();
+      for (auto const& nh : *route.nextHops_ref()) {
         VLOG(2) << "  " << toString(nh);
       }
     }
@@ -644,8 +652,8 @@ Fib::syncRouteDb() {
     VLOG(2) << "Mpls routes to add/update";
     for (auto const& route : mplsRoutes) {
       VLOG(2) << "> " << std::to_string(route.topLabel) << ", "
-              << route.nextHops.size();
-      for (auto const& nh : route.nextHops) {
+              << route.nextHops_ref()->size();
+      for (auto const& nh : *route.nextHops_ref()) {
         VLOG(2) << "  " << toString(nh);
       }
     }
@@ -767,19 +775,19 @@ Fib::updateGlobalCounters() {
 
 void
 Fib::logPerfEvents(std::optional<thrift::PerfEvents> perfEvents) {
-  if (not perfEvents.has_value() or not perfEvents->events.size()) {
+  if (not perfEvents.has_value() or not perfEvents->events_ref()->size()) {
     return;
   }
 
   // Ignore bad perf event sample if creation time of first event is
   // less than creation time of our recently logged perf events.
-  if (recentPerfEventCreateTs_ >= perfEvents->events[0].unixTs) {
+  if (recentPerfEventCreateTs_ >= *perfEvents->events_ref()[0].unixTs_ref()) {
     LOG(WARNING) << "Ignoring perf event with old create timestamp "
-                 << perfEvents->events[0].unixTs << ", expected > "
+                 << *perfEvents->events_ref()[0].unixTs_ref() << ", expected > "
                  << recentPerfEventCreateTs_;
     return;
   } else {
-    recentPerfEventCreateTs_ = perfEvents->events[0].unixTs;
+    recentPerfEventCreateTs_ = *perfEvents->events_ref()[0].unixTs_ref();
   }
 
   // Add latest event information (this function is meant to be called after

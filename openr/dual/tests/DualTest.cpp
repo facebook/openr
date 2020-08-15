@@ -239,7 +239,7 @@ class DualTestNode final : public DualNode {
     auto& otherNode = nodes_.at(neighbor);
     CHECK(neighborUp(neighbor))
         << nodeId << ": sending dual msgs to down neighbor " << neighbor;
-    CHECK(msgs.messages.size()) << " send empty messages";
+    CHECK(msgs.messages_ref()->size()) << " send empty messages";
 
     evb_->runInEventBaseThread(
         [&, otherNode, msgs]() { otherNode->processDualMessages(msgs); });

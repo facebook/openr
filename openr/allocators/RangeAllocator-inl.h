@@ -156,7 +156,7 @@ RangeAllocator<T>::getValueFromKvStore() const {
       << "Failed to dump keys with prefix: " << keyPrefix_
       << " from kvstore in area: " << area_;
   for (const auto& kv : *maybeKeyMap) {
-    if (kv.second.originatorId == nodeName_) {
+    if (*kv.second.originatorId_ref() == nodeName_) {
       const auto val =
           details::binaryToPrimitive<T>(kv.second.value_ref().value());
       CHECK_EQ(kv.first, createKey(val));
@@ -180,25 +180,26 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   const auto newKey = createKey(newVal);
   const auto maybeThriftVal = kvStoreClient_->getKey(newKey, area_);
   if (maybeThriftVal) {
-    DCHECK_EQ(1, maybeThriftVal->version);
+    DCHECK_EQ(1, *maybeThriftVal->version_ref());
   }
 
   // Check if we can own the value or not
   const bool shouldOwnOther = not maybeThriftVal or
-      (overrideOwner_ && nodeName_ > maybeThriftVal->originatorId) or
+      (overrideOwner_ && nodeName_ > *maybeThriftVal->originatorId_ref()) or
       // Following condition is to prefer range alloc keys with TTL over keys
       // without TTL. Old node will never try to steal keys from new node
       // if overrideOwner is set to false
       // We are trying this only when overrideOwner_ is set to false otherwise
       // nodes whose keys are stolen will try to get back their keys as well
-      (!overrideOwner_ && maybeThriftVal->ttl == Constants::kTtlInfinity);
+      (!overrideOwner_ &&
+       *maybeThriftVal->ttl_ref() == Constants::kTtlInfinity);
   const bool shouldOwnMine =
-      maybeThriftVal and (nodeName_ == maybeThriftVal->originatorId);
+      maybeThriftVal and (nodeName_ == *maybeThriftVal->originatorId_ref());
 
   // If we cannot own then we should try some other value
   if (!shouldOwnOther && !shouldOwnMine) {
     VLOG(1) << "RangeAllocator: failed to allocate " << newVal << " bcoz of "
-            << maybeThriftVal->originatorId;
+            << *maybeThriftVal->originatorId_ref();
     scheduleAllocate(newVal);
     return;
   }
@@ -214,7 +215,8 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     myRequestedValue_ = newVal;
     // Either no one owns it or owner has lower originator ID
     // Set new value in KvStore
-    auto ttlVersion = maybeThriftVal ? maybeThriftVal->ttlVersion + 1 : 0;
+    auto ttlVersion =
+        maybeThriftVal ? *maybeThriftVal->ttlVersion_ref() + 1 : 0;
     const auto ret = kvStoreClient_->setKey(
         newKey,
         thrift::Value(
@@ -229,13 +231,13 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     CHECK(ret.has_value());
   } else {
     CHECK(shouldOwnMine);
-    CHECK_EQ(nodeName_, maybeThriftVal->originatorId);
+    CHECK_EQ(nodeName_, *maybeThriftVal->originatorId_ref());
     // We own it: this can occur if the node reboots w/ kvstore intact
     // Let the application know of newly allocated value
     // We set back via KvStoreClientInternal so that ttl is published regularly
     auto newValue = *maybeThriftVal;
-    newValue.ttlVersion += 1; // bump ttl version
-    newValue.ttl = rangeAllocTtl_.count(); // reset ttl
+    *newValue.ttlVersion_ref() += 1; // bump ttl version
+    *newValue.ttl_ref() = rangeAllocTtl_.count(); // reset ttl
     kvStoreClient_->setKey(newKey, newValue, area_);
     myValue_ = newVal;
     callback_(myValue_);

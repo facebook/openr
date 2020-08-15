@@ -90,7 +90,7 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
       ? *filter_.oper_ref()
       : thrift::FilterOperator::OR;
 
-  for (auto& kv : pub.keyVals) {
+  for (auto& kv : *pub.keyVals_ref()) {
     auto& key = kv.first;
     auto& val = kv.second;
     if (*filter_.ignoreTtl_ref() and not val.value_ref().has_value()) {

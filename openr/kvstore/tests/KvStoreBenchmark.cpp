@@ -75,7 +75,8 @@ class KvStoreTestFixture {
   KvStoreWrapper*
   createKvStore(const std::string& nodeId) {
     auto tConfig = getBasicOpenrConfig(nodeId);
-    tConfig.kvstore_config.sync_interval_s = kDbSyncInterval.count();
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() =
+        kDbSyncInterval.count();
     config_ = std::make_shared<Config>(tConfig);
     auto ptr = std::make_unique<KvStoreWrapper>(context, config_);
     stores_.emplace_back(std::move(ptr));
@@ -164,7 +165,9 @@ floodingUpdate(
 
     // Update hash
     thriftVal.hash_ref() = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
+        *thriftVal.version_ref(),
+        *thriftVal.originatorId_ref(),
+        thriftVal.value_ref());
     auto keyVal = std::make_pair(key, thriftVal);
     keyVals.emplace_back(keyVal);
   }
@@ -174,7 +177,7 @@ floodingUpdate(
 
   // Receive publication from kvStore for new key-update
   auto pub = kvStore->recvPublication();
-  CHECK_EQ(numOfUpdateKeys, pub.keyVals.size());
+  CHECK_EQ(numOfUpdateKeys, pub.keyVals_ref()->size());
 }
 
 /**
@@ -242,7 +245,9 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
         0 /* ttl version */,
         0 /* hash */);
     thriftVal.hash_ref() = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
+        *thriftVal.version_ref(),
+        *thriftVal.originatorId_ref(),
+        thriftVal.value_ref());
 
     // Adding key to kvStore
     kvStore->setKey(key, thriftVal);

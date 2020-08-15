@@ -155,7 +155,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.version++;
+    (*newKvIt->second.version_ref())++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -165,7 +165,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.version--;
+    (*newKvIt->second.version_ref())--;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -175,7 +175,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.originatorId = "node55";
+    *newKvIt->second.originatorId_ref() = "node55";
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -185,7 +185,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.originatorId = "node3";
+    *newKvIt->second.originatorId_ref() = "node3";
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -216,18 +216,20 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref().reset();
-    newKvIt->second.ttl = 123;
-    newKvIt->second.ttlVersion++;
+    newKvIt->second.ttl_ref() = 123;
+    (*newKvIt->second.ttlVersion_ref())++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     auto deltaKvIt = keyVals.find(key);
     // new ttl, ttlversion
-    EXPECT_EQ(myKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
-    EXPECT_EQ(myKvIt->second.ttl, newKvIt->second.ttl);
+    EXPECT_EQ(
+        *myKvIt->second.ttlVersion_ref(), *newKvIt->second.ttlVersion_ref());
+    EXPECT_EQ(*myKvIt->second.ttl_ref(), *newKvIt->second.ttl_ref());
     // old value tho
     EXPECT_EQ(myKvIt->second.value_ref(), oldKvIt->second.value_ref());
 
-    EXPECT_EQ(deltaKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
-    EXPECT_EQ(deltaKvIt->second.ttl, newKvIt->second.ttl);
+    EXPECT_EQ(
+        *deltaKvIt->second.ttlVersion_ref(), *newKvIt->second.ttlVersion_ref());
+    EXPECT_EQ(*deltaKvIt->second.ttl_ref(), *newKvIt->second.ttl_ref());
     EXPECT_EQ(deltaKvIt->second.value_ref().has_value(), false);
   }
 
@@ -236,8 +238,8 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.ttl = 123;
-    newKvIt->second.ttlVersion++;
+    newKvIt->second.ttl_ref() = 123;
+    (*newKvIt->second.ttlVersion_ref())++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -248,7 +250,7 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref() = "dummy";
-    newKvIt->second.ttlVersion++;
+    (*newKvIt->second.ttlVersion_ref())++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -258,7 +260,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     std::unordered_map<std::string, thrift::Value> emptyStore;
     newKvIt->second = thriftValue;
-    newKvIt->second.ttl = -100;
+    newKvIt->second.ttl_ref() = -100;
     auto keyVals = KvStore::mergeKeyValues(emptyStore, newStore);
     EXPECT_EQ(keyVals.size(), 0);
     EXPECT_EQ(emptyStore.size(), 0);
@@ -282,7 +284,7 @@ TEST(KvStore, compareValuesTest) {
   // diff version
   v1 = refValue;
   v2 = refValue;
-  v1.version++;
+  (*v1.version_ref())++;
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
@@ -291,7 +293,7 @@ TEST(KvStore, compareValuesTest) {
   // diff originatorId
   v1 = refValue;
   v2 = refValue;
-  v2.originatorId = "node6";
+  *v2.originatorId_ref() = "node6";
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, -1); // v2 is better
@@ -300,7 +302,7 @@ TEST(KvStore, compareValuesTest) {
   // diff ttlVersion
   v1 = refValue;
   v2 = refValue;
-  v1.ttlVersion++;
+  (*v1.ttlVersion_ref())++;
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
@@ -376,7 +378,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
 
     // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
     thrift::Value value;
-    value.version = 1;
+    value.version_ref() = 1;
     {
       value.value_ref() = "test_value1";
       EXPECT_TRUE(client1->setKey(

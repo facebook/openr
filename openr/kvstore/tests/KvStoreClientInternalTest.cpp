@@ -243,8 +243,8 @@ class MultipleAreaFixture : public MultipleStoreFixture {
           std::vector<openr::thrift::AreaConfig> areaConfig;
           for (const auto& id : areas) {
             thrift::AreaConfig a;
-            a.area_id = id;
-            a.neighbor_regexes.emplace_back(".*");
+            *a.area_id_ref() = id;
+            a.neighbor_regexes_ref()->emplace_back(".*");
             areaConfig.emplace_back(std::move(a));
           }
           auto tConfig = getBasicOpenrConfig(nodeId, "domain", areaConfig);
@@ -493,8 +493,8 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
         maybeThriftVal = store3->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v1", maybeThriftVal.value().value_ref());
-        EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
-        EXPECT_EQ(1, maybeThriftVal.value().version);
+        EXPECT_EQ("node1", *maybeThriftVal.value().originatorId_ref());
+        EXPECT_EQ(1, *maybeThriftVal.value().version_ref());
       });
 
   // set empty value on store1, check for empty value on other stores, and
@@ -518,8 +518,8 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
         maybeThriftVal = store3->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("", maybeThriftVal.value().value_ref());
-        EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
-        EXPECT_EQ(maybeThriftVal.value().version, 2);
+        EXPECT_EQ("node1", *maybeThriftVal.value().originatorId_ref());
+        EXPECT_EQ(*maybeThriftVal.value().version_ref(), 2);
       });
 
   // persist key with new value, and check for new value and higher key version
@@ -542,8 +542,8 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
         maybeThriftVal = store3->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v2", maybeThriftVal.value().value_ref());
-        EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
-        EXPECT_EQ(maybeThriftVal.value().version, 3);
+        EXPECT_EQ("node1", *maybeThriftVal.value().originatorId_ref());
+        EXPECT_EQ(*maybeThriftVal.value().version_ref(), 3);
       });
 
   // set empty value on store1, and check for key expiry
@@ -617,7 +617,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
     auto maybeVal1 = client1->getKey("test_key3");
 
     ASSERT_TRUE(maybeVal1.has_value());
-    EXPECT_EQ(1, maybeVal1->version);
+    EXPECT_EQ(1, *maybeVal1->version_ref());
     EXPECT_EQ("test_value3", maybeVal1->value_ref());
   });
 
@@ -646,7 +646,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
   evb.scheduleTimeout(std::chrono::milliseconds(3000), [&]() noexcept {
     auto maybeVal3 = client1->getKey("test_key3");
     ASSERT_TRUE(maybeVal3.has_value());
-    EXPECT_EQ(1, maybeVal3->version);
+    EXPECT_EQ(1, *maybeVal3->version_ref());
     EXPECT_EQ("test_value3", maybeVal3->value_ref());
 
     // Synchronization primitive
@@ -714,11 +714,11 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.has_value());
-    EXPECT_EQ(1, maybeVal->version);
+    EXPECT_EQ(1, *maybeVal->version_ref());
     EXPECT_EQ(testValue, maybeVal->value_ref());
-    EXPECT_LT(0, maybeVal->ttl);
-    EXPECT_GE(1000, maybeVal->ttl);
-    EXPECT_LE(6, maybeVal->ttlVersion); // can be flaky under stress
+    EXPECT_LT(0, *maybeVal->ttl_ref());
+    EXPECT_GE(1000, *maybeVal->ttl_ref());
+    EXPECT_LE(6, *maybeVal->ttlVersion_ref()); // can be flaky under stress
 
     // Set key with higher ttl=3s
     client1->persistKey(testKey, testValue, std::chrono::seconds(3));
@@ -729,11 +729,11 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.has_value());
-    EXPECT_EQ(1, maybeVal->version);
+    EXPECT_EQ(1, *maybeVal->version_ref());
     EXPECT_EQ(testValue, maybeVal->value_ref());
-    EXPECT_LT(1000, maybeVal->ttl);
-    EXPECT_GE(3000, maybeVal->ttl);
-    EXPECT_LE(9, maybeVal->ttlVersion); // can be flaky under stress
+    EXPECT_LT(1000, *maybeVal->ttl_ref());
+    EXPECT_GE(3000, *maybeVal->ttl_ref());
+    EXPECT_LE(9, *maybeVal->ttlVersion_ref()); // can be flaky under stress
 
     // Set key with lower ttl=1s
     client1->persistKey(testKey, testValue, std::chrono::seconds(1));
@@ -744,11 +744,11 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.has_value());
-    EXPECT_EQ(1, maybeVal->version);
+    EXPECT_EQ(1, *maybeVal->version_ref());
     EXPECT_EQ(testValue, maybeVal->value_ref());
-    EXPECT_LT(0, maybeVal->ttl);
-    EXPECT_GE(1000, maybeVal->ttl);
-    EXPECT_LE(12, maybeVal->ttlVersion); // can be flaky under stress
+    EXPECT_LT(0, *maybeVal->ttl_ref());
+    EXPECT_GE(1000, *maybeVal->ttl_ref());
+    EXPECT_LE(12, *maybeVal->ttlVersion_ref()); // can be flaky under stress
 
     // Synchronization primitive
     waitBaton.post();
@@ -828,7 +828,7 @@ TEST(KvStoreClientInternal, ApiTest) {
       // 1st get key
       auto maybeVal1 = client2->getKey("test_key2");
       ASSERT_TRUE(maybeVal1.has_value());
-      EXPECT_EQ(1, maybeVal1->version);
+      EXPECT_EQ(1, *maybeVal1->version_ref());
       EXPECT_EQ("test_value2", maybeVal1->value_ref());
 
       // persistKey with new value
@@ -837,7 +837,7 @@ TEST(KvStoreClientInternal, ApiTest) {
       // 2nd getkey
       auto maybeVal2 = client2->getKey("test_key2");
       ASSERT_TRUE(maybeVal2.has_value());
-      EXPECT_EQ(2, maybeVal2->version);
+      EXPECT_EQ(2, *maybeVal2->version_ref());
       EXPECT_EQ("test_value2-client2", maybeVal2->value_ref());
 
       // get key with non-existing key
@@ -930,12 +930,12 @@ TEST(KvStoreClientInternal, ApiTest) {
       auto maybeVal1 = client2->getKey("test_ttl_key1");
       ASSERT_TRUE(maybeVal1.has_value());
       EXPECT_EQ("test_ttl_value1", maybeVal1->value_ref());
-      EXPECT_LT(500, maybeVal1->ttlVersion);
+      EXPECT_LT(500, *maybeVal1->ttlVersion_ref());
 
       auto maybeVal2 = client1->getKey("test_ttl_key2");
       ASSERT_TRUE(maybeVal2.has_value());
-      EXPECT_LT(1500, maybeVal2->ttlVersion);
-      EXPECT_EQ(1, maybeVal2->version);
+      EXPECT_LT(1500, *maybeVal2->ttlVersion_ref());
+      EXPECT_EQ(1, *maybeVal2->version_ref());
       EXPECT_EQ("test_ttl_value2", maybeVal2->value_ref());
     });
 
@@ -964,11 +964,11 @@ TEST(KvStoreClientInternal, ApiTest) {
 
     auto const& value1 = keyValResponse.at("test_key1");
     EXPECT_EQ("test_value1", value1.value_ref());
-    EXPECT_EQ(1, value1.version);
+    EXPECT_EQ(1, *value1.version_ref());
 
     auto const& value2 = keyValResponse.at("test_key2");
     EXPECT_EQ("test_value2-client2", value2.value_ref());
-    EXPECT_LE(2, value2.version); // client-2 must win over client-1
+    EXPECT_LE(2, *value2.version_ref()); // client-2 must win over client-1
 
     EXPECT_EQ(1, keyValResponse.count("set_test_key"));
 
@@ -1016,7 +1016,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         [&](std::string const& k, std::optional<thrift::Value> v) {
           // should be called when client1 call persistKey for test_key1
           EXPECT_EQ("test_key1", k);
-          EXPECT_EQ(1, v.value().version);
+          EXPECT_EQ(1, *v.value().version_ref());
           EXPECT_EQ("test_value1", v.value().value_ref());
           key1CbCnt++;
         },
@@ -1026,9 +1026,9 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         [&](std::string const& k, std::optional<thrift::Value> v) {
           // hould be called when client2 call persistKey for test_key2
           EXPECT_EQ("test_key2", k);
-          EXPECT_LT(0, v.value().version);
-          EXPECT_GE(2, v.value().version);
-          switch (v.value().version) {
+          EXPECT_LT(0, *v.value().version_ref());
+          EXPECT_GE(2, *v.value().version_ref());
+          switch (*v.value().version_ref()) {
           case 1:
             EXPECT_EQ("test_value2", v.value().value_ref());
             break;
@@ -1170,7 +1170,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
           // this should be called when client call persistKey for
           // test_key1
           EXPECT_THAT(k, testing::StartsWith("test_"));
-          EXPECT_EQ(1, v.value().version);
+          EXPECT_EQ(1, *v.value().version_ref());
           EXPECT_EQ("test_key_val", v.value().value_ref());
           key1CbCnt++;
         });
@@ -1296,7 +1296,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         thrift::Value valuePlane1;
-        valuePlane1.version = 1;
+        valuePlane1.version_ref() = 1;
         valuePlane1.value_ref() = "test_value1";
         // key set within invalid area, must return false
         EXPECT_FALSE(
@@ -1320,7 +1320,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
 
         // set key in pod are on node3
         thrift::Value valuePod1;
-        valuePod1.version = 1;
+        valuePod1.version_ref() = 1;
         valuePod1.value_ref() = "test_value1";
         EXPECT_TRUE(
             client3

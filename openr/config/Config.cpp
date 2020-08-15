@@ -148,28 +148,28 @@ Config::populateAreaConfig() {
   // Area
   //
   thrift::AreaConfig defaultArea;
-  defaultArea.area_id = thrift::KvStore_constants::kDefaultArea();
-  defaultArea.interface_regexes.emplace_back(".*");
-  defaultArea.neighbor_regexes.emplace_back(".*");
+  *defaultArea.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+  defaultArea.interface_regexes_ref()->emplace_back(".*");
+  defaultArea.neighbor_regexes_ref()->emplace_back(".*");
 
-  const auto& areas = config_.areas.empty()
+  const auto& areas = config_.areas_ref()->empty()
       ? std::vector<thrift::AreaConfig>({defaultArea})
-      : config_.areas;
+      : *config_.areas_ref();
 
   for (const auto& area : areas) {
     // TODO: Check if we can remove areaIds_ and
     // use areaConfigs_.
-    if (not areaIds_.emplace(area.area_id).second) {
-      throw std::invalid_argument(
-          folly::sformat("Duplicate area config: area_id {}", area.area_id));
+    if (not areaIds_.emplace(*area.area_id_ref()).second) {
+      throw std::invalid_argument(folly::sformat(
+          "Duplicate area config: area_id {}", *area.area_id_ref()));
     }
   }
 
-  for (const auto& areaConfig : config_.areas) {
+  for (const auto& areaConfig : *config_.areas_ref()) {
     addAreaRegex(
-        areaConfig.area_id,
-        areaConfig.neighbor_regexes,
-        areaConfig.interface_regexes);
+        *areaConfig.area_id_ref(),
+        *areaConfig.neighbor_regexes_ref(),
+        *areaConfig.interface_regexes_ref());
   }
 }
 
@@ -178,8 +178,8 @@ Config::populateInternalDb() {
   populateAreaConfig();
 
   // prefix forwarding type and algorithm
-  const auto& pfxType = config_.prefix_forwarding_type;
-  const auto& pfxAlgo = config_.prefix_forwarding_algorithm;
+  const auto& pfxType = *config_.prefix_forwarding_type_ref();
+  const auto& pfxAlgo = *config_.prefix_forwarding_algorithm_ref();
 
   if (not enumName(pfxType) or not enumName(pfxAlgo)) {
     throw std::invalid_argument(
@@ -203,12 +203,12 @@ Config::populateInternalDb() {
   //
   // Kvstore
   //
-  const auto& kvConf = config_.kvstore_config;
+  const auto& kvConf = *config_.kvstore_config_ref();
   if (const auto& floodRate = kvConf.flood_rate_ref()) {
-    if (floodRate->flood_msg_per_sec <= 0) {
+    if (*floodRate->flood_msg_per_sec_ref() <= 0) {
       throw std::out_of_range("kvstore flood_msg_per_sec should be > 0");
     }
-    if (floodRate->flood_msg_burst_size <= 0) {
+    if (*floodRate->flood_msg_burst_size_ref() <= 0) {
       throw std::out_of_range("kvstore flood_msg_burst_size should be > 0");
     }
   }
@@ -216,131 +216,135 @@ Config::populateInternalDb() {
   //
   // Spark
   //
-  const auto& sparkConfig = config_.spark_config;
-  if (sparkConfig.neighbor_discovery_port <= 0 ||
-      sparkConfig.neighbor_discovery_port > 65535) {
+  const auto& sparkConfig = *config_.spark_config_ref();
+  if (*sparkConfig.neighbor_discovery_port_ref() <= 0 ||
+      *sparkConfig.neighbor_discovery_port_ref() > 65535) {
     throw std::out_of_range(folly::sformat(
         "neighbor_discovery_port ({}) should be in range [0, 65535]",
-        sparkConfig.neighbor_discovery_port));
+        *sparkConfig.neighbor_discovery_port_ref()));
   }
 
-  if (sparkConfig.hello_time_s <= 0) {
+  if (*sparkConfig.hello_time_s_ref() <= 0) {
     throw std::out_of_range(folly::sformat(
-        "hello_time_s ({}) should be > 0", sparkConfig.hello_time_s));
+        "hello_time_s ({}) should be > 0", *sparkConfig.hello_time_s_ref()));
   }
 
   // When a node starts or a new link comes up we perform fast initial neighbor
   // discovery by sending hello packets with solicitResponse bit set to request
   // an immediate reply. This allows us to discover new neighbors in hundreds
   // of milliseconds (or as configured).
-  if (sparkConfig.fastinit_hello_time_ms <= 0) {
+  if (*sparkConfig.fastinit_hello_time_ms_ref() <= 0) {
     throw std::out_of_range(folly::sformat(
         "fastinit_hello_time_ms ({}) should be > 0",
-        sparkConfig.fastinit_hello_time_ms));
+        *sparkConfig.fastinit_hello_time_ms_ref()));
   }
 
-  if (sparkConfig.fastinit_hello_time_ms > 1000 * sparkConfig.hello_time_s) {
+  if (*sparkConfig.fastinit_hello_time_ms_ref() >
+      1000 * *sparkConfig.hello_time_s_ref()) {
     throw std::invalid_argument(folly::sformat(
         "fastinit_hello_time_ms ({}) should be <= hold_time_s ({}) * 1000",
-        sparkConfig.fastinit_hello_time_ms,
-        sparkConfig.hello_time_s));
+        *sparkConfig.fastinit_hello_time_ms_ref(),
+        *sparkConfig.hello_time_s_ref()));
   }
 
   // The rate of hello packet send is defined by keepAliveTime.
   // This time must be less than the holdTime for each node.
-  if (sparkConfig.keepalive_time_s <= 0) {
+  if (*sparkConfig.keepalive_time_s_ref() <= 0) {
     throw std::out_of_range(folly::sformat(
-        "keepalive_time_s ({}) should be > 0", sparkConfig.keepalive_time_s));
+        "keepalive_time_s ({}) should be > 0",
+        *sparkConfig.keepalive_time_s_ref()));
   }
 
-  if (sparkConfig.keepalive_time_s > sparkConfig.hold_time_s) {
+  if (*sparkConfig.keepalive_time_s_ref() > *sparkConfig.hold_time_s_ref()) {
     throw std::invalid_argument(folly::sformat(
         "keepalive_time_s ({}) should be <= hold_time_s ({})",
-        sparkConfig.keepalive_time_s,
-        sparkConfig.hold_time_s));
+        *sparkConfig.keepalive_time_s_ref(),
+        *sparkConfig.hold_time_s_ref()));
   }
 
   // Hold time tells the receiver how long to keep the information valid for.
-  if (sparkConfig.hold_time_s <= 0) {
+  if (*sparkConfig.hold_time_s_ref() <= 0) {
     throw std::out_of_range(folly::sformat(
-        "hold_time_s ({}) should be > 0", sparkConfig.hold_time_s));
+        "hold_time_s ({}) should be > 0", *sparkConfig.hold_time_s_ref()));
   }
 
-  if (sparkConfig.graceful_restart_time_s <= 0) {
+  if (*sparkConfig.graceful_restart_time_s_ref() <= 0) {
     throw std::out_of_range(folly::sformat(
         "graceful_restart_time_s ({}) should be > 0",
-        sparkConfig.graceful_restart_time_s));
+        *sparkConfig.graceful_restart_time_s_ref()));
   }
 
-  if (sparkConfig.graceful_restart_time_s < 3 * sparkConfig.keepalive_time_s) {
+  if (*sparkConfig.graceful_restart_time_s_ref() <
+      3 * *sparkConfig.keepalive_time_s_ref()) {
     throw std::invalid_argument(folly::sformat(
         "graceful_restart_time_s ({}) should be >= 3 * keepalive_time_s ({})",
-        sparkConfig.graceful_restart_time_s,
-        sparkConfig.keepalive_time_s));
+        *sparkConfig.graceful_restart_time_s_ref(),
+        *sparkConfig.keepalive_time_s_ref()));
   }
 
-  if (sparkConfig.step_detector_conf.lower_threshold < 0 ||
-      sparkConfig.step_detector_conf.upper_threshold < 0 ||
-      sparkConfig.step_detector_conf.lower_threshold >=
-          sparkConfig.step_detector_conf.upper_threshold) {
+  if (*sparkConfig.step_detector_conf_ref()->lower_threshold_ref() < 0 ||
+      *sparkConfig.step_detector_conf_ref()->upper_threshold_ref() < 0 ||
+      *sparkConfig.step_detector_conf_ref()->lower_threshold_ref() >=
+          *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()) {
     throw std::invalid_argument(folly::sformat(
         "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({}), and they should be >= 0",
-        sparkConfig.step_detector_conf.lower_threshold,
-        sparkConfig.step_detector_conf.upper_threshold));
+        *sparkConfig.step_detector_conf_ref()->lower_threshold_ref(),
+        *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()));
   }
 
-  if (sparkConfig.step_detector_conf.fast_window_size < 0 ||
-      sparkConfig.step_detector_conf.slow_window_size < 0 ||
-      (sparkConfig.step_detector_conf.fast_window_size >
-       sparkConfig.step_detector_conf.slow_window_size)) {
+  if (*sparkConfig.step_detector_conf_ref()->fast_window_size_ref() < 0 ||
+      *sparkConfig.step_detector_conf_ref()->slow_window_size_ref() < 0 ||
+      (*sparkConfig.step_detector_conf_ref()->fast_window_size_ref() >
+       *sparkConfig.step_detector_conf_ref()->slow_window_size_ref())) {
     throw std::invalid_argument(folly::sformat(
         "step_detector_conf.fast_window_size ({}) should be <= step_detector_conf.slow_window_size ({}), and they should be >= 0",
-        sparkConfig.step_detector_conf.fast_window_size,
-        sparkConfig.step_detector_conf.slow_window_size));
+        *sparkConfig.step_detector_conf_ref()->fast_window_size_ref(),
+        *sparkConfig.step_detector_conf_ref()->slow_window_size_ref()));
   }
 
-  if (sparkConfig.step_detector_conf.lower_threshold < 0 ||
-      sparkConfig.step_detector_conf.upper_threshold < 0 ||
-      sparkConfig.step_detector_conf.lower_threshold >=
-          sparkConfig.step_detector_conf.upper_threshold) {
+  if (*sparkConfig.step_detector_conf_ref()->lower_threshold_ref() < 0 ||
+      *sparkConfig.step_detector_conf_ref()->upper_threshold_ref() < 0 ||
+      *sparkConfig.step_detector_conf_ref()->lower_threshold_ref() >=
+          *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()) {
     throw std::invalid_argument(folly::sformat(
         "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({})",
-        sparkConfig.step_detector_conf.lower_threshold,
-        sparkConfig.step_detector_conf.upper_threshold));
+        *sparkConfig.step_detector_conf_ref()->lower_threshold_ref(),
+        *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()));
   }
 
   //
   // Monitor
   //
-  const auto& monitorConfig = config_.monitor_config;
-  if (monitorConfig.max_event_log < 0) {
+  const auto& monitorConfig = *config_.monitor_config_ref();
+  if (*monitorConfig.max_event_log_ref() < 0) {
     throw std::out_of_range(folly::sformat(
         "monitor_max_event_log ({}) should be >= 0",
-        monitorConfig.max_event_log));
+        *monitorConfig.max_event_log_ref()));
   }
   //
   // Link Monitor
   //
-  const auto& lmConf = config_.link_monitor_config;
+  const auto& lmConf = *config_.link_monitor_config_ref();
 
   // backoff validation
-  if (lmConf.linkflap_initial_backoff_ms < 0) {
+  if (*lmConf.linkflap_initial_backoff_ms_ref() < 0) {
     throw std::out_of_range(folly::sformat(
         "linkflap_initial_backoff_ms ({}) should be >= 0",
-        lmConf.linkflap_initial_backoff_ms));
+        *lmConf.linkflap_initial_backoff_ms_ref()));
   }
 
-  if (lmConf.linkflap_max_backoff_ms < 0) {
+  if (*lmConf.linkflap_max_backoff_ms_ref() < 0) {
     throw std::out_of_range(folly::sformat(
         "linkflap_max_backoff_ms ({}) should be >= 0",
-        lmConf.linkflap_max_backoff_ms));
+        *lmConf.linkflap_max_backoff_ms_ref()));
   }
 
-  if (lmConf.linkflap_initial_backoff_ms > lmConf.linkflap_max_backoff_ms) {
+  if (*lmConf.linkflap_initial_backoff_ms_ref() >
+      *lmConf.linkflap_max_backoff_ms_ref()) {
     throw std::out_of_range(folly::sformat(
         "linkflap_initial_backoff_ms ({}) should be < linkflap_max_backoff_ms ({})",
-        lmConf.linkflap_initial_backoff_ms,
-        lmConf.linkflap_max_backoff_ms));
+        *lmConf.linkflap_initial_backoff_ms_ref(),
+        *lmConf.linkflap_max_backoff_ms_ref()));
   }
 
   // Construct the regular expressions to match interface names against
@@ -351,10 +355,10 @@ Config::populateInternalDb() {
   // define RE, which is fed into link-monitor
 
   // Compiling empty Re2 Set will cause undefined error
-  if (lmConf.include_interface_regexes.size()) {
+  if (lmConf.include_interface_regexes_ref()->size()) {
     includeItfRegexes_ =
         std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    for (const auto& regexStr : lmConf.include_interface_regexes) {
+    for (const auto& regexStr : *lmConf.include_interface_regexes_ref()) {
       if (includeItfRegexes_->Add(regexStr, &regexErr) == -1) {
         throw std::invalid_argument(folly::sformat(
             "Add include_interface_regexes failed: {}", regexErr));
@@ -366,10 +370,10 @@ Config::populateInternalDb() {
     }
   }
 
-  if (lmConf.exclude_interface_regexes.size()) {
+  if (lmConf.exclude_interface_regexes_ref()->size()) {
     excludeItfRegexes_ =
         std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    for (const auto& regexStr : lmConf.exclude_interface_regexes) {
+    for (const auto& regexStr : *lmConf.exclude_interface_regexes_ref()) {
       if (excludeItfRegexes_->Add(regexStr, &regexErr) == -1) {
         throw std::invalid_argument(folly::sformat(
             "Add exclude_interface_regexes failed: {}", regexErr));
@@ -382,10 +386,10 @@ Config::populateInternalDb() {
   }
 
   // redistribute_interface_regexes defines interface to be advertised
-  if (lmConf.redistribute_interface_regexes.size()) {
+  if (lmConf.redistribute_interface_regexes_ref()->size()) {
     redistributeItfRegexes_ =
         std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    for (const auto& regexStr : lmConf.redistribute_interface_regexes) {
+    for (const auto& regexStr : *lmConf.redistribute_interface_regexes_ref()) {
       if (redistributeItfRegexes_->Add(regexStr, &regexErr) == -1) {
         throw std::invalid_argument(folly::sformat(
             "Add redistribute_interface_regexes failed: {}", regexErr));
@@ -415,14 +419,14 @@ Config::populateInternalDb() {
     }
 
     // sanity check enum prefix_allocation_mode
-    if (not enumName(paConf->prefix_allocation_mode)) {
+    if (not enumName(*paConf->prefix_allocation_mode_ref())) {
       throw std::invalid_argument("invalid prefix_allocation_mode");
     }
 
     auto seedPrefix = paConf->seed_prefix_ref().value_or("");
     auto allocatePfxLen = paConf->allocate_prefix_len_ref().value_or(0);
 
-    switch (paConf->prefix_allocation_mode) {
+    switch (*paConf->prefix_allocation_mode_ref()) {
     case PrefixAllocationMode::DYNAMIC_ROOT_NODE: {
       // populate prefixAllocationParams_ from seed_prefix and
       // allocate_prefix_len

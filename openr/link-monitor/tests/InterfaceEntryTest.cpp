@@ -23,7 +23,7 @@ std::unordered_set<folly::CIDRNetwork>
 toCIDRNetworkSet(std::vector<thrift::PrefixEntry> const& prefixes) {
   std::unordered_set<folly::CIDRNetwork> networks;
   for (auto const& prefix : prefixes) {
-    networks.emplace(toIPNetwork(prefix.prefix, false));
+    networks.emplace(toIPNetwork(*prefix.prefix_ref(), false));
   }
   return networks;
 }

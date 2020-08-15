@@ -232,7 +232,8 @@ main(int argc, char** argv) {
 
   // Hold time for advertising Prefix/Adj keys into KvStore
   const auto& sparkConf = config->getSparkConfig();
-  const std::chrono::seconds initialDumpTime{2 * sparkConf.keepalive_time_s};
+  const std::chrono::seconds initialDumpTime{2 *
+                                             *sparkConf.keepalive_time_s_ref()};
 
   // Set up the zmq context for this process.
   Context context;
@@ -278,7 +279,7 @@ main(int argc, char** argv) {
 
   if (FLAGS_enable_fib_service_waiting and
       (not config->isNetlinkFibHandlerEnabled())) {
-    waitForFibService(mainEventLoop, config->getConfig().fib_port);
+    waitForFibService(mainEventLoop, *config->getConfig().fib_port_ref());
   }
 
   // Create ThreadManager for thrift services
@@ -319,7 +320,7 @@ main(int argc, char** argv) {
     netlinkFibServer->setThreadManager(thriftThreadMgr);
     netlinkFibServer->setNumIOWorkerThreads(1);
     netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
-    netlinkFibServer->setPort(config->getConfig().fib_port);
+    netlinkFibServer->setPort(*config->getConfig().fib_port_ref());
 
     netlinkFibServerThread =
         std::make_unique<std::thread>([&netlinkFibServer, &nlSock]() {
@@ -369,15 +370,15 @@ main(int argc, char** argv) {
   // [TODO: TO BE DEPRECATED] Start ZmqMonitor
   // for each log message it receives, we want to add the openr domain
   fbzmq::LogSample sampleToMerge;
-  sampleToMerge.addString("domain", config->getConfig().domain);
+  sampleToMerge.addString("domain", *config->getConfig().domain_ref());
   ZmqMonitor monitor(
       MonitorSubmitUrl{folly::sformat(
           "tcp://{}:{}",
-          config->getConfig().listen_addr,
+          *config->getConfig().listen_addr_ref(),
           FLAGS_monitor_rep_port)},
       MonitorPubUrl{folly::sformat(
           "tcp://{}:{}",
-          config->getConfig().listen_addr,
+          *config->getConfig().listen_addr_ref(),
           FLAGS_monitor_pub_port)},
       context,
       sampleToMerge);
@@ -402,7 +403,7 @@ main(int argc, char** argv) {
           peerUpdatesQueue.getReader(),
           KvStoreGlobalCmdUrl{folly::sformat(
               "tcp://{}:{}",
-              config->getConfig().listen_addr,
+              *config->getConfig().listen_addr_ref(),
               FLAGS_kvstore_rep_port)},
           monitorSubmitUrl,
           config,
@@ -510,8 +511,8 @@ main(int argc, char** argv) {
       "Fib",
       std::make_unique<Fib>(
           config,
-          config->getConfig().fib_port,
-          std::chrono::seconds(3 * sparkConf.keepalive_time_s),
+          *config->getConfig().fib_port_ref(),
+          std::chrono::seconds(3 * *sparkConf.keepalive_time_s_ref()),
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
           fibUpdatesQueue,
@@ -550,7 +551,7 @@ main(int argc, char** argv) {
         sslContext);
   }
   // set the port and interface
-  thriftCtrlServer.setPort(config->getConfig().openr_ctrl_port);
+  thriftCtrlServer.setPort(*config->getConfig().openr_ctrl_port_ref());
 
   std::unordered_set<std::string> acceptableNamesSet; // empty set by default
   if (FLAGS_enable_secure_thrift_server) {

@@ -136,7 +136,8 @@ using RouteMap = unordered_map<
 // disable V4 by default
 NextHop
 toNextHop(thrift::Adjacency adj, bool isV4 = false) {
-  return {adj.ifName, toIPAddress(isV4 ? adj.nextHopV4 : adj.nextHopV6)};
+  return {*adj.ifName_ref(),
+          toIPAddress(isV4 ? *adj.nextHopV4_ref() : *adj.nextHopV6_ref())};
 }
 
 // Note: routeMap will be modified
@@ -145,17 +146,18 @@ fillRouteMap(
     const string& node,
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : routeDb.unicastRoutes) {
+  for (auto const& route : *routeDb.unicastRoutes_ref()) {
     auto prefix = toString(route.dest);
-    for (const auto& nextHop : route.nextHops) {
-      const auto nextHopAddr = toIPAddress(nextHop.address);
+    for (const auto& nextHop : *route.nextHops_ref()) {
+      const auto nextHopAddr = toIPAddress(*nextHop.address_ref());
+      assert(nextHop.address_ref()->ifName_ref());
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << nextHop.address.ifName_ref().value() << " : " << nextHopAddr
-              << " (" << nextHop.metric << ")";
+              << nextHop.address_ref()->ifName_ref().value() << " : "
+              << nextHopAddr << " (" << *nextHop.metric_ref() << ")";
 
       routeMap[make_pair(node, prefix)].insert(
-          {{nextHop.address.ifName_ref().value(), nextHopAddr},
-           nextHop.metric});
+          {{nextHop.address_ref()->ifName_ref().value(), nextHopAddr},
+           *nextHop.metric_ref()});
     }
   }
 }
@@ -561,7 +563,7 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
     while (counters2.size() == 0) {
       counters2 = openr2->zmqMonitorClient->dumpCounters();
     }
-    rssMemInUse = counters2[memKey].value / 1e6;
+    rssMemInUse = *counters2[memKey].value_ref() / 1e6;
   }
 
   uint32_t memLimitMB = static_cast<uint32_t>(rssMemInUse) + 500;
@@ -589,7 +591,8 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
 
   // allocate memory to go beyond memory limit and check if watchdog
   // catches the over the limit condition
-  uint32_t memUsage = static_cast<uint32_t>(counters1[memKey].value / 1e6);
+  uint32_t memUsage =
+      static_cast<uint32_t>(*counters1[memKey].value_ref() / 1e6);
 
   if (memUsage < memLimitMB) {
     EXPECT_FALSE(openr1->watchdog->memoryLimitExceeded());

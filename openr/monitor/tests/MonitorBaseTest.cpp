@@ -34,8 +34,8 @@ class MonitorTestFixture : public ::testing::Test {
   SetUp() override {
     // generate a config for testing
     openr::thrift::OpenrConfig config;
-    config.node_name = "node1";
-    config.domain = "domain1";
+    *config.node_name_ref() = "node1";
+    *config.domain_ref() = "domain1";
 
     monitor = make_unique<MonitorMock>(
         std::make_unique<openr::Config>(config),

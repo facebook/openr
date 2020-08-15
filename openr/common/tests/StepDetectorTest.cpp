@@ -42,11 +42,11 @@ getTestConfig() {
   // generate a config for testing
   openr::thrift::StepDetectorConfig stepDetectorConfig;
 
-  stepDetectorConfig.fast_window_size = FAST_WINDOW_SIZE;
-  stepDetectorConfig.slow_window_size = SLOW_WINDOW_SIZE;
-  stepDetectorConfig.lower_threshold = LOWER_THRESHOLD;
-  stepDetectorConfig.upper_threshold = UPPER_THRESHOLD;
-  stepDetectorConfig.ads_threshold = ABS_THRESHOLD;
+  stepDetectorConfig.fast_window_size_ref() = FAST_WINDOW_SIZE;
+  stepDetectorConfig.slow_window_size_ref() = SLOW_WINDOW_SIZE;
+  stepDetectorConfig.lower_threshold_ref() = LOWER_THRESHOLD;
+  stepDetectorConfig.upper_threshold_ref() = UPPER_THRESHOLD;
+  stepDetectorConfig.ads_threshold_ref() = ABS_THRESHOLD;
 
   return stepDetectorConfig;
 }

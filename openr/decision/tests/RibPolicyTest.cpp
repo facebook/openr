@@ -25,11 +25,11 @@ createPolicyStatement(
     int32_t defaultWeight,
     std::map<std::string, int32_t> areaToWeight) {
   thrift::RibPolicyStatement p;
-  p.name = "TestPolicyStatement";
-  p.matcher.prefixes_ref() = prefixes;
-  p.action.set_weight_ref() = thrift::RibRouteActionWeight{};
-  p.action.set_weight_ref()->default_weight = defaultWeight;
-  p.action.set_weight_ref()->area_to_weight = areaToWeight;
+  *p.name_ref() = "TestPolicyStatement";
+  p.matcher_ref()->prefixes_ref() = prefixes;
+  p.action_ref()->set_weight_ref() = thrift::RibRouteActionWeight{};
+  p.action_ref()->set_weight_ref()->default_weight_ref() = defaultWeight;
+  *p.action_ref()->set_weight_ref()->area_to_weight_ref() = areaToWeight;
   return p;
 }
 
@@ -37,8 +37,8 @@ thrift::RibPolicy
 createPolicy(
     std::vector<thrift::RibPolicyStatement> statements, int32_t ttl_secs) {
   thrift::RibPolicy policy;
-  policy.statements = std::move(statements);
-  policy.ttl_secs = ttl_secs;
+  *policy.statements_ref() = std::move(statements);
+  policy.ttl_secs_ref() = ttl_secs;
   return policy;
 }
 
@@ -48,14 +48,14 @@ TEST(RibPolicyStatement, Error) {
   // Create RibPolicyStatement with no action
   {
     thrift::RibPolicyStatement stmt;
-    stmt.matcher.prefixes_ref() = std::vector<thrift::IpPrefix>{};
+    stmt.matcher_ref()->prefixes_ref() = std::vector<thrift::IpPrefix>{};
     EXPECT_THROW((RibPolicyStatement(stmt)), thrift::OpenrError);
   }
 
   // Create RibPolicyStatement with no matcher
   {
     thrift::RibPolicyStatement stmt;
-    stmt.action.set_weight_ref() = thrift::RibRouteActionWeight{};
+    stmt.action_ref()->set_weight_ref() = thrift::RibRouteActionWeight{};
     EXPECT_THROW((RibPolicyStatement(stmt)), thrift::OpenrError);
   }
 }
@@ -103,10 +103,10 @@ TEST(RibPolicyStatement, ApplyAction) {
     ASSERT_EQ(2, entry.nexthops.size());
 
     auto nhDefaultModified = nhDefault;
-    nhDefaultModified.weight = 1;
+    nhDefaultModified.weight_ref() = 1;
 
     auto nh2Modified = nh2;
-    nh2Modified.weight = 2;
+    nh2Modified.weight_ref() = 2;
 
     EXPECT_THAT(
         entry.nexthops,
@@ -125,16 +125,17 @@ TEST(RibPolicy, ApiTest) {
     auto thriftPolicyCopy = policy.toThrift();
 
     // Verify ttl. It must be less or equal
-    EXPECT_LE(thriftPolicyCopy.ttl_secs, thriftPolicy.ttl_secs);
+    EXPECT_LE(*thriftPolicyCopy.ttl_secs_ref(), *thriftPolicy.ttl_secs_ref());
 
     // NOTE: Make ttl equal for comparing policy. Everything else
     // must be same
-    thriftPolicyCopy.ttl_secs = thriftPolicy.ttl_secs;
+    thriftPolicyCopy.ttl_secs_ref() = *thriftPolicy.ttl_secs_ref();
     EXPECT_EQ(thriftPolicyCopy, thriftPolicy);
   }
 
   // Verify getTtlDuration(). Remaining time must be less or equal
-  EXPECT_LE(policy.getTtlDuration().count(), thriftPolicy.ttl_secs * 1000);
+  EXPECT_LE(
+      policy.getTtlDuration().count(), *thriftPolicy.ttl_secs_ref() * 1000);
 
   // Verify isActive()
   EXPECT_TRUE(policy.isActive());
@@ -191,10 +192,10 @@ TEST(RibPolicy, ApplyAction) {
     ASSERT_EQ(2, entry.nexthops.size());
 
     auto expectNh1 = nh1;
-    expectNh1.weight = 99;
+    expectNh1.weight_ref() = 99;
 
     auto expectNh2 = nh2;
-    expectNh2.weight = 1;
+    expectNh2.weight_ref() = 1;
 
     EXPECT_THAT(
         entry.nexthops, testing::UnorderedElementsAre(expectNh1, expectNh2));
@@ -209,10 +210,10 @@ TEST(RibPolicy, ApplyAction) {
     ASSERT_EQ(2, entry.nexthops.size());
 
     auto expectNh1 = nh1;
-    expectNh1.weight = 1;
+    expectNh1.weight_ref() = 1;
 
     auto expectNh2 = nh2;
-    expectNh2.weight = 99;
+    expectNh2.weight_ref() = 99;
 
     EXPECT_THAT(
         entry.nexthops, testing::UnorderedElementsAre(expectNh1, expectNh2));

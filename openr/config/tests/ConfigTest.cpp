@@ -28,24 +28,24 @@ const uint8_t testAllocationPfxLen = 128;
 openr::thrift::LinkMonitorConfig
 getTestLinkMonitorConfig() {
   openr::thrift::LinkMonitorConfig lmConf;
-  lmConf.include_interface_regexes.emplace_back("fboss.*");
-  lmConf.exclude_interface_regexes.emplace_back("eth.*");
-  lmConf.redistribute_interface_regexes.emplace_back("lo");
+  lmConf.include_interface_regexes_ref()->emplace_back("fboss.*");
+  lmConf.exclude_interface_regexes_ref()->emplace_back("eth.*");
+  lmConf.redistribute_interface_regexes_ref()->emplace_back("lo");
   return lmConf;
 }
 
 openr::thrift::KvstoreFloodRate
 getFloodRate() {
   openr::thrift::KvstoreFloodRate floodrate;
-  floodrate.flood_msg_per_sec = 1;
-  floodrate.flood_msg_burst_size = 1;
+  floodrate.flood_msg_per_sec_ref() = 1;
+  floodrate.flood_msg_burst_size_ref() = 1;
   return floodrate;
 }
 
 openr::thrift::PrefixAllocationConfig
 getPrefixAllocationConfig(openr::thrift::PrefixAllocationMode mode) {
   openr::thrift::PrefixAllocationConfig pfxAllocationConf;
-  pfxAllocationConf.prefix_allocation_mode = mode;
+  pfxAllocationConf.prefix_allocation_mode_ref() = mode;
   if (mode == openr::thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE) {
     pfxAllocationConf.seed_prefix_ref() =
         folly::IPAddress::networkToString(testSeedPrefix);
@@ -57,9 +57,9 @@ getPrefixAllocationConfig(openr::thrift::PrefixAllocationMode mode) {
 openr::thrift::AreaConfig
 getAreaConfig(const std::string& areaId) {
   openr::thrift::AreaConfig area;
-  area.area_id = areaId;
-  area.interface_regexes.emplace_back("fboss.*");
-  area.neighbor_regexes.emplace_back("rsw.*");
+  *area.area_id_ref() = areaId;
+  area.interface_regexes_ref()->emplace_back("fboss.*");
+  area.neighbor_regexes_ref()->emplace_back("rsw.*");
   return area;
 }
 
@@ -146,15 +146,15 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // duplicate area id
   {
     auto confInvalidArea = getBasicOpenrConfig();
-    confInvalidArea.areas.emplace_back(getAreaConfig("1"));
-    confInvalidArea.areas.emplace_back(getAreaConfig("1"));
+    confInvalidArea.areas_ref()->emplace_back(getAreaConfig("1"));
+    confInvalidArea.areas_ref()->emplace_back(getAreaConfig("1"));
     EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
   }
 
   // area config - empty neighbor and interfsace regexes
   {
     openr::thrift::AreaConfig area;
-    area.area_id = thrift::KvStore_constants::kDefaultArea();
+    *area.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
     std::vector<openr::thrift::AreaConfig> vec = {area};
     auto confInvalidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
@@ -163,8 +163,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty interface regex
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
-    areaConfig.interface_regexes.emplace_back("iface.*");
+    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.interface_regexes_ref()->emplace_back("iface.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
@@ -173,8 +173,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty neighbor regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
-    areaConfig.neighbor_regexes.emplace_back("fsw.*");
+    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
@@ -183,9 +183,9 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty neighbor and interface regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
-    areaConfig.interface_regexes.emplace_back("iface.*");
-    areaConfig.neighbor_regexes.emplace_back("fsw.*");
+    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.interface_regexes_ref()->emplace_back("iface.*");
+    areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
@@ -193,9 +193,9 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id = thrift::KvStore_constants::kDefaultArea();
-    areaConfig.interface_regexes.emplace_back("iface.*");
-    areaConfig.neighbor_regexes.emplace_back("fsw.*");
+    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+    areaConfig.interface_regexes_ref()->emplace_back("iface.*");
+    areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     Config cfg = Config(confValidArea);
@@ -214,8 +214,8 @@ TEST(ConfigTest, PopulateInternalDb) {
   // enable_ordered_fib_programming = true with multiple areas
   {
     auto confInvalid = getBasicOpenrConfig();
-    confInvalid.areas.emplace_back(getAreaConfig("1"));
-    confInvalid.areas.emplace_back(getAreaConfig("2"));
+    confInvalid.areas_ref()->emplace_back(getAreaConfig("1"));
+    confInvalid.areas_ref()->emplace_back(getAreaConfig("2"));
     confInvalid.enable_ordered_fib_programming_ref() = true;
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
@@ -223,8 +223,8 @@ TEST(ConfigTest, PopulateInternalDb) {
   // KSP2_ED_ECMP with IP
   {
     auto confInvalid = getBasicOpenrConfig();
-    confInvalid.prefix_forwarding_type = thrift::PrefixForwardingType::IP;
-    confInvalid.prefix_forwarding_algorithm =
+    confInvalid.prefix_forwarding_type_ref() = thrift::PrefixForwardingType::IP;
+    confInvalid.prefix_forwarding_algorithm_ref() =
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
@@ -232,7 +232,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   // RibPolicy
   {
     auto conf = getBasicOpenrConfig();
-    conf.enable_rib_policy = true;
+    conf.enable_rib_policy_ref() = true;
     EXPECT_TRUE(Config(conf).isRibPolicyEnabled());
   }
 
@@ -241,17 +241,21 @@ TEST(ConfigTest, PopulateInternalDb) {
   // flood_msg_per_sec <= 0
   {
     auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
-    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
-        ->flood_msg_per_sec = 0;
+    confInvalidFloodMsgPerSec.kvstore_config_ref()->flood_rate_ref() =
+        getFloodRate();
+    confInvalidFloodMsgPerSec.kvstore_config_ref()
+        ->flood_rate_ref()
+        ->flood_msg_per_sec_ref() = 0;
     EXPECT_THROW((Config(confInvalidFloodMsgPerSec)), std::out_of_range);
   }
   // flood_msg_burst_size <= 0
   {
     auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
-    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
-        ->flood_msg_burst_size = 0;
+    confInvalidFloodMsgPerSec.kvstore_config_ref()->flood_rate_ref() =
+        getFloodRate();
+    confInvalidFloodMsgPerSec.kvstore_config_ref()
+        ->flood_rate_ref()
+        ->flood_msg_burst_size_ref() = 0;
     EXPECT_THROW((Config(confInvalidFloodMsgPerSec)), std::out_of_range);
   }
 
@@ -260,55 +264,55 @@ TEST(ConfigTest, PopulateInternalDb) {
   // Exception: neighbor_discovery_port <= 0 or > 65535
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.neighbor_discovery_port = -1;
+    confInvalidSpark.spark_config_ref()->neighbor_discovery_port_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
 
-    confInvalidSpark.spark_config.neighbor_discovery_port = 65536;
+    confInvalidSpark.spark_config_ref()->neighbor_discovery_port_ref() = 65536;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: hello_time_s <= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.hello_time_s = -1;
+    confInvalidSpark.spark_config_ref()->hello_time_s_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: fastinit_hello_time_ms <= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.fastinit_hello_time_ms = -1;
+    confInvalidSpark.spark_config_ref()->fastinit_hello_time_ms_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: fastinit_hello_time_ms > hello_time_s
   {
     auto confInvalidSpark2 = getBasicOpenrConfig();
-    confInvalidSpark2.spark_config.fastinit_hello_time_ms = 10000;
-    confInvalidSpark2.spark_config.hello_time_s = 2;
+    confInvalidSpark2.spark_config_ref()->fastinit_hello_time_ms_ref() = 10000;
+    confInvalidSpark2.spark_config_ref()->hello_time_s_ref() = 2;
     EXPECT_THROW(auto c = Config(confInvalidSpark2), std::invalid_argument);
   }
 
   // Exception: keepalive_time_s <= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.keepalive_time_s = -1;
+    confInvalidSpark.spark_config_ref()->keepalive_time_s_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: keepalive_time_s > hold_time_s
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.keepalive_time_s = 10;
-    confInvalidSpark.spark_config.hold_time_s = 5;
+    confInvalidSpark.spark_config_ref()->keepalive_time_s_ref() = 10;
+    confInvalidSpark.spark_config_ref()->hold_time_s_ref() = 5;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
   // Exception: graceful_restart_time_s < 3 * keepalive_time_s
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.keepalive_time_s = 10;
-    confInvalidSpark.spark_config.graceful_restart_time_s = 20;
+    confInvalidSpark.spark_config_ref()->keepalive_time_s_ref() = 10;
+    confInvalidSpark.spark_config_ref()->graceful_restart_time_s_ref() = 20;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
@@ -318,13 +322,21 @@ TEST(ConfigTest, PopulateInternalDb) {
   //           step_detector_upper_threshold >= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.step_detector_conf.fast_window_size = -1;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->fast_window_size_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
-    confInvalidSpark.spark_config.step_detector_conf.slow_window_size = -1;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->slow_window_size_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
-    confInvalidSpark.spark_config.step_detector_conf.lower_threshold = -1;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->lower_threshold_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
-    confInvalidSpark.spark_config.step_detector_conf.upper_threshold = -1;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->upper_threshold_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
@@ -332,12 +344,20 @@ TEST(ConfigTest, PopulateInternalDb) {
   //           step_detector_lower_threshold > step_detector_upper_threshold
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config.step_detector_conf.fast_window_size = 10;
-    confInvalidSpark.spark_config.step_detector_conf.slow_window_size = 5;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->fast_window_size_ref() = 10;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->slow_window_size_ref() = 5;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
 
-    confInvalidSpark.spark_config.step_detector_conf.upper_threshold = 5;
-    confInvalidSpark.spark_config.step_detector_conf.lower_threshold = 10;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->upper_threshold_ref() = 5;
+    confInvalidSpark.spark_config_ref()
+        ->step_detector_conf_ref()
+        ->lower_threshold_ref() = 10;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
@@ -346,7 +366,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   // Exception monitor_max_event_log >= 0
   {
     auto confInvalidMon = getBasicOpenrConfig();
-    confInvalidMon.monitor_config.max_event_log = -1;
+    confInvalidMon.monitor_config_ref()->max_event_log_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidMon), std::out_of_range);
   }
 
@@ -355,45 +375,51 @@ TEST(ConfigTest, PopulateInternalDb) {
   // linkflap_initial_backoff_ms < 0
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config.linkflap_initial_backoff_ms = -1;
+    confInvalidLm.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() =
+        -1;
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
   // linkflap_max_backoff_ms < 0
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config.linkflap_max_backoff_ms = -1;
+    confInvalidLm.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = -1;
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
   // linkflap_initial_backoff_ms > linkflap_max_backoff_ms
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config.linkflap_initial_backoff_ms = 360000;
-    confInvalidLm.link_monitor_config.linkflap_max_backoff_ms = 300000;
+    confInvalidLm.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() =
+        360000;
+    confInvalidLm.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() =
+        300000;
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
 
   // invalid include_interface_regexes
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config = getTestLinkMonitorConfig();
-    confInvalidLm.link_monitor_config.include_interface_regexes.emplace_back(
-        "[0-9]++");
+    *confInvalidLm.link_monitor_config_ref() = getTestLinkMonitorConfig();
+    confInvalidLm.link_monitor_config_ref()
+        ->include_interface_regexes_ref()
+        ->emplace_back("[0-9]++");
     EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
   }
   //  invalid exclude_interface_regexes
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config = getTestLinkMonitorConfig();
-    confInvalidLm.link_monitor_config.exclude_interface_regexes.emplace_back(
-        "boom\\");
+    *confInvalidLm.link_monitor_config_ref() = getTestLinkMonitorConfig();
+    confInvalidLm.link_monitor_config_ref()
+        ->exclude_interface_regexes_ref()
+        ->emplace_back("boom\\");
     EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
   }
   //  invalid redistribute_interface_regexes
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config = getTestLinkMonitorConfig();
-    confInvalidLm.link_monitor_config.redistribute_interface_regexes
-        .emplace_back("*");
+    *confInvalidLm.link_monitor_config_ref() = getTestLinkMonitorConfig();
+    confInvalidLm.link_monitor_config_ref()
+        ->redistribute_interface_regexes_ref()
+        ->emplace_back("*");
     EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
   }
 
@@ -408,8 +434,8 @@ TEST(ConfigTest, PopulateInternalDb) {
   // enable_prefix_allocation = true with multiple areas
   {
     auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.areas.emplace_back(getAreaConfig("1"));
-    confInvalidPa.areas.emplace_back(getAreaConfig("2"));
+    confInvalidPa.areas_ref()->emplace_back(getAreaConfig("1"));
+    confInvalidPa.areas_ref()->emplace_back(getAreaConfig("2"));
     confInvalidPa.enable_prefix_allocation_ref() = true;
     confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
@@ -422,7 +448,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalidPa.enable_prefix_allocation_ref() = true;
     confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode =
+    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode_ref() =
         thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
     EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
@@ -433,7 +459,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalidPa.enable_prefix_allocation_ref() = true;
     confInvalidPa.prefix_allocation_config_ref() =
         thrift::PrefixAllocationConfig();
-    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode =
+    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode_ref() =
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
     EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
@@ -546,7 +572,7 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
 
     // getSparkConfig
-    EXPECT_EQ(tConfig.spark_config, config.getSparkConfig());
+    EXPECT_EQ(*tConfig.spark_config_ref(), config.getSparkConfig());
   }
 
   // config with bgp peering
@@ -597,7 +623,7 @@ TEST(ConfigTest, KvstoreGetter) {
 TEST(ConfigTest, LinkMonitorGetter) {
   auto tConfig = getBasicOpenrConfig();
   const auto& lmConf = getTestLinkMonitorConfig();
-  tConfig.link_monitor_config = lmConf;
+  *tConfig.link_monitor_config_ref() = lmConf;
   auto config = Config(tConfig);
 
   // getLinkMonitorConfig

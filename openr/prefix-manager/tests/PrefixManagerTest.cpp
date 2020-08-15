@@ -180,11 +180,11 @@ class PrefixManagerTestFixture : public testing::Test {
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             pkey.second.value_ref().value(), serializer);
         // skip prefixes marked for delete
-        if (!prefixDb.deletePrefix) {
+        if (!(*prefixDb.deletePrefix_ref())) {
           prefixEntries.insert(
               prefixEntries.begin(),
-              prefixDb.prefixEntries.begin(),
-              prefixDb.prefixEntries.end());
+              prefixDb.prefixEntries_ref()->begin(),
+              prefixDb.prefixEntries_ref()->end());
         }
       }
     }
@@ -300,7 +300,7 @@ TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
 
   // Verify that prefix type has to match for withdrawing prefix
   auto prefixEntryError = prefixEntry1;
-  prefixEntryError.type = thrift::PrefixType::PREFIX_ALLOCATOR;
+  prefixEntryError.type_ref() = thrift::PrefixType::PREFIX_ALLOCATOR;
 
   auto resp1 =
       prefixManager->withdrawPrefixes({prefixEntryError, prefixEntry2}).get();
@@ -330,7 +330,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   std::string keyStr{"prefix:node-1"};
   auto prefixKey = PrefixKey(
       "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
+      folly::IPAddress::createNetwork(toString(*prefixEntry1.prefix_ref())),
       thrift::KvStore_constants::kDefaultArea());
   keyStr = prefixKey.getPrefixKey();
 
@@ -349,16 +349,16 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         EXPECT_TRUE(maybeValue.has_value());
         db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        EXPECT_EQ(db.prefixEntries.size(), 1);
+        EXPECT_EQ(*db.thisNodeName_ref(), "node-1");
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
         ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
+        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
 
         {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
+          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
+          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
         }
 
         prefixManager->withdrawPrefixes({prefixEntry1}).get();
@@ -384,12 +384,12 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 1);
         ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
+        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
         {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
+          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
+          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
         }
       });
 
@@ -405,12 +405,12 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 8);
         ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
+        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
         {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
+          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
+          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
         }
         // now make a change and check again
         prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT)
@@ -429,12 +429,12 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 5);
         ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
+        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
         {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
+          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
+          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
         }
 
         // Synchronization primitive
@@ -508,15 +508,16 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
         ASSERT_TRUE(val.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             val->value_ref().value(), serializer);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        if (expectedPrefix.has_value() and db.prefixEntries.size() != 0) {
+        EXPECT_EQ(*db.thisNodeName_ref(), "node-1");
+        if (expectedPrefix.has_value() and
+            db.prefixEntries_ref()->size() != 0) {
           // we should always be advertising one prefix until we withdraw all
-          EXPECT_EQ(db.prefixEntries.size(), 1);
+          EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
           EXPECT_EQ(expectedPrefix, db.prefixEntries_ref()->at(0));
           gotExpected = true;
         } else {
-          EXPECT_TRUE(db.deletePrefix);
-          EXPECT_TRUE(db.prefixEntries.size() == 1);
+          EXPECT_TRUE(*db.deletePrefix_ref());
+          EXPECT_TRUE(db.prefixEntries_ref()->size() == 1);
         }
 
         // Signal verification
@@ -586,11 +587,11 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
 
   auto prefixKey1 = PrefixKey(
       "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
+      folly::IPAddress::createNetwork(toString(*prefixEntry1.prefix_ref())),
       thrift::KvStore_constants::kDefaultArea());
   auto prefixKey2 = PrefixKey(
       "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
+      folly::IPAddress::createNetwork(toString(*prefixEntry2.prefix_ref())),
       thrift::KvStore_constants::kDefaultArea());
 
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
@@ -609,7 +610,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
       });
 
   // add another key
@@ -628,12 +629,12 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
         prefixKeyStr = prefixKey2.getPrefixKey();
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        EXPECT_EQ(maybeValue2.value().version, 1);
+        EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
       });
 
   // withdraw prefixEntry2
@@ -652,7 +653,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
         // verify key is withdrawn
         prefixKeyStr = prefixKey2.getPrefixKey();
@@ -660,8 +661,8 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
         EXPECT_TRUE(maybeValue2.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value_ref().value(), serializer);
-        EXPECT_NE(db.prefixEntries.size(), 0);
-        EXPECT_TRUE(db.deletePrefix);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(*db.deletePrefix_ref());
 
         // Synchronization primitive
         waitBaton.post();
@@ -691,7 +692,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
       createPrefixEntry(toIpPrefix("5001::/64"), thrift::PrefixType::DEFAULT);
   auto prefixKey = PrefixKey(
       "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
+      folly::IPAddress::createNetwork(toString(*prefixEntry.prefix_ref())),
       thrift::KvStore_constants::kDefaultArea());
   prefixKeyStr = prefixKey.getPrefixKey();
 
@@ -711,17 +712,17 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
       [&]() noexcept {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        keyVersion = maybeValue.value().version;
+        keyVersion = *maybeValue.value().version_ref();
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        EXPECT_EQ(db.prefixEntries.size(), 1);
-        EXPECT_EQ(db.prefixEntries[0], prefixEntry);
+        EXPECT_EQ(*db.thisNodeName_ref(), "node-1");
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0], prefixEntry);
       });
 
   thrift::PrefixDatabase emptyPrefxDb;
-  emptyPrefxDb.thisNodeName = "node-1";
-  emptyPrefxDb.prefixEntries = {};
+  *emptyPrefxDb.thisNodeName_ref() = "node-1";
+  *emptyPrefxDb.prefixEntries_ref() = {};
   const auto emptyPrefxDbStr =
       fbzmq::util::writeThriftObjStr(emptyPrefxDb, serializer);
 
@@ -746,10 +747,10 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(maybeValue.value().version, keyVersion + 2);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        EXPECT_EQ(db.prefixEntries.size(), 1);
-        EXPECT_EQ(db.prefixEntries[0], prefixEntry);
+        EXPECT_EQ(*maybeValue.value().version_ref(), keyVersion + 2);
+        EXPECT_EQ(*db.thisNodeName_ref(), "node-1");
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0], prefixEntry);
       });
 
   // Clear key from prefix DB map, which will delete key from persistent
@@ -768,17 +769,17 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(maybeValue.value().version, keyVersion + 3);
-        EXPECT_EQ(db.thisNodeName, "node-1");
+        EXPECT_EQ(*maybeValue.value().version_ref(), keyVersion + 3);
+        EXPECT_EQ(*db.thisNodeName_ref(), "node-1");
         // delete prefix must be set to TRUE, applies only when per prefix key
         // is enabled
-        EXPECT_NE(db.prefixEntries.size(), 0);
-        EXPECT_TRUE(db.deletePrefix);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(*db.deletePrefix_ref());
       });
 
   thrift::PrefixDatabase nonEmptyPrefxDb;
-  nonEmptyPrefxDb.thisNodeName = "node-1";
-  nonEmptyPrefxDb.prefixEntries = {prefixEntry};
+  *nonEmptyPrefxDb.thisNodeName_ref() = "node-1";
+  *nonEmptyPrefxDb.prefixEntries_ref() = {prefixEntry};
   const auto nonEmptyPrefxDbStr =
       fbzmq::util::writeThriftObjStr(nonEmptyPrefxDb, serializer);
 
@@ -807,12 +808,12 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(maybeValue.value().version, staleKeyVersion + 1);
-        EXPECT_EQ(db.thisNodeName, "node-1");
+        EXPECT_EQ(*maybeValue.value().version_ref(), staleKeyVersion + 1);
+        EXPECT_EQ(*db.thisNodeName_ref(), "node-1");
         // delete prefix must be set to TRUE, applies only when per prefix key
         // is enabled
-        EXPECT_NE(db.prefixEntries.size(), 0);
-        EXPECT_TRUE(db.deletePrefix);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(*db.deletePrefix_ref());
 
         // Synchronization primitive
         waitBaton.post();
@@ -835,7 +836,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       &evl, "node-1", kvStoreWrapper->getKvStore());
 
   auto tConfig = getBasicOpenrConfig("node-2");
-  tConfig.kvstore_config.key_ttl_ms = ttl.count();
+  tConfig.kvstore_config_ref()->key_ttl_ms_ref() = ttl.count();
   auto config = std::make_shared<Config>(tConfig);
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
@@ -856,11 +857,11 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
 
   auto prefixKey1 = PrefixKey(
       "node-2",
-      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
+      folly::IPAddress::createNetwork(toString(*prefixEntry1.prefix_ref())),
       thrift::KvStore_constants::kDefaultArea());
   auto prefixKey2 = PrefixKey(
       "node-2",
-      folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
+      folly::IPAddress::createNetwork(toString(*prefixEntry2.prefix_ref())),
       thrift::KvStore_constants::kDefaultArea());
 
   // insert two prefixes
@@ -878,12 +879,12 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
         prefixKeyStr = prefixKey2.getPrefixKey();
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        EXPECT_EQ(maybeValue2.value().version, 1);
+        EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
       });
 
   // withdraw prefixEntry1
@@ -908,7 +909,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
         prefixKeyStr = prefixKey2.getPrefixKey();
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        EXPECT_EQ(maybeValue2.value().version, 1);
+        EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
 
         // Synchronization primitive
         waitBaton.post();
@@ -1062,8 +1063,8 @@ TEST(PrefixManagerTest, HoldTimeout) {
   EXPECT_GE(
       elapsedTime.count() + 10 /* error buffer */,
       std::chrono::duration_cast<std::chrono::milliseconds>(holdTime).count());
-  EXPECT_EQ(1, publication.keyVals.size());
-  EXPECT_EQ(1, publication.keyVals.count("prefix:node-1"));
+  EXPECT_EQ(1, publication.keyVals_ref()->size());
+  EXPECT_EQ(1, publication.keyVals_ref()->count("prefix:node-1"));
 
   // Stop the test
   prefixUpdatesQueue.close();
@@ -1182,8 +1183,8 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   {
     // Send update request in queue
     thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-    request.prefixes = {prefixEntry1, persistentPrefixEntry9};
+    request.cmd_ref() = thrift::PrefixUpdateCommand::ADD_PREFIXES;
+    *request.prefixes_ref() = {prefixEntry1, persistentPrefixEntry9};
     prefixUpdatesQueue.push(std::move(request));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
@@ -1200,7 +1201,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   {
     // Send update request in queue
     thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
+    request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
     request.type_ref() = thrift::PrefixType::BGP;
     prefixUpdatesQueue.push(std::move(request));
 
@@ -1217,9 +1218,9 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   {
     // Send update request in queue
     thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+    request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
     request.type_ref() = thrift::PrefixType::DEFAULT;
-    request.prefixes = {prefixEntry3};
+    *request.prefixes_ref() = {prefixEntry3};
     prefixUpdatesQueue.push(std::move(request));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
@@ -1235,8 +1236,8 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   {
     // Send update request in queue
     thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
-    request.prefixes = {prefixEntry3};
+    request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
+    *request.prefixes_ref() = {prefixEntry3};
     prefixUpdatesQueue.push(std::move(request));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
