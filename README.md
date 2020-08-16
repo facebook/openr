@@ -138,7 +138,7 @@ sudo python setup.py install
 
 ### Docker Building / Usage
 
-OpenR does not have a `Dockerfile`. It uses `gendeps.py` to build all dependencies + OpenR.
+OpenR does now has a `Dockerfile`. It uses `gendeps.py` to build all dependencies + OpenR.
 It also installs the OpenR CLI `breeze` into the container.
 
 ```console
