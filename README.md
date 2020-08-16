@@ -68,7 +68,7 @@ project. The `openr` directory contains the source for the project.
 ### Dependencies
 
 OpenR requires these dependencies for
-your system and  follows the traditional cmake build steps below.
+your system and follows the traditional cmake build steps below.
 
 * `cmake`
 * `gflags`
