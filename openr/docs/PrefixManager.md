@@ -47,6 +47,8 @@ In both cases, `PrefixManager` updates the PrefixDatabase advertised in
 
 ### Redistribute Prefix Workflow
 
+![RouteRedistributeLogic](https://user-images.githubusercontent.com/5740745/90441634-250fed00-e08e-11ea-90b5-d29c7e94e558.png)
+
 For a route update (pfx1, node1, area1) from `decisionRouteUpdatesQueue`,
 workflow is as follows:
 - run area1 egress policy
@@ -54,6 +56,9 @@ workflow is as follows:
 - run area2 ingress policy, if accepted => inject to area2.
 
 ## Selecting Unique Prefix Advertisement
+
+![RouteRedistributeLogicWithBgp](https://user-images.githubusercontent.com/5740745/90441674-3953ea00-e08e-11ea-99dc-5c0cc731dda8.png)
+
 A prefix can be requested to be advertised by multiple sources e.g. from
 configuration (originating route) or RIB (re-distributing route). However,
 only a single prefix information can be advertised to other nodes. We do so by
@@ -64,10 +69,10 @@ source is statically defined in code
 
 Let's take the same (pfx1, node1, area1) example:
 - pfx1 is redistributed into area2, (pfx1(`RIB`), me, area2)
-- pfx1 is originated with type `DEFAULT` (pfx1(`DEFAULT`), me, all)
+- pfx1 is originated with type `BGP` (pfx1(`BGP`), me, all)
 
 To decide which prefix entry openr should originate. We'll compare their
-attributes first, if they are the same, `DEFAULT`(2) win over `RIB`(6).
+attributes first, if they are the same, `BGP`(3) win over `RIB`(6).
 
 To conclude, attributes tie break happens in two places in openr:
 - in prefix Manager: same prefix of different typrs originated by me.
