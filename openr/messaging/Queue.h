@@ -119,9 +119,12 @@ class RWQueue {
   };
 
   /**
-   * Implementation for push
+   * Implementation for reading a pending or future data element.
+   *
+   * @returns true/false indicating if immediate read is performed
+   * @returns QUEUE_CLOSED error if queue is closed.
    */
-  bool getAnyImpl(PendingRead& pendingRead);
+  folly::Expected<bool, QueueError> getAnyImpl(PendingRead& pendingRead);
 
   // Lock to protect below private variables
   std::mutex lock_;

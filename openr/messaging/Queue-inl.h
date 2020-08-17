@@ -76,14 +76,16 @@ RWQueue<ValueType>::get() {
   PendingRead pendingRead;
 
   // Queue is closed
-  if (not getAnyImpl(pendingRead)) {
-    return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
+  auto maybeImmediateRead = getAnyImpl(pendingRead);
+  if (maybeImmediateRead.hasError()) {
+    return folly::makeUnexpected(maybeImmediateRead.error());
   }
 
   // Post our own baton if read is immediate (for)
   // XXX: This will evenly distribute elements between readers when queue
   // and also ensures fiber-fairness
-  if (pendingRead.data) {
+  if (maybeImmediateRead.value()) {
+    CHECK(pendingRead.data);
     pendingRead.baton.post();
   }
 
@@ -102,12 +104,14 @@ RWQueue<ValueType>::getCoro() {
   PendingRead pendingRead;
 
   // Queue is closed
-  if (not getAnyImpl(pendingRead)) {
-    co_return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
+  auto maybeImmediateRead = getAnyImpl(pendingRead);
+  if (maybeImmediateRead.hasError()) {
+    co_return folly::makeUnexpected(maybeImmediateRead.error());
   }
 
   // Wait if there is no data
-  if (pendingRead.data) {
+  if (maybeImmediateRead.value()) {
+    CHECK(pendingRead.data);
     pendingRead.baton.post();
   }
 
@@ -121,13 +125,13 @@ RWQueue<ValueType>::getCoro() {
 #endif
 
 template <typename ValueType>
-bool
+folly::Expected<bool, QueueError>
 RWQueue<ValueType>::getAnyImpl(PendingRead& pendingRead) {
   std::lock_guard<std::mutex> l(lock_);
 
   // If queue is closed, return immediately
   if (closed_) {
-    return false;
+    return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
   }
 
   // Perform immediate read if data is available
@@ -139,7 +143,7 @@ RWQueue<ValueType>::getAnyImpl(PendingRead& pendingRead) {
 
   // Else enqueue read request
   pendingReads_.emplace_back(pendingRead);
-  return true;
+  return false;
 }
 
 template <typename ValueType>
