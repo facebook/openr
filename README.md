@@ -68,7 +68,7 @@ project. The `openr` directory contains the source for the project.
 ### Dependencies
 
 OpenR requires these dependencies for
-your system and follow the traditional cmake build steps below.
+your system and follows the traditional cmake build steps below.
 
 * `cmake`
 * `gflags`
@@ -138,7 +138,7 @@ sudo python setup.py install
 
 ### Docker Building / Usage
 
-OpenR not has a `Dockerfile`. It uses `gendeps.py` to build all dependencies + OpenR.
+OpenR now has a `Dockerfile`. It uses `gendeps.py` to build all dependencies + OpenR.
 It also installs the OpenR CLI `breeze` into the container.
 
 ```console
