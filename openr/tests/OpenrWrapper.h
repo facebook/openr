@@ -19,7 +19,7 @@
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
-#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
+#include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <openr/watchdog/Watchdog.h>
 
 namespace openr {
@@ -134,7 +134,7 @@ class OpenrWrapper {
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
 
   // mocked version of netlink system handler
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_{nullptr};
+  std::shared_ptr<NetlinkEventsInjector> nlEventsInjector_{nullptr};
 
   // IpPrefix
   folly::Synchronized<std::optional<thrift::IpPrefix>> ipPrefix_;

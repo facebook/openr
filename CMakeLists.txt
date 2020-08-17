@@ -552,7 +552,7 @@ if(BUILD_TESTS)
       openr/tests/OpenrSystemTest.cpp
       openr/tests/OpenrWrapper.cpp
       openr/tests/mocks/MockIoProvider.cpp
-      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
     LIBRARIES
       fbzmq::fbzmq
       ${ZMQ}
@@ -573,7 +573,7 @@ if(BUILD_TESTS)
   add_openr_test(PrefixAllocatorTest prefix_allocator_test
     SOURCES
       openr/allocators/tests/PrefixAllocatorTest.cpp
-      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
     DESTINATION sbin/tests/openr/allocators
   )
 
@@ -586,7 +586,7 @@ if(BUILD_TESTS)
   add_openr_test(OpenrCtrlHandlerTest openr_ctrl_handler_test
     SOURCES
       openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
-      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
@@ -684,7 +684,7 @@ if(BUILD_TESTS)
  add_openr_test(LinkMonitorTest link_monitor_test
     SOURCES
       openr/link-monitor/tests/LinkMonitorTest.cpp
-      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
     DESTINATION sbin/tests/openr/link-monitor
   )
 

@@ -27,7 +27,7 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
-#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
+#include <openr/tests/mocks/NetlinkEventsInjector.h>
 
 using namespace std;
 using namespace openr;
@@ -181,14 +181,14 @@ class LinkMonitorTestFixture : public ::testing::Test {
       std::chrono::milliseconds flapInitalBackoff =
           std::chrono::milliseconds(1),
       std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
-    // Cleanup any existing config file on disk
+    // cleanup any existing config file on disk
     system(folly::sformat("rm -rf {}", kConfigStorePath).c_str());
 
-    // create fakeNetlinkProtocolSocket
+    // create MockNetlinkProtocolSocket
     nlSock = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&nlEvb_);
 
-    // Setup system service by using MockSystemHandler
-    mockNlHandler = std::make_shared<MockNetlinkSystemHandler>(nlSock.get());
+    // spin up netlinkEventsInjector to inject LINK/ADDR events
+    nlEventsInjector = std::make_shared<NetlinkEventsInjector>(nlSock.get());
 
     // spin up a config store
     configStore =
@@ -268,7 +268,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // stop mocked nl platform
     LOG(INFO) << "Stopping mocked thrift handlers";
-    mockNlHandler.reset();
+    nlEventsInjector.reset();
     nlSock.reset();
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
@@ -566,7 +566,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   std::unique_ptr<std::thread> prefixManagerThread;
 
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler;
+  std::shared_ptr<NetlinkEventsInjector> nlEventsInjector;
 
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;
   std::map<std::string, thrift::InterfaceInfo> sparkIfDb;
@@ -648,7 +648,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
     {
       // create an interface
-      mockNlHandler->sendLinkEvent("iface_2_1", 100, true);
+      nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
       recvAndReplyIfUpdate();
     }
 
@@ -1264,11 +1264,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
 
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
@@ -1295,11 +1295,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
   // Bringing up the interface
   VLOG(2) << "*** bring up 2 interfaces ***";
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       true /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
@@ -1317,12 +1317,12 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
   VLOG(2) << "*** bring down 2 interfaces ***";
   auto linkDownTs = std::chrono::steady_clock::now();
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
   recvAndReplyIfUpdate(); // Update will be sent immediately within 1ms
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
@@ -1355,11 +1355,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   }
 
   VLOG(2) << "*** bring up 2 interfaces ***";
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       true /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
@@ -1399,12 +1399,12 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   // Bringing down the interfaces
   VLOG(2) << "*** bring down 2 interfaces ***";
   linkDownTs = std::chrono::steady_clock::now();
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
   recvAndReplyIfUpdate(); // Update will be sent immediately within 1ms
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
@@ -1443,11 +1443,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
   // Bringing up the interfaces
   VLOG(2) << "*** bring up 2 interfaces ***";
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       true /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
@@ -1497,12 +1497,12 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
 
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
   recvAndReplyIfUpdate();
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
@@ -1528,12 +1528,12 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
   });
 
   // Emulate a link up event publication
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
   recvAndReplyIfUpdate();
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       true /* is up */);
@@ -1562,11 +1562,11 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
 
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
@@ -1590,20 +1590,20 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
     }
   });
 
-  mockNlHandler->sendAddrEvent(linkX, "10.0.0.1/31", true /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "10.0.0.2/31", true /* is valid */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendAddrEvent(linkX, "10.0.0.1/31", true /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkY, "10.0.0.2/31", true /* is valid */);
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       true /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
   // Emulate add address event: v6 while interfaces are in UP state. Both
   // v4 and v6 addresses should be reported.
-  mockNlHandler->sendAddrEvent(linkX, "fe80::1/128", true /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "fe80::2/128", true /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkX, "fe80::1/128", true /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkY, "fe80::2/128", true /* is valid */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
@@ -1622,8 +1622,8 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   });
 
   // Emulate delete address event: v4
-  mockNlHandler->sendAddrEvent(linkX, "10.0.0.1/31", false /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "10.0.0.2/31", false /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkX, "10.0.0.1/31", false /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkY, "10.0.0.2/31", false /* is valid */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
@@ -1642,8 +1642,8 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   });
 
   // Emulate delete address event: v6
-  mockNlHandler->sendAddrEvent(linkX, "fe80::1/128", false /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "fe80::2/128", false /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkX, "fe80::1/128", false /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkY, "fe80::2/128", false /* is valid */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
@@ -1670,12 +1670,12 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   const std::string linkZ = kTestVethNamePrefix + "Z";
 
   // Link event comes in later - FixMe
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkZ /* link name */,
       kTestVethIfIndex.at(2) /* ifIndex */,
       true /* is up */);
   // Addr event comes in first - FixMe
-  mockNlHandler->sendAddrEvent(linkZ, "fe80::3/128", true /* is valid */);
+  nlEventsInjector->sendAddrEvent(linkZ, "fe80::3/128", true /* is valid */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
@@ -1692,15 +1692,15 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   });
 
   // Link goes down
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
-  mockNlHandler->sendLinkEvent(
+  nlEventsInjector->sendLinkEvent(
       linkZ /* link name */,
       kTestVethIfIndex[2] /* ifIndex */,
       false /* is up */);
@@ -1819,20 +1819,22 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   // Send link up event
   // Advertise some dummy and wrong prefixes
   //
-  mockNlHandler->sendLinkEvent("loopback", 101, true);
+  nlEventsInjector->sendLinkEvent("loopback", 101, true);
 
   // push some invalid loopback addresses
-  mockNlHandler->sendAddrEvent("loopback", "fe80::1/128", true);
-  mockNlHandler->sendAddrEvent("loopback", "fe80::2/64", true);
+  nlEventsInjector->sendAddrEvent("loopback", "fe80::1/128", true);
+  nlEventsInjector->sendAddrEvent("loopback", "fe80::2/64", true);
 
   // push some valid loopback addresses
-  mockNlHandler->sendAddrEvent("loopback", "10.127.240.1/32", true);
-  mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/128", true);
-  mockNlHandler->sendAddrEvent("loopback", "2803:cafe:babe::1/128", true);
+  nlEventsInjector->sendAddrEvent("loopback", "10.127.240.1/32", true);
+  nlEventsInjector->sendAddrEvent(
+      "loopback", "2803:6080:4958:b403::1/128", true);
+  nlEventsInjector->sendAddrEvent("loopback", "2803:cafe:babe::1/128", true);
 
   // push some valid interface addresses with subnet
-  mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", true);
-  mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", true);
+  nlEventsInjector->sendAddrEvent("loopback", "10.128.241.1/24", true);
+  nlEventsInjector->sendAddrEvent(
+      "loopback", "2803:6080:4958:b403::1/64", true);
 
   // Get interface updates
   recvAndReplyIfUpdate(); // coalesced updates by throttling
@@ -1859,12 +1861,13 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   //
 
   // withdraw some addresses
-  mockNlHandler->sendAddrEvent("loopback", "10.127.240.1/32", false);
-  mockNlHandler->sendAddrEvent("loopback", "2803:cafe:babe::1/128", false);
+  nlEventsInjector->sendAddrEvent("loopback", "10.127.240.1/32", false);
+  nlEventsInjector->sendAddrEvent("loopback", "2803:cafe:babe::1/128", false);
 
   // withdraw addresses with subnet
-  mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", false);
-  mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", false);
+  nlEventsInjector->sendAddrEvent("loopback", "10.128.241.1/24", false);
+  nlEventsInjector->sendAddrEvent(
+      "loopback", "2803:6080:4958:b403::1/64", false);
 
   // Get interface updates
   const auto startTs = std::chrono::steady_clock::now();
@@ -1900,7 +1903,7 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   // Send link down event
   //
 
-  mockNlHandler->sendLinkEvent("loopback", 101, false);
+  nlEventsInjector->sendLinkEvent("loopback", 101, false);
   recvAndReplyIfUpdate();
 
   //
@@ -2035,7 +2038,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
   {
     InSequence dummy;
 
-    mockNlHandler->sendLinkEvent("iface_2_1", 100, true);
+    nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
     recvAndReplyIfUpdate();
     // expect neighbor up first
     // node-2 neighbor up in iface_2_1
@@ -2057,7 +2060,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
 
     // bring up iface3_1, neighbor up event in plane area. Adj db in "plane"
     // area should contain only 'adj_3_1'
-    mockNlHandler->sendLinkEvent("iface_3_1", 100, true);
+    nlEventsInjector->sendLinkEvent("iface_3_1", 100, true);
     recvAndReplyIfUpdate();
     adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, "plane");
     expectedAdjDbs.push(std::move(adjDb));

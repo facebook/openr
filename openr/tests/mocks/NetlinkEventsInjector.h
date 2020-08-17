@@ -13,18 +13,19 @@
 namespace openr {
 
 /**
- * This class implements Netlink Platform thrift interface for programming
- * NetlinkEvent Publisher as well as System Service on linux platform.
+ * This class serves as a wrapper to inject netlink events to
+ * MockNetlinkProtocolSocket inside UT environment to mimick
+ * netlink events happening.
  */
 
-class MockNetlinkSystemHandler {
+class NetlinkEventsInjector {
  public:
-  explicit MockNetlinkSystemHandler(fbnl::MockNetlinkProtocolSocket* nlSock);
+  explicit NetlinkEventsInjector(fbnl::MockNetlinkProtocolSocket* nlSock);
 
-  ~MockNetlinkSystemHandler() = default;
+  ~NetlinkEventsInjector() = default;
 
-  MockNetlinkSystemHandler(const MockNetlinkSystemHandler&) = delete;
-  MockNetlinkSystemHandler& operator=(const MockNetlinkSystemHandler&) = delete;
+  NetlinkEventsInjector(const NetlinkEventsInjector&) = delete;
+  NetlinkEventsInjector& operator=(const NetlinkEventsInjector&) = delete;
 
   void getAllLinks(std::vector<thrift::Link>& linkDb);
 

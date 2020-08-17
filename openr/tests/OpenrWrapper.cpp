@@ -80,8 +80,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   folly::EventBase evb;
   nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
 
-  // create MockSystemHandler
-  mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
+  // create netlinkEventInjector
+  nlEventsInjector_ = std::make_shared<NetlinkEventsInjector>(nlSock_.get());
 
   // create zmq monitor
   monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
@@ -250,7 +250,7 @@ OpenrWrapper<Serializer>::run() {
     // mimick nlSock to generate LINK event
     // ATTN: LinkMonitor will be notified as it holds the reader queue
     //       from the same MockNetlinkProtocolSocket
-    mockNlHandler_->sendLinkEvent(
+    nlEventsInjector_->sendLinkEvent(
         "vethLMTest_" + nodeId_, /* ifName */
         5, /* ifIndex */
         true /* isUp */);
@@ -380,8 +380,8 @@ OpenrWrapper<Serializer>::stop() {
     t.join();
   }
 
-  // destroy netlink system handler
-  mockNlHandler_.reset();
+  // destroy netlink related objects
+  nlEventsInjector_.reset();
   nlSock_.reset();
   LOG(INFO) << "OpenR with nodeId: " << nodeId_ << " stopped";
 }

@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
+#include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <glog/logging.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/nl/NetlinkTypes.h>
@@ -14,16 +14,14 @@ extern "C" {
 #include <net/if.h>
 }
 
-using apache::thrift::FRAGILE;
-
 namespace openr {
 
-MockNetlinkSystemHandler::MockNetlinkSystemHandler(
+NetlinkEventsInjector::NetlinkEventsInjector(
     fbnl::MockNetlinkProtocolSocket* nlSock)
     : nlSock_(nlSock) {}
 
 void
-MockNetlinkSystemHandler::getAllLinks(std::vector<thrift::Link>& linkDb) {
+NetlinkEventsInjector::getAllLinks(std::vector<thrift::Link>& linkDb) {
   VLOG(3) << "Query links from Netlink according to link name";
   SYNCHRONIZED(linkDb_) {
     for (const auto link : linkDb_) {
@@ -32,16 +30,15 @@ MockNetlinkSystemHandler::getAllLinks(std::vector<thrift::Link>& linkDb) {
       linkEntry.ifIndex_ref() = link.second.ifIndex;
       linkEntry.isUp_ref() = link.second.isUp;
       for (const auto network : link.second.networks) {
-        linkEntry.networks_ref()->push_back(thrift::IpPrefix(
-            FRAGILE, toBinaryAddress(network.first), network.second));
+        linkEntry.networks_ref()->emplace_back(toIpPrefix(network));
       }
-      linkDb.push_back(linkEntry);
+      linkDb.emplace_back(linkEntry);
     }
   }
 }
 
 void
-MockNetlinkSystemHandler::sendLinkEvent(
+NetlinkEventsInjector::sendLinkEvent(
     const std::string& ifName, const uint64_t ifIndex, const bool isUp) {
   // Update linkDb_
   SYNCHRONIZED(linkDb_) {
@@ -66,7 +63,7 @@ MockNetlinkSystemHandler::sendLinkEvent(
 }
 
 void
-MockNetlinkSystemHandler::sendAddrEvent(
+NetlinkEventsInjector::sendAddrEvent(
     const std::string& ifName, const std::string& prefix, const bool isValid) {
   const auto ipNetwork = folly::IPAddress::createNetwork(prefix, -1, false);
 
@@ -83,7 +80,7 @@ MockNetlinkSystemHandler::sendAddrEvent(
   }
 
   // Send event to NetlinkProtocolSocket
-  CHECK(ifIndex.has_value()) << "Uknown interface";
+  CHECK(ifIndex.has_value()) << "Unknown interface";
   fbnl::IfAddressBuilder builder;
   builder.setIfIndex(ifIndex.value());
   builder.setPrefix(ipNetwork);

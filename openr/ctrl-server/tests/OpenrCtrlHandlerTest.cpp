@@ -24,7 +24,7 @@
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
-#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
+#include <openr/tests/mocks/NetlinkEventsInjector.h>
 
 using namespace openr;
 
@@ -1576,10 +1576,10 @@ TEST_F(
 
 TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   // create an interface
-  auto mockNlHandler_ =
-      std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
+  auto nlEventsInjector =
+      std::make_shared<NetlinkEventsInjector>(nlSock_.get());
 
-  mockNlHandler_->sendLinkEvent("po1011", 100, true);
+  nlEventsInjector->sendLinkEvent("po1011", 100, true);
   const std::string ifName = "po1011";
   const std::string adjName = "night@king";
 
