@@ -402,8 +402,11 @@ NetlinkProtocolSocket::processMessage(
         VLOG(2) << "Netlink neighbor event. " << neighbor.str();
         fbData->addStatValue("netlink.notifications.neighbor", 1, fb303::SUM);
         if (neighborEventCB_) {
-          neighborEventCB_(std::move(neighbor), true);
+          neighborEventCB_(neighbor, true);
         }
+
+        // notification via replicateQueue
+        netlinkEventsQueue_.push(neighbor);
       }
     } break;
 

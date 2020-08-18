@@ -641,10 +641,10 @@ TEST(NetlinkProtocolSocket, SafeDestruction) {
 }
 
 /*
- * Spawn RQueue of platformUpdateRequest to verify:
- *  1) link DOWN events are populated through replicate queue;
- *  2) RQueue spawned can receive requests from different interfaces;
- *  3) attributes like ifName/isUp/weight is correct;
+ * Spawn RQueue of `NetlinkEvent` to verify:
+ *  1) LINK_EVENT(DOWN) is populated through replicate queue;
+ *  2) RQueue can receive updates from different interfaces;
+ *  3) verify attributes: ifName/isUp/weight/ifIndex;
  */
 TEST_F(NlMessageFixture, LinkEventPublication) {
   // Spawn RQueue to receive platformUpdate request
@@ -679,10 +679,10 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
 }
 
 /*
- * Spawn RQueue of platformUpdateRequest to verify:
- *  1) address ADD events are populated through replicate queue;
- *  2) RQueue spawned can receive requests from different interfaces;
- *  3) attributes is correct by cross reference between:
+ * Spawn RQueue of `NetlinkEvent` to verify:
+ *  1) ADDR_EVENT(ADD) is populated through replicate queue;
+ *  2) RQueue can receive updates from different interfaces;
+ *  3) verify attributes by cross-reference between:
  *      [ifName => openr::fbnl::IfAddress]
  *      and
  *      [ifIndex => ifName]
@@ -692,6 +692,8 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   auto netlinkEventsReader = netlinkEventsQ.getReader();
   std::unordered_map<int64_t, std::string> ifIndexToName;
   std::unordered_map<std::string, openr::fbnl::IfAddress> addrEntryMap;
+
+  // build CIDRNetwork addresses
   uint64_t prefixLen = 64;
   std::string prefixX = "fe80::303";
   std::string prefixY = "fe80::404";
@@ -736,6 +738,53 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
 
   // verify ifIndex is different for different veth interface
   EXPECT_NE(addrEntryX.getIfIndex(), addrEntryY.getIfIndex());
+}
+
+/*
+ * Spawn RQueue of `NetlinkEvent` to verify:
+ *  1) NEIGHBOR_EVENT(ADD) is populated through replicate queue;
+ *  2) RQueue can receive updates of different address family;
+ *  3) verify attributes: family/isReachable/link-address/ifIndex;
+ */
+TEST_F(NlMessageFixture, NeighborEventPublication) {
+  // spawn RQueue to receive platformUpdate request for neigh event
+  auto netlinkEventsReader = netlinkEventsQ.getReader();
+  std::unordered_map<int, openr::fbnl::Neighbor> neighEntryMap;
+  const folly::IPAddress addressV4{"172.8.0.1"};
+  const folly::IPAddress addressV6{"face:b00c::1"};
+
+  // add new neighbor entry associated with MAC address
+  addV4NeighborEntry(kVethNameX, addressV4, kLinkAddr1);
+  addNeighborEntry(kVethNameX, addressV6, kLinkAddr2);
+
+  while (neighEntryMap.size() < 2) {
+    auto req = netlinkEventsReader.get(); // perform read
+    ASSERT_TRUE(req.hasValue());
+    // get_if returns `nullptr` of targeted variant is NOT populated
+    if (auto* neigh = std::get_if<openr::fbnl::Neighbor>(&req.value())) {
+      // mapping of [AF_INET/AF_INET6 => neigh]
+      neighEntryMap.emplace(neigh->getFamily(), *neigh);
+    }
+  }
+  ASSERT_TRUE(neighEntryMap.count(AF_INET));
+  ASSERT_TRUE(neighEntryMap.count(AF_INET6));
+
+  // verify V4 entry(ARP entry)
+  auto neighV4 = neighEntryMap.at(AF_INET);
+  EXPECT_EQ(neighV4.getDestination(), addressV4);
+  EXPECT_EQ(neighV4.isReachable(), true);
+  ASSERT_TRUE(neighV4.getLinkAddress().has_value());
+  EXPECT_EQ(neighV4.getLinkAddress().value(), kLinkAddr1);
+
+  // verify V6 entry(NEIGHBOR entry)
+  auto neighV6 = neighEntryMap.at(AF_INET6);
+  EXPECT_EQ(neighV6.getDestination(), addressV6);
+  EXPECT_EQ(neighV6.isReachable(), true);
+  ASSERT_TRUE(neighV6.getLinkAddress().has_value());
+  EXPECT_EQ(neighV6.getLinkAddress().value(), kLinkAddr2);
+
+  // verify ifIndex is SAME for same veth interface
+  EXPECT_EQ(neighV4.getIfIndex(), neighV6.getIfIndex());
 }
 
 TEST_F(NlMessageFixture, IpRouteSingleNextHop) {

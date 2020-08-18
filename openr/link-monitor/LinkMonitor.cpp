@@ -227,7 +227,7 @@ LinkMonitor::LinkMonitor(
     while (true) {
       auto maybeEvent = q.get();
       if (maybeEvent.hasError()) {
-        LOG(INFO) << "Terminating neighbor update processing fiber";
+        LOG(INFO) << "Terminating netlink events processing fiber";
         break;
       }
       processNetlinkEvent(std::move(maybeEvent).value());
