@@ -230,6 +230,154 @@ TEST_P(LoopbackTestWithParam, AddRemoveLoopbackV4orV6) {
 
 INSTANTIATE_TEST_CASE_P(LoopbackTest, LoopbackTestWithParam, ::testing::Bool());
 
+/**
+ * Verifies `getReceivedRoutesFiltered` with all filter combinations
+ */
+TEST(PrefixState, GetReceivedRoutes) {
+  PrefixState state;
+
+  //
+  // Add prefix entries
+  // prefix1 -> (node0, area0), (node0, area1), (node1, area1)
+  //
+  const auto prefixEntry = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  state.updatePrefixDatabase(createPrefixDb("node0", {prefixEntry}, "area0"));
+  state.updatePrefixDatabase(createPrefixDb("node0", {prefixEntry}, "area1"));
+  state.updatePrefixDatabase(createPrefixDb("node1", {prefixEntry}, "area1"));
+
+  thrift::NodeAndArea bestKey;
+  bestKey.node_ref() = "node0";
+  bestKey.area_ref() = "area0";
+
+  //
+  // Empty filter
+  //
+  {
+    thrift::ReceivedRouteFilter filter;
+    auto routes = state.getReceivedRoutesFiltered(filter);
+    ASSERT_EQ(1, routes.size());
+
+    auto& routeDetail = routes.at(0);
+    EXPECT_EQ(*prefixEntry.prefix_ref(), *routeDetail.prefix_ref());
+    EXPECT_EQ(bestKey, *routeDetail.bestKey_ref());
+    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(3, routeDetail.routes_ref()->size());
+  }
+
+  //
+  // Filter on prefix
+  //
+  {
+    thrift::ReceivedRouteFilter filter;
+    filter.prefixes_ref() =
+        std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
+
+    auto routes = state.getReceivedRoutesFiltered(filter);
+    ASSERT_EQ(1, routes.size());
+
+    auto& routeDetail = routes.at(0);
+    EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
+    EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
+    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(3, routeDetail.routes_ref()->size());
+  }
+
+  //
+  // Filter on non-existing prefix
+  //
+  {
+    thrift::ReceivedRouteFilter filter;
+    filter.prefixes_ref() =
+        std::vector<thrift::IpPrefix>({toIpPrefix("11.0.0.0/8")});
+
+    auto routes = state.getReceivedRoutesFiltered(filter);
+    EXPECT_EQ(0, routes.size());
+  }
+
+  //
+  // Filter with empty prefix list. Should return empty list
+  //
+  {
+    thrift::ReceivedRouteFilter filter;
+    filter.prefixes_ref() = std::vector<thrift::IpPrefix>();
+
+    filter.prefixes_ref()->clear();
+    auto routes = state.getReceivedRoutesFiltered(filter);
+    EXPECT_EQ(0, routes.size());
+  }
+
+  //
+  // Filter on the prefix and node-name
+  //
+  {
+    thrift::ReceivedRouteFilter filter;
+    filter.prefixes_ref() =
+        std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
+    filter.nodeName_ref() = "node1";
+
+    auto routes = state.getReceivedRoutesFiltered(filter);
+    ASSERT_EQ(1, routes.size());
+
+    auto& routeDetail = routes.at(0);
+    EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
+    EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
+    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    ASSERT_EQ(1, routeDetail.routes_ref()->size());
+
+    auto& route = routeDetail.routes_ref()->at(0);
+    EXPECT_EQ("node1", route.key_ref()->node_ref().value());
+    EXPECT_EQ("area1", route.key_ref()->area_ref().value());
+  }
+
+  //
+  // Filter on the area-name
+  //
+  {
+    thrift::ReceivedRouteFilter filter;
+    filter.areaName_ref() = "area0";
+
+    auto routes = state.getReceivedRoutesFiltered(filter);
+    ASSERT_EQ(1, routes.size());
+
+    auto& routeDetail = routes.at(0);
+    EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
+    EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
+    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    ASSERT_EQ(1, routeDetail.routes_ref()->size());
+
+    auto& route = routeDetail.routes_ref()->at(0);
+    EXPECT_EQ("node0", route.key_ref()->node_ref().value());
+    EXPECT_EQ("area0", route.key_ref()->area_ref().value());
+  }
+
+  //
+  // Filter on unknown area or node
+  //
+  {
+    thrift::ReceivedRouteFilter filter;
+    filter.areaName_ref() = "unknown";
+
+    auto routes = state.getReceivedRoutesFiltered(filter);
+    ASSERT_EQ(0, routes.size());
+  }
+}
+
+/**
+ * Verifies the test case with empty entries. Other cases are exercised above
+ */
+TEST(PrefixState, FilterReceivedRoutes) {
+  std::vector<thrift::ReceivedRouteDetail> routes;
+  PrefixEntries prefixEntries;
+  thrift::ReceivedRouteFilter filter;
+  PrefixState::filterAndAddReceivedRoute(
+      routes,
+      filter.nodeName_ref(),
+      filter.areaName_ref(),
+      thrift::IpPrefix(),
+      prefixEntries);
+  EXPECT_TRUE(routes.empty());
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

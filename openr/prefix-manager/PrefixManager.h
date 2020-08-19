@@ -32,6 +32,8 @@ namespace openr {
 
 class PrefixManager final : public OpenrEventBase {
  public:
+  struct PrefixEntry; // Forward declaration
+
   PrefixManager(
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
       messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
@@ -86,7 +88,18 @@ class PrefixManager final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
   getPrefixesByType(thrift::PrefixType prefixType);
 
- private:
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
+  getAdvertisedRoutesFiltered(thrift::AdvertisedRouteFilter filter);
+
+  /**
+   * Filter routes only the <type> attribute
+   */
+  static void filterAndAddAdvertisedRoute(
+      std::vector<thrift::AdvertisedRouteDetail>& routes,
+      apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
+      thrift::IpPrefix const& prefix,
+      std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries);
+
   // prefix entry with their destination areas
   // if dstAreas become empty, entry should be withdrawn
   struct PrefixEntry {
@@ -110,6 +123,7 @@ class PrefixManager final : public OpenrEventBase {
     }
   };
 
+ private:
   /*
    * Private helpers to update prefixMap_ and send prefixes to KvStore
    *

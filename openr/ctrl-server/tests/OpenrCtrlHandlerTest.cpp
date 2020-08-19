@@ -296,6 +296,12 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
         res, thrift::PrefixType::LOOPBACK);
     EXPECT_EQ(0, res.size());
   }
+
+  {
+    std::vector<thrift::AdvertisedRouteDetail> routes;
+    openrCtrlThriftClient_->sync_getAdvertisedRoutes(routes);
+    EXPECT_EQ(1, routes.size());
+  }
 }
 
 TEST_F(OpenrCtrlFixture, RouteApis) {
@@ -366,6 +372,12 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
     thrift::PrefixDbs db;
     openrCtrlThriftClient_->sync_getDecisionPrefixDbs(db);
     EXPECT_EQ(0, db.size());
+  }
+
+  {
+    std::vector<thrift::ReceivedRouteDetail> routes;
+    openrCtrlThriftClient_->sync_getReceivedRoutes(routes);
+    EXPECT_EQ(0, routes.size());
   }
 }
 

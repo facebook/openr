@@ -333,6 +333,12 @@ class Decision : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>> getDecisionPrefixDbs();
 
   /*
+   * Retrieve received routes along with best route selection output.
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
+  getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter);
+
+  /*
    * Set new or replace existing RibPolicy. This will trigger the new policy
    * run against computed routes and delta will be published.
    */

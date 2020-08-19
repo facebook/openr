@@ -16,6 +16,7 @@
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 
 namespace openr {
 
@@ -51,7 +52,25 @@ class PrefixState {
     return nodeHostLoopbacksV6_;
   }
 
+  std::vector<thrift::ReceivedRouteDetail> getReceivedRoutesFiltered(
+      thrift::ReceivedRouteFilter const& filter) const;
+
+  /**
+   * Filter routes only the <type> attribute
+   */
+  static void filterAndAddReceivedRoute(
+      std::vector<thrift::ReceivedRouteDetail>& routes,
+      apache::thrift::optional_field_ref<const std::string&> const& nodeFilter,
+      apache::thrift::optional_field_ref<const std::string&> const& areaFilter,
+      thrift::IpPrefix const& prefix,
+      PrefixEntries const& prefixEntries);
+
  private:
+  // TODO: Also maintain clean list of reachable prefix entries. A node might
+  // become un-reachable we might still have their prefix entries, until gets
+  // expired in KvStore. This will simplify logic in route computation where
+  // we exclude unreachable nodes.
+
   // TODO: Maintain shared_ptr for `thrift::PrefixEntry` within
   // `PrefixEntries` to avoid data-copy for best metric selection and
   // route re-distribution

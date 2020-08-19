@@ -459,6 +459,74 @@ PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
   return sf;
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
+PrefixManager::getAdvertisedRoutesFiltered(
+    thrift::AdvertisedRouteFilter filter) {
+  auto [p, sf] = folly::makePromiseContract<
+      std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>();
+  runInEventBaseThread(
+      [this, p = std::move(p), filter = std::move(filter)]() mutable noexcept {
+        auto routes =
+            std::make_unique<std::vector<thrift::AdvertisedRouteDetail>>();
+        if (filter.prefixes_ref()) {
+          // Explicitly lookup the requested prefixes
+          for (auto& prefix : filter.prefixes_ref().value()) {
+            auto it = prefixMap_.find(prefix);
+            if (it == prefixMap_.end()) {
+              continue;
+            }
+            filterAndAddAdvertisedRoute(
+                *routes, filter.prefixType_ref(), it->first, it->second);
+          }
+        } else {
+          // Iterate over all prefixes
+          for (auto& [prefix, prefixEntries] : prefixMap_) {
+            filterAndAddAdvertisedRoute(
+                *routes, filter.prefixType_ref(), prefix, prefixEntries);
+          }
+        }
+        p.setValue(std::move(routes));
+      });
+  return std::move(sf);
+}
+
+void
+PrefixManager::filterAndAddAdvertisedRoute(
+    std::vector<thrift::AdvertisedRouteDetail>& routes,
+    apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
+    thrift::IpPrefix const& prefix,
+    std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries) {
+  // Return immediately if no prefix-entry
+  if (prefixEntries.empty()) {
+    return;
+  }
+
+  thrift::AdvertisedRouteDetail routeDetail;
+  routeDetail.prefix_ref() = prefix;
+
+  // Add best route selection data
+  for (auto& prefixType : selectBestPrefixMetrics(prefixEntries)) {
+    routeDetail.bestKeys_ref()->emplace_back(prefixType);
+  }
+  routeDetail.bestKey_ref() = routeDetail.bestKeys_ref()->at(0);
+
+  // Add prefix entries and honor the filter
+  for (auto& [prefixType, prefixEntry] : prefixEntries) {
+    if (typeFilter && *typeFilter != prefixType) {
+      continue;
+    }
+    routeDetail.routes_ref()->emplace_back();
+    auto& route = routeDetail.routes_ref()->back();
+    route.key_ref() = prefixType;
+    route.route_ref() = prefixEntry.tPrefixEntry;
+  }
+
+  // Add detail if there are entries to return
+  if (routeDetail.routes_ref()->size()) {
+    routes.emplace_back(std::move(routeDetail));
+  }
+}
+
 // helpers for modifying our Prefix Db
 bool
 PrefixManager::advertisePrefixesImpl(

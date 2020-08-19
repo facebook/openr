@@ -1249,6 +1249,116 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   }
 }
 
+/**
+ * Verifies `getAdvertisedRoutesFiltered` with all filter combinations
+ */
+TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
+  //
+  // Add prefixes, prefix1 -> DEFAULT, LOOPBACK
+  //
+  auto const prefix = toIpPrefix("10.0.0.0/8");
+  {
+    thrift::PrefixUpdateRequest request;
+    request.cmd_ref() = thrift::PrefixUpdateCommand::ADD_PREFIXES;
+    request.prefixes_ref() = std::vector<thrift::PrefixEntry>(
+        {createPrefixEntry(prefix, thrift::PrefixType::DEFAULT),
+         createPrefixEntry(prefix, thrift::PrefixType::LOOPBACK)});
+    prefixUpdatesQueue.push(std::move(request));
+  }
+
+  //
+  // Empty filter
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(1, routes->size());
+
+    auto& routeDetail = routes->at(0);
+    EXPECT_EQ(prefix, *routeDetail.prefix_ref());
+    EXPECT_EQ(thrift::PrefixType::LOOPBACK, *routeDetail.bestKey_ref());
+    EXPECT_EQ(2, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(2, routeDetail.routes_ref()->size());
+  }
+
+  //
+  // Filter on prefix
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixes_ref() = std::vector<thrift::IpPrefix>({prefix});
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(1, routes->size());
+
+    auto& routeDetail = routes->at(0);
+    EXPECT_EQ(prefix, *routeDetail.prefix_ref());
+    EXPECT_EQ(thrift::PrefixType::LOOPBACK, *routeDetail.bestKey_ref());
+    EXPECT_EQ(2, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(2, routeDetail.routes_ref()->size());
+  }
+
+  //
+  // Filter on non-existing prefix
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixes_ref() =
+        std::vector<thrift::IpPrefix>({toIpPrefix("11.0.0.0/8")});
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+
+  //
+  // Filter on empty prefix list. Should return empty list
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixes_ref() = std::vector<thrift::IpPrefix>();
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+
+  //
+  // Filter on type
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixType_ref() = thrift::PrefixType::DEFAULT;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(1, routes->size());
+
+    auto& routeDetail = routes->at(0);
+    EXPECT_EQ(prefix, *routeDetail.prefix_ref());
+    EXPECT_EQ(thrift::PrefixType::LOOPBACK, *routeDetail.bestKey_ref());
+    EXPECT_EQ(2, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(1, routeDetail.routes_ref()->size());
+
+    auto& route = routeDetail.routes_ref()->at(0);
+    EXPECT_EQ(thrift::PrefixType::DEFAULT, route.key_ref());
+  }
+
+  //
+  // Filter on non-existing type (BGP)
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixType_ref() = thrift::PrefixType::BGP;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+}
+
+/**
+ * Verifies the test case with empty entries. Other cases are exercised above
+ */
+TEST(PrefixManager, FilterAdvertisedRoutes) {
+  std::vector<thrift::AdvertisedRouteDetail> routes;
+  std::unordered_map<thrift::PrefixType, PrefixManager::PrefixEntry> entries;
+  thrift::AdvertisedRouteFilter filter;
+  PrefixManager::filterAndAddAdvertisedRoute(
+      routes, filter.prefixType_ref(), thrift::IpPrefix(), entries);
+  EXPECT_TRUE(routes.empty());
+}
+
 class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
   thrift::OpenrConfig
   createConfig() override {

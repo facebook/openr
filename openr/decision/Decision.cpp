@@ -1494,6 +1494,18 @@ Decision::getDecisionPrefixDbs() {
   return sf;
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
+Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
+  auto [p, sf] = folly::makePromiseContract<
+      std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>();
+  runInEventBaseThread(
+      [this, p = std::move(p), filter = std::move(filter)]() mutable noexcept {
+        p.setValue(std::make_unique<std::vector<thrift::ReceivedRouteDetail>>(
+            prefixState_.getReceivedRoutesFiltered(filter)));
+      });
+  return std::move(sf);
+}
+
 folly::SemiFuture<folly::Unit>
 Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();

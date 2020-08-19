@@ -386,9 +386,23 @@ OpenrCtrlHandler::semifuture_getPrefixesByType(thrift::PrefixType prefixType) {
   return prefixManager_->getPrefixesByType(prefixType);
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
+OpenrCtrlHandler::semifuture_getAdvertisedRoutes() {
+  auto filter = std::make_unique<thrift::AdvertisedRouteFilter>();
+  return semifuture_getAdvertisedRoutesFiltered(std::move(filter));
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
+OpenrCtrlHandler::semifuture_getAdvertisedRoutesFiltered(
+    std::unique_ptr<thrift::AdvertisedRouteFilter> filter) {
+  CHECK(prefixManager_);
+  return prefixManager_->getAdvertisedRoutesFiltered(std::move(*filter));
+}
+
 //
 // Fib APIs
 //
+
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDb() {
   CHECK(fib_);
@@ -431,6 +445,20 @@ OpenrCtrlHandler::semifuture_getPerfDb() {
 //
 // Decision APIs
 //
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
+OpenrCtrlHandler::semifuture_getReceivedRoutes() {
+  auto filter = std::make_unique<thrift::ReceivedRouteFilter>();
+  return semifuture_getReceivedRoutesFiltered(std::move(filter));
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
+OpenrCtrlHandler::semifuture_getReceivedRoutesFiltered(
+    std::unique_ptr<thrift::ReceivedRouteFilter> filter) {
+  CHECK(decision_);
+  return decision_->getReceivedRoutesFiltered(std::move(*filter));
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDbComputed(
     std::unique_ptr<std::string> nodeName) {
