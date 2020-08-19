@@ -205,8 +205,10 @@ thrift::Publication
 createGrid(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     const int n,
+    const int numPrefixes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
   LOG(INFO) << "grid: " << n << " by " << n;
+  LOG(INFO) << " number of prefixes " << numPrefixes;
   thrift::Publication initialPub;
 
   // Grid topology
@@ -221,13 +223,17 @@ createGrid(
               folly::sformat("adj:{}", nodeName),
               decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
 
-      // prefix
-      auto addrV6 = toIpPrefix(nodeToPrefixV6(nodeId));
+      // prefixes
+      std::vector<thrift::IpPrefix> prefixes;
+      for (int i = 0; i < numPrefixes; i++) {
+        prefixes.push_back(toIpPrefix(nodeToPrefixV6(nodeId + i)));
+      }
+
       (*initialPub.keyVals_ref())
           .emplace(
               folly::sformat("prefix:{}", nodeName),
               decisionWrapper->createPrefixValue(
-                  nodeName, 1, {addrV6}, forwardingAlgorithm));
+                  nodeName, 1, prefixes, forwardingAlgorithm));
     }
   }
   return initialPub;
@@ -501,12 +507,14 @@ BM_DecisionGrid(
     folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfSws,
-    thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    uint32_t numberOfPrefixes) {
   auto suspender = folly::BenchmarkSuspender();
   const std::string nodeName{"1"};
   auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
   int n = std::sqrt(numOfSws);
-  auto initialPub = createGrid(decisionWrapper, n, forwardingAlgorithm);
+  auto initialPub =
+      createGrid(decisionWrapper, n, numberOfPrefixes, forwardingAlgorithm);
 
   //
   // Publish initial link state info to KvStore, This should trigger the

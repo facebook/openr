@@ -272,6 +272,7 @@ inline std::vector<thrift::Adjacency> createGridAdjacencys(
 thrift::Publication createGrid(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     const int n,
+    const int numPrefixes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
 
 /**
@@ -363,7 +364,8 @@ void BM_DecisionGrid(
     folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfSws,
-    thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    uint32_t numberOfPrefixes = 1);
 
 //
 // Benchmark test for fabric topology.
