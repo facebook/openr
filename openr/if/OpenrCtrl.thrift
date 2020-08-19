@@ -27,8 +27,48 @@ exception OpenrError {
   1: string message
 } ( message = "message" )
 
+struct NodeAndArea {
+  1: string node;
+  2: string area;
+}
+
 struct StaticRoutes {
   1: map<i32,list<Network.NextHopThrift>> mplsRoutes;
+}
+
+struct AdvertisedRoute {
+  1: Network.PrefixType key;
+  2: Lsdb.PrefixEntry route;
+}
+
+struct AdvertisedRouteDetail {
+  1: Network.IpPrefix prefix;
+  2: Network.PrefixType bestKey;
+  3: list<Network.PrefixType> bestKeys;
+  4: list<AdvertisedRoute> routes;
+}
+
+struct AdvertisedRouteFilter {
+  1: optional list<Network.IpPrefix> prefixes;
+  2: optional Network.PrefixType prefixType;
+}
+
+struct ReceivedRoute {
+  1: NodeAndArea key;
+  2: Lsdb.PrefixEntry route;
+}
+
+struct ReceivedRouteDetail {
+  1: Network.IpPrefix prefix;
+  2: NodeAndArea bestKey;
+  3: list<NodeAndArea> bestKeys;
+  4: list<ReceivedRoute> routes;
+}
+
+struct ReceivedRouteFilter {
+  1: optional list<Network.IpPrefix> prefixes;
+  2: optional string nodeName;
+  3: optional string areaName;
 }
 
 //
@@ -186,6 +226,7 @@ service OpenrCtrl extends fb303_core.BaseService {
 
   /**
    * Get all prefixes being advertised
+   * @deprecated - use getAdvertisedRoutes() instead
    */
   list<Lsdb.PrefixEntry> getPrefixes() throws (1: OpenrError error)
 
@@ -198,6 +239,22 @@ service OpenrCtrl extends fb303_core.BaseService {
   //
   // Route APIs
   //
+
+  /**
+   * Get routes that current node is advertising. Filter parameters if specified
+   * will follow `AND` operator
+   */
+  list<AdvertisedRouteDetail> getAdvertisedRoutes();
+  list<AdvertisedRouteDetail> getAdvertisedRoutesFiltered(
+      1: AdvertisedRouteFilter filter) throws (1: OpenrError error);
+
+  /**
+   * Get received routes, aka Adjacency RIB. Filter parameters if specified will
+   * follow `AND` operator
+   */
+  list<ReceivedRouteDetail> getReceivedRoutes();
+  list<ReceivedRouteDetail> getReceivedRoutesFiltered(
+      1: ReceivedRouteFilter filter) throws (1: OpenrError error);
 
   /**
    * Get route database of the current node. It is retrieved from FIB module.
