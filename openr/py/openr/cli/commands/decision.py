@@ -11,7 +11,7 @@
 import ipaddress
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from openr.cli.utils import utils
@@ -643,3 +643,62 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
                 f"    Action Set Weight: default={action.default_weight}, "
                 f"area-weights={action.area_to_weight}"
             )
+
+
+class ReceivedRoutesCmd(OpenrCtrlCmd):
+
+    # @override
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        prefixes: List[str],
+        node: Optional[str],
+        area: Optional[str],
+        json: bool,
+        detailed: bool,
+    ) -> None:
+
+        # Get data
+        routes = self.fetch(client, prefixes, node, area)
+
+        # Print json if
+        if json:
+            # TODO: Print routes in json
+            raise NotImplementedError()
+        else:
+            self.render(routes, detailed)
+
+    def fetch(
+        self,
+        client: OpenrCtrl.Client,
+        prefixes: List[str],
+        node: Optional[str],
+        area: Optional[str],
+    ) -> List[ctrl_types.AdvertisedRouteDetail]:
+        """
+        Fetch the requested data
+        """
+
+        # Create filter
+        route_filter = ctrl_types.ReceivedRouteFilter()
+        if prefixes:
+            route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+        if node:
+            route_filter.nodeName = node
+        if area:
+            route_filter.areaName = area
+
+        # Get routes
+        return client.getReceivedRoutesFiltered(route_filter)
+
+    def render(
+        self, routes: List[ctrl_types.ReceivedRouteDetail], detailed: bool
+    ) -> None:
+        """
+        Render received routes
+        """
+
+        def key_fn(key: ctrl_types.NodeAndArea) -> Tuple[str]:
+            return (key.node, key.area)
+
+        utils.print_route_details(routes, key_fn, detailed)

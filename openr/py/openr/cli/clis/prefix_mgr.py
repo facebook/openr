@@ -9,11 +9,10 @@
 
 
 from builtins import object
-from typing import List
+from typing import List, Optional
 
 import click
 from openr.cli.commands import prefix_mgr
-from openr.cli.utils.options import breeze_option
 
 
 class PrefixMgrCli(object):
@@ -22,6 +21,7 @@ class PrefixMgrCli(object):
         self.prefixmgr.add_command(AdvertiseCli().advertise)
         self.prefixmgr.add_command(ViewCli().view)
         self.prefixmgr.add_command(SyncCli().sync)
+        self.prefixmgr.add_command(AdvertisedRoutesCli().show)
 
     @click.group()
     @click.pass_context
@@ -92,6 +92,38 @@ class ViewCli(object):
     @click.command()
     @click.pass_obj
     def view(cli_opts):  # noqa: B902
-        """ View the prefix of this node """
+        """
+        View the prefix of this node
+        TODO: Deprecated. Use routes-advertised instead
+        """
 
         prefix_mgr.ViewCmd(cli_opts).run()
+
+
+class AdvertisedRoutesCli(object):
+    @click.command("routes-advertised")
+    @click.argument("prefix", nargs=-1, type=str)
+    @click.option(
+        "--prefix-type",
+        "-t",
+        help="Filter on source of origination. e.g. RIB, BGP, LINK_MONITOR",
+    )
+    @click.option(
+        "--detail/--no-detail",
+        default=False,
+        help="Show all details including tags and area-stack",
+    )
+    @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    @click.pass_obj
+    def show(
+        cli_opts,  # noqa: B902
+        prefix: List[str],
+        prefix_type: Optional[str],
+        detail: bool,
+        json: bool,
+    ) -> None:
+        """
+        Show routes this node is advertising. Will show all by default
+        """
+
+        prefix_mgr.AdvertisedRoutesCmd(cli_opts).run(prefix, prefix_type, json, detail)

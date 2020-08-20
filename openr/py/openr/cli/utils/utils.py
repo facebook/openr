@@ -30,7 +30,8 @@ from openr.Fib import ttypes as fib_types
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
-from openr.OpenrCtrl import OpenrCtrl
+from openr.OpenrConfig import ttypes as config_types
+from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Platform import FibService, ttypes as platform_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -1828,3 +1829,118 @@ def is_color_output_supported():
         pass
 
     return is_a_tty and has_color
+
+
+def print_route_details(
+    routes: List[
+        Union[ctrl_types.AdvertisedRouteDetail, ctrl_types.ReceivedRouteDetail]
+    ],
+    key_str,
+    detailed: bool,
+) -> None:
+    """
+    Print advertised or received route.
+
+    `key_fn` argument specifies the transformation of key attributes to tuple of
+    strings
+
+    Output format
+      > 10.0.0.0/8, entries=10, best-entries(*)=1, best-entry(@)
+        [@*] source <key>
+             forwarding algo=<fwd-algo> type=<fwd-type>
+             metrics=<metrics>
+             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+
+
+    """
+
+    rows = []
+
+    # Add marker information
+    rows.append("Markers: * - One of best entry, @ - The best entry")
+    if not detailed:
+        rows.append(
+            "Acronyms: SP - Source Preference, PP - Path Preference, D - Distance\n"
+            "          MN - Min-Nexthops, PL - Prepend Label"
+        )
+    rows.append("")
+
+    # Add a header if not detailed
+    # NOTE: Using very custom formatting here instead of using table rendering
+    # for compact output. And also interleave the custom route titles in between
+    # This header is in sync with the rows we append
+    if not detailed:
+        rows.append(
+            f"{'':<2} {'Source':<36} "
+            f"{'FwdAlgo':<12} {'FwdType':<8} "
+            f"{'SP':<6} "
+            f"{'PP':<6} "
+            f"{'D':<6} "
+            f"{'MN':<6}"
+            f"{'PL':<6}"
+        )
+        rows.append("")
+
+    for route_detail in routes:
+        best_key = key_str(route_detail.bestKey)
+        best_keys = {key_str(k) for k in route_detail.bestKeys}
+
+        # Create a title for the route
+        rows.append(
+            f"> {ipnetwork.sprint_prefix(route_detail.prefix)}"
+            f", {len(best_keys)}/{len(route_detail.routes)}"
+        )
+
+        # Add all entries associated with routes
+        for route in route_detail.routes:
+            key, metrics = key_str(route.key), route.route.metrics
+            fwd_algo = config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
+                route.route.forwardingAlgorithm
+            )
+            fwd_type = config_types.PrefixForwardingType._VALUES_TO_NAMES.get(
+                route.route.forwardingType
+            )
+            markers = (
+                f"{'*' if key in best_keys else ''}{'@' if key == best_key else ' '}"
+            )
+
+            if detailed:
+                rows.append(f"{markers} from {' '.join(key)}")
+                rows.append(
+                    f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}"
+                )
+                rows.append(
+                    f"     Metrics: path-preference: {metrics.path_preference}"
+                    f", source-preference: {metrics.source_preference}"
+                    f", distance: {metrics.distance}"
+                )
+                rows.append(f"     Performance: min-nexthops: {route.route.minNexthop}")
+                if route.route.prependLabel:
+                    rows.append(
+                        f"     Misc - prepend-label: {route.route.prependLabel}"
+                    )
+                rows.append(f"     Tags - {', '.join(route.route.tags)}")
+                rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
+            else:
+                min_nexthop = (
+                    route.route.minNexthop
+                    if route.route.minNexthop is not None
+                    else "-"
+                )
+                prepend_label = (
+                    route.route.prependLabel
+                    if route.route.prependLabel is not None
+                    else "-"
+                )
+                rows.append(
+                    f"{markers:<2} {' '.join(key)[:36]:<36} "
+                    f"{fwd_algo:<12} {fwd_type:<8} "
+                    f"{metrics.source_preference:<6} "
+                    f"{metrics.path_preference:<6} "
+                    f"{metrics.distance:<6} "
+                    f"{min_nexthop:<6}"
+                    f"{prepend_label:<6}"
+                )
+        rows.append("")
+
+    print("\n".join(rows))

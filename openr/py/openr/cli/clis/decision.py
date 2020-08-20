@@ -10,7 +10,7 @@
 
 import sys
 from builtins import object
-from typing import Any, List
+from typing import Any, List, Optional
 
 import click
 from openr.cli.commands import decision
@@ -28,8 +28,8 @@ class DecisionCli(object):
         self.decision.add_command(
             DecisionRoutesUnInstallableCli().routes, name="routes-uninstallable"
         )
-        # TODO: Add the DecisionRibPolicyCli
         self.decision.add_command(DecisionRibPolicyCli().show, name="rib-policy")
+        self.decision.add_command(ReceivedRoutesCli().show)
 
         # for TG backward compatibility. Deprecated.
         self.decision.add_command(DecisionRoutesComputedCli().routes, name="routes")
@@ -212,3 +212,30 @@ class DecisionRibPolicyCli(object):
         """
 
         decision.DecisionRibPolicyCmd(cli_opts).run()
+
+
+class ReceivedRoutesCli(object):
+    @click.command("routes-received")
+    @click.argument("prefix", nargs=-1, type=str)
+    @click.option("--node", help="Filter on node name", type=str)
+    @click.option("--area", help="Filter on area name", type=str)
+    @click.option(
+        "--detail/--no-detail",
+        default=False,
+        help="Show all details including tags and area-stack",
+    )
+    @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    @click.pass_obj
+    def show(
+        cli_opts,  # noqa: B902
+        prefix: List[str],
+        node: Optional[str],
+        area: Optional[str],
+        detail: bool,
+        json: bool,
+    ) -> None:
+        """
+        Show routes this node is advertising. Will show all by default
+        """
+
+        decision.ReceivedRoutesCmd(cli_opts).run(prefix, node, area, json, detail)
