@@ -98,12 +98,6 @@ Detailed overview about `openr/decision` module
 Instructions on how to contribute to `OpenR` project and follow best
 testing/coding practices.
 
-#### [`Emulator.md`](Emulator.md)
-
-Tool for generating/managing virtual mesh-network topologies for testing OpenR
-(at scale ... ~1000+ nodes topologies). Network topology can span across
-multiple servers.
-
 #### [`Fib.md`](Fib.md)
 
 Detailed overview about `openr/fib` module
