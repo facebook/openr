@@ -485,7 +485,8 @@ void
 insertUserCounters(
     folly::UserCounters& counters,
     uint32_t iters,
-    std::vector<uint64_t>& processTimes) {
+    std::vector<uint64_t>& processTimes,
+    std::optional<thrift::PrefixForwardingAlgorithm> forwardingAlgorithm) {
   // Get average time of each itaration
   for (auto& processTime : processTimes) {
     processTime /= iters == 0 ? 1 : iters;
@@ -496,7 +497,18 @@ insertUserCounters(
 
   // Counter for spf is for regular benchmark output
   counters["spf"] = processTimes[2];
-  counters["openr.rib_computation.benchmark_spf.time_ms"] = processTimes[2];
+  if (forwardingAlgorithm.has_value()) {
+    CHECK(
+        forwardingAlgorithm.value() == SP_ECMP ||
+        forwardingAlgorithm.value() == KSP2_ED_ECMP);
+
+    if (forwardingAlgorithm.value() == SP_ECMP) {
+      counters["openr.rib_computation.benchmark_spf.time_ms"] = processTimes[2];
+    } else {
+      counters["openr.rib_computation.benchmark_kspf.time_ms"] =
+          processTimes[2];
+    }
+  }
 }
 
 //
@@ -543,7 +555,7 @@ BM_DecisionGrid(
 
   suspender.rehire(); // Stop measuring time again
   // Insert processTimes as user counters
-  insertUserCounters(counters, iters, processTimes);
+  insertUserCounters(counters, iters, processTimes, forwardingAlgorithm);
 }
 
 //
@@ -614,6 +626,6 @@ BM_DecisionFabric(
 
   suspender.rehire(); // Stop measuring time again
   // Insert processTimes as user counters
-  insertUserCounters(counters, iters, processTimes);
+  insertUserCounters(counters, iters, processTimes, std::nullopt);
 }
 } // namespace openr

@@ -355,7 +355,8 @@ void updateRandomGridAdjs(
 void insertUserCounters(
     folly::UserCounters& counters,
     uint32_t iters,
-    std::vector<uint64_t>& processTimes);
+    std::vector<uint64_t>& processTimes,
+    std::optional<thrift::PrefixForwardingAlgorithm> forwardingAlgorithm);
 
 //
 // Benchmark test for grid topology
