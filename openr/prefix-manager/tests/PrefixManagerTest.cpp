@@ -1272,8 +1272,13 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
   {
     thrift::AdvertisedRouteFilter filter;
     auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
-    ASSERT_EQ(1, routes->size());
+    auto attempts = 0;
+    if (routes->size() == 0 && attempts < 3) {
+      routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+      attempts++;
+    }
 
+    ASSERT_EQ(1, routes->size());
     auto& routeDetail = routes->at(0);
     EXPECT_EQ(prefix, *routeDetail.prefix_ref());
     EXPECT_EQ(thrift::PrefixType::LOOPBACK, *routeDetail.bestKey_ref());
