@@ -7,14 +7,21 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import asyncio
+import ipaddress
+import time
 from builtins import object
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients.openr_client import get_openr_ctrl_client
+from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
+from openr.Fib import ttypes as fib_types
+from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.utils import ipnetwork, printing
+from thrift.py3.client import ClientType
 
 
 class FibAgentCmd(object):
@@ -271,3 +278,181 @@ class FibValidateRoutesCmd(FibAgentCmd):
         all_success = all_success and ret
 
         return 0 if all_success else -1
+
+
+class FibSnoopCmd(OpenrCtrlCmd):
+    def print_ip_prefixes_filtered(
+        self,
+        ip_prefixes: List[network_types.IpPrefix],
+        prefixes_filter: Optional[List[str]] = None,
+        element_prefix: str = ">",
+        element_suffix: str = "",
+    ) -> None:
+        """
+        Print prefixes. If specified, exact match subset of prefixes_filter
+        only will be printed.
+        :param unicast_routes: Unicast routes
+        :param prefixes_filter: Optional prefixes/filter to print (Exact match).
+        :param element_prefix: Starting prefix for each item. (string)
+        :param element_suffix: Ending/terminator for each item. (string)
+        """
+
+        filter_for_networks = None
+        if prefixes_filter:
+            filter_for_networks = [ipaddress.ip_network(p) for p in prefixes_filter]
+
+        prefix_strs = []
+        for ip_prefix in ip_prefixes:
+            if (
+                filter_for_networks
+                and not ipaddress.ip_network(ipnetwork.sprint_prefix(ip_prefix))
+                in filter_for_networks
+            ):
+                continue
+
+            prefix_strs.append([ipnetwork.sprint_prefix(ip_prefix)])
+
+        print(
+            printing.render_vertical_table(
+                prefix_strs,
+                element_prefix=element_prefix,
+                element_suffix=element_suffix,
+            )
+        )
+
+    def print_mpls_labels(
+        self, labels: List[int], element_prefix: str = ">", element_suffix: str = ""
+    ) -> None:
+        """
+        Print mpls labels. Subset specified by labels_filter only will be printed if specified
+        :param labels: mpls labels
+        :param element_prefix: Starting prefix for each item. (string)
+        :param element_suffix: Ending/terminator for each item. (string)
+        """
+
+        label_strs = [[str(label)] for label in labels]
+
+        print(
+            printing.render_vertical_table(
+                label_strs, element_prefix=element_prefix, element_suffix=element_suffix
+            )
+        )
+
+    def print_route_db_delta(
+        self,
+        delta_db: fib_types.RouteDatabaseDelta,
+        prefixes: Optional[List[str]] = None,
+    ) -> None:
+        """ print the RouteDatabaseDelta from Fib module """
+
+        if len(delta_db.unicastRoutesToUpdate) != 0:
+            utils.print_unicast_routes(
+                caption="",
+                unicast_routes=delta_db.unicastRoutesToUpdate,
+                prefixes=prefixes,
+                element_prefix="+",
+                filter_exact_match=True,
+            )
+        if len(delta_db.unicastRoutesToDelete) != 0:
+            self.print_ip_prefixes_filtered(
+                ip_prefixes=delta_db.unicastRoutesToDelete,
+                prefixes_filter=prefixes,
+                element_prefix="-",
+            )
+
+        if prefixes:
+            return
+
+        if len(delta_db.mplsRoutesToUpdate) != 0:
+            utils.print_mpls_routes(
+                caption="",
+                mpls_routes=delta_db.mplsRoutesToUpdate,
+                element_prefix="+",
+                element_suffix="(MPLS)",
+            )
+        if len(delta_db.mplsRoutesToDelete) != 0:
+            self.print_mpls_labels(
+                labels=delta_db.mplsRoutesToDelete,
+                element_prefix="-",
+                element_suffix="(MPLS)",
+            )
+
+    def print_route_db(
+        self,
+        route_db: fib_types.RouteDatabase,
+        prefixes: Optional[List[str]] = None,
+        labels: Optional[List[int]] = None,
+    ) -> None:
+        """ print the routes from Fib module """
+
+        if (prefixes or not labels) and len(route_db.unicastRoutes) != 0:
+            utils.print_unicast_routes(
+                caption="",
+                unicast_routes=route_db.unicastRoutes,
+                prefixes=prefixes,
+                element_prefix="+",
+                filter_exact_match=True,
+            )
+        if (labels or not prefixes) and len(route_db.mplsRoutes) != 0:
+            utils.print_mpls_routes(
+                caption="",
+                mpls_routes=route_db.mplsRoutes,
+                labels=labels,
+                element_prefix="+",
+                element_suffix="(MPLS)",
+            )
+
+    # @override
+    def run(self, *args, **kwargs) -> None:
+        """
+        Override run method to create py3 client for streaming.
+        """
+
+        async def _wrapper():
+            client_type = ClientType.THRIFT_ROCKET_CLIENT_TYPE
+            async with get_openr_ctrl_cpp_client(
+                self.host, self.cli_opts, client_type=client_type
+            ) as client:
+                await self._run(client, *args, **kwargs)
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(_wrapper())
+        loop.close()
+
+    async def _run(
+        self,
+        client: OpenrCtrlCppClient,
+        duration: int,
+        initial_dump: bool,
+        prefixes: List[str],
+    ) -> None:
+
+        initialDb, updates = await client.subscribeAndGetFib()
+        # Print summary
+        print(f" Routes for {initialDb.thisNodeName}.")
+        print(f" {len(initialDb.unicastRoutes)} unicast routes in initial dump.")
+        print(f" {len(initialDb.mplsRoutes)} mpls routes in initial dump.\n")
+        # Expand initial dump based on input argument
+        if initial_dump:
+            self.print_route_db(initialDb, prefixes)
+
+        print("RouteDatabaseDelta updates to follow ...\n")
+
+        start_time = time.time()
+        awaited_updates = None
+        while True:
+            # Break if it is time
+            if duration > 0 and time.time() - start_time > duration:
+                print("Duration expired. Terminating snooping.")
+                break
+
+            # Await for an update
+            if not awaited_updates:
+                awaited_updates = [updates.__anext__()]
+            done, awaited_updates = await asyncio.wait(awaited_updates, timeout=1)
+            if not done:
+                continue
+            else:
+                msg = await done.pop()
+
+            self.print_route_db_delta(msg, prefixes)

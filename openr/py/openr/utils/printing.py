@@ -9,6 +9,7 @@
 
 
 from builtins import range
+from typing import Iterable
 
 import tabulate
 
@@ -58,7 +59,13 @@ def render_horizontal_table(data, column_labels=(), caption="", tablefmt="simple
     )
 
 
-def render_vertical_table(data, column_labels="", caption=""):
+def render_vertical_table(
+    data: Iterable[Iterable[str]],
+    column_labels: Iterable[str] = "",
+    caption: str = "",
+    element_prefix: str = ">",
+    element_suffix: str = "",
+):
     """ Render tabular data with one column per line
 
         :param data:  An iterable (e.g. a tuple() or list) containing the rows
@@ -66,21 +73,25 @@ def render_vertical_table(data, column_labels="", caption=""):
                       the columns of the table (strings).
         :param column_names: An iterable of column names (strings).
         :param caption: Title of the table (a string).
+        :param element_prefix: Starting prefix for each item. (string)
+        :param element_suffix: Ending/terminator for each item. (string)
 
         :return: The rendered table (a string).
     """
 
     table_str = ""
+    if caption:
+        table_str += "{}\n".format(caption_fmt(caption))
 
     for item in sorted(data, key=lambda x: x[0]):
         if not item:
             break
 
-        item_str = "> {}\n".format(item[0])
+        item_str = "{} {} {}\n".format(element_prefix, item[0], element_suffix)
         for idx in range(1, len(item)):
             if column_labels:
                 item_str += "{} ".format(column_labels[idx - 1])
             item_str += "{}\n".format(item[idx])
         table_str += "{}\n".format(item_str)
 
-    return "{}\n{}".format(caption_fmt(caption), table_str)
+    return "{}".format(table_str)

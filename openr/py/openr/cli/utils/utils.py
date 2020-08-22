@@ -851,7 +851,7 @@ def print_route_db(
     prefixes: List[str] = None,
     labels: List[int] = None,
 ) -> None:
-    """ print the the routes from Decision/Fib module """
+    """ print the routes from Decision/Fib module """
 
     if prefixes or not labels:
         print_unicast_routes(
@@ -1563,10 +1563,19 @@ def ip_nexthop_to_str(
 def print_unicast_routes(
     caption: str,
     unicast_routes: List[network_types.UnicastRoute],
-    prefixes: List[str] = None,
-):
+    prefixes: Optional[List[str]] = None,
+    element_prefix: str = ">",
+    element_suffix: str = "",
+    filter_exact_match: bool = False,
+) -> None:
     """
     Print unicast routes. Subset specified by prefixes will be printed if specified
+        :param caption: Title of the table (a string).
+        :param unicast_routes: Unicast routes
+        :param prefixes: Optional prefixes/filter to print.
+        :param element_prefix: Starting prefix for each item. (string)
+        :param element_suffix: Ending/terminator for each item. (string)
+        :param filter_exact_match: Indicate exact match or subnet match.
     """
 
     networks = None
@@ -1578,10 +1587,17 @@ def print_unicast_routes(
         entry = build_unicast_route(route, filter_for_networks=networks)
         if entry:
             dest, nexthops = entry
-            paths_str = "\n".join(["via {}".format(nh) for nh in nexthops])
+            paths_str = "\n".join(["  via {}".format(nh) for nh in nexthops])
             route_strs.append([dest, paths_str])
 
-    print(printing.render_vertical_table(route_strs, caption=caption))
+    print(
+        printing.render_vertical_table(
+            route_strs,
+            caption=caption,
+            element_prefix=element_prefix,
+            element_suffix=element_suffix,
+        )
+    )
 
 
 def build_unicast_route(
@@ -1589,21 +1605,40 @@ def build_unicast_route(
     filter_for_networks: Optional[
         List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]
     ] = None,
+    filter_exact_match: bool = False,
 ) -> Tuple[str, List[str]]:
+    """
+    Build unicast route.
+        :param route: Unicast Route
+        :param filter_for_networks: IP/Prefixes to filter.
+        :param filter_exact_match: Indicate exact match or subnet match.
+    """
     dest = ipnetwork.sprint_prefix(route.dest)
-    if filter_for_networks and not ipnetwork.contain_any_prefix(
-        dest, filter_for_networks
-    ):
-        return None
+    if filter_for_networks:
+        if filter_exact_match:
+            if not ipaddress.ip_network(dest) in filter_for_networks:
+                return None
+        else:
+            if not ipnetwork.contain_any_prefix(dest, filter_for_networks):
+                return None
     nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
     return dest, nexthops
 
 
 def print_mpls_routes(
-    caption: str, mpls_routes: List[network_types.MplsRoute], labels: List[int] = None
-):
+    caption: str,
+    mpls_routes: List[network_types.MplsRoute],
+    labels: Optional[List[int]] = None,
+    element_prefix: str = ">",
+    element_suffix: str = "",
+) -> None:
     """
     List mpls routes. Subset specified by labels will be printed if specified
+        :param caption: Title of the table (a string).
+        :param mpls_routes: mpls routes
+        :param labels: Optional labels/filter to print.
+        :param element_prefix: Starting prefix for each item. (string)
+        :param element_suffix: Ending/terminator for each item. (string)
     """
 
     route_strs = []
@@ -1612,11 +1647,18 @@ def print_mpls_routes(
             continue
 
         paths_str = "\n".join(
-            ["via {}".format(ip_nexthop_to_str(nh)) for nh in route.nextHops]
+            ["  via {}".format(ip_nexthop_to_str(nh)) for nh in route.nextHops]
         )
         route_strs.append([str(route.topLabel), paths_str])
 
-    print(printing.render_vertical_table(route_strs, caption=caption))
+    print(
+        printing.render_vertical_table(
+            route_strs,
+            caption=caption,
+            element_prefix=element_prefix,
+            element_suffix=element_suffix,
+        )
+    )
 
 
 def get_routes_json(

@@ -35,6 +35,7 @@ class FibCli(object):
         self.fib.add_command(FibAddRoutesCli().add_routes, name="add")
         self.fib.add_command(FibDelRoutesCli().del_routes, name="del")
         self.fib.add_command(FibSyncRoutesCli().sync_routes, name="sync")
+        self.fib.add_command(FibSnoopCli().snoop)
         self.fib.add_command(FibValidateRoutesCli().validate)
 
     @click.group()
@@ -156,3 +157,33 @@ class FibValidateRoutesCli(object):
         """ Validator to check that all routes as computed by Decision """
 
         sys.exit(fib.FibValidateRoutesCmd(cli_opts).run(cli_opts))
+
+
+class FibSnoopCli(object):
+    @click.command()
+    @click.option(
+        "--duration",
+        "-d",
+        default=0,
+        help="How long to snoop in seconds. Default is infinite",
+    )
+    @click.option(
+        "--initial-dump/--no-initial-dump", default=False, help="Output initial full DB"
+    )
+    @click.option(
+        "--prefixes",
+        "-p",
+        type=click.STRING,
+        multiple=True,
+        help="Display stream of specific Prefixes.",
+    )
+    @click.pass_obj
+    def snoop(
+        cli_opts: Bunch,  # noqa: B902
+        duration: int,
+        initial_dump: bool,
+        prefixes: List[str],
+    ):
+        """ Snoop on fib streaming updates. """
+
+        fib.FibSnoopCmd(cli_opts).run(duration, initial_dump, prefixes)

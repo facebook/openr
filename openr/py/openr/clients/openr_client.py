@@ -24,7 +24,7 @@ from thrift.transport import THeaderTransport, TSocket, TSSLSocket
 
 class OpenrCtrlClient(OpenrCtrl.Client):
     """
-    Base class for for secure and plain-text clients. Do not use this
+    Base class for secure and plain-text clients. Do not use this
     client directly. Instead use one of `OpenrCtrlPlainTextClient` or
     `OpenrCtrlSecureClient`
     """
