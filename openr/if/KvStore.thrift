@@ -7,6 +7,7 @@
 
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
+namespace go openr.KvStore
 namespace php Openr
 namespace py openr.KvStore
 namespace py3 openr.thrift

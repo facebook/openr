@@ -7,6 +7,7 @@
 
 namespace cpp2 openr.thrift
 namespace php Openr
+namespace go openr.Spark
 namespace py openr.Spark
 namespace py3 openr.thrift
 namespace lua openr.Spark

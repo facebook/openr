@@ -6,6 +6,7 @@
  */
 
 namespace cpp2 openr.thrift
+namespace go openr.BgpConfig
 namespace py openr.BgpConfig
 namespace py3 openr.thrift
 

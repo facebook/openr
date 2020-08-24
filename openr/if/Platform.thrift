@@ -7,6 +7,7 @@
 
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
+namespace go openr.Platform
 namespace py openr.Platform
 namespace py3 openr.thrift
 namespace lua openr.Platform

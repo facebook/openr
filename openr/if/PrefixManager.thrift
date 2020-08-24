@@ -6,6 +6,7 @@
  */
 
 namespace cpp2 openr.thrift
+namespace go openr.PrefixManager
 namespace py openr.PrefixManager
 namespace py3 openr.thrift
 namespace lua openr.PrefixManager

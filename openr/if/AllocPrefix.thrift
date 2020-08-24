@@ -6,6 +6,7 @@
  */
 
 namespace cpp2 openr.thrift
+namespace go openr.AllocPrefix
 namespace py openr.AllocPrefix
 namespace py3 openr.thrift
 namespace lua openr.AllocPrefix

@@ -6,6 +6,7 @@
  */
 
 namespace cpp2 openr.thrift
+namespace go openr.PersistentStore
 namespace py openr.PersistentStore
 namespace py3 openr.thrift
 namespace lua openr.PersistentStore
