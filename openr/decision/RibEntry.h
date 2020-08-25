@@ -35,7 +35,7 @@ struct RibEntry {
 };
 
 struct RibUnicastEntry : RibEntry {
-  const folly::CIDRNetwork prefix;
+  folly::CIDRNetwork prefix;
   thrift::PrefixEntry bestPrefixEntry;
   std::string bestArea;
   // install to fib or not
@@ -72,6 +72,11 @@ struct RibUnicastEntry : RibEntry {
         doNotInstall == other.doNotInstall && RibEntry::operator==(other);
   }
 
+  bool
+  operator!=(const RibUnicastEntry& other) const {
+    return !(*this == other);
+  }
+
   thrift::UnicastRoute
   toThrift() const {
     thrift::UnicastRoute tUnicast;
@@ -91,7 +96,7 @@ struct RibUnicastEntry : RibEntry {
 };
 
 struct RibMplsEntry : RibEntry {
-  const int32_t label{0};
+  int32_t label{0};
 
   explicit RibMplsEntry(int32_t label) : label(label) {}
 
@@ -111,6 +116,11 @@ struct RibMplsEntry : RibEntry {
   bool
   operator==(const RibMplsEntry& other) const {
     return label == other.label && RibEntry::operator==(other);
+  }
+
+  bool
+  operator!=(const RibMplsEntry& other) const {
+    return !(*this == other);
   }
 
   thrift::MplsRoute

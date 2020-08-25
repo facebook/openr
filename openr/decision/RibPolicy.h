@@ -93,6 +93,20 @@ class RibPolicy {
    */
   bool applyAction(RibUnicastEntry& route) const;
 
+  struct PolicyChange {
+    std::vector<folly::CIDRNetwork> updatedRoutes, deletedRoutes;
+  };
+
+  /**
+   * Calls applyAction on all routes in unicastEntries, removes entries that
+   * have no remaining nexthops.
+   *
+   * @returns PolicyChange struct indicating unicastEntries that were modified.
+   */
+  PolicyChange applyPolicy(
+      std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>& unicastEntries)
+      const;
+
  private:
   // List of policy statements
   std::vector<RibPolicyStatement> policyStatements_;

@@ -251,7 +251,7 @@ using PrefixRoutes = unordered_map<
 void
 fillRouteMap(
     const string& node, RouteMap& routeMap, const DecisionRouteDb& routeDb) {
-  for (auto const& [_, entry] : routeDb.unicastEntries) {
+  for (auto const& [_, entry] : routeDb.unicastRoutes) {
     auto prefix = folly::IPAddress::networkToString(entry.prefix);
     for (const auto& nextHop : entry.nexthops) {
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
@@ -260,7 +260,7 @@ fillRouteMap(
       routeMap[make_pair(node, prefix)].emplace(nextHop);
     }
   }
-  for (auto const& [_, entry] : routeDb.mplsEntries) {
+  for (auto const& [_, entry] : routeDb.mplsRoutes) {
     auto topLabelStr = std::to_string(entry.label);
     for (const auto& nextHop : entry.nexthops) {
       VLOG(4) << "node: " << node << " label: " << topLabelStr << " -> "
@@ -320,7 +320,7 @@ fillPrefixRoutes(
     const string& node,
     PrefixRoutes& prefixRoutes,
     const DecisionRouteDb& routeDb) {
-  for (auto const& [_, entry] : routeDb.unicastEntries) {
+  for (auto const& [_, entry] : routeDb.unicastRoutes) {
     auto prefix = folly::IPAddress::networkToString(entry.prefix);
     prefixRoutes[make_pair(node, prefix)] = entry.toThrift();
   }
@@ -432,8 +432,8 @@ TEST(ShortestPathTest, UnreachableNodes) {
   for (string const& node : allNodes) {
     auto routeDb = spfSolver.buildRouteDb(node, areaLinkStates, prefixState);
     ASSERT_TRUE(routeDb.has_value());
-    EXPECT_EQ(0, routeDb->unicastEntries.size());
-    EXPECT_EQ(0, routeDb->mplsEntries.size()); // No label routes
+    EXPECT_EQ(0, routeDb->unicastRoutes.size());
+    EXPECT_EQ(0, routeDb->mplsRoutes.size()); // No label routes
   }
 }
 
@@ -464,8 +464,8 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(0, routeDb->unicastEntries.size());
-  EXPECT_EQ(0, routeDb->mplsEntries.size());
+  EXPECT_EQ(0, routeDb->unicastRoutes.size());
+  EXPECT_EQ(0, routeDb->mplsRoutes.size());
 }
 
 //
@@ -500,11 +500,11 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(0, routeDb->unicastEntries.size());
+  EXPECT_EQ(0, routeDb->unicastRoutes.size());
 
   routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(0, routeDb->unicastEntries.size());
+  EXPECT_EQ(0, routeDb->unicastRoutes.size());
 }
 
 //
@@ -565,13 +565,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(1, routeDb->unicastEntries.size());
-  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastRoutes.size());
+  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(1, routeDb->unicastEntries.size());
-  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastRoutes.size());
+  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   //
   // Update adjacency database of node 1 by changing it's nexthops and verift
@@ -592,13 +592,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(1, routeDb->unicastEntries.size());
-  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastRoutes.size());
+  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(1, routeDb->unicastEntries.size());
-  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastRoutes.size());
+  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   //
   // Update adjacency database of node 2 by changing it's nexthops and verift
@@ -619,13 +619,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(1, routeDb->unicastEntries.size());
-  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastRoutes.size());
+  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
-  EXPECT_EQ(1, routeDb->unicastEntries.size());
-  EXPECT_EQ(3, routeDb->mplsEntries.size()); // node and adj route
+  EXPECT_EQ(1, routeDb->unicastRoutes.size());
+  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   //
   // Change adjLabel. This should report route-attribute change only for node1
@@ -858,7 +858,7 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_THAT(
       spfSolver.buildRouteDb("1", areaLinkStates, prefixState)
           .value()
-          .unicastEntries,
+          .unicastRoutes,
       testing::SizeIs(1));
 
   // 3 will program the BGP route towards both
@@ -1198,13 +1198,13 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   bool foundRouteV6 = false;
   bool foundRouteNodeLabel = false;
   if (routeDb.has_value()) {
-    for (auto const& [preifx, _] : routeDb->unicastEntries) {
-      if (preifx == addr3) {
+    for (auto const& [prefix, _] : routeDb->unicastRoutes) {
+      if (toIpPrefix(prefix) == addr3) {
         foundRouteV6 = true;
         break;
       }
     }
-    for (auto const& [label, _] : routeDb->mplsEntries) {
+    for (auto const& [label, _] : routeDb->mplsRoutes) {
       if (label == 3) {
         foundRouteNodeLabel = true;
       }
@@ -1733,9 +1733,8 @@ class SimpleRingTopologyFixture
   verifyRouteInUpdateNoDelete(
       std::string nodeName, int32_t mplsLabel, const DecisionRouteDb& compDb) {
     // verify route DB change in node 1.
-    auto routeDb1 =
-        spfSolver->buildRouteDb(nodeName, areaLinkStates, prefixState).value();
-    auto deltaRoutes = getRouteDelta(routeDb1, compDb);
+    auto deltaRoutes = compDb.calculateUpdate(
+        spfSolver->buildRouteDb(nodeName, areaLinkStates, prefixState).value());
 
     int find = 0;
     for (const auto& mplsRoute : deltaRoutes.mplsRoutesToUpdate) {
@@ -4493,7 +4492,7 @@ class DecisionTestFixture : public ::testing::Test {
   createPrefixValue(
       const string& node,
       int64_t version,
-      const vector<thrift::IpPrefix>& prefixes,
+      const vector<thrift::IpPrefix>& prefixes = {},
       const string& area = kDefaultArea) {
     vector<thrift::PrefixEntry> prefixEntries;
     for (const auto& prefix : prefixes) {
@@ -4651,7 +4650,9 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routeDbDelta = recvRouteUpdates();
   // only expect to add a route to addr3
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].prefix, toIPNetwork(addr3));
+  EXPECT_EQ(
+      routeDbDelta.unicastRoutesToUpdate.begin()->second.prefix,
+      toIPNetwork(addr3));
   EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
@@ -4752,7 +4753,9 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routeDbDelta = recvRouteUpdates();
   // only expect to add a route to addr3
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].prefix, toIPNetwork(addr3));
+  EXPECT_EQ(
+      routeDbDelta.unicastRoutesToUpdate.begin()->second.prefix,
+      toIPNetwork(addr3));
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
 
@@ -5113,7 +5116,10 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     auto updates = recvRouteUpdates();
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
     EXPECT_EQ(
-        0, *updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight_ref());
+        0,
+        *updates.unicastRoutesToUpdate.begin()
+             ->second.nexthops.begin()
+             ->weight_ref());
   }
 
   // Get policy test. Expect failure
@@ -5145,7 +5151,10 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     auto updates = recvRouteUpdates();
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
     EXPECT_EQ(
-        2, *updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight_ref());
+        2,
+        *updates.unicastRoutesToUpdate.begin()
+             ->second.nexthops.begin()
+             ->weight_ref());
   }
 
   // Set the policy with empty weight. Expect route delete
@@ -5162,12 +5171,34 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     EXPECT_EQ(toIPNetwork(addr2), updates.unicastRoutesToDelete.at(0));
   }
 
+  // trigger addr2 recalc by flapping the advertisement
+  publication = createThriftPublication(
+      {{"prefix:2", createPrefixValue("2", 2)}}, {}, {}, {}, std::string(""));
+  sendKvPublication(publication);
+  publication = createThriftPublication(
+      {{"prefix:2", createPrefixValue("2", 3, {addr2})}},
+      {},
+      {},
+      {},
+      std::string(""));
+  sendKvPublication(publication);
+
+  {
+    auto updates = recvRouteUpdates();
+    EXPECT_EQ(0, updates.unicastRoutesToUpdate.size());
+    ASSERT_EQ(1, updates.unicastRoutesToDelete.size());
+    EXPECT_EQ(toIPNetwork(addr2), updates.unicastRoutesToDelete.at(0));
+  }
+
   // Let the policy expire. Wait for another route database change
   {
     auto updates = recvRouteUpdates();
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
     EXPECT_EQ(
-        0, *updates.unicastRoutesToUpdate.at(0).nexthops.begin()->weight_ref());
+        0,
+        *updates.unicastRoutesToUpdate.begin()
+             ->second.nexthops.begin()
+             ->weight_ref());
 
     auto retrievedPolicy = decision->getRibPolicy().get();
     EXPECT_GE(0, *retrievedPolicy.ttl_secs_ref());
@@ -5431,6 +5462,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   //
   // Only publish prefix updates
   //
+  auto getRouteForPrefixCount =
+      counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
       {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
       {},
@@ -5442,7 +5475,12 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(4, counters["decision.spf_runs.count"]);
-  EXPECT_EQ(3, counters["decision.route_build_runs.count"]);
+  // only prefix changed no full rebuild needed
+  EXPECT_EQ(2, counters["decision.route_build_runs.count"]);
+
+  EXPECT_EQ(
+      getRouteForPrefixCount + 1,
+      counters["decision.get_route_for_prefix.count"]);
 
   //
   // publish adj updates right after prefix updates
@@ -5469,14 +5507,16 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(6, counters["decision.spf_runs.count"]);
-  EXPECT_EQ(4, counters["decision.route_build_runs.count"]);
+  EXPECT_EQ(3, counters["decision.route_build_runs.count"]);
 
   //
   // publish multiple prefix updates in a row
   // Decision is supposed to process prefix update only once
 
-  // Some tricks here; we need to bump the time-stamp on router 4's data, so
+  // Some tricks here; we need to bump the version on router 4's data, so
   // it can override existing;
+
+  getRouteForPrefixCount = counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
       {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
       {},
@@ -5503,9 +5543,12 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   recvRouteUpdates();
 
   counters = fb303::fbData->getCounters();
+  // only prefix has changed so spf_runs is unchanged
   EXPECT_EQ(6, counters["decision.spf_runs.count"]);
-  // only 1 request shall be processed
-  EXPECT_EQ(5, counters["decision.route_build_runs.count"]);
+  // addr5 and addr6 are seen to have changed or flapped during this interval
+  EXPECT_EQ(
+      getRouteForPrefixCount + 2,
+      counters["decision.get_route_for_prefix.count"]);
 }
 
 //
@@ -6196,7 +6239,7 @@ TEST_F(DecisionTestFixture, Counters) {
       std::string(""));
   sendKvPublication(publication0);
   const auto routeDb = recvRouteUpdates();
-  for (const auto& uniRoute : routeDb.unicastRoutesToUpdate) {
+  for (const auto& [_, uniRoute] : routeDb.unicastRoutesToUpdate) {
     EXPECT_NE(
         folly::IPAddress::networkToString(uniRoute.prefix), "10.1.0.0/16");
   }

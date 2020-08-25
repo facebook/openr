@@ -223,8 +223,8 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
           kNumOfNexthops, kVethNameY);
       auto nhsSet =
           std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
-      routeUpdate.unicastRoutesToUpdate.emplace_back(
-          RibUnicastEntry(toIPNetwork(prefix), nhsSet));
+      routeUpdate.unicastRoutesToUpdate.emplace(
+          toIPNetwork(prefix), RibUnicastEntry(toIPNetwork(prefix), nhsSet));
     }
     // Send routeDB to Fib and wait for updating completing
     fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
@@ -248,7 +248,8 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
           kNumOfNexthops, kVethNameY);
       auto nhsSet =
           std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
-      routeUpdate.unicastRoutesToUpdate.emplace_back(
+      routeUpdate.unicastRoutesToUpdate.emplace(
+          toIPNetwork(prefixes[index]),
           RibUnicastEntry(toIPNetwork(prefixes[index]), nhsSet));
     }
     // Add perfevents

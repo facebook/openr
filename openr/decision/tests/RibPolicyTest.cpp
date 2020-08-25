@@ -231,6 +231,61 @@ TEST(RibPolicy, ApplyAction) {
   }
 }
 
+TEST(RibPolicy, ApplyPolicy) {
+  const auto stmt1 =
+      createPolicyStatement({toIpPrefix("fc01::/64")}, 1, {{"area1", 99}});
+  const auto stmt2 = createPolicyStatement(
+      {toIpPrefix("fc00::/64"), toIpPrefix("fc02::/64")}, 1, {{"area2", 0}});
+  auto policy = RibPolicy(createPolicy({stmt1, stmt2}, 1));
+
+  const auto nh1 = createNextHop(
+      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, false, "area1");
+  const auto nh2 = createNextHop(
+      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, false, "area2");
+
+  RibUnicastEntry const entry1(
+      folly::IPAddress::createNetwork("fc01::/64"), {nh1, nh2});
+  RibUnicastEntry const entry2(
+      folly::IPAddress::createNetwork("fc02::/64"), {nh2});
+  {
+    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> entries;
+    entries.emplace(entry1.prefix, entry1);
+    entries.emplace(entry2.prefix, entry2);
+
+    auto const change = policy.applyPolicy(entries);
+
+    EXPECT_THAT(
+        change.updatedRoutes, testing::UnorderedElementsAre(entry1.prefix));
+    EXPECT_THAT(
+        change.deletedRoutes, testing::UnorderedElementsAre(entry2.prefix));
+
+    EXPECT_THAT(entries, testing::SizeIs(1));
+
+    auto expectNh1 = nh1;
+    expectNh1.weight_ref() = 99;
+
+    auto expectNh2 = nh2;
+    expectNh2.weight_ref() = 1;
+    EXPECT_THAT(
+        entries.at(entry1.prefix).nexthops,
+        testing::UnorderedElementsAre(expectNh1, expectNh2));
+  }
+
+  // wait for policy to expire and expect no changes
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  EXPECT_FALSE(policy.isActive());
+  {
+    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> entries;
+    entries.emplace(entry1.prefix, entry1);
+    entries.emplace(entry2.prefix, entry2);
+    auto const change = policy.applyPolicy(entries);
+
+    EXPECT_THAT(change.updatedRoutes, testing::IsEmpty());
+    EXPECT_THAT(change.deletedRoutes, testing::IsEmpty());
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

@@ -359,7 +359,7 @@ TEST_F(FibTestFixture, processRouteDb) {
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1, path1_2_2}));
     routeUpdatesQueue.push(std::move(routeUpdate));
   }
@@ -383,7 +383,7 @@ TEST_F(FibTestFixture, processRouteDb) {
 
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}));
     routeUpdatesQueue.push(std::move(routeUpdate));
   }
@@ -405,9 +405,9 @@ TEST_F(FibTestFixture, processRouteDb) {
       createUnicastRoute(prefix3, {path1_3_2}));
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix2), {path1_2_2, path1_2_3}));
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix3), {path1_3_2}));
     routeUpdatesQueue.push(std::move(routeUpdate));
   }
@@ -455,9 +455,9 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   // Mimic decision pub sock publishing RouteDatabaseDelta
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1, path1_2_2}));
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
     routeUpdate.mplsRoutesToUpdate.emplace_back(
         RibMplsEntry(label2, {mpls_path1_2_1, mpls_path1_2_2}));
@@ -509,7 +509,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   //
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_2}));
     routeUpdate.mplsRoutesToUpdate.emplace_back(
         RibMplsEntry(label1, {mpls_path1_2_2}));
@@ -606,9 +606,10 @@ TEST_F(FibTestFixture, processInterfaceDbWithNoIfnameNexthop) {
   DecisionRouteUpdate routeUpdate;
   auto path1_2_1_no_if_name = path1_2_1;
   path1_2_1_no_if_name.address_ref()->ifName_ref().reset();
-  routeUpdate.unicastRoutesToUpdate.emplace_back(
+  routeUpdate.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix2),
       RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1_no_if_name}));
-  routeUpdate.unicastRoutesToUpdate.emplace_back(
+  routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
   routeUpdatesQueue.push(std::move(routeUpdate));
   mockFibHandler->waitForUpdateUnicastRoutes();
@@ -657,9 +658,9 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   // Mimic decision pub sock publishing RouteDatabaseDelta
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}));
     routeUpdate.mplsRoutesToUpdate.emplace_back(
         RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
@@ -711,7 +712,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   // add back that route
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(
+    routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}));
     routeUpdate.mplsRoutesToUpdate.emplace_back(
         RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
@@ -743,7 +744,7 @@ TEST_F(FibTestFixture, fibRestart) {
 
   // Mimic decision pub sock publishing RouteDatabaseDelta
   DecisionRouteUpdate routeUpdate;
-  routeUpdate.unicastRoutesToUpdate.emplace_back(
+  routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
   routeUpdate.mplsRoutesToUpdate.emplace_back(
       RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
@@ -795,7 +796,7 @@ TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
 
   // Mimic decision pub sock publishing RouteDatabaseDelta
   DecisionRouteUpdate routeUpdate;
-  routeUpdate.unicastRoutesToUpdate.emplace_back(
+  routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
   routeUpdate.mplsRoutesToUpdate.emplace_back(
       RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
@@ -917,10 +918,10 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
 
   // add routes to DB and update DB
   DecisionRouteUpdate routeUpdate;
-  routeUpdate.unicastRoutesToUpdate.emplace_back(std::move(route1));
-  routeUpdate.unicastRoutesToUpdate.emplace_back(std::move(route2));
-  routeUpdate.unicastRoutesToUpdate.emplace_back(std::move(route3));
-  routeUpdate.unicastRoutesToUpdate.emplace_back(std::move(route4));
+  routeUpdate.addRouteToUpdate(std::move(route1));
+  routeUpdate.addRouteToUpdate(std::move(route2));
+  routeUpdate.addRouteToUpdate(std::move(route3));
+  routeUpdate.addRouteToUpdate(std::move(route4));
   routeUpdatesQueue.push(std::move(routeUpdate));
   mockFibHandler->waitForUpdateUnicastRoutes();
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -1070,8 +1071,8 @@ TEST_F(FibTestFixture, doNotInstall) {
   // add routes to DB and update DB
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(route1);
-    routeUpdate.unicastRoutesToUpdate.emplace_back(route2);
+    routeUpdate.addRouteToUpdate(std::move(route1));
+    routeUpdate.addRouteToUpdate(std::move(route2));
     routeUpdatesQueue.push(std::move(routeUpdate));
   }
   mockFibHandler->waitForSyncFib();
@@ -1083,8 +1084,8 @@ TEST_F(FibTestFixture, doNotInstall) {
   // add routes to DB and update DB
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(route3);
-    routeUpdate.unicastRoutesToUpdate.emplace_back(route4);
+    routeUpdate.addRouteToUpdate(std::move(route3));
+    routeUpdate.addRouteToUpdate(std::move(route4));
     routeUpdatesQueue.push(std::move(routeUpdate));
   }
 
@@ -1123,9 +1124,9 @@ TEST_F(FibTestFixture, ThriftServerError) {
 
   // RouteUpdates - Send route update for unicast & mpls routes
   DecisionRouteUpdate routeUpdate;
-  routeUpdate.unicastRoutesToUpdate.emplace_back(
+  routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix2), {path1_2_2}));
-  routeUpdate.unicastRoutesToUpdate.emplace_back(
+  routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
   routeUpdate.mplsRoutesToUpdate.emplace_back(
       RibMplsEntry(label2, {mpls_path1_2_2}));

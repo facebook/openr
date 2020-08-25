@@ -75,37 +75,48 @@ struct BestRouteSelectionResult {
   }
 };
 
-struct DecisionRouteDb {
-  std::unordered_map<thrift::IpPrefix /* prefix */, RibUnicastEntry>
-      unicastEntries;
-  std::unordered_map<int32_t /* label */, RibMplsEntry> mplsEntries;
+class DecisionRouteDb {
+ public:
+  std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
+      unicastRoutes;
+  std::unordered_map<int32_t /* label */, RibMplsEntry> mplsRoutes;
+
+  // calculate the delta between this and newDb. Note, this method is const;
+  // We are not actually updating here. We may mutate the DecisionRouteUpdate in
+  // some way before calling update with it
+  DecisionRouteUpdate calculateUpdate(DecisionRouteDb&& newDb) const;
+
+  // update the state of this with the DecisionRouteUpdate passed
+  void update(DecisionRouteUpdate const& update);
 
   thrift::RouteDatabase
   toThrift() const {
     thrift::RouteDatabase tRouteDb;
     // unicast routes
-    for (const auto& [_, entry] : unicastEntries) {
+    for (const auto& [_, entry] : unicastRoutes) {
       tRouteDb.unicastRoutes_ref()->emplace_back(entry.toThrift());
     }
     // mpls routes
-    for (const auto& [_, entry] : mplsEntries) {
+    for (const auto& [_, entry] : mplsRoutes) {
       tRouteDb.mplsRoutes_ref()->emplace_back(entry.toThrift());
     }
     return tRouteDb;
   }
+
+  // Assertion: no route for this prefix may already exist in the db
+  void
+  addUnicastRoute(RibUnicastEntry&& entry) {
+    auto key = entry.prefix;
+    CHECK(unicastRoutes.emplace(key, std::move(entry)).second);
+  }
+
+  // Assertion: no route for this label may already exist in the db
+  void
+  addMplsRoute(RibMplsEntry&& entry) {
+    auto key = entry.label;
+    CHECK(mplsRoutes.emplace(key, std::move(entry)).second);
+  }
 };
-
-/*
- * Given old DecisionRouteDb and new DecisionRouteDb
- * return DecisionRouteUpdate
- */
-DecisionRouteUpdate getRouteDelta(
-    const DecisionRouteDb& newDb, const DecisionRouteDb& oldDb);
-
-/*
- * Given DecisionRouteDb, translate to thrift::RouteDatabase
- */
-thrift::RouteDatabase toTRouteDatabase(const DecisionRouteDb& decisionRouteDb);
 
 namespace detail {
 /**
@@ -139,53 +150,25 @@ class DecisionPendingUpdates {
     return updatedPrefixes_;
   }
 
-  void
-  applyLinkStateChange(
+  void applyLinkStateChange(
       std::string const& nodeName,
       LinkState::LinkStateChange const& change,
-      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt) {
-    needsFullRebuild_ |=
-        (change.topologyChanged || change.nodeLabelChanged ||
-         // we only need a full rebuild if link attributes change locally
-         // this would be a nexthop on link label change
-         (change.linkAttributesChanged && nodeName == myNodeName_));
-    addUpdate(perfEvents);
-  }
+      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt);
 
-  void
-  applyPrefixStateChange(
+  void applyPrefixStateChange(
       std::unordered_set<thrift::IpPrefix>&& change,
-      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt) {
-    updatedPrefixes_.merge(std::move(change));
-    addUpdate(perfEvents);
-  }
+      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt);
 
-  void
-  reset() {
-    count_ = 0;
-    perfEvents_ = std::nullopt;
-    needsFullRebuild_ = false;
-    updatedPrefixes_.clear();
-  }
+  void reset();
 
-  void
-  addEvent(std::string const& eventDescription) {
-    if (perfEvents_) {
-      addPerfEvent(*perfEvents_, myNodeName_, eventDescription);
-    }
-  }
+  void addEvent(std::string const& eventDescription);
 
   std::optional<thrift::PerfEvents> const&
   perfEvents() const {
     return perfEvents_;
   }
 
-  std::optional<thrift::PerfEvents>
-  moveOutEvents() {
-    std::optional<thrift::PerfEvents> events = std::move(perfEvents_);
-    perfEvents_ = std::nullopt;
-    return events;
-  }
+  std::optional<thrift::PerfEvents> moveOutEvents();
 
   uint32_t
   getCount() const {
@@ -193,24 +176,7 @@ class DecisionPendingUpdates {
   }
 
  private:
-  void
-  addUpdate(const std::optional<thrift::PerfEvents>& perfEvents) {
-    ++count_;
-
-    // Update local copy of perf evens if it is newer than the one to be added
-    // We do debounce (batch updates) for recomputing routes and in order to
-    // measure convergence performance, it is better to use event which is
-    // oldest.
-    if (!perfEvents_ ||
-        (perfEvents &&
-         *perfEvents_->events_ref()->front().unixTs_ref() >
-             *perfEvents->events_ref()->front().unixTs_ref())) {
-      // if we don't have any perf events for this batch and this update also
-      // doesn't have anything, let's start building the event list from now
-      perfEvents_ = perfEvents ? perfEvents : thrift::PerfEvents{};
-      addPerfEvent(*perfEvents_, myNodeName_, "DECISION_RECEIVED");
-    }
-  }
+  void addUpdate(const std::optional<thrift::PerfEvents>& perfEvents);
 
   // tracks how many updates are part of this batch
   uint32_t count_{0};
@@ -264,6 +230,12 @@ class SpfSolver {
       const std::string& myNodeName,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState);
+
+  std::optional<RibUnicastEntry> createRouteForPrefix(
+      const std::string& myNodeName,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      PrefixState const& prefixState,
+      thrift::IpPrefix const& prefix);
 
  private:
   // no-copy

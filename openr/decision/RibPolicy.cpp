@@ -154,4 +154,31 @@ RibPolicy::applyAction(RibUnicastEntry& route) const {
   return false;
 }
 
+RibPolicy::PolicyChange
+RibPolicy::applyPolicy(std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+                           unicastEntries) const {
+  PolicyChange change;
+  if (not isActive()) {
+    return change;
+  }
+  auto iter = unicastEntries.begin();
+  while (iter != unicastEntries.end()) {
+    if (applyAction(iter->second)) {
+      if (iter->second.nexthops.empty()) {
+        VLOG(1) << "Removing route for "
+                << folly::IPAddress::networkToString(iter->second.prefix)
+                << " because no valid next-hops after applying rib-policy";
+        change.deletedRoutes.push_back(iter->second.prefix);
+        iter = unicastEntries.erase(iter);
+        continue;
+      }
+      change.updatedRoutes.push_back(iter->second.prefix);
+      VLOG(2) << "RibPolicy transformed the route "
+              << folly::IPAddress::networkToString(iter->second.prefix);
+    }
+    ++iter;
+  }
+  return change;
+}
+
 } // namespace openr

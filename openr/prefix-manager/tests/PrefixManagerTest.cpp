@@ -1450,7 +1450,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
 
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdate.addRouteToUpdate(unicast1A);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
@@ -1484,7 +1484,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
 
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1B);
+    routeUpdate.addRouteToUpdate(unicast1B);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
@@ -1572,7 +1572,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdate.addRouteToUpdate(unicast1A);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
@@ -1593,7 +1593,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   unicast1A.nexthops.emplace(path1_2_3);
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdate.addRouteToUpdate(unicast1A);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
@@ -1613,7 +1613,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   unicast1A.nexthops.erase(path1_2_2);
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
+    routeUpdate.addRouteToUpdate(unicast1A);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
@@ -1644,7 +1644,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1B);
+    routeUpdate.addRouteToUpdate(unicast1B);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;

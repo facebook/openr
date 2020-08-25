@@ -677,7 +677,7 @@ PrefixManager::processDecisionRouteUpdates(
   // Add/Update unicast routes to update
   // Self originated (include routes imported from local BGP)
   // won't show up in decisionRouteUpdate.
-  for (auto& route : decisionRouteUpdate.unicastRoutesToUpdate) {
+  for (auto& [_, route] : decisionRouteUpdate.unicastRoutesToUpdate) {
     auto& prefixEntry = route.bestPrefixEntry;
 
     // NOTE: future expansion - run egress policy here

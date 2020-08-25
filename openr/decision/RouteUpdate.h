@@ -7,11 +7,13 @@
 
 #pragma once
 
+#include <list>
 #include <vector>
 
 #include <folly/IPAddress.h>
 #include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
+#include <openr/decision/RibPolicy.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 
 namespace openr {
@@ -19,18 +21,32 @@ namespace openr {
 // Route updates published by Decision
 // consumed by PrefixManager, BgpSpeaker, Fib.
 struct DecisionRouteUpdate {
-  std::vector<RibUnicastEntry> unicastRoutesToUpdate;
+  std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
+      unicastRoutesToUpdate;
   std::vector<folly::CIDRNetwork> unicastRoutesToDelete;
   std::vector<RibMplsEntry> mplsRoutesToUpdate;
   std::vector<int32_t> mplsRoutesToDelete;
   std::optional<thrift::PerfEvents> perfEvents = std::nullopt;
+
+  void
+  addRouteToUpdate(RibUnicastEntry const& route) {
+    CHECK(!unicastRoutesToUpdate.count(route.prefix));
+    unicastRoutesToUpdate.emplace(route.prefix, route);
+  }
+
+  void
+  addRouteToUpdate(RibUnicastEntry&& route) {
+    auto prefix = route.prefix;
+    CHECK(!unicastRoutesToUpdate.count(prefix));
+    unicastRoutesToUpdate.emplace(std::move(prefix), std::move(route));
+  }
 
   thrift::RouteDatabaseDelta
   toThrift() {
     thrift::RouteDatabaseDelta delta;
 
     // unicast
-    for (const auto& route : unicastRoutesToUpdate) {
+    for (const auto& [_, route] : unicastRoutesToUpdate) {
       delta.unicastRoutesToUpdate_ref()->emplace_back(route.toThrift());
     }
     for (const auto& route : unicastRoutesToDelete) {
