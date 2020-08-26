@@ -671,15 +671,15 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
         continue;
       }
 
-      routeDb.addMplsRoute(RibMplsEntry(
-          topLabel,
-          {createNextHop(
-              link->getNhV6FromNode(myNodeName),
-              link->getIfaceFromNode(myNodeName),
-              link->getMetricFromNode(myNodeName),
-              createMplsAction(thrift::MplsActionCode::PHP),
-              false /* useNonShortestRoute */,
-              link->getArea())}));
+      routeDb.addMplsRoute(
+          RibMplsEntry(
+              topLabel,
+              {createNextHop(
+                  link->getNhV6FromNode(myNodeName),
+                  link->getIfaceFromNode(myNodeName),
+                  link->getMetricFromNode(myNodeName),
+                  createMplsAction(thrift::MplsActionCode::PHP),
+                  link->getArea())}));
     }
   }
 
@@ -1012,7 +1012,6 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
           firstLink->getIfaceFromNode(myNodeName),
           cost,
           mplsAction,
-          true /* useNonShortestRoute */,
           firstLink->getArea()));
     }
   }
@@ -1089,11 +1088,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
     if (routeIter != staticRoutes_.mplsRoutes_ref()->end()) {
       for (const auto& nh : routeIter->second) {
         nextHops.emplace(createNextHop(
-            nh.address_ref().value(),
-            std::nullopt,
-            0,
-            std::nullopt,
-            true /* useNonShortestRoute */));
+            nh.address_ref().value(), std::nullopt, 0, std::nullopt));
       }
     } else {
       LOG(ERROR) << "Static nexthops doesn't exist for static mpls label "
@@ -1328,7 +1323,6 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
             link->getIfaceFromNode(myNodeName),
             distOverLink,
             mplsAction,
-            false /* useNonShortestRoute */,
             link->getArea()));
       } // end for perDestination ...
     } // end for linkState ...

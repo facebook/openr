@@ -253,20 +253,6 @@ int64_t generateHash(
 std::string getRemoteIfName(const thrift::Adjacency& adj);
 
 /**
- * Given list of nextHops returns the list of best nextHops (nextHops with
- * lowest metric value).
- */
-std::vector<thrift::NextHopThrift> getBestNextHopsUnicast(
-    std::vector<thrift::NextHopThrift> const& nextHops);
-
-/**
- * Given list of nextHops for mpls route, validate nexthops and return
- * nextHops with lowest metric value and of same MplsActionCode.
- */
-std::vector<thrift::NextHopThrift> getBestNextHopsMpls(
-    std::vector<thrift::NextHopThrift> const& nextHops);
-
-/**
  * Find delta between two route databases, it requires input to be sorted.
  */
 thrift::RouteDatabaseDelta findDeltaRoutes(
@@ -438,7 +424,6 @@ thrift::NextHopThrift createNextHop(
     std::optional<std::string> ifName = std::nullopt,
     int32_t metric = 0,
     std::optional<thrift::MplsAction> maybeMplsAction = std::nullopt,
-    bool useNonShortestRoute = false,
     const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
 
 thrift::MplsAction createMplsAction(
@@ -454,17 +439,22 @@ thrift::UnicastRoute createUnicastRoute(
 thrift::MplsRoute createMplsRoute(
     int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops);
 
-std::vector<thrift::UnicastRoute> createUnicastRoutesWithBestNexthops(
-    const std::vector<thrift::UnicastRoute>& routes);
-
-std::vector<thrift::MplsRoute> createMplsRoutesWithBestNextHops(
-    const std::vector<thrift::MplsRoute>& routes);
-
-std::vector<thrift::UnicastRoute> createUnicastRoutesWithBestNextHopsMap(
+std::vector<thrift::UnicastRoute> createUnicastRoutesFromMap(
     const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
         unicastRoutes);
 
-std::vector<thrift::MplsRoute> createMplsRoutesWithBestNextHopsMap(
+/**
+ * Given list of nextHops for mpls route, validate nexthops and return
+ * subset of nextHops with the same MplsActionCode. PHP (immediate) next-hops
+ * are preferred over SWAP (in-direct) next-hops
+ *
+ * Later two APIs are bulk conversion of MPLS route
+ */
+std::vector<thrift::NextHopThrift> selectMplsNextHops(
+    std::vector<thrift::NextHopThrift> const& nextHops);
+std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHops(
+    const std::vector<thrift::MplsRoute>& routes);
+std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHopsMap(
     const std::unordered_map<uint32_t, thrift::MplsRoute>& mplsRoutes);
 
 std::string getNodeNameFromKey(const std::string& key);

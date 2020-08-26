@@ -471,37 +471,12 @@ getRemoteIfName(const thrift::Adjacency& adj) {
 }
 
 std::vector<thrift::NextHopThrift>
-getBestNextHopsUnicast(std::vector<thrift::NextHopThrift> const& allNextHops) {
-  // Optimization
-  if (allNextHops.size() <= 1) {
-    return allNextHops;
-  }
-  // Find minimum cost
-  int32_t minCost = std::numeric_limits<int32_t>::max();
-  for (auto const& nextHop : allNextHops) {
-    minCost = std::min(minCost, *nextHop.metric_ref());
-  }
-
-  // Find nextHops with the minimum cost
-  std::vector<thrift::NextHopThrift> bestNextHops;
-  for (auto const& nextHop : allNextHops) {
-    if (*nextHop.metric_ref() == minCost or
-        *nextHop.useNonShortestRoute_ref()) {
-      bestNextHops.emplace_back(nextHop);
-    }
-  }
-
-  return bestNextHops;
-}
-
-std::vector<thrift::NextHopThrift>
-getBestNextHopsMpls(std::vector<thrift::NextHopThrift> const& allNextHops) {
+selectMplsNextHops(std::vector<thrift::NextHopThrift> const& allNextHops) {
   // Optimization for single nexthop case
   if (allNextHops.size() <= 1) {
     return allNextHops;
   }
   // Find minimum cost and mpls action
-  int32_t minCost = std::numeric_limits<int32_t>::max();
   thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
   for (auto const& nextHop : allNextHops) {
     CHECK(nextHop.mplsAction_ref().has_value());
@@ -514,20 +489,16 @@ getBestNextHopsMpls(std::vector<thrift::NextHopThrift> const& allNextHops) {
         thrift::MplsActionCode::POP_AND_LOOKUP !=
         *nextHop.mplsAction_ref()->action_ref());
 
-    if (*nextHop.metric_ref() <= minCost) {
-      minCost = *nextHop.metric_ref();
-      if (*nextHop.mplsAction_ref()->action_ref() ==
-          thrift::MplsActionCode::PHP) {
-        mplsActionCode = thrift::MplsActionCode::PHP;
-      }
+    if (*nextHop.mplsAction_ref()->action_ref() ==
+        thrift::MplsActionCode::PHP) {
+      mplsActionCode = thrift::MplsActionCode::PHP;
     }
   }
 
   // Find nextHops with the minimum cost and required mpls action
   std::vector<thrift::NextHopThrift> bestNextHops;
   for (auto const& nextHop : allNextHops) {
-    if (*nextHop.metric_ref() == minCost and
-        *nextHop.mplsAction_ref()->action_ref() == mplsActionCode) {
+    if (*nextHop.mplsAction_ref()->action_ref() == mplsActionCode) {
       bestNextHops.emplace_back(nextHop);
     }
   }
@@ -911,14 +882,12 @@ createNextHop(
     std::optional<std::string> ifName,
     int32_t metric,
     std::optional<thrift::MplsAction> maybeMplsAction,
-    bool useNonShortestRoute,
     const std::string& area) {
   thrift::NextHopThrift nextHop;
   *nextHop.address_ref() = addr;
   nextHop.address_ref()->ifName_ref().from_optional(std::move(ifName));
   nextHop.metric_ref() = metric;
   nextHop.mplsAction_ref().from_optional(maybeMplsAction);
-  nextHop.useNonShortestRoute_ref() = useNonShortestRoute;
   nextHop.area_ref() = area;
   return nextHop;
 }
@@ -969,59 +938,43 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
   return mplsRoute;
 }
 
-std::vector<thrift::UnicastRoute>
-createUnicastRoutesWithBestNexthops(
-    const std::vector<thrift::UnicastRoute>& routes) {
-  // Build routes to be programmed
-  std::vector<thrift::UnicastRoute> newRoutes;
-
-  for (auto const& route : routes) {
-    auto newRoute = createUnicastRoute(
-        *route.dest_ref(), getBestNextHopsUnicast(*route.nextHops_ref()));
-    newRoutes.emplace_back(std::move(newRoute));
-  }
-
-  return newRoutes;
-}
-
 std::vector<thrift::MplsRoute>
-createMplsRoutesWithBestNextHops(const std::vector<thrift::MplsRoute>& routes) {
+createMplsRoutesWithSelectedNextHops(
+    const std::vector<thrift::MplsRoute>& routes) {
   // Build routes to be programmed
   std::vector<thrift::MplsRoute> newRoutes;
 
   for (auto const& route : routes) {
     newRoutes.emplace_back(createMplsRoute(
-        *route.topLabel_ref(), getBestNextHopsMpls(*route.nextHops_ref())));
+        *route.topLabel_ref(), selectMplsNextHops(*route.nextHops_ref())));
   }
 
   return newRoutes;
 }
 
 std::vector<thrift::UnicastRoute>
-createUnicastRoutesWithBestNextHopsMap(
+createUnicastRoutesFromMap(
     const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
         unicastRoutes) {
   // Build routes to be programmed
   std::vector<thrift::UnicastRoute> newRoutes;
 
-  for (auto const& route : unicastRoutes) {
-    auto newRoute = createUnicastRoute(
-        route.first, getBestNextHopsUnicast(*route.second.nextHops_ref()));
-    newRoutes.emplace_back(std::move(newRoute));
+  for (auto const& [_, route] : unicastRoutes) {
+    newRoutes.emplace_back(route);
   }
 
   return newRoutes;
 }
 
 std::vector<thrift::MplsRoute>
-createMplsRoutesWithBestNextHopsMap(
+createMplsRoutesWithSelectedNextHopsMap(
     const std::unordered_map<uint32_t, thrift::MplsRoute>& mplsRoutes) {
   // Build routes to be programmed
   std::vector<thrift::MplsRoute> newRoutes;
 
   for (auto const& route : mplsRoutes) {
     newRoutes.emplace_back(createMplsRoute(
-        route.first, getBestNextHopsMpls(*route.second.nextHops_ref())));
+        route.first, selectMplsNextHops(*route.second.nextHops_ref())));
   }
 
   return newRoutes;

@@ -1717,31 +1717,7 @@ def get_routes(
     )
     mpls_routes = sorted(route_db.mplsRoutes, key=lambda x: x.topLabel)
 
-    ret_unicast_routes = []
-    ret_mpls_routes = []
-    for route in unicast_routes:
-        if not route.nextHops:
-            continue
-
-        min_metric = min(route.nextHops, key=lambda x: x.metric).metric
-        nextHops = [
-            nh
-            for nh in route.nextHops
-            if nh.metric == min_metric or nh.useNonShortestRoute
-        ]
-        ret_unicast_routes.append(
-            network_types.UnicastRoute(dest=route.dest, nextHops=nextHops)
-        )
-
-    for route in mpls_routes:
-        if not route.nextHops:
-            continue
-        min_metric = min(route.nextHops, key=lambda x: x.metric).metric
-        nextHops = [nh for nh in route.nextHops if nh.metric == min_metric]
-        ret_mpls_routes.append(
-            network_types.MplsRoute(topLabel=route.topLabel, nextHops=nextHops)
-        )
-    return (ret_unicast_routes, ret_mpls_routes)
+    return (unicast_routes, mpls_routes)
 
 
 def print_spt_infos(

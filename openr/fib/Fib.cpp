@@ -399,6 +399,9 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   for (auto const& kv : routeState_.unicastRoutes) {
     auto const& route = kv.second;
 
+    // Find previous best nexthops
+    const auto& prevNextHops = *route.nextHops_ref();
+
     // Find valid nexthops for route
     std::vector<thrift::NextHopThrift> validNextHops;
     for (auto const& nextHop : *route.nextHops_ref()) {
@@ -409,14 +412,8 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
       }
     } // end for ... kv.second
 
-    // Find previous best nexthops
-    auto prevBestNextHops = getBestNextHopsUnicast(*route.nextHops_ref());
-
-    // Find new valid best nexthops
-    auto validBestNextHops = getBestNextHopsUnicast(validNextHops);
-
     // Remove route if no valid nexthops
-    if (not validBestNextHops.size()) {
+    if (not validNextHops.size()) {
       VLOG(1) << "Removing prefix " << toString(route.dest)
               << " because of no valid nextHops.";
       routeDbDelta.unicastRoutesToDelete_ref()->emplace_back(*route.dest_ref());
@@ -424,14 +421,14 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
       continue; // Skip rest
     }
 
-    if (validBestNextHops != prevBestNextHops) {
+    if (validNextHops != prevNextHops) {
       // Nexthop group shrink
       VLOG(1) << "bestPaths group resize for prefix: " << toString(route.dest)
-              << ", old: " << prevBestNextHops.size()
-              << ", new: " << validBestNextHops.size();
+              << ", old: " << prevNextHops.size()
+              << ", new: " << validNextHops.size();
       thrift::UnicastRoute newRoute;
       newRoute.dest = route.dest;
-      *newRoute.nextHops_ref() = std::move(validBestNextHops);
+      *newRoute.nextHops_ref() = std::move(validNextHops);
       routeDbDelta.unicastRoutesToUpdate_ref()->emplace_back(
           std::move(newRoute));
       routeState_.dirtyPrefixes.emplace(route.dest); // Mark prefix as dirty
@@ -460,10 +457,10 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     }
 
     // Find previous best nexthops
-    auto prevBestNextHops = getBestNextHopsMpls(*route.nextHops_ref());
+    auto prevBestNextHops = selectMplsNextHops(*route.nextHops_ref());
 
     // Find new valid best nexthops
-    auto validBestNextHops = getBestNextHopsMpls(validNextHops);
+    auto validBestNextHops = selectMplsNextHops(validNextHops);
 
     // Remove route if no valid nexthops
     if (not validBestNextHops.size()) {
@@ -524,15 +521,13 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   updateGlobalCounters();
 
   // Only for backward compatibility
-  auto const& patchedUnicastRoutesToUpdate =
-      createUnicastRoutesWithBestNexthops(
-          *routeDbDelta.unicastRoutesToUpdate_ref());
+  auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
 
-  auto const& mplsRoutesToUpdate =
-      createMplsRoutesWithBestNextHops(*routeDbDelta.mplsRoutesToUpdate_ref());
+  auto const& mplsRoutesToUpdate = createMplsRoutesWithSelectedNextHops(
+      *routeDbDelta.mplsRoutesToUpdate_ref());
 
   VLOG(2) << "Unicast routes to add/update";
-  for (auto const& route : patchedUnicastRoutesToUpdate) {
+  for (auto const& route : unicastRoutesToUpdate) {
     VLOG(2) << "> " << toString(*route.dest_ref()) << ", "
             << route.nextHops_ref()->size();
     for (auto const& nh : *route.nextHops_ref()) {
@@ -598,9 +593,9 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
       client_->sync_deleteUnicastRoutes(
           kFibId_, *routeDbDelta.unicastRoutesToDelete_ref());
     }
-    if (patchedUnicastRoutesToUpdate.size()) {
-      numOfRouteUpdates += patchedUnicastRoutesToUpdate.size();
-      client_->sync_addUnicastRoutes(kFibId_, patchedUnicastRoutesToUpdate);
+    if (unicastRoutesToUpdate.size()) {
+      numOfRouteUpdates += unicastRoutesToUpdate.size();
+      client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
     }
     if (enableSegmentRouting_ &&
         routeDbDelta.mplsRoutesToDelete_ref()->size()) {
@@ -634,9 +629,9 @@ Fib::syncRouteDb() {
             << routeState_.unicastRoutes.size() << " routes";
 
   const auto& unicastRoutes =
-      createUnicastRoutesWithBestNextHopsMap(routeState_.unicastRoutes);
+      createUnicastRoutesFromMap(routeState_.unicastRoutes);
   const auto& mplsRoutes =
-      createMplsRoutesWithBestNextHopsMap(routeState_.mplsRoutes);
+      createMplsRoutesWithSelectedNextHopsMap(routeState_.mplsRoutes);
 
   // In dry run we just print the routes. No real action
   if (dryrun_) {

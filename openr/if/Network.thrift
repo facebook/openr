@@ -86,9 +86,6 @@ struct NextHopThrift {
   // is going to be useful when FBOSS supports it underneath
   //
 
-  // Use non-shortest route (usually false but enabled for KSP2_ED_ECMP)
-  52: bool useNonShortestRoute = 0
-
   // Area field associated with next-hop. This is derived from an adjacency,
   // from where the transport address is also derived. This can be none for
   // imported routes.

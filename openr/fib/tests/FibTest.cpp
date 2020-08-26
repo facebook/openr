@@ -90,14 +90,12 @@ const auto mpls_path1_2_1 = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
     std::string("iface_1_2_1"),
     2,
-    createMplsAction(thrift::MplsActionCode::SWAP, 2),
-    true /* useNonShortestPath */);
+    createMplsAction(thrift::MplsActionCode::SWAP, 2));
 const auto mpls_path1_2_2 = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
     std::string("iface_1_2_2"),
     2,
-    createMplsAction(thrift::MplsActionCode::SWAP, 2),
-    true /* useNonShortestPath */);
+    createMplsAction(thrift::MplsActionCode::SWAP, 2));
 
 bool
 checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {

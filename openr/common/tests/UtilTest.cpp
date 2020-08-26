@@ -592,75 +592,29 @@ TEST(UtilTest, getDurationBetweenPerfEventsTest) {
   }
 }
 
-TEST(UtilTest, getBestNextHopsUnicast) {
-  auto bestNextHops = getBestNextHopsUnicast({path1_2_1, path1_2_2});
-  EXPECT_EQ(bestNextHops.size(), 1);
-  EXPECT_EQ(bestNextHops.at(0).address_ref()->ifName_ref(), "iface_1_2_1");
-  EXPECT_EQ(
-      *bestNextHops.at(0).address_ref()->addr_ref(),
-      *toBinaryAddress(folly::IPAddress("fe80::2")).addr_ref());
-  EXPECT_EQ(*bestNextHops.at(0).metric_ref(), 1);
-
-  bestNextHops =
-      getBestNextHopsUnicast({path1_2_1, path1_2_2, path1_2_3, path1_3_1});
-  EXPECT_EQ(
-      bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_1, path1_3_1}));
-
-  auto path1_2_2_updated = path1_2_2;
-  path1_2_2_updated.useNonShortestRoute_ref() = true;
-  bestNextHops = getBestNextHopsUnicast(
-      {path1_2_1, path1_2_2_updated, path1_2_3, path1_3_1});
-  EXPECT_EQ(
-      bestNextHops,
-      std::vector<thrift::NextHopThrift>(
-          {path1_2_1, path1_2_2_updated, path1_3_1}));
-}
-
-TEST(UtilTest, getBestNextHopsMpls) {
+TEST(UtilTest, selectMplsNextHops) {
   // Validate pop route
-  auto bestNextHops = getBestNextHopsMpls({path1_2_2_pop});
+  auto bestNextHops = selectMplsNextHops({path1_2_2_pop});
   EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_2_pop}));
 
-  // Validate all swap routes (choose min metric)
-  bestNextHops = getBestNextHopsMpls({
-      path1_2_1_swap,
-      path1_2_2_swap,
-      path1_2_3_swap,
-      path1_3_1_swap,
-      path1_3_2_swap,
-  });
+  // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
+  // Metric is ignored
+  bestNextHops = selectMplsNextHops(
+      {path1_2_1_swap, path1_2_2_php, path1_3_1_swap, path1_2_2_php});
   EXPECT_EQ(
       bestNextHops,
-      std::vector<thrift::NextHopThrift>({path1_2_1_swap, path1_3_1_swap}));
+      std::vector<thrift::NextHopThrift>({path1_2_2_php, path1_2_2_php}));
 
-  // Validate all php routes (choose min metric)
-  bestNextHops = getBestNextHopsMpls({
-      path1_2_1_php,
-      path1_2_2_php,
-      path1_2_3_php,
-      path1_3_1_php,
-      path1_3_2_php,
-  });
-  EXPECT_EQ(
-      bestNextHops,
-      std::vector<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
-
-  // Choose min metric in mix of swap and php
-  bestNextHops = getBestNextHopsMpls(
-      {path1_2_1_swap, path1_2_2_php, path1_3_1_swap, path1_3_2_php});
-  EXPECT_EQ(
-      bestNextHops,
-      std::vector<thrift::NextHopThrift>({path1_2_1_swap, path1_3_1_swap}));
-
-  // Choose min metric in mix of swap and php
-  bestNextHops = getBestNextHopsMpls(
+  // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
+  // Metric is ignored
+  bestNextHops = selectMplsNextHops(
       {path1_2_1_php, path1_2_2_swap, path1_3_1_php, path1_3_2_swap});
   EXPECT_EQ(
       bestNextHops,
       std::vector<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
 
   // Prefer PHP over SWAP for metric tie
-  bestNextHops = getBestNextHopsMpls({path1_2_1_swap, path1_3_1_php});
+  bestNextHops = selectMplsNextHops({path1_2_1_swap, path1_3_1_php});
   EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_3_1_php}));
 }
 

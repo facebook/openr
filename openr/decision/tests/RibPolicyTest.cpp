@@ -76,9 +76,9 @@ TEST(RibPolicyStatement, ApplyAction) {
   const auto nhDefault =
       createNextHop(toBinaryAddress("fe80::1"), "iface-default");
   const auto nh1 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, false, "area1");
+      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, "area1");
   const auto nh2 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, false, "area2");
+      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, "area2");
 
   // Test with non matching prefix. Shouldn't be transformed.
   {
@@ -179,9 +179,9 @@ TEST(RibPolicy, ApplyAction) {
   auto policy = RibPolicy(createPolicy({stmt1, stmt2}, 1));
 
   const auto nh1 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, false, "area1");
+      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, "area1");
   const auto nh2 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, false, "area2");
+      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, "area2");
 
   // Apply policy on fc01::/64 (stmt1 gets applied)
   {
@@ -239,9 +239,9 @@ TEST(RibPolicy, ApplyPolicy) {
   auto policy = RibPolicy(createPolicy({stmt1, stmt2}, 1));
 
   const auto nh1 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, false, "area1");
+      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, "area1");
   const auto nh2 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, false, "area2");
+      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, "area2");
 
   RibUnicastEntry const entry1(
       folly::IPAddress::createNetwork("fc01::/64"), {nh1, nh2});
