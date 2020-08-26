@@ -111,6 +111,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_,
       kvStoreUpdatesQueue_,
       peerUpdatesQueue_.getReader(),
+      logSampleQueue_,
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       config_,
@@ -181,6 +182,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       interfaceUpdatesQueue_,
       prefixUpdatesQueue_,
       peerUpdatesQueue_,
+      logSampleQueue_,
       neighborUpdatesQueue_.getReader(),
       nlSock_->getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
@@ -223,6 +225,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       routeUpdatesQueue_.getReader(),
       interfaceUpdatesQueue_.getReader(),
       fibUpdatesQueue_,
+      logSampleQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       kvStore_.get(),
       context_);
@@ -236,6 +239,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStore_.get(),
       configStore_.get(),
       prefixUpdatesQueue_,
+      logSampleQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       context_,
       Constants::kPrefixAllocatorSyncInterval);
@@ -356,6 +360,7 @@ OpenrWrapper<Serializer>::stop() {
   kvStoreUpdatesQueue_.close();
   staticRoutesQueue_.close();
   fibUpdatesQueue_.close();
+  logSampleQueue_.close();
 
   // stop all modules in reverse order
   eventBase_.stop();

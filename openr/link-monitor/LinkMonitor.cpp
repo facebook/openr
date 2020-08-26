@@ -81,6 +81,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
+    messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     MonitorSubmitUrl const& monitorSubmitUrl,
@@ -107,6 +108,7 @@ LinkMonitor::LinkMonitor(
       interfaceUpdatesQueue_(intfUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
+      logSampleQueue_(logSampleQueue),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
       configStore_(configStore),
       nlSock_(nlSock) {
@@ -1229,22 +1231,18 @@ LinkMonitor::getAllLinks() {
 
 void
 LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
-  fbzmq::LogSample sample{};
+  LogSample sample{};
   sample.addString(
       "event",
       apache::thrift::TEnumTraits<thrift::SparkNeighborEventType>::findName(
           event.eventType));
-  sample.addString("node_name", nodeId_);
   sample.addString("neighbor", *event.neighbor_ref()->nodeName_ref());
   sample.addString("interface", event.ifName);
   sample.addString("remote_interface", *event.neighbor_ref()->ifName_ref());
   sample.addString("area", *event.area_ref());
   sample.addInt("rtt_us", event.rttUs);
 
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
+  logSampleQueue_.push(sample);
 }
 
 void
@@ -1258,18 +1256,14 @@ LinkMonitor::logLinkEvent(
     return;
   }
 
-  fbzmq::LogSample sample{};
+  LogSample sample{};
   const std::string event = isUp ? "UP" : "DOWN";
 
   sample.addString("event", folly::sformat("IFACE_{}", event));
-  sample.addString("node_name", nodeId_);
   sample.addString("interface", iface);
   sample.addInt("backoff_ms", backoffTime.count());
 
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
+  logSampleQueue_.push(sample);
 
   SYSLOG(INFO) << "Interface " << iface << " is " << event
                << " and has backoff of " << backoffTime.count() << "ms";
@@ -1280,17 +1274,14 @@ LinkMonitor::logPeerEvent(
     const std::string& event,
     const std::string& peerName,
     const thrift::PeerSpec& peerSpec) {
-  fbzmq::LogSample sample{};
+  LogSample sample{};
 
   sample.addString("event", event);
   sample.addString("node_name", nodeId_);
   sample.addString("peer_name", peerName);
   sample.addString("cmd_url", *peerSpec.cmdUrl_ref());
 
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
+  logSampleQueue_.push(sample);
 }
 
 } // namespace openr

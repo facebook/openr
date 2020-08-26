@@ -98,6 +98,7 @@ class FibWrapper {
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
         fibUpdatesQueue,
+        logSampleQueue,
         MonitorSubmitUrl{"inproc://monitor-sub"},
         nullptr, /* KvStore module ptr */
         context);
@@ -133,6 +134,7 @@ class FibWrapper {
     // Close queue
     routeUpdatesQueue.close();
     interfaceUpdatesQueue.close();
+    logSampleQueue.close();
 
     // This will be invoked before Fib's d-tor
     fib->stop();
@@ -183,6 +185,8 @@ class FibWrapper {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample> logSampleQueue;
 
   fbzmq::Context context{};
 

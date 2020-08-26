@@ -39,6 +39,7 @@ KvStoreWrapper::KvStoreWrapper(
       kvStoreUpdatesQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
                                    : dummyPeerUpdatesQueue_.getReader(),
+      logSampleQueue_,
       KvStoreGlobalCmdUrl{globalCmdUrl},
       MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId)},
       config,
@@ -68,6 +69,7 @@ KvStoreWrapper::stop() {
   // Close queue
   kvStoreUpdatesQueue_.close();
   dummyPeerUpdatesQueue_.close();
+  logSampleQueue_.close();
 
   // Stop kvstore
   kvStore_->stop();

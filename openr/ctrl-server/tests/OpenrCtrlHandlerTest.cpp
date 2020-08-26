@@ -91,7 +91,8 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         interfaceUpdatesQueue_.getReader(),
         fibUpdatesQueue_,
-        MonitorSubmitUrl{"inproc://monitor-sub"},
+        logSampleQueue_,
+        monitorSubmitUrl_,
         kvStoreWrapper_->getKvStore(),
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
@@ -128,6 +129,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         interfaceUpdatesQueue_,
         prefixUpdatesQueue_,
         peerUpdatesQueue_,
+        logSampleQueue_,
         neighborUpdatesQueue_.getReader(),
         nlSock_->getReader(),
         monitorSubmitUrl_,
@@ -167,6 +169,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     fibUpdatesQueue_.close();
+    logSampleQueue_.close();
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
 
@@ -209,7 +212,6 @@ class OpenrCtrlFixture : public ::testing::Test {
 
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
-
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
@@ -218,6 +220,8 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
       staticRoutesUpdatesQueue_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue_;
+  // Queue for event logs
+  messaging::ReplicateQueue<openr::LogSample> logSampleQueue_;
 
   fbzmq::Context context_{};
   folly::EventBase evb_;

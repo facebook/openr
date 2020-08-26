@@ -30,6 +30,7 @@ Fib::Fib(
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
+    messaging::ReplicateQueue<LogSample>& logSampleQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     KvStore* kvStore,
     fbzmq::Context& zmqContext)
@@ -38,7 +39,8 @@ Fib::Fib(
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)),
       kvStore_(kvStore),
-      fibUpdatesQueue_(fibUpdatesQueue) {
+      fibUpdatesQueue_(fibUpdatesQueue),
+      logSampleQueue_(logSampleQueue) {
   auto tConfig = config->getConfig();
 
   dryrun_ = config->getConfig().dryrun_ref().value_or(false);
@@ -847,15 +849,11 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents> perfEvents) {
       "fib.convergence_time_ms", totalDuration.count(), fb303::AVG);
 
   // Log via zmq monitor
-  fbzmq::LogSample sample{};
+  LogSample sample{};
   sample.addString("event", "ROUTE_CONVERGENCE");
-  sample.addString("node_name", myNodeName_);
   sample.addStringVector("perf_events", eventStrs);
   sample.addInt("duration_ms", totalDuration.count());
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
+  logSampleQueue_.push(sample);
 }
 
 } // namespace openr

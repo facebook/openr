@@ -97,6 +97,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         kvStoreWrapper_->getKvStore(),
         configStore_.get(),
         prefixUpdatesQueue_,
+        logSampleQueue_,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         zmqContext_,
         kSyncInterval);
@@ -185,6 +186,9 @@ class PrefixAllocatorFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
 
+  // Queue for event logs
+  messaging::ReplicateQueue<openr::LogSample> logSampleQueue_;
+
   // create serializer object for parsing kvstore key/values
   apache::thrift::CompactSerializer serializer;
 
@@ -263,6 +267,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         numAllocators};
     vector<messaging::ReplicateQueue<DecisionRouteUpdate>> routeQueues{
         numAllocators};
+    messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
     vector<std::unique_ptr<PrefixAllocator>> allocators;
     vector<thread> threads;
 
@@ -425,6 +430,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           store->getKvStore(),
           configStore.get(),
           prefixQueues.at(i),
+          logSampleQueue,
           MonitorSubmitUrl{"inproc://monitor_submit"},
           zmqContext,
           kSyncInterval);
@@ -494,6 +500,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     for (auto& queue : routeQueues) {
       queue.close();
     }
+    logSampleQueue.close();
     LOG(INFO) << "Stop all prefix managers";
     for (auto& prefixManager : prefixManagers) {
       prefixManager->stop();

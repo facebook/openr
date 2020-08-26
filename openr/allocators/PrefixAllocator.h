@@ -24,6 +24,7 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/LogSample.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr {
@@ -42,6 +43,7 @@ class PrefixAllocator : public OpenrEventBase {
       PersistentStore* configStore,
       // producer queue
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
+      messaging::ReplicateQueue<LogSample>& logSampleQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext,
       std::chrono::milliseconds syncInterval);
@@ -193,6 +195,9 @@ class PrefixAllocator : public OpenrEventBase {
 
   // Queue to send prefix update request to PrefixManager
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue_;
+
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
 
   // Monitor client for submitting counters/logs
   fbzmq::ZmqMonitorClient zmqMonitorClient_;

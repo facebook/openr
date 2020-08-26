@@ -237,6 +237,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     neighborUpdatesQueue.close();
     prefixUpdatesQueue.close();
     routeUpdatesQueue.close();
+    logSampleQueue.close();
     nlSock->closeQueue();
     kvStoreWrapper->closeQueue();
 
@@ -325,6 +326,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
+        logSampleQueue,
         neighborUpdatesQueue.getReader(),
         nlSock->getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
@@ -550,6 +552,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
+  messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
   std::unique_ptr<PersistentStore> configStore;
   std::unique_ptr<std::thread> configStoreThread;
@@ -1746,6 +1749,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
+        logSampleQueue,
         neighborUpdatesQueue.getReader(),
         nlSock->getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},

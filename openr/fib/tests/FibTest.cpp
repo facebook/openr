@@ -220,6 +220,7 @@ class FibTestFixture : public ::testing::Test {
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
         fibUpdatesQueue,
+        logSampleQueue,
         MonitorSubmitUrl{"inproc://monitor-sub"},
         nullptr, /* KvStore module ptr */
         context);
@@ -255,6 +256,7 @@ class FibTestFixture : public ::testing::Test {
 
     routeUpdatesQueue.close();
     interfaceUpdatesQueue.close();
+    logSampleQueue.close();
 
     // this will be invoked before Fib's d-tor
     LOG(INFO) << "Stopping the Fib thread";
@@ -320,6 +322,7 @@ class FibTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
+  messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
   fbzmq::Context context{};
 

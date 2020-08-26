@@ -29,6 +29,7 @@ PrefixAllocator::PrefixAllocator(
     KvStore* kvStore,
     PersistentStore* configStore,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
+    messaging::ReplicateQueue<LogSample>& logSampleQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext,
     std::chrono::milliseconds syncInterval)
@@ -47,6 +48,7 @@ PrefixAllocator::PrefixAllocator(
       nlSock_(nlSock),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
+      logSampleQueue_(logSampleQueue),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl) {
   // check non-empty module ptr
   CHECK(nlSock_);
@@ -939,7 +941,7 @@ PrefixAllocator::logPrefixEvent(
     std::optional<uint32_t> newPrefix,
     std::optional<PrefixAllocationParams> const& oldAllocParams,
     std::optional<PrefixAllocationParams> const& newAllocParams) {
-  fbzmq::LogSample sample{};
+  LogSample sample{};
 
   sample.addString("event", event);
   sample.addString("node_name", myNodeName_);
@@ -975,10 +977,7 @@ PrefixAllocator::logPrefixEvent(
     sample.addInt("new_alloc_len", newAllocParams->second);
   }
 
-  zmqMonitorClient_.addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
+  logSampleQueue_.push(sample);
 }
 
 } // namespace openr

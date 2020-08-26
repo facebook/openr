@@ -401,6 +401,7 @@ main(int argc, char** argv) {
           context,
           kvStoreUpdatesQueue,
           peerUpdatesQueue.getReader(),
+          logSampleQueue,
           KvStoreGlobalCmdUrl{folly::sformat(
               "tcp://{}:{}",
               *config->getConfig().listen_addr_ref(),
@@ -440,6 +441,7 @@ main(int argc, char** argv) {
             kvStore,
             configStore,
             prefixUpdateRequestQueue,
+            logSampleQueue,
             monitorSubmitUrl,
             context,
             Constants::kPrefixAllocatorSyncInterval));
@@ -476,6 +478,7 @@ main(int argc, char** argv) {
           interfaceUpdatesQueue,
           prefixUpdateRequestQueue,
           peerUpdatesQueue,
+          logSampleQueue,
           neighborUpdatesQueue.getReader(),
           netlinkEventsQueue.getReader(),
           monitorSubmitUrl,
@@ -516,6 +519,7 @@ main(int argc, char** argv) {
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
           fibUpdatesQueue,
+          logSampleQueue,
           monitorSubmitUrl,
           kvStore,
           context));

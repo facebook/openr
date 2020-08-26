@@ -27,6 +27,7 @@
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/Queue.h>
+#include <openr/monitor/LogSample.h>
 
 namespace openr {
 
@@ -58,6 +59,7 @@ class Fib final : public OpenrEventBase {
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
+      messaging::ReplicateQueue<LogSample>& logSampleQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       KvStore* kvStore,
       fbzmq::Context& zmqContext);
@@ -277,6 +279,9 @@ class Fib final : public OpenrEventBase {
   // updates & route updates)
   // NOTE: Initializing with a single slot to avoid parallel processing
   folly::fibers::Semaphore updateRoutesSemaphore_{1};
+
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
 };
 
 } // namespace openr

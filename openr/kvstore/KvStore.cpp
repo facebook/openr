@@ -138,6 +138,7 @@ KvStore::KvStore(
     fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
+    messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
     std::shared_ptr<const Config> config,
@@ -148,6 +149,7 @@ KvStore::KvStore(
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
+          logSampleQueue,
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
               fbzmq::IdentityString{
@@ -3126,30 +3128,25 @@ void
 KvStoreDb::logSyncEvent(
     const std::string& peerNodeName,
     const std::chrono::milliseconds syncDuration) {
-  fbzmq::LogSample sample{};
+  LogSample sample{};
+
   sample.addString("event", "KVSTORE_FULL_SYNC");
   sample.addString("node_name", kvParams_.nodeId);
   sample.addString("neighbor", peerNodeName);
   sample.addInt("duration_ms", syncDuration.count());
 
-  fbzmq::thrift::EventLog eventLog;
-  *eventLog.category_ref() = Constants::kEventLogCategory.toString();
-  *eventLog.samples_ref() = {sample.toJson()};
-  kvParams_.zmqMonitorClient->addEventLog(std::move(eventLog));
+  kvParams_.logSampleQueue.push(std::move(sample));
 }
 
 void
 KvStoreDb::logKvEvent(const std::string& event, const std::string& key) {
-  fbzmq::LogSample sample{};
+  LogSample sample{};
 
   sample.addString("event", event);
   sample.addString("node_name", kvParams_.nodeId);
   sample.addString("key", key);
 
-  fbzmq::thrift::EventLog eventLog;
-  *eventLog.category_ref() = Constants::kEventLogCategory.toString();
-  *eventLog.samples_ref() = {sample.toJson()};
-  kvParams_.zmqMonitorClient->addEventLog(std::move(eventLog));
+  kvParams_.logSampleQueue.push(std::move(sample));
 }
 
 bool

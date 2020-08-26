@@ -89,6 +89,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
+      messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // consumer queue
       messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
@@ -315,6 +316,9 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Queue to publish peer updates to KvStore
   messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue_;
+
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
 
   // used for communicating over thrift/zmq sockets
   apache::thrift::CompactSerializer serializer_;

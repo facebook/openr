@@ -17,6 +17,7 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/LogSample.h>
 
 namespace openr {
 
@@ -195,6 +196,9 @@ class KvStoreWrapper {
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
   messaging::RQueue<thrift::Publication> kvStoreUpdatesQueueReader_{
       kvStoreUpdatesQueue_.getReader()};
+
+  // Queue for publishing the event log
+  messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
   // Queue for streaming peer updates from LM
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> dummyPeerUpdatesQueue_;

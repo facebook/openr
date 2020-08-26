@@ -36,6 +36,7 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/LogSample.h>
 
 namespace openr {
 
@@ -126,6 +127,9 @@ struct KvStoreParams {
   // Queue for publishing KvStore updates to other modules within a process
   messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue;
 
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample>& logSampleQueue;
+
   // socket for remote & local commands
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock;
 
@@ -152,6 +156,7 @@ struct KvStoreParams {
   KvStoreParams(
       std::string nodeid,
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
+      messaging::ReplicateQueue<LogSample>& logSampleQueue,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
       int zmqhwm,
@@ -172,6 +177,7 @@ struct KvStoreParams {
       bool isfloodRoot)
       : nodeId(nodeid),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
+        logSampleQueue(logSampleQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
         enableKvStoreThrift(enableKvStoreThrift),
@@ -559,6 +565,8 @@ class KvStore final : public OpenrEventBase {
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
       // Queue for receiving peer updates
       messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
+      // Queue for publishing the event log
+      messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // the url to receive command from peer instances
       KvStoreGlobalCmdUrl globalCmdUrl,
       // the url to submit to monitor
