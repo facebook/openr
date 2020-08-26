@@ -391,4 +391,9 @@ DEFINE_int32(add_path, 0, "add path value");
 DEFINE_uint32(
     monitor_max_event_log, 100, "Max number for storing recent event logs");
 
+DEFINE_bool(
+    enable_event_log_submission,
+    true,
+    "If set, will enable Monitor::processEventLog() to submit the logs");
+
 DEFINE_string(config, "", "OpenR config file path");

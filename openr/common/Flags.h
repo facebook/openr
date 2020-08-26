@@ -146,5 +146,6 @@ DECLARE_uint32(bgp_min_nexthop);
 DECLARE_int32(add_path);
 
 DECLARE_uint32(monitor_max_event_log);
+DECLARE_bool(enable_event_log_submission);
 
 DECLARE_string(config);

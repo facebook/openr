@@ -34,7 +34,9 @@ MonitorBase::MonitorBase(
   // Fiber task to read the LogSample from queue and publish
   addFiberTask(
       [q = std::move(logSampleQueue), config, this]() mutable noexcept {
-        LOG(INFO) << "Starting log sample updates processing fiber";
+        LOG(INFO) << "Starting log sample updates processing fiber "
+                  << "with isLogSubmissionEnable() flag: "
+                  << config->isLogSubmissionEnabled();
         while (true) {
           // perform read log from the queue
           auto maybeLog = q.get();
@@ -60,14 +62,15 @@ MonitorBase::MonitorBase(
             }
             recentLog_.push_back(inputLog);
 
-            // and publish the log
-            processEventLog(inputLog);
+            // publish the log if enable log submission
+            if (config->isLogSubmissionEnabled()) {
+              processEventLog(inputLog);
+            }
           } catch (const std::exception& e) {
             fb303::fbData->addStatValue(
                 "monitor.log.publish.failure", 1, fb303::COUNT);
             LOG(ERROR) << "Failed to publish the log. Error: "
                        << folly::exceptionStr(e);
-            continue;
           }
         }
       });

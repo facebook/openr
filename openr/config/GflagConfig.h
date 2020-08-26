@@ -173,6 +173,8 @@ class GflagConfig final {
     // Monitor
     auto& monitorConf = *config.monitor_config_ref();
     *monitorConf.max_event_log_ref() = FLAGS_monitor_max_event_log;
+    *monitorConf.enable_event_log_submission_ref() =
+        FLAGS_enable_event_log_submission;
 
     // Watchdog
     if (FLAGS_enable_watchdog) {

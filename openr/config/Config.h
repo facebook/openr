@@ -104,6 +104,11 @@ class Config {
     return *config_.enable_best_route_selection_ref();
   }
 
+  bool
+  isLogSubmissionEnabled() const {
+    return *getMonitorConfig().enable_event_log_submission_ref();
+  }
+
   //
   // area
   //

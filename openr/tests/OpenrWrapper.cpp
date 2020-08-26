@@ -74,6 +74,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   watchdogConf.max_memory_mb_ref() = memLimit;
   tConfig.watchdog_config_ref() = std::move(watchdogConf);
 
+  // monitor
+  thrift::MonitorConfig monitorConf;
+  // disable log submission for testing
+  monitorConf.enable_event_log_submission_ref() = false;
+  tConfig.monitor_config_ref() = std::move(monitorConf);
+
   config_ = std::make_shared<Config>(tConfig);
 
   // create fakeNetlinkProtocolSocket

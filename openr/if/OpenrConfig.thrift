@@ -71,6 +71,7 @@ struct WatchdogConfig {
 
 struct MonitorConfig {
   1: i32 max_event_log = 100
+  2: bool enable_event_log_submission  = true
 }
 
 enum PrefixForwardingType {
