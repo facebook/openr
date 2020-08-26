@@ -24,6 +24,8 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
+namespace fb303 = facebook::fb303;
+
 namespace openr {
 
 OpenrCtrlHandler::OpenrCtrlHandler(
@@ -39,7 +41,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     std::shared_ptr<const Config> config,
     MonitorSubmitUrl const& monitorSubmitUrl,
     fbzmq::Context& context)
-    : facebook::fb303::BaseService("openr"),
+    : fb303::BaseService("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
       decision_(decision),
@@ -148,7 +150,12 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               break;
             }
 
-            // TODO
+            // Publish the update to all active streams
+            fibPublishers_.withWLock([&maybeUpdate](auto& fibPublishers) {
+              for (auto& fibPublisher : fibPublishers) {
+                fibPublisher.second.next(maybeUpdate.value());
+              }
+            });
           }
         });
 
@@ -157,13 +164,27 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 }
 
 OpenrCtrlHandler::~OpenrCtrlHandler() {
+  closeKvStorePublishers();
+  closeFibPublishers();
+
+  LOG(INFO) << "Cleanup all pending request(s).";
+  longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
+
+  LOG(INFO)
+      << "Waiting for termination of kvStoreUpdatesQueue, FibUpdatesQueue";
+  folly::collectAll(workers_.begin(), workers_.end()).get();
+  LOG(INFO) << "Collected all workers";
+}
+
+// NOTE: We're intentionally creating list of publishers to and then invoke
+// `complete()` on them.
+// Reason => `complete()` returns only when callback `onComplete` associated
+// with publisher returns. Since we acquire lock within `onComplete` callback,
+// we will run into the deadlock if `complete()` is invoked within
+// SYNCHRONIZED block
+void
+OpenrCtrlHandler::closeKvStorePublishers() {
   std::vector<std::unique_ptr<KvStorePublisher>> publishers;
-  // NOTE: We're intentionally creating list of publishers to and then invoke
-  // `complete()` on them.
-  // Reason => `complete()` returns only when callback `onComplete` associated
-  // with publisher returns. Since we acquire lock within `onComplete` callback,
-  // we will run into the deadlock if `complete()` is invoked within
-  // SYNCHRONIZED block
   SYNCHRONIZED(kvStorePublishers_) {
     for (auto& kv : kvStorePublishers_) {
       publishers.emplace_back(std::move(kv.second));
@@ -174,14 +195,23 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   for (auto& publisher : publishers) {
     publisher->complete();
   }
+}
 
-  LOG(INFO) << "Cleanup all pending request(s).";
-  longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
-
-  LOG(INFO)
-      << "Waiting for termination of kvStoreUpdatesQueue, FibUpdatesQueue";
-  folly::collectAll(workers_.begin(), workers_.end()).get();
-  LOG(INFO) << "Collected all workers";
+// Refer to note on top of closeKvStorePublishers
+void
+OpenrCtrlHandler::closeFibPublishers() {
+  std::vector<apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDelta>>
+      fibPublishers_close;
+  fibPublishers_.withWLock([&fibPublishers_close](auto& fibPublishers) {
+    for (auto& kv : fibPublishers) {
+      fibPublishers_close.emplace_back(std::move(kv.second));
+    }
+  });
+  LOG(INFO) << "Terminating " << fibPublishers_close.size()
+            << " active Fib snoop stream(s).";
+  for (auto& fibPublisher : fibPublishers_close) {
+    std::move(fibPublisher).complete();
+  }
 }
 
 void
@@ -224,9 +254,9 @@ OpenrCtrlHandler::authorizeConnection() {
   }
 }
 
-facebook::fb303::cpp2::fb303_status
+fb303::cpp2::fb303_status
 OpenrCtrlHandler::getStatus() {
-  return facebook::fb303::cpp2::fb303_status::ALIVE;
+  return fb303::cpp2::fb303_status::ALIVE;
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>>
@@ -664,6 +694,8 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
                 LOG(ERROR) << "Can't remove unknown KvStore snoop stream-"
                            << clientToken;
               }
+              fb303::fbData->setCounter(
+                  "subscribers.kvstore", kvStorePublishers_.size());
             }
           });
 
@@ -673,6 +705,7 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
     auto kvStorePublisher = std::make_unique<KvStorePublisher>(
         std::move(*filter), std::move(streamAndPublisher.second));
     kvStorePublishers_.emplace(clientToken, std::move(kvStorePublisher));
+    fb303::fbData->setCounter("subscribers.kvstore", kvStorePublishers_.size());
   }
   return std::move(streamAndPublisher.first);
 }
@@ -702,6 +735,52 @@ OpenrCtrlHandler::semifuture_subscribeAndGetKvStoreFiltered(
                 thrift::Publication>{std::move(*pub.value()),
                                      std::move(stream)};
           });
+}
+
+apache::thrift::ServerStream<thrift::RouteDatabaseDelta>
+OpenrCtrlHandler::subscribeFib() {
+  // Get new client-ID (monotonically increasing)
+  auto clientToken = publisherToken_++;
+
+  auto streamAndPublisher =
+      apache::thrift::ServerStream<thrift::RouteDatabaseDelta>::createPublisher(
+          [this, clientToken]() {
+            fibPublishers_.withWLock([&clientToken](auto& fibPublishers) {
+              if (fibPublishers.erase(clientToken)) {
+                LOG(INFO) << "Fib snoop stream-" << clientToken << " ended.";
+              } else {
+                LOG(ERROR) << "Can't remove unknown Fib snoop stream-"
+                           << clientToken;
+              }
+              fb303::fbData->setCounter(
+                  "subscribers.fib", fibPublishers.size());
+            });
+          });
+
+  fibPublishers_.withWLock([&clientToken,
+                            &streamAndPublisher](auto& fibPublishers) {
+    assert(fibPublishers.count(clientToken) == 0);
+    LOG(INFO) << "Fib snoop stream-" << clientToken << " started.";
+    fibPublishers.emplace(clientToken, std::move(streamAndPublisher.second));
+    fb303::fbData->setCounter("subscribers.fib", fibPublishers.size());
+  });
+  return std::move(streamAndPublisher.first);
+}
+
+folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+    thrift::RouteDatabase,
+    thrift::RouteDatabaseDelta>>
+OpenrCtrlHandler::semifuture_subscribeAndGetFib() {
+  auto stream = subscribeFib();
+  return semifuture_getRouteDb().defer(
+      [stream = std::move(stream)](
+          folly::Try<std::unique_ptr<thrift::RouteDatabase>>&& db) mutable {
+        db.throwIfFailed();
+        return apache::thrift::ResponseAndServerStream<
+            thrift::RouteDatabase,
+            thrift::RouteDatabaseDelta>{std::move(*db.value()),
+                                        std::move(stream)};
+      });
 }
 
 //

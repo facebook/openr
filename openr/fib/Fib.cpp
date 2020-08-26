@@ -566,7 +566,14 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
 
   // Publish the fib streaming routes after considering donotinstall
   // and dryrun logic.
-  fibUpdatesQueue_.push(routeDbDelta);
+  if (not(*routeDbDelta.unicastRoutesToUpdate_ref()).empty() ||
+      not(*routeDbDelta.unicastRoutesToDelete_ref()).empty() ||
+      not(*routeDbDelta.mplsRoutesToUpdate_ref()).empty() ||
+      not(*routeDbDelta.mplsRoutesToDelete_ref()).empty()) {
+    // Due to donotinstall logic it's possible to have emtpy change,
+    // no need to publish empty updates.
+    fibUpdatesQueue_.push(routeDbDelta);
+  }
 
   if (syncRoutesTimer_->isScheduled()) {
     // Check if there's any full sync scheduled,

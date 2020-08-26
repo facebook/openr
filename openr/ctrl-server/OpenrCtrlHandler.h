@@ -221,6 +221,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // immediately create and return the stream handler
   apache::thrift::ServerStream<thrift::Publication> subscribeKvStoreFilter(
       std::unique_ptr<thrift::KeyDumpParams>);
+  apache::thrift::ServerStream<thrift::RouteDatabaseDelta> subscribeFib();
 
   folly::SemiFuture<apache::thrift::ResponseAndServerStream<
       thrift::Publication,
@@ -232,6 +233,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       thrift::Publication>>
   semifuture_subscribeAndGetKvStoreFiltered(
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
+
+  folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+      thrift::RouteDatabase,
+      thrift::RouteDatabaseDelta>>
+  semifuture_subscribeAndGetFib() override;
 
   // Long poll support
   folly::SemiFuture<bool> semifuture_longPollKvStoreAdj(
@@ -311,6 +317,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
     return longPollReqs_->size();
   }
 
+  inline size_t
+  getNumFibPublishers() {
+    return fibPublishers_.wlock()->size();
+  }
+
   //
   // API to cleanup private variables
   //
@@ -321,6 +332,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
  private:
   void authorizeConnection();
+  void closeKvStorePublishers();
+  void closeFibPublishers();
 
   const std::string nodeName_;
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
@@ -337,11 +350,19 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
-  // Active kvstore snoop publishers
+  // Publisher token (monotonically increasing) for all publishers
   std::atomic<int64_t> publisherToken_{0};
+
+  // Active kvstore snoop publishers
   folly::Synchronized<
       std::unordered_map<int64_t, std::unique_ptr<KvStorePublisher>>>
       kvStorePublishers_;
+
+  // Active Fib streaming publishers
+  folly::Synchronized<std::unordered_map<
+      int64_t,
+      apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDelta>>>
+      fibPublishers_;
 
   // pending longPoll requests from clients, which consists of
   // 1). promise; 2). timestamp when req received on server

@@ -97,22 +97,26 @@ const auto mpls_path1_2_2 = createNextHop(
     2,
     createMplsAction(thrift::MplsActionCode::SWAP, 2));
 
+// Check if two lists of unicastRoute's are equal.
+// Handles elements being in different order.
 bool
-checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
-  if (lhs.unicastRoutes_ref()->size() != rhs.unicastRoutes_ref()->size()) {
+checkEqualUnicastRoutes(
+    const std::vector<thrift::UnicastRoute>& lhs,
+    const std::vector<thrift::UnicastRoute>& rhs) {
+  if (lhs.size() != rhs.size()) {
     return false;
   }
   std::unordered_map<thrift::IpPrefix, std::set<thrift::NextHopThrift>>
       lhsRoutes;
   std::unordered_map<thrift::IpPrefix, std::set<thrift::NextHopThrift>>
       rhsRoutes;
-  for (auto const& route : *lhs.unicastRoutes_ref()) {
+  for (auto const& route : lhs) {
     lhsRoutes.emplace(
         route.dest,
         std::set<thrift::NextHopThrift>(
             route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
   }
-  for (auto const& route : *rhs.unicastRoutes_ref()) {
+  for (auto const& route : rhs) {
     rhsRoutes.emplace(
         route.dest,
         std::set<thrift::NextHopThrift>(
@@ -141,7 +145,15 @@ checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
 }
 
 bool
-checkEqualMplsRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
+checkEqualRouteDatabaseUnicast(
+    const thrift::RouteDatabase& lhs, const thrift::RouteDatabase& rhs) {
+  return checkEqualUnicastRoutes(
+      *lhs.unicastRoutes_ref(), *rhs.unicastRoutes_ref());
+}
+
+bool
+checkEqualRouteDatabaseMpls(
+    const thrift::RouteDatabase& lhs, const thrift::RouteDatabase& rhs) {
   if (lhs.mplsRoutes_ref()->size() != rhs.mplsRoutes_ref()->size()) {
     return false;
   }
@@ -178,6 +190,33 @@ checkEqualMplsRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
     }
   }
   return true;
+}
+
+// Verify if RouteDatabaseDelta are same.
+// Handles values being arrange in different order.
+bool
+checkEqualRouteDatabaseDeltaUnicast(
+    const thrift::RouteDatabaseDelta& lhs,
+    const thrift::RouteDatabaseDelta& rhs) {
+  // Check routes to update
+  if (not checkEqualUnicastRoutes(
+          *lhs.unicastRoutesToUpdate_ref(), *rhs.unicastRoutesToUpdate_ref())) {
+    return false;
+  }
+  // Check routes to delete
+  if ((*lhs.unicastRoutesToDelete_ref()).size() !=
+      (*rhs.unicastRoutesToDelete_ref()).size()) {
+    return false;
+  }
+
+  std::set<thrift::IpPrefix> lhsRoutesToDelete(
+      (*lhs.unicastRoutesToDelete_ref()).begin(),
+      (*lhs.unicastRoutesToDelete_ref()).end());
+  std::set<thrift::IpPrefix> rhsRoutesToDelete(
+      (*rhs.unicastRoutesToDelete_ref()).begin(),
+      (*rhs.unicastRoutesToDelete_ref()).end());
+
+  return lhsRoutesToDelete == rhsRoutesToDelete;
 }
 
 class FibTestFixture : public ::testing::Test {
@@ -231,7 +270,7 @@ class FibTestFixture : public ::testing::Test {
     fib->waitUntilRunning();
 
     // spin up an openrThriftServer
-    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
+    openrThriftServerWrapper = std::make_shared<OpenrThriftServerWrapper>(
         "node-1",
         nullptr /* decision */,
         fib.get() /* fib */,
@@ -242,14 +281,14 @@ class FibTestFixture : public ::testing::Test {
         config /* config */,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         context);
-    openrThriftServerWrapper_->run();
+    openrThriftServerWrapper->run();
   }
 
   void
   TearDown() override {
     LOG(INFO) << "Stopping openr-ctrl thrift server";
     fibUpdatesQueue.close();
-    openrThriftServerWrapper_->stop();
+    openrThriftServerWrapper->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
     routeUpdatesQueue.close();
@@ -270,7 +309,7 @@ class FibTestFixture : public ::testing::Test {
 
   thrift::RouteDatabase
   getRouteDb() {
-    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
                     ->semifuture_getRouteDb()
                     .get();
     EXPECT_TRUE(resp);
@@ -279,7 +318,7 @@ class FibTestFixture : public ::testing::Test {
 
   std::vector<thrift::UnicastRoute>
   getUnicastRoutesFiltered(std::unique_ptr<std::vector<std::string>> prefixes) {
-    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
                     ->semifuture_getUnicastRoutesFiltered(std::move(prefixes))
                     .get();
     EXPECT_TRUE(resp);
@@ -288,7 +327,7 @@ class FibTestFixture : public ::testing::Test {
 
   std::vector<thrift::UnicastRoute>
   getUnicastRoutes() {
-    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
                     ->semifuture_getUnicastRoutes()
                     .get();
     EXPECT_TRUE(resp);
@@ -297,7 +336,7 @@ class FibTestFixture : public ::testing::Test {
 
   std::vector<thrift::MplsRoute>
   getMplsRoutesFiltered(std::unique_ptr<std::vector<int32_t>> labels) {
-    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
                     ->semifuture_getMplsRoutesFiltered(std::move(labels))
                     .get();
     EXPECT_TRUE(resp);
@@ -306,11 +345,49 @@ class FibTestFixture : public ::testing::Test {
 
   std::vector<thrift::MplsRoute>
   getMplsRoutes() {
-    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
                     ->semifuture_getMplsRoutes()
                     .get();
     EXPECT_TRUE(resp);
     return *resp;
+  }
+
+  // Method to wait for OpenrCtrlHandler fib streaming fiber
+  // to consume the initial update.
+  void
+  wait_for_initial_update() {
+    std::atomic<int> received{0};
+
+    auto handler = openrThriftServerWrapper->getOpenrCtrlHandler();
+    auto responseAndSubscription =
+        handler->semifuture_subscribeAndGetFib().get();
+
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .toClientStream()
+            .subscribeExTry(folly::getEventBase(), [&received](auto&& t) {
+              if (not t.hasValue()) {
+                return;
+              }
+
+              received++;
+            });
+
+    EXPECT_EQ(1, handler->getNumFibPublishers());
+
+    // Check we should receive 1 updates
+    while (received < 1) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumFibPublishers() != 0) {
+      std::this_thread::yield();
+    }
   }
 
   int port{0};
@@ -333,12 +410,209 @@ class FibTestFixture : public ::testing::Test {
 
   std::shared_ptr<MockNetlinkFibHandler> mockFibHandler;
 
- private:
   // thriftServer to talk to Fib
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper{nullptr};
 
+ private:
   bool waitOnDecision_{false};
 };
+
+// Fib single streaming client test.
+// Case 1: Verify initial full dump is received properly.
+// Case 2: Verify doNotInstall route is not published.
+// Case 3: Verify delta unicast route addition is published.
+// Case 4: Verify delta unicast route deletion is published.
+TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
+  {
+    std::atomic<int> received{0};
+
+    // Case 1: Verify initial full dump is received properly.
+    // Mimic decision publishing RouteDatabase (Full initial dump)
+    thrift::RouteDatabase routeDbExpected1;
+    (*routeDbExpected1.unicastRoutes_ref())
+        .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
+    DecisionRouteUpdate routeUpdate1;
+
+    routeUpdate1.unicastRoutesToUpdate.emplace(
+        toIPNetwork(prefix1),
+        RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
+    routeUpdatesQueue.push(std::move(routeUpdate1));
+
+    // Start the streaming after OpenrCtrlHandler consumes initial route update.
+    wait_for_initial_update();
+    auto handler = openrThriftServerWrapper->getOpenrCtrlHandler();
+    auto responseAndSubscription =
+        handler->semifuture_subscribeAndGetFib().get();
+
+    EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
+        routeDbExpected1, responseAndSubscription.response));
+
+    // Case 2: Verify doNotInstall route is not published.
+    // Mimic decision publishing doNotInstall (incremental)
+    // No streaming update is expected from fib
+    DecisionRouteUpdate routeUpdate2;
+    auto ribUnicastEntry =
+        RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1, path1_2_2});
+    ribUnicastEntry.doNotInstall = true;
+    routeUpdate2.unicastRoutesToUpdate.emplace(
+        toIPNetwork(prefix2), ribUnicastEntry);
+
+    // Case 3: Verify delta unicast route addition is published.
+    // Mimic decision publishing unicast route addition (incremental)
+    thrift::RouteDatabaseDelta routeDbExpected3;
+    (*routeDbExpected3.unicastRoutesToUpdate_ref())
+        .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
+    DecisionRouteUpdate routeUpdate3;
+    routeUpdate3.unicastRoutesToUpdate.emplace(
+        toIPNetwork(prefix3),
+        RibUnicastEntry(toIPNetwork(prefix3), {path1_2_1, path1_2_2}));
+
+    // Case 4: Verify delta unicast route deletion is published.
+    thrift::RouteDatabaseDelta routeDbExpected4;
+    (*routeDbExpected4.unicastRoutesToDelete_ref()) = {prefix3};
+    DecisionRouteUpdate routeUpdate4;
+    routeUpdate4.unicastRoutesToDelete = {toIPNetwork(prefix3)};
+
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .toClientStream()
+            .subscribeExTry(
+                folly::getEventBase(),
+                [&received, &routeDbExpected3, &routeDbExpected4](auto&& t) {
+                  if (not t.hasValue()) {
+                    return;
+                  }
+
+                  auto& deltaUpdate = *t;
+                  if (received == 0) {
+                    // NOTE: due to donotinstall logic routeUpdate2 get's
+                    // suppressed and we directly receive routeUpdate3
+                    // notification
+                    EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
+                        routeDbExpected3, deltaUpdate));
+                  } else if (received == 1) {
+                    EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
+                        routeDbExpected4, deltaUpdate));
+                  } else {
+                    // Not expected to reach here.
+                    FAIL() << "Unexpected stream update";
+                  }
+                  received++;
+                });
+
+    EXPECT_EQ(1, handler->getNumFibPublishers());
+
+    routeUpdatesQueue.push(std::move(routeUpdate2));
+    routeUpdatesQueue.push(std::move(routeUpdate3));
+    routeUpdatesQueue.push(std::move(routeUpdate4));
+
+    // Check we should receive 2 updates
+    while (received < 2) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumFibPublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+}
+
+// Fib multiple streaming client test.
+// Case 1: Verify initial full dump is received properly by both the clients.
+// Case 2: Verify delta unicast route addition is received by both the clients.
+TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
+  {
+    std::atomic<int> received_1{0};
+    std::atomic<int> received_2{0};
+
+    // Case 1: Verify initial full dump is received properly.
+    // Mimic decision publishing RouteDatabase (Full initial dump)
+    thrift::RouteDatabase routeDbExpected1;
+    (*routeDbExpected1.unicastRoutes_ref())
+        .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
+    DecisionRouteUpdate routeUpdate1;
+    routeUpdate1.unicastRoutesToUpdate.emplace(
+        toIPNetwork(prefix1),
+        RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
+    routeUpdatesQueue.push(std::move(routeUpdate1));
+
+    // Start the streaming after OpenrCtrlHandler consumes initial route update.
+    wait_for_initial_update();
+    auto handler = openrThriftServerWrapper->getOpenrCtrlHandler();
+    auto responseAndSubscription_1 =
+        handler->semifuture_subscribeAndGetFib().get();
+    auto responseAndSubscription_2 =
+        handler->semifuture_subscribeAndGetFib().get();
+
+    EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
+        routeDbExpected1, responseAndSubscription_1.response));
+    EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
+        routeDbExpected1, responseAndSubscription_2.response));
+
+    // Case 2: Verify delta unicast route addition is published.
+    // Mimic decision publishing unicast route addition (incremental)
+    thrift::RouteDatabaseDelta routeDbExpected2;
+    (*routeDbExpected2.unicastRoutesToUpdate_ref())
+        .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
+    DecisionRouteUpdate routeUpdate2;
+    routeUpdate2.unicastRoutesToUpdate.emplace(
+        toIPNetwork(prefix3),
+        RibUnicastEntry(toIPNetwork(prefix3), {path1_2_1, path1_2_2}));
+
+    auto subscription_1 =
+        std::move(responseAndSubscription_1.stream)
+            .toClientStream()
+            .subscribeExTry(
+                folly::getEventBase(),
+                [&received_1, &routeDbExpected2](auto&& t) {
+                  if (not t.hasValue()) {
+                    return;
+                  }
+                  EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
+                      routeDbExpected2, *t));
+                  received_1++;
+                });
+
+    auto subscription_2 =
+        std::move(responseAndSubscription_2.stream)
+            .toClientStream()
+            .subscribeExTry(
+                folly::getEventBase(),
+                [&received_2, &routeDbExpected2](auto&& t) {
+                  if (not t.hasValue()) {
+                    return;
+                  }
+                  EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
+                      routeDbExpected2, *t));
+                  received_2++;
+                });
+
+    EXPECT_EQ(2, handler->getNumFibPublishers());
+
+    routeUpdatesQueue.push(std::move(routeUpdate2));
+
+    // Check we should receive 1 updates for each client
+    while ((received_1 < 1) || (received_2 < 1)) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription_1.cancel();
+    std::move(subscription_1).detach();
+    subscription_2.cancel();
+    std::move(subscription_2).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumFibPublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+}
 
 TEST_F(FibTestFixture, processRouteDb) {
   // Make sure fib starts with clean route database
@@ -374,7 +648,7 @@ TEST_F(FibTestFixture, processRouteDb) {
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
-  EXPECT_TRUE(checkEqualRoutes(routeDb, getRouteDb()));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(routeDb, getRouteDb()));
 
   // Update routes
   countAdd = mockFibHandler->getAddRoutesCount();
@@ -395,7 +669,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), countDel);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
-  EXPECT_TRUE(checkEqualRoutes(routeDb, getRouteDb()));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(routeDb, getRouteDb()));
 
   // Update routes by removing some nextHop
   countAdd = mockFibHandler->getAddRoutesCount();
@@ -418,7 +692,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), countDel);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
-  EXPECT_TRUE(checkEqualRoutes(routeDb, getRouteDb()));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(routeDb, getRouteDb()));
 }
 
 TEST_F(FibTestFixture, processInterfaceDb) {
@@ -866,7 +1140,7 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   thrift::RouteDatabase expectedDb;
   *expectedDb.thisNodeName_ref() = "node-1";
   *expectedDb.mplsRoutes_ref() = {tRoute1, tRoute3};
-  EXPECT_TRUE(checkEqualMplsRoutes(responseDb, expectedDb));
+  EXPECT_TRUE(checkEqualRouteDatabaseMpls(responseDb, expectedDb));
 
   // 2. check getting all MPLS routes API
   thrift::RouteDatabase allRoutesDb;
@@ -876,7 +1150,7 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   *allRoutesExpectedDb.thisNodeName_ref() = "node-1";
   *allRoutesExpectedDb.mplsRoutes_ref() = {tRoute1, tRoute2, tRoute3};
   *expectedDb.mplsRoutes_ref() = {tRoute1, tRoute2, tRoute3};
-  EXPECT_TRUE(checkEqualMplsRoutes(allRoutesDb, allRoutesExpectedDb));
+  EXPECT_TRUE(checkEqualRouteDatabaseMpls(allRoutesDb, allRoutesExpectedDb));
 
   // 3. check filtering API with empty input list - return all MPLS routes
   auto emptyLabels =
@@ -884,7 +1158,7 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   thrift::RouteDatabase responseAllDb;
   *responseAllDb.mplsRoutes_ref() =
       getMplsRoutesFiltered(std::move(emptyLabels));
-  EXPECT_TRUE(checkEqualMplsRoutes(responseAllDb, allRoutesExpectedDb));
+  EXPECT_TRUE(checkEqualRouteDatabaseMpls(responseAllDb, allRoutesExpectedDb));
 
   // 4. check if no result found
   auto notFoundFilter = std::unique_ptr<std::vector<std::int32_t>>(
@@ -950,7 +1224,7 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
   thrift::RouteDatabase responseDb;
   const auto& responseRoutes = getUnicastRoutesFiltered(std::move(filter));
   *responseDb.unicastRoutes_ref() = responseRoutes;
-  EXPECT_TRUE(checkEqualRoutes(expectedDb, responseDb));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(expectedDb, responseDb));
 
   // check when get empty input - return all unicast routes
   thrift::RouteDatabase allRouteDb;
@@ -963,13 +1237,13 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
   const auto& allRoutes = getUnicastRoutesFiltered(std::move(emptyParamRet));
   thrift::RouteDatabase allRoutesRespDb;
   *allRoutesRespDb.unicastRoutes_ref() = allRoutes;
-  EXPECT_TRUE(checkEqualRoutes(allRouteDb, allRoutesRespDb));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(allRouteDb, allRoutesRespDb));
 
   // check getUnicastRoutes() API - return all unicast routes
   const auto& allRoute = getUnicastRoutes();
   thrift::RouteDatabase allRoutesApiDb;
   *allRoutesApiDb.unicastRoutes_ref() = allRoute;
-  EXPECT_TRUE(checkEqualRoutes(allRouteDb, allRoutesApiDb));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(allRouteDb, allRoutesApiDb));
 
   // check when no result found
   auto notFoundFilter = std::unique_ptr<std::vector<std::string>>(
