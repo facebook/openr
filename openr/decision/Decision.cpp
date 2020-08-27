@@ -671,15 +671,14 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
         continue;
       }
 
-      routeDb.addMplsRoute(
-          RibMplsEntry(
-              topLabel,
-              {createNextHop(
-                  link->getNhV6FromNode(myNodeName),
-                  link->getIfaceFromNode(myNodeName),
-                  link->getMetricFromNode(myNodeName),
-                  createMplsAction(thrift::MplsActionCode::PHP),
-                  link->getArea())}));
+      routeDb.addMplsRoute(RibMplsEntry(
+          topLabel,
+          {createNextHop(
+              link->getNhV6FromNode(myNodeName),
+              link->getIfaceFromNode(myNodeName),
+              link->getMetricFromNode(myNodeName),
+              createMplsAction(thrift::MplsActionCode::PHP),
+              link->getArea())}));
     }
   }
 
