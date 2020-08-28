@@ -46,23 +46,11 @@ def generate_thrift_files():
         include_paths = (
             install_base,
             "{}/fb303/include/thrift-files/".format(install_base),
-            "{}/fbzmq/include/".format(install_base),
         )
         include_args = []
         for include_path in include_paths:
             include_args.extend(["-I", include_path])
         return include_args
-
-    def get_include_dir(base_path, pattern):
-        for dir_name in Path(base_path).rglob("*/usr/include/"):
-            # ONLY dir which contains "pattern" is the targeted path
-            if sorted(dir_name.rglob(pattern)):
-                return str(dir_name.absolute())
-        return ""
-
-    # find "usr/include" dir which contains "fbzmq" for thrift generation usage
-    fbzmq_thrift_pattern = "fbzmq/service/if/*.thrift"
-    usr_include_dir = get_include_dir(os.path.dirname(root_dir), fbzmq_thrift_pattern)
 
     for top_dir in top_dirs:
         for thrift_file in Path(top_dir).rglob("*.thrift"):
@@ -76,8 +64,6 @@ def generate_thrift_files():
                     "py",
                     "-I",
                     root_dir,
-                    "-I",
-                    usr_include_dir,
                     *get_default_install_paths(),
                     "--out",
                     current_dir,
@@ -88,14 +74,7 @@ def generate_thrift_files():
 
 generate_thrift_files()
 
-INSTALL_REQUIRES = [
-    "bunch",
-    "click",
-    "hexdump",
-    "jsondiff",
-    "networkx",
-    "tabulate",
-]
+INSTALL_REQUIRES = ["bunch", "click", "hexdump", "jsondiff", "networkx", "tabulate"]
 
 setup(
     name="py-openr",

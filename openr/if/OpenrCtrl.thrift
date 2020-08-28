@@ -14,7 +14,6 @@ namespace php Openr
 namespace lua openr.OpenrCtrl
 
 include "fb303/thrift/fb303_core.thrift"
-include "fbzmq/service/if/Monitor.thrift"
 include "Decision.thrift"
 include "Dual.thrift"
 include "Fib.thrift"

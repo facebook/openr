@@ -236,7 +236,6 @@ add_fbthrift_cpp_library(
     lsdb_cpp2
     network_cpp2
     fb303::fb303_thrift_cpp
-    fbzmq::monitor_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp2)
 
@@ -318,7 +317,6 @@ target_link_libraries(openrlib
   build_info
   ${OPENR_THRIFT_LIBS}
   fbzmq::fbzmq
-  fbzmq::monitor_cpp2
   ${DOUBLE-CONVERSION}
   ${ZMQ}
   glog::glog

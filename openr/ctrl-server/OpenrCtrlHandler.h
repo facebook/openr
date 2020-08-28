@@ -8,7 +8,6 @@
 #pragma once
 
 #include <fb303/BaseService.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
