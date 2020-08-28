@@ -1601,12 +1601,18 @@ KvStoreDb::processThriftSuccess(
     return;
   }
 
-  // In case there are duplicate msg for full-sync, state transition
-  // will handle it gracefully.
   auto& peer = thriftPeers_.at(peerName);
-  CHECK(
-      peer.state == KvStorePeerState::SYNCING or
-      peer.state == KvStorePeerState::INITIALIZED);
+  if (peer.state == KvStorePeerState::IDLE) {
+    LOG(WARNING) << "Ignore response from: " << peerName
+                 << " as it is in IDLE state";
+    return;
+  }
+
+  // ATTN: In parallel link case, peer state can be set to IDLE when
+  //       parallel adj comes up before the previous full-sync response
+  //       being received. KvStoreDb will ignore the old full-sync
+  //       response and will rely on the new full-sync response to
+  //       promote the state.
   KvStorePeerState oldState = peer.state;
   peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
   logStateTransition(peerName, oldState, peer.state);
