@@ -72,7 +72,6 @@ namespace openr {
 // LinkMonitor code
 //
 LinkMonitor::LinkMonitor(
-    fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
     fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
@@ -84,7 +83,6 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
-    MonitorSubmitUrl const& monitorSubmitUrl,
     bool assumeDrained,
     bool overrideDrainState,
     std::chrono::seconds adjHoldTime)
@@ -141,10 +139,6 @@ LinkMonitor::LinkMonitor(
   // Create timer. Timer is used for immediate or delayed executions.
   advertiseIfaceAddrTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
-
-  // [TO BE DEPRECATED]
-  zmqMonitorClient_ =
-      std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
   // Create config-store client
   LOG(INFO) << "Loading link-monitor state";

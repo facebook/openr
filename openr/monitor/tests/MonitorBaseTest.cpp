@@ -98,7 +98,7 @@ TEST_F(MonitorTestFixture, LogBasicOperation) {
   while (true) {
     if (monitor->getRecentEventLogs().size() == 1) {
       // Should only get the valid log from queue, discard the invalid one
-      auto sample = monitor->getRecentEventLogs().front();
+      auto sample = LogSample::fromJson(monitor->getRecentEventLogs().front());
       EXPECT_EQ(sample.getString("event"), "event_unit_test");
       EXPECT_EQ(sample.getInt("num"), 200);
       // `domain` and `node_name` should be added to each log message

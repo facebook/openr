@@ -15,18 +15,16 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
     Fib* fib,
     KvStore* kvStore,
     LinkMonitor* linkMonitor,
+    Monitor* monitor,
     PersistentStore* configStore,
     PrefixManager* prefixManager,
-    std::shared_ptr<const Config> config,
-    MonitorSubmitUrl const& monitorSubmitUrl,
-    fbzmq::Context& context)
+    std::shared_ptr<const Config> config)
     : nodeName_(nodeName),
-      monitorSubmitUrl_(monitorSubmitUrl),
-      context_(context),
       decision_(decision),
       fib_(fib),
       kvStore_(kvStore),
       linkMonitor_(linkMonitor),
+      monitor_(monitor),
       configStore_(configStore),
       prefixManager_(prefixManager),
       config_(config) {
@@ -49,11 +47,11 @@ OpenrThriftServerWrapper::run() {
         fib_,
         kvStore_,
         linkMonitor_,
+        monitor_,
         configStore_,
         prefixManager_,
         config_,
-        monitorSubmitUrl_,
-        context_);
+        logSampleQueue_);
   });
 
   // setup openrCtrlThrift server for client to connect to

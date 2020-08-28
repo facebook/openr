@@ -74,11 +74,11 @@ class KvStoreThriftTestFixture : public ::testing::Test {
         nullptr, // fib
         store->getKvStore(), // kvStore
         nullptr, // link-monitor
+        nullptr, /* monitor */
         nullptr, // config-store
         nullptr, // prefixManager
-        nullptr, // config
-        MonitorSubmitUrl{"inproc://monitor_submit"},
-        context_));
+        nullptr // config
+        ));
     thriftServers_.back()->run();
   }
 

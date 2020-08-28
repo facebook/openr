@@ -30,8 +30,6 @@ PrefixAllocator::PrefixAllocator(
     PersistentStore* configStore,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
-    const MonitorSubmitUrl& monitorSubmitUrl,
-    fbzmq::Context& zmqContext,
     std::chrono::milliseconds syncInterval)
     : myNodeName_(config->getNodeName()),
       syncInterval_(syncInterval),
@@ -48,8 +46,7 @@ PrefixAllocator::PrefixAllocator(
       nlSock_(nlSock),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
-      logSampleQueue_(logSampleQueue),
-      zmqMonitorClient_(zmqContext, monitorSubmitUrl) {
+      logSampleQueue_(logSampleQueue) {
   // check non-empty module ptr
   CHECK(nlSock_);
   CHECK(configStore_);

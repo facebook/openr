@@ -13,7 +13,6 @@
 #include <utility>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
@@ -75,8 +74,6 @@ struct AdjacencyValue {
 class LinkMonitor final : public OpenrEventBase {
  public:
   LinkMonitor(
-      // the zmq context to use for IO
-      fbzmq::Context& zmqContext,
       // config
       std::shared_ptr<const Config> config,
       // raw ptr for modules
@@ -93,8 +90,6 @@ class LinkMonitor final : public OpenrEventBase {
       // consumer queue
       messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
-      // URL for monitoring
-      MonitorSubmitUrl const& monitorSubmitUrl,
       // if set, we will assume drained if no drain state is found in the
       // persitentStore
       bool assumeDrained,
@@ -361,9 +356,6 @@ class LinkMonitor final : public OpenrEventBase {
   // RangAlloctor to get unique nodeLabel for this node
   std::unordered_map<std::string /* area */, RangeAllocator<int32_t>>
       rangeAllocator_;
-
-  // client to interact with ZmqMonitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // Raw ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};

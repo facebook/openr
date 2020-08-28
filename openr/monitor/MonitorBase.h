@@ -36,11 +36,8 @@ class MonitorBase : public OpenrEventBase {
       const std::string& category,
       messaging::RQueue<LogSample> logSampleQueue);
 
-  // Add an event log to queue
-  void addEventLog(LogSample const& eventLog);
-
   // Get recent event logs
-  std::list<LogSample> getRecentEventLogs();
+  std::list<std::string> getRecentEventLogs();
 
   // Destructor
   virtual ~MonitorBase() = default;
@@ -63,7 +60,7 @@ class MonitorBase : public OpenrEventBase {
   const uint32_t maxLogEvents_{0};
 
   // List of recent log
-  std::list<LogSample> recentLog_{};
+  std::list<std::string> recentLog_{};
 
   // Timer to periodically set process cpu/uptime/memory counter
   std::unique_ptr<folly::AsyncTimeout> setProcessCounterTimer_;

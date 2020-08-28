@@ -334,10 +334,6 @@ main(int argc, char** argv) {
         });
   }
 
-  // [TODO: TO BE DEPRECATED]
-  const MonitorSubmitUrl monitorSubmitUrl{
-      folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
-
   // Starting openrCtrlEvb for thrift handler
   OpenrEventBase ctrlEvb;
   std::thread ctrlEvbThread([&]() noexcept {
@@ -357,7 +353,7 @@ main(int argc, char** argv) {
       std::make_unique<PersistentStore>(FLAGS_config_store_filepath));
 
   // Start monitor Module
-  startEventBase(
+  auto monitor = startEventBase(
       allThreads,
       orderedEvbs,
       watchdog,
@@ -366,30 +362,6 @@ main(int argc, char** argv) {
           config,
           Constants::kEventLogCategory.toString(),
           logSampleQueue.getReader()));
-
-  // [TODO: TO BE DEPRECATED] Start ZmqMonitor
-  // for each log message it receives, we want to add the openr domain
-  fbzmq::LogSample sampleToMerge;
-  sampleToMerge.addString("domain", *config->getConfig().domain_ref());
-  ZmqMonitor monitor(
-      MonitorSubmitUrl{folly::sformat(
-          "tcp://{}:{}",
-          *config->getConfig().listen_addr_ref(),
-          FLAGS_monitor_rep_port)},
-      MonitorPubUrl{folly::sformat(
-          "tcp://{}:{}",
-          *config->getConfig().listen_addr_ref(),
-          FLAGS_monitor_pub_port)},
-      context,
-      sampleToMerge);
-  std::thread monitorThread([&monitor]() noexcept {
-    LOG(INFO) << "Starting ZmqMonitor thread...";
-    folly::setThreadName("ZmqMonitor");
-    monitor.run();
-    LOG(INFO) << "ZmqMonitor thread got stopped.";
-  });
-  monitor.waitUntilRunning();
-  allThreads.emplace_back(std::move(monitorThread));
 
   // Start KVStore
   auto kvStore = startEventBase(
@@ -406,7 +378,6 @@ main(int argc, char** argv) {
               "tcp://{}:{}",
               *config->getConfig().listen_addr_ref(),
               FLAGS_kvstore_rep_port)},
-          monitorSubmitUrl,
           config,
           maybeIpTos,
           FLAGS_kvstore_zmq_hwm,
@@ -442,8 +413,6 @@ main(int argc, char** argv) {
             configStore,
             prefixUpdateRequestQueue,
             logSampleQueue,
-            monitorSubmitUrl,
-            context,
             Constants::kPrefixAllocatorSyncInterval));
   }
 
@@ -469,7 +438,6 @@ main(int argc, char** argv) {
       watchdog,
       "LinkMonitor",
       std::make_unique<LinkMonitor>(
-          context,
           config,
           nlSock.get(),
           kvStore,
@@ -481,7 +449,6 @@ main(int argc, char** argv) {
           logSampleQueue,
           neighborUpdatesQueue.getReader(),
           netlinkEventsQueue.getReader(),
-          monitorSubmitUrl,
           FLAGS_assume_drained,
           FLAGS_override_drain_state,
           initialDumpTime));
@@ -520,9 +487,7 @@ main(int argc, char** argv) {
           interfaceUpdatesQueue.getReader(),
           fibUpdatesQueue,
           logSampleQueue,
-          monitorSubmitUrl,
-          kvStore,
-          context));
+          kvStore));
 
   // Start OpenrCtrl thrift server
   apache::thrift::ThriftServer thriftCtrlServer;
@@ -574,11 +539,11 @@ main(int argc, char** argv) {
         fib,
         kvStore,
         linkMonitor,
+        monitor,
         configStore,
         prefixManager,
         config,
-        monitorSubmitUrl,
-        context);
+        logSampleQueue);
   });
 
   CHECK(ctrlHandler);
@@ -633,8 +598,6 @@ main(int argc, char** argv) {
     (*riter)->stop();
     (*riter)->waitUntilStopped();
   }
-  monitor.stop();
-  monitor.waitUntilStopped();
 
   if (nlEvb) {
     nlEvb->getEvb()->terminateLoopSoon();

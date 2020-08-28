@@ -41,7 +41,6 @@ KvStoreWrapper::KvStoreWrapper(
                                    : dummyPeerUpdatesQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{globalCmdUrl},
-      MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId)},
       config,
       std::nullopt /* ip-tos */,
       Constants::kHighWaterMark,

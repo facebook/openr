@@ -140,7 +140,6 @@ KvStore::KvStore(
     messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
-    MonitorSubmitUrl monitorSubmitUrl,
     std::shared_ptr<const Config> config,
     std::optional<int> maybeIpTos,
     int zmqHwm,
@@ -170,10 +169,6 @@ KvStore::KvStore(
               false),
           config->getKvStoreConfig().is_flood_root_ref().value_or(false)),
       areas_(config->getAreaIds()) {
-  zmqMonitorClient_ =
-      std::make_shared<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
-  kvParams_.zmqMonitorClient = zmqMonitorClient_;
-
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& counter : getGlobalCounters()) {

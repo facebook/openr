@@ -98,8 +98,6 @@ class PrefixAllocatorFixture : public ::testing::Test {
         configStore_.get(),
         prefixUpdatesQueue_,
         logSampleQueue_,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
-        zmqContext_,
         kSyncInterval);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
     prefixAllocator_->waitUntilRunning();
@@ -431,8 +429,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           configStore.get(),
           prefixQueues.at(i),
           logSampleQueue,
-          MonitorSubmitUrl{"inproc://monitor_submit"},
-          zmqContext,
           kSyncInterval);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();

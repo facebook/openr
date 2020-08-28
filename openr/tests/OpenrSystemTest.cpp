@@ -6,7 +6,6 @@
  */
 
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/Format.h>
@@ -550,6 +549,7 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
 
   std::string memKey{"process.memory.rss"};
   std::string cpuKey{"process.cpu.pct"};
+  std::string upTimeKey{"process.uptime.seconds"};
   uint32_t rssMemInUse{0};
 
   // find out rss memory in use
@@ -557,13 +557,13 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
     auto openr2 = createOpenr("2", v4Enabled);
     openr2->run();
 
-    auto counters2 = openr2->zmqMonitorClient->dumpCounters();
+    auto counters2 = openr2->getCounters();
     /* sleep override */
     std::this_thread::sleep_for(kMaxOpenrSyncTime);
     while (counters2.size() == 0) {
-      counters2 = openr2->zmqMonitorClient->dumpCounters();
+      counters2 = openr2->getCounters();
     }
-    rssMemInUse = *counters2[memKey].value_ref() / 1e6;
+    rssMemInUse = counters2[memKey] / 1e6;
   }
 
   uint32_t memLimitMB = static_cast<uint32_t>(rssMemInUse) + 500;
@@ -577,22 +577,21 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
   // make sure every openr has a prefix allocated
   EXPECT_TRUE(openr1->getIpPrefix().has_value());
 
-  auto counters1 = openr1->zmqMonitorClient->dumpCounters();
-  while (counters1.size() == 0) {
-    counters1 = openr1->zmqMonitorClient->dumpCounters();
+  // Wait for calling getCPUpercentage() twice for calculating the cpu% counter.
+  // Check if counters contain the uptime, cpu and memory usage counters.
+  auto counters1 = openr1->getCounters();
+  while (true) {
+    if (counters1.find(cpuKey) != counters1.end()) {
+      EXPECT_EQ(counters1.count(cpuKey), 1);
+      EXPECT_EQ(counters1.count(memKey), 1);
+      break;
+    }
+    counters1 = openr1->getCounters();
+    std::this_thread::yield();
   }
-
-  // check if counters contain the cpu and memory resource usage
-  // sleep for 6s to ensure querying twice for calculating the cpu% counter
-  std::this_thread::sleep_for(std::chrono::seconds(6));
-  counters1 = openr1->zmqMonitorClient->dumpCounters();
-  EXPECT_EQ(counters1.count(cpuKey), 1);
-  EXPECT_EQ(counters1.count(memKey), 1);
-
   // allocate memory to go beyond memory limit and check if watchdog
   // catches the over the limit condition
-  uint32_t memUsage =
-      static_cast<uint32_t>(*counters1[memKey].value_ref() / 1e6);
+  uint32_t memUsage = static_cast<uint32_t>(counters1[memKey] / 1e6);
 
   if (memUsage < memLimitMB) {
     EXPECT_FALSE(openr1->watchdog->memoryLimitExceeded());

@@ -8,8 +8,6 @@
 #pragma once
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/fibers/Semaphore.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
@@ -60,9 +58,7 @@ class Fib final : public OpenrEventBase {
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      const MonitorSubmitUrl& monitorSubmitUrl,
-      KvStore* kvStore,
-      fbzmq::Context& zmqContext);
+      KvStore* kvStore);
 
   /**
    * Override stop method of OpenrEventBase
@@ -255,9 +251,6 @@ class Fib final : public OpenrEventBase {
 
   // periodically send alive msg to switch agent
   std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
-
-  // client to interact with monitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // module ptr to refer to KvStore for KvStoreClientInternal usage
   KvStore* kvStore_{nullptr};

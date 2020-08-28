@@ -317,7 +317,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
       bool assumeDrained = false,
       bool overrideDrainState = false) {
     linkMonitor = std::make_unique<LinkMonitor>(
-        context,
         config,
         nlSock.get(),
         kvStoreWrapper->getKvStore(),
@@ -329,7 +328,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         logSampleQueue,
         neighborUpdatesQueue.getReader(),
         nlSock->getReader(),
-        MonitorSubmitUrl{"inproc://monitor-rep"},
         assumeDrained,
         overrideDrainState,
         std::chrono::seconds(1) /* adjHoldTime */
@@ -1740,7 +1738,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
     *tConfigCopy.node_name_ref() = folly::sformat("lm{}", i + 1);
     auto currConfig = std::make_shared<Config>(tConfigCopy);
     auto lm = std::make_unique<LinkMonitor>(
-        context,
         currConfig,
         nlSock.get(),
         kvStoreWrapper->getKvStore(),
@@ -1752,7 +1749,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         logSampleQueue,
         neighborUpdatesQueue.getReader(),
         nlSock->getReader(),
-        MonitorSubmitUrl{"inproc://monitor-rep"},
         false, /* assumeDrained */
         false, /* overrideDrainState */
         std::chrono::seconds(1));

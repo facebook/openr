@@ -39,11 +39,11 @@ class LongPollFixture : public ::testing::Test {
         nullptr /* fib */,
         kvStoreWrapper_->getKvStore() /* kvStore */,
         nullptr /* linkMonitor */,
+        nullptr /* monitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
-        nullptr /* config */,
-        MonitorSubmitUrl{"inproc://monitor-submit-url"},
-        context_);
+        nullptr /* config */
+    );
     openrThriftServerWrapper_->run();
 
     // initialize openrCtrlClient talking to server

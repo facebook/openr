@@ -31,9 +31,7 @@ Fib::Fib(
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
-    const MonitorSubmitUrl& monitorSubmitUrl,
-    KvStore* kvStore,
-    fbzmq::Context& zmqContext)
+    KvStore* kvStore)
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
       expBackoff_(
@@ -127,9 +125,6 @@ Fib::Fib(
       processInterfaceDb(std::move(maybeThriftObj).value());
     }
   });
-
-  zmqMonitorClient_ =
-      std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("fib.convergence_time_ms", fb303::AVG);
@@ -850,7 +845,7 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents> perfEvents) {
   fb303::fbData->addStatValue(
       "fib.convergence_time_ms", totalDuration.count(), fb303::AVG);
 
-  // Log via zmq monitor
+  // Add event logs
   LogSample sample{};
   sample.addString("event", "ROUTE_CONVERGENCE");
   sample.addStringVector("perf_events", eventStrs);

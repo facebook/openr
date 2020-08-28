@@ -79,24 +79,29 @@ class CountersCmd(MonitorCmd):
 
 class LogCmd(MonitorCmd):
     def _run(self, client: OpenrCtrl.Client, json_opt: bool = False) -> None:
-        resp = client.getEventLogs()
-        self.print_log_data(resp, json_opt)
+        try:
+            resp = client.getEventLogs()
+            self.print_log_data(resp, json_opt)
+        except TypeError:
+            host_id = client.getMyNodeName()
+            print(
+                "Incompatible return type. Please upgrade Open/R binary on {}".format(
+                    host_id
+                )
+            )
 
     def print_log_data(self, resp, json_opt):
         """ print the log data"""
 
         if json_opt:
-            data = {}
-            data["eventLogs"] = [utils.thrift_to_dict(e) for e in resp]
-            print(utils.json_dumps(data))
+            event_logs = []
+            for event_log in resp:
+                event_logs.append(json.loads(event_log))
+            print(utils.json_dumps(event_logs))
 
         else:
-            log_samples = []
             for event_log in resp:
-                log_samples.extend([json.loads(lg) for lg in event_log.samples])
-
-            for log_sample in log_samples:
-                self.print_log_sample(log_sample)
+                self.print_log_sample(json.loads(event_log))
 
 
 class StatisticsCmd(MonitorCmd):

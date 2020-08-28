@@ -258,9 +258,7 @@ class FibTestFixture : public ::testing::Test {
         interfaceUpdatesQueue.getReader(),
         fibUpdatesQueue,
         logSampleQueue,
-        MonitorSubmitUrl{"inproc://monitor-sub"},
-        nullptr, /* KvStore module ptr */
-        context);
+        nullptr /* KvStore module ptr */);
 
     fibThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Fib thread starting";
@@ -276,11 +274,10 @@ class FibTestFixture : public ::testing::Test {
         fib.get() /* fib */,
         nullptr /* kvStore */,
         nullptr /* linkMonitor */,
+        nullptr /* monitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
-        config /* config */,
-        MonitorSubmitUrl{"inproc://monitor-rep"},
-        context);
+        config /* config */);
     openrThriftServerWrapper->run();
   }
 

@@ -60,7 +60,7 @@ MonitorBase::MonitorBase(
             if (recentLog_.size() >= maxLogEvents_) {
               recentLog_.pop_front();
             }
-            recentLog_.push_back(inputLog);
+            recentLog_.emplace_back(inputLog.toJson());
 
             // publish the log if enable log submission
             if (config->isLogSubmissionEnabled()) {
@@ -76,7 +76,7 @@ MonitorBase::MonitorBase(
       });
 }
 
-std::list<LogSample>
+std::list<std::string>
 MonitorBase::getRecentEventLogs() {
   return recentLog_;
 }

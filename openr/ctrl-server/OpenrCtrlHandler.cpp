@@ -22,6 +22,7 @@
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/monitor/LogSample.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
 namespace fb303 = facebook::fb303;
@@ -36,11 +37,11 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     Fib* fib,
     KvStore* kvStore,
     LinkMonitor* linkMonitor,
+    Monitor* monitor,
     PersistentStore* configStore,
     PrefixManager* prefixManager,
     std::shared_ptr<const Config> config,
-    MonitorSubmitUrl const& monitorSubmitUrl,
-    fbzmq::Context& context)
+    messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : fb303::BaseService("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
@@ -48,13 +49,11 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       fib_(fib),
       kvStore_(kvStore),
       linkMonitor_(linkMonitor),
+      monitor_(monitor),
       configStore_(configStore),
       prefixManager_(prefixManager),
-      config_(config) {
-  // Create monitor client
-  zmqMonitorClient_ =
-      std::make_unique<fbzmq::ZmqMonitorClient>(context, monitorSubmitUrl);
-
+      config_(config),
+      logSampleQueue_(logSampleQueue) {
   // Add fiber task to receive publication from KvStore
   if (kvStore_) {
     auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture([
@@ -228,7 +227,7 @@ OpenrCtrlHandler::authorizeConnection() {
   if (peerCommonName.empty() || acceptablePeerCommonNames_.empty()) {
     // for now, we will allow non-secure connections, but lets log the event so
     // we know how often this is happening.
-    fbzmq::LogSample sample{};
+    LogSample sample{};
 
     sample.addString(
         "event",
@@ -239,10 +238,7 @@ OpenrCtrlHandler::authorizeConnection() {
         "peer_address", connContext->getPeerAddress()->getAddressStr());
     sample.addString("peer_common_name", peerCommonName);
 
-    zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-        apache::thrift::FRAGILE,
-        Constants::kEventLogCategory.toString(),
-        {sample.toJson()}));
+    logSampleQueue_.push(sample);
 
     LOG(INFO) << "Authorizing request with issues: " << sample.toJson();
     return;
@@ -259,20 +255,12 @@ OpenrCtrlHandler::getStatus() {
   return fb303::cpp2::fb303_status::ALIVE;
 }
 
-folly::SemiFuture<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>>
-OpenrCtrlHandler::semifuture_getEventLogs() {
-  folly::Promise<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>> p;
-
-  auto eventLogs = zmqMonitorClient_->getLastEventLogs();
-  if (eventLogs.has_value()) {
-    p.setValue(std::make_unique<std::vector<fbzmq::thrift::EventLog>>(
-        eventLogs.value()));
-  } else {
-    p.setException(
-        thrift::OpenrError(std::string("Fail to retrieve eventlogs")));
+void
+OpenrCtrlHandler::getEventLogs(std::vector<::std::string>& _return) {
+  auto recentEventLogs = monitor_->getRecentEventLogs();
+  for (auto const& log : recentEventLogs) {
+    _return.emplace_back(log);
   }
-
-  return p.getSemiFuture();
 }
 
 void
@@ -321,11 +309,7 @@ OpenrCtrlHandler::getSelectedCounters(
 
 int64_t
 OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
-  auto counter = zmqMonitorClient_->getCounter(*key);
-  if (counter.has_value()) {
-    return static_cast<int64_t>(*counter->value_ref());
-  }
-  return 0;
+  return BaseService::getCounter(std::move(key));
 }
 
 void

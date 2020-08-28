@@ -32,8 +32,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     : context_(context),
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
-      monitorSubmitUrl_(folly::sformat("inproc://{}-monitor-submit", nodeId_)),
-      monitorPubUrl_(folly::sformat("inproc://{}-monitor-pub", nodeId_)),
       kvStoreGlobalCmdUrl_(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)) {
   // create config
@@ -89,12 +87,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create netlinkEventInjector
   nlEventsInjector_ = std::make_shared<NetlinkEventsInjector>(nlSock_.get());
 
-  // create zmq monitor
-  monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      MonitorPubUrl{monitorPubUrl_},
-      context_);
-
   // create and start config-store thread
   configStore_ = std::make_unique<PersistentStore>(
       folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_));
@@ -113,7 +105,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       peerUpdatesQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
-      MonitorSubmitUrl{monitorSubmitUrl_},
       config_,
       std::nullopt /* ip-tos */);
   std::thread kvStoreThread([this]() noexcept {
@@ -173,7 +164,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create link monitor
   //
   linkMonitor_ = std::make_unique<LinkMonitor>(
-      context_,
       config_,
       nlSock_.get(),
       kvStore_.get(),
@@ -185,10 +175,17 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       logSampleQueue_,
       neighborUpdatesQueue_.getReader(),
       nlSock_->getReader(),
-      MonitorSubmitUrl{monitorSubmitUrl_},
       false, /* assumeDrained */
       false, /* overrideDrainState */
       linkMonitorAdjHoldTime);
+
+  //
+  // create monitor
+  //
+  monitor_ = std::make_unique<openr::Monitor>(
+      config_,
+      Constants::kEventLogCategory.toString(),
+      logSampleQueue_.getReader());
 
   //
   // Create prefix manager
@@ -226,9 +223,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       interfaceUpdatesQueue_.getReader(),
       fibUpdatesQueue_,
       logSampleQueue_,
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      kvStore_.get(),
-      context_);
+      kvStore_.get());
 
   //
   // create PrefixAllocator
@@ -240,17 +235,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       configStore_.get(),
       prefixUpdatesQueue_,
       logSampleQueue_,
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      context_,
       Constants::kPrefixAllocatorSyncInterval);
 
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(config_);
-
-  // Zmq monitor client to get counters
-  zmqMonitorClient = std::make_unique<fbzmq::ZmqMonitorClient>(
-      context_,
-      MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId_)});
 }
 
 template <class Serializer>
@@ -504,6 +492,12 @@ OpenrWrapper<Serializer>::checkPrefixExists(
     }
   }
   return false;
+}
+
+template <class Serializer>
+std::map<std::string, int64_t>
+OpenrWrapper<Serializer>::getCounters() {
+  return facebook::fb303::fbData->getCounters();
 }
 
 // define template instance for some common serializers

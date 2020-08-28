@@ -8,7 +8,6 @@
 #pragma once
 
 #include <fb303/BaseService.h>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
 #include <openr/config-store/PersistentStore.h>
@@ -19,6 +18,8 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStorePublisher.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/Monitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
 namespace openr {
@@ -37,11 +38,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       Fib* fib,
       KvStore* kvStore,
       LinkMonitor* linkMonitor,
+      Monitor* Monitor,
       PersistentStore* configStore,
       PrefixManager* prefixManager,
       std::shared_ptr<const Config> config,
-      MonitorSubmitUrl const& monitorSubmitUrl,
-      fbzmq::Context& context);
+      messaging::ReplicateQueue<LogSample>& logSampleQueue);
 
   ~OpenrCtrlHandler() override;
 
@@ -75,11 +76,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       ::std::string& _return, std::unique_ptr<::std::string> file) override;
 
   //
-  // ZMQ Monitor APIs
+  // Monitor APIs
   //
 
-  folly::SemiFuture<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>>
-  semifuture_getEventLogs() override;
+  void getEventLogs(std::vector<::std::string>& _return) override;
 
   //
   // PrefixManager APIs
@@ -343,12 +343,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   Fib* fib_{nullptr};
   KvStore* kvStore_{nullptr};
   LinkMonitor* linkMonitor_{nullptr};
+  Monitor* monitor_{nullptr};
   PersistentStore* configStore_{nullptr};
   PrefixManager* prefixManager_{nullptr};
   std::shared_ptr<const Config> config_;
-
-  // client to interact with monitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // Publisher token (monotonically increasing) for all publishers
   std::atomic<int64_t> publisherToken_{0};
@@ -373,5 +371,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // fiber task future hold for kvStore update, fib update reader's
   std::vector<folly::Future<folly::Unit>> workers_;
+
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
+
 }; // class OpenrCtrlHandler
 } // namespace openr

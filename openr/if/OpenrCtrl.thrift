@@ -533,13 +533,13 @@ service OpenrCtrl extends fb303_core.BaseService {
   binary getConfigKey(1: string key) throws (1: OpenrError error)
 
   //
-  // ZMQ Monitor APIs (get counters / log events)
+  //  Monitor APIs (get log events)
   //
 
   /**
-   * Get ZMQ log events
+   * Get log events
    */
-  list<Monitor.EventLog> getEventLogs() throws (1: OpenrError error)
+  list<string> getEventLogs() throws (1: OpenrError error)
 
   // Get Openr Node Name
   string getMyNodeName()

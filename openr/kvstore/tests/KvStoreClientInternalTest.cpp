@@ -132,11 +132,11 @@ class MultipleStoreFixture : public ::testing::Test {
               nullptr /* fib */,
               store->getKvStore() /* kvStore */,
               nullptr /* linkMonitor */,
+              nullptr /* monitor */,
               nullptr /* configStore */,
               nullptr /* prefixManager */,
-              nullptr /* config */,
-              MonitorSubmitUrl{"inproc://monitor_submit"},
-              context);
+              nullptr /* config */
+          );
         };
 
     // spin up OpenrThriftServerWrapper for thrift connectivity

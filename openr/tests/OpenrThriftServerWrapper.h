@@ -22,8 +22,7 @@ class OpenrThriftServerWrapper {
   std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler_{nullptr};
   apache::thrift::util::ScopedServerThread openrCtrlThriftServerThread_;
   std::string const nodeName_;
-  MonitorSubmitUrl const monitorSubmitUrl_;
-  fbzmq::Context& context_;
+  messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
  public:
   OpenrThriftServerWrapper(
@@ -32,11 +31,10 @@ class OpenrThriftServerWrapper {
       Fib* fib,
       KvStore* kvStore,
       LinkMonitor* linkMonitor,
+      Monitor* monitor,
       PersistentStore* configStore,
       PrefixManager* prefixManager,
-      std::shared_ptr<const Config> config,
-      MonitorSubmitUrl const& monitorSubmitUrl,
-      fbzmq::Context& context);
+      std::shared_ptr<const Config> config);
 
   // start Open/R thrift server
   void run();
@@ -59,6 +57,7 @@ class OpenrThriftServerWrapper {
   Fib* fib_{nullptr};
   KvStore* kvStore_{nullptr};
   LinkMonitor* linkMonitor_{nullptr};
+  Monitor* monitor_{nullptr};
   PersistentStore* configStore_{nullptr};
   PrefixManager* prefixManager_{nullptr};
   std::shared_ptr<const Config> config_;

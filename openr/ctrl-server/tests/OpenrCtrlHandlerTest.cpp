@@ -92,9 +92,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         interfaceUpdatesQueue_.getReader(),
         fibUpdatesQueue_,
         logSampleQueue_,
-        monitorSubmitUrl_,
-        kvStoreWrapper_->getKvStore(),
-        context_);
+        kvStoreWrapper_->getKvStore());
     fibThread_ = std::thread([&]() { fib->run(); });
 
     // Create PrefixManager module
@@ -120,7 +118,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     includeRegexList->Compile();
 
     linkMonitor = std::make_shared<LinkMonitor>(
-        context_,
         config,
         nlSock_.get(),
         kvStoreWrapper_->getKvStore(),
@@ -132,7 +129,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         logSampleQueue_,
         neighborUpdatesQueue_.getReader(),
         nlSock_->getReader(),
-        monitorSubmitUrl_,
         false, /* assumeDrained */
         false, /* overrideDrainState */
         std::chrono::seconds(1));
@@ -145,11 +141,10 @@ class OpenrCtrlFixture : public ::testing::Test {
         fib.get() /* fib */,
         kvStoreWrapper_->getKvStore() /* kvStore */,
         linkMonitor.get() /* linkMonitor */,
+        monitor.get() /* monitor */,
         persistentStore.get() /* configStore */,
         prefixManager.get() /* prefixManager */,
-        nullptr /* config */,
-        monitorSubmitUrl_,
-        context_);
+        nullptr /* config */);
     openrThriftServerWrapper_->run();
 
     // initialize openrCtrlClient talking to server
@@ -211,7 +206,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   }
 
  private:
-  const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
@@ -238,6 +232,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<PrefixManager> prefixManager;
   std::shared_ptr<PersistentStore> persistentStore;
   std::shared_ptr<LinkMonitor> linkMonitor;
+  std::shared_ptr<Monitor> monitor;
 
  public:
   const std::string nodeName_{"thanos@universe"};

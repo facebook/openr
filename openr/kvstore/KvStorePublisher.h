@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
 #include <openr/config/Config.h>

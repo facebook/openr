@@ -10,7 +10,6 @@
 #include <chrono>
 #include <string>
 
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/allocators/RangeAllocator.h>
@@ -44,8 +43,6 @@ class PrefixAllocator : public OpenrEventBase {
       // producer queue
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      const MonitorSubmitUrl& monitorSubmitUrl,
-      fbzmq::Context& zmqContext,
       std::chrono::milliseconds syncInterval);
 
   PrefixAllocator(PrefixAllocator const&) = delete;
@@ -198,9 +195,6 @@ class PrefixAllocator : public OpenrEventBase {
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;
-
-  // Monitor client for submitting counters/logs
-  fbzmq::ZmqMonitorClient zmqMonitorClient_;
 
   // AsyncTimeout for initialization
   std::unique_ptr<folly::AsyncTimeout> initTimer_;

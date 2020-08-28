@@ -32,10 +32,6 @@ BOOST_STRONG_TYPEDEF(uint16_t, KvStoreCmdPort);
 // OpenrCtrl Thrift port
 BOOST_STRONG_TYPEDEF(uint16_t, OpenrCtrlThriftPort);
 
-// Monitor URLs
-BOOST_STRONG_TYPEDEF(std::string, MonitorSubmitUrl);
-BOOST_STRONG_TYPEDEF(std::string, MonitorPubUrl);
-
 // markers for some of KvStore keys
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);

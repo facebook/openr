@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
+#include <fb303/BaseService.h>
 #include <fbzmq/zmq/Zmq.h>
 
 #include <openr/allocators/PrefixAllocator.h>
@@ -17,6 +17,7 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/monitor/LogSample.h>
+#include <openr/monitor/Monitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
@@ -101,9 +102,9 @@ class OpenrWrapper {
       const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb);
 
   /*
-   * to get counters
+   * return all counters
    */
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient{nullptr};
+  std::map<std::string, int64_t> getCounters();
 
   /*
    * watchdog thread (used for checking memory limit exceeded)
@@ -146,11 +147,11 @@ class OpenrWrapper {
   // sub modules owned by this wrapper
   std::shared_ptr<Config> config_;
   std::unique_ptr<PersistentStore> configStore_;
-  std::unique_ptr<fbzmq::ZmqMonitor> monitor_;
   std::unique_ptr<KvStore> kvStore_;
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<Spark> spark_;
   std::unique_ptr<LinkMonitor> linkMonitor_;
+  std::unique_ptr<Monitor> monitor_;
   std::unique_ptr<Decision> decision_;
   std::unique_ptr<Fib> fib_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
@@ -158,8 +159,6 @@ class OpenrWrapper {
 
   // sub module communication zmq urls and ports
   int kvStoreGlobalCmdPort_{0};
-  const std::string monitorSubmitUrl_;
-  const std::string monitorPubUrl_;
   const std::string kvStoreGlobalCmdUrl_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;

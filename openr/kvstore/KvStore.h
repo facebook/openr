@@ -14,11 +14,11 @@
 
 #include <boost/heap/priority_queue.hpp>
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
 #include <folly/futures/Future.h>
+#include <folly/gen/Base.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -151,7 +151,6 @@ struct KvStoreParams {
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
   bool enableFloodOptimization{false};
   bool isFloodRoot{false};
-  std::shared_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient{nullptr};
 
   KvStoreParams(
       std::string nodeid,
@@ -569,8 +568,6 @@ class KvStore final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // the url to receive command from peer instances
       KvStoreGlobalCmdUrl globalCmdUrl,
-      // the url to submit to monitor
-      MonitorSubmitUrl monitorSubmitUrl,
       // openr config
       std::shared_ptr<const Config> config,
       // IP TOS value to set on sockets using TCP
@@ -686,9 +683,6 @@ class KvStore final : public OpenrEventBase {
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
-
-  // client to interact with monitor
-  std::shared_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // kvstore parameters common to all kvstoreDB
   KvStoreParams kvParams_;
