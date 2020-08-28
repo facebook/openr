@@ -17,17 +17,20 @@ template <typename Duration>
 ExponentialBackoff<Duration>::ExponentialBackoff()
     : initialBackoff_(Duration(1)),
       maxBackoff_(Duration(1)),
-      currentBackoff_(0) {}
+      currentBackoff_(0),
+      isAbortAtMax_(false) {}
 
 template <typename Duration>
 ExponentialBackoff<Duration>::ExponentialBackoff(
-    Duration initialBackoff, Duration maxBackoff)
+    Duration initialBackoff, Duration maxBackoff, bool isAbortAtMax)
     : initialBackoff_(initialBackoff),
       maxBackoff_(maxBackoff),
-      currentBackoff_(0) {
-  CHECK(initialBackoff > Duration(0)) << "Backoff must be positive value";
-  CHECK(initialBackoff < maxBackoff) << "Max backoff must be greater than"
-                                     << "initial backoff.";
+      currentBackoff_(0),
+      isAbortAtMax_(isAbortAtMax) {
+  CHECK_GT(initialBackoff.count(), Duration(0).count())
+      << "Backoff must be positive value";
+  CHECK_LT(initialBackoff.count(), maxBackoff.count())
+      << "Max backoff must be greater than initial backoff.";
 }
 
 template <typename Duration>
@@ -48,6 +51,10 @@ template <typename Duration>
 void
 ExponentialBackoff<Duration>::reportError() {
   lastErrorTime_ = std::chrono::steady_clock::now();
+  if (currentBackoff_ >= maxBackoff_ && isAbortAtMax_) {
+    LOG(ERROR) << "Max back-off reached, isAbortAtMax true! Abort! Abort!";
+    ::abort();
+  }
   if (currentBackoff_ == Duration(0)) {
     currentBackoff_ = initialBackoff_;
   } else {
@@ -85,6 +92,12 @@ template <typename Duration>
 Duration
 ExponentialBackoff<Duration>::getMaxBackoff() const {
   return maxBackoff_;
+}
+
+template <typename Duration>
+bool
+ExponentialBackoff<Duration>::getIsAbortAtMax() const {
+  return isAbortAtMax_;
 }
 
 // define template instance for some common usecases

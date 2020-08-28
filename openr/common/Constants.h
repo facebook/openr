@@ -74,8 +74,12 @@ class Constants {
   static constexpr folly::StringPiece kEventLogCategory{"perfpipe_aquaman"};
 
   // ExponentialBackoff durations
+  // Link-monitor, KvStore
   static constexpr std::chrono::milliseconds kInitialBackoff{64};
   static constexpr std::chrono::milliseconds kMaxBackoff{8192};
+  // FIB Sync, perhaps this could be removed and above used in time.
+  static constexpr std::chrono::milliseconds kFibSyncInitialBackoff{8};
+  static constexpr std::chrono::milliseconds kFibSyncMaxBackoff{4096};
 
   // Persistent store specific
   static constexpr std::chrono::milliseconds kPersistentStoreInitialBackoff{

@@ -107,7 +107,7 @@ LinkMonitor::LinkMonitor(
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
       logSampleQueue_(logSampleQueue),
-      expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
+      expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff, true),
       configStore_(configStore),
       nlSock_(nlSock) {
   // Check non-empty module ptr

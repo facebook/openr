@@ -35,7 +35,9 @@ Fib::Fib(
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
       expBackoff_(
-          std::chrono::milliseconds(8), std::chrono::milliseconds(4096)),
+          Constants::kFibSyncInitialBackoff,
+          Constants::kFibSyncMaxBackoff,
+          true),
       kvStore_(kvStore),
       fibUpdatesQueue_(fibUpdatesQueue),
       logSampleQueue_(logSampleQueue) {

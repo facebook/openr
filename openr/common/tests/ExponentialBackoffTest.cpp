@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <signal.h>
 #include <unistd.h>
 
 #include <gflags/gflags.h>
@@ -12,6 +13,17 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/ExponentialBackoff.h>
+
+TEST(ExponentialBackoffTest, AbortAtMaxTest) {
+  openr::ExponentialBackoff<std::chrono::milliseconds> timer(
+      std::chrono::milliseconds(1), std::chrono::milliseconds(2), true);
+  timer.reportError();
+  timer.reportError();
+  EXPECT_EXIT(
+      timer.reportError(),
+      ::testing::KilledBySignal(SIGABRT),
+      "Max back-off reached");
+}
 
 TEST(ExponentialBackoffTest, ApiTest) {
   openr::ExponentialBackoff<std::chrono::milliseconds> timer(

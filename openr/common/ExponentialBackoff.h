@@ -31,8 +31,16 @@ class ExponentialBackoff {
    * @param initialBackoff  The length of time to wait before retrying
    *                        after the first error.
    * @param maxBackoff      The maximum backoff period to use.
+   * @param isAbortAtMax    Whether to fail and abort() at maximum.
+   *
+   *                        This should be set for critical services, to
+   *                        ensure a problem is escalated to higher-level
+   *                        service managers for further action.
+   *
+   *                        Defaults to false.
    */
-  ExponentialBackoff(Duration initialBackoff, Duration maxBackoff);
+  ExponentialBackoff(
+      Duration initialBackoff, Duration maxBackoff, bool isAbortAtMax = false);
 
   /**
    * Should we wait or not?
@@ -87,6 +95,10 @@ class ExponentialBackoff {
    */
   Duration getInitialBackoff() const;
   Duration getMaxBackoff() const;
+  /**
+   * Getter for AbortAtMax
+   */
+  bool getIsAbortAtMax() const;
 
  private:
   Duration initialBackoff_;
@@ -94,6 +106,8 @@ class ExponentialBackoff {
 
   // Current backoff. If things are good then it is Duration(0)
   Duration currentBackoff_;
+
+  bool isAbortAtMax_ = false;
 
   // Time point of last error
   std::chrono::steady_clock::time_point lastErrorTime_;
