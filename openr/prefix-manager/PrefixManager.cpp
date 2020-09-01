@@ -682,9 +682,15 @@ PrefixManager::processDecisionRouteUpdates(
 
     // NOTE: future expansion - run egress policy here
 
-    // cross area, append area stack
+    //
+    // cross area, modify attributes
+    //
+
+    // 1. append area stack
     prefixEntry.area_stack_ref()->emplace_back(route.bestArea);
-    // normalize to RIB routes
+    // 2. increase distance by 1
+    ++(*prefixEntry.metrics_ref()->distance_ref());
+    // 3. normalize to RIB routes
     prefixEntry.type_ref() = thrift::PrefixType::RIB;
 
     auto dstAreas = allAreas_;

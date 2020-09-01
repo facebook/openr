@@ -1441,12 +1441,14 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   // create unicast route for addr1 from area "A"
   auto prefixEntry1A = prefixEntry1;
   prefixEntry1A.area_stack_ref() = {"65000"};
+  prefixEntry1A.metrics_ref()->distance_ref() = 1;
   prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
   auto unicast1A = RibUnicastEntry(
       toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, "A", false);
   // expected kvstore announcement to other area, append "A" in area stack
   auto expectedPrefixEntry1A = prefixEntry1A;
   expectedPrefixEntry1A.area_stack_ref()->push_back("A");
+  ++*expectedPrefixEntry1A.metrics_ref()->distance_ref();
   expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
 
   {
@@ -1476,12 +1478,14 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   // create unicast route for addr1 from area "B"
   auto prefixEntry1B = prefixEntry1;
   prefixEntry1B.area_stack_ref() = {"65000"}; // previous area stack
+  prefixEntry1B.metrics_ref()->distance_ref() = 1;
   prefixEntry1B.metrics_ref()->source_preference_ref() = 100;
   auto unicast1B = RibUnicastEntry(
       toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, "B", false);
   // expected kvstore announcement to other area, append "B" in area stack
   auto expectedPrefixEntry1B = prefixEntry1B;
   expectedPrefixEntry1B.area_stack_ref()->push_back("B");
+  ++*expectedPrefixEntry1B.metrics_ref()->distance_ref();
   expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
 
   {
@@ -1570,6 +1574,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   // expected kvstore announcement to other area, append "A" in area stack
   auto expectedPrefixEntry1A = prefixEntry1A;
   expectedPrefixEntry1A.area_stack_ref()->push_back("A");
+  ++*expectedPrefixEntry1A.metrics_ref()->distance_ref();
   expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
 
   {
@@ -1642,6 +1647,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   // expected kvstore announcement to other area, append "B" in area stack
   auto expectedPrefixEntry1B = prefixEntry1B;
   expectedPrefixEntry1B.area_stack_ref()->push_back("B");
+  ++*expectedPrefixEntry1B.metrics_ref()->distance_ref();
   expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
 
   {
