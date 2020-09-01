@@ -4999,10 +4999,15 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   // "2" originate addr2 into A
   //
   auto originKeyStr = PrefixKey("2", toIPNetwork(addr2), "A").getPrefixKey();
+  auto originPfx = createPrefixEntry(addr2);
+  originPfx.area_stack_ref() = {"65000"};
+  auto originPfxVal =
+      createPrefixValue("2", 1, createPrefixDb("2", {originPfx}, "A"));
+
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
        {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
-       {originKeyStr, createPrefixValue("2", 1, {addr2}, "A")}},
+       {originKeyStr, originPfxVal}},
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
@@ -5035,9 +5040,10 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   auto redistributeKeyStr =
       PrefixKey("1", toIPNetwork(addr2), "B").getPrefixKey();
   auto redistributePfx = createPrefixEntry(addr2, thrift::PrefixType::RIB);
-  redistributePfx.area_stack_ref()->emplace_back("A");
+  redistributePfx.area_stack_ref() = {"65000", "A"};
   auto redistributePfxVal =
       createPrefixValue("1", 1, createPrefixDb("1", {redistributePfx}, "B"));
+
   publication = createThriftPublication(
       {{redistributeKeyStr, redistributePfxVal}},
       {}, /* expiredKeys */

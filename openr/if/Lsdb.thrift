@@ -323,7 +323,7 @@ struct PrefixEntry {
   11: set<string> tags
 
   // List of areas, this route has traversed through. This is automatically
-  // extended as route gets re-distributed across the areas.
+  // extended (*not prepend) as route gets re-distributed across the areas.
   // AreaID at index=0 indicates the originating area and at AreaID at the
   // end indicates the re-distributing area.
   // NOTE: This is immutable by Policy and only code can modify it. It is always

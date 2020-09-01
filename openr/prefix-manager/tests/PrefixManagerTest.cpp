@@ -1440,6 +1440,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
 
   // create unicast route for addr1 from area "A"
   auto prefixEntry1A = prefixEntry1;
+  prefixEntry1A.area_stack_ref() = {"65000"};
   prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
   auto unicast1A = RibUnicastEntry(
       toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, "A", false);
@@ -1474,6 +1475,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
 
   // create unicast route for addr1 from area "B"
   auto prefixEntry1B = prefixEntry1;
+  prefixEntry1B.area_stack_ref() = {"65000"}; // previous area stack
   prefixEntry1B.metrics_ref()->source_preference_ref() = 100;
   auto unicast1B = RibUnicastEntry(
       toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, "B", false);

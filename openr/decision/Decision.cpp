@@ -1681,7 +1681,10 @@ Decision::updateNodePrefixDatabase(
       // These routes are programmed by Decision,
       // re-origintaed by me to areas that do not have the best prefix entry
       if (nodeName == myNodeName_ && prefixEntry.area_stack_ref()->size() > 0 &&
-          areaLinkStates_.count(prefixEntry.area_stack_ref()->at(0))) {
+          areaLinkStates_.count(prefixEntry.area_stack_ref()->back())) {
+        LOG(INFO) << "Ignore self redistributed route reflection for prefix: "
+                  << key << " area_stack: "
+                  << folly::join(",", *prefixEntry.area_stack_ref());
         return std::nullopt;
       }
 
