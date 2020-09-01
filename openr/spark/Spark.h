@@ -332,6 +332,14 @@ class Spark final : public OpenrEventBase {
     // Lastest measured RTT on receipt of every hello packet
     std::chrono::microseconds rttLatest{0};
 
+    // Time when a neighbor state becomes IDLE
+    std::chrono::time_point<std::chrono::steady_clock> idleStateTransitionTime =
+        std::chrono::steady_clock::now();
+
+    // Time when a neighbor state becomes RESTART
+    std::chrono::time_point<std::chrono::steady_clock>
+        restartStateTransitionTime = std::chrono::steady_clock::now();
+
     // detect rtt changes
     StepDetector<int64_t, std::chrono::milliseconds> stepDetector;
 

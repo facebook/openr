@@ -301,6 +301,10 @@ Spark::Spark(
       "spark.invalid_keepalive.different_subnet", fb303::SUM);
   fb303::fbData->addStatExportType(
       "spark.invalid_keepalive.looped_packet", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "openr.neighbor_discovery_time.time_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "openr.neighbor_restart_time.time_ms", fb303::AVG);
 }
 
 // static util function to transform state into str
@@ -877,6 +881,51 @@ Spark::logStateTransition(
                << toStr(newState) << "] "
                << "for neighbor: (" << neighborName << ") on interface: ("
                << ifName << ").";
+
+  auto& ifNeighbors = sparkNeighbors_.at(ifName);
+  auto& neighbor = ifNeighbors.at(neighborName);
+
+  // Track neighbor discovery time
+  if (newState == SparkNeighState::ESTABLISHED and
+      oldState == SparkNeighState::NEGOTIATE) {
+    // compute neighbor discovery time
+
+    const auto elapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() -
+            neighbor.idleStateTransitionTime);
+
+    LOG(INFO) << "Neighbor discovery time for neighbor: (" << neighborName
+              << ") on interface: (" << ifName << ") " << elapsedTime.count()
+              << " ms";
+
+    fb303::fbData->addStatValue(
+        "openr.neighbor_discovery_time.time_ms",
+        elapsedTime.count(),
+        fb303::AVG);
+  } else if (newState == SparkNeighState::IDLE) {
+    // reset neighbor discovery time
+    neighbor.idleStateTransitionTime = std::chrono::steady_clock::now();
+  }
+
+  // Track how much time has elapsed from RESTART to ESTABLISHED transition.
+  if (newState == SparkNeighState::ESTABLISHED and
+      oldState == SparkNeighState::RESTART) {
+    const auto elapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() -
+            neighbor.restartStateTransitionTime);
+
+    LOG(INFO) << "Neighbor restart time for neighbor: (" << neighborName
+              << ") on interface: (" << ifName << ") " << elapsedTime.count()
+              << " ms";
+
+    fb303::fbData->addStatValue(
+        "openr.neighbor_restart_time.time_ms", elapsedTime.count(), fb303::AVG);
+  } else if (newState == SparkNeighState::RESTART) {
+    // reset neighbor restart time
+    neighbor.restartStateTransitionTime = std::chrono::steady_clock::now();
+  }
 }
 
 void
