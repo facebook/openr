@@ -138,7 +138,7 @@ class LinkMonitor final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   getLinkMonitorAdjacencies();
-  folly::SemiFuture<std::vector<thrift::Link>> getAllLinks();
+  folly::SemiFuture<std::vector<LinkEntry>> getAllLinks();
 
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
   static std::unordered_map<std::string, thrift::PeerSpec>

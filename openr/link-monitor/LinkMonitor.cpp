@@ -765,7 +765,7 @@ LinkMonitor::syncInterfaces() {
   VLOG(1) << "Syncing Interface DB from Netlink Platform";
 
   // Retrieve latest link snapshot from NetlinkProtocolSocket
-  std::vector<thrift::Link> links;
+  std::vector<LinkEntry> links;
   try {
     links = getAllLinks().get();
   } catch (const std::exception& e) {
@@ -779,10 +779,10 @@ LinkMonitor::syncInterfaces() {
     // update cache of ifIndex -> ifName mapping
     //  1) if ifIndex exists, override it with new ifName;
     //  2) if ifIndex does NOT exist, cache the ifName;
-    ifIndexToName_[*link.ifIndex_ref()] = *link.ifName_ref();
+    ifIndexToName_[link.ifIndex] = link.ifName;
 
     // Get interface entry
-    auto interfaceEntry = getOrCreateInterfaceEntry(*link.ifName_ref());
+    auto interfaceEntry = getOrCreateInterfaceEntry(link.ifName);
     if (not interfaceEntry) {
       continue;
     }
@@ -790,14 +790,13 @@ LinkMonitor::syncInterfaces() {
     const std::unordered_set<folly::CIDRNetwork> oldNetworks =
         interfaceEntry->getNetworks(); // NOTE: Copy intended
     std::unordered_set<folly::CIDRNetwork> newNetworks;
-    for (const auto& network : *link.networks_ref()) {
-      newNetworks.emplace(toIPNetwork(network, false /* no masking */));
+    for (const auto& network : link.networks) {
+      newNetworks.emplace(network);
     }
 
     // Update link attributes
     const bool wasUp = interfaceEntry->isUp();
-    interfaceEntry->updateAttrs(
-        *link.ifIndex_ref(), *link.isUp_ref(), *link.weight_ref());
+    interfaceEntry->updateAttrs(link.ifIndex, link.isUp, link.weight);
     logLinkEvent(
         interfaceEntry->getIfName(),
         wasUp,
@@ -1180,7 +1179,7 @@ LinkMonitor::getLinkMonitorAdjacencies() {
   return sf;
 }
 
-folly::SemiFuture<std::vector<thrift::Link>>
+folly::SemiFuture<std::vector<LinkEntry>>
 LinkMonitor::getAllLinks() {
   VLOG(2) << "Querying all links and their addresses from system";
   return collectAll(nlSock_->getAllLinks(), nlSock_->getAllIfAddresses())
@@ -1189,17 +1188,16 @@ LinkMonitor::getAllLinks() {
               folly::Try<folly::Expected<std::vector<fbnl::Link>, int>>,
               folly::Try<folly::Expected<std::vector<fbnl::IfAddress>, int>>>&&
                  res) {
-            std::unordered_map<int, thrift::Link> links;
+            std::unordered_map<int, LinkEntry> links;
             // Create links
             auto nlLinks = std::get<0>(res).value();
             if (nlLinks.hasError()) {
               throw fbnl::NlException("Failed fetching links", nlLinks.error());
             }
             for (auto& nlLink : nlLinks.value()) {
-              thrift::Link link;
-              link.ifName_ref() = nlLink.getLinkName();
-              link.ifIndex_ref() = nlLink.getIfIndex();
-              link.isUp_ref() = nlLink.isUp();
+              // explicitly constuct linkEntry with EMPTY addresses
+              LinkEntry link(
+                  nlLink.getLinkName(), nlLink.getIfIndex(), nlLink.isUp(), {});
               links.emplace(nlLink.getIfIndex(), std::move(link));
             }
 
@@ -1210,14 +1208,13 @@ LinkMonitor::getAllLinks() {
             }
             for (auto& nlAddr : nlAddrs.value()) {
               auto& link = links.at(nlAddr.getIfIndex());
-              link.networks_ref()->emplace_back(
-                  toIpPrefix(nlAddr.getPrefix().value()));
+              link.networks.emplace_back(nlAddr.getPrefix().value());
             }
 
             // Convert to list and return
-            std::vector<thrift::Link> result{};
-            for (auto& kv : links) {
-              result.emplace_back(std::move(kv.second));
+            std::vector<LinkEntry> result{};
+            for (auto& [_, link] : links) {
+              result.emplace_back(std::move(link));
             }
             return result;
           });

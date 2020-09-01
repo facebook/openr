@@ -1927,25 +1927,29 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
   EXPECT_EQ(0, links.size());
 
   // Set addresses and links
-  EXPECT_EQ(0, nlSock->addLink(fbnl::utils::createLink(1, "eth0")).get());
+  const std::string ifName = "eth0";
+  auto v4Addr = "192.168.0.3/31";
+  auto v6Addr = "fc00::3/127";
+
+  EXPECT_EQ(0, nlSock->addLink(fbnl::utils::createLink(1, ifName)).get());
   EXPECT_EQ(
-      0,
-      nlSock->addIfAddress(fbnl::utils::createIfAddress(1, "192.168.0.3/31"))
-          .get());
+      0, nlSock->addIfAddress(fbnl::utils::createIfAddress(1, v4Addr)).get());
   EXPECT_EQ(
       -ENXIO,
-      nlSock->addIfAddress(fbnl::utils::createIfAddress(2, "fc00::3/127"))
-          .get());
+      nlSock->addIfAddress(fbnl::utils::createIfAddress(2, v6Addr)).get());
 
   // Verify link status and addresses shows up
   links = linkMonitor->getAllLinks().get();
   ASSERT_EQ(1, links.size());
 
   const auto& link = links.at(0);
-  EXPECT_TRUE(*link.isUp_ref());
-  EXPECT_EQ("eth0", *link.ifName_ref());
-  ASSERT_EQ(1, link.networks_ref()->size());
-  EXPECT_EQ("192.168.0.3/31", toString(link.networks_ref()->at(0)));
+  EXPECT_EQ(ifName, link.ifName);
+  EXPECT_EQ(1, link.ifIndex);
+  EXPECT_TRUE(link.isUp);
+  ASSERT_EQ(1, link.networks.size());
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork(v4Addr, -1, false /* apply mask */),
+      link.networks.at(0));
 }
 
 TEST(LinkMonitor, GetPeersFromAdjacencies) {

@@ -21,18 +21,17 @@ NetlinkEventsInjector::NetlinkEventsInjector(
     : nlSock_(nlSock) {}
 
 void
-NetlinkEventsInjector::getAllLinks(std::vector<thrift::Link>& linkDb) {
+NetlinkEventsInjector::getAllLinks(std::vector<LinkEntry>& linkDb) {
   VLOG(3) << "Query links from Netlink according to link name";
   SYNCHRONIZED(linkDb_) {
-    for (const auto link : linkDb_) {
-      thrift::Link linkEntry;
-      *linkEntry.ifName_ref() = link.first;
-      linkEntry.ifIndex_ref() = link.second.ifIndex;
-      linkEntry.isUp_ref() = link.second.isUp;
-      for (const auto network : link.second.networks) {
-        linkEntry.networks_ref()->emplace_back(toIpPrefix(network));
+    for (const auto& link : linkDb_) {
+      LinkEntry linkEntry(
+          link.first, link.second.ifIndex, link.second.isUp, {});
+      // std::unordered_set -> std::vector
+      for (const auto& network : link.second.networks) {
+        linkEntry.networks.emplace_back(network);
       }
-      linkDb.emplace_back(linkEntry);
+      linkDb.emplace_back(std::move(linkEntry));
     }
   }
 }

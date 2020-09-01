@@ -15,14 +15,6 @@ namespace lua openr.Platform
 include "fb303/thrift/fb303_core.thrift"
 include "Network.thrift"
 
-struct Link {
-  1: i64 ifIndex;
-  2: bool isUp;
-  3: list<Network.IpPrefix> networks;
-  4: string ifName;
-  5: i64 weight = 1; // used for weighted ecmp
-}
-
 /**
  * Enum to keep track of Client name to Client-ID mapping. Indicates which
  * client-ids are used and which are available to use.
