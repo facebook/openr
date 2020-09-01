@@ -8,6 +8,96 @@
 #include "openr/common/Flags.h"
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 
+DEFINE_string(
+    config_store_filepath,
+    "/tmp/aq_persistent_config_store.bin",
+    "File name where to persist OpenR's internal state across restarts");
+DEFINE_string(config, "", "OpenR config file path");
+DEFINE_bool(
+    enable_fib_service_waiting,
+    true,
+    "Wait for Switch FIB agent to be ready before initialize OpenR");
+DEFINE_bool(
+    enable_perf_measurement,
+    true,
+    "Enable performance measurement in network.");
+DEFINE_int32(
+    ip_tos,
+    openr::Constants::kIpTos,
+    "Mark control plane traffic with specified IP-TOS value. Set this to 0 "
+    "if you don't want to mark packets.");
+DEFINE_bool(
+    assume_drained,
+    false,
+    "If set, will assume node is drained if no drain state is found in the "
+    "persistent store");
+DEFINE_bool(
+    override_drain_state,
+    false,
+    "If set, will override persistent store drain state with value passed in "
+    "--assume_drained");
+DEFINE_bool(
+    enable_bgp_route_programming,
+    true,
+    "Enable programming routes with prefix type BGP to the system FIB");
+DEFINE_string(
+    spr_ha_state_file,
+    "/dev/shm/spr_ha_state.txt",
+    "File in which HA stateful information is stored across bgp restarts");
+DEFINE_bool(bgp_enable_stateful_ha, true, "Is Bgp peer stateful HA required");
+DEFINE_bool(
+    enable_secure_thrift_server,
+    false,
+    "Flag to enable TLS for our thrift server");
+DEFINE_string(
+    x509_cert_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "certificate path for the associated wangle::SSLContextConfig");
+DEFINE_string(
+    x509_key_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "key path for the associated wangle::SSLContextConfig. If unspecified, "
+    "will use x509_cert_path");
+DEFINE_string(
+    x509_ca_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "certificate authority path for verifying peers");
+DEFINE_string(
+    tls_ticket_seed_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "TLS ticket seed file path to use for client session resumption");
+DEFINE_string(
+    tls_ecc_curve_name,
+    "prime256v1",
+    "If we are running an SSL thrift server, this option specifies the "
+    "eccCurveName for the associated wangle::SSLContextConfig");
+DEFINE_string(
+    tls_acceptable_peers,
+    "",
+    "A comma separated list of strings. Strings are x509 common names to "
+    "accept SSL connections from. If an empty string is provided, the server "
+    "will accept connections from any authenticated peer.");
+DEFINE_bool(
+    enable_lfa, false, "Enable LFA computation for quick reroute per RFC 5286");
+DEFINE_int32(
+    decision_debounce_min_ms,
+    10,
+    "Fast reaction time to update decision spf upon receiving adj db update "
+    "(in milliseconds)");
+DEFINE_int32(
+    decision_debounce_max_ms,
+    250,
+    "Decision debounce time to update spf in frequent adj db update "
+    "(in milliseconds)");
+
+//
+// TODO: [DEPRECATED] All following flags are deprecated in favor of config
+//
+
 DEFINE_int32(
     openr_ctrl_port,
     openr::Constants::kOpenrCtrlPort,
@@ -52,21 +142,6 @@ DEFINE_string(
     "Domain name associated with this OpenR. No adjacencies will be formed "
     "to OpenR of other domains.");
 DEFINE_string(listen_addr, "*", "The IP address to bind to");
-DEFINE_string(
-    config_store_filepath,
-    "/tmp/aq_persistent_config_store.bin",
-    "File name where to persist OpenR's internal state across restarts");
-
-DEFINE_bool(
-    assume_drained,
-    false,
-    "If set, will assume node is drained if no drain state is found in the "
-    "persistent store");
-DEFINE_bool(
-    override_drain_state,
-    false,
-    "If set, will override persistent store drain state with value passed in "
-    "--assume_drained");
 
 DEFINE_string(
     node_name,
@@ -117,10 +192,6 @@ DEFINE_string(
     "my certificate file containing private & public key pair");
 DEFINE_bool(enable_encryption, false, "Encrypt traffic between AQ instances");
 DEFINE_bool(
-    enable_fib_service_waiting,
-    true,
-    "Wait for Switch FIB agent to be ready before initialize OpenR");
-DEFINE_bool(
     enable_rtt_metric,
     true,
     "Use dynamically learned RTT for interface metric values.");
@@ -130,15 +201,9 @@ DEFINE_bool(
     "Enable v4 in OpenR for exchanging and programming v4 routes. Works only "
     "when Switch FIB Agent is used for FIB programming. No NSS/Linux.");
 DEFINE_bool(
-    enable_lfa, false, "Enable LFA computation for quick reroute per RFC 5286");
-DEFINE_bool(
     enable_ordered_fib_programming,
     false,
     "Enable ordered fib programming per RFC 6976");
-DEFINE_bool(
-    enable_bgp_route_programming,
-    true,
-    "Enable programming routes with prefix type BGP to the system FIB");
 DEFINE_int32(
     decision_graceful_restart_window_s,
     -1,
@@ -195,11 +260,6 @@ DEFINE_bool(
     true,
     "If set, netlink system handler will be started");
 DEFINE_int32(
-    ip_tos,
-    openr::Constants::kIpTos,
-    "Mark control plane traffic with specified IP-TOS value. Set this to 0 "
-    "if you don't want to mark packets.");
-DEFINE_int32(
     link_flap_initial_backoff_ms,
     1000,
     "Initial backoff to dampen link flaps (in milliseconds)");
@@ -207,21 +267,7 @@ DEFINE_int32(
     link_flap_max_backoff_ms,
     60000,
     "Max backoff to dampen link flaps (in millseconds)");
-DEFINE_bool(
-    enable_perf_measurement,
-    true,
-    "Enable performance measurement in network.");
 DEFINE_bool(enable_rib_policy, false, "Enable RibPolicy in Decision module");
-DEFINE_int32(
-    decision_debounce_min_ms,
-    10,
-    "Fast reaction time to update decision spf upon receiving adj db update "
-    "(in milliseconds)");
-DEFINE_int32(
-    decision_debounce_max_ms,
-    250,
-    "Decision debounce time to update spf in frequent adj db update "
-    "(in milliseconds)");
 DEFINE_bool(
     enable_watchdog,
     true,
@@ -275,42 +321,6 @@ DEFINE_int32(
     kvstore_ttl_decrement_ms,
     openr::Constants::kTtlDecrement.count(),
     "Amount of time to decrement TTL when flooding updates");
-DEFINE_bool(
-    enable_secure_thrift_server,
-    false,
-    "Flag to enable TLS for our thrift server");
-DEFINE_string(
-    x509_cert_path,
-    "",
-    "If we are running an SSL thrift server, this option specifies the "
-    "certificate path for the associated wangle::SSLContextConfig");
-DEFINE_string(
-    x509_key_path,
-    "",
-    "If we are running an SSL thrift server, this option specifies the "
-    "key path for the associated wangle::SSLContextConfig. If unspecified, "
-    "will use x509_cert_path");
-DEFINE_string(
-    x509_ca_path,
-    "",
-    "If we are running an SSL thrift server, this option specifies the "
-    "certificate authority path for verifying peers");
-DEFINE_string(
-    tls_ticket_seed_path,
-    "",
-    "If we are running an SSL thrift server, this option specifies the "
-    "TLS ticket seed file path to use for client session resumption");
-DEFINE_string(
-    tls_ecc_curve_name,
-    "prime256v1",
-    "If we are running an SSL thrift server, this option specifies the "
-    "eccCurveName for the associated wangle::SSLContextConfig");
-DEFINE_string(
-    tls_acceptable_peers,
-    "",
-    "A comma separated list of strings. Strings are x509 common names to "
-    "accept SSL connections from. If an empty string is provided, the server "
-    "will accept connections from any authenticated peer.");
 DEFINE_bool(enable_flood_optimization, false, "Enable flooding optimization");
 DEFINE_bool(is_flood_root, false, "set myself as flooding root or not");
 // TODO this option will be deprecated in near future, this is just for safely
@@ -371,14 +381,6 @@ DEFINE_bool(bgp_nexthop_self, false, "Bgp nexthop self");
 // Override bgp auto config with arguments passed
 DEFINE_bool(bgp_override_auto_config, false, "Override BGP auto config");
 
-DEFINE_string(
-    spr_ha_state_file,
-    "/dev/shm/spr_ha_state.txt",
-    "File in which HA stateful information is stored across bgp restarts");
-
-// bgp stateful ha
-DEFINE_bool(bgp_enable_stateful_ha, true, "Is Bgp peer stateful HA required");
-
 DEFINE_uint32(
     bgp_min_nexthop,
     0,
@@ -395,5 +397,3 @@ DEFINE_bool(
     enable_event_log_submission,
     true,
     "If set, will enable Monitor::processEventLog() to submit the logs");
-
-DEFINE_string(config, "", "OpenR config file path");

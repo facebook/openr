@@ -11,6 +11,48 @@
 
 #include <openr/common/Constants.h>
 
+// persistent store file
+DECLARE_string(config_store_filepath);
+// openr config file
+DECLARE_string(config);
+
+// platform flags
+DECLARE_bool(enable_fib_service_waiting);
+DECLARE_bool(enable_perf_measurement);
+
+DECLARE_int32(ip_tos);
+
+// drain workflow flags
+DECLARE_bool(assume_drained);
+DECLARE_bool(override_drain_state);
+
+// migration workflow flags
+DECLARE_bool(enable_bgp_route_programming);
+
+// bgp stateful ha
+DECLARE_string(spr_ha_state_file);
+DECLARE_bool(bgp_enable_stateful_ha);
+
+// security related flags
+DECLARE_bool(enable_secure_thrift_server);
+DECLARE_string(x509_cert_path);
+DECLARE_string(x509_key_path);
+DECLARE_string(x509_ca_path);
+DECLARE_string(tls_ticket_seed_path);
+DECLARE_string(tls_ecc_curve_name);
+DECLARE_string(tls_acceptable_peers);
+
+// TODO: should we deprecate this? @striz
+DECLARE_bool(enable_lfa);
+
+// TODO: these should be const
+DECLARE_int32(decision_debounce_min_ms);
+DECLARE_int32(decision_debounce_max_ms);
+
+//
+// TODO: [DEPRECATED] All following flags are deprecated in favor of config
+//
+
 DECLARE_int32(openr_ctrl_port);
 DECLARE_int32(kvstore_rep_port);
 
@@ -28,9 +70,6 @@ DECLARE_int32(fib_handler_port);
 DECLARE_string(platform_pub_url);
 DECLARE_string(domain);
 DECLARE_string(listen_addr);
-DECLARE_string(config_store_filepath);
-DECLARE_bool(assume_drained);
-DECLARE_bool(override_drain_state);
 DECLARE_string(node_name);
 DECLARE_bool(dryrun);
 DECLARE_string(loopback_iface);
@@ -47,16 +86,13 @@ DECLARE_bool(override_loopback_addr);
 DECLARE_string(iface_regex_include);
 DECLARE_string(iface_regex_exclude);
 DECLARE_string(redistribute_ifaces);
-
 DECLARE_string(cert_file_path);
 
 DECLARE_bool(enable_encryption);
-DECLARE_bool(enable_fib_service_waiting);
+
 DECLARE_bool(enable_rtt_metric);
 DECLARE_bool(enable_v4);
-DECLARE_bool(enable_lfa);
 DECLARE_bool(enable_ordered_fib_programming);
-DECLARE_bool(enable_bgp_route_programming);
 
 DECLARE_int32(decision_graceful_restart_window_s);
 
@@ -69,17 +105,10 @@ DECLARE_uint64(step_detector_ads_threshold);
 DECLARE_bool(enable_netlink_fib_handler);
 DECLARE_bool(enable_netlink_system_handler);
 
-DECLARE_int32(ip_tos);
-
 DECLARE_int32(link_flap_initial_backoff_ms);
 DECLARE_int32(link_flap_max_backoff_ms);
 
-DECLARE_bool(enable_perf_measurement);
-
 DECLARE_bool(enable_rib_policy);
-
-DECLARE_int32(decision_debounce_min_ms);
-DECLARE_int32(decision_debounce_max_ms);
 
 DECLARE_bool(enable_watchdog);
 DECLARE_int32(watchdog_interval_s);
@@ -99,14 +128,6 @@ DECLARE_int32(kvstore_flood_msg_burst_size);
 DECLARE_int32(kvstore_key_ttl_ms);
 DECLARE_int32(kvstore_sync_interval_s);
 DECLARE_int32(kvstore_ttl_decrement_ms);
-
-DECLARE_bool(enable_secure_thrift_server);
-DECLARE_string(x509_cert_path);
-DECLARE_string(x509_key_path);
-DECLARE_string(x509_ca_path);
-DECLARE_string(tls_ticket_seed_path);
-DECLARE_string(tls_ecc_curve_name);
-DECLARE_string(tls_acceptable_peers);
 
 DECLARE_bool(enable_flood_optimization);
 DECLARE_bool(is_flood_root);
@@ -140,12 +161,8 @@ DECLARE_string(bgp_nexthop4);
 DECLARE_string(bgp_nexthop6);
 DECLARE_bool(bgp_nexthop_self);
 DECLARE_bool(bgp_override_auto_config);
-DECLARE_string(spr_ha_state_file);
-DECLARE_bool(bgp_enable_stateful_ha);
 DECLARE_uint32(bgp_min_nexthop);
 DECLARE_int32(add_path);
 
 DECLARE_uint32(monitor_max_event_log);
 DECLARE_bool(enable_event_log_submission);
-
-DECLARE_string(config);
