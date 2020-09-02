@@ -5955,6 +5955,9 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   thrift::Publication initialPub;
   fb303::fbData->resetAllData();
 
+  // wait for the inital coldstart sync, expect it to be empty
+  EXPECT_EQ(0, recvRouteUpdates().unicastRoutesToUpdate.size());
+
   // Create full topology
   for (int i = 1; i <= 1000; i++) {
     const std::string src = folly::to<std::string>(i);
@@ -6004,7 +6007,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   while (true) {
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start);
-    if (diff > (3 * debounceTimeoutMax)) {
+    if (diff > (2 * debounceTimeoutMax)) {
       LOG(INFO) << "Hammered decision with " << totalSent
                 << " updates. Stopping";
       break;
@@ -6018,10 +6021,6 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   EXPECT_EQ(999, routeUpdates1.unicastRoutesToUpdate.size()); // Route to all
                                                               // nodes except
                                                               // mine
-  //
-  // Wait until all pending updates are finished
-  //
-  std::this_thread::sleep_for(std::chrono::seconds(5));
 
   //
   // Advertise prefix update. Decision gonna take some
