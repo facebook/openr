@@ -995,6 +995,19 @@ createPeerSyncId(const std::string& node, const std::string& area) {
   return folly::to<std::string>(node, "::TCP::SYNC::", area);
 };
 
+NodeAndArea
+selectBestNodeArea(
+    std::set<NodeAndArea> const& allNodeAreas, std::string const& myNodeName) {
+  NodeAndArea bestNodeArea = *allNodeAreas.begin();
+  for (const auto& nodeAndArea : allNodeAreas) {
+    if (nodeAndArea.first == myNodeName) {
+      bestNodeArea = nodeAndArea;
+      break;
+    }
+  }
+  return bestNodeArea;
+}
+
 namespace MetricVectorUtils {
 
 std::optional<const openr::thrift::MetricEntity>
@@ -1174,7 +1187,6 @@ compareMetricVectors(
   }
   return result;
 }
-
 } // namespace MetricVectorUtils
 
 } // namespace openr

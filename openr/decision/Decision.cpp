@@ -703,7 +703,7 @@ SpfSolver::SpfSolverImpl::selectBestRoutes(
   if (enableBestRouteSelection_) {
     // Perform best route selection based on metrics
     ret.allNodeAreas = selectBestPrefixMetrics(prefixEntries);
-    ret.bestNodeArea = *ret.allNodeAreas.begin();
+    ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
     ret.success = true;
   } else if (isBgp) {
     ret = runBestPathSelectionBgp(
@@ -1590,7 +1590,7 @@ Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
   runInEventBaseThread(
       [this, p = std::move(p), filter = std::move(filter)]() mutable noexcept {
         p.setValue(std::make_unique<std::vector<thrift::ReceivedRouteDetail>>(
-            prefixState_.getReceivedRoutesFiltered(filter)));
+            prefixState_.getReceivedRoutesFiltered(filter, myNodeName_)));
       });
   return std::move(sf);
 }

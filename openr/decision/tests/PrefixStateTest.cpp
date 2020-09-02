@@ -254,7 +254,7 @@ TEST(PrefixState, GetReceivedRoutes) {
   //
   {
     thrift::ReceivedRouteFilter filter;
-    auto routes = state.getReceivedRoutesFiltered(filter);
+    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
@@ -272,7 +272,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     filter.prefixes_ref() =
         std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
 
-    auto routes = state.getReceivedRoutesFiltered(filter);
+    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
@@ -290,7 +290,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     filter.prefixes_ref() =
         std::vector<thrift::IpPrefix>({toIpPrefix("11.0.0.0/8")});
 
-    auto routes = state.getReceivedRoutesFiltered(filter);
+    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
     EXPECT_EQ(0, routes.size());
   }
 
@@ -302,7 +302,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     filter.prefixes_ref() = std::vector<thrift::IpPrefix>();
 
     filter.prefixes_ref()->clear();
-    auto routes = state.getReceivedRoutesFiltered(filter);
+    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
     EXPECT_EQ(0, routes.size());
   }
 
@@ -315,7 +315,7 @@ TEST(PrefixState, GetReceivedRoutes) {
         std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
     filter.nodeName_ref() = "node1";
 
-    auto routes = state.getReceivedRoutesFiltered(filter);
+    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
@@ -336,7 +336,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     thrift::ReceivedRouteFilter filter;
     filter.areaName_ref() = "area0";
 
-    auto routes = state.getReceivedRoutesFiltered(filter);
+    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
@@ -357,7 +357,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     thrift::ReceivedRouteFilter filter;
     filter.areaName_ref() = "unknown";
 
-    auto routes = state.getReceivedRoutesFiltered(filter);
+    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
     ASSERT_EQ(0, routes.size());
   }
 }
@@ -374,7 +374,8 @@ TEST(PrefixState, FilterReceivedRoutes) {
       filter.nodeName_ref(),
       filter.areaName_ref(),
       thrift::IpPrefix(),
-      prefixEntries);
+      prefixEntries,
+      "node0");
   EXPECT_TRUE(routes.empty());
 }
 

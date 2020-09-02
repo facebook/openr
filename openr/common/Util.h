@@ -475,6 +475,12 @@ template <typename Key, typename MetricsWrapper>
 std::set<Key> selectBestPrefixMetrics(
     std::unordered_map<Key, MetricsWrapper> const& prefixes);
 
+// Deterministic choose one as best path from multipaths. Used in Decision.
+// Choose local if local node is a part of the multipaths.
+// Otherwise choose smallest key: allNodeAreas.begin().
+NodeAndArea selectBestNodeArea(
+    std::set<NodeAndArea> const& allNodeAreas, std::string const& myNodeName);
+
 namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };

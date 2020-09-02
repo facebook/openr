@@ -53,7 +53,8 @@ class PrefixState {
   }
 
   std::vector<thrift::ReceivedRouteDetail> getReceivedRoutesFiltered(
-      thrift::ReceivedRouteFilter const& filter) const;
+      thrift::ReceivedRouteFilter const& filter,
+      std::string const& myNodeName) const;
 
   /**
    * Filter routes only the <type> attribute
@@ -63,7 +64,8 @@ class PrefixState {
       apache::thrift::optional_field_ref<const std::string&> const& nodeFilter,
       apache::thrift::optional_field_ref<const std::string&> const& areaFilter,
       thrift::IpPrefix const& prefix,
-      PrefixEntries const& prefixEntries);
+      PrefixEntries const& prefixEntries,
+      std::string const& myNodeName);
 
  private:
   // TODO: Also maintain clean list of reachable prefix entries. A node might

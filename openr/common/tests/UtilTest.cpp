@@ -1057,6 +1057,26 @@ TEST(UtilTest, BestMetricsSelection) {
     EXPECT_EQ(1, bestKeys.count("KEY3"));
     EXPECT_EQ(1, bestKeys.count("KEY4"));
   }
+
+  //
+  // Multiple entries. Each node will choose local as best. If a node announce
+  // best entry to two areas, choose the one with lower area id
+  // (based on std::map key hash)
+  //
+  {
+    std::unordered_map<NodeAndArea, thrift::PrefixEntry> prefixes = {
+        {{"node1", "area1"}, createMetrics(100, 10, 1)},
+        {{"node1", "area2"}, createMetrics(100, 10, 1)},
+        {{"node2", "area1"}, createMetrics(100, 10, 1)}};
+    const auto bestKeys = selectBestPrefixMetrics(prefixes);
+    EXPECT_EQ(3, bestKeys.size());
+    const auto node1bestKey =
+        std::make_pair<std::string, std::string>("node1", "area1");
+    EXPECT_EQ(node1bestKey, selectBestNodeArea(bestKeys, "node1"));
+    const auto node2bestKey =
+        std::make_pair<std::string, std::string>("node2", "area1");
+    EXPECT_EQ(node2bestKey, selectBestNodeArea(bestKeys, "node2"));
+  }
 }
 
 int
