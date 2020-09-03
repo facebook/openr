@@ -5136,7 +5136,8 @@ TEST_F(DecisionTestFixture, RibPolicy) {
              ->weight_ref());
   }
 
-  // Set the policy with empty weight. Expect route delete
+  // Set the policy with empty weight. Expect route remains intact and error
+  // counter is reported
   policy.statements_ref()
       ->at(0)
       .action_ref()
@@ -5145,9 +5146,15 @@ TEST_F(DecisionTestFixture, RibPolicy) {
   EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
   {
     auto updates = recvRouteUpdates();
-    EXPECT_EQ(0, updates.unicastRoutesToUpdate.size());
-    ASSERT_EQ(1, updates.unicastRoutesToDelete.size());
-    EXPECT_EQ(toIPNetwork(addr2), updates.unicastRoutesToDelete.at(0));
+    EXPECT_EQ(1, updates.unicastRoutesToUpdate.size());
+    ASSERT_EQ(0, updates.unicastRoutesToDelete.size());
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
+    for (auto& nh :
+         updates.unicastRoutesToUpdate.at(toIPNetwork(addr2)).nexthops) {
+      EXPECT_FALSE(nh.weight_ref().has_value());
+    }
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(1, counters.at("decision.rib_policy.invalidated_routes.count"));
   }
 
   // trigger addr2 recalc by flapping the advertisement
@@ -5164,20 +5171,21 @@ TEST_F(DecisionTestFixture, RibPolicy) {
 
   {
     auto updates = recvRouteUpdates();
-    EXPECT_EQ(0, updates.unicastRoutesToUpdate.size());
-    ASSERT_EQ(1, updates.unicastRoutesToDelete.size());
-    EXPECT_EQ(toIPNetwork(addr2), updates.unicastRoutesToDelete.at(0));
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+    ASSERT_EQ(0, updates.unicastRoutesToDelete.size());
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
+    for (auto& nh :
+         updates.unicastRoutesToUpdate.at(toIPNetwork(addr2)).nexthops) {
+      EXPECT_FALSE(nh.weight_ref().has_value());
+    }
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(2, counters.at("decision.rib_policy.invalidated_routes.count"));
   }
 
   // Let the policy expire. Wait for another route database change
   {
     auto updates = recvRouteUpdates();
-    ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
-    EXPECT_EQ(
-        0,
-        *updates.unicastRoutesToUpdate.begin()
-             ->second.nexthops.begin()
-             ->weight_ref());
+    ASSERT_EQ(0, updates.unicastRoutesToUpdate.size());
 
     auto retrievedPolicy = decision->getRibPolicy().get();
     EXPECT_GE(0, *retrievedPolicy.ttl_secs_ref());

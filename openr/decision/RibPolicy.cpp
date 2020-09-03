@@ -7,6 +7,7 @@
 
 #include <openr/decision/RibPolicy.h>
 
+#include <fb303/ServiceData.h>
 #include <folly/MapUtil.h>
 
 namespace openr {
@@ -81,6 +82,19 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
     }
     // We skip the next-hop with weight=0
   }
+
+  // Retain existing next-hops if new next-hops is empty
+  // NOTE: In future we may modify this code to also support dropping
+  //       routes with no-invalid next-hops
+  if (newNexthops.empty()) {
+    LOG(WARNING) << "RibPolicy invalidated all next-hops for route to "
+                 << folly::IPAddress::networkToString(route.prefix);
+    facebook::fb303::fbData->addStatValue(
+        "decision.rib_policy.invalidated_routes", 1, facebook::fb303::COUNT);
+    return false;
+  }
+
+  // Update route next-hops
   route.nexthops = std::move(newNexthops);
 
   return true;
@@ -164,14 +178,7 @@ RibPolicy::applyPolicy(std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
   auto iter = unicastEntries.begin();
   while (iter != unicastEntries.end()) {
     if (applyAction(iter->second)) {
-      if (iter->second.nexthops.empty()) {
-        VLOG(1) << "Removing route for "
-                << folly::IPAddress::networkToString(iter->second.prefix)
-                << " because no valid next-hops after applying rib-policy";
-        change.deletedRoutes.push_back(iter->second.prefix);
-        iter = unicastEntries.erase(iter);
-        continue;
-      }
+      DCHECK(iter->second.nexthops.size()) << "Unexpected empty next-hops";
       change.updatedRoutes.push_back(iter->second.prefix);
       VLOG(2) << "RibPolicy transformed the route "
               << folly::IPAddress::networkToString(iter->second.prefix);

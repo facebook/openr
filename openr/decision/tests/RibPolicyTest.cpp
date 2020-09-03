@@ -7,13 +7,13 @@
 
 #include <thread>
 
+#include <fb303/ServiceData.h>
+#include <folly/IPAddress.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <openr/common/Util.h>
 #include <openr/decision/RibPolicy.h>
-
-#include <folly/IPAddress.h>
 
 using namespace openr;
 
@@ -256,10 +256,11 @@ TEST(RibPolicy, ApplyPolicy) {
 
     EXPECT_THAT(
         change.updatedRoutes, testing::UnorderedElementsAre(entry1.prefix));
-    EXPECT_THAT(
-        change.deletedRoutes, testing::UnorderedElementsAre(entry2.prefix));
+    EXPECT_TRUE(change.deletedRoutes.empty());
+    auto counters = facebook::fb303::fbData->getCounters();
+    EXPECT_EQ(1, counters.at("decision.rib_policy.invalidated_routes.count"));
 
-    EXPECT_THAT(entries, testing::SizeIs(1));
+    EXPECT_THAT(entries, testing::SizeIs(2));
 
     auto expectNh1 = nh1;
     expectNh1.weight_ref() = 99;
@@ -269,6 +270,7 @@ TEST(RibPolicy, ApplyPolicy) {
     EXPECT_THAT(
         entries.at(entry1.prefix).nexthops,
         testing::UnorderedElementsAre(expectNh1, expectNh2));
+    EXPECT_EQ(entries.at(entry2.prefix).nexthops, entry2.nexthops);
   }
 
   // wait for policy to expire and expect no changes
