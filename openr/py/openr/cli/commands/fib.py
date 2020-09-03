@@ -134,9 +134,6 @@ class FibRoutesInstalledCmd(FibAgentCmd):
             print("Exception: {}".format(e))
             return 1
 
-        with utils.get_openr_ctrl_client(self.cli_opts.host, self.cli_opts) as client:
-            host_id = client.getMyNodeName()
-
         try:
             mpls_routes = self.client.getMplsRouteTableByClient(client_id)
         except Exception:
@@ -145,13 +142,13 @@ class FibRoutesInstalledCmd(FibAgentCmd):
         if json_opt:
             utils.print_json(
                 utils.get_routes_json(
-                    host_id, client_id, routes, prefixes, mpls_routes, labels
+                    "", client_id, routes, prefixes, mpls_routes, labels
                 )
             )
         else:
-            caption = f"{host_id}'s FIB routes by client {client_id}"
+            caption = f"FIB routes by client {client_id}"
             utils.print_unicast_routes(caption, routes, prefixes)
-            caption = f"{host_id}'s MPLS routes by client {client_id}"
+            caption = f"MPLS routes by client {client_id}"
             utils.print_mpls_routes(caption, mpls_routes, labels)
 
         return 0
