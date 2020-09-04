@@ -549,8 +549,9 @@ if(BUILD_TESTS)
     SOURCES
       openr/tests/OpenrSystemTest.cpp
       openr/tests/OpenrWrapper.cpp
-      openr/tests/mocks/MockIoProvider.cpp
       openr/tests/mocks/NetlinkEventsInjector.cpp
+      openr/tests/mocks/MockIoProvider.cpp
+      openr/tests/mocks/MockIoProviderUtils.cpp
     LIBRARIES
       fbzmq::fbzmq
       ${ZMQ}
@@ -734,6 +735,7 @@ if(BUILD_TESTS)
     SOURCES
       openr/spark/tests/SparkTest.cpp
       openr/tests/mocks/MockIoProvider.cpp
+      openr/tests/mocks/MockIoProviderUtils.cpp
     DESTINATION sbin/tests/openr/spark
   )
 
@@ -741,6 +743,7 @@ if(BUILD_TESTS)
     SOURCES
       openr/tests/MockIoProviderTest.cpp
       openr/tests/mocks/MockIoProvider.cpp
+      openr/tests/mocks/MockIoProviderUtils.cpp
     DESTINATION sbin/tests/openr/spark
   )
 

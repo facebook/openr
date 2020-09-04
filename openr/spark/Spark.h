@@ -15,6 +15,7 @@
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/Constants.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
@@ -72,6 +73,8 @@ enum class SparkNeighEvent {
 //
 
 class Spark final : public OpenrEventBase {
+  friend class SparkWrapper;
+
  public:
   Spark(
       std::optional<int> ipTos,
@@ -82,7 +85,8 @@ class Spark final : public OpenrEventBase {
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<const Config> config,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion));
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
+      std::optional<uint32_t> maybeMaxAllowedPps = Constants::kMaxAllowedPps);
 
   ~Spark() override = default;
 
@@ -92,6 +96,9 @@ class Spark final : public OpenrEventBase {
 
   // override eventloop stop()
   void stop() override;
+
+  // Turn on the throwing of parsing errors.
+  void setThrowParserErrors(bool);
 
  private:
   //
@@ -522,5 +529,12 @@ class Spark final : public OpenrEventBase {
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
+
+  // Optional rate-limit on processing inbound Spark messages
+  std::optional<uint32_t> maybeMaxAllowedPps_;
+
+  // Whether to throw parsing errors upwards, or suppress.
+  // Fuzzer needs to see exceptions.
+  bool isThrowParserErrorsOn_ = false;
 };
 } // namespace openr

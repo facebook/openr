@@ -35,7 +35,8 @@ class SparkWrapper {
       std::string const& myNodeName,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
-      std::shared_ptr<const Config> config);
+      std::shared_ptr<const Config> config,
+      bool isRateLimitEnabled = true);
 
   ~SparkWrapper();
 
@@ -72,6 +73,13 @@ class SparkWrapper {
   getSparkConfig() {
     return config_->getSparkConfig();
   }
+
+  /* Forwarded to the underlying Spark processPacket()
+   * For test purposes, e.g. to manually invoke packet handling
+   * inline on the same thread - bypassing the event-base - as is needed
+   * for fuzzing.
+   */
+  void processPacket();
 
  private:
   std::string myNodeName_{""};

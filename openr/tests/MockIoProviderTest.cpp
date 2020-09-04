@@ -8,7 +8,8 @@
 #include <forward_list>
 #include <thread>
 
-#include <fbzmq/zmq/Zmq.h>
+#include <folly/Memory.h>
+#include <folly/ScopeGuard.h>
 #include <folly/SocketAddress.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -16,6 +17,9 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/tests/mocks/MockIoProvider.h>
+#include <openr/tests/mocks/MockIoProviderUtils.h>
+
+#include <fbzmq/zmq/Zmq.h>
 
 namespace {
 
@@ -25,108 +29,12 @@ const int kPollTimeout{10};
 const int kRecvBufferSize{1024};
 const std::string kDiscardMulticastAddr("ff01::1");
 
-template <typename T>
-union AlignedCtrlBuf {
-  char cbuf[CMSG_SPACE(sizeof(T))];
-  struct cmsghdr align;
-};
-
-void
-prepareSendMessage(
-    struct msghdr& msg,
-    const int srcIfIndex,
-    const folly::IPAddress& srcIPAddr,
-    const folly::IPAddress& dstIPAddr,
-    const std::string& packet,
-    AlignedCtrlBuf<struct in6_pktinfo>& u,
-    sockaddr_storage& dstAddrStorage,
-    struct iovec& entry) {
-  msg.msg_control = u.cbuf;
-  msg.msg_controllen = sizeof(u.cbuf);
-
-  folly::SocketAddress dstSockAddr(dstIPAddr, kMockedUdpPort);
-  dstSockAddr.getAddress(&dstAddrStorage);
-  msg.msg_name = reinterpret_cast<void*>(&dstAddrStorage);
-  msg.msg_namelen = dstSockAddr.getActualSize();
-
-  struct cmsghdr* cmsg{nullptr};
-  cmsg = CMSG_FIRSTHDR(&msg);
-  cmsg->cmsg_level = IPPROTO_IPV6;
-  cmsg->cmsg_type = IPV6_PKTINFO;
-  cmsg->cmsg_len = CMSG_LEN(sizeof(struct in6_pktinfo));
-
-  auto pktinfo = (struct in6_pktinfo*)CMSG_DATA(cmsg);
-  pktinfo->ipi6_ifindex = srcIfIndex;
-  std::memcpy(&pktinfo->ipi6_addr, srcIPAddr.bytes(), srcIPAddr.byteCount());
-
-  entry.iov_base = const_cast<char*>(packet.c_str());
-  entry.iov_len = packet.size();
-
-  msg.msg_iov = &entry;
-  msg.msg_iovlen = 1;
-}
-
-void
-prepareRecvMessage(
-    struct msghdr& msg,
-    unsigned char* buf,
-    int len,
-    struct iovec& entry,
-    AlignedCtrlBuf<char[kRecvBufferSize]>& u,
-    sockaddr_storage& srcAddrStorage) {
-  std::memset(&msg, 0, sizeof(msg));
-
-  entry.iov_base = buf;
-  entry.iov_len = len;
-
-  msg.msg_iov = &entry;
-  msg.msg_iovlen = 1;
-
-  std::memset(&u.cbuf[0], 0, sizeof(u.cbuf));
-  msg.msg_control = u.cbuf;
-  msg.msg_controllen = sizeof(u.cbuf);
-
-  std::memset(&srcAddrStorage, 0, sizeof(srcAddrStorage));
-  msg.msg_name = &srcAddrStorage;
-  msg.msg_namelen = sizeof(sockaddr_storage);
-}
-
-int
-getMsgIfIndex(struct msghdr* msg) {
-  for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg); cmsg;
-       cmsg = CMSG_NXTHDR(msg, cmsg)) {
-    if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
-      auto pktinfo = (struct in6_pktinfo*)CMSG_DATA(cmsg);
-      return pktinfo->ipi6_ifindex;
-    }
-  }
-  return -1;
-}
-
 void
 checkPacketContent(const std::string& packet, const struct msghdr& msg) {
   EXPECT_EQ(
       packet,
       std::string(
           reinterpret_cast<const char*>(msg.msg_iov->iov_base), packet.size()));
-}
-
-int
-createSocketAndJoinGroup(
-    std::shared_ptr<openr::MockIoProvider> mockIoProvider,
-    int ifIndex,
-    folly::IPAddress /* mcastGroup */) {
-  int fd = mockIoProvider->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  CHECK(fd);
-
-  struct ipv6_mreq mreq;
-  mreq.ipv6mr_interface = ifIndex;
-  if (mockIoProvider->setsockopt(
-          fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) != 0) {
-    LOG(ERROR) << "setsockopt on ipv6_join_group failed with error "
-               << folly::errnoStr(errno);
-  }
-  return fd;
 }
 
 void
@@ -136,11 +44,10 @@ waitForDataToRead(const int fd) {
   // poll until we have received any message.
   fbzmq::poll(items, folly::none);
 }
-
 } // anonymous namespace.
 
 using namespace openr;
-
+using namespace openr::MockIoProviderUtils;
 //
 // This test sends packets along the follow topology.
 //
@@ -196,14 +103,20 @@ TEST(MockIoProviderTestSetup, TwoNodesAndOneNodeTest) {
   std::string packet1(
       "This is a single-destination multicast message #1 from node1 to node2.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -213,7 +126,14 @@ TEST(MockIoProviderTestSetup, TwoNodesAndOneNodeTest) {
   AlignedCtrlBuf<char[kRecvBufferSize]> recvUnion;
   sockaddr_storage srcAddrStorage;
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   EXPECT_EQ(
       packet1.size(), mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
@@ -233,14 +153,20 @@ TEST(MockIoProviderTestSetup, TwoNodesAndOneNodeTest) {
       "This is a single-destination multicast message #2 in reverse direction "
       "from node2 to node1.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex2,
-      ipAddr2V6,
-      ipAddr1V6,
-      packet2,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet2.c_str()),
+          .len = packet2.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex2,
+          .srcIPAddr = ipAddr2V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -321,14 +247,20 @@ TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
 
     // Send packet2.
     prepareSendMessage(
-        sendMsg,
-        ifIndex2,
-        ipAddr2V6,
-        ipAddr1V6,
-        packet2,
-        sendUnion,
-        dstAddrStorage,
-        sendEntry);
+        (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+            .msg = sendMsg,
+            .data = const_cast<char*>(packet2.c_str()),
+            .len = packet2.size(),
+            .entry = sendEntry,
+            .u = sendUnion,
+        },
+        (struct openr::MockIoProviderUtils::networkArgs){
+            .srcIfIndex = ifIndex2,
+            .srcIPAddr = ipAddr2V6,
+            .dstIPAddr = ipAddr1V6,
+            .dstPort = kMockedUdpPort,
+            .dstAddrStorage = dstAddrStorage,
+        });
     EXPECT_EQ(
         packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -340,11 +272,13 @@ TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
 
     // To receive packet1.
     prepareRecvMessage(
-        recvMsg,
-        recvBuf,
-        kMinIpv6PktSize,
-        recvEntry,
-        recvUnion,
+        (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+            .msg = recvMsg,
+            .data = recvBuf,
+            .len = kMinIpv6PktSize,
+            .entry = recvEntry,
+            .u = recvUnion,
+        },
         srcAddrStorage);
 
     // Wait for data availability for read.
@@ -360,15 +294,21 @@ TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
     EXPECT_EQ(-1, mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
 
     // Send packet3.
-    prepareSendMessage(
-        sendMsg,
-        ifIndex2,
-        ipAddr2V6,
-        ipAddr1V6,
-        packet3,
-        sendUnion,
-        dstAddrStorage,
-        sendEntry);
+    MockIoProviderUtils::prepareSendMessage(
+        (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+            .msg = sendMsg,
+            .data = const_cast<char*>(packet3.c_str()),
+            .len = packet3.size(),
+            .entry = sendEntry,
+            .u = sendUnion,
+        },
+        (struct openr::MockIoProviderUtils::networkArgs){
+            .srcIfIndex = ifIndex2,
+            .srcIPAddr = ipAddr2V6,
+            .dstIPAddr = ipAddr1V6,
+            .dstPort = kMockedUdpPort,
+            .dstAddrStorage = dstAddrStorage,
+        });
     EXPECT_EQ(
         packet3.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -379,20 +319,26 @@ TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
   });
 
   struct msghdr sendMsg;
-  AlignedCtrlBuf<struct in6_pktinfo> sendUnion;
+  MockIoProviderUtils::AlignedCtrlBuf<struct in6_pktinfo> sendUnion;
   sockaddr_storage dstAddrStorage;
   struct iovec sendEntry;
 
   // Send packet1.
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -404,7 +350,14 @@ TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
 
   // To receive packet2.
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   // Wait for data availability for read.
   waitForDataToRead(fd1);
@@ -504,14 +457,20 @@ TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   std::string packet1(
       "This is a multicast message #1 from node1 to node2 and node4.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -521,7 +480,14 @@ TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   AlignedCtrlBuf<char[kRecvBufferSize]> recvUnion;
   sockaddr_storage srcAddrStorage;
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   EXPECT_EQ(
       packet1.size(), mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
@@ -545,14 +511,20 @@ TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   std::string packet2(
       "This is a multicast message #2 from node2 to node1 + node3.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex2,
-      ipAddr2V6,
-      ipAddr3V6,
-      packet2,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet2.c_str()),
+          .len = packet2.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex2,
+          .srcIPAddr = ipAddr2V6,
+          .dstIPAddr = ipAddr3V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -574,14 +546,20 @@ TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   std::string packet3(
       "This is a multicast message #3 from node3 to nodes 4 & 2.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex3,
-      ipAddr3V6,
-      ipAddr4V6,
-      packet3,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet3.c_str()),
+          .len = packet3.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex3,
+          .srcIPAddr = ipAddr3V6,
+          .dstIPAddr = ipAddr4V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet3.size(), mockIoProvider->sendmsg(fd3, &sendMsg, MSG_DONTWAIT));
 
@@ -603,14 +581,20 @@ TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   std::string packet4(
       "This is a multicast message #4 from node4 to nodes:1/3.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex4,
-      ipAddr4V6,
-      ipAddr1V6,
-      packet4,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet4.c_str()),
+          .len = packet4.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex4,
+          .srcIPAddr = ipAddr4V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet4.size(), mockIoProvider->sendmsg(fd4, &sendMsg, MSG_DONTWAIT));
 
@@ -703,14 +687,20 @@ TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
       "This is a single-destination multicast message #1 from node1 just to "
       "node2 only.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -720,7 +710,14 @@ TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
   AlignedCtrlBuf<char[kRecvBufferSize]> recvUnion;
   sockaddr_storage srcAddrStorage;
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   EXPECT_EQ(
       packet1.size(), mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
@@ -742,14 +739,20 @@ TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
   std::string packet2(
       "This is a multicast message #2 from node2 to node1 + node3.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex2,
-      ipAddr2V6,
-      ipAddr3V6,
-      packet2,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet2.c_str()),
+          .len = packet2.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex2,
+          .srcIPAddr = ipAddr2V6,
+          .dstIPAddr = ipAddr3V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -772,14 +775,20 @@ TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
 
   std::string packet3("This is an anycast message #3 from node3 to nowhere.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex3,
-      ipAddr3V6,
-      ipAddr4V6,
-      packet3,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet3.c_str()),
+          .len = packet3.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex3,
+          .srcIPAddr = ipAddr3V6,
+          .dstIPAddr = ipAddr4V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(-1, mockIoProvider->sendmsg(fd3, &sendMsg, MSG_DONTWAIT));
 
   // Sanity check.
@@ -793,14 +802,20 @@ TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
   std::string packet4(
       "This is a multicast message #4 from node4 to nodes 1, 3.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex4,
-      ipAddr4V6,
-      ipAddr1V6,
-      packet4,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet4.c_str()),
+          .len = packet4.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex4,
+          .srcIPAddr = ipAddr4V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet4.size(), mockIoProvider->sendmsg(fd4, &sendMsg, MSG_DONTWAIT));
 
@@ -896,14 +911,20 @@ TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
   std::string packet1(
       "This is a multicast message #1 from node1 to node2, node3, and node4.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -913,7 +934,14 @@ TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
   AlignedCtrlBuf<char[kRecvBufferSize]> recvUnion;
   sockaddr_storage srcAddrStorage;
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   EXPECT_EQ(
       packet1.size(), mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
@@ -939,14 +967,20 @@ TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
   std::string packet2(
       "This is a single-destination multicast message #2 from node2 to node1.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex2,
-      ipAddr2V6,
-      ipAddr1V6,
-      packet2,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet2.c_str()),
+          .len = packet2.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex2,
+          .srcIPAddr = ipAddr2V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -965,14 +999,20 @@ TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
       "This is a single-destination multicast message #3 from node3 to node "
       "#1.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex3,
-      ipAddr3V6,
-      ipAddr1V6,
-      packet3,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet3.c_str()),
+          .len = packet3.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex3,
+          .srcIPAddr = ipAddr3V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet3.size(), mockIoProvider->sendmsg(fd3, &sendMsg, MSG_DONTWAIT));
 
@@ -991,14 +1031,20 @@ TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
       "This is a single-destination multicast message #4 from node4 to node "
       "no. 1 the origin.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex4,
-      ipAddr4V6,
-      ipAddr1V6,
-      packet4,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet4.c_str()),
+          .len = packet4.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex4,
+          .srcIPAddr = ipAddr4V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet4.size(), mockIoProvider->sendmsg(fd4, &sendMsg, MSG_DONTWAIT));
 
@@ -1086,14 +1132,20 @@ TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
   std::string packet1(
       "This is a multicast message #1 from node1 to node2 & node3.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -1103,7 +1155,14 @@ TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
   AlignedCtrlBuf<char[kRecvBufferSize]> recvUnion;
   sockaddr_storage srcAddrStorage;
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   EXPECT_EQ(
       packet1.size(), mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
@@ -1128,14 +1187,20 @@ TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
       "This is a single-destination multicast message #2 from node 2 to node "
       "1.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex2,
-      ipAddr2V6,
-      ipAddr1V6,
-      packet2,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet2.c_str()),
+          .len = packet2.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex2,
+          .srcIPAddr = ipAddr2V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -1155,14 +1220,20 @@ TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
   std::string packet3(
       "This is an anycast message no.3 from node no.3 to nowhere.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex3,
-      ipAddr3V6,
-      ipAddr1V6,
-      packet3,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet3.c_str()),
+          .len = packet3.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex3,
+          .srcIPAddr = ipAddr3V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(-1, mockIoProvider->sendmsg(fd3, &sendMsg, MSG_DONTWAIT));
 
   // Sanity check.
@@ -1177,14 +1248,20 @@ TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
       "This is a single-destination multicast message no.4 from node no.4 to "
       "node no.1.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex4,
-      ipAddr4V6,
-      ipAddr1V6,
-      packet4,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet4.c_str()),
+          .len = packet4.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex4,
+          .srcIPAddr = ipAddr4V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet4.size(), mockIoProvider->sendmsg(fd4, &sendMsg, MSG_DONTWAIT));
 
@@ -1278,14 +1355,20 @@ TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
   std::string packet1(
       "This is a multicast message #1 from node1 to node2, node3, and node4.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -1295,7 +1378,14 @@ TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
   AlignedCtrlBuf<char[kRecvBufferSize]> recvUnion;
   sockaddr_storage srcAddrStorage;
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   EXPECT_EQ(
       packet1.size(), mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
@@ -1322,14 +1412,20 @@ TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
       "This is a multicast message #2 from node 2 to node 3, node 4, and node "
       "1.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex2,
-      ipAddr2V6,
-      ipAddr3V6,
-      packet2,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet2.c_str()),
+          .len = packet2.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex2,
+          .srcIPAddr = ipAddr2V6,
+          .dstIPAddr = ipAddr3V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -1355,14 +1451,20 @@ TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
   std::string packet3(
       "This is a multicast message #3 from node#3 everyone else.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex3,
-      ipAddr3V6,
-      ipAddr4V6,
-      packet3,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet3.c_str()),
+          .len = packet3.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex3,
+          .srcIPAddr = ipAddr3V6,
+          .dstIPAddr = ipAddr4V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet3.size(), mockIoProvider->sendmsg(fd3, &sendMsg, MSG_DONTWAIT));
 
@@ -1388,14 +1490,20 @@ TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
   std::string packet4(
       "This is a multicast message #4 from node number 4 to nodes 1,2,3.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex4,
-      ipAddr4V6,
-      ipAddr1V6,
-      packet4,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet4.c_str()),
+          .len = packet4.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex4,
+          .srcIPAddr = ipAddr4V6,
+          .dstIPAddr = ipAddr1V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet4.size(), mockIoProvider->sendmsg(fd4, &sendMsg, MSG_DONTWAIT));
 
@@ -1491,14 +1599,20 @@ TEST(MockIoProviderTestSetup, PartialMeshOfNodesTest) {
   std::string packet1(
       "This is a multicast message #1 from node1 to node2, node3, and node4.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex1,
-      ipAddr1V6,
-      ipAddr2V6,
-      packet1,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet1.c_str()),
+          .len = packet1.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex1,
+          .srcIPAddr = ipAddr1V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet1.size(), mockIoProvider->sendmsg(fd1, &sendMsg, MSG_DONTWAIT));
 
@@ -1508,7 +1622,14 @@ TEST(MockIoProviderTestSetup, PartialMeshOfNodesTest) {
   AlignedCtrlBuf<char[kRecvBufferSize]> recvUnion;
   sockaddr_storage srcAddrStorage;
   prepareRecvMessage(
-      recvMsg, recvBuf, kMinIpv6PktSize, recvEntry, recvUnion, srcAddrStorage);
+      (openr::MockIoProviderUtils::bufferArgs<char[kRecvBufferSize]>){
+          .msg = recvMsg,
+          .data = recvBuf,
+          .len = kMinIpv6PktSize,
+          .entry = recvEntry,
+          .u = recvUnion,
+      },
+      srcAddrStorage);
 
   EXPECT_EQ(
       packet1.size(), mockIoProvider->recvmsg(fd2, &recvMsg, MSG_DONTWAIT));
@@ -1534,14 +1655,20 @@ TEST(MockIoProviderTestSetup, PartialMeshOfNodesTest) {
   std::string packet2(
       "This is a multicast message #2 from node 2 to node 4 and node 1.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex2,
-      ipAddr2V6,
-      ipAddr4V6,
-      packet2,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet2.c_str()),
+          .len = packet2.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex2,
+          .srcIPAddr = ipAddr2V6,
+          .dstIPAddr = ipAddr4V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet2.size(), mockIoProvider->sendmsg(fd2, &sendMsg, MSG_DONTWAIT));
 
@@ -1563,14 +1690,20 @@ TEST(MockIoProviderTestSetup, PartialMeshOfNodesTest) {
   std::string packet3(
       "This is an anycast message no.3 from node no.3 to nowhere else.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex3,
-      ipAddr3V6,
-      ipAddr4V6,
-      packet3,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet3.c_str()),
+          .len = packet3.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex3,
+          .srcIPAddr = ipAddr3V6,
+          .dstIPAddr = ipAddr4V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(-1, mockIoProvider->sendmsg(fd3, &sendMsg, MSG_DONTWAIT));
 
   // Sanity check.
@@ -1582,14 +1715,20 @@ TEST(MockIoProviderTestSetup, PartialMeshOfNodesTest) {
   std::string packet4(
       "This is a multicast message #4 from node number 4 to nodes 2 and 3.");
   prepareSendMessage(
-      sendMsg,
-      ifIndex4,
-      ipAddr4V6,
-      ipAddr2V6,
-      packet4,
-      sendUnion,
-      dstAddrStorage,
-      sendEntry);
+      (openr::MockIoProviderUtils::bufferArgs<struct in6_pktinfo>){
+          .msg = sendMsg,
+          .data = const_cast<char*>(packet4.c_str()),
+          .len = packet4.size(),
+          .entry = sendEntry,
+          .u = sendUnion,
+      },
+      (struct openr::MockIoProviderUtils::networkArgs){
+          .srcIfIndex = ifIndex4,
+          .srcIPAddr = ipAddr4V6,
+          .dstIPAddr = ipAddr2V6,
+          .dstPort = kMockedUdpPort,
+          .dstAddrStorage = dstAddrStorage,
+      });
   EXPECT_EQ(
       packet4.size(), mockIoProvider->sendmsg(fd4, &sendMsg, MSG_DONTWAIT));
 

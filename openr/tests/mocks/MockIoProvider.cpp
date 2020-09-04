@@ -110,11 +110,19 @@ MockIoProvider::recvmsg(int sockFd, struct msghdr* msg, int /* flags */) {
   ::memcpy(msg->msg_name, &addrStorage, sizeof(sockaddr_storage));
   msg->msg_namelen = sizeof(sockaddr_storage);
 
-  // croak if user didn't supply big enough buffer
-  CHECK(msg->msg_iov->iov_len >= packet.size());
+  // user should supply right sized buffer
+  // for things like fuzz-testing, we want to be able to test
+  // oversized messages being sent and truncated.
+  if (msg->msg_iov->iov_len < packet.size()) {
+    LOG(ERROR) << __func__ << " Warning: iov len " << msg->msg_iov->iov_len
+               << ", p size: " << packet.size();
+  }
 
   // deliver the actual data
-  ::memcpy(msg->msg_iov->iov_base, packet.data(), packet.size());
+  ::memcpy(
+      msg->msg_iov->iov_base,
+      packet.data(),
+      std::min(packet.size(), msg->msg_iov->iov_len));
 
   //
   // deliver the control data

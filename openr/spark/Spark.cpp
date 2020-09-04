@@ -225,7 +225,8 @@ Spark::Spark(
     OpenrCtrlThriftPort openrCtrlThriftPort,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
-    std::pair<uint32_t, uint32_t> version)
+    std::pair<uint32_t, uint32_t> version,
+    std::optional<uint32_t> maybeMaxAllowedPps)
     : myDomainName_(*config->getConfig().domain_ref()),
       myNodeName_(config->getNodeName()),
       neighborDiscoveryPort_(static_cast<uint16_t>(
@@ -266,11 +267,14 @@ Spark::Spark(
 
   // Initialize list of BucketedTimeSeries
   const std::chrono::seconds sec{1};
-  const int32_t numBuckets = Constants::kMaxAllowedPps / 3;
-  for (size_t i = 0; i < Constants::kNumTimeSeries; i++) {
-    timeSeriesVector_.emplace_back(
-        folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>(
-            numBuckets, sec));
+  if (maybeMaxAllowedPps) {
+    maybeMaxAllowedPps_ = maybeMaxAllowedPps;
+    const int32_t numBuckets = *maybeMaxAllowedPps_ / 3;
+    for (size_t i = 0; i < Constants::kNumTimeSeries; i++) {
+      timeSeriesVector_.emplace_back(
+          folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>(
+              numBuckets, sec));
+    }
   }
 
   // Fiber to process interface updates from LinkMonitor
@@ -515,18 +519,23 @@ Spark::sanityCheckHelloPkt(
 bool
 Spark::shouldProcessHelloPacket(
     std::string const& ifName, folly::IPAddress const& addr) {
+  if (not maybeMaxAllowedPps_.has_value()) {
+    return true; // no rate limit
+  }
+
   size_t index = std::hash<std::tuple<std::string, folly::IPAddress>>{}(
                      std::make_tuple(ifName, addr)) %
       Constants::kNumTimeSeries;
-
   // check our timeseries to see if we want to process anymore right now
   timeSeriesVector_[index].update(std::chrono::steady_clock::now());
-  if (timeSeriesVector_[index].count() > Constants::kMaxAllowedPps) {
+
+  if (timeSeriesVector_[index].count() > *maybeMaxAllowedPps_) {
     // drop the packet
     return false;
   }
   // otherwise, count this packet and process it
   timeSeriesVector_[index].addValue(std::chrono::steady_clock::now(), 1);
+
   return true;
 }
 
@@ -602,6 +611,9 @@ Spark::parsePacket(
         readBuf, serializer_);
   } catch (std::exception const& err) {
     LOG(ERROR) << "Failed parsing hello packet " << folly::exceptionStr(err);
+    if (isThrowParserErrorsOn_) {
+      throw;
+    }
     return false;
   }
   return true;
@@ -2093,6 +2105,11 @@ Spark::getNeighborArea(
     return std::nullopt;
   }
   return candidateAreas.back();
+}
+
+void
+Spark::setThrowParserErrors(bool val) {
+  isThrowParserErrorsOn_ = val;
 }
 
 } // namespace openr

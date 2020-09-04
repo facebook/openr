@@ -15,17 +15,38 @@ SparkWrapper::SparkWrapper(
     std::string const& myNodeName,
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
-    std::shared_ptr<const Config> config)
+    std::shared_ptr<const Config> config,
+    bool isRateLimitEnabled)
     : myNodeName_(myNodeName), config_(config) {
-  spark_ = std::make_shared<Spark>(
-      std::nullopt /* ip-tos */,
-      interfaceUpdatesQueue_.getReader(),
-      neighborUpdatesQueue_,
-      KvStoreCmdPort{10002},
-      OpenrCtrlThriftPort{2018},
-      std::move(ioProvider),
-      config,
-      version);
+  // apply isRateLimitEnabled.
+  // Using a plain bool enable/disable for rate-limit here, to leave
+  // the knowledge of the default contained in Spark (and not re-specify it
+  // here).
+  spark_ = isRateLimitEnabled
+      ? std::make_shared<Spark>(
+            std::nullopt /* ip-tos */,
+            interfaceUpdatesQueue_.getReader(),
+            neighborUpdatesQueue_,
+            KvStoreCmdPort{10002},
+            OpenrCtrlThriftPort{2018},
+            std::move(ioProvider),
+            config,
+            version,
+            std::nullopt) // no Spark receive rate-limit, for testing
+      : std::make_shared<Spark>(
+            std::nullopt /* ip-tos */,
+            interfaceUpdatesQueue_.getReader(),
+            neighborUpdatesQueue_,
+            KvStoreCmdPort{10002},
+            OpenrCtrlThriftPort{2018},
+            std::move(ioProvider),
+            config,
+            version
+            // Go with the default Spark rate-limit
+        );
+  // For testing - fuzz testing particularly - we want parsing errors to
+  // be thrown upward, not suppressed.
+  spark_->setThrowParserErrors(true);
 
   // start spark
   run();
@@ -130,4 +151,10 @@ SparkWrapper::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
   return spark_->getSparkNeighState(ifName, neighborName).get();
 }
+
+void
+SparkWrapper::processPacket() {
+  spark_->processPacket();
+}
+
 } // namespace openr
