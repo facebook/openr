@@ -661,6 +661,7 @@ TEST(KvStore, StateTransitionTest) {
     auto oldState = KvStorePeerState::IDLE;
     auto event = KvStorePeerEvent::PEER_ADD;
     auto newState = KvStoreDb::getNextState(oldState, event);
+
     EXPECT_EQ(newState, KvStorePeerState::SYNCING);
   }
 
@@ -669,34 +670,30 @@ TEST(KvStore, StateTransitionTest) {
     auto oldState = KvStorePeerState::SYNCING;
     auto event = KvStorePeerEvent::SYNC_RESP_RCVD;
     auto newState = KvStoreDb::getNextState(oldState, event);
+
     EXPECT_EQ(newState, KvStorePeerState::INITIALIZED);
   }
 
   {
     // SYNCING => IDLE
     auto oldState = KvStorePeerState::SYNCING;
-    auto event1 = KvStorePeerEvent::SYNC_TIMEOUT;
-    auto newState1 = KvStoreDb::getNextState(oldState, event1);
-    auto event2 = KvStorePeerEvent::THRIFT_API_ERROR;
-    auto newState2 = KvStoreDb::getNextState(oldState, event2);
+    auto event = KvStorePeerEvent::THRIFT_API_ERROR;
+    auto newState = KvStoreDb::getNextState(oldState, event);
 
-    EXPECT_EQ(newState1, KvStorePeerState::IDLE);
-    EXPECT_EQ(newState2, KvStorePeerState::IDLE);
+    EXPECT_EQ(newState, KvStorePeerState::IDLE);
   }
 
   {
     // INITIALIZED => IDLE
+    // INITIALIZED => INITIIALIZED
     auto oldState = KvStorePeerState::INITIALIZED;
-    auto event1 = KvStorePeerEvent::SYNC_TIMEOUT;
+    auto event1 = KvStorePeerEvent::SYNC_RESP_RCVD;
     auto newState1 = KvStoreDb::getNextState(oldState, event1);
     auto event2 = KvStorePeerEvent::THRIFT_API_ERROR;
-    auto newState2 = KvStoreDb::getNextState(oldState, event2);
-    auto event3 = KvStorePeerEvent::SYNC_RESP_RCVD;
-    auto newState3 = KvStoreDb::getNextState(oldState, event3);
+    auto newState2 = KvStoreDb::getNextState(newState1, event2);
 
-    EXPECT_EQ(newState1, KvStorePeerState::IDLE);
+    EXPECT_EQ(newState1, KvStorePeerState::INITIALIZED);
     EXPECT_EQ(newState2, KvStorePeerState::IDLE);
-    EXPECT_EQ(newState3, KvStorePeerState::INITIALIZED);
   }
 }
 

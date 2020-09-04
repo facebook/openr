@@ -973,34 +973,29 @@ const std::vector<std::vector<std::optional<KvStorePeerState>>>
         /*
          * index 0 - IDLE
          * PEER_ADD => SYNCING
-         * SYNC_TIMEOUT => IDLE
          * THRIFT_API_ERROR => IDLE
          */
         {KvStorePeerState::SYNCING,
          std::nullopt,
          std::nullopt,
-         KvStorePeerState::IDLE,
          KvStorePeerState::IDLE},
         /*
          * index 1 - SYNCING
          * SYNC_RESP_RCVD => INITIALIZED
-         * SYNC_TIMEOUT => IDLE
          * THRIFT_API_ERROR => IDLE
          */
         {std::nullopt,
          std::nullopt,
          KvStorePeerState::INITIALIZED,
-         KvStorePeerState::IDLE,
          KvStorePeerState::IDLE},
         /*
          * index 2 - INITIALIZED
-         * SYNC_TIMEOUT => IDLE
+         * SYNC_RESP_RCVD => INITIALIZED
          * THRIFT_API_ERROR => IDLE
          */
         {std::nullopt,
          std::nullopt,
          KvStorePeerState::INITIALIZED,
-         KvStorePeerState::IDLE,
          KvStorePeerState::IDLE}};
 
 // static util function for logging
@@ -1658,7 +1653,7 @@ KvStoreDb::processThriftFailure(
 
   // state transition
   KvStorePeerState oldState = peer.state;
-  peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_TIMEOUT);
+  peer.state = getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR);
   logStateTransition(peerName, oldState, peer.state);
 
   // Schedule another round of `thriftSyncTimer_` in case it is

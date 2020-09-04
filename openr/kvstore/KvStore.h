@@ -58,8 +58,7 @@ enum class KvStorePeerEvent {
   PEER_ADD = 0,
   PEER_DEL = 1,
   SYNC_RESP_RCVD = 2,
-  SYNC_TIMEOUT = 3,
-  THRIFT_API_ERROR = 4,
+  THRIFT_API_ERROR = 3,
 };
 
 struct TtlCountdownQueueEntry {
