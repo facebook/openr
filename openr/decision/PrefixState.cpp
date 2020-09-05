@@ -42,12 +42,13 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   auto const& nodeName = *prefixDb.thisNodeName_ref();
   auto const& area = *prefixDb.area_ref();
 
-  // Get old and new set of prefixes - NOTE explicit copy
-  const std::set<thrift::IpPrefix> oldPrefixSet =
-      nodeToPrefixes_[nodeName][area];
+  // Get reference existing set or create new one
+  auto& newPrefixSet = nodeToPrefixes_[nodeAndArea];
+
+  // Create copy of existing prefix set - NOTE explicit copy
+  const std::set<thrift::IpPrefix> oldPrefixSet = newPrefixSet;
 
   // update the entry
-  auto& newPrefixSet = nodeToPrefixes_[nodeName][area];
   newPrefixSet.clear();
   for (const auto& prefixEntry : *prefixDb.prefixEntries_ref()) {
     newPrefixSet.emplace(*prefixEntry.prefix_ref());
@@ -112,7 +113,7 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   }
 
   if (newPrefixSet.empty()) {
-    nodeToPrefixes_.erase(nodeName);
+    nodeToPrefixes_.erase(nodeAndArea);
   }
 
   return changed;
@@ -121,17 +122,15 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 PrefixState::getPrefixDatabases() const {
   std::unordered_map<std::string, thrift::PrefixDatabase> prefixDatabases;
-  for (auto const& [node, areaToPrefixes] : nodeToPrefixes_) {
-    for (auto const& [area, prefixes] : areaToPrefixes) {
-      thrift::PrefixDatabase prefixDb;
-      *prefixDb.thisNodeName_ref() = node;
-      prefixDb.area_ref() = area;
-      for (auto const& prefix : prefixes) {
-        prefixDb.prefixEntries_ref()->emplace_back(
-            prefixes_.at(prefix).at({node, area}));
-      }
-      prefixDatabases.emplace(node, std::move(prefixDb));
+  for (auto const& [nodeAndArea, prefixes] : nodeToPrefixes_) {
+    thrift::PrefixDatabase prefixDb;
+    *prefixDb.thisNodeName_ref() = nodeAndArea.first;
+    prefixDb.area_ref() = nodeAndArea.second;
+    for (auto const& prefix : prefixes) {
+      prefixDb.prefixEntries_ref()->emplace_back(
+          prefixes_.at(prefix).at(nodeAndArea));
     }
+    prefixDatabases.emplace(nodeAndArea.first, std::move(prefixDb));
   }
   return prefixDatabases;
 }

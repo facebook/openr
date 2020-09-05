@@ -78,10 +78,8 @@ class PrefixState {
   // route re-distribution
   // For each prefix in the network, stores a set of nodes that advertise it
   std::unordered_map<thrift::IpPrefix, PrefixEntries> prefixes_;
-  std::unordered_map<
-      std::string /* node */,
-      std::unordered_map<std::string /* area */, std::set<thrift::IpPrefix>>>
-      nodeToPrefixes_;
+  std::unordered_map<NodeAndArea, std::set<thrift::IpPrefix>> nodeToPrefixes_;
+
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
 }; // class PrefixState
