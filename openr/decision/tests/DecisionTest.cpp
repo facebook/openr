@@ -393,6 +393,11 @@ printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
   }
 }
 
+const auto&
+getNextHops(const thrift::UnicastRoute& r) {
+  return *r.nextHops_ref();
+}
+
 } // anonymous namespace
 
 //
@@ -867,8 +872,8 @@ TEST(BGPRedistribution, BasicOperation) {
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, bgpPrefix1),
           Truly([&data2](auto i) { return i.data_ref() == data2; }),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj31, false, 10))))));
 
@@ -984,8 +989,8 @@ TEST(BGPRedistribution, IgpMetric) {
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10),
                   createNextHopFromAdj(adj13, false, 10))))));
@@ -1003,8 +1008,8 @@ TEST(BGPRedistribution, IgpMetric) {
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
 
@@ -1023,8 +1028,8 @@ TEST(BGPRedistribution, IgpMetric) {
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj13, false, 20))))));
 
@@ -1042,8 +1047,8 @@ TEST(BGPRedistribution, IgpMetric) {
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj13, false, 20))))));
 
@@ -1060,8 +1065,8 @@ TEST(BGPRedistribution, IgpMetric) {
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
           Truly([&data1](auto i) { return i.data_ref() == data1; }),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 20),
                   createNextHopFromAdj(adj13, false, 20))))));
@@ -1118,8 +1123,8 @@ TEST(Decision, BestRouteSelection) {
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10),
                   createNextHopFromAdj(adj13, false, 10))))));
@@ -1141,8 +1146,8 @@ TEST(Decision, BestRouteSelection) {
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Field(
-              &thrift::UnicastRoute::nextHops,
+          ResultOf(
+              getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
 }
