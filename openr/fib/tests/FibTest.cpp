@@ -8,26 +8,24 @@
 #include <chrono>
 #include <thread>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
+#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/messaging/ReplicateQueue.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
 
 using namespace std;
@@ -267,9 +265,11 @@ class FibTestFixture : public ::testing::Test {
     });
     fib->waitUntilRunning();
 
-    // spin up an openrThriftServer
-    openrThriftServerWrapper = std::make_shared<OpenrThriftServerWrapper>(
+    // instantiate openrCtrlHandler to invoke fib API
+    handler = std::make_shared<OpenrCtrlHandler>(
         "node-1",
+        std::unordered_set<std::string>{} /* acceptable peers */,
+        &evb,
         nullptr /* decision */,
         fib.get() /* fib */,
         nullptr /* kvStore */,
@@ -277,20 +277,30 @@ class FibTestFixture : public ::testing::Test {
         nullptr /* monitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
-        config /* config */);
-    openrThriftServerWrapper->run();
+        config /* config */,
+        logSampleQueue);
+
+    evbThread = std::make_unique<std::thread>([this]() {
+      LOG(INFO) << "Starting ctrlEvb";
+      evb.run();
+      LOG(INFO) << "ctrlEvb finished";
+    });
+    evb.waitUntilRunning();
   }
 
   void
   TearDown() override {
-    LOG(INFO) << "Stopping openr-ctrl thrift server";
+    LOG(INFO) << "Closing queues";
     fibUpdatesQueue.close();
-    openrThriftServerWrapper->stop();
-    LOG(INFO) << "Openr-ctrl thrift server got stopped";
-
     routeUpdatesQueue.close();
     interfaceUpdatesQueue.close();
     logSampleQueue.close();
+
+    LOG(INFO) << "Stopping openr ctrl handler";
+    handler.reset();
+    evb.stop();
+    evb.waitUntilStopped();
+    evbThread->join();
 
     // this will be invoked before Fib's d-tor
     LOG(INFO) << "Stopping the Fib thread";
@@ -306,45 +316,37 @@ class FibTestFixture : public ::testing::Test {
 
   thrift::RouteDatabase
   getRouteDb() {
-    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
-                    ->semifuture_getRouteDb()
-                    .get();
+    auto resp = handler->semifuture_getRouteDb().get();
     EXPECT_TRUE(resp);
     return std::move(*resp);
   }
 
   std::vector<thrift::UnicastRoute>
   getUnicastRoutesFiltered(std::unique_ptr<std::vector<std::string>> prefixes) {
-    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
-                    ->semifuture_getUnicastRoutesFiltered(std::move(prefixes))
-                    .get();
+    auto resp =
+        handler->semifuture_getUnicastRoutesFiltered(std::move(prefixes)).get();
     EXPECT_TRUE(resp);
     return *resp;
   }
 
   std::vector<thrift::UnicastRoute>
   getUnicastRoutes() {
-    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
-                    ->semifuture_getUnicastRoutes()
-                    .get();
+    auto resp = handler->semifuture_getUnicastRoutes().get();
     EXPECT_TRUE(resp);
     return *resp;
   }
 
   std::vector<thrift::MplsRoute>
   getMplsRoutesFiltered(std::unique_ptr<std::vector<int32_t>> labels) {
-    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
-                    ->semifuture_getMplsRoutesFiltered(std::move(labels))
-                    .get();
+    auto resp =
+        handler->semifuture_getMplsRoutesFiltered(std::move(labels)).get();
     EXPECT_TRUE(resp);
     return *resp;
   }
 
   std::vector<thrift::MplsRoute>
   getMplsRoutes() {
-    auto resp = openrThriftServerWrapper->getOpenrCtrlHandler()
-                    ->semifuture_getMplsRoutes()
-                    .get();
+    auto resp = handler->semifuture_getMplsRoutes().get();
     EXPECT_TRUE(resp);
     return *resp;
   }
@@ -355,7 +357,6 @@ class FibTestFixture : public ::testing::Test {
   wait_for_initial_update() {
     std::atomic<int> received{0};
 
-    auto handler = openrThriftServerWrapper->getOpenrCtrlHandler();
     auto responseAndSubscription =
         handler->semifuture_subscribeAndGetFib().get();
 
@@ -396,19 +397,16 @@ class FibTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
-  fbzmq::Context context{};
-
-  // Create the serializer for write/read
-  apache::thrift::CompactSerializer serializer;
+  // ctrlEvb for openrCtrlHandler instantiation
+  OpenrEventBase evb;
+  std::unique_ptr<std::thread> evbThread;
 
   std::shared_ptr<Config> config;
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
 
   std::shared_ptr<MockNetlinkFibHandler> mockFibHandler;
-
-  // thriftServer to talk to Fib
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper{nullptr};
+  std::shared_ptr<OpenrCtrlHandler> handler;
 
  private:
   bool waitOnDecision_{false};
@@ -437,7 +435,6 @@ TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
 
     // Start the streaming after OpenrCtrlHandler consumes initial route update.
     wait_for_initial_update();
-    auto handler = openrThriftServerWrapper->getOpenrCtrlHandler();
     auto responseAndSubscription =
         handler->semifuture_subscribeAndGetFib().get();
 
@@ -540,7 +537,6 @@ TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
 
     // Start the streaming after OpenrCtrlHandler consumes initial route update.
     wait_for_initial_update();
-    auto handler = openrThriftServerWrapper->getOpenrCtrlHandler();
     auto responseAndSubscription_1 =
         handler->semifuture_subscribeAndGetFib().get();
     auto responseAndSubscription_2 =
