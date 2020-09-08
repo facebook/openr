@@ -306,9 +306,8 @@ Spark::Spark(
   fb303::fbData->addStatExportType(
       "spark.invalid_keepalive.looped_packet", fb303::SUM);
   fb303::fbData->addStatExportType(
-      "openr.neighbor_discovery_time.time_ms", fb303::AVG);
-  fb303::fbData->addStatExportType(
-      "openr.neighbor_restart_time.time_ms", fb303::AVG);
+      "slo.neighbor_discovery.time_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("slo.neighbor_restart.time_ms", fb303::AVG);
 }
 
 // static util function to transform state into str
@@ -912,9 +911,7 @@ Spark::logStateTransition(
               << " ms";
 
     fb303::fbData->addStatValue(
-        "openr.neighbor_discovery_time.time_ms",
-        elapsedTime.count(),
-        fb303::AVG);
+        "slo.neighbor_discovery_time.time_ms", elapsedTime.count(), fb303::AVG);
   } else if (newState == SparkNeighState::IDLE) {
     // reset neighbor discovery time
     neighbor.idleStateTransitionTime = std::chrono::steady_clock::now();
@@ -933,7 +930,7 @@ Spark::logStateTransition(
               << " ms";
 
     fb303::fbData->addStatValue(
-        "openr.neighbor_restart_time.time_ms", elapsedTime.count(), fb303::AVG);
+        "slo.neighbor_restart.time_ms", elapsedTime.count(), fb303::AVG);
   } else if (newState == SparkNeighState::RESTART) {
     // reset neighbor restart time
     neighbor.restartStateTransitionTime = std::chrono::steady_clock::now();

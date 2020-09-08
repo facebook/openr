@@ -13,6 +13,7 @@
 #include <sodium.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <fb303/ServiceData.h>
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
@@ -26,6 +27,7 @@
 using namespace openr;
 
 using apache::thrift::CompactSerializer;
+namespace fb303 = facebook::fb303;
 
 namespace {
 const std::string iface1{"iface1"};
@@ -161,6 +163,27 @@ class SimpleSparkFixture : public SparkFixture {
     }
   }
 
+  void
+  checkCounters() {
+    auto counters = fb303::fbData->getCounters();
+    // Verify the counter keys exist
+    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg"));
+    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg.3600"));
+    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg.60"));
+    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg.600"));
+
+    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg"));
+    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg.3600"));
+    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg.60"));
+    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg.600"));
+
+    // Neighbor discovery should be less than 3 secs
+    ASSERT_GE(3000, counters["slo.neighbor_discovery.time_ms.avg"]);
+    ASSERT_GE(3000, counters["slo.neighbor_discovery.time_ms.avg.3600"]);
+    ASSERT_GE(3000, counters["slo.neighbor_discovery.time_ms.avg.60"]);
+    ASSERT_GE(3000, counters["slo.neighbor_discovery.time_ms.avg.600"]);
+  }
+
   std::shared_ptr<SparkWrapper> node1;
   std::shared_ptr<SparkWrapper> node2;
 };
@@ -201,6 +224,8 @@ TEST_F(SimpleSparkFixture, RttTest) {
     LOG(INFO) << "node-2 reported new RTT to node-1 to be "
               << event->rttUs / 1000.0 << "ms";
   }
+
+  checkCounters();
 }
 
 //
@@ -293,6 +318,8 @@ TEST_F(SimpleSparkFixture, GRTest) {
                 NB_DOWN, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
   }
+
+  checkCounters();
 }
 
 //
