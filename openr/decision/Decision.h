@@ -237,6 +237,9 @@ class SpfSolver {
       PrefixState const& prefixState,
       thrift::IpPrefix const& prefix);
 
+  std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult> const&
+  getBestRoutesCache() const;
+
  private:
   // no-copy
   SpfSolver(SpfSolver const&) = delete;

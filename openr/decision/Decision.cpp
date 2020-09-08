@@ -239,6 +239,11 @@ class SpfSolver::SpfSolverImpl {
       PrefixState const& prefixState,
       thrift::IpPrefix const& prefix);
 
+  std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult> const&
+  getBestRoutesCache() const {
+    return bestRoutesCache_;
+  }
+
   // helpers used in best path calculation
   static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
       const SpfResult& spfResult, const std::set<NodeAndArea>& dstNodeAreas);
@@ -345,6 +350,12 @@ class SpfSolver::SpfSolverImpl {
 
   std::vector<thrift::RouteDatabaseDelta> staticRoutesUpdates_;
 
+  // Cache of best route selection.
+  // - Cleared when topology changes
+  // - Updated for the prefix whenever a route is created for it
+  std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult>
+      bestRoutesCache_;
+
   const std::string myNodeName_;
 
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
@@ -389,6 +400,9 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     return std::nullopt;
   }
   auto const& allPrefixEntries = search->second;
+
+  // Clear best route selection in prefix state
+  bestRoutesCache_.erase(prefix);
 
   //
   // Create list of prefix-entries from reachable nodes only
@@ -484,6 +498,9 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     return std::nullopt;
   }
 
+  // Set best route selection in prefix state
+  bestRoutesCache_.insert_or_assign(prefix, bestRouteSelectionResult);
+
   // Skip adding route for prefixes advertised by this node. The originated
   // routes are already programmed on the system e.g. re-distributed from
   // other area, re-distributed from other protocols, interface-subnets etc.
@@ -554,6 +571,10 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
 
   DecisionRouteDb routeDb{};
 
+  // Clear best route selection cache
+  bestRoutesCache_.clear();
+
+  // Create IPv4, IPv6 routes (includes IP -> MPLS routes)
   for (const auto& [prefix, _] : prefixState.prefixes()) {
     if (auto maybeRoute = createRouteForPrefix(
             myNodeName, areaLinkStates, prefixState, prefix)) {
@@ -1376,6 +1397,11 @@ SpfSolver::createRouteForPrefix(
       myNodeName, areaLinkStates, prefixState, prefix);
 }
 
+std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult> const&
+SpfSolver::getBestRoutesCache() const {
+  return impl_->getBestRoutesCache();
+}
+
 std::optional<DecisionRouteDb>
 SpfSolver::buildRouteDb(
     const std::string& myNodeName,
@@ -1589,8 +1615,31 @@ Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
       std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>();
   runInEventBaseThread(
       [this, p = std::move(p), filter = std::move(filter)]() mutable noexcept {
+        // Get route details
+        auto routes = prefixState_.getReceivedRoutesFiltered(filter);
+
+        // Add best path result to this
+        auto const& bestRoutesCache = spfSolver_->getBestRoutesCache();
+        for (auto& route : routes) {
+          auto const& bestRoutesIt = bestRoutesCache.find(*route.prefix_ref());
+          if (bestRoutesIt != bestRoutesCache.end()) {
+            auto const& bestRoutes = bestRoutesIt->second;
+            // Set all selected node-area
+            for (auto const& [node, area] : bestRoutes.allNodeAreas) {
+              route.bestKeys_ref()->emplace_back();
+              auto& key = route.bestKeys_ref()->back();
+              key.node_ref() = node;
+              key.area_ref() = area;
+            }
+            // Set best node-area
+            route.bestKey_ref()->node_ref() = bestRoutes.bestNodeArea.first;
+            route.bestKey_ref()->area_ref() = bestRoutes.bestNodeArea.second;
+          }
+        }
+
+        // Set the promise
         p.setValue(std::make_unique<std::vector<thrift::ReceivedRouteDetail>>(
-            prefixState_.getReceivedRoutesFiltered(filter, myNodeName_)));
+            std::move(routes)));
       });
   return std::move(sf);
 }

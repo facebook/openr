@@ -1113,6 +1113,11 @@ TEST(Decision, BestRouteSelection) {
           .empty());
 
   //
+  // Verifies that best routes cache is empty
+  //
+  EXPECT_TRUE(spfSolver.getBestRoutesCache().empty());
+
+  //
   // Case-1 node1 ECMP towards {node2, node3}
   //
   auto decisionRouteDb =
@@ -1128,6 +1133,19 @@ TEST(Decision, BestRouteSelection) {
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10),
                   createNextHopFromAdj(adj13, false, 10))))));
+
+  //
+  // Verify that prefix-state report two best routes
+  //
+  {
+    auto bestRoutesCache = spfSolver.getBestRoutesCache();
+    ASSERT_EQ(1, bestRoutesCache.count(addr1));
+    auto& bestRoutes = bestRoutesCache.at(addr1);
+    EXPECT_EQ(2, bestRoutes.allNodeAreas.size());
+    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", "0"}));
+    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"3", "0"}));
+    EXPECT_EQ("2", bestRoutes.bestNodeArea.first);
+  }
 
   //
   // Case-2 node1 prefers node2 (prefix metrics)
@@ -1150,6 +1168,17 @@ TEST(Decision, BestRouteSelection) {
               getNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
+  //
+  // Verify that prefix-state report two best routes
+  //
+  {
+    auto bestRoutesCache = spfSolver.getBestRoutesCache();
+    ASSERT_EQ(1, bestRoutesCache.count(addr1));
+    auto& bestRoutes = bestRoutesCache.at(addr1);
+    EXPECT_EQ(1, bestRoutes.allNodeAreas.size());
+    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", "0"}));
+    EXPECT_EQ("2", bestRoutes.bestNodeArea.first);
+  }
 }
 
 //
@@ -5814,6 +5843,18 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   sendKvPublication(publication);
   recvRouteUpdates();
+
+  // Expect best route selection to be populated in route-details for addr2
+  {
+    thrift::ReceivedRouteFilter filter;
+    filter.prefixes_ref() = std::vector<thrift::IpPrefix>({addr2});
+    auto routes = decision->getReceivedRoutesFiltered(filter).get();
+    ASSERT_EQ(1, routes->size());
+
+    auto const& routeDetails = routes->at(0);
+    EXPECT_EQ(2, routeDetails.bestKeys_ref()->size());
+    EXPECT_EQ("2", routeDetails.bestKey_ref()->node_ref().value());
+  }
 
   // Query new information
   // validate routers

@@ -155,8 +155,7 @@ PrefixState::getLoopbackVias(
 
 std::vector<thrift::ReceivedRouteDetail>
 PrefixState::getReceivedRoutesFiltered(
-    thrift::ReceivedRouteFilter const& filter,
-    std::string const& myNodeName) const {
+    thrift::ReceivedRouteFilter const& filter) const {
   std::vector<thrift::ReceivedRouteDetail> routes;
   if (filter.prefixes_ref()) {
     for (auto& prefix : filter.prefixes_ref().value()) {
@@ -169,8 +168,7 @@ PrefixState::getReceivedRoutesFiltered(
           filter.nodeName_ref(),
           filter.areaName_ref(),
           it->first,
-          it->second,
-          myNodeName);
+          it->second);
     }
   } else {
     for (auto& [prefix, prefixEntries] : prefixes_) {
@@ -179,8 +177,7 @@ PrefixState::getReceivedRoutesFiltered(
           filter.nodeName_ref(),
           filter.areaName_ref(),
           prefix,
-          prefixEntries,
-          myNodeName);
+          prefixEntries);
     }
   }
   return routes;
@@ -192,8 +189,7 @@ PrefixState::filterAndAddReceivedRoute(
     apache::thrift::optional_field_ref<const std::string&> const& nodeFilter,
     apache::thrift::optional_field_ref<const std::string&> const& areaFilter,
     thrift::IpPrefix const& prefix,
-    PrefixEntries const& prefixEntries,
-    std::string const& myNodeName) {
+    PrefixEntries const& prefixEntries) {
   // Return immediately if no prefix-entry
   if (prefixEntries.empty()) {
     return;
@@ -201,22 +197,6 @@ PrefixState::filterAndAddReceivedRoute(
 
   thrift::ReceivedRouteDetail routeDetail;
   routeDetail.prefix_ref() = prefix;
-
-  // Add best route selection data
-  // TODO: We can save best route computation cycles on CLI invocation by
-  // performing it when prefixes are updated and caching the result.
-  auto allNodeAreas = selectBestPrefixMetrics(prefixEntries);
-  auto bestNodeArea = selectBestNodeArea(allNodeAreas, myNodeName);
-  for (auto& [node, area] : allNodeAreas) {
-    routeDetail.bestKeys_ref()->emplace_back();
-    auto& key = routeDetail.bestKeys_ref()->back();
-    key.node_ref() = node;
-    key.area_ref() = area;
-  }
-  thrift::NodeAndArea tBestNodeArea;
-  tBestNodeArea.node_ref() = bestNodeArea.first;
-  tBestNodeArea.area_ref() = bestNodeArea.second;
-  routeDetail.bestKey_ref() = tBestNodeArea;
 
   // Add prefix entries and honor the filter
   for (auto& [nodeAndArea, prefixEntry] : prefixEntries) {

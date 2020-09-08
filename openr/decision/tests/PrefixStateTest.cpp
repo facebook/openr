@@ -246,21 +246,21 @@ TEST(PrefixState, GetReceivedRoutes) {
   state.updatePrefixDatabase(createPrefixDb("node1", {prefixEntry}, "area1"));
 
   thrift::NodeAndArea bestKey;
-  bestKey.node_ref() = "node0";
-  bestKey.area_ref() = "area0";
+  bestKey.node_ref() = "";
+  bestKey.area_ref() = "";
 
   //
   // Empty filter
   //
   {
     thrift::ReceivedRouteFilter filter;
-    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
+    auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
     EXPECT_EQ(*prefixEntry.prefix_ref(), *routeDetail.prefix_ref());
     EXPECT_EQ(bestKey, *routeDetail.bestKey_ref());
-    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
     EXPECT_EQ(3, routeDetail.routes_ref()->size());
   }
 
@@ -272,13 +272,13 @@ TEST(PrefixState, GetReceivedRoutes) {
     filter.prefixes_ref() =
         std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
 
-    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
+    auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
     EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
     EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
-    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
     EXPECT_EQ(3, routeDetail.routes_ref()->size());
   }
 
@@ -290,7 +290,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     filter.prefixes_ref() =
         std::vector<thrift::IpPrefix>({toIpPrefix("11.0.0.0/8")});
 
-    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
+    auto routes = state.getReceivedRoutesFiltered(filter);
     EXPECT_EQ(0, routes.size());
   }
 
@@ -302,7 +302,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     filter.prefixes_ref() = std::vector<thrift::IpPrefix>();
 
     filter.prefixes_ref()->clear();
-    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
+    auto routes = state.getReceivedRoutesFiltered(filter);
     EXPECT_EQ(0, routes.size());
   }
 
@@ -315,13 +315,13 @@ TEST(PrefixState, GetReceivedRoutes) {
         std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
     filter.nodeName_ref() = "node1";
 
-    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
+    auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
     EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
     EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
-    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
     ASSERT_EQ(1, routeDetail.routes_ref()->size());
 
     auto& route = routeDetail.routes_ref()->at(0);
@@ -336,13 +336,13 @@ TEST(PrefixState, GetReceivedRoutes) {
     thrift::ReceivedRouteFilter filter;
     filter.areaName_ref() = "area0";
 
-    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
+    auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
     EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
     EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
-    EXPECT_EQ(3, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
     ASSERT_EQ(1, routeDetail.routes_ref()->size());
 
     auto& route = routeDetail.routes_ref()->at(0);
@@ -357,7 +357,7 @@ TEST(PrefixState, GetReceivedRoutes) {
     thrift::ReceivedRouteFilter filter;
     filter.areaName_ref() = "unknown";
 
-    auto routes = state.getReceivedRoutesFiltered(filter, "node0");
+    auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(0, routes.size());
   }
 }
@@ -374,8 +374,7 @@ TEST(PrefixState, FilterReceivedRoutes) {
       filter.nodeName_ref(),
       filter.areaName_ref(),
       thrift::IpPrefix(),
-      prefixEntries,
-      "node0");
+      prefixEntries);
   EXPECT_TRUE(routes.empty());
 }
 
