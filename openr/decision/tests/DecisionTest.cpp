@@ -1089,9 +1089,9 @@ TEST(Decision, BestRouteSelection) {
   // Setup adjacencies
   // 2 <--> 1 <--> 3
   //
-  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
-  auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
-  auto adjacencyDb3 = createAdjDb("3", {adj31}, 0);
+  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
+  auto adjacencyDb2 = createAdjDb("2", {adj21}, 2);
+  auto adjacencyDb3 = createAdjDb("3", {adj31}, 3);
   areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
   auto& linkState = areaLinkStates.at(kDefaultArea);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
@@ -1169,7 +1169,7 @@ TEST(Decision, BestRouteSelection) {
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
   //
-  // Verify that prefix-state report two best routes
+  // Verify that prefix-state report only one best route
   //
   {
     auto bestRoutesCache = spfSolver.getBestRoutesCache();
@@ -1179,6 +1179,35 @@ TEST(Decision, BestRouteSelection) {
     EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", "0"}));
     EXPECT_EQ("2", bestRoutes.bestNodeArea.first);
   }
+
+  //
+  // Verify that forwarding type is selected from the best entry
+  // node2 - advertising SR_MPLS forwarding type
+  // node3 - advertising IP forwarding type
+  // Decision chooses MPLS entry
+  //
+  auto node2PrefixPreferredMpls = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 100, 0));
+  node2PrefixPreferredMpls.forwardingType_ref() =
+      thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_FALSE(
+      prefixState
+          .updatePrefixDatabase(createPrefixDb("2", {node2PrefixPreferredMpls}))
+          .empty());
+  decisionRouteDb = *spfSolver.buildRouteDb("3", areaLinkStates, prefixState);
+  routeDb = decisionRouteDb.toThrift();
+  EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(1));
+  auto push2 = createMplsAction(
+      thrift::MplsActionCode::PUSH, std::nullopt, std::vector<int32_t>{2});
+  LOG(INFO) << toString(routeDb.unicastRoutes_ref()->at(0));
+  EXPECT_THAT(
+      *routeDb.unicastRoutes_ref(),
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHopFromAdj(adj31, false, 20, push2))))));
 }
 
 //

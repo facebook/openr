@@ -612,7 +612,9 @@ getBuildInfoThrift() noexcept {
 }
 
 std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
-getPrefixForwardingTypeAndAlgorithm(const PrefixEntries& prefixEntries) {
+getPrefixForwardingTypeAndAlgorithm(
+    const PrefixEntries& prefixEntries,
+    const std::set<NodeAndArea>& bestNodeAreas) {
   std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm> r;
   r.first = thrift::PrefixForwardingType::SR_MPLS;
   r.second = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
@@ -622,7 +624,10 @@ getPrefixForwardingTypeAndAlgorithm(const PrefixEntries& prefixEntries) {
             thrift::PrefixForwardingAlgorithm::SP_ECMP};
   }
 
-  for (auto const& [_, prefixEntry] : prefixEntries) {
+  for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
+    if (not bestNodeAreas.count(nodeAndArea)) {
+      continue; // Skip the prefix-entry of non best node-area
+    }
     r.first = std::min(r.first, *prefixEntry.forwardingType_ref());
     r.second = std::min(r.second, *prefixEntry.forwardingAlgorithm_ref());
     // Optimization case for most common algorithm and forwarding type

@@ -756,49 +756,61 @@ TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
   // Default case (empty entries)
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, {}));
 
   prefixes[{"node1", "area1"}] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
   prefixes[{"node2", "area1"}] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
   prefixes[{"node3", "area1"}] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
 
+  std::set<NodeAndArea> bestNodeAreas = {
+      {"node1", "area1"}, {"node2", "area1"}, {"node3", "area1"}};
+
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, bestNodeAreas));
 
   prefixes[{"node3", "area1"}].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, bestNodeAreas));
+
+  EXPECT_EQ(
+      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes, {{"node3", "area1"}}));
 
   prefixes[{"node2", "area1"}].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, bestNodeAreas));
 
   prefixes[{"node1", "area1"}].forwardingType_ref() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, bestNodeAreas));
 
   prefixes[{"node3", "area1"}].forwardingAlgorithm_ref() =
       FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, bestNodeAreas));
+
+  EXPECT_EQ(
+      (std::make_pair<FwdType, FwdAlgo>(
+          FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),
+      getPrefixForwardingTypeAndAlgorithm(prefixes, {{"node3", "area1"}}));
 
   prefixes[{"node2", "area1"}].forwardingAlgorithm_ref() =
       FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, bestNodeAreas));
 
   prefixes[{"node1", "area1"}].forwardingAlgorithm_ref() =
       FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(
           FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(prefixes));
+      getPrefixForwardingTypeAndAlgorithm(prefixes, bestNodeAreas));
 }
 
 using namespace openr::MetricVectorUtils;

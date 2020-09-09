@@ -515,7 +515,8 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
 
   // Get the forwarding type and algorithm
   const auto [forwardingType, forwardingAlgo] =
-      getPrefixForwardingTypeAndAlgorithm(prefixEntries);
+      getPrefixForwardingTypeAndAlgorithm(
+          prefixEntries, bestRouteSelectionResult.allNodeAreas);
 
   //
   // Route computation flow
