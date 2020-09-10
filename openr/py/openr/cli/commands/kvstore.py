@@ -19,10 +19,11 @@ import time
 from builtins import str
 from collections import defaultdict
 from itertools import combinations
-from typing import Any, Callable, Dict, List, Pattern, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import bunch
 import hexdump
+import openr.thrift.KvStore.types as _openr_thrift_KvStore_types
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
@@ -894,19 +895,29 @@ class SnoopCmd(KvStoreCmdBase):
         client: OpenrCtrlCppClient,
         delta: bool,
         ttl: bool,
-        regex: str,
+        regexes: Optional[List[str]],
         duration: int,
+        originator_ids: Optional[List[str]],
+        match_all: bool = True,
     ) -> None:
         # TODO: Fix area specifier for snoop. Intentionally setting to None to
         # snoop across all area once. It will be easier when we migrate all the
         # APIs to async
         # area = await self.get_area_id()
         area = None
-        pattern = re.compile(regex)
+        kvDumpParams = _openr_thrift_KvStore_types.KeyDumpParams(
+            ignoreTtl=not ttl,
+            keys=regexes,
+            originatorIds=originator_ids,
+            oper=_openr_thrift_KvStore_types.FilterOperator.AND
+            if match_all
+            else _openr_thrift_KvStore_types.FilterOperator.OR,
+        )
 
         print("Retrieving and subcribing KvStore ... ")
-        snapshot, updates = await client.subscribeAndGetKvStore()
+        snapshot, updates = await client.subscribeAndGetKvStoreFiltered(kvDumpParams)
         global_dbs = self.process_snapshot(snapshot, area)
+        self.print_delta(snapshot, ttl, delta, global_dbs)
         print("Magic begins here ... \n")
 
         start_time = time.time()
@@ -927,23 +938,15 @@ class SnoopCmd(KvStoreCmdBase):
 
             # filter out messages for area if specified
             if area is None or msg.area == area:
-                self.print_expired_keys(msg, regex, pattern, global_dbs)
-                self.print_delta(msg, regex, pattern, ttl, delta, global_dbs)
+                self.print_expired_keys(msg, global_dbs)
+                self.print_delta(msg, ttl, delta, global_dbs)
 
-    def print_expired_keys(
-        self,
-        msg: kv_store_types.Publication,
-        regex: str,
-        pattern: Pattern[str],
-        global_dbs: Dict,
-    ):
+    def print_expired_keys(self, msg: kv_store_types.Publication, global_dbs: Dict):
         rows = []
         if len(msg.expiredKeys):
             print("Traversal List: {}".format(msg.nodeIds))
 
         for key in msg.expiredKeys:
-            if not key.startswith(regex) and not pattern.match(key):
-                continue
             rows.append(["Key: {} got expired".format(key)])
 
             # Delete key from global DBs
@@ -965,36 +968,23 @@ class SnoopCmd(KvStoreCmdBase):
                     node_prefix_set = node_prefix_set - prefix_set
                 else:
                     global_dbs.prefixes.pop(key.split(":")[1], None)
-
         if rows:
             self.print_timestamp()
             print(printing.render_vertical_table(rows))
 
     def print_delta(
-        self,
-        msg: kv_store_types.Publication,
-        regex: str,
-        pattern: Pattern[str],
-        ttl: bool,
-        delta: bool,
-        global_dbs: Dict,
+        self, msg: kv_store_types.Publication, ttl: bool, delta: bool, global_dbs: Dict
     ):
 
         for key, value in msg.keyVals.items():
-            if not key.startswith(regex) and not pattern.match(key):
-                continue
             if value.value is None:
-                if ttl:
-                    self.print_timestamp()
-                    print("Traversal List: {}".format(msg.nodeIds))
-                    self.print_publication_delta(
-                        "Key: {}, ttl update".format(key),
-                        "ttl: {}, ttlVersion: {}".format(value.ttl, value.ttlVersion),
-                    )
+                self.print_timestamp()
+                print("Traversal List: {}".format(msg.nodeIds))
+                self.print_publication_delta(
+                    "Key: {}, ttl update".format(key),
+                    "ttl: {}, ttlVersion: {}".format(value.ttl, value.ttlVersion),
+                )
                 continue
-                value = global_dbs.publications[key]
-                value.ttlVersion = value.ttlVersion
-                value.ttl = value.ttl
 
             if key.startswith(Consts.ADJ_DB_MARKER):
                 self.print_adj_delta(
