@@ -61,8 +61,10 @@ influence the traffic flows as per congesion in the network (e.g. send more to
 less congested part of network).
 
 RIB Policy allows operators to customize the weight for computed next-hops. As of
-now the weights can be customized per `area` field. See `RibRouteActionWeight`
-struct in [`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift) for more information.
+now the weights can be customized per `area` or per `neighbor` fields. The `neighbor`
+weight takes precedence over the `area` weight. See `RibRouteActionWeight` struct in
+[`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift)
+for more information.
 
 The next-hops that are processed through RIB Policy and gets assigned `weight=0`
 will be removed. If policed route have no next-hop then it will be removed from

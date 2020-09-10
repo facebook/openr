@@ -700,7 +700,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
               link->getIfaceFromNode(myNodeName),
               link->getMetricFromNode(myNodeName),
               createMplsAction(thrift::MplsActionCode::PHP),
-              link->getArea())}));
+              link->getArea(),
+              link->getOtherNodeName(myNodeName))}));
     }
   }
 
@@ -1034,7 +1035,8 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
           firstLink->getIfaceFromNode(myNodeName),
           cost,
           mplsAction,
-          firstLink->getArea()));
+          firstLink->getArea(),
+          firstLink->getOtherNodeName(myNodeName)));
     }
   }
 
@@ -1345,7 +1347,8 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
             link->getIfaceFromNode(myNodeName),
             distOverLink,
             mplsAction,
-            link->getArea()));
+            link->getArea(),
+            link->getOtherNodeName(myNodeName)));
       } // end for perDestination ...
     } // end for linkState ...
   }

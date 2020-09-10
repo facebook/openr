@@ -1681,6 +1681,7 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
     // Create valid rib policy
     thrift::RibRouteActionWeight actionWeight;
     actionWeight.area_to_weight_ref()->emplace("test-area", 2);
+    actionWeight.neighbor_to_weight_ref()->emplace("nbr", 3);
     thrift::RibPolicyStatement policyStatement;
     policyStatement.matcher_ref()->prefixes_ref() =
         std::vector<thrift::IpPrefix>();

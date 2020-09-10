@@ -210,7 +210,8 @@ createNextHopFromAdj(
       *adj.ifName_ref(),
       metric,
       std::move(mplsAction),
-      area);
+      area,
+      *adj.otherNodeName_ref());
 }
 
 thrift::PrefixMetrics
@@ -5169,7 +5170,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
 
   // Create rib policy
   thrift::RibRouteActionWeight actionWeight;
-  actionWeight.area_to_weight_ref()->emplace(kDefaultArea, 2);
+  actionWeight.neighbor_to_weight_ref()->emplace("2", 2);
   thrift::RibPolicyStatement policyStatement;
   policyStatement.matcher_ref()->prefixes_ref() =
       std::vector<thrift::IpPrefix>({addr2});
@@ -5205,7 +5206,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
       ->at(0)
       .action_ref()
       ->set_weight_ref()
-      ->area_to_weight_ref()[kDefaultArea] = 0;
+      ->neighbor_to_weight_ref()["2"] = 0;
   EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
   {
     auto updates = recvRouteUpdates();
@@ -5295,7 +5296,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
   {
     // Create valid rib policy
     thrift::RibRouteActionWeight actionWeight;
-    actionWeight.area_to_weight_ref()->emplace(kDefaultArea, 2);
+    actionWeight.neighbor_to_weight_ref()->emplace("2", 2);
     thrift::RibPolicyStatement policyStatement;
     policyStatement.matcher_ref()->prefixes_ref() =
         std::vector<thrift::IpPrefix>({addr2});

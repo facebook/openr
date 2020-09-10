@@ -90,6 +90,9 @@ struct NextHopThrift {
   // from where the transport address is also derived. This can be none for
   // imported routes.
   53: optional string area
+
+  // Name of next-hop device
+  54: optional string neighborNodeName
 }
 
 struct MplsRoute {

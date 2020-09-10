@@ -23,13 +23,15 @@ thrift::RibPolicyStatement
 createPolicyStatement(
     std::vector<thrift::IpPrefix> const& prefixes,
     int32_t defaultWeight,
-    std::map<std::string, int32_t> areaToWeight) {
+    std::map<std::string, int32_t> areaToWeight,
+    std::map<std::string, int32_t> nbrToWeight = {}) {
   thrift::RibPolicyStatement p;
   *p.name_ref() = "TestPolicyStatement";
   p.matcher_ref()->prefixes_ref() = prefixes;
   p.action_ref()->set_weight_ref() = thrift::RibRouteActionWeight{};
   p.action_ref()->set_weight_ref()->default_weight_ref() = defaultWeight;
   *p.action_ref()->set_weight_ref()->area_to_weight_ref() = areaToWeight;
+  *p.action_ref()->set_weight_ref()->neighbor_to_weight_ref() = nbrToWeight;
   return p;
 }
 
@@ -232,19 +234,21 @@ TEST(RibPolicy, ApplyAction) {
 }
 
 TEST(RibPolicy, ApplyPolicy) {
-  const auto stmt1 =
-      createPolicyStatement({toIpPrefix("fc01::/64")}, 1, {{"area1", 99}});
+  const auto stmt1 = createPolicyStatement(
+      {toIpPrefix("fc01::/64")}, 1, {{"area1", 99}}, {{"nbr3", 98}});
   const auto stmt2 = createPolicyStatement(
       {toIpPrefix("fc00::/64"), toIpPrefix("fc02::/64")}, 1, {{"area2", 0}});
   auto policy = RibPolicy(createPolicy({stmt1, stmt2}, 1));
 
   const auto nh1 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, "area1");
+      toBinaryAddress("fe80::1"), "iface1", 0, std::nullopt, "area1", "nbr1");
   const auto nh2 = createNextHop(
-      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, "area2");
+      toBinaryAddress("fe80::1"), "iface2", 0, std::nullopt, "area2", "nbr2");
+  const auto nh3 = createNextHop(
+      toBinaryAddress("fe80::1"), "iface3", 0, std::nullopt, "area1", "nbr3");
 
   RibUnicastEntry const entry1(
-      folly::IPAddress::createNetwork("fc01::/64"), {nh1, nh2});
+      folly::IPAddress::createNetwork("fc01::/64"), {nh1, nh2, nh3});
   RibUnicastEntry const entry2(
       folly::IPAddress::createNetwork("fc02::/64"), {nh2});
   {
@@ -267,9 +271,13 @@ TEST(RibPolicy, ApplyPolicy) {
 
     auto expectNh2 = nh2;
     expectNh2.weight_ref() = 1;
+
+    auto expectNh3 = nh3;
+    expectNh3.weight_ref() = 98;
+
     EXPECT_THAT(
         entries.at(entry1.prefix).nexthops,
-        testing::UnorderedElementsAre(expectNh1, expectNh2));
+        testing::UnorderedElementsAre(expectNh1, expectNh2, expectNh3));
     EXPECT_EQ(entries.at(entry2.prefix).nexthops, entry2.nexthops);
   }
 

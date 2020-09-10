@@ -68,12 +68,22 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   auto const& weightAction = action_.set_weight_ref().value();
   std::unordered_set<thrift::NextHopThrift> newNexthops;
   for (auto& nh : route.nexthops) {
+    // Next-hop inherits a RibPolicy weight with the following precedence
+    // 1. Neighbor weight
+    // 2. Area weight
+    // 3. Default weight
     auto new_weight = *weightAction.default_weight_ref();
     if (nh.area_ref()) {
       new_weight = folly::get_default(
           *weightAction.area_to_weight_ref(),
           nh.area_ref().value(),
-          *weightAction.default_weight_ref());
+          new_weight);
+    }
+    if (nh.neighborNodeName_ref()) {
+      new_weight = folly::get_default(
+          *weightAction.neighbor_to_weight_ref(),
+          nh.neighborNodeName_ref().value(),
+          new_weight);
     }
     if (new_weight > 0) {
       auto newNh = nh;

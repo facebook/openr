@@ -15,6 +15,10 @@ DEFINE_string(host, "::1", "Host to talk to");
 DEFINE_int32(ttl_secs, 300, "Number of seconds the policy is alive for");
 DEFINE_int32(default_weight, 1, "Weight for nexthops with no area");
 DEFINE_int32(area0_weight, 2, "Area0 (default area in Open/R) weight");
+DEFINE_string(
+    neighbor_weight,
+    "",
+    "Comma separated list of neighborName:weight (ex: fsw001.p001.f01.atn6:10)");
 DEFINE_string(prefixes, "", "Comma separated list of prefixes to apply policy");
 
 using namespace openr;
@@ -39,6 +43,26 @@ main(int argc, char* argv[]) {
   actionWeight.default_weight_ref() = FLAGS_default_weight;
   actionWeight.area_to_weight_ref()->emplace(
       thrift::KvStore_constants::kDefaultArea(), FLAGS_area0_weight);
+  // Parse neighbor->weight map and insert into the policy statement
+  std::vector<std::string> neighborWeights;
+  folly::split(",", FLAGS_neighbor_weight, neighborWeights, true);
+  for (auto const& neighborWeight : neighborWeights) {
+    std::vector<std::string> neighborWeightSplit;
+    folly::split(":", neighborWeight, neighborWeightSplit, true);
+    CHECK_EQ(2, neighborWeightSplit.size());
+    int32_t weight = 0;
+    try {
+      weight = folly::to<int32_t>(neighborWeightSplit.at(1));
+    } catch (std::exception& e) {
+      LOG(ERROR) << "Failed to convert string to weight int32, "
+                 << folly::exceptionStr(e);
+      return -1;
+    }
+    LOG(INFO) << "Neighbor: " << neighborWeightSplit.at(0)
+              << " -> weight: " << weight;
+    actionWeight.neighbor_to_weight_ref()->emplace(
+        neighborWeightSplit.at(0), weight);
+  }
 
   // Create PolicyStatement
   thrift::RibPolicyStatement policyStatement;

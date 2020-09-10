@@ -95,12 +95,15 @@ struct RibRouteMatcher {
  * `set weight <>` action for RibRoute
  */
 struct RibRouteActionWeight {
-  // Default weight for the next-hops with no-area. Usually next-hops from
-  // static routes (external next-hops)
+  // Default weight for the next-hops with no a neighbor not in the map.
+  // Usually next-hops from static routes (external next-hops)
   2: i32 default_weight;
 
   // Area name to weight mapping (internal next-hops)
   3: map<string, i32> area_to_weight;
+
+  // Neighbor device name to weight mapping (internal next-hops)
+  4: map<string, i32> neighbor_to_weight;
 }
 
 /**

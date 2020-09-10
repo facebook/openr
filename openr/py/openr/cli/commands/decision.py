@@ -639,10 +639,14 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
             action = stmt.action.set_weight or ctrl_types.RibRouteActionWeight()
             print(f"  Statement: {stmt.name}")
             print(f"    Prefix Match List: {', '.join(prefixes)}")
-            print(
-                f"    Action Set Weight: default={action.default_weight}, "
-                f"area-weights={action.area_to_weight}"
-            )
+            print("    Action Set Weight:")
+            print(f"      Default: {action.default_weight}")
+            print("      Area:")
+            for area, weight in action.area_to_weight.items():
+                print(f"        {area}: {weight}")
+            print("      Neighbor:")
+            for neighbor, weight in action.neighbor_to_weight.items():
+                print(f"        {neighbor}: {weight}")
 
 
 class ReceivedRoutesCmd(OpenrCtrlCmd):
