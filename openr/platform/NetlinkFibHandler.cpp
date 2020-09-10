@@ -49,22 +49,6 @@ NetlinkFibHandler::NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock)
                      std::chrono::system_clock::now().time_since_epoch())
                      .count()) {
   CHECK_NOTNULL(nlSock);
-  // NOTE: This will mask off neighbor events publisher. It is okay because as
-  // of now no one is using Neighbor Events.
-  nlSock_->setNeighborEventCB([this](fbnl::Neighbor neighbor, bool) {
-    std::lock_guard<std::mutex> g(listenersMutex_);
-    for (auto& listener : listeners_.accessAllThreads()) {
-      LOG(INFO) << "Sending notification to bgpD";
-      listener.eventBase->runInEventBaseThread(
-          [this, neighbor, listenerPtr = &listener] {
-            LOG(INFO) << "firing off notification";
-            invokeNeighborListeners(
-                listenerPtr,
-                {neighbor.getDestination().str()},
-                neighbor.isReachable());
-          });
-    }
-  });
 }
 
 NetlinkFibHandler::~NetlinkFibHandler() {}
