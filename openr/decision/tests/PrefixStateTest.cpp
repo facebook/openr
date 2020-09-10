@@ -378,6 +378,52 @@ TEST(PrefixState, FilterReceivedRoutes) {
   EXPECT_TRUE(routes.empty());
 }
 
+/**
+ * Test PrefixState::hasConflictingForwardingInfo
+ */
+TEST(PrefixState, HasConflictingForwardingInfo) {
+  std::unordered_map<NodeAndArea, thrift::PrefixEntry> prefixEntries;
+
+  thrift::PrefixEntry pIpSpf, pMplsSpf, pMplsKspf;
+  pIpSpf.forwardingType_ref() = thrift::PrefixForwardingType::IP;
+  pIpSpf.forwardingAlgorithm_ref() = thrift::PrefixForwardingAlgorithm::SP_ECMP;
+  pMplsSpf.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
+  pMplsSpf.forwardingAlgorithm_ref() =
+      thrift::PrefixForwardingAlgorithm::SP_ECMP;
+  pMplsKspf.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
+  pMplsKspf.forwardingAlgorithm_ref() =
+      thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+
+  //
+  // Empty case
+  //
+  EXPECT_FALSE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
+
+  //
+  // Single entry (doesn't conflict)
+  //
+  prefixEntries = {{{"0", "0"}, pIpSpf}};
+  EXPECT_FALSE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
+
+  //
+  // Multiple entries conflicting type
+  //
+  prefixEntries = {{{"0", "0"}, pIpSpf}, {{"1", "1"}, pMplsSpf}};
+  EXPECT_TRUE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
+
+  //
+  // Multiple entries conflicting algorithm
+  //
+  prefixEntries = {{{"0", "0"}, pMplsSpf}, {{"1", "1"}, pMplsKspf}};
+  EXPECT_TRUE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
+
+  //
+  // Multiple entries (no conflicts)
+  //
+  prefixEntries = {{{"0", "0"}, pMplsSpf}, {{"1", "1"}, pMplsSpf}};
+  EXPECT_FALSE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

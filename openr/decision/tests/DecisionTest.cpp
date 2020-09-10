@@ -6245,6 +6245,7 @@ TEST_F(DecisionTestFixture, Counters) {
     decision->updateGlobalCounters();
     const auto counters = fb303::fbData->getCounters();
     EXPECT_EQ(counters.at("decision.num_nodes"), 1);
+    EXPECT_EQ(counters.at("decision.num_conflicting_prefixes"), 0);
   }
 
   // set up first publication
@@ -6272,12 +6273,24 @@ TEST_F(DecisionTestFixture, Counters) {
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
       std::nullopt,
       std::nullopt /* missing metric vector */);
+  auto bgpPrefixEntry3 = createPrefixEntry( // Conflicting forwarding type
+      toIpPrefix("10.3.0.0/16"),
+      thrift::PrefixType::BGP,
+      "data=10.3.0.0/16",
+      thrift::PrefixForwardingType::SR_MPLS,
+      thrift::PrefixForwardingAlgorithm::SP_ECMP,
+      std::nullopt,
+      thrift::MetricVector{} /* empty metric vector */);
   const auto prefixDb1 = createPrefixDb(
       "1", {createPrefixEntry(addr1), createPrefixEntry(addr1V4)});
   const auto prefixDb2 = createPrefixDb(
       "2", {createPrefixEntry(addr2), createPrefixEntry(addr2V4)});
   const auto prefixDb3 = createPrefixDb(
-      "3", {createPrefixEntry(addr3), bgpPrefixEntry1, mplsPrefixEntry1});
+      "3",
+      {createPrefixEntry(addr3),
+       bgpPrefixEntry1,
+       bgpPrefixEntry3,
+       mplsPrefixEntry1});
   const auto prefixDb4 =
       createPrefixDb("4", {createPrefixEntry(addr4), bgpPrefixEntry2});
 
@@ -6308,14 +6321,15 @@ TEST_F(DecisionTestFixture, Counters) {
   // Verify counters
   decision->updateGlobalCounters();
   const auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(counters.at("decision.num_conflicting_prefixes"), 1);
   EXPECT_EQ(counters.at("decision.num_partial_adjacencies"), 1);
   EXPECT_EQ(counters.at("decision.num_complete_adjacencies"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes"), 4);
   EXPECT_EQ(counters.at("decision.num_prefixes"), 9);
   EXPECT_EQ(counters.at("decision.num_nodes_v4_loopbacks"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes_v6_loopbacks"), 4);
-  EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 2);
-  EXPECT_EQ(counters.at("decision.missing_loopback_addr.sum.60"), 1);
+  EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.missing_loopback_addr.sum.60"), 2);
   EXPECT_EQ(counters.at("decision.incompatible_forwarding_type.count.60"), 1);
   EXPECT_EQ(counters.at("decision.skipped_unicast_route.count.60"), 0);
   EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);

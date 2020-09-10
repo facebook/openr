@@ -219,4 +219,29 @@ PrefixState::filterAndAddReceivedRoute(
   }
 }
 
+bool
+PrefixState::hasConflictingForwardingInfo(const PrefixEntries& prefixEntries) {
+  // Empty prefix entries doesn't indicate conflicting information
+  if (prefixEntries.empty()) {
+    return false;
+  }
+
+  // There is at-least one entry, get its reference
+  const auto& firstEntry = prefixEntries.begin()->second;
+
+  // Iterate over all entries and make sure the forwarding information agrees
+  for (auto& [_, entry] : prefixEntries) {
+    if (firstEntry.forwardingAlgorithm_ref() !=
+        entry.forwardingAlgorithm_ref()) {
+      return true;
+    }
+    if (firstEntry.forwardingType_ref() != entry.forwardingType_ref()) {
+      return true;
+    }
+  }
+
+  // No conflicting information
+  return false;
+}
+
 } // namespace openr

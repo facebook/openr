@@ -471,14 +471,14 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   // skip adding route for BGP prefixes that have issues
   if (hasBGP) {
     if (hasNonBGP) {
-      LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
+      LOG(ERROR) << "Skipping route for " << toString(prefix)
                  << " which is advertised with BGP and non-BGP type.";
       fb303::fbData->addStatValue(
           "decision.skipped_unicast_route", 1, fb303::COUNT);
       return std::nullopt;
     }
     if (missingMv) {
-      LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
+      LOG(ERROR) << "Skipping route for " << toString(prefix)
                  << " at least one advertiser is missing its metric vector.";
       fb303::fbData->addStatValue(
           "decision.skipped_unicast_route", 1, fb303::COUNT);
@@ -807,11 +807,11 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
       ret.allNodeAreas.emplace(nodeAndArea);
       break;
     case MetricVectorUtils::CompareResult::TIE:
-      LOG(ERROR) << "Tie ordering prefix entries. Skipping route for prefix: "
+      LOG(ERROR) << "Tie ordering prefix entries. Skipping route for "
                  << toString(prefix);
       return ret;
     case MetricVectorUtils::CompareResult::ERROR:
-      LOG(ERROR) << "Error ordering prefix entries. Skipping route for prefix: "
+      LOG(ERROR) << "Error ordering prefix entries. Skipping route for "
                  << toString(prefix);
       return ret;
     default:
@@ -936,9 +936,10 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
     PrefixState const& prefixState) {
   // Sanity check for forwarding type
   if (forwardingType != thrift::PrefixForwardingType::SR_MPLS) {
-    LOG(ERROR) << "Incompatible forwarding type for algo for KSPF2_ED_ECMP."
-               << "Prefix: " << toString(prefix) << "Forwarding Type: "
-               << apache::thrift::util::enumNameSafe(forwardingType);
+    LOG(ERROR) << "Incompatible forwarding type "
+               << apache ::thrift::util::enumNameSafe(forwardingType)
+               << " for algorithm KSPF2_ED_ECMP of " << toString(prefix);
+
     fb303::fbData->addStatValue(
         "decision.incompatible_forwarding_type", 1, fb303::COUNT);
     return std::nullopt;
@@ -1080,7 +1081,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
       fb303::fbData->addStatValue(
           "decision.missing_loopback_addr", 1, fb303::SUM);
       LOG(ERROR) << "Cannot find the best paths loopback address. "
-                 << "Skipping route for prefix: " << toString(prefixThrift);
+                 << "Skipping route for " << toString(prefixThrift);
       return std::nullopt;
     } else {
       bestLoopbackNextHop = bestNextHops.at(0);
@@ -2017,7 +2018,19 @@ Decision::updateGlobalCounters() const {
     }
   }
 
+  size_t numConflictingPrefixes{0};
+  for (const auto& [prefix, prefixEntries] : prefixState_.prefixes()) {
+    if (not PrefixState::hasConflictingForwardingInfo(prefixEntries)) {
+      continue;
+    }
+    LOG(WARNING) << "Prefix " << toString(prefix) << " has conflicting "
+                 << "forwarding algorithm or type.";
+    numConflictingPrefixes += 1;
+  }
+
   // Add custom counters
+  fb303::fbData->setCounter(
+      "decision.num_conflicting_prefixes", numConflictingPrefixes);
   fb303::fbData->setCounter(
       "decision.num_partial_adjacencies", numPartialAdjacencies);
   fb303::fbData->setCounter(

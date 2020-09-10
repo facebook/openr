@@ -65,6 +65,12 @@ class PrefixState {
       thrift::IpPrefix const& prefix,
       PrefixEntries const& prefixEntries);
 
+  /**
+   * Function returns true if all prefix entries do not agree on the same
+   * forwarding algorithm and type.
+   */
+  static bool hasConflictingForwardingInfo(PrefixEntries const& prefixEntries);
+
  private:
   // TODO: Also maintain clean list of reachable prefix entries. A node might
   // become un-reachable we might still have their prefix entries, until gets
