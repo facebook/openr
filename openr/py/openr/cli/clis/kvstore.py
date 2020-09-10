@@ -238,39 +238,33 @@ class SnoopCli(object):
     @click.option("--delta/--no-delta", default=True, help="Output incremental changes")
     @click.option("--ttl/--no-ttl", default=False, help="Print ttl updates")
     @click.option(
-        "--regexes",
-        "-r",
-        default="",
-        multiple=True,
-        help="Snoop on keys matching filter",
+        "--regexes", "-r", default=[], multiple=True, help="Keys to be used in filter"
     )
     @click.option(
-        "--duration", default=0, help="How long to snoop for. Default is infinite"
+        "--duration", default=0, help="How long to snoop for ? Default is infinite"
     )
     @click.option(
         "--match-all/--match-any",
         default=True,
-        type=bool,
-        help="Boolean operator for combining keys and originator ids (default=AND)",
+        help="Boolean operator for combining keys and originator ids (default=match-all)",
     )
     @click.option(
         "--originator-ids",
         "-o",
-        default="",
-        type=click.STRING,
+        default=[],
         multiple=True,
-        help="Originator Ids to be used in filter",
+        help="Originator ids to be used in filter",
     )
     @click.pass_obj
     def snoop(
-        cli_opts, delta, ttl, regexes, duration, originator_ids, filter_operator
+        cli_opts, delta, ttl, regexes, duration, originator_ids, match_all
     ):  # noqa: B902
         """ Snoop on KV-store updates in the network. We are primarily
             looking at the adj/prefix announcements.
         """
 
         kvstore.SnoopCmd(cli_opts).run(
-            delta, ttl, regexes, duration, originator_ids, filter_operator
+            delta, ttl, regexes, duration, originator_ids, match_all
         )
 
 
