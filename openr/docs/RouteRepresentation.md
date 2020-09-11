@@ -70,8 +70,6 @@ routing. This resembles AS-Path length of BGP
 > Take a look at [Decision Route Computation](Decision.md) for understanding best
 route selection process
 
-TODO: Picture
-
 #### > `tags`
 `set[string]`, `transitive`, `mutable`
 Meta-data associated with the route to facilitate route policing as the route
