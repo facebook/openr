@@ -911,7 +911,7 @@ Spark::logStateTransition(
               << " ms";
 
     fb303::fbData->addStatValue(
-        "slo.neighbor_discovery_time.time_ms", elapsedTime.count(), fb303::AVG);
+        "slo.neighbor_discovery.time_ms", elapsedTime.count(), fb303::AVG);
   } else if (newState == SparkNeighState::IDLE) {
     // reset neighbor discovery time
     neighbor.idleStateTransitionTime = std::chrono::steady_clock::now();
