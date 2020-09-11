@@ -147,6 +147,7 @@ struct AreaConfig {
  * - BGP Origin <=> metrics.path_preference (IGP=1000, EGP=900, INCOMPLETE=500)
  * - BGP Special Source AS => metrics.source_preference
  * - BGP AS Path Length => metrics.distance
+ * - metrics.source_preference => BGP Local Preference
  */
 struct BgpRouteTranslationConfig {
   /**
@@ -179,9 +180,20 @@ struct BgpRouteTranslationConfig {
   6: set<i64> asns_to_ignore_for_distance;
 
   /**
-   * Knob to enable translation incrementally
+   * Knob to enable BGP -> Open/R translation incrementally
    */
-  7: bool is_enabled = 0
+  7: bool is_enabled = 0 (deprecated) // use 8: enable_bgp_to_openr
+
+  /**
+   * Knob to enable BGP -> Open/R translation incrementally
+   */
+  8: bool enable_bgp_to_openr = 0
+
+  /**
+   * Knob to enable Open/R -> BGP translation incrementally
+   */
+  9: bool enable_openr_to_bgp = 0
+
 }
 
 struct OpenrConfig {
