@@ -465,15 +465,17 @@ class KvStoreDb : public DualNode {
   // set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
-  // pending requestId for thrift client.
   // NOTE: KvStoreDb processes full-sync/flooding/etc. in ASYNC fashion.
-  //       `thriftFs_` make sure all pending request finish processing before
+  //       `taskFutures_` make sure all pending request finish processing before
   //       shutting down.
-  uint64_t pendingThriftId_{0};
+  //
+  // monotonically increasing requestId for pending thrift request.
+  uint64_t reqId_{0};
 
-  // collection of semifutures for thrift requests
-  std::unordered_map<uint64_t, folly::SemiFuture<folly::Unit>> thriftFs_{};
+  // collection of futures for pending thrift requests
+  std::unordered_map<uint64_t, folly::Future<folly::Unit>> taskFutures_{};
 
+  // [TO BE DEPRECATED]
   // The peers we will be talking to: both PUB and CMD URLs for each. We use
   // peerAddCounter_ to uniquely identify a peering session's socket-id.
   uint64_t peerAddCounter_{0};
@@ -482,12 +484,14 @@ class KvStoreDb : public DualNode {
       std::pair<thrift::PeerSpec, std::string /* socket-id */>>
       peers_;
 
+  // [TO BE DEPRECATED]
   // set of peers to perform full sync from. We use exponential backoff to try
   // repetitively untill we succeeed (without overwhelming anyone with too
   // many requests).
   std::unordered_map<std::string, ExponentialBackoff<std::chrono::milliseconds>>
       peersToSyncWith_{};
 
+  // [TO BE DEPRECATED]
   // Callback timer to get full KEY_DUMP from peersToSyncWith_
   std::unique_ptr<folly::AsyncTimeout> fullSyncTimer_;
 
@@ -503,6 +507,7 @@ class KvStoreDb : public DualNode {
   // TTL count down timer
   std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_;
 
+  // [TO BE DEPRECATED]
   // Map of latest peer sync up request send to each peer
   // this is used to measure full-dump sync time between this node and each of
   // its peers
@@ -523,6 +528,7 @@ class KvStoreDb : public DualNode {
   // timer to promote idle peers for initial syncing
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
 
+  // [TO BE DEPRECATED]
   // timer for processing messages on peerSyncSock_
   // TODO: This is hacky way to process messages which are pending on socket but
   // ZMQ doesn't invoke the callback for them. This will go away once we migrate
@@ -535,6 +541,7 @@ class KvStoreDb : public DualNode {
       unordered_map<std::optional<std::string>, std::unordered_set<std::string>>
           publicationBuffer_{};
 
+  // [TO BE DEPRECATED]
   // max parallel syncs allowed. It's initialized with '2' and doubles
   // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
   // response received
