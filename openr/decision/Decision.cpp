@@ -470,7 +470,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   // on their origin source aka `prefixEntry.type`
   // skip adding route for BGP prefixes that have issues
   if (hasBGP) {
-    if (hasNonBGP) {
+    if (hasNonBGP and not enableBestRouteSelection_) {
       LOG(ERROR) << "Skipping route for " << toString(prefix)
                  << " which is advertised with BGP and non-BGP type.";
       fb303::fbData->addStatValue(

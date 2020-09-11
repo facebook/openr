@@ -4427,9 +4427,7 @@ class DecisionTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
-    auto tConfig = getBasicOpenrConfig("1");
-    // set coldstart to be longer than debounce time
-    tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
+    auto tConfig = createConfig();
     config = std::make_shared<Config>(tConfig);
 
     decision = make_shared<Decision>(
@@ -4459,6 +4457,14 @@ class DecisionTestFixture : public ::testing::Test {
     decision->stop();
     decisionThread->join();
     LOG(INFO) << "Decision thread got stopped";
+  }
+
+  virtual openr::thrift::OpenrConfig
+  createConfig() {
+    auto tConfig = getBasicOpenrConfig("1");
+    // set coldstart to be longer than debounce time
+    tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
+    return tConfig;
   }
 
   //
@@ -6379,6 +6385,102 @@ TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
       {},
       std::string(""));
   sendKvPublication(publication);
+}
+
+// DecisionTestFixture with different enableBestRouteSelection_ input
+class EnableBestRouteSelectionFixture
+    : public DecisionTestFixture,
+      public ::testing::WithParamInterface<bool> {
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = DecisionTestFixture::createConfig();
+    // set coldstart to be longer than debounce time
+    tConfig.enable_best_route_selection_ref() = GetParam();
+    return tConfig;
+  }
+};
+
+INSTANTIATE_TEST_CASE_P(
+    EnableBestRouteSelectionInstance,
+    EnableBestRouteSelectionFixture,
+    ::testing::Bool());
+
+//
+// Mixed type prefixe announcements (e.g. prefix1 with type BGP and type RIB )
+// are allowed when enableBestRouteSelection_ = true,
+// Otherwise prefix will be skipped in route programming.
+//
+TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
+  // Verifiy some initial/default counters
+  {
+    decision->updateGlobalCounters();
+    const auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(counters.at("decision.num_nodes"), 1);
+  }
+
+  // set up first publication
+
+  // node 2/3 announce loopbacks
+  {
+    const auto prefixDb2 = createPrefixDb(
+        "2", {createPrefixEntry(addr2), createPrefixEntry(addr2V4)});
+    const auto prefixDb3 = createPrefixDb(
+        "3", {createPrefixEntry(addr3), createPrefixEntry(addr3V4)});
+
+    // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
+    auto publication = createThriftPublication(
+        {{"adj:1", createAdjValue("1", 1, {adj12, adj13}, false, 1)},
+         {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+         {"adj:3", createAdjValue("3", 1, {adj31}, false, 3)},
+         {"prefix:2", createPrefixValue("2", 1, prefixDb2)},
+         {"prefix:3", createPrefixValue("3", 1, prefixDb3)}},
+        {},
+        {},
+        {},
+        std::string(""));
+    sendKvPublication(publication);
+    recvRouteUpdates();
+  }
+
+  // Node2 annouce prefix in BGP type,
+  // Node3 announce prefix in Rib type
+  {
+    auto bgpPrefixEntry = createPrefixEntry(
+        toIpPrefix("10.1.0.0/16"),
+        thrift::PrefixType::BGP,
+        "data=10.1.0.0/16",
+        thrift::PrefixForwardingType::IP,
+        thrift::PrefixForwardingAlgorithm::SP_ECMP,
+        std::nullopt,
+        thrift::MetricVector{} /* empty metric vector */);
+    auto ribPrefixEntry = createPrefixEntry(
+        toIpPrefix("10.1.0.0/16"),
+        thrift::PrefixType::RIB,
+        "",
+        thrift::PrefixForwardingType::IP,
+        thrift::PrefixForwardingAlgorithm::SP_ECMP);
+    // node 2 announce BGP prefix with loopback
+    const auto prefixDb2 = createPrefixDb("2", {bgpPrefixEntry});
+    const auto prefixDb3 = createPrefixDb("3", {ribPrefixEntry});
+
+    // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
+    auto publication = createThriftPublication(
+        {{"prefix:2", createPrefixValue("2", 1, prefixDb2)},
+         {"prefix:3", createPrefixValue("3", 1, prefixDb3)}},
+        {},
+        {},
+        {},
+        std::string(""));
+    sendKvPublication(publication);
+    recvRouteUpdates();
+  }
+  // Verify counters
+  decision->updateGlobalCounters();
+  const auto counters = fb303::fbData->getCounters();
+  int skippedUnicastRouteCnt = GetParam() ? 0 : 1;
+  EXPECT_EQ(
+      skippedUnicastRouteCnt,
+      counters.at("decision.skipped_unicast_route.count.60"));
 }
 
 TEST(DecisionPendingUpdates, needsFullRebuild) {
