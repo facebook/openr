@@ -16,75 +16,7 @@ namespace lua openr.LinkMonitor
 include "Lsdb.thrift"
 include "Spark.thrift"
 
-//
-// LinkMonitor provides simple API to drain/undrain the node
-// and to dump all known interfaces of the node
-//
-
-enum LinkMonitorCommand {
-  /**
-   * Commands to set/unset overload bit. If overload bit is set then the node
-   * will not do any transit traffic. However node will still be reachable in
-   * the network from other nodes.
-   */
-  SET_OVERLOAD    = 1,    // No response will be sent
-  UNSET_OVERLOAD  = 2,    // No response will be sent
-
-  /**
-   * Get the current link status information
-   */
-  DUMP_LINKS      = 3,    // DumpLinksReply will be sent back
-
-  /**
-   * Command to set/unset overload bit for link. If overload bit is set then
-   * no transit traffic will pass through the link which is equivalent to
-   * hard drain on the link.
-   */
-  SET_LINK_OVERLOAD   = 4,  // No response will be sent
-  UNSET_LINK_OVERLOAD = 5,  // No response will be sent
-
-  /**
-   * Command to override metric for adjacencies over specific interfaces. This
-   * can be used to emulate soft-drain of links by using higher metric value
-   * for link.
-   *
-   * Request must have valid `interfaceName` and `overrideMetric` values for
-   * SET command. UNSET command only expects `interfaceName`.
-   */
-  SET_LINK_METRIC     = 6,  // No response will be sent
-  UNSET_LINK_METRIC   = 7,  // No response will be sent
-
-  /**
-   * Command to override metric for specific adjacencies.
-   *
-   * Request must have valid 'adjacency' node name
-   */
-  SET_ADJ_METRIC     = 8,  // No response will be sent
-  UNSET_ADJ_METRIC   = 9,  // No response will be sent
-
-  /**
-   * Command to request OpenR version
-   */
-   GET_VERSION = 10, // replies with OpenrVersions
-
-  /**
-   * Command to request build information
-   */
-  GET_BUILD_INFO = 11,  // replies with OpenrBuildInfo
-
-  /**
-   * Get the current adj status info reported from Spark
-   */
-  DUMP_ADJS = 12,  // AdjacencyDatabase will be sent back
-}
-
-struct LinkMonitorRequest {
- 1: LinkMonitorCommand cmd
- 2: string interfaceName
- 3: i32 overrideMetric = 1  # Default value (can't be less than 1)
- 4: optional string adjNodeName
-}
-
+// TODO: Change the definition to Spark.thrift to break thrift dependency
 struct OpenrVersions {
  1: Spark.OpenrVersion version
  2: Spark.OpenrVersion lowestSupportedVersion
@@ -135,10 +67,10 @@ struct LinkMonitorState {
   5: map<AdjKey, i32> adjMetricOverrides;
 }
 
-/**
- * Struct representing build information. Attributes are described in detail
- * in `openr/common/BuildInfo.h`
- */
+//
+// Struct representing build information. Attributes are described in detail
+// in `openr/common/BuildInfo.h`
+//
 struct BuildInfo {
   1: string buildUser;
   2: string buildTime;
