@@ -313,6 +313,8 @@ def collate_prefix_keys(
             prefix_db = deserialize_thrift_object(
                 value.value, lsdb_types.PrefixDatabase
             )
+            if prefix_db.deletePrefix:
+                continue
             if node_name not in prefix_maps:
                 prefix_maps[node_name] = lsdb_types.PrefixDatabase(f"{node_name}", [])
 
