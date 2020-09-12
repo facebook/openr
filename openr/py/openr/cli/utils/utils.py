@@ -1927,11 +1927,14 @@ def print_route_details(
                     f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}"
                 )
                 rows.append(
-                    f"     Metrics: path-preference: {metrics.path_preference}"
+                    f"     Metrics - path-preference: {metrics.path_preference}"
                     f", source-preference: {metrics.source_preference}"
                     f", distance: {metrics.distance}"
                 )
-                rows.append(f"     Performance: min-nexthops: {route.route.minNexthop}")
+                if route.route.minNexthop:
+                    rows.append(
+                        f"     Performance - min-nexthops: {route.route.minNexthop}"
+                    )
                 if route.route.prependLabel:
                     rows.append(
                         f"     Misc - prepend-label: {route.route.prependLabel}"
