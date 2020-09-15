@@ -767,7 +767,7 @@ Fib::updateGlobalCounters() {
   // Count the number of bgp routes
   int64_t bgpCounter = 0;
   for (const auto& route : routeState_.unicastRoutes) {
-    if (route.second.data_ref().has_value()) {
+    if (route.second.bestNexthop_ref().has_value()) {
       bgpCounter++;
     }
   }

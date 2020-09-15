@@ -185,6 +185,8 @@ class SpfSolver::SpfSolverImpl {
     fb303::fbData->addStatExportType(
         "decision.incompatible_forwarding_type", fb303::COUNT);
     fb303::fbData->addStatExportType(
+        "decision.missing_loopback_addr", fb303::SUM);
+    fb303::fbData->addStatExportType(
         "decision.no_route_to_label", fb303::COUNT);
     fb303::fbData->addStatExportType(
         "decision.no_route_to_prefix", fb303::COUNT);
@@ -1071,6 +1073,23 @@ SpfSolver::SpfSolverImpl::addBestPaths(
     return std::nullopt;
   }
 
+  // TODO @girasoley - Remove this once we implement feature in BGP to not
+  // program Open/R received routes.
+  std::optional<thrift::NextHopThrift> bestLoopbackNextHop;
+  if (isBgp) {
+    auto bestNextHops = prefixState.getLoopbackVias(
+        {bestRouteSelectionResult.bestNodeArea.first}, prefix.first.isV4());
+    if (bestNextHops.empty()) {
+      fb303::fbData->addStatValue(
+          "decision.missing_loopback_addr", 1, fb303::SUM);
+      LOG(ERROR) << "Cannot find the best paths loopback address. "
+                 << "Skipping route for " << toString(prefixThrift);
+      return std::nullopt;
+    } else {
+      bestLoopbackNextHop = bestNextHops.at(0);
+    }
+  }
+
   // Special case for programming imported next-hops during route origination.
   // This case, programs the next-hops learned from external processes while
   // importing route, along with the computed next-hops.
@@ -1107,7 +1126,8 @@ SpfSolver::SpfSolverImpl::addBestPaths(
       std::move(nextHops),
       prefixEntries.at(bestRouteSelectionResult.bestNodeArea),
       bestRouteSelectionResult.bestNodeArea.second,
-      isBgp & bgpDryRun_); // doNotInstall
+      isBgp & bgpDryRun_, // doNotInstall
+      bestLoopbackNextHop);
 }
 
 std::pair<Metric, std::unordered_set<std::string>>
@@ -2023,6 +2043,12 @@ Decision::updateGlobalCounters() const {
       "decision.num_nodes", std::max(nodeSet.size(), static_cast<size_t>(1ul)));
   fb303::fbData->setCounter(
       "decision.num_prefixes", prefixState_.prefixes().size());
+  fb303::fbData->setCounter(
+      "decision.num_nodes_v4_loopbacks",
+      prefixState_.getNodeHostLoopbacksV4().size());
+  fb303::fbData->setCounter(
+      "decision.num_nodes_v6_loopbacks",
+      prefixState_.getNodeHostLoopbacksV6().size());
 }
 
 } // namespace openr

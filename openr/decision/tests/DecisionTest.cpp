@@ -387,6 +387,10 @@ printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
     for (const auto nh : *ucRoute.nextHops_ref()) {
       LOG(INFO) << "nexthops: " << toString(nh);
     }
+    if (ucRoute.bestNexthop_ref().has_value()) {
+      const auto nh = ucRoute.bestNexthop_ref().value();
+      LOG(INFO) << "best next hop: " << toString(nh);
+    }
   }
 }
 
@@ -773,6 +777,7 @@ TEST(BGPRedistribution, BasicOperation) {
       bgpPrefix1, {createNextHopFromAdj(adj21, false, *adj21.metric_ref())});
   route1.prefixType_ref() = thrift::PrefixType::BGP;
   route1.data_ref() = data1;
+  route1.bestNexthop_ref() = createNextHop(*addr1.prefixAddress_ref());
   route1.doNotInstall_ref() = false;
 
   EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(2));
@@ -826,6 +831,7 @@ TEST(BGPRedistribution, BasicOperation) {
       bgpPrefix1, {createNextHopFromAdj(adj12, false, *adj12.metric_ref())});
   route2.prefixType_ref() = thrift::PrefixType::BGP;
   route2.data_ref() = data2;
+  route2.bestNexthop_ref() = createNextHop(*addr2.prefixAddress_ref());
   route2.doNotInstall_ref() = false;
 
   decisionRouteDb = *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
@@ -2575,6 +2581,14 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       areaLinkStates,
       prefixState)[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
 
+  EXPECT_EQ(
+      route.bestNexthop_ref().value(),
+      createNextHop(
+          v4Enabled ? *addr1V4.prefixAddress_ref() : *addr1.prefixAddress_ref(),
+          std::nullopt,
+          0,
+          std::nullopt));
+
   // increase mv for the second node by 2, now router 3 should point to 2
   prefixDBTwo.prefixEntries_ref()
       ->back()
@@ -2596,6 +2610,14 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       {"3"},
       areaLinkStates,
       prefixState)[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
+
+  EXPECT_EQ(
+      route.bestNexthop_ref(),
+      createNextHop(
+          v4Enabled ? *addr2V4.prefixAddress_ref() : *addr2.prefixAddress_ref(),
+          std::nullopt,
+          0,
+          std::nullopt));
 
   // set the tie breaker to be true. in this case, both nodes will be selected
   prefixDBTwo.prefixEntries_ref()
@@ -2631,7 +2653,25 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       {"3"},
       areaLinkStates,
       prefixState)[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
+  const auto bestNextHop1 = createNextHop(
+      v4Enabled ? *addr1V4.prefixAddress_ref() : *addr1.prefixAddress_ref(),
+      std::nullopt,
+      0,
+      std::nullopt);
 
+  const auto bestNextHop2 = createNextHop(
+      v4Enabled ? *addr2V4.prefixAddress_ref() : *addr2.prefixAddress_ref(),
+      std::nullopt,
+      0,
+      std::nullopt);
+  EXPECT_THAT(
+      route.bestNexthop_ref().value(), AnyOf(bestNextHop1, bestNextHop2));
+
+  if (route.bestNexthop_ref() == bestNextHop1) {
+    EXPECT_EQ(route.data_ref(), "123");
+  } else {
+    EXPECT_FALSE(route.data_ref());
+  }
   EXPECT_EQ(route.prefixType_ref(), thrift::PrefixType::BGP);
 
   // verify on node 1. From node 1 point of view, both node 1 and node 2 are
@@ -6293,7 +6333,10 @@ TEST_F(DecisionTestFixture, Counters) {
   EXPECT_EQ(counters.at("decision.num_complete_adjacencies"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes"), 4);
   EXPECT_EQ(counters.at("decision.num_prefixes"), 9);
+  EXPECT_EQ(counters.at("decision.num_nodes_v4_loopbacks"), 2);
+  EXPECT_EQ(counters.at("decision.num_nodes_v6_loopbacks"), 4);
   EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.missing_loopback_addr.sum.60"), 2);
   EXPECT_EQ(counters.at("decision.incompatible_forwarding_type.count.60"), 1);
   EXPECT_EQ(counters.at("decision.skipped_unicast_route.count.60"), 0);
   EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);

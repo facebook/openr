@@ -13,6 +13,26 @@ using apache::thrift::can_throw;
 
 namespace openr {
 
+void
+PrefixState::deleteLoopbackPrefix(
+    thrift::IpPrefix const& prefix, const std::string& nodeName) {
+  auto addrSize = prefix.prefixAddress_ref()->addr_ref()->size();
+  if (addrSize == folly::IPAddressV4::byteCount() &&
+      folly::IPAddressV4::bitCount() == *prefix.prefixLength_ref()) {
+    if (nodeHostLoopbacksV4_.find(nodeName) != nodeHostLoopbacksV4_.end() &&
+        *prefix.prefixAddress_ref() == nodeHostLoopbacksV4_.at(nodeName)) {
+      nodeHostLoopbacksV4_.erase(nodeName);
+    }
+  }
+  if (addrSize == folly::IPAddressV6::byteCount() &&
+      folly::IPAddressV6::bitCount() == *prefix.prefixLength_ref()) {
+    if (nodeHostLoopbacksV6_.find(nodeName) != nodeHostLoopbacksV6_.end() &&
+        nodeHostLoopbacksV6_.at(nodeName) == *prefix.prefixAddress_ref()) {
+      nodeHostLoopbacksV6_.erase(nodeName);
+    }
+  }
+}
+
 std::unordered_set<thrift::IpPrefix>
 PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   std::unordered_set<thrift::IpPrefix> changed;
@@ -49,6 +69,7 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
       prefixes_.erase(prefix);
     }
 
+    deleteLoopbackPrefix(prefix, nodeName);
     changed.insert(prefix);
   }
 
@@ -71,6 +92,24 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     VLOG(1) << "Prefix " << toString(*prefixEntry.prefix_ref())
             << " has been advertised/updated by node " << nodeName
             << " from area " << area;
+
+    // Keep track of loopback addresses (v4 / v6) for each node
+    if (thrift::PrefixType::LOOPBACK == *prefixEntry.type_ref()) {
+      auto addrSize =
+          prefixEntry.prefix_ref()->prefixAddress_ref()->addr_ref()->size();
+      if (addrSize == folly::IPAddressV4::byteCount() &&
+          folly::IPAddressV4::bitCount() ==
+              *prefixEntry.prefix_ref()->prefixLength_ref()) {
+        nodeHostLoopbacksV4_[nodeName] =
+            *prefixEntry.prefix_ref()->prefixAddress_ref();
+      }
+      if (addrSize == folly::IPAddressV6::byteCount() &&
+          folly::IPAddressV6::bitCount() ==
+              *prefixEntry.prefix_ref()->prefixLength_ref()) {
+        nodeHostLoopbacksV6_[nodeName] =
+            *prefixEntry.prefix_ref()->prefixAddress_ref();
+      }
+    }
   }
 
   if (newPrefixSet.empty()) {
@@ -94,6 +133,24 @@ PrefixState::getPrefixDatabases() const {
     prefixDatabases.emplace(nodeAndArea.first, std::move(prefixDb));
   }
   return prefixDatabases;
+}
+
+std::vector<thrift::NextHopThrift>
+PrefixState::getLoopbackVias(
+    std::unordered_set<std::string> const& nodes, bool const isV4) const {
+  std::vector<thrift::NextHopThrift> result;
+  result.reserve(nodes.size());
+  auto const& hostLoopBacks =
+      isV4 ? nodeHostLoopbacksV4_ : nodeHostLoopbacksV6_;
+  for (auto const& node : nodes) {
+    if (!hostLoopBacks.count(node)) {
+      LOG(ERROR) << "No loopback for node " << node;
+    } else {
+      result.emplace_back(
+          createNextHop(hostLoopBacks.at(node), std::nullopt, 0));
+    }
+  }
+  return result;
 }
 
 std::vector<thrift::ReceivedRouteDetail>
