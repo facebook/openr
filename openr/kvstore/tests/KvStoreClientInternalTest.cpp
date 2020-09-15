@@ -555,7 +555,7 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
   // after kTtl duration key must have been deleted due to ttl expiry
   evb.scheduleTimeout(
       // add 100 msec more to avoid flakiness
-      std::chrono::milliseconds(waitDuration += kTtl.count() + 100),
+      std::chrono::milliseconds(waitDuration += kTtl.count() + 200),
       [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
         ASSERT_FALSE(maybeThriftVal.has_value());
