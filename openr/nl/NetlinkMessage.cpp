@@ -100,7 +100,7 @@ NetlinkMessage::getSemiFuture() {
 
 void
 NetlinkMessage::setReturnStatus(int status) {
-  VLOG(1) << "Netlink request completed. retval=" << status << ", "
+  VLOG(3) << "Netlink request completed. retval=" << status << ", "
           << folly::errnoStr(std::abs(status));
   promise_.setValue(status);
 }

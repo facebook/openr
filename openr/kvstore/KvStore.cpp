@@ -1593,6 +1593,11 @@ KvStoreDb::processThriftSuccess(
     return;
   }
 
+  // ATTN: In parallel link case, peer state can be set to IDLE when
+  //       parallel adj comes up before the previous full-sync response
+  //       being received. KvStoreDb will ignore the old full-sync
+  //       response and will rely on the new full-sync response to
+  //       promote the state.
   auto& peer = thriftPeers_.at(peerName);
   if (peer.state == KvStorePeerState::IDLE) {
     LOG(WARNING) << "Ignore response from: " << peerName
@@ -1600,14 +1605,13 @@ KvStoreDb::processThriftSuccess(
     return;
   }
 
-  // ATTN: In parallel link case, peer state can be set to IDLE when
-  //       parallel adj comes up before the previous full-sync response
-  //       being received. KvStoreDb will ignore the old full-sync
-  //       response and will rely on the new full-sync response to
-  //       promote the state.
+  // State transition
   KvStorePeerState oldState = peer.state;
   peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
   logStateTransition(peerName, oldState, peer.state);
+
+  // Log full-sync event via replicate queue
+  logSyncEvent(peerName, timeDelta);
 
   // Successfully received full-sync response. Double the parallel
   // sync limit. This is to:
@@ -2667,8 +2671,13 @@ KvStoreDb::cleanupTtlCountdownQueue() {
     // no key expires
     return;
   }
+
   fb303::fbData->addStatValue(
       "kvstore.expired_key_vals", expiredKeys.size(), fb303::SUM);
+
+  // ATTN: expired key will be ONLY notified to local subscribers
+  //       via replicate-queue. KvStore will NOT flood publication
+  //       with expired keys ONLY to external peers.
   thrift::Publication expiredKeysPub{};
   *expiredKeysPub.expiredKeys_ref() = std::move(expiredKeys);
   floodPublication(std::move(expiredKeysPub));
@@ -2921,6 +2930,14 @@ KvStoreDb::floodPublication(
   if (publication.keyVals_ref()->empty()) {
     return;
   }
+
+  // Key collection to be flooded
+  auto keysToUpdate = folly::gen::from(*publication.keyVals_ref()) |
+      folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
+
+  LOG(INFO) << "Flood publication from: " << kvParams_.nodeId
+            << " to peers with: " << keysToUpdate.size()
+            << " key-vals. Updated keys:  " << folly::join(",", keysToUpdate);
 
   if (setFloodRoot and not senderId.has_value()) {
     // I'm the initiator, set flood-root-id
