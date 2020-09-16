@@ -167,9 +167,7 @@ add_fbthrift_cpp_library(
   OPTIONS
     json
   DEPENDS
-    openr_config_cpp2
     lsdb_cpp2
-    spark_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} link_monitor_cpp2)
 

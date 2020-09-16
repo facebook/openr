@@ -56,6 +56,11 @@ struct ReflectedNeighborInfo {
 //
 typedef i32 OpenrVersion
 
+struct OpenrVersions {
+ 1: OpenrVersion version
+ 2: OpenrVersion lowestSupportedVersion
+}
+
 //
 // Spark will define 3 types of msg and fit into SparkPacket thrift structure:
 // 1. SparkHelloMsg;

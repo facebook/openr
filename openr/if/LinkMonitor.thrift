@@ -14,13 +14,6 @@ namespace py3 openr.thrift
 namespace lua openr.LinkMonitor
 
 include "Lsdb.thrift"
-include "Spark.thrift"
-
-// TODO: Change the definition to Spark.thrift to break thrift dependency
-struct OpenrVersions {
- 1: Spark.OpenrVersion version
- 2: Spark.OpenrVersion lowestSupportedVersion
-}
 
 struct InterfaceDetails {
   1: Lsdb.InterfaceInfo info

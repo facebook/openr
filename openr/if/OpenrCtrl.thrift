@@ -22,6 +22,7 @@ include "LinkMonitor.thrift"
 include "Lsdb.thrift"
 include "Network.thrift"
 include "OpenrConfig.thrift"
+include "Spark.thrift"
 
 exception OpenrError {
   1: string message
@@ -505,7 +506,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Command to request OpenR version
    */
-  LinkMonitor.OpenrVersions getOpenrVersion() throws (1: OpenrError error)
+  Spark.OpenrVersions getOpenrVersion() throws (1: OpenrError error)
 
   /**
    * Command to request build information
