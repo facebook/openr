@@ -1509,7 +1509,7 @@ Decision::Decision(
     }
   });
 
-  // Add reader to process publication from KvStore
+  // Add reader to process static routes publication from prefix-manager
   addFiberTask(
       [q = std::move(staticRoutesUpdateQueue), this]() mutable noexcept {
         LOG(INFO) << "Starting static routes update processing fiber";
@@ -1517,7 +1517,7 @@ Decision::Decision(
           auto maybeThriftPub = q.get(); // perform read
           VLOG(2) << "Received static routes update";
           if (maybeThriftPub.hasError()) {
-            LOG(INFO) << "Terminating prefix manager update processing fiber";
+            LOG(INFO) << "Terminating static routes update processing fiber";
             break;
           }
           // Apply publication and update stored update status
