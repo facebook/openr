@@ -234,7 +234,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             decision_unicast_routes,
             fib_unicast_routes,
             "unicast",
-            ["Decision:unicast", "Openr-Fib:unicast"],
+            ["Openr-Decision:unicast", "Openr-Fib:unicast"],
         )
         all_success = all_success and ret
 
@@ -242,7 +242,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             decision_mpls_routes,
             fib_mpls_routes,
             "mpls",
-            ["Decision:mpls", "Openr-Fib:mpls"],
+            ["Openr-Decision:mpls", "Openr-Fib:mpls"],
         )
         all_success = all_success and ret
 

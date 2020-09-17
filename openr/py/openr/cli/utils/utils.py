@@ -1258,7 +1258,7 @@ def get_route_as_dict_in_str(
     elif route_type == "mpls":
         routes_dict = {
             str(route.topLabel): sorted(
-                ip_nexthop_to_str(nh, True) for nh in route.nextHops
+                ip_nexthop_to_str(nh, True, True) for nh in route.nextHops
             )
             for route in routes
         }
@@ -1364,6 +1364,7 @@ def prefixes_with_different_nexthops(
 
             # nexthop diff found
             if nh_diff_found:
+                print(key, l_nh_coll, r_nh_coll)
                 keys.append((key, l_nh_coll, r_nh_coll))
 
     return keys
@@ -1425,7 +1426,7 @@ def compare_route_db(
         caption = "Prefixes have different nexthops in {} and {}".format(*sources)
         rows = []
         for prefix, lhs_nexthops, rhs_nexthops in diff_prefixes:
-            rows.append([prefix, ", ".join(lhs_nexthops), ", ".join(rhs_nexthops)])
+            rows.append([prefix, len(lhs_nexthops), len(rhs_nexthops)])
         column_labels = ["Prefix"] + sources
         if not quiet:
             print(
@@ -1461,8 +1462,21 @@ def validate_route_nexthops(routes, interfaces, sources, quiet=False):
         invalid_nexthop = defaultdict(list)
         for nextHop in route.nextHops:
             nh = nextHop.address
+
+            # if nexthop addr is v6 link-local, then ifName must be specified
+            if (
+                ipnetwork.ip_version(nh.addr) == 6
+                and ipnetwork.is_link_local(nh.addr)
+                and not nh.ifName
+            ):
+                invalid_nexthop[INVALID_LINK_LOCAL].append(nextHop)
+
+            # next-hop can be empty for other types. Skip if it is the case
+            if nh.ifName is None:
+                continue
+
             if nh.ifName not in interfaces or not interfaces[nh.ifName].info.isUp:
-                invalid_nexthop[MISSING_NEXTHOP].append(ip_nexthop_to_str(nextHop))
+                invalid_nexthop[MISSING_NEXTHOP].append(nextHop)
                 continue
             # if nexthop addr is v4, make sure it belongs to same subnets as
             # interface addr
@@ -1477,18 +1491,13 @@ def validate_route_nexthops(routes, interfaces, sources, quiet=False):
                     ) == 4 and not ipnetwork.is_same_subnet(
                         nh.addr, prefix.prefixAddress.addr, "31"
                     ):
-                        invalid_nexthop[INVALID_SUBNET].append(
-                            ip_nexthop_to_str(nextHop)
-                        )
-            # if nexthop addr is v6, make sure it's a link local addr
-            elif ipnetwork.ip_version(nh.addr) == 6 and not ipnetwork.is_link_local(
-                nh.addr
-            ):
-                invalid_nexthop[INVALID_LINK_LOCAL].append(ip_nexthop_to_str(nextHop))
+                        invalid_nexthop[INVALID_SUBNET].append(nextHop)
 
         # build routes per error type
         for k, v in invalid_nexthop.items():
-            invalid_routes[k].extend(build_routes([dest], v))
+            invalid_routes[k].append(
+                network_types.UnicastRoute(dest=route.dest, nextHops=v)
+            )
 
     # if all good, then return early
     if not invalid_routes:
@@ -1535,7 +1544,9 @@ def mpls_action_to_str(mpls_action: network_types.MplsAction) -> str:
 
 
 def ip_nexthop_to_str(
-    nextHop: network_types.NextHopThrift, ignore_v4_iface: bool = False
+    nextHop: network_types.NextHopThrift,
+    ignore_v4_iface: bool = False,
+    ignore_v6_iface: bool = False,
 ) -> str:
     """
     Convert Network.BinaryAddress to string representation of a nexthop
@@ -1544,6 +1555,8 @@ def ip_nexthop_to_str(
     nh = nextHop.address
     ifName = "%{}".format(nh.ifName) if nh.ifName else ""
     if len(nh.addr) == 4 and ignore_v4_iface:
+        ifName = ""
+    if len(nh.addr) == 16 and ignore_v6_iface:
         ifName = ""
     addr_str = "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
 
