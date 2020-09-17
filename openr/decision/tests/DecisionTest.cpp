@@ -1201,14 +1201,11 @@ TEST(Decision, BestRouteSelection) {
   auto push2 = createMplsAction(
       thrift::MplsActionCode::PUSH, std::nullopt, std::vector<int32_t>{2});
   LOG(INFO) << toString(routeDb.unicastRoutes_ref()->at(0));
+  EXPECT_EQ(*routeDb.unicastRoutes_ref()->at(0).dest_ref(), addr1);
   EXPECT_THAT(
-      *routeDb.unicastRoutes_ref(),
-      testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
-          Field(
-              &thrift::UnicastRoute::nextHops,
-              testing::UnorderedElementsAre(
-                  createNextHopFromAdj(adj31, false, 20, push2))))));
+      *routeDb.unicastRoutes_ref()->at(0).nextHops_ref(),
+      testing::UnorderedElementsAre(
+          createNextHopFromAdj(adj31, false, 20, push2)));
 }
 
 //
@@ -4427,6 +4424,9 @@ class DecisionTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
+    // reset all global counters
+    fb303::fbData->resetAllData();
+
     auto tConfig = createConfig();
     config = std::make_shared<Config>(tConfig);
 
@@ -5457,7 +5457,6 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // publish the link state info to KvStore
   //
 
-  fb303::fbData->resetAllData();
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
@@ -5617,7 +5616,6 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   // publish the link state info to KvStore, but use different markers
   // those must be ignored by the decision module
   //
-  fb303::fbData->resetAllData();
   auto publication = createThriftPublication(
       {{"adj2:1", createAdjValue("1", 1, {adj12})},
        {"adji2:2", createAdjValue("2", 1, {adj21})},
@@ -5651,7 +5649,6 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   // publish initial link state info to KvStore, This should trigger the
   // SPF run.
   //
-  fb303::fbData->resetAllData();
   auto const publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
@@ -6043,7 +6040,6 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
  */
 TEST_F(DecisionTestFixture, DecisionSubReliability) {
   thrift::Publication initialPub;
-  fb303::fbData->resetAllData();
 
   // wait for the inital coldstart sync, expect it to be empty
   EXPECT_EQ(0, recvRouteUpdates().unicastRoutesToUpdate.size());
@@ -6394,7 +6390,6 @@ class EnableBestRouteSelectionFixture
   openr::thrift::OpenrConfig
   createConfig() override {
     auto tConfig = DecisionTestFixture::createConfig();
-    // set coldstart to be longer than debounce time
     tConfig.enable_best_route_selection_ref() = GetParam();
     return tConfig;
   }
@@ -6406,7 +6401,7 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Bool());
 
 //
-// Mixed type prefixe announcements (e.g. prefix1 with type BGP and type RIB )
+// Mixed type prefix announcements (e.g. prefix1 with type BGP and type RIB )
 // are allowed when enableBestRouteSelection_ = true,
 // Otherwise prefix will be skipped in route programming.
 //
