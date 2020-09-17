@@ -231,6 +231,7 @@ add_fbthrift_cpp_library(
     fib_cpp2
     kv_store_cpp2
     link_monitor_cpp2
+    spark_cpp2
     lsdb_cpp2
     network_cpp2
     fb303::fb303_thrift_cpp
