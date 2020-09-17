@@ -24,12 +24,6 @@ DEFINE_bool(
 DEFINE_int32(
     fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
 
-// [TO BE DEPRECATED]
-DEFINE_string(
-    platform_pub_url,
-    "ipc:///tmp/platform-pub-url",
-    "Publisher URL for interface/address notifications");
-
 using openr::NetlinkFibHandler;
 
 int

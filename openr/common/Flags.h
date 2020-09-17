@@ -55,19 +55,10 @@ DECLARE_int32(decision_debounce_max_ms);
 
 DECLARE_int32(openr_ctrl_port);
 DECLARE_int32(kvstore_rep_port);
+DECLARE_int32(fib_handler_port);
 
 DECLARE_bool(enable_plugin);
-
 DECLARE_string(areas);
-
-DECLARE_int32(monitor_pub_port);
-DECLARE_int32(monitor_rep_port);
-
-// [TO BE DEPRECATED]
-DECLARE_int32(system_agent_port);
-
-DECLARE_int32(fib_handler_port);
-DECLARE_string(platform_pub_url);
 DECLARE_string(domain);
 DECLARE_string(listen_addr);
 DECLARE_string(node_name);

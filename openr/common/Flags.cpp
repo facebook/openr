@@ -113,18 +113,6 @@ DEFINE_string(
     openr::thrift::KvStore_constants::kDefaultArea(),
     "Comma separated list of areas name specified as string");
 DEFINE_int32(
-    monitor_pub_port,
-    openr::Constants::kMonitorPubPort,
-    "The port monitor publishes on");
-DEFINE_int32(
-    monitor_rep_port,
-    openr::Constants::kMonitorRepPort,
-    "The port monitor replies on");
-DEFINE_int32(
-    system_agent_port,
-    openr::Constants::kSystemAgentPort,
-    "Switch agent thrift service port for Platform programming.");
-DEFINE_int32(
     fib_handler_port,
     openr::Constants::kFibAgentPort, // NOTE 100 is on purpose
     "Switch agent thrift service port for FIB programming.");
@@ -132,10 +120,6 @@ DEFINE_int32(
     spark_mcast_port,
     openr::Constants::kSparkMcastPort,
     "Spark UDP multicast port for sending spark-hello messages.");
-DEFINE_string(
-    platform_pub_url,
-    "ipc:///tmp/platform-pub-url",
-    "Publisher URL for interface/address notifications");
 DEFINE_string(
     domain,
     "terragraph",

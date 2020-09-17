@@ -252,16 +252,6 @@ class Constants {
   // The port KvStore replier listens on
   static constexpr int32_t kKvStoreRepPort{60002};
 
-  // The port monitor publishes on
-  static constexpr int32_t kMonitorPubPort{60007};
-
-  // The port monitor replies on
-  static constexpr int32_t kMonitorRepPort{60008};
-
-  // Switch agent thrift service port for Platform programming
-  // [TO BE DEPRECATED]
-  static constexpr int32_t kSystemAgentPort{60099};
-
   // Switch agent thrift service port for FIB programming
   static constexpr int32_t kFibAgentPort{60100};
 
