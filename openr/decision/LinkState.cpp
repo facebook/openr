@@ -700,7 +700,7 @@ LinkState::updateAdjacencyDatabase(
     if (newLink.getNhV6FromNode(nodeName) !=
         oldLink.getNhV6FromNode(nodeName)) {
       VLOG(1) << folly::sformat(
-          "V4-NextHop address change on link {}: {} => {}",
+          "V6-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV6FromNode(nodeName)),
           toString(newLink.getNhV6FromNode(nodeName)));
