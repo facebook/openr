@@ -1531,6 +1531,10 @@ Decision::Decision(
     pendingUpdates_.setNeedsFullRebuild();
     rebuildRoutes("RIB_POLICY_EXPIRED");
   });
+
+  // Initialize some stat keys
+  fb303::fbData->addStatExportType(
+      "decision.rib_policy_processing.time_ms", fb303::AVG);
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
@@ -1951,7 +1955,12 @@ Decision::rebuildRoutes(std::string const& event) {
         << "SEVERE: full route rebuild resulted in no routes";
     auto db = std::move(maybeRouteDb).value_or(DecisionRouteDb{});
     if (ribPolicy_) {
+      auto start = std::chrono::steady_clock::now();
       ribPolicy_->applyPolicy(db.unicastRoutes);
+      updateCounters(
+          "decision.rib_policy_processing.time_ms",
+          start,
+          std::chrono::steady_clock::now());
     }
     update = routeDb_.calculateUpdate(std::move(db));
   } else {
@@ -1964,8 +1973,13 @@ Decision::rebuildRoutes(std::string const& event) {
       }
     }
     if (ribPolicy_) {
+      auto start = std::chrono::steady_clock::now();
       auto const changes =
           ribPolicy_->applyPolicy(update.unicastRoutesToUpdate);
+      updateCounters(
+          "decision.rib_policy_processing.time_ms",
+          start,
+          std::chrono::steady_clock::now());
       for (auto const& prefix : changes.deletedRoutes) {
         update.unicastRoutesToDelete.push_back(prefix);
       }
@@ -2002,6 +2016,18 @@ Decision::getMaxFib() {
     maxFib = std::max(maxFib, kv.second);
   }
   return maxFib;
+}
+
+void
+Decision::updateCounters(
+    std::string key,
+    std::chrono::steady_clock::time_point start,
+    std::chrono::steady_clock::time_point end) const {
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  fb303::fbData->addStatValue(key, elapsedTime.count(), fb303::AVG);
+  LOG(INFO) << "Policy Processing time " << elapsedTime.count()
+            << " milliseconds";
 }
 
 void

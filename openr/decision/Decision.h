@@ -328,6 +328,11 @@ class Decision : public OpenrEventBase {
   // periodically called by counterUpdateTimer_, exposed publicly for testing
   void updateGlobalCounters() const;
 
+  void updateCounters(
+      std::string key,
+      std::chrono::steady_clock::time_point start,
+      std::chrono::steady_clock::time_point end) const;
+
  private:
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
