@@ -11,7 +11,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <boost/serialization/strong_typedef.hpp>
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>

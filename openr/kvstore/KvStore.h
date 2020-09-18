@@ -13,7 +13,6 @@
 #include <string>
 
 #include <boost/heap/priority_queue.hpp>
-#include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
@@ -73,6 +72,7 @@ struct TtlCountdownQueueEntry {
   }
 };
 
+// TODO: migrate to std::priority_queue
 using TtlCountdownQueue = boost::heap::priority_queue<
     TtlCountdownQueueEntry,
     // Always returns smallest first

@@ -22,7 +22,6 @@
 #if FOLLY_USE_SYMBOLIZER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
-#include <gflags/gflags.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
@@ -1778,49 +1777,49 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   }
   auto& areaLinkState = areaLinkStates_.at(area);
 
-  // LSDB addition/update
-  // deserialize contents of every LSDB key
-
   // Nothing to process if no adj/prefix db changes
   if (thriftPub.keyVals_ref()->empty() and
       thriftPub.expiredKeys_ref()->empty()) {
     return;
   }
 
-  for (const auto& kv : *thriftPub.keyVals_ref()) {
-    const auto& key = kv.first;
-    const auto& rawVal = kv.second;
-    std::string nodeName = getNodeNameFromKey(key);
-
+  // LSDB addition/update
+  for (const auto& [key, rawVal] : *thriftPub.keyVals_ref()) {
     if (not rawVal.value_ref().has_value()) {
       // skip TTL update
       DCHECK(*rawVal.ttlVersion_ref() > 0);
       continue;
     }
 
+    // parse nodeName from keys:
+    //  1) prefix:*
+    //  2) adj:*
+    //  3) fibtime:*
+    const std::string nodeName = getNodeNameFromKey(key);
+
     try {
+      // adjacencyDb: update keys starting with "adj:"
       if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-        // update adjacencyDb
         auto adjacencyDb =
             fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
                 rawVal.value_ref().value(), serializer_);
-        // TODO this sould come from KvStore.
-        adjacencyDb.area_ref() = area;
         CHECK_EQ(nodeName, *adjacencyDb.thisNodeName_ref());
+
+        // TODO - this should directly come from KvStore.
+        adjacencyDb.area_ref() = area;
+
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
         if (config_->getConfig().enable_ordered_fib_programming_ref().value_or(
                 false)) {
-          if (auto maybeHoldUpTtl = areaLinkState.getHopsFromAToB(
-                  myNodeName_, *adjacencyDb.thisNodeName_ref())) {
+          if (auto maybeHoldUpTtl =
+                  areaLinkState.getHopsFromAToB(myNodeName_, nodeName)) {
             holdUpTtl = maybeHoldUpTtl.value();
-            holdDownTtl = areaLinkState.getMaxHopsToNode(
-                              *adjacencyDb.thisNodeName_ref()) -
-                holdUpTtl;
+            holdDownTtl = areaLinkState.getMaxHopsToNode(nodeName) - holdUpTtl;
           }
         }
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyLinkStateChange(
-            *adjacencyDb.thisNodeName_ref(),
+            nodeName,
             areaLinkState.updateAdjacencyDatabase(
                 adjacencyDb, holdUpTtl, holdDownTtl),
             castToStd(adjacencyDb.perfEvents_ref()));
@@ -1831,18 +1830,21 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         continue;
       }
 
+      // prefixDb: update keys starting with "prefix:"
       if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
-        // update prefixDb
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
         CHECK_EQ(nodeName, *prefixDb.thisNodeName_ref());
+
         auto maybeNodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
         if (not maybeNodePrefixDb.has_value()) {
           continue;
         }
         auto nodePrefixDb = maybeNodePrefixDb.value();
+
         // TODO - this should directly come from KvStore.
         *nodePrefixDb.area_ref() = area;
+
         VLOG(1) << "Updating prefix database for node " << nodeName
                 << " from area " << area;
         fb303::fbData->addStatValue(
@@ -1853,6 +1855,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         continue;
       }
 
+      // update keys starting with "fibTime:"
       if (key.find(Constants::kFibTimeMarker.toString()) == 0) {
         try {
           std::chrono::milliseconds fibTime{stoll(rawVal.value_ref().value())};
@@ -1874,6 +1877,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   for (const auto& key : *thriftPub.expiredKeys_ref()) {
     std::string nodeName = getNodeNameFromKey(key);
 
+    // adjacencyDb: delete keys starting with "adj:"
     if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
       pendingUpdates_.applyLinkStateChange(
           nodeName,
@@ -1882,6 +1886,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       continue;
     }
 
+    // prefixDb: delete keys starting with "prefix:"
     if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
       // manually build delete prefix db to signal delete just as a client would
       thrift::PrefixDatabase deletePrefixDb;

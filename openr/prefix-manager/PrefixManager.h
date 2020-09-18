@@ -10,7 +10,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>

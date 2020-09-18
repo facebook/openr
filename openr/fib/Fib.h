@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <boost/serialization/strong_typedef.hpp>
 #include <folly/fibers/Semaphore.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>

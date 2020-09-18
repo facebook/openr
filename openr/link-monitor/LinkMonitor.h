@@ -12,7 +12,6 @@
 #include <string>
 #include <utility>
 
-#include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
