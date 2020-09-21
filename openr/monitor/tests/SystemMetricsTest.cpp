@@ -22,9 +22,9 @@ TEST(MonitorTestFixture, SystemMetrics) {
   // First memory query
   auto rssMem1 = systemMetrics_.getRSSMemBytes();
   EXPECT_TRUE(rssMem1.has_value());
-  // Check sanity of return value, check for > 1MB and < 100MB
+  // Check sanity of return value, check for > 1MB and < 150MB
   EXPECT_GT(rssMem1.value() / 1e6, 1);
-  EXPECT_LT(rssMem1.value() / 1e6, 100);
+  EXPECT_LT(rssMem1.value() / 1e6, 150);
 
   // Fill about 100 Mbytes of memory and check if monitor reports the increase
   std::vector<int64_t> v(13 * 0x100000);
