@@ -1,6 +1,6 @@
 # OpenR: Open Routing
 
-[![Build Status](https://github.com/facebook/openr/workflows/CI/badge.svg)](https://github.com/facebook/openr/actions?workflow=CI)
+[![Build Status](https://github.com/facebook/openr/workflows/linux/badge.svg)](https://github.com/facebook/openr/actions?workflow=linux)
 
 Open Routing, OpenR, is Facebook's internally designed and developed Interior Routing
 Protocol/Platform. OpenR was originally designed and built for performing routing on the
