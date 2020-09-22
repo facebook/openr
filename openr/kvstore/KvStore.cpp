@@ -1581,7 +1581,7 @@ KvStoreDb::processThriftSuccess(
 
   LOG(INFO) << "[Thrift Sync] Full-sync response received from: " << peerName
             << " with " << pub.keyVals_ref()->size() << " key-vals and "
-            << numMissingKeys << " missing keys. Incured " << kvUpdateCnt
+            << numMissingKeys << " missing keys. Incurred " << kvUpdateCnt
             << " key-value updates."
             << " Processing time: " << timeDelta.count() << "ms.";
 
@@ -2431,14 +2431,17 @@ KvStoreDb::processSyncResponse(
   const auto& syncPub = maybeSyncPub.value();
   const size_t kvUpdateCnt = mergePublication(syncPub, requestId);
   size_t numMissingKeys = 0;
+
+  LOG(INFO) << "[ZMQ Sync]: Full-sync response received from " << requestId
+            << " with " << syncPub.keyVals_ref()->size()
+            << " key-vals. Incurred " << kvUpdateCnt << " key-value updates";
+
   if (syncPub.tobeUpdatedKeys_ref().has_value()) {
     numMissingKeys = syncPub.tobeUpdatedKeys_ref()->size();
-  }
 
-  LOG(INFO) << "full-sync response received from " << requestId << " with "
-            << syncPub.keyVals_ref()->size() << " key-vals and "
-            << numMissingKeys << " missing keys. Incured " << kvUpdateCnt
-            << " key-value updates";
+    LOG(INFO) << "[ZMQ Sync]: " << numMissingKeys << " missing keys observed: "
+              << folly::join(",", *syncPub.tobeUpdatedKeys_ref());
+  }
 
   fb303::fbData->addStatValue(
       "kvstore.zmq.num_missing_keys", numMissingKeys, fb303::SUM);
