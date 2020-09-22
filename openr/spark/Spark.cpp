@@ -27,6 +27,8 @@
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/spark/Spark.h>
 
+#include <thrift/lib/cpp/protocol/TProtocolException.h>
+
 namespace fb303 = facebook::fb303;
 
 namespace {
@@ -608,6 +610,12 @@ Spark::parsePacket(
   try {
     pkt = fbzmq::util::readThriftObjStr<thrift::SparkHelloPacket>(
         readBuf, serializer_);
+  } catch (std::out_of_range const& err) {
+    LOG(INFO) << "Malformed Thrift packet: " << folly::exceptionStr(err);
+    return false;
+  } catch (apache::thrift::protocol::TProtocolException const& err) {
+    LOG(INFO) << "Malformed Thrift packet: " << folly::exceptionStr(err);
+    return false;
   } catch (std::exception const& err) {
     LOG(ERROR) << "Failed parsing hello packet " << folly::exceptionStr(err);
     if (isThrowParserErrorsOn_) {
