@@ -27,9 +27,10 @@ class KvStorePublisher {
   // Invoked whenever there is change. Apply filter and publish changes
   void publish(const thrift::Publication& pub);
 
+  template <class... Args>
   void
-  complete() {
-    std::move(publisher_).complete();
+  complete(Args&&... args) {
+    std::move(publisher_).complete(std::forward<Args>(args)...);
   }
 
  private:

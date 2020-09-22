@@ -192,7 +192,10 @@ OpenrCtrlHandler::closeKvStorePublishers() {
   LOG(INFO) << "Terminating " << publishers.size()
             << " active KvStore snoop stream(s).";
   for (auto& publisher : publishers) {
-    publisher->complete();
+    // We have to send an exception as part of the completion, otherwise
+    // thrift doesn't seem to notify the peer of the shutdown
+    publisher->complete(folly::make_exception_wrapper<std::runtime_error>(
+        "publisher terminated"));
   }
 }
 
