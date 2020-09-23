@@ -99,7 +99,11 @@ class PrefixAllocatorFixture : public ::testing::Test {
         prefixUpdatesQueue_,
         logSampleQueue_,
         kSyncInterval);
-    threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
+    threads_.emplace_back([&]() noexcept {
+      LOG(INFO) << "PrefixAllocator started. TID: "
+                << std::this_thread::get_id();
+      prefixAllocator_->run();
+    });
     prefixAllocator_->waitUntilRunning();
   }
 
@@ -111,9 +115,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
         config_,
         configStore_.get(),
         kvStoreWrapper_->getKvStore(),
-        false /* prefix-manager perf measurement */,
-        std::chrono::seconds(0),
-        false /* perPrefixKeys */);
+        false,
+        std::chrono::seconds(0));
     threads_.emplace_back([&]() noexcept {
       LOG(INFO) << "PrefixManager started. TID: " << std::this_thread::get_id();
       prefixManager_->run();
@@ -413,9 +416,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           currConfig,
           tempConfigStore.get(),
           store->getKvStore(),
-          false /* prefix-manager perf measurement */,
-          std::chrono::seconds(0),
-          false /* perPrefixKeys */);
+          false,
+          std::chrono::seconds(0));
       threads.emplace_back([&prefixManager]() noexcept {
         prefixManager->run();
       });

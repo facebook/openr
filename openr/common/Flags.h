@@ -49,6 +49,9 @@ DECLARE_bool(enable_lfa);
 DECLARE_int32(decision_debounce_min_ms);
 DECLARE_int32(decision_debounce_max_ms);
 
+// TODO: TO BE DEPRECATED
+DECLARE_bool(per_prefix_keys);
+
 //
 // TODO: [DEPRECATED] All following flags are deprecated in favor of config
 //
@@ -69,7 +72,6 @@ DECLARE_string(seed_prefix);
 DECLARE_bool(enable_prefix_alloc);
 DECLARE_int32(alloc_prefix_len);
 DECLARE_bool(static_prefix_alloc);
-DECLARE_bool(per_prefix_keys);
 
 DECLARE_bool(set_loopback_address);
 DECLARE_bool(override_loopback_addr);

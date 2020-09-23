@@ -396,8 +396,7 @@ main(int argc, char** argv) {
           configStore,
           kvStore,
           FLAGS_enable_perf_measurement,
-          initialDumpTime,
-          FLAGS_per_prefix_keys));
+          initialDumpTime));
 
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (config->isPrefixAllocationEnabled()) {

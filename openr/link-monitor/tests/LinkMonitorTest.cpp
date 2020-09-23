@@ -216,8 +216,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         configStore.get(),
         kvStoreWrapper->getKvStore(),
         false,
-        std::chrono::seconds(0),
-        false /* perPrefixKeys */);
+        std::chrono::seconds(0));
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";
       prefixManager->run();
@@ -508,23 +507,29 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>
   getNextPrefixDb(
-      std::string const& key,
+      std::string const& originatorId,
       std::string const& area =
           openr::thrift::KvStore_constants::kDefaultArea()) {
-    while (true) {
-      auto value = getPublicationValueForKey(key, area);
-      if (not value.has_value()) {
-        continue;
-      }
+    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes;
 
-      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-          value->value_ref().value(), serializer);
-      std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes;
-      for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
-        prefixes.emplace(*prefixEntry.prefix_ref(), prefixEntry);
+    // Leverage KvStoreFilter to get `prefix:*` change
+    std::optional<KvStoreFilters> kvFilters{KvStoreFilters(
+        {Constants::kPrefixDbMarker.toString()}, {originatorId})};
+    auto kvs = kvStoreWrapper->dumpAll(std::move(kvFilters), area);
+    for (const auto& [key, val] : kvs) {
+      if (auto value = val.value_ref()) {
+        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            *value, serializer);
+        // skip prefix entries marked as deleted
+        if (*prefixDb.deletePrefix_ref()) {
+          continue;
+        }
+        for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
+          prefixes.emplace(*prefixEntry.prefix_ref(), prefixEntry);
+        }
       }
-      return prefixes;
     }
+    return prefixes;
   }
 
   void
@@ -1808,66 +1813,73 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
  * - set link to down state and verify that it removes all associated addresses
  */
 TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
-  // Verify that initial DB has empty prefix entries
-  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes;
+  SetUp({thrift::KvStore_constants::kDefaultArea()});
 
-  prefixes = getNextPrefixDb("prefix:node-1");
+  const std::string nodeName = "node-1";
+  const std::string linkLocalAddr1 = "fe80::1/128";
+  const std::string linkLocalAddr2 = "fe80::2/64";
+  const std::string loopbackAddrV4 = "10.127.240.1/32";
+  const std::string loopbackAddrV4Subnet = "10.128.241.1/24";
+  const std::string loopbackAddrV6_1 = "2803:cafe:babe::1/128";
+  const std::string loopbackAddrV6_2 = "2803:6080:4958:b403::1/128";
+  const std::string loopbackAddrV6Subnet = "2803:6080:4958:b403::1/64";
+
+  //
+  // Verify that initial DB has empty prefix entries
+  //
+
+  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes{};
+  prefixes =
+      getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
   EXPECT_EQ(0, prefixes.size());
 
   //
-  // Send link up event
-  // Advertise some dummy and wrong prefixes
+  // Send link UP event(i.e. mixed with VALID and INVALID loopback address)
   //
+
   nlEventsInjector->sendLinkEvent("loopback", 101, true);
 
-  // push some invalid loopback addresses
-  nlEventsInjector->sendAddrEvent("loopback", "fe80::1/128", true);
-  nlEventsInjector->sendAddrEvent("loopback", "fe80::2/64", true);
+  // 1) push INVALID loopback addresses
+  nlEventsInjector->sendAddrEvent("loopback", linkLocalAddr1, true);
+  nlEventsInjector->sendAddrEvent("loopback", linkLocalAddr2, true);
 
-  // push some valid loopback addresses
-  nlEventsInjector->sendAddrEvent("loopback", "10.127.240.1/32", true);
-  nlEventsInjector->sendAddrEvent(
-      "loopback", "2803:6080:4958:b403::1/128", true);
-  nlEventsInjector->sendAddrEvent("loopback", "2803:cafe:babe::1/128", true);
+  // 2) push VALID loopback addresses WITHOUT subnet
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV4, true);
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV6_1, true);
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV6_2, true);
 
-  // push some valid interface addresses with subnet
-  nlEventsInjector->sendAddrEvent("loopback", "10.128.241.1/24", true);
-  nlEventsInjector->sendAddrEvent(
-      "loopback", "2803:6080:4958:b403::1/64", true);
+  // 3) push VALID interface addresses WITH subnet
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV4Subnet, true);
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV6Subnet, true);
 
   // Get interface updates
   recvAndReplyIfUpdate(); // coalesced updates by throttling
 
-  // verify
-  prefixes.clear();
-  while (prefixes.size() != 5) {
-    LOG(INFO) << "Testing address advertisements";
-    prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 5) {
-      LOG(INFO) << "Looking for 5 prefixes got " << prefixes.size();
-      continue;
-    }
-    EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
-    EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:cafe:babe::1/128")));
-    EXPECT_EQ(1, prefixes.count(toIpPrefix("10.127.240.1/32")));
+  LOG(INFO) << "Testing address advertisements";
 
-    EXPECT_EQ(1, prefixes.count(toIpPrefix("10.128.241.0/24")));
-    EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::/64")));
+  while (prefixes.size() != 5) {
+    prefixes =
+        getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
   }
+
+  // verify prefixes with VALID prefixes has been advertised
+  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV4)));
+  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV4Subnet)));
+  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6_1)));
+  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6_2)));
+  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6Subnet)));
 
   //
   // Withdraw prefix and see it is being withdrawn
   //
 
-  // withdraw some addresses
-  nlEventsInjector->sendAddrEvent("loopback", "10.127.240.1/32", false);
-  nlEventsInjector->sendAddrEvent("loopback", "2803:cafe:babe::1/128", false);
+  // 1) withdraw addresses WITHOUT subnet
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV4, false);
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV6_1, false);
 
-  // withdraw addresses with subnet
-  nlEventsInjector->sendAddrEvent("loopback", "10.128.241.1/24", false);
-  nlEventsInjector->sendAddrEvent(
-      "loopback", "2803:6080:4958:b403::1/64", false);
+  // 2) withdraw addresses WITH subnet
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV4Subnet, false);
+  nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV6Subnet, false);
 
   // Get interface updates
   const auto startTs = std::chrono::steady_clock::now();
@@ -1877,27 +1889,25 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   // Threshold check to ensure that we react to published events instead of sync
   EXPECT_LT(elapsed.count(), 3);
 
-  // verify
-  prefixes.clear();
+  LOG(INFO) << "Testing address withdraws";
+
   while (prefixes.size() != 1) {
-    LOG(INFO) << "Testing address withdraws";
-    prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 1) {
-      LOG(INFO) << "Looking for 1 prefixes got " << prefixes.size();
-      continue;
-    }
-    ASSERT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
-    auto& prefixEntry = prefixes.at(toIpPrefix("2803:6080:4958:b403::1/128"));
-    EXPECT_EQ(
-        Constants::kDefaultPathPreference,
-        prefixEntry.metrics_ref()->path_preference_ref());
-    EXPECT_EQ(
-        Constants::kDefaultSourcePreference,
-        prefixEntry.metrics_ref()->source_preference_ref());
-    EXPECT_EQ(
-        std::set<std::string>({"INTERFACE_SUBNET", "node-1:loopback"}),
-        prefixEntry.tags_ref());
+    prefixes =
+        getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
   }
+
+  ASSERT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6_2)));
+  auto& prefixEntry = prefixes.at(toIpPrefix(loopbackAddrV6_2));
+  EXPECT_EQ(
+      Constants::kDefaultPathPreference,
+      prefixEntry.metrics_ref()->path_preference_ref());
+  EXPECT_EQ(
+      Constants::kDefaultSourcePreference,
+      prefixEntry.metrics_ref()->source_preference_ref());
+  EXPECT_EQ(
+      std::set<std::string>(
+          {"INTERFACE_SUBNET", folly::sformat("{}:loopback", nodeName)}),
+      prefixEntry.tags_ref());
 
   //
   // Send link down event
@@ -1906,17 +1916,13 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   nlEventsInjector->sendLinkEvent("loopback", 101, false);
   recvAndReplyIfUpdate();
 
-  //
   // Verify all addresses are withdrawn on link down event
-  //
   while (prefixes.size() != 0) {
-    LOG(INFO) << "Testing prefix withdraws";
-    prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 0) {
-      LOG(INFO) << "Looking for 0 prefixes got " << prefixes.size();
-      continue;
-    }
+    prefixes =
+        getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
   }
+
+  LOG(INFO) << "All prefixes get withdrawn.";
 }
 
 TEST_F(LinkMonitorTestFixture, GetAllLinks) {

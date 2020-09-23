@@ -42,12 +42,10 @@ PrefixManager::PrefixManager(
     PersistentStore* configStore,
     KvStore* kvStore,
     bool enablePerfMeasurement,
-    const std::chrono::seconds& initialDumpTime,
-    bool perPrefixKeys)
+    const std::chrono::seconds& initialDumpTime)
     : nodeId_(config->getNodeName()),
       configStore_{configStore},
       kvStore_(kvStore),
-      perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
@@ -278,52 +276,16 @@ PrefixManager::syncKvStore() {
   std::vector<std::pair<std::string, std::string>> keyVals;
   std::unordered_set<std::string> nowAdvertisingKeys;
 
-  if (perPrefixKeys_) {
-    for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
-      CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
-      auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
-      auto& bestEntry = typeToPrefixes.at(bestType);
-      addPerfEventIfNotExist(
-          addingEvents_[bestType][prefix], "UPDATE_KVSTORE_THROTTLED");
-      for (const auto& key : updateKvStorePrefixEntry(bestEntry)) {
-        nowAdvertisingKeys.emplace(key);
-        keysToClear_.erase(key);
-      }
+  for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
+    CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
+    auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
+    auto& bestEntry = typeToPrefixes.at(bestType);
+    addPerfEventIfNotExist(
+        addingEvents_[bestType][prefix], "UPDATE_KVSTORE_THROTTLED");
+    for (const auto& key : updateKvStorePrefixEntry(bestEntry)) {
+      nowAdvertisingKeys.emplace(key);
+      keysToClear_.erase(key);
     }
-  } else {
-    thrift::PrefixDatabase prefixDb;
-    *prefixDb.thisNodeName_ref() = nodeId_;
-    thrift::PerfEvents* mostRecentEvents = nullptr;
-    for (auto& [prefix, typeToPrefixes] : prefixMap_) {
-      CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
-      auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
-      auto& bestEntry = typeToPrefixes.at(bestType);
-      auto& perfEvent = addingEvents_[bestType][prefix];
-      addPerfEventIfNotExist(perfEvent, "UPDATE_KVSTORE_THROTTLED");
-      if (nullptr == mostRecentEvents or
-          perfEvent.events_ref()->back().unixTs_ref().value() >
-              mostRecentEvents->events_ref()->back().unixTs_ref().value()) {
-        mostRecentEvents = &perfEvent;
-      }
-      prefixDb.prefixEntries_ref()->emplace_back(bestEntry.tPrefixEntry);
-    }
-    if (enablePerfMeasurement_ and nullptr != mostRecentEvents) {
-      prefixDb.perfEvents_ref() = *mostRecentEvents;
-    }
-    const auto prefixDbKey =
-        folly::sformat("{}{}", Constants::kPrefixDbMarker.toString(), nodeId_);
-    for (const auto& area : allAreas_) {
-      bool const changed = kvStoreClient_->persistKey(
-          prefixDbKey,
-          fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_),
-          ttlKeyInKvStore_,
-          area);
-      LOG_IF(INFO, changed)
-          << "Updating all " << prefixDb.prefixEntries_ref()->size()
-          << " prefixes in KvStore " << prefixDbKey << " area: " << area;
-    }
-    nowAdvertisingKeys.emplace(prefixDbKey);
-    keysToClear_.erase(prefixDbKey);
   }
 
   thrift::PrefixDatabase deletedPrefixDb;

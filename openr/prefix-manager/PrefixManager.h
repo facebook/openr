@@ -41,8 +41,7 @@ class PrefixManager final : public OpenrEventBase {
       KvStore* kvStore,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
-      const std::chrono::seconds& initialDumpTime,
-      bool perPrefixKeys = true);
+      const std::chrono::seconds& initialDumpTime);
 
   ~PrefixManager();
 
@@ -174,8 +173,6 @@ class PrefixManager final : public OpenrEventBase {
 
   // keep track of prefixDB on disk
   thrift::PrefixDatabase diskState_;
-
-  bool perPrefixKeys_{true};
 
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};

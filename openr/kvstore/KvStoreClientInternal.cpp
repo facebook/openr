@@ -55,7 +55,6 @@ KvStoreClientInternal::~KvStoreClientInternal() {
   // - Otherwise, will wait the EventBase to run;
   eventBase_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // destory your timers
-    LOG(INFO) << "Destroy timers inside KvStoreClientInternal...";
     advertiseKeyValsTimer_.reset();
     ttlTimer_.reset();
     checkPersistKeyTimer_.reset();
@@ -68,6 +67,7 @@ KvStoreClientInternal::~KvStoreClientInternal() {
 void
 KvStoreClientInternal::stop() {
   // wait for fiber to be closed before destroy KvStoreClientInternal
+  taskFuture_.cancel();
   taskFuture_.wait();
   LOG(INFO) << "Fiber task closed...";
 }

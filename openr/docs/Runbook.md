@@ -501,21 +501,6 @@ deprecated soon. This is just for safely rollout purpose
 USE_FLOOD_OPTIMIZATION=false
 ```
 
-#### PER_PREFIX_KEYS
-
-OpenR advertises prefix DB (key-value) where the key value contains all the
-prefixes advertised by a node. Enabling 'PER_PREFIX_KEYS' flag causes each
-prefix to be advertised as a single 'key-value' pair. This is helpful when
-the prefix DB contains large number of keys as it allows incremental prefix
-updates from the originator. This feature is backward incompatible, however
-versions that support the feature can have mixed mode of prefix keys, i.e. some
-nodes advertising per prefix key and some advertising entire prefix DB. The
-minimum OpenR version that supports this feature is 20190805.
-
-```
-PER_PREFIX_KEYS=true
-```
-
 ### TLS Related Flags
 
 We are in the process of adding TLS for all openr traffic. This will be
