@@ -995,7 +995,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
 
     // nodeLabel is non-zero value read from config_, override to 0 to
     // honor flag.
-    auto thriftAdjDb = linkMonitor->getLinkMonitorAdjacencies().get();
+    auto thriftAdjDb = linkMonitor->getAdjacencies().get();
     EXPECT_TRUE(thriftAdjDb);
     EXPECT_EQ(0, *thriftAdjDb->nodeLabel_ref());
   }

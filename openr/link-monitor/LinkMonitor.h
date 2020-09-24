@@ -136,7 +136,7 @@ class LinkMonitor final : public OpenrEventBase {
       std::optional<int32_t> overrideMetric);
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
-  getLinkMonitorAdjacencies();
+  getAdjacencies();
   folly::SemiFuture<std::vector<LinkEntry>> getAllLinks();
 
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
@@ -163,9 +163,6 @@ class LinkMonitor final : public OpenrEventBase {
   void neighborDownEvent(const thrift::SparkNeighborEvent& event);
   void neighborRttChangeEvent(const thrift::SparkNeighborEvent& event);
 
-  // submit events to monitor
-  void logNeighborEvent(thrift::SparkNeighborEvent const& event);
-
   /*
    * [Netlink Platform] related functions
    */
@@ -190,18 +187,6 @@ class LinkMonitor final : public OpenrEventBase {
   // called upon interface change in getOrCreateInterfaceEntry()
   void advertiseIfaceAddr();
 
-  // get next try time, which should be the minimum remaining time among
-  // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
-  // return 0 if no more unstable interface
-  std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
-
-  // link events
-  void logLinkEvent(
-      const std::string& iface,
-      bool wasUp,
-      bool isUp,
-      std::chrono::milliseconds backoffTime);
-
   /*
    * [Kvstore] PEER UP/DOWN events sent to Kvstore over peerUpdatesQueue_
    *
@@ -223,12 +208,6 @@ class LinkMonitor final : public OpenrEventBase {
   // advertise to all areas
   void advertiseKvStorePeers(
       const std::unordered_map<std::string, thrift::PeerSpec>& upPeers = {});
-
-  // peer events
-  void logPeerEvent(
-      const std::string& event,
-      const std::string& peerName,
-      const thrift::PeerSpec& peerSpec);
 
   /*
    * [Kvstore] Advertise my adjacencies_ (kvStoreClient_->persistKey)
@@ -257,19 +236,39 @@ class LinkMonitor final : public OpenrEventBase {
    */
   void advertiseRedistAddrs();
 
-  //
-  // immutable state/invariants
-  //
+  /*
+   * [Util function] general function used for util purpose
+   */
+
+  // get next try time, which should be the minimum remaining time among
+  // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
+  // return 0 if no more unstable interface
+  std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
+
+  // build AdjacencyDatabase
+  thrift::AdjacencyDatabase buildAdjacencyDatabase(
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
+
+  // submit events to monitor
+  void logNeighborEvent(thrift::SparkNeighborEvent const& event);
+
+  // link events
+  void logLinkEvent(
+      const std::string& iface,
+      bool wasUp,
+      bool isUp,
+      std::chrono::milliseconds backoffTime);
+
+  // peer events
+  void logPeerEvent(
+      const std::string& event,
+      const std::string& peerName,
+      const thrift::PeerSpec& peerSpec);
 
   // used to build the key names for this node
   const std::string nodeId_;
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
-
-  //
-  // Mutable states that reads from config, can be reload by loadConfig
-  //
-
   // enable v4
   bool enableV4_{false};
   // enable segment routing

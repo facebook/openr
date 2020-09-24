@@ -542,47 +542,8 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
     advertiseAdjacenciesThrottled_->cancel();
   }
 
-  auto adjDb = thrift::AdjacencyDatabase();
-  *adjDb.thisNodeName_ref() = nodeId_;
-  adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
-  adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
-  *adjDb.area_ref() = area;
-  for (const auto& [_, adjValue] : adjacencies_) {
-    // ignore unrelated area
-    if (adjValue.area != area) {
-      continue;
-    }
-    // NOTE: copy on purpose
-    auto adj = folly::copy(adjValue.adjacency);
-
-    // Set link overload bit
-    adj.isOverloaded_ref() =
-        state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
-
-    // Override metric with link metric if it exists
-    adj.metric_ref() = folly::get_default(
-        *state_.linkMetricOverrides_ref(),
-        *adj.ifName_ref(),
-        *adj.metric_ref());
-
-    // Override metric with adj metric if it exists
-    thrift::AdjKey adjKey;
-    *adjKey.nodeName_ref() = *adj.otherNodeName_ref();
-    *adjKey.ifName_ref() = *adj.ifName_ref();
-    adj.metric_ref() = folly::get_default(
-        *state_.adjMetricOverrides_ref(), adjKey, *adj.metric_ref());
-
-    adjDb.adjacencies_ref()->emplace_back(std::move(adj));
-  }
-
-  // Add perf information if enabled
-  if (enablePerfMeasurement_) {
-    thrift::PerfEvents perfEvents;
-    addPerfEvent(perfEvents, nodeId_, "ADJ_DB_UPDATED");
-    adjDb.perfEvents_ref() = perfEvents;
-  } else {
-    DCHECK(!adjDb.perfEvents_ref().has_value());
-  }
+  // Extract information from `adjacencies_`
+  auto adjDb = buildAdjacencyDatabase(area);
 
   LOG(INFO) << "Updating adjacency database in KvStore with "
             << adjDb.adjacencies_ref()->size() << " entries in area: " << area;
@@ -725,6 +686,56 @@ LinkMonitor::getRetryTimeOnUnstableInterfaces() {
   }
 
   return minRemainMs;
+}
+
+thrift::AdjacencyDatabase
+LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
+  // prepare adjacency database
+  thrift::AdjacencyDatabase adjDb;
+
+  *adjDb.thisNodeName_ref() = nodeId_;
+  adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
+  adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
+  *adjDb.area_ref() = area;
+
+  for (const auto& [_, adjValue] : adjacencies_) {
+    // ignore unrelated area
+    if (adjValue.area != area) {
+      continue;
+    }
+    // NOTE: copy on purpose
+    auto adj = folly::copy(adjValue.adjacency);
+
+    // Set link overload bit
+    adj.isOverloaded_ref() =
+        state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
+
+    // Override metric with link metric if it exists
+    adj.metric_ref() = folly::get_default(
+        *state_.linkMetricOverrides_ref(),
+        *adj.ifName_ref(),
+        *adj.metric_ref());
+
+    // Override metric with adj metric if it exists
+    thrift::AdjKey adjKey;
+    *adjKey.nodeName_ref() = *adj.otherNodeName_ref();
+    *adjKey.ifName_ref() = *adj.ifName_ref();
+    adj.metric_ref() = folly::get_default(
+        *state_.adjMetricOverrides_ref(), adjKey, *adj.metric_ref());
+
+    adjDb.adjacencies_ref()->emplace_back(std::move(adj));
+  }
+
+  // Add perf information if enabled
+  if (enablePerfMeasurement_) {
+    thrift::PerfEvents perfEvents;
+    addPerfEvent(perfEvents, nodeId_, "ADJ_DB_UPDATED");
+    adjDb.perfEvents_ref() = perfEvents;
+  } else {
+    DCHECK(!adjDb.perfEvents_ref().has_value());
+  }
+
+  return adjDb;
 }
 
 InterfaceEntry* FOLLY_NULLABLE
@@ -1130,43 +1141,14 @@ LinkMonitor::getInterfaces() {
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
-LinkMonitor::getLinkMonitorAdjacencies() {
+LinkMonitor::getAdjacencies() {
   VLOG(2) << "Dump adj requested, reply with " << adjacencies_.size()
           << " adjs";
 
   folly::Promise<std::unique_ptr<thrift::AdjacencyDatabase>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p)]() mutable {
-    // build adjacency database
-    thrift::AdjacencyDatabase adjDb;
-    *adjDb.thisNodeName_ref() = nodeId_;
-    adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
-    adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
-
-    // fill adjacency details
-    for (const auto& [_, adjValue] : adjacencies_) {
-      // NOTE: copy on purpose
-      auto adj = folly::copy(adjValue.adjacency);
-
-      // Set link overload bit
-      adj.isOverloaded_ref() =
-          state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
-
-      // Override metric with link metric if it exists
-      adj.metric_ref() = folly::get_default(
-          *state_.linkMetricOverrides_ref(),
-          *adj.ifName_ref(),
-          *adj.metric_ref());
-
-      // Override metric with adj metric if it exists
-      thrift::AdjKey adjKey;
-      *adjKey.nodeName_ref() = *adj.otherNodeName_ref();
-      *adjKey.ifName_ref() = *adj.ifName_ref();
-      adj.metric_ref() = folly::get_default(
-          *state_.adjMetricOverrides_ref(), adjKey, *adj.metric_ref());
-
-      adjDb.adjacencies_ref()->emplace_back(std::move(adj));
-    }
+    auto adjDb = buildAdjacencyDatabase();
     p.setValue(std::make_unique<thrift::AdjacencyDatabase>(std::move(adjDb)));
   });
   return sf;

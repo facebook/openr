@@ -841,7 +841,7 @@ OpenrCtrlHandler::semifuture_getInterfaces() {
 folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
   CHECK(linkMonitor_);
-  return linkMonitor_->getLinkMonitorAdjacencies();
+  return linkMonitor_->getAdjacencies();
 }
 
 //
