@@ -58,8 +58,8 @@ printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   }
   if (not state.linkMetricOverrides_ref()->empty()) {
     VLOG(1) << "\tlinkMetricOverrides: ";
-    for (auto const& kv : *state.linkMetricOverrides_ref()) {
-      VLOG(1) << "\t\t" << kv.first << ": " << kv.second;
+    for (auto const& [key, val] : *state.linkMetricOverrides_ref()) {
+      VLOG(1) << "\t\t" << key << ": " << val;
     }
   }
 }
@@ -427,12 +427,12 @@ LinkMonitor::getPeersFromAdjacencies(
     const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
     const std::string& area) {
   std::unordered_map<std::string, std::string> neighborToIface;
-  for (const auto& adjKv : adjacencies) {
-    if (adjKv.second.area != area || adjKv.second.isRestarting) {
+  for (const auto& [adjKey, adjValue] : adjacencies) {
+    if (adjValue.area != area or adjValue.isRestarting) {
       continue;
     }
-    const auto& nodeName = adjKv.first.first;
-    const auto& iface = adjKv.first.second;
+    const auto& nodeName = adjKey.first;
+    const auto& iface = adjKey.second;
 
     // Look up for node
     auto it = neighborToIface.find(nodeName);
@@ -467,11 +467,10 @@ LinkMonitor::advertiseKvStorePeers(
 
   // Get list of peers to delete
   std::vector<std::string> toDelPeers;
-  for (const auto& oldKv : oldPeers) {
-    const auto& nodeName = oldKv.first;
-    if (newPeers.count(nodeName) == 0) {
+  for (const auto& [nodeName, peerSpec] : oldPeers) {
+    if (newPeers.find(nodeName) == newPeers.end()) {
       toDelPeers.emplace_back(nodeName);
-      logPeerEvent("DEL_PEER", oldKv.first, oldKv.second);
+      logPeerEvent("DEL_PEER", nodeName, peerSpec);
     }
   }
 
@@ -484,21 +483,18 @@ LinkMonitor::advertiseKvStorePeers(
 
   // Get list of peers to add
   std::unordered_map<std::string, thrift::PeerSpec> toAddPeers;
-  for (const auto& newKv : newPeers) {
-    const auto& nodeName = newKv.first;
+  for (const auto& [nodeName, peerSpec] : newPeers) {
     // send out peer-add to kvstore if
     // 1. it's a new peer (not exist in old-peers)
     // 2. old-peer but peer-spec changed (e.g parallel link case)
     if (oldPeers.find(nodeName) == oldPeers.end() or
-        oldPeers.at(nodeName) != newKv.second) {
-      toAddPeers.emplace(nodeName, newKv.second);
-      logPeerEvent("ADD_PEER", newKv.first, newKv.second);
+        oldPeers.at(nodeName) != peerSpec) {
+      toAddPeers.emplace(nodeName, peerSpec);
+      logPeerEvent("ADD_PEER", nodeName, peerSpec);
     }
   }
 
-  for (const auto& upPeer : upPeers) {
-    const auto& name = upPeer.first;
-    const auto& spec = upPeer.second;
+  for (const auto& [name, spec] : upPeers) {
     // upPeer MUST already be in current state peers_
     CHECK(peers_.at(area).count(name));
 
@@ -551,14 +547,13 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
   adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
   *adjDb.area_ref() = area;
-  for (const auto& adjKv : adjacencies_) {
-    // 'second.second' is the adj object for this peer
-    // must match the area
-    if (adjKv.second.area != area) {
+  for (const auto& [_, adjValue] : adjacencies_) {
+    // ignore unrelated area
+    if (adjValue.area != area) {
       continue;
     }
     // NOTE: copy on purpose
-    auto adj = folly::copy(adjKv.second.adjacency);
+    auto adj = folly::copy(adjValue.adjacency);
 
     // Set link overload bit
     adj.isOverloaded_ref() =
@@ -591,19 +586,21 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
 
   LOG(INFO) << "Updating adjacency database in KvStore with "
             << adjDb.adjacencies_ref()->size() << " entries in area: " << area;
+
+  // Persist `adj:node_Id` key into KvStore via KvStoreClientInternal
   const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
   kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_, area);
-  fb303::fbData->addStatValue(
-      "link_monitor.advertise_adjacencies", 1, fb303::SUM);
 
   // Config is most likely to have changed. Update it in `ConfigStore`
   configStore_->storeThriftObj(kConfigKey, state_); // not awaiting on result
 
   // Update some flat counters
+  fb303::fbData->addStatValue(
+      "link_monitor.advertise_adjacencies", 1, fb303::SUM);
   fb303::fbData->setCounter("link_monitor.adjacencies", adjacencies_.size());
-  for (const auto& kv : adjacencies_) {
-    auto& adj = kv.second.adjacency;
+  for (const auto& [_, adjValue] : adjacencies_) {
+    auto& adj = adjValue.adjacency;
     fb303::fbData->setCounter(
         "link_monitor.metric." + *adj.otherNodeName_ref(), *adj.metric_ref());
   }
@@ -646,9 +643,7 @@ LinkMonitor::advertiseInterfaces() {
   // Create interface database
   thrift::InterfaceDatabase ifDb;
   *ifDb.thisNodeName_ref() = nodeId_;
-  for (auto& kv : interfaces_) {
-    auto& ifName = kv.first;
-    auto& interface = kv.second;
+  for (auto& [ifName, interface] : interfaces_) {
     // Perform regex match
     if (not checkIncludeExcludeRegex(
             ifName, includeItfRegexes_, excludeItfRegexes_)) {
@@ -672,8 +667,7 @@ LinkMonitor::advertiseRedistAddrs() {
   std::vector<thrift::PrefixEntry> prefixes;
 
   // Add redistribute addresses
-  for (auto& kv : interfaces_) {
-    auto& interface = kv.second;
+  for (auto& [_, interface] : interfaces_) {
     // Ignore in-active interfaces
     if (not interface.isActive()) {
       continue;
@@ -703,20 +697,21 @@ LinkMonitor::advertiseRedistAddrs() {
   }
 
   LOG_IF(INFO, prefixes.empty()) << "Advertising empty LOOPBACK addresses.";
-  // Advertise via prefix manager client
+
+  // Advertise LOOPBACK prefix via replicate queue
   thrift::PrefixUpdateRequest request;
   request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
   request.type_ref() = openr::thrift::PrefixType::LOOPBACK;
   *request.prefixes_ref() = std::move(prefixes);
-  // publish LOOPBACK prefixes to prefix manager
+
+  // publish to prefix manager
   prefixUpdatesQueue_.push(std::move(request));
 }
 
 std::chrono::milliseconds
 LinkMonitor::getRetryTimeOnUnstableInterfaces() {
   std::chrono::milliseconds minRemainMs{0};
-  for (auto& kv : interfaces_) {
-    auto& interface = kv.second;
+  for (auto& [_, interface] : interfaces_) {
     if (interface.isActive()) {
       continue;
     }
@@ -1103,9 +1098,7 @@ LinkMonitor::getInterfaces() {
     reply.isOverloaded_ref() = *state_.isOverloaded_ref();
 
     // Fill interface details
-    for (auto& kv : interfaces_) {
-      auto& ifName = kv.first;
-      auto& interface = kv.second;
+    for (auto& [ifName, interface] : interfaces_) {
       auto ifDetails = thrift::InterfaceDetails(
           apache::thrift::FRAGILE,
           interface.getInterfaceInfo(),
@@ -1151,9 +1144,9 @@ LinkMonitor::getLinkMonitorAdjacencies() {
     adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
 
     // fill adjacency details
-    for (const auto& adjKv : adjacencies_) {
+    for (const auto& [_, adjValue] : adjacencies_) {
       // NOTE: copy on purpose
-      auto adj = folly::copy(adjKv.second.adjacency);
+      auto adj = folly::copy(adjValue.adjacency);
 
       // Set link overload bit
       adj.isOverloaded_ref() =
