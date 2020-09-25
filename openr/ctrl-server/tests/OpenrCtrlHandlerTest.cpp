@@ -1382,7 +1382,6 @@ TEST_F(
   // ignoreTTL = false in specified in filter.
   // Client should receive publication associated with TTL update
   {
-    std::atomic<int> received{0};
     const std::string key{"key1"};
     thrift::KeyDumpParams filter;
     filter.keys_ref() = {key};
@@ -1430,8 +1429,7 @@ TEST_F(
         std::move(responseAndSubscription.stream)
             .toClientStream()
             .subscribeExTry(
-                folly::getEventBase(),
-                [&received, keyvals, &newTtlVersionSeen](auto&& t) {
+                folly::getEventBase(), [keyvals, &newTtlVersionSeen](auto&& t) {
                   if (not t.hasValue()) {
                     return;
                   }
@@ -1451,7 +1449,6 @@ TEST_F(
                         EXPECT_EQ(1, (*pub.keyVals_ref()).size());
                       }
                     }
-                    received++;
                   }
                 });
 
@@ -1482,7 +1479,6 @@ TEST_F(
   // ignoreTTL = true in specified in filter.
   // Client should not receive publication associated with TTL update
   {
-    std::atomic<int> received{0};
     const std::string key{"key3"};
     thrift::KeyDumpParams filter;
     filter.keys_ref() = {key};
@@ -1529,26 +1525,24 @@ TEST_F(
     auto subscription =
         std::move(responseAndSubscription.stream)
             .toClientStream()
-            .subscribeExTry(
-                folly::getEventBase(), [&received, keyvals](auto&& t) {
-                  if (not t.hasValue()) {
-                    return;
-                  }
+            .subscribeExTry(folly::getEventBase(), [keyvals](auto&& t) {
+              if (not t.hasValue()) {
+                return;
+              }
 
-                  for (const auto& kv : keyvals) {
-                    if (not t->keyVals_ref()->count(kv.first)) {
-                      continue;
-                    }
-                    auto& pub = *t;
-                    EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-                    ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
-                    if ((*pub.keyVals_ref()).count("key3") == 1) {
-                      const auto& val = (*pub.keyVals_ref())["key3"];
-                      EXPECT_LE(6, *val.ttlVersion_ref());
-                    }
-                    received++;
-                  }
-                });
+              for (const auto& kv : keyvals) {
+                if (not t->keyVals_ref()->count(kv.first)) {
+                  continue;
+                }
+                auto& pub = *t;
+                EXPECT_EQ(1, (*pub.keyVals_ref()).size());
+                ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
+                if ((*pub.keyVals_ref()).count("key3") == 1) {
+                  const auto& val = (*pub.keyVals_ref())["key3"];
+                  EXPECT_LE(6, *val.ttlVersion_ref());
+                }
+              }
+            });
 
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
 

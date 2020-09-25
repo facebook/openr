@@ -70,8 +70,10 @@ void
 OpenrThriftServerWrapper::stop() {
   // ATTN: it is user's responsibility to close the queue passed
   //       to OpenrThrifyServerWrapper before calling stop()
+  LOG(INFO) << "Stopping openr-ctrl handler";
   openrCtrlHandler_.reset();
   evb_.stop();
+  evb_.waitUntilStopped();
   evbThread_.join();
   openrCtrlThriftServerThread_.stop();
 
