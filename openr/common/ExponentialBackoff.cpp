@@ -15,10 +15,7 @@ namespace openr {
 
 template <typename Duration>
 ExponentialBackoff<Duration>::ExponentialBackoff()
-    : initialBackoff_(Duration(1)),
-      maxBackoff_(Duration(1)),
-      currentBackoff_(0),
-      isAbortAtMax_(false) {}
+    : ExponentialBackoff(Duration(1), Duration(2), false) {}
 
 template <typename Duration>
 ExponentialBackoff<Duration>::ExponentialBackoff(
