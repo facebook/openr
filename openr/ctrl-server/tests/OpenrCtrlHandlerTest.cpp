@@ -168,7 +168,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
 
-    openrThriftServerWrapper_->stop();
+    openrCtrlThriftClient_.reset();
 
     linkMonitor->stop();
     linkMonitorThread_.join();
@@ -188,6 +188,10 @@ class OpenrCtrlFixture : public ::testing::Test {
     decisionThread_.join();
 
     kvStoreWrapper_->stop();
+    kvStoreWrapper_.reset();
+
+    openrThriftServerWrapper_->stop();
+    openrThriftServerWrapper_.reset();
   }
 
   thrift::PeerSpec

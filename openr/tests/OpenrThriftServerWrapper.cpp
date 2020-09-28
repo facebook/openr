@@ -76,6 +76,7 @@ OpenrThriftServerWrapper::stop() {
   evb_.waitUntilStopped();
   evbThread_.join();
   openrCtrlThriftServerThread_.stop();
+  openrCtrlThriftServerThread_.join();
 
   LOG(INFO) << "Successfully stopped openr-ctrl thrift server";
 }
