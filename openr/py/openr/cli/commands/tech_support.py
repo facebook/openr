@@ -20,6 +20,7 @@ from openr.cli.commands import (
     kvstore,
     lm,
     monitor,
+    openr,
     perf,
     prefix_mgr,
 )
@@ -42,7 +43,6 @@ class TechSupportCmd(object):
             ("openr config file", self.print_config_file),
             ("openr runtime params", self.print_runtime_params),
             ("openr version", self.print_openr_version),
-            ("openr build information", self.print_build_info),
             ("openr config", self.print_config),
             ("breeze prefixmgr view", self.print_prefixmgr_view),
             ("breeze lm links", self.print_lm_links),
@@ -92,10 +92,7 @@ class TechSupportCmd(object):
         print(output)
 
     def print_openr_version(self):
-        lm.VersionCmd(self.cli_opts).run(False)
-
-    def print_build_info(self):
-        lm.BuildInfoCmd(self.cli_opts).run(False)
+        openr.VersionCmd(self.cli_opts).run(False)
 
     def print_config(self):
         config.ConfigPrefixAllocatorCmd(self.cli_opts).run()
