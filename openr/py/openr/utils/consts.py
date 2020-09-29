@@ -16,7 +16,7 @@ from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 class Consts(object):
     TIMEOUT_MS = 10000  # 10 seconds
-    CONST_TTL_INF = -2 ** 31
+    CONST_TTL_INF = -(2 ** 31)
     IP_TOS = 192
     ADJ_DB_MARKER = "adj:"
     PREFIX_DB_MARKER = "prefix:"
@@ -49,6 +49,3 @@ class Consts(object):
         + r"\[(?P<ipaddr>[a-fA-F0-9\.\:].*)/"
         + r"(?P<plen>[0-9]{1,3})\]"
     )
-
-    # Openr version at which area feature was added
-    OPENR_AREA_VERSION = 20191122

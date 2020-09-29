@@ -196,52 +196,6 @@ class UnsetAdjMetricCmd(LMCmdBase):
         client.unsetAdjacencyMetric(interface, node)
 
 
-class VersionCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, json: bool) -> None:
-        openr_version = client.getOpenrVersion()
-
-        if json:
-            version = utils.thrift_to_dict(openr_version)
-            print(utils.json_dumps(version))
-        else:
-            rows = []
-            rows.append(["Current Version", ":", openr_version.version])
-            rows.append(
-                ["Lowest Supported Version", ":", openr_version.lowestSupportedVersion]
-            )
-            print(
-                printing.render_horizontal_table(
-                    rows, column_labels=[], tablefmt="plain"
-                )
-            )
-
-
-class BuildInfoCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, json: bool) -> None:
-        info = client.getBuildInfo()
-
-        if json:
-            info = utils.thrift_to_dict(info)
-            print(utils.json_dumps(info))
-        else:
-            print("Build Information")
-            print("  Built by: {}".format(info.buildUser))
-            print("  Built on: {}".format(info.buildTime))
-            print("  Built at: {}".format(info.buildHost))
-            print("  Build path: {}".format(info.buildPath))
-            print("  Package Name: {}".format(info.buildPackageName))
-            print("  Package Version: {}".format(info.buildPackageVersion))
-            print("  Package Release: {}".format(info.buildPackageRelease))
-            print("  Build Revision: {}".format(info.buildRevision))
-            print("  Build Upstream Revision: {}".format(info.buildUpstreamRevision))
-            print("  Build Platform: {}".format(info.buildPlatform))
-            print(
-                "  Build Rule: {} ({}, {}, {})".format(
-                    info.buildRule, info.buildType, info.buildTool, info.buildMode
-                )
-            )
-
-
 class LMAdjCmd(LMCmdBase):
     def _run(self, client: OpenrCtrl.Client, nodes: set, json: bool) -> None:
         adj_db = client.getLinkMonitorAdjacencies()

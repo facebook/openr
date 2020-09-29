@@ -1814,11 +1814,6 @@ def print_spt_infos(
     print(printing.render_vertical_table(output))
 
 
-def is_area_feature_supported(client: OpenrCtrl.Client) -> bool:
-    openr_version = client.getOpenrVersion()
-    return openr_version.version >= Consts.OPENR_AREA_VERSION
-
-
 def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
     openr_area_config = client.getAreasConfig()
     return openr_area_config.areas
@@ -1829,9 +1824,6 @@ def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
 # return 'None'. If area ID is passed, API checks if it's valid and returns
 # the same ID
 def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
-    if not is_area_feature_supported(client):
-        return None
-
     # if no area is provided, return area in case only one area is configured
     areas = get_areas_list(client)
     if (area is None or area == "") and 1 == len(areas):

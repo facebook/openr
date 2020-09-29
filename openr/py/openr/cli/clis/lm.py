@@ -42,8 +42,6 @@ class LMCli(object):
         self.lm.add_command(
             UnsetAdjMetricCli().unset_adj_metric, name="unset-adj-metric"
         )
-        self.lm.add_command(VersionCli().version, name="version")
-        self.lm.add_command(BuildInfoCli().build_info, name="build-info")
 
     @click.group()
     @click.pass_context
@@ -160,9 +158,8 @@ class SetAdjMetricCli(object):
         """
         Set custom metric value for the adjacency
         """
-        question_str = (
-            "Are you sure to override metric "
-            "for adjacency {} {} ?".format(node, interface)
+        question_str = "Are you sure to override metric for adjacency {} {} ?".format(
+            node, interface
         )
         if not utils.yesno(question_str, yes):
             return
@@ -191,27 +188,3 @@ class UnsetAdjMetricCli(object):
         lm.UnsetAdjMetricCmd(cli_opts).run(node, interface, yes)
         nodes = parse_nodes(cli_opts, "")
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
-
-
-class VersionCli(object):
-    @click.command()
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.pass_obj
-    def version(cli_opts, json):  # noqa: B902
-        """
-        Get OpenR version
-        """
-
-        lm.VersionCmd(cli_opts).run(json)
-
-
-class BuildInfoCli(object):
-    @click.command()
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.pass_obj
-    def build_info(cli_opts, json):  # noqa: B902
-        """
-        Get build information from running version of Open/R
-        """
-
-        lm.BuildInfoCmd(cli_opts).run(json)

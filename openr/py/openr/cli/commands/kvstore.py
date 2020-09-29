@@ -44,7 +44,8 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
     def _init_area(self, client: Union[OpenrCtrl.Client, OpenrCtrlCppClient]):
         # find out if area feature is supported
-        self.area_feature = utils.is_area_feature_supported(client)
+        # TODO: remove self.area_feature as it will be supported by default
+        self.area_feature = True
 
         # get list of areas if area feature is supported.
         self.areas = set()
