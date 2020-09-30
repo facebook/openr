@@ -89,7 +89,15 @@ dumpAllWithThriftClientFromMultiple(
     params.keys_ref() = {keyPrefix};
   }
 
-  LOG(INFO) << "Prepare requests to all Open/R instances";
+  auto addrStrs =
+      folly::gen::from(sockAddrs) |
+      folly::gen::mapped([](const folly::SocketAddress& sockAddr) {
+        return folly::sformat(
+            "[{}, {}]", sockAddr.getAddressStr(), sockAddr.getPort());
+      }) |
+      folly::gen::as<std::vector<std::string>>();
+
+  LOG(INFO) << "Dump kvStore key-vals from: " << folly::join(",", addrStrs);
 
   auto startTime = std::chrono::steady_clock::now();
   for (auto const& sockAddr : sockAddrs) {
@@ -116,13 +124,8 @@ dumpAllWithThriftClientFromMultiple(
     VLOG(3) << "Successfully connected to Open/R with addr: "
             << sockAddr.getAddressStr();
 
-    // Keep getKvStoreKeyValsFiltered() for backward compatibility purpose
-    if (area == thrift::KvStore_constants::kDefaultArea()) {
-      calls.emplace_back(client->semifuture_getKvStoreKeyValsFiltered(params));
-    } else {
-      calls.emplace_back(
-          client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
-    }
+    calls.emplace_back(
+        client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
   }
 
   // can't connect to ANY single Open/R instance
@@ -132,22 +135,23 @@ dumpAllWithThriftClientFromMultiple(
 
   folly::collectAll(calls).via(&evb).thenValue(
       [&](std::vector<folly::Try<openr::thrift::Publication>>&& results) {
-        LOG(INFO) << "Merge values received from Open/R instances"
-                  << ", results size: " << results.size();
+        LOG(INFO) << "Merge key-vals from " << results.size()
+                  << " different Open/R instances.";
 
         // loop semifuture collection to merge all values
         for (auto& result : results) {
-          VLOG(3) << "hasException: " << result.hasException()
-                  << ", hasValue: " << result.hasValue();
-
           // folly::Try will contain either value or exception
           // Do NOT CHECK(result.hasValue()) since exception can happen.
           if (result.hasException()) {
-            LOG(WARNING) << "Exception happened: "
-                         << folly::exceptionStr(result.exception());
+            LOG(ERROR) << "Exception: "
+                       << folly::exceptionStr(result.exception());
           } else if (result.hasValue()) {
-            VLOG(3) << "KvStore publication received";
-            KvStore::mergeKeyValues(merged, *result.value().keyVals_ref());
+            auto keyVals = *result.value().keyVals_ref();
+            const auto deltaPub = KvStore::mergeKeyValues(merged, keyVals);
+
+            LOG(INFO) << "Received kvstore publication with: " << keyVals.size()
+                      << " key-vals. Incurred " << deltaPub.size()
+                      << " key-val updates.";
           }
         }
         evb.terminateLoopSoon();
