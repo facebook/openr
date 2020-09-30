@@ -536,12 +536,20 @@ service OpenrCtrl extends fb303_core.BaseService {
   binary getConfigKey(1: string key) throws (1: OpenrError error)
 
   //
+  // Spark APIs
+  //
+
+  /*
+   * Send out SparkHelloMsg with `restarting` flag
+   * indicating graceful restart usage
+   */
+  void floodRestartingMsg() throws (1: OpenrError error)
+
+  //
   //  Monitor APIs (get log events)
   //
 
-  /**
-   * Get log events
-   */
+  // Get log events
   list<string> getEventLogs() throws (1: OpenrError error)
 
   // Get Openr Node Name

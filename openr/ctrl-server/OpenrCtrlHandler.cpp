@@ -453,6 +453,17 @@ OpenrCtrlHandler::semifuture_getMplsRoutesFiltered(
   return fib_->getMplsRoutes(std::move(*labels));
 }
 
+//
+// Spark APIs
+//
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_floodRestartingMsg() {
+  CHECK(false) << "Not implemented";
+}
+
+//
+// Performance stats APIs
+//
 folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
 OpenrCtrlHandler::semifuture_getPerfDb() {
   CHECK(fib_);
