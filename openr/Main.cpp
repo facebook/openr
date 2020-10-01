@@ -416,7 +416,7 @@ main(int argc, char** argv) {
   }
 
   // Create Spark instance for neighbor discovery
-  startEventBase(
+  auto spark = startEventBase(
       allThreads,
       orderedEvbs,
       watchdog,
@@ -541,8 +541,8 @@ main(int argc, char** argv) {
         monitor,
         configStore,
         prefixManager,
-        config,
-        logSampleQueue);
+        spark,
+        config);
   });
 
   CHECK(ctrlHandler);

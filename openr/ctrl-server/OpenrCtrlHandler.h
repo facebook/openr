@@ -17,7 +17,6 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStorePublisher.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/Monitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
@@ -40,8 +39,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       Monitor* Monitor,
       PersistentStore* configStore,
       PrefixManager* prefixManager,
-      std::shared_ptr<const Config> config,
-      messaging::ReplicateQueue<LogSample>& logSampleQueue);
+      Spark* spark,
+      std::shared_ptr<const Config> config);
 
   ~OpenrCtrlHandler() override;
 
@@ -351,6 +350,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   Monitor* monitor_{nullptr};
   PersistentStore* configStore_{nullptr};
   PrefixManager* prefixManager_{nullptr};
+  Spark* spark_{nullptr};
   std::shared_ptr<const Config> config_;
 
   // Publisher token (monotonically increasing) for all publishers
@@ -376,9 +376,5 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // fiber task future hold for kvStore update, fib update reader's
   std::vector<folly::Future<folly::Unit>> workers_;
-
-  // Queue to publish the event log
-  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
-
 }; // class OpenrCtrlHandler
 } // namespace openr

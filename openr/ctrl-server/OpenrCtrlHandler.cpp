@@ -40,8 +40,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     Monitor* monitor,
     PersistentStore* configStore,
     PrefixManager* prefixManager,
-    std::shared_ptr<const Config> config,
-    messaging::ReplicateQueue<LogSample>& logSampleQueue)
+    Spark* spark,
+    std::shared_ptr<const Config> config)
     : fb303::BaseService("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
@@ -52,8 +52,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       monitor_(monitor),
       configStore_(configStore),
       prefixManager_(prefixManager),
-      config_(config),
-      logSampleQueue_(logSampleQueue) {
+      spark_(spark),
+      config_(config) {
   // Add fiber task to receive publication from KvStore
   if (kvStore_) {
     auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture([
@@ -240,8 +240,6 @@ OpenrCtrlHandler::authorizeConnection() {
     sample.addString(
         "peer_address", connContext->getPeerAddress()->getAddressStr());
     sample.addString("peer_common_name", peerCommonName);
-
-    logSampleQueue_.push(sample);
 
     LOG(INFO) << "Authorizing request with issues: " << sample.toJson();
     return;
@@ -458,7 +456,8 @@ OpenrCtrlHandler::semifuture_getMplsRoutesFiltered(
 //
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_floodRestartingMsg() {
-  CHECK(false) << "Not implemented";
+  CHECK(spark_);
+  return spark_->floodRestartingMsg();
 }
 
 //

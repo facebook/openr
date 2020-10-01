@@ -144,6 +144,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitor.get() /* monitor */,
         persistentStore.get() /* configStore */,
         prefixManager.get() /* prefixManager */,
+        nullptr /* spark */,
         nullptr /* config */);
     openrThriftServerWrapper_->run();
 

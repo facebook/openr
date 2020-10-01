@@ -52,6 +52,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
               nullptr /* monitor */,
               nullptr /* configStore */,
               nullptr /* prefixManager */,
+              nullptr /* spark */,
               nullptr /* config */
           );
         };

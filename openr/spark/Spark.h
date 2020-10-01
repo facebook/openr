@@ -90,6 +90,9 @@ class Spark final : public OpenrEventBase {
 
   ~Spark() override = default;
 
+  // Public APIs
+  folly::SemiFuture<folly::Unit> floodRestartingMsg();
+
   // get the current state of neighborNode, used for unit-testing
   folly::SemiFuture<std::optional<SparkNeighState>> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);

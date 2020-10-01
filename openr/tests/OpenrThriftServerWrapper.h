@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/zmq/Zmq.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
@@ -22,7 +21,6 @@ class OpenrThriftServerWrapper {
   std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler_{nullptr};
   apache::thrift::util::ScopedServerThread openrCtrlThriftServerThread_;
   std::string const nodeName_;
-  messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
  public:
   OpenrThriftServerWrapper(
@@ -34,6 +32,7 @@ class OpenrThriftServerWrapper {
       Monitor* monitor,
       PersistentStore* configStore,
       PrefixManager* prefixManager,
+      Spark* spark,
       std::shared_ptr<const Config> config);
 
   // start Open/R thrift server
@@ -60,6 +59,7 @@ class OpenrThriftServerWrapper {
   Monitor* monitor_{nullptr};
   PersistentStore* configStore_{nullptr};
   PrefixManager* prefixManager_{nullptr};
+  Spark* spark_{nullptr};
   std::shared_ptr<const Config> config_;
 };
 

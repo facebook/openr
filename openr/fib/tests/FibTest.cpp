@@ -277,8 +277,8 @@ class FibTestFixture : public ::testing::Test {
         nullptr /* monitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
-        config /* config */,
-        logSampleQueue);
+        nullptr /* spark */,
+        config /* config */);
 
     evbThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Starting ctrlEvb";

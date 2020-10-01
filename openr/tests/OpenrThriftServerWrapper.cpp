@@ -18,6 +18,7 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
     Monitor* monitor,
     PersistentStore* configStore,
     PrefixManager* prefixManager,
+    Spark* spark,
     std::shared_ptr<const Config> config)
     : nodeName_(nodeName),
       decision_(decision),
@@ -27,6 +28,7 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
       monitor_(monitor),
       configStore_(configStore),
       prefixManager_(prefixManager),
+      spark_(spark),
       config_(config) {
   CHECK(!nodeName_.empty());
 }
@@ -50,8 +52,8 @@ OpenrThriftServerWrapper::run() {
         monitor_,
         configStore_,
         prefixManager_,
-        config_,
-        logSampleQueue_);
+        spark_,
+        config_);
   });
 
   // setup openrCtrlThrift server for client to connect to

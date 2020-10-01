@@ -335,18 +335,8 @@ Spark::toStr(SparkNeighState state) {
 
 void
 Spark::stop() {
-  // send out restarting packets for all interfaces before I'm going down
-  // here we are sending duplicate restarting packets (3 times per interface)
-  // in case some packets get lost
-  for (int i = 0; i < kNumRestartingPktSent; ++i) {
-    for (const auto& kv : interfaceDb_) {
-      const auto& ifName = kv.first;
-      sendHelloMsg(ifName, false /* inFastInitState */, true /* restarting */);
-    }
-  }
-
-  LOG(INFO)
-      << "I have sent all restarting packets to my neighbors, ready to go down";
+  // NOTE: explicitly wait for msg to send out before going down
+  floodRestartingMsg().get();
   OpenrEventBase::stop();
 }
 
@@ -978,6 +968,27 @@ Spark::getSparkNeighState(
           }
         }
       });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+Spark::floodRestartingMsg() {
+  folly::Promise<folly::Unit> promise;
+  auto sf = promise.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(promise)]() mutable {
+    // send out restarting packets for all interfaces before I'm going down
+    // here we are sending duplicate restarting packets (kNumRestartingPktSent
+    // times per interface) in case some packets get lost
+    for (int i = 0; i < kNumRestartingPktSent; ++i) {
+      for (const auto& [ifName, _] : interfaceDb_) {
+        sendHelloMsg(
+            ifName, false /* inFastInitState */, true /* restarting */);
+      }
+    }
+    LOG(INFO) << "Successfully sent restarting msg to: " << interfaceDb_.size()
+              << " neighbors, ready to go down";
+    p.setValue();
+  });
   return sf;
 }
 

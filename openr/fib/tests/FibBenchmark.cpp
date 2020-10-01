@@ -109,6 +109,7 @@ class FibWrapper {
     fib->waitUntilRunning();
 
     // spin up an openrThriftServer
+    // TODO: spawn openrCtrlHandler to reduce complexity
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         "node-1",
         nullptr /* decision */,
@@ -118,6 +119,7 @@ class FibWrapper {
         nullptr /* monitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
+        nullptr /* spark */,
         config /* config */);
     openrThriftServerWrapper_->run();
   }
