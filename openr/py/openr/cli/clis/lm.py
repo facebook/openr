@@ -8,8 +8,6 @@
 #
 
 
-from builtins import object
-
 import click
 from openr.cli.commands import kvstore, lm
 from openr.cli.utils import utils

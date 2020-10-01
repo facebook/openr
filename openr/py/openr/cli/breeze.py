@@ -30,6 +30,7 @@ from openr.cli.clis import (
     perf,
     plugin,
     prefix_mgr,
+    spark,
     tech_support,
 )
 from openr.cli.utils.options import OPTIONS, breeze_option, str2cert
@@ -89,7 +90,6 @@ def cli(ctx, *args, **kwargs):
 
 
 def get_breeze_cli():
-
     # add cli submodules
     cli.add_command(config.ConfigCli().config)
     cli.add_command(decision.DecisionCli().decision)
@@ -97,11 +97,13 @@ def get_breeze_cli():
     cli.add_command(kvstore.KvStoreCli().kvstore)
     cli.add_command(lm.LMCli().lm)
     cli.add_command(monitor.MonitorCli().monitor)
+    cli.add_command(openr.OpenrCli().openr)
     cli.add_command(perf.PerfCli().perf)
     cli.add_command(prefix_mgr.PrefixMgrCli().prefixmgr)
+    cli.add_command(spark.SparkCli().spark)
     cli.add_command(tech_support.TechSupportCli().tech_support)
-    cli.add_command(openr.OpenrCli().openr)
     plugin.plugin_start(cli)
+
     return cli
 
 

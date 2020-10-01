@@ -8,8 +8,6 @@
 #
 
 
-from builtins import object
-
 import click
 from openr.cli.commands import perf
 from openr.cli.utils.options import breeze_option

@@ -8,7 +8,6 @@
 #
 
 
-from builtins import object
 from typing import Any, List
 
 import click

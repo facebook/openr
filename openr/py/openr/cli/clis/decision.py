@@ -9,7 +9,6 @@
 
 
 import sys
-from builtins import object
 from typing import Any, List, Optional
 
 import click
