@@ -2938,9 +2938,9 @@ KvStoreDb::floodPublication(
   auto keysToUpdate = folly::gen::from(*publication.keyVals_ref()) |
       folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
 
-  LOG(INFO) << "Flood publication from: " << kvParams_.nodeId
-            << " to peers with: " << keysToUpdate.size()
-            << " key-vals. Updated keys:  " << folly::join(",", keysToUpdate);
+  VLOG(2) << "Flood publication from: " << kvParams_.nodeId
+          << " to peers with: " << keysToUpdate.size()
+          << " key-vals. Updated keys:  " << folly::join(",", keysToUpdate);
 
   if (setFloodRoot and not senderId.has_value()) {
     // I'm the initiator, set flood-root-id
