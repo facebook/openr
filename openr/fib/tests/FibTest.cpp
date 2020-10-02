@@ -5,11 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <chrono>
-#include <thread>
-
-#include <folly/futures/Future.h>
-#include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>

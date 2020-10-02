@@ -5,11 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <thread>
-
 #include <gtest/gtest.h>
 
-#include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
@@ -17,9 +14,9 @@
 
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
+#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/fib/Fib.h>
 #include <openr/messaging/ReplicateQueue.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 
@@ -108,10 +105,11 @@ class FibWrapper {
     });
     fib->waitUntilRunning();
 
-    // spin up an openrThriftServer
-    // TODO: spawn openrCtrlHandler to reduce complexity
-    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
+    // instantiate openrCtrlHandler to invoke fib API
+    handler = std::make_shared<OpenrCtrlHandler>(
         "node-1",
+        std::unordered_set<std::string>{} /* acceptable peers */,
+        &evb,
         nullptr /* decision */,
         fib.get() /* fib */,
         nullptr /* kvStore */,
@@ -121,19 +119,27 @@ class FibWrapper {
         nullptr /* prefixManager */,
         nullptr /* spark */,
         config /* config */);
-    openrThriftServerWrapper_->run();
+
+    evbThread = std::make_unique<std::thread>([this]() {
+      LOG(INFO) << "Starting ctrlEvb";
+      evb.run();
+      LOG(INFO) << "ctrlEvb finished";
+    });
+    evb.waitUntilRunning();
   }
 
   ~FibWrapper() {
-    LOG(INFO) << "Stopping openr-ctrl thrift server";
+    LOG(INFO) << "Closing queues";
     fibUpdatesQueue.close();
-    openrThriftServerWrapper_->stop();
-    LOG(INFO) << "Openr-ctrl thrift server got stopped";
-
-    // Close queue
     routeUpdatesQueue.close();
     interfaceUpdatesQueue.close();
     logSampleQueue.close();
+
+    LOG(INFO) << "Stopping openr-ctrl handler";
+    handler.reset();
+    evb.stop();
+    evb.waitUntilStopped();
+    evbThread->join();
 
     // This will be invoked before Fib's d-tor
     fib->stop();
@@ -147,9 +153,7 @@ class FibWrapper {
   thrift::PerfDatabase
   getPerfDb() {
     thrift::PerfDatabase perfDb;
-    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
-                    ->semifuture_getPerfDb()
-                    .get();
+    auto resp = handler->semifuture_getPerfDb().get();
     EXPECT_TRUE(resp);
 
     perfDb = *resp;
@@ -184,20 +188,19 @@ class FibWrapper {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
-  // Queue to publish the event log
   messaging::ReplicateQueue<LogSample> logSampleQueue;
 
-  fbzmq::Context context{};
+  // ctrlEvb for openrCtrlHandler instantiation
+  OpenrEventBase evb;
+  std::unique_ptr<std::thread> evbThread;
 
   std::shared_ptr<Config> config;
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
 
-  std::shared_ptr<MockNetlinkFibHandler> mockFibHandler;
+  std::shared_ptr<MockNetlinkFibHandler> mockFibHandler{nullptr};
+  std::shared_ptr<OpenrCtrlHandler> handler{nullptr};
   PrefixGenerator prefixGenerator;
-
-  // thriftServer to talk to Fib
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 /**
