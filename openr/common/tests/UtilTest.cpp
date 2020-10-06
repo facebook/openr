@@ -141,11 +141,6 @@ TEST(UtilTest, PrefixKeyTest) {
   strToItems.push_back(k1);
 
   // this should fail, all parameters expected to be std::nullopt
-  k1.pkey = "prefix:node-name:e.1:[ff00::1/100]";
-  k1.shouldPass = false;
-  strToItems.push_back(k1);
-
-  // this should fail, all parameters expected to be std::nullopt
   k1.pkey = "prefix:node_name:a:[ff00::1/a]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
@@ -173,9 +168,22 @@ TEST(UtilTest, PrefixKeyTest) {
   k1.shouldPass = true;
   strToItems.push_back(k1);
 
-  // this should fail
+  // this should pass
   k1.pkey = "prefix:nodename0:pod-108:[ff00::0/64]";
-  k1.shouldPass = false;
+  k1.area = "pod-108";
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename0:dc.fabric01.pod001:[ff00::0/64]";
+  k1.area = "dc.fabric01.pod001";
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename0:dc_fabric01_pod001:[ff00::0/64]";
+  k1.area = "dc_fabric01_pod001";
+  k1.shouldPass = true;
   strToItems.push_back(k1);
 
   // this should fail, all paremeters expected to by std::nullopt
@@ -217,11 +225,6 @@ TEST(UtilTest, PrefixKeyTest) {
 
   // this should fail
   k1.pkey = "prefix:nodename.0.0:10:99.0:[0.0.0.0/19]";
-  k1.shouldPass = false;
-  strToItems.push_back(k1);
-
-  // this should fail
-  k1.pkey = "prefix:nodename.0.0:99-h:[0.0.0.0/19]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
 

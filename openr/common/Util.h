@@ -114,7 +114,7 @@ class PrefixKey {
   getPrefixRE2() {
     static const RE2 prefixKeyPattern{folly::sformat(
         "{}(?P<node>[a-zA-Z\\d\\.\\-\\_]+):"
-        "(?P<area>[a-zA-Z0-9]+):"
+        "(?P<area>[a-zA-Z0-9\\.\\_\\-]+):"
         "\\[(?P<IPAddr>[a-fA-F\\d\\.\\:]+)/"
         "(?P<plen>[\\d]{{1,3}})\\]",
         Constants::kPrefixDbMarker.toString())};
