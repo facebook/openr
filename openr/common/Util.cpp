@@ -887,14 +887,14 @@ createNextHop(
     std::optional<std::string> ifName,
     int32_t metric,
     std::optional<thrift::MplsAction> maybeMplsAction,
-    const std::string& area,
+    const std::optional<std::string>& area,
     const std::optional<std::string>& neighborNodeName) {
   thrift::NextHopThrift nextHop;
   *nextHop.address_ref() = addr;
   nextHop.address_ref()->ifName_ref().from_optional(std::move(ifName));
   nextHop.metric_ref() = metric;
   nextHop.mplsAction_ref().from_optional(maybeMplsAction);
-  nextHop.area_ref() = area;
+  nextHop.area_ref().from_optional(area);
   nextHop.neighborNodeName_ref().from_optional(neighborNodeName);
   return nextHop;
 }

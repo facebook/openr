@@ -427,7 +427,7 @@ thrift::NextHopThrift createNextHop(
     std::optional<std::string> ifName = std::nullopt,
     int32_t metric = 0,
     std::optional<thrift::MplsAction> maybeMplsAction = std::nullopt,
-    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea(),
+    const std::optional<std::string>& area = std::nullopt,
     const std::optional<std::string>& neighborNodeName = std::nullopt);
 
 thrift::MplsAction createMplsAction(
