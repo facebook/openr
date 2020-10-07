@@ -141,6 +141,7 @@ Fib::Fib(
   fb303::fbData->addStatExportType(
       "fib.thrift.failure.keepalive", fb303::COUNT);
   fb303::fbData->addStatExportType("fib.thrift.failure.sync_fib", fb303::COUNT);
+  fb303::fbData->addStatExportType("fib.route_programming.time_ms", fb303::AVG);
 }
 
 void
@@ -592,6 +593,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   try {
     uint32_t numOfRouteUpdates = 0;
     createFibClient(evb_, socket_, client_, thriftPort_);
+    const auto startTime = std::chrono::steady_clock::now();
     if (routeDbDelta.unicastRoutesToDelete_ref()->size()) {
       numOfRouteUpdates += routeDbDelta.unicastRoutesToDelete_ref()->size();
       client_->sync_deleteUnicastRoutes(
@@ -611,6 +613,13 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
       numOfRouteUpdates += mplsRoutesToUpdate.size();
       client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
     }
+    const auto elapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime);
+
+    fb303::fbData->addStatValue(
+        "fib.route_programming.time_ms", elapsedTime.count(), fb303::AVG);
+
     fb303::fbData->addStatValue(
         "fib.num_of_route_updates", numOfRouteUpdates, fb303::SUM);
     routeState_.dirtyRouteDb = false;
