@@ -506,7 +506,8 @@ main(int argc, char** argv) {
     sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
     sslContext->clientCAFile = FLAGS_x509_ca_path;
     sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
-    sslContext->setNextProtocols(Constants::getNextProtocolsForThriftServers());
+    sslContext->setNextProtocols(
+        **apache::thrift::ThriftServer::defaultNextProtocols());
     // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
     sslContext->clientVerification =
         folly::SSLContext::SSLVerifyPeerEnum::VERIFY;

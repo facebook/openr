@@ -274,19 +274,6 @@ class Constants {
 
   // Threshold time in secs to crash after reaching critical memory
   static constexpr std::chrono::seconds kMemoryThresholdTime{600};
-
-  static const std::list<std::string>&
-  getNextProtocolsForThriftServers() {
-    static const std::list<std::string> result{
-        "thrift",
-        "h2",
-        // "http" is not a legit specifier but need to include it for
-        // legacy.  Thrift's HTTP2RoutingHandler uses this, and clients
-        // may be sending it.
-        "http",
-        "rs"};
-    return result;
-  }
 };
 
 } // namespace openr
