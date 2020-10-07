@@ -184,7 +184,7 @@ def sprint_prefix_forwarding_type(forwarding_type):
 
 
 def sprint_prefix_forwarding_algorithm(
-    forwarding_algo: openr_config_types.PrefixForwardingAlgorithm
+    forwarding_algo: openr_config_types.PrefixForwardingAlgorithm,
 ) -> str:
     """
     :param forwarding_algorithm: openr_config_types.PrefixForwardingAlgorithm
