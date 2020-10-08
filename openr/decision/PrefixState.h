@@ -28,8 +28,10 @@ class PrefixState {
   }
 
   // update loopback prefix deletes
-  void deleteLoopbackPrefix(
-      thrift::IpPrefix const& prefix, const std::string& nodename);
+  void updateLoopbackPrefixes(
+      thrift::IpPrefix const& prefix,
+      const std::string& nodename,
+      bool isDelete = false);
 
   // returns set of changed prefixes (i.e. a node started advertising or
   // withdrew or any attributes changed)
@@ -80,12 +82,18 @@ class PrefixState {
   // TODO: Maintain shared_ptr for `thrift::PrefixEntry` within
   // `PrefixEntries` to avoid data-copy for best metric selection and
   // route re-distribution
-  // For each prefix in the network, stores a set of nodes that advertise it
+
+  // Data structure to maintain mapping from:
+  //  IpPrefix -> collection of originator(i.e. [node, area] combination)
   std::unordered_map<thrift::IpPrefix, PrefixEntries> prefixes_;
+
+  // (Reverse Mapping) Data structure to maintain mapping from:
+  //  [node, area] combination -> set of IpPrefix
   std::unordered_map<NodeAndArea, std::set<thrift::IpPrefix>> nodeToPrefixes_;
 
+  // loopbackV4/V6 address for each node
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
-}; // class PrefixState
+};
 
 } // namespace openr

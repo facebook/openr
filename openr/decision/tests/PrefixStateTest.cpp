@@ -137,7 +137,7 @@ TEST_P(GetLoopbackViasTest, basicOperation) {
   for (auto const& node : nodes) {
     auto const& prefixDb = prefixDbs_.at(node);
     for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
-      state_.deleteLoopbackPrefix(*prefixEntry.prefix_ref(), node);
+      state_.updateLoopbackPrefixes(*prefixEntry.prefix_ref(), node, true);
     }
   }
 

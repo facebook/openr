@@ -1993,6 +1993,8 @@ Decision::rebuildRoutes(std::string const& event) {
     }
   }
 
+  // TODO: update change for local originiated prefixes based on threshold
+
   routeDb_.update(update);
   pendingUpdates_.addEvent("ROUTE_UPDATE");
   update.perfEvents = pendingUpdates_.moveOutEvents();
