@@ -256,4 +256,6 @@ struct BgpConfig {
    * Use received link bandwidth extended community to compute UCMP paths
    */
   17: optional bool compute_ucmp_from_link_bandwidth_community
+
+  18: i32 eor_time_s = 45
 }
