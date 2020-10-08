@@ -37,7 +37,7 @@ Fib::Fib(
       expBackoff_(
           Constants::kFibSyncInitialBackoff,
           Constants::kFibSyncMaxBackoff,
-          true),
+          false),
       kvStore_(kvStore),
       fibUpdatesQueue_(fibUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
