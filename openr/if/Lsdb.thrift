@@ -15,7 +15,7 @@ namespace lua openr.Lsdb
 
 include "Network.thrift"
 include "KvStore.thrift"
-include "openr/if/OpenrConfig.thrift"
+include "OpenrConfig.thrift"
 
 //
 // Performance measurement related structs
@@ -105,7 +105,7 @@ struct Adjacency {
 }
 
 // full link state information of a single router
-// announced under keys starting with "adjacencies:"
+// announced under keys starting with "adj:"
 struct AdjacencyDatabase {
   // must use the same name as used in the key
   1: string thisNodeName

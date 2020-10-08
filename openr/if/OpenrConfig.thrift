@@ -110,6 +110,41 @@ struct PrefixAllocationConfig {
   6: optional i32 allocate_prefix_len
 }
 
+// describes prefixes for route origination purpose
+struct OriginatedPrefix {
+  1: string prefix
+
+  // Default mode of forwarding for prefix is IP.
+  2: PrefixForwardingType forwardingType = PrefixForwardingType.IP
+
+  # Default forwarding (route computation) algorithm is shortest path ECMP.
+  3: PrefixForwardingAlgorithm forwardingAlgorithm =
+    PrefixForwardingAlgorithm.SP_ECMP
+
+  // minimum # of supporting routes to advertise this prefix. Decision will
+  // advertise/withdrawn this prefix when # of supporting routes change.
+  4: optional i32 minimum_supporting_routes
+
+  // flag to indicate FIB programming
+  5: optional bool install_to_fib
+
+  6: optional i32 source_preference
+
+  7: optional i32 path_preference
+
+  // Set of tags associated with this route. This is meta-data and intends to be
+  // used by Policy. NOTE: There is no ordering on tags
+  8: optional set<string> tags
+
+  // to interact with BGP, area prepending is needed
+  9: optional list<string> area_stack
+
+  // If the # of nethops for this prefix is below certain threshold, Decision
+  // will not program/anounce the routes. If this parameter is not set, Decision
+  // will not do extra check # of nexthops.
+  11: optional i64 minNexthop
+}
+
 /**
  * NOTE: interfaces and nodes can be explicit or unix regex
  * 1) Config specifying interfaces:
@@ -213,13 +248,13 @@ struct OpenrConfig {
   # [deprecated] TODO: remove after next push.
   9: optional bool enable_netlink_system_handler
 
-  /* Hard wait time before decision start to compute routes
-   * if not set, first neighbor update will trigger route computation
-   */
+  # Hard wait time before decision start to compute routes
+  # if not set, first neighbor update will trigger route computation
   10: optional i32 eor_time_s
 
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP
-  12: PrefixForwardingAlgorithm prefix_forwarding_algorithm = PrefixForwardingAlgorithm.SP_ECMP
+  12: PrefixForwardingAlgorithm prefix_forwarding_algorithm =
+    PrefixForwardingAlgorithm.SP_ECMP
   13: optional bool enable_segment_routing
   14: optional i32 prefix_min_nexthop
 
@@ -251,6 +286,10 @@ struct OpenrConfig {
   26: bool enable_kvstore_thrift = 1
   27: bool enable_periodic_sync = 1
 
+  # V4/V6 prefixes to be originated
+  31: optional list<OriginatedPrefix> originated_prefixes_v4
+  32: optional list<OriginatedPrefix> originated_prefixes_v6
+
   # Flag for enabling best route selection based on PrefixMetrics
   # TODO: This is temporary & will go away once new prefix metrics is rolled out
   51: bool enable_best_route_selection = 0
@@ -259,9 +298,7 @@ struct OpenrConfig {
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
 
-  /**
-   * Configuration to facilitate Open/R <-> BGP route conversions.
-   * NOTE: This must be specified if bgp_peering is enabled
-   */
+  # Configuration to facilitate Open/R <-> BGP route conversions.
+  # NOTE: This must be specified if bgp_peering is enabled
   104: optional BgpRouteTranslationConfig bgp_translation_config
 }
