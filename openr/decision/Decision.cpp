@@ -1749,6 +1749,8 @@ Decision::updateNodePrefixDatabase(
           prefixEntry;
     }
   } else {
+    // TODO: deprecate non per-prefix-key logic
+    //       fullDbPrefixEntries_ can be retired
     fullDbPrefixEntries_[nodeName].clear();
     for (auto const& entry : *prefixDb.prefixEntries_ref()) {
       fullDbPrefixEntries_[nodeName][*entry.prefix_ref()] = entry;
@@ -1849,8 +1851,9 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         // TODO - this should directly come from KvStore.
         *nodePrefixDb.area_ref() = area;
 
-        VLOG(1) << "Updating prefix database for node " << nodeName
-                << " from area " << area;
+        VLOG(1) << "Updating prefix key: " << key << " of node: " << nodeName
+                << " in area: " << area;
+
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyPrefixStateChange(
@@ -1905,6 +1908,10 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 
       // TODO - this should directly come from KvStore.
       *nodePrefixDb.area_ref() = area;
+
+      VLOG(1) << "Deleting expired prefix key: " << key
+              << " of node: " << nodeName << " in area: " << area;
+
       pendingUpdates_.applyPrefixStateChange(
           prefixState_.updatePrefixDatabase(nodePrefixDb));
       continue;

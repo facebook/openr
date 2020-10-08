@@ -336,16 +336,16 @@ struct PrefixEntry {
 struct PrefixDatabase {
   // must be the same as used in the key
   1: string thisNodeName
+
   // numbering is intentional
   3: list<PrefixEntry> prefixEntries
-  // flag to indicate prefix(s) must be deleted
-  5: bool deletePrefix
 
   // Optional attribute to measure convergence performance
   4: optional PerfEvents perfEvents;
-  // Set to true if prefix was added by 'per prefix key' format.
-  // this value is local to the node, and not used by remote nodes
-  6: optional bool perPrefixKey
+
+  // flag to indicate prefix(s) must be deleted
+  5: bool deletePrefix
+
   // openr area in which prefix is advertised
   7: string area = KvStore.kDefaultArea
 }
