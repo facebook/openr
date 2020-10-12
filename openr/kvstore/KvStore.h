@@ -465,16 +465,6 @@ class KvStoreDb : public DualNode {
   // set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
-  // NOTE: KvStoreDb processes full-sync/flooding/etc. in ASYNC fashion.
-  //       `taskFutures_` make sure all pending request finish processing before
-  //       shutting down.
-  //
-  // monotonically increasing requestId for pending thrift request.
-  uint64_t reqId_{0};
-
-  // collection of futures for pending thrift requests
-  std::unordered_map<uint64_t, folly::Future<folly::Unit>> taskFutures_{};
-
   // [TO BE DEPRECATED]
   // The peers we will be talking to: both PUB and CMD URLs for each. We use
   // peerAddCounter_ to uniquely identify a peering session's socket-id.
