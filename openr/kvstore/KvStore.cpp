@@ -2952,10 +2952,10 @@ KvStoreDb::floodPublication(
       }
 
       auto& thriftPeer = thriftPeers_.at(peerName);
-      if (thriftPeer.state == KvStorePeerState::IDLE or
+      if (thriftPeer.state != KvStorePeerState::INITIALIZED or
           (not thriftPeer.client)) {
-        // peer in thriftPeers collection can still be in IDLE state.
-        // Skip flooding to those peers.
+        // Skip flooding to those peers if peer has NOT finished
+        // initial sync(i.e. promoted to `INITIALIZED`)
         continue;
       }
 
