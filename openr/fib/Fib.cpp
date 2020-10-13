@@ -513,19 +513,11 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   };
   updateRoutesSemaphore_.wait();
 
-  LOG(INFO) << "Processing route add/update for "
-            << routeDbDelta.unicastRoutesToUpdate_ref()->size() << "-unicast, "
-            << routeDbDelta.mplsRoutesToUpdate_ref()->size() << "-mpls, "
-            << "and route delete for "
-            << routeDbDelta.unicastRoutesToDelete_ref()->size() << "-unicast, "
-            << routeDbDelta.mplsRoutesToDelete_ref()->size() << "-mpls, ";
-
   // update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
 
   // Only for backward compatibility
   auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
-
   auto const& mplsRoutesToUpdate = createMplsRoutesWithSelectedNextHops(
       *routeDbDelta.mplsRoutesToUpdate_ref());
 
@@ -596,72 +588,73 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
 
   // Make thrift calls to do real programming
   try {
-    LOG(INFO)
-        << "Starting fib sync (thrift calls) for "
-        << routeDbDelta.unicastRoutesToUpdate_ref()->size() << "-unicast, "
-        << routeDbDelta.mplsRoutesToUpdate_ref()->size() << "-mpls, "
-        << "and route delete for "
-        << routeDbDelta.unicastRoutesToDelete_ref()->size() << "-unicast, "
-        << routeDbDelta.mplsRoutesToDelete_ref()->size() << "-mpls, ";
-
-    uint32_t numOfRouteUpdates = 0;
-    createFibClient(evb_, socket_, client_, thriftPort_);
+    LOG(INFO) << "Updating routes in FIB";
     const auto startTime = std::chrono::steady_clock::now();
+    uint32_t numOfRouteUpdates = 0;
+
+    // Create FIB client if doesn't exists
+    createFibClient(evb_, socket_, client_, thriftPort_);
+
+    // Delete unicast routes
     if (routeDbDelta.unicastRoutesToDelete_ref()->size()) {
+      LOG(INFO) << "Deleting "
+                << routeDbDelta.unicastRoutesToDelete_ref()->size()
+                << " unicast routes in FIB";
       numOfRouteUpdates += routeDbDelta.unicastRoutesToDelete_ref()->size();
       client_->sync_deleteUnicastRoutes(
           kFibId_, *routeDbDelta.unicastRoutesToDelete_ref());
     }
+
+    // Add unicast routes
     if (unicastRoutesToUpdate.size()) {
+      LOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
+                << " unicast routes in FIB";
       numOfRouteUpdates += unicastRoutesToUpdate.size();
       client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
     }
+
+    // Delete mpls routes
     if (enableSegmentRouting_ &&
         routeDbDelta.mplsRoutesToDelete_ref()->size()) {
+      LOG(INFO) << "Deleting " << routeDbDelta.mplsRoutesToDelete_ref()->size()
+                << " mpls routes in FIB";
       numOfRouteUpdates += routeDbDelta.mplsRoutesToDelete_ref()->size();
       client_->sync_deleteMplsRoutes(
           kFibId_, *routeDbDelta.mplsRoutesToDelete_ref());
     }
+
+    // Add mpls routes
     if (enableSegmentRouting_ && mplsRoutesToUpdate.size()) {
       numOfRouteUpdates += mplsRoutesToUpdate.size();
+      LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
+                << " mpls routes in FIB";
       client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
     }
+
     const auto elapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
+    LOG(INFO) << "It took " << elapsedTime.count() << "ms to update "
+              << "routes in FIB";
 
+    routeState_.dirtyRouteDb = false;
     fb303::fbData->addStatValue(
         "fib.route_programming.time_ms", elapsedTime.count(), fb303::AVG);
-
     fb303::fbData->addStatValue(
         "fib.num_of_route_updates", numOfRouteUpdates, fb303::SUM);
-    routeState_.dirtyRouteDb = false;
-    logPerfEvents(castToStd(routeDbDelta.perfEvents_ref()));
-    LOG(INFO)
-        << "Done processing route add/update for "
-        << routeDbDelta.unicastRoutesToUpdate_ref()->size() << "-unicast, "
-        << routeDbDelta.mplsRoutesToUpdate_ref()->size() << "-mpls, "
-        << "and route delete for "
-        << routeDbDelta.unicastRoutesToDelete_ref()->size() << "-unicast, "
-        << routeDbDelta.mplsRoutesToDelete_ref()->size() << "-mpls, ";
-
   } catch (const std::exception& e) {
     fb303::fbData->addStatValue(
         "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
     client_.reset();
     routeState_.dirtyRouteDb = true;
     syncRouteDbDebounced(); // Schedule future full sync of route DB
-    LOG(ERROR) << "Failed to make thrift call to FibAgent. Error: "
+    LOG(ERROR) << "Failed to update routes in FIB. Error: "
                << folly::exceptionStr(e);
   }
 }
 
 bool
 Fib::syncRouteDb() {
-  LOG(INFO) << "Syncing latest routeDb with fib-agent with "
-            << routeState_.unicastRoutes.size() << " unicast routes, and "
-            << routeState_.mplsRoutes.size() << " mpls routes";
-
   const auto& unicastRoutes =
       createUnicastRoutesFromMap(routeState_.unicastRoutes);
   const auto& mplsRoutes =
@@ -693,34 +686,36 @@ Fib::syncRouteDb() {
   }
 
   try {
+    LOG(INFO) << "Syncing routes in FIB";
+    auto startTime = std::chrono::steady_clock::now();
+
     createFibClient(evb_, socket_, client_, thriftPort_);
     fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
 
-    auto startTime = std::chrono::steady_clock::now();
     // Sync unicast routes
+    LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes in FIB";
     client_->sync_syncFib(kFibId_, unicastRoutes);
     routeState_.dirtyPrefixes.clear();
 
     // Sync mpls routes
     if (enableSegmentRouting_) {
+      LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes in FIB";
       client_->sync_syncMplsFib(kFibId_, mplsRoutes);
     }
 
     const auto elapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
-
+    LOG(INFO) << "It took " << elapsedTime.count()
+              << "ms to sync routes in FIB";
     fb303::fbData->addStatValue(
         "fib.route_sync.time_ms", elapsedTime.count(), fb303::AVG);
-
     routeState_.dirtyLabels.clear();
-
     routeState_.dirtyRouteDb = false;
-    LOG(INFO) << "Done syncing latest routeDb with fib-agent";
     return true;
   } catch (std::exception const& e) {
     fb303::fbData->addStatValue("fib.thrift.failure.sync_fib", 1, fb303::COUNT);
-    LOG(ERROR) << "Failed to sync routeDb with switch FIB agent. Error: "
+    LOG(ERROR) << "Failed to sync routes in FIB. Error: "
                << folly::exceptionStr(e);
     routeState_.dirtyRouteDb = true;
     client_.reset();
