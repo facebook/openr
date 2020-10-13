@@ -212,13 +212,9 @@ class SpfSolver::SpfSolverImpl {
   // mpls static route
   //
 
-  bool staticRoutesUpdated();
+  void updateStaticRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
 
-  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
-
-  std::optional<DecisionRouteUpdate> processStaticRouteUpdates();
-
-  thrift::StaticRoutes const& getStaticRoutes();
+  StaticMplsRoutes const& getStaticRoutes();
 
   //
   // best path calculation
@@ -345,9 +341,7 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixEntries const& prefixEntries = {}) const;
 
-  thrift::StaticRoutes staticRoutes_;
-
-  std::vector<thrift::RouteDatabaseDelta> staticRoutesUpdates_;
+  StaticMplsRoutes staticMplsRoutes_;
 
   // Cache of best route selection.
   // - Cleared when topology changes
@@ -370,20 +364,28 @@ class SpfSolver::SpfSolverImpl {
   const bool enableBestRouteSelection_{false};
 };
 
-bool
-SpfSolver::SpfSolverImpl::staticRoutesUpdated() {
-  return staticRoutesUpdates_.size() > 0;
-}
-
 void
-SpfSolver::SpfSolverImpl::pushRoutesDeltaUpdates(
-    thrift::RouteDatabaseDelta& staticRoutesDelta) {
-  staticRoutesUpdates_.emplace_back(std::move(staticRoutesDelta));
+SpfSolver::SpfSolverImpl::updateStaticRoutes(
+    thrift::RouteDatabaseDelta&& staticRoutesDelta) {
+  // We don't support static routes for IP routes yet
+  CHECK(staticRoutesDelta.unicastRoutesToUpdate_ref()->empty());
+  CHECK(staticRoutesDelta.unicastRoutesToDelete_ref()->empty());
+
+  // Process MPLS routes to add or update
+  for (auto& mplsRoute : *staticRoutesDelta.mplsRoutesToUpdate_ref()) {
+    const auto topLabel = *mplsRoute.topLabel_ref();
+    staticMplsRoutes_.insert_or_assign(
+        topLabel, std::move(*mplsRoute.nextHops_ref()));
+  }
+
+  for (const auto& topLabel : *staticRoutesDelta.mplsRoutesToDelete_ref()) {
+    staticMplsRoutes_.erase(topLabel);
+  }
 }
 
-thrift::StaticRoutes const&
+StaticMplsRoutes const&
 SpfSolver::SpfSolverImpl::getStaticRoutes() {
-  return staticRoutes_;
+  return staticMplsRoutes_;
 }
 
 std::optional<RibUnicastEntry>
@@ -704,6 +706,15 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
     }
   }
 
+  //
+  // Add static routes
+  //
+  for (const auto& [topLabel, nhs] : staticMplsRoutes_) {
+    routeDb.addMplsRoute(RibMplsEntry(
+        topLabel,
+        std::unordered_set<thrift::NextHopThrift>{nhs.begin(), nhs.end()}));
+  }
+
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";
@@ -881,47 +892,6 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
           std::nullopt,
           areaLinkStates,
           prefixEntries));
-}
-
-std::optional<DecisionRouteUpdate>
-SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
-  std::unordered_map<int32_t, thrift::MplsRoute> routesToUpdate;
-  std::unordered_set<int32_t> routesToDel;
-
-  // squash the updates together.
-  for (const auto& staticRoutesUpdate : staticRoutesUpdates_) {
-    for (const auto& mplsRoutesToUpdate :
-         *staticRoutesUpdate.mplsRoutesToUpdate_ref()) {
-      LOG(INFO) << "adding: " << mplsRoutesToUpdate.topLabel;
-      routesToUpdate[mplsRoutesToUpdate.topLabel] = mplsRoutesToUpdate;
-      routesToDel.erase(mplsRoutesToUpdate.topLabel);
-    }
-
-    for (const auto& mplsRoutesToDelete :
-         *staticRoutesUpdate.mplsRoutesToDelete_ref()) {
-      LOG(INFO) << "erasing: " << mplsRoutesToDelete;
-      routesToDel.insert(mplsRoutesToDelete);
-      routesToUpdate.erase(mplsRoutesToDelete);
-    }
-  }
-  staticRoutesUpdates_.clear();
-
-  if (routesToUpdate.size() == 0 && routesToDel.size() == 0) {
-    return {};
-  }
-
-  DecisionRouteUpdate ret;
-  for (const auto& [label, tMplsRoute] : routesToUpdate) {
-    staticRoutes_.mplsRoutes_ref()[label] = *tMplsRoute.nextHops_ref();
-    ret.mplsRoutesToUpdate.emplace_back(RibMplsEntry::fromThrift(tMplsRoute));
-  }
-
-  for (const auto& routeToDel : routesToDel) {
-    staticRoutes_.mplsRoutes_ref()->erase(routeToDel);
-    ret.mplsRoutesToDelete.push_back(routeToDel);
-  }
-
-  return ret;
 }
 
 std::optional<RibUnicastEntry>
@@ -1107,8 +1077,8 @@ SpfSolver::SpfSolverImpl::addBestPaths(
     CHECK(prependLabel.has_value());
 
     // Add static next-hops
-    auto routeIter = staticRoutes_.mplsRoutes_ref()->find(prependLabel.value());
-    if (routeIter != staticRoutes_.mplsRoutes_ref()->end()) {
+    auto routeIter = staticMplsRoutes_.find(prependLabel.value());
+    if (routeIter != staticMplsRoutes_.end()) {
       for (const auto& nh : routeIter->second) {
         nextHops.emplace(createNextHop(
             nh.address_ref().value(), std::nullopt, 0, std::nullopt));
@@ -1375,18 +1345,12 @@ SpfSolver::SpfSolver(
 
 SpfSolver::~SpfSolver() {}
 
-bool
-SpfSolver::staticRoutesUpdated() {
-  return impl_->staticRoutesUpdated();
-}
-
 void
-SpfSolver::pushRoutesDeltaUpdates(
-    thrift::RouteDatabaseDelta& staticRoutesDelta) {
-  return impl_->pushRoutesDeltaUpdates(staticRoutesDelta);
+SpfSolver::updateStaticRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta) {
+  return impl_->updateStaticRoutes(std::move(staticRoutesDelta));
 }
 
-thrift::StaticRoutes const&
+StaticMplsRoutes const&
 SpfSolver::getStaticRoutes() {
   return impl_->getStaticRoutes();
 }
@@ -1412,11 +1376,6 @@ SpfSolver::buildRouteDb(
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState) {
   return impl_->buildRouteDb(myNodeName, areaLinkStates, prefixState);
-}
-
-std::optional<DecisionRouteUpdate>
-SpfSolver::processStaticRouteUpdates() {
-  return impl_->processStaticRouteUpdates();
 }
 
 //
@@ -1520,7 +1479,8 @@ Decision::Decision(
             break;
           }
           // Apply publication and update stored update status
-          pushRoutesDeltaUpdates(maybeThriftPub.value());
+          spfSolver_->updateStaticRoutes(std::move(maybeThriftPub).value());
+          pendingUpdates_.setNeedsFullRebuild(); // Mark for full DB rebuild
           rebuildRoutesDebounced_();
         }
       });
@@ -1553,25 +1513,18 @@ Decision::getDecisionRouteDb(std::string nodeName) {
       routeDb = maybeRouteDb->toThrift();
     }
 
-    // static routes
-    for (const auto& [key, val] :
-         *spfSolver_->getStaticRoutes().mplsRoutes_ref()) {
-      routeDb.mplsRoutes_ref()->emplace_back(createMplsRoute(key, val));
-    }
-
     *routeDb.thisNodeName_ref() = nodeName;
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
   });
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::StaticRoutes>>
-Decision::getDecisionStaticRoutes() {
-  folly::Promise<std::unique_ptr<thrift::StaticRoutes>> p;
+folly::SemiFuture<StaticMplsRoutes>
+Decision::getMplsStaticRoutes() {
+  folly::Promise<StaticMplsRoutes> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([p = std::move(p), this]() mutable {
-    auto staticRoutes = spfSolver_->getStaticRoutes();
-    p.setValue(std::make_unique<thrift::StaticRoutes>(std::move(staticRoutes)));
+    p.setValue(spfSolver_->getStaticRoutes());
   });
   return sf;
 }
@@ -1920,12 +1873,6 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 }
 
 void
-Decision::pushRoutesDeltaUpdates(
-    thrift::RouteDatabaseDelta& staticRoutesDelta) {
-  spfSolver_->pushRoutesDeltaUpdates(staticRoutesDelta);
-}
-
-void
 Decision::rebuildRoutes(std::string const& event) {
   if (coldStartTimer_->isScheduled()) {
     return;
@@ -1943,17 +1890,9 @@ Decision::rebuildRoutes(std::string const& event) {
               << expectedDuration->count() << "ms.";
     }
   }
-  // we need to update  static route first, because there maybe routes
-  // depending on static routes.
-  bool staticRoutesUpdated = spfSolver_->staticRoutesUpdated();
-  if (staticRoutesUpdated) {
-    if (auto maybeRouteDbDelta = spfSolver_->processStaticRouteUpdates()) {
-      routeUpdatesQueue_.push(std::move(maybeRouteDbDelta.value()));
-    }
-  }
 
   DecisionRouteUpdate update;
-  if (pendingUpdates_.needsFullRebuild() || staticRoutesUpdated) {
+  if (pendingUpdates_.needsFullRebuild()) {
     // if only static routes gets updated, we still need to update routes
     // because there maybe routes depended on static routes.
     auto maybeRouteDb =
@@ -1992,8 +1931,6 @@ Decision::rebuildRoutes(std::string const& event) {
       }
     }
   }
-
-  // TODO: update change for local originiated prefixes based on threshold
 
   routeDb_.update(update);
   pendingUpdates_.addEvent("ROUTE_UPDATE");

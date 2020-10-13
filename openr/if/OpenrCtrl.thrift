@@ -33,10 +33,6 @@ struct NodeAndArea {
   2: string area;
 }
 
-struct StaticRoutes {
-  1: map<i32,list<Network.NextHopThrift>> mplsRoutes;
-}
-
 struct AdvertisedRoute {
   1: Network.PrefixType key;
   2: Lsdb.PrefixEntry route;

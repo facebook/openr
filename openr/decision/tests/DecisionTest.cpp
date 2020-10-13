@@ -2258,8 +2258,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   thrift::RouteDatabaseDelta routesDelta;
   routesDelta.mplsRoutesToUpdate_ref() = {
       createMplsRoute(prependLabel, staticNextHops)};
-  spfSolver->pushRoutesDeltaUpdates(routesDelta);
-  spfSolver->processStaticRouteUpdates();
+  spfSolver->updateStaticRoutes(std::move(routesDelta));
 
   // Get and verify next-hops. Both node1 & node4 will report static next-hops
   // NOTE: PUSH action is removed.
@@ -2676,7 +2675,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // 1: recursively resolved MPLS nexthops of prependLabel
   // 2: shortest path to node 2.
   // 3: second shortest path node 2.
-  thrift::StaticRoutes staticRoutes;
   int32_t staticMplsRouteLabel = 60000;
   // insert the new nexthop to mpls static routes cache
   thrift::NextHopThrift nh;
@@ -2687,8 +2685,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
   *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
-  spfSolver->pushRoutesDeltaUpdates(routesDelta);
-  spfSolver->processStaticRouteUpdates();
+  spfSolver->updateStaticRoutes(std::move(routesDelta));
 
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -2773,7 +2770,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   // 1: recursively resolved MPLS nexthops of prependLabel
   // 2: shortest path to node 2.
   // 3: second shortest path node 2.
-  thrift::StaticRoutes staticRoutes;
   int32_t staticMplsRouteLabel = 60000;
   // insert the new nexthop to mpls static routes cache
   thrift::NextHopThrift nh;
@@ -2784,8 +2780,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
   *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
-  spfSolver->pushRoutesDeltaUpdates(routesDelta);
-  spfSolver->processStaticRouteUpdates();
+  spfSolver->updateStaticRoutes(std::move(routesDelta));
 
   auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -4818,7 +4813,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // construct new static mpls route add
   thrift::RouteDatabaseDelta input;
-  thrift::NextHopThrift nh, nh1, nh2;
+  thrift::NextHopThrift nh, nh1;
   *nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::1"));
   *nh1.address_ref() = toBinaryAddress(folly::IPAddressV6("::2"));
   nh.mplsAction_ref() =
@@ -4830,31 +4825,26 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   *route.nextHops_ref() = {nh};
   input.mplsRoutesToUpdate_ref()->push_back(route);
 
-  // update 32011 and make sure only that is updated
+  // Update 32011 and make sure only that is updated
   sendStaticRoutesUpdate(input);
   auto routesDelta = routeUpdatesQueueReader.get().value();
-  // consume an empty routes update because of reachability change.
-  routeUpdatesQueueReader.get().value();
   routesDelta.perfEvents.reset();
   EXPECT_EQ(routesDelta.toThrift(), input);
 
-  // update another routes and make sure only that is updated
+  // Update 32012 and make sure only that is updated
   route.topLabel = 32012;
   *input.mplsRoutesToUpdate_ref() = {route};
   sendStaticRoutesUpdate(input);
   routesDelta = routeUpdatesQueueReader.get().value();
-  // consume an empty routes update because of reachability change.
-  routeUpdatesQueueReader.get().value();
   routesDelta.perfEvents.reset();
   EXPECT_EQ(routesDelta.toThrift(), input);
 
-  auto staticRoutes =
-      *decision->getDecisionStaticRoutes().wait().value()->mplsRoutes_ref();
+  auto staticRoutes = decision->getMplsStaticRoutes().get();
   EXPECT_EQ(staticRoutes.size(), 2);
   EXPECT_THAT(staticRoutes[32012], testing::UnorderedElementsAreArray({nh}));
   EXPECT_THAT(staticRoutes[32011], testing::UnorderedElementsAreArray({nh}));
 
-  // test our consolidating logic, we first update 32011 then delete 32011
+  // Test our consolidating logic, we first update 32011 then delete 32011
   // making sure only delete for 32011 is emitted.
   route.topLabel = 32011;
   *route.nextHops_ref() = {nh, nh1};
@@ -4867,14 +4857,11 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   sendStaticRoutesUpdate(input);
 
   routesDelta = routeUpdatesQueueReader.get().value();
-  // consume an empty routes update because of reachability change.
-  routeUpdatesQueueReader.get().value();
   routesDelta.perfEvents.reset();
-  EXPECT_EQ(routesDelta.mplsRoutesToDelete[0], 32011);
+  EXPECT_EQ(routesDelta.mplsRoutesToDelete.at(0), 32011);
   EXPECT_EQ(routesDelta.mplsRoutesToUpdate.size(), 0);
 
-  staticRoutes =
-      *decision->getDecisionStaticRoutes().wait().value()->mplsRoutes_ref();
+  staticRoutes = decision->getMplsStaticRoutes().get();
   EXPECT_EQ(staticRoutes.size(), 1);
   EXPECT_THAT(staticRoutes[32012], testing::UnorderedElementsAreArray({nh}));
 
@@ -4891,8 +4878,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   sendStaticRoutesUpdate(input);
 
   routesDelta = routeUpdatesQueueReader.get().value();
-  // consume an empty routes update because of reachability change.
-  routeUpdatesQueueReader.get().value();
   routesDelta.perfEvents.reset();
   EXPECT_EQ(1, routesDelta.mplsRoutesToUpdate.size());
   EXPECT_EQ(32012, routesDelta.mplsRoutesToUpdate.at(0).label);
@@ -4900,15 +4885,25 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       routesDelta.mplsRoutesToUpdate.at(0).nexthops,
       testing::UnorderedElementsAre(nh, nh1));
 
-  staticRoutes =
-      *decision->getDecisionStaticRoutes().wait().value()->mplsRoutes_ref();
+  staticRoutes = decision->getMplsStaticRoutes().get();
   EXPECT_EQ(staticRoutes.size(), 1);
   EXPECT_THAT(
       staticRoutes[32012], testing::UnorderedElementsAreArray({nh, nh1}));
 
-  EXPECT_THAT(
-      *dumpRouteDb({"1"})["1"].mplsRoutes_ref(),
-      Contains(createMplsRoute(32012, {nh, nh1})));
+  routeDb = dumpRouteDb({"1"})["1"];
+  bool foundLabelRoute{false};
+  for (auto const& mplsRoute : *routeDb.mplsRoutes_ref()) {
+    if (*mplsRoute.topLabel_ref() != 32012) {
+      continue;
+    }
+
+    EXPECT_THAT(
+        *mplsRoute.nextHops_ref(),
+        testing::UnorderedElementsAreArray({nh, nh1}));
+    foundLabelRoute = true;
+    break;
+  }
+  EXPECT_TRUE(foundLabelRoute);
 }
 
 // The following topology is used:

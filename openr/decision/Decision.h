@@ -42,6 +42,9 @@
 
 namespace openr {
 
+using StaticMplsRoutes =
+    std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>;
+
 /**
  * Captures the best route selection result. Especially highlights
  * - Best announcing `pair<area, node>`
@@ -214,13 +217,9 @@ class SpfSolver {
   // be defined in the .cpp
   //
 
-  bool staticRoutesUpdated();
+  void updateStaticRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
 
-  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
-
-  std::optional<DecisionRouteUpdate> processStaticRouteUpdates();
-
-  thrift::StaticRoutes const& getStaticRoutes();
+  StaticMplsRoutes const& getStaticRoutes();
 
   // Build route database using given prefix and link states for a given
   // router, myNodeName
@@ -287,8 +286,10 @@ class Decision : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getDecisionRouteDb(
       std::string nodeName);
 
-  folly::SemiFuture<std::unique_ptr<thrift::StaticRoutes>>
-  getDecisionStaticRoutes();
+  /**
+   * Retrieve static routes from Decision
+   */
+  folly::SemiFuture<StaticMplsRoutes> getMplsStaticRoutes();
 
   /*
    * Retrieve AdjacencyDatabase for kDefaultArea
@@ -339,8 +340,6 @@ class Decision : public OpenrEventBase {
 
   // process publication from KvStore
   void processPublication(thrift::Publication const& thriftPub);
-
-  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
 
   // openr config
   std::shared_ptr<const Config> config_;
