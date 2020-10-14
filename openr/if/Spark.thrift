@@ -26,11 +26,11 @@ struct SparkNeighbor {
   4: Network.BinaryAddress transportAddressV6
   5: Network.BinaryAddress transportAddressV4
 
-  // neighbor's kvstore global pub/cmd ports
+  // port to establish TCP connection
   7: i32 openrCtrlThriftPort = 0
   8: i32 kvStoreCmdPort = 0
 
-  // the interface name of the node sending hello packets over
+  // remote interface name
   9: string ifName
 }
 
@@ -161,21 +161,13 @@ enum SparkNeighborEventType {
 //
 // TODO: Migrate SparkNeighborEvent to NOT use thrift structure
 struct SparkNeighborEvent {
-  1: required SparkNeighborEventType eventType
-  2: required string ifName
-  3: required SparkNeighbor neighbor
-  4: required i64 rttUs
-  5: required i32 label   // Derived based off of ifIndex (local per node)
+  1: SparkNeighborEventType eventType
+  2: string ifName
+  3: SparkNeighbor neighbor
+  4: i64 rttUs
+  5: i32 label   // Derived based off of ifIndex (local per node)
   // support flood optimization or not
   6: bool supportFloodOptimization = 0
   // area ID
   7: string area
-}
-
-//
-// Spark result status
-//
-struct SparkIfDbUpdateResult {
-  1: bool isSuccess
-  2: string errString
 }

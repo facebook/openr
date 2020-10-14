@@ -1243,9 +1243,7 @@ Spark::processHelloMsg(
         std::piecewise_construct,
         std::forward_as_tuple(neighborName),
         std::forward_as_tuple(
-            *config_->getSparkConfig().step_detector_conf_ref(), // step
-                                                                 // detector
-                                                                 // config
+            *config_->getSparkConfig().step_detector_conf_ref(),
             domainName, // neighborNode domain
             neighborName, // neighborNode name
             remoteIfName, // remote interface on neighborNode
