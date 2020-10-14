@@ -1542,8 +1542,7 @@ KvStoreDb::processThriftSuccess(
     thrift::Publication&& pub,
     std::chrono::milliseconds timeDelta) {
   // check if it is valid peer(i.e. peer removed in process of syncing)
-  auto peerIt = thriftPeers_.find(peerName);
-  if (peerIt == thriftPeers_.end()) {
+  if (not thriftPeers_.count(peerName)) {
     LOG(WARNING) << "Received async full-sync response from invalid peer: "
                  << peerName << ". Ignore state transition.";
     return;
@@ -1621,8 +1620,7 @@ KvStoreDb::processThriftFailure(
     folly::fbstring const& exceptionStr,
     std::chrono::milliseconds timeDelta) {
   // check if it is valid peer(i.e. peer removed in process of syncing)
-  auto peerIt = thriftPeers_.find(peerName);
-  if (peerIt == thriftPeers_.end()) {
+  if (not thriftPeers_.count(peerName)) {
     return;
   }
 
