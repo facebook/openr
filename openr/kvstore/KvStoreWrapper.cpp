@@ -29,9 +29,6 @@ KvStoreWrapper::KvStoreWrapper(
     bool enableKvStoreThrift)
     : nodeId(config->getNodeName()),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
-      enableFloodOptimization_(
-          config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
-              false)),
       enableKvStoreThrift_(enableKvStoreThrift) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(

@@ -678,13 +678,11 @@ thrift::PeerSpec
 createPeerSpec(
     const std::string& cmdUrl,
     const std::string& peerAddr,
-    const int32_t port,
-    bool supportFloodOptimization) {
+    const int32_t port) {
   thrift::PeerSpec peerSpec;
   *peerSpec.cmdUrl_ref() = cmdUrl;
   *peerSpec.peerAddr_ref() = peerAddr;
   peerSpec.ctrlPort_ref() = port;
-  peerSpec.supportFloodOptimization_ref() = supportFloodOptimization;
   return peerSpec;
 }
 
@@ -695,7 +693,6 @@ createSparkNeighborEvent(
     const thrift::SparkNeighbor& originator,
     int64_t rttUs,
     int32_t label,
-    bool supportFloodOptimization,
     const std::string& area) {
   thrift::SparkNeighborEvent event;
   event.eventType = eventType;
@@ -703,7 +700,6 @@ createSparkNeighborEvent(
   event.neighbor = originator;
   event.rttUs = rttUs;
   event.label = label;
-  event.supportFloodOptimization_ref() = supportFloodOptimization;
   *event.area_ref() = area;
   return event;
 }

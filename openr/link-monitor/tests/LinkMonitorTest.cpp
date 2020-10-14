@@ -135,7 +135,7 @@ createNeighborEvent(
     const std::string& area = std::string{
         openr::thrift::KvStore_constants::kDefaultArea()}) {
   return createSparkNeighborEvent(
-      eventType, ifName, neighbor, rttUs, label, false, area);
+      eventType, ifName, neighbor, rttUs, label, area);
 }
 
 thrift::AdjacencyDatabase

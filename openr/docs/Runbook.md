@@ -492,15 +492,6 @@ root nodes went away, open/r will fall back to naive flooding.
 IS_FLOOD_ROOT=false
 ```
 
-#### USE_FLOOD_OPTIMIZATION
-
-Set this true to let open/r USE formed SPT for flooding, this flag will be
-deprecated soon. This is just for safely rollout purpose
-
-```
-USE_FLOOD_OPTIMIZATION=false
-```
-
 ### TLS Related Flags
 
 We are in the process of adding TLS for all openr traffic. This will be

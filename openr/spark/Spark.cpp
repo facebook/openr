@@ -252,7 +252,6 @@ Spark::Spark(
       kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(openrCtrlThriftPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
-      enableFloodOptimization_(config->isFloodOptimizationEnabled()),
       ioProvider_(std::move(ioProvider)),
       config_(std::move(config)) {
   CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
@@ -676,7 +675,7 @@ Spark::processRttChange(
       sparkNeighbor.toThrift(),
       sparkNeighbor.rtt.count(),
       sparkNeighbor.label,
-      false);
+      sparkNeighbor.area);
 }
 
 void
@@ -1020,7 +1019,6 @@ Spark::neighborUpWrapper(
       neighbor.toThrift(),
       neighbor.rtt.count(),
       neighbor.label,
-      true /* support flood-optimization */,
       neighbor.area);
 }
 
@@ -1036,7 +1034,6 @@ Spark::neighborDownWrapper(
       neighbor.toThrift(),
       neighbor.rtt.count(),
       neighbor.label,
-      true /* support flood-optimization */,
       neighbor.area);
 
   // remove neighborship on this interface
@@ -1058,7 +1055,6 @@ Spark::notifySparkNeighborEvent(
     thrift::SparkNeighbor const& originator,
     int64_t rttUs,
     int32_t label,
-    bool supportFloodOptimization,
     const std::string& area) {
   thrift::SparkNeighborEvent event;
   event.eventType = eventType;
@@ -1066,7 +1062,6 @@ Spark::notifySparkNeighborEvent(
   event.neighbor = originator;
   event.rttUs = rttUs;
   event.label = label;
-  event.supportFloodOptimization_ref() = supportFloodOptimization;
   *event.area_ref() = area;
   neighborUpdatesQueue_.push(std::move(event));
 }
@@ -1163,7 +1158,6 @@ Spark::processGRMsg(
       neighbor.toThrift(),
       neighbor.rtt.count(),
       neighbor.label,
-      false /* supportDual: doesn't matter in DOWN event*/,
       neighbor.area);
 
   // start graceful-restart timer
@@ -1413,7 +1407,6 @@ Spark::processHelloMsg(
         neighbor.toThrift(),
         neighbor.rtt.count(),
         neighbor.label,
-        true /* support flood-optimization */,
         neighbor.area);
 
     // start heartbeat timer again to make sure neighbor is alive

@@ -116,7 +116,6 @@ X509_CERT_PATH=""
 X509_KEY_PATH=""
 ENABLE_FLOOD_OPTIMIZATION=false
 IS_FLOOD_ROOT=false
-USE_FLOOD_OPTIMIZATION=false
 PLUGIN_ARGS=
 
 #
@@ -237,7 +236,6 @@ ARGS="\
   --tls_acceptable_peers=${TLS_ACCEPTABLE_PEERS} \
   --tls_ecc_curve_name=${TLS_ECC_CURVE_NAME} \
   --tls_ticket_seed_path=${TLS_TICKET_SEED_PATH} \
-  --use_flood_optimization=${USE_FLOOD_OPTIMIZATION} \
   --x509_ca_path=${X509_CA_PATH} \
   --x509_cert_path=${X509_CERT_PATH} \
   --x509_key_path=${X509_KEY_PATH} \

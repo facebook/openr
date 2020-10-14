@@ -166,8 +166,6 @@ struct SparkNeighborEvent {
   3: SparkNeighbor neighbor
   4: i64 rttUs
   5: i32 label   // Derived based off of ifIndex (local per node)
-  // support flood optimization or not
-  6: bool supportFloodOptimization = 0
   // area ID
   7: string area
 }

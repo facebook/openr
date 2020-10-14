@@ -124,7 +124,6 @@ DECLARE_int32(kvstore_ttl_decrement_ms);
 
 DECLARE_bool(enable_flood_optimization);
 DECLARE_bool(is_flood_root);
-DECLARE_bool(use_flood_optimization);
 
 DECLARE_int32(spark_mcast_port);
 DECLARE_int32(spark_hold_time_s);

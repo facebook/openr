@@ -160,8 +160,7 @@ class KvStoreWrapper {
     return createPeerSpec(
         globalCmdUrl, /* cmdUrl for ZMQ */
         "", /* peerAddr for thrift */
-        0, /* port for thrift */
-        enableFloodOptimization_);
+        0 /* port for thrift */);
   }
 
   /**
@@ -208,9 +207,6 @@ class KvStoreWrapper {
 
   // Thread in which KvStore will be running.
   std::thread kvStoreThread_;
-
-  // enable flood optimization or not
-  const bool enableFloodOptimization_{false};
 
   // enable kvStore over thrift or not
   const bool enableKvStoreThrift_{false};

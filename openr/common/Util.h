@@ -333,8 +333,7 @@ addJitter(T base, double pct = 20.0) {
 thrift::PeerSpec createPeerSpec(
     const std::string& cmdUrl,
     const std::string& thriftPeerAddr = "",
-    const int32_t port = 0,
-    bool supportFloodOptimization = false);
+    const int32_t port = 0);
 
 thrift::SparkNeighbor createSparkNeighbor(
     const std::string& nodeName,
@@ -350,7 +349,6 @@ thrift::SparkNeighborEvent createSparkNeighborEvent(
     const thrift::SparkNeighbor& originator,
     int64_t rttUs,
     int32_t label,
-    bool supportFloodOptimization,
     const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
 
 thrift::Adjacency createAdjacency(

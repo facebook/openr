@@ -120,9 +120,6 @@ struct PeerSpec {
   // cmd url for KvStore external sync over ZMQ
   2: string cmdUrl
 
-  // support flood optimization or not
-  3: bool supportFloodOptimization = 0
-
   // thrift port
   4: i32 ctrlPort = 0
 }

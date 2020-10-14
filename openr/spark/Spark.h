@@ -392,7 +392,6 @@ class Spark final : public OpenrEventBase {
       thrift::SparkNeighbor const& originator,
       int64_t rtt,
       int32_t label,
-      bool supportFloodOptimization,
       const std::string& area =
           openr::thrift::KvStore_constants::kDefaultArea());
 
@@ -486,9 +485,6 @@ class Spark final : public OpenrEventBase {
 
   // current version and supported version
   const thrift::OpenrVersions kVersion_;
-
-  // enable dual or not
-  const bool enableFloodOptimization_{false};
 
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};

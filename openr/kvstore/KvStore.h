@@ -171,7 +171,7 @@ struct KvStoreParams {
       std::optional<thrift::KvstoreFloodRate> floodrate,
       // TTL decrement factor
       std::chrono::milliseconds ttldecr,
-      bool enablefloodOptimization,
+      bool enableFloodOptimization,
       bool isfloodRoot)
       : nodeId(nodeid),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
@@ -185,7 +185,7 @@ struct KvStoreParams {
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
-        enableFloodOptimization(enablefloodOptimization),
+        enableFloodOptimization(enableFloodOptimization),
         isFloodRoot(isfloodRoot) {}
 };
 

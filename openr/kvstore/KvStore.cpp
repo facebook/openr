@@ -1653,15 +1653,12 @@ KvStoreDb::addThriftPeers(
   for (auto const& peerKv : peers) {
     auto const& peerName = peerKv.first;
     auto const& newPeerSpec = peerKv.second;
-    auto const& supportFloodOptimization =
-        *newPeerSpec.supportFloodOptimization_ref();
 
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter != thriftPeers_.end()) {
       LOG(INFO) << "[Peer Update] " << peerName << " is updated."
-                << " peerAddr: " << *newPeerSpec.peerAddr_ref()
-                << " flood-optimization:" << supportFloodOptimization;
+                << " peerAddr: " << *newPeerSpec.peerAddr_ref();
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
       if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr_ref()) {
@@ -1681,8 +1678,7 @@ KvStoreDb::addThriftPeers(
     } else {
       // case 2: found a new peer coming up
       LOG(INFO) << "[Peer Add] " << peerName << " is added."
-                << " peerAddr: " << *newPeerSpec.peerAddr_ref()
-                << " flood-optimization:" << supportFloodOptimization;
+                << " peerAddr: " << *newPeerSpec.peerAddr_ref();
 
       KvStorePeer peer(
           peerName,
@@ -1729,8 +1725,6 @@ KvStoreDb::addPeers(
         Constants::kGlobalCmdLocalIdTemplate.toString(),
         peerName,
         peerAddCounter_);
-    const auto& supportFloodOptimization =
-        *newPeerSpec.supportFloodOptimization_ref();
 
     try {
       auto it = peers_.find(peerName);
@@ -1738,14 +1732,12 @@ KvStoreDb::addPeers(
       bool isNewPeer{false};
 
       // add dual peers for both new-peer or update-peer event
-      if (supportFloodOptimization) {
+      if (kvParams_.enableFloodOptimization) {
         dualPeersToAdd.emplace_back(peerName);
       }
 
       if (it != peers_.end()) {
-        LOG(INFO)
-            << "Updating existing peer " << peerName
-            << ", support-flood-optimization: " << supportFloodOptimization;
+        LOG(INFO) << "Updating existing peer " << peerName;
 
         const auto& peerSpec = it->second.first;
 
@@ -1773,9 +1765,7 @@ KvStoreDb::addPeers(
         it->second.first = newPeerSpec;
       } else {
         // case3. new peer came up
-        LOG(INFO)
-            << "Adding new peer " << peerName
-            << ", support-flood-optimization: " << supportFloodOptimization;
+        LOG(INFO) << "Adding new peer " << peerName;
         isNewPeer = true;
         cmdUrlUpdated = true;
         std::tie(it, std::ignore) =
@@ -1800,7 +1790,7 @@ KvStoreDb::addPeers(
       }
 
       if (isNewPeer) {
-        if (supportFloodOptimization) {
+        if (kvParams_.enableFloodOptimization) {
           // make sure let peer to unset-child for me for all roots first
           // after that, I'll be fed with proper dual-events and I'll be
           // chosing new nexthop if need.
@@ -1872,10 +1862,8 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
     }
     const auto& peerSpec = peerIter->second.peerSpec;
 
-    LOG(INFO)
-        << "[Peer Delete] " << peerName
-        << " is detached from: " << *peerSpec.peerAddr_ref()
-        << ", flood-optimization: " << *peerSpec.supportFloodOptimization_ref();
+    LOG(INFO) << "[Peer Delete] " << peerName
+              << " is detached from: " << *peerSpec.peerAddr_ref();
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
@@ -1902,13 +1890,11 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
     }
 
     const auto& peerSpec = it->second.first;
-    if (*peerSpec.supportFloodOptimization_ref()) {
+    if (kvParams_.enableFloodOptimization) {
       dualPeersToRemove.emplace_back(peerName);
     }
 
-    LOG(INFO) << "Detaching from: " << *peerSpec.cmdUrl_ref()
-              << ", support-flood-optimization: "
-              << *peerSpec.supportFloodOptimization_ref();
+    LOG(INFO) << "Detaching from: " << *peerSpec.cmdUrl_ref();
     auto syncRes =
         peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
     if (syncRes.hasError()) {
@@ -2836,8 +2822,7 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
   for (const auto& kv : peers_) {
     const auto& peer = kv.first;
     const auto& peerSpec = kv.second.first;
-    if (floodToAll or sptPeers.count(peer) != 0 or
-        not(*peerSpec.supportFloodOptimization_ref())) {
+    if (floodToAll or sptPeers.count(peer) != 0) {
       floodPeers.emplace(peer);
     }
   }

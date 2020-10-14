@@ -2840,7 +2840,6 @@ TEST_P(KvStoreRateLimitTestFixture, InitialSync) {
     // NOTE: We explicitly disable flood optimization to avoid conflict of
     // dual messages with full sync requests.
     thrift::PeerSpec peerSpec;
-    peerSpec.supportFloodOptimization_ref() = false;
     *peerSpec.cmdUrl_ref() = folly::sformat("inproc://{}", nodeName);
 
     // Create peer socket.
@@ -2998,7 +2997,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
   // Create peer socket
   //
   thrift::PeerSpec peerSpec;
-  peerSpec.supportFloodOptimization_ref() = false;
   *peerSpec.cmdUrl_ref() = "inproc://test-peer-iface0";
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSock(
       context,

@@ -351,8 +351,6 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   *peerSpec.cmdUrl_ref() = repUrl;
   *peerSpec.peerAddr_ref() = peerAddr;
   peerSpec.ctrlPort_ref() = openrCtrlThriftPort;
-  peerSpec.supportFloodOptimization_ref() =
-      *event.supportFloodOptimization_ref();
   adjacencies_[adjId] =
       AdjacencyValue(peerSpec, std::move(newAdj), false, area);
 
