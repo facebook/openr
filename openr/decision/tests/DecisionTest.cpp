@@ -4906,6 +4906,58 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_TRUE(foundLabelRoute);
 }
 
+/**
+ * Publish all types of update to Decision and expect that Decision emits
+ * a full route database that includes all the routes as its first update.
+ *
+ * Types of information updated
+ * - Adjacencies (with MPLS labels)
+ * - Prefixes
+ * - MPLS Static routes
+ */
+TEST_F(DecisionTestFixture, InitialRouteUpdate) {
+  // Send adj publication
+  sendKvPublication(createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
+      {},
+      {},
+      {},
+      std::string("")));
+
+  // Send prefix publication
+  sendKvPublication(createThriftPublication(
+      {createPrefixKeyValue("1", 1, createPrefixEntry(addr1), "0"),
+       createPrefixKeyValue("2", 1, createPrefixEntry(addr2), "0")},
+      {},
+      {},
+      {},
+      std::string("")));
+
+  // Send static MPLS routes
+  thrift::RouteDatabaseDelta staticRoutes;
+  {
+    thrift::NextHopThrift nh;
+    nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::1"));
+    nh.mplsAction_ref() =
+        createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+    thrift::MplsRoute mplsRoute;
+    mplsRoute.topLabel_ref() = 32011;
+    mplsRoute.nextHops_ref() = {nh};
+    staticRoutes.mplsRoutesToUpdate_ref()->push_back(mplsRoute);
+  }
+  sendStaticRoutesUpdate(staticRoutes);
+
+  //
+  // Receive & verify all the expected updates
+  auto routeDbDelta = recvRouteUpdates();
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  // self mpls route, node 2 mpls route, adj12 label route, static MPLS route
+  EXPECT_EQ(4, routeDbDelta.mplsRoutesToUpdate.size());
+  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
+}
+
 // The following topology is used:
 //  1--- A ---2
 //  |         |

@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <fbzmq/zmq/Common.h>
+
 namespace openr {
 
 // create RE2 set for the list of key prefixes
@@ -849,6 +851,28 @@ createThriftValue(
   }
 
   return value;
+}
+
+/**
+ * Utility function to create `key, value` pair for updating route in KvStore
+ */
+std::pair<std::string, thrift::Value>
+createPrefixKeyValue(
+    const std::string& nodeName,
+    const int64_t version,
+    const thrift::PrefixEntry& prefixEntry,
+    const std::string& area) {
+  auto prefixDb = createPrefixDb(nodeName, {prefixEntry}, area);
+  auto prefixKey =
+      PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix_ref()), area)
+          .getPrefixKey();
+
+  apache::thrift::CompactSerializer serializer;
+  return {prefixKey,
+          createThriftValue(
+              version,
+              nodeName,
+              fbzmq::util::writeThriftObjStr(prefixDb, serializer))};
 }
 
 thrift::Publication

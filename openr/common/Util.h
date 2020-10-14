@@ -409,6 +409,15 @@ thrift::Value createThriftValue(
     int64_t ttlVersion = 0,
     std::optional<int64_t> hash = std::nullopt);
 
+/**
+ * Utility function to create `key, value` pair for updating route in KvStore
+ */
+std::pair<std::string, thrift::Value> createPrefixKeyValue(
+    const std::string& nodeName,
+    const int64_t version,
+    const thrift::PrefixEntry& prefixEntry,
+    const std::string& area);
+
 thrift::Publication createThriftPublication(
     const std::unordered_map<std::string, thrift::Value>& kv,
     const std::vector<std::string>& expiredKeys,
