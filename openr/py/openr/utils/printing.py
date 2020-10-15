@@ -38,18 +38,18 @@ def sprint_bytes(bytes: int) -> str:
 
 
 def render_horizontal_table(data, column_labels=(), caption="", tablefmt="simple"):
-    """ Render tabular data with one item per line
+    """Render tabular data with one item per line
 
-        :param data:  An iterable (e.g. a tuple() or list) containing the rows
-                      of the table, where each row is an iterable containing
-                      the columns of the table (strings).
-        :param column_names: An iterable of column names (strings).
-        :param caption: Title of the table (a string).
-        :param tablefmt: Table formats. Supports 'plain', 'simple'.
-                         'simple' format generates a separating line '----' between
-                         column label and contents, while 'plain' format does not.
+    :param data:  An iterable (e.g. a tuple() or list) containing the rows
+                  of the table, where each row is an iterable containing
+                  the columns of the table (strings).
+    :param column_names: An iterable of column names (strings).
+    :param caption: Title of the table (a string).
+    :param tablefmt: Table formats. Supports 'plain', 'simple'.
+                     'simple' format generates a separating line '----' between
+                     column label and contents, while 'plain' format does not.
 
-        :return: The rendered table (a string).
+    :return: The rendered table (a string).
     """
 
     return "{}{}{}".format(
@@ -66,17 +66,17 @@ def render_vertical_table(
     element_prefix: str = ">",
     element_suffix: str = "",
 ):
-    """ Render tabular data with one column per line
+    """Render tabular data with one column per line
 
-        :param data:  An iterable (e.g. a tuple() or list) containing the rows
-                      of the table, where each row is an iterable containing
-                      the columns of the table (strings).
-        :param column_names: An iterable of column names (strings).
-        :param caption: Title of the table (a string).
-        :param element_prefix: Starting prefix for each item. (string)
-        :param element_suffix: Ending/terminator for each item. (string)
+    :param data:  An iterable (e.g. a tuple() or list) containing the rows
+                  of the table, where each row is an iterable containing
+                  the columns of the table (strings).
+    :param column_names: An iterable of column names (strings).
+    :param caption: Title of the table (a string).
+    :param element_prefix: Starting prefix for each item. (string)
+    :param element_suffix: Ending/terminator for each item. (string)
 
-        :return: The rendered table (a string).
+    :return: The rendered table (a string).
     """
 
     table_str = ""

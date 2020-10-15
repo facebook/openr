@@ -234,9 +234,9 @@ class PathCmd(OpenrCtrlCmd):
     def get_nexthop_nodes(
         self, route_db, dst_addr, cur_lpm_len, if2node, fib_routes, in_fib
     ):
-        """ get the next hop nodes.
+        """get the next hop nodes.
         if the longest prefix is coming from the current node,
-        return an empty list to terminate the path searching. """
+        return an empty list to terminate the path searching."""
 
         next_hop_nodes = []
         is_initialized = fib_routes[route_db.thisNodeName]

@@ -206,8 +206,7 @@ def sprint_prefix_is_ephemeral(prefix_entry: lsdb_types.PrefixEntry) -> str:
 
 
 def ip_version(addr):
-    """ return ip addr version
-    """
+    """return ip addr version"""
 
     return ipaddress.ip_address(addr).version
 

@@ -13,12 +13,12 @@ from thrift.util import Serializer
 
 
 def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
-    """ Serialize thrift data to binary blob
+    """Serialize thrift data to binary blob
 
-        :param thrift_obj: the thrift object
-        :param proto_factory: protocol factory, set default as Compact Protocol
+    :param thrift_obj: the thrift object
+    :param proto_factory: protocol factory, set default as Compact Protocol
 
-        :return: string the serialized thrift payload
+    :return: string the serialized thrift payload
     """
 
     return Serializer.serialize(proto_factory(), thrift_obj)
@@ -27,13 +27,13 @@ def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
 def deserialize_thrift_object(
     raw_data, thrift_type, proto_factory=Consts.PROTO_FACTORY
 ):
-    """ Deserialize thrift data from binary blob
+    """Deserialize thrift data from binary blob
 
-        :param raw_data string: the serialized thrift payload
-        :param thrift_type: the thrift type
-        :param proto_factory: protocol factory, set default as Compact Protocol
+    :param raw_data string: the serialized thrift payload
+    :param thrift_type: the thrift type
+    :param proto_factory: protocol factory, set default as Compact Protocol
 
-        :return: instance of thrift_type
+    :return: instance of thrift_type
     """
 
     resp = thrift_type()

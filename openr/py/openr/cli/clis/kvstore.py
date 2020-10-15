@@ -224,7 +224,7 @@ class KvSignatureCli(object):
     )
     @click.pass_obj
     def kv_signature(cli_opts, prefix):  # noqa: B902
-        """ Returns a signature of the contents of the KV store for comparison
+        """Returns a signature of the contents of the KV store for comparison
         with other nodes.  In case of mismatch, use kv-compare to analyze
         differences
         """
@@ -258,8 +258,8 @@ class SnoopCli(object):
     def snoop(
         cli_opts, delta, ttl, regexes, duration, originator_ids, match_all
     ):  # noqa: B902
-        """ Snoop on KV-store updates in the network. We are primarily
-            looking at the adj/prefix announcements.
+        """Snoop on KV-store updates in the network. We are primarily
+        looking at the adj/prefix announcements.
         """
 
         kvstore.SnoopCmd(cli_opts).run(

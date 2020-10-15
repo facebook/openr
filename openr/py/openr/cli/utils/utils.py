@@ -144,9 +144,9 @@ def get_fib_agent_client(
 
 
 def parse_nodes(cli_opts, nodes):
-    """ parse nodes from user input
+    """parse nodes from user input
 
-        :return set: the set of nodes
+    :return set: the set of nodes
     """
 
     if not nodes:
@@ -158,13 +158,13 @@ def parse_nodes(cli_opts, nodes):
 
 
 def sprint_prefixes_db_full(prefix_db, loopback_only=False):
-    """ given serialized prefixes output an array of lines
-            representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
+    """given serialized prefixes output an array of lines
+        representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
 
-        :prefix_db lsdb_types.PrefixDatabase: prefix database
-        :loopback_only : is only loopback address expected
+    :prefix_db lsdb_types.PrefixDatabase: prefix database
+    :loopback_only : is only loopback address expected
 
-        :return [str]: the array of prefix strings
+    :return [str]: the array of prefix strings
     """
 
     prefix_strs = []
@@ -270,13 +270,13 @@ def print_prefixes_table(resp, nodes, prefix, client_type, iter_func):
 
 
 def thrift_to_dict(thrift_inst, update_func=None):
-    """ convert thrift instance into a dict in strings
+    """convert thrift instance into a dict in strings
 
-        :param thrift_inst: a thrift instance
-        :param update_func: transformation function to update dict value of
-                            thrift object. It is optional.
+    :param thrift_inst: a thrift instance
+    :param update_func: transformation function to update dict value of
+                        thrift object. It is optional.
 
-        :return dict: dict with attributes as key, value in strings
+    :return dict: dict with attributes as key, value in strings
     """
 
     if thrift_inst is None:
@@ -301,8 +301,8 @@ def metric_vector_to_dict(metric_vector):
 def collate_prefix_keys(
     kvstore_keyvals: kv_store_types.KeyVals,
 ) -> Dict[str, lsdb_types.PrefixDatabase]:
-    """ collate all the prefixes of node and return a map of
-        nodename - PrefixDatabase
+    """collate all the prefixes of node and return a map of
+    nodename - PrefixDatabase
     """
 
     prefix_maps = {}
@@ -376,12 +376,12 @@ def print_prefixes_json(resp, nodes, prefix, client_type, iter_func):
 
 
 def update_global_adj_db(global_adj_db, adj_db):
-    """ update the global adj map based on publication from single node
+    """update the global adj map based on publication from single node
 
-        :param global_adj_map map(node, AdjacencyDatabase)
-            the map for all adjacencies in the network - to be updated
-        :param adj_db lsdb_types.AdjacencyDatabase: publication from single
-            node
+    :param global_adj_map map(node, AdjacencyDatabase)
+        the map for all adjacencies in the network - to be updated
+    :param adj_db lsdb_types.AdjacencyDatabase: publication from single
+        node
     """
 
     assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
@@ -390,14 +390,14 @@ def update_global_adj_db(global_adj_db, adj_db):
 
 
 def build_global_adj_db(resp):
-    """ build a map of all adjacencies in the network. this is used
-        for bi-directional validation
+    """build a map of all adjacencies in the network. this is used
+    for bi-directional validation
 
-        :param resp kv_store_types.Publication: the parsed publication
+    :param resp kv_store_types.Publication: the parsed publication
 
-        :return map(node, AdjacencyDatabase): the global
-            adj map, devices name mapped to devices it connects to, and
-            properties of that connection
+    :return map(node, AdjacencyDatabase): the global
+        adj map, devices name mapped to devices it connects to, and
+        properties of that connection
     """
 
     # map: (node) -> AdjacencyDatabase)
@@ -413,13 +413,13 @@ def build_global_adj_db(resp):
 
 
 def build_global_prefix_db(resp):
-    """ build a map of all prefixes in the network. this is used
-        for checking for changes in topology
+    """build a map of all prefixes in the network. this is used
+    for checking for changes in topology
 
-        :param resp kv_store_types.Publication: the parsed publication
+    :param resp kv_store_types.Publication: the parsed publication
 
-        :return map(node, set([prefix])): the global prefix map,
-            prefixes mapped to the node
+    :return map(node, set([prefix])): the global prefix map,
+        prefixes mapped to the node
     """
 
     # map: (node) -> set([prefix])
@@ -433,16 +433,16 @@ def build_global_prefix_db(resp):
 
 
 def dump_adj_db_full(global_adj_db, adj_db, bidir):
-    """ given an adjacency database, dump neighbors. Use the
-            global adj database to validate bi-dir adjacencies
+    """given an adjacency database, dump neighbors. Use the
+        global adj database to validate bi-dir adjacencies
 
-        :param global_adj_db map(str, AdjacencyDatabase):
-            map of node names to their adjacent node names
-        :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
-        :param bidir bool: only dump bidir adjacencies
+    :param global_adj_db map(str, AdjacencyDatabase):
+        map of node names to their adjacent node names
+    :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
+    :param bidir bool: only dump bidir adjacencies
 
-        :return (nodeLabel, [adjacencies]): tuple of node label and list
-            of adjacencies
+    :return (nodeLabel, [adjacencies]): tuple of node label and list
+        of adjacencies
     """
 
     assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
@@ -507,14 +507,14 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
 
 
 def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
-    """ get parsed adjacency db
+    """get parsed adjacency db
 
-        :param resp kv_store_types.Publication, or decision_types.adjDbs
-        :param nodes set: the set of the nodes to print prefixes for
-        :param bidir bool: only dump bidirectional adjacencies
+    :param resp kv_store_types.Publication, or decision_types.adjDbs
+    :param nodes set: the set of the nodes to print prefixes for
+    :param bidir bool: only dump bidirectional adjacencies
 
-        :return map(node, map(adjacency_keys, (adjacency_values)): the parsed
-            adjacency DB in a map with keys and values in strings
+    :return map(node, map(adjacency_keys, (adjacency_values)): the parsed
+        adjacency DB in a map with keys and values in strings
     """
     adj_dbs = resp
     if isinstance(adj_dbs, kv_store_types.Publication):
@@ -546,9 +546,9 @@ def print_json(map, file=sys.stdout):
 
 
 def print_adjs_table(adjs_map, neigh=None, interface=None):
-    """ print adjacencies
+    """print adjacencies
 
-        :param adjacencies as list of dict
+    :param adjacencies as list of dict
     """
 
     column_labels = [
@@ -636,15 +636,15 @@ def print_adjs_table(adjs_map, neigh=None, interface=None):
 
 
 def sprint_adj_db_full(global_adj_db, adj_db, bidir):
-    """ given serialized adjacency database, print neighbors. Use the
-            global adj database to validate bi-dir adjacencies
+    """given serialized adjacency database, print neighbors. Use the
+        global adj database to validate bi-dir adjacencies
 
-        :param global_adj_db map(str, AdjacencyDatabase):
-            map of node names to their adjacent node names
-        :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
-        :param bidir bool: only print bidir adjacencies
+    :param global_adj_db map(str, AdjacencyDatabase):
+        map of node names to their adjacent node names
+    :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
+    :param bidir bool: only print bidir adjacencies
 
-        :return [str]: list of string to be printed
+    :return [str]: list of string to be printed
     """
 
     assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
@@ -729,13 +729,13 @@ def interface_db_to_dict(value):
 
 
 def interface_dbs_to_dict(publication, nodes, iter_func):
-    """ get parsed interface dbs
+    """get parsed interface dbs
 
-        :param publication kv_store_types.Publication
-        :param nodes set: the set of the nodes to filter interfaces for
+    :param publication kv_store_types.Publication
+    :param nodes set: the set of the nodes to filter interfaces for
 
-        :return map(node, InterfaceDatabase.bunch): the parsed
-            adjacency DB in a map with keys and values in strings
+    :return map(node, InterfaceDatabase.bunch): the parsed
+        adjacency DB in a map with keys and values in strings
     """
 
     assert isinstance(publication, kv_store_types.Publication)
@@ -870,18 +870,18 @@ def print_route_db(
 
 
 def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
-    """ given the old adj list and the new one for some node, return
-        change list.
+    """given the old adj list and the new one for some node, return
+    change list.
 
-        :param old_adj_list [Adjacency]: old adjacency list
-        :param new_adj_list [Adjacency]: new adjacency list
-        :param tags 3-tuple(string): a tuple of labels for
-            (in old only, in new only, in both but different)
+    :param old_adj_list [Adjacency]: old adjacency list
+    :param new_adj_list [Adjacency]: new adjacency list
+    :param tags 3-tuple(string): a tuple of labels for
+        (in old only, in new only, in both but different)
 
-        :return [(str, Adjacency, Adjacency)]: list of tuples of
-            (changeType, oldAdjacency, newAdjacency)
-            in the case where an adjacency is added or removed,
-            oldAdjacency or newAdjacency is None, respectively
+    :return [(str, Adjacency, Adjacency)]: list of tuples of
+        (changeType, oldAdjacency, newAdjacency)
+        in the case where an adjacency is added or removed,
+        oldAdjacency or newAdjacency is None, respectively
     """
     if not tags:
         tags = ("NEIGHBOR_DOWN", "NEIGHBOR_UP", "NEIGHBOR_UPDATE")
@@ -976,11 +976,11 @@ def adj_list_deltas_json(adj_deltas_list, tags=None):
 
 
 def adjacency_to_dict(adjacency):
-    """ convert adjacency from thrift instance into a dict in strings
+    """convert adjacency from thrift instance into a dict in strings
 
-        :param adjacency as a thrift instance: adjacency
+    :param adjacency as a thrift instance: adjacency
 
-        :return dict: dict with adjacency attributes as key, value in strings
+    :return dict: dict with adjacency attributes as key, value in strings
     """
 
     # Only addrs need string conversion so we udpate them
@@ -996,14 +996,14 @@ def adjacency_to_dict(adjacency):
 
 
 def sprint_adj_delta(old_adj, new_adj):
-    """ given old and new adjacency, create a list of strings that summarize
-        changes. If oldAdj is None, this function prints all attridutes of
-        newAdj
+    """given old and new adjacency, create a list of strings that summarize
+    changes. If oldAdj is None, this function prints all attridutes of
+    newAdj
 
-        :param oldAdj Adjacency: can be None
-        :param newAdj Adjacency: new
+    :param oldAdj Adjacency: can be None
+    :param newAdj Adjacency: new
 
-        :return str: table summarizing the change
+    :return str: table summarizing the change
     """
     assert new_adj is not None
     rows = []
@@ -1047,12 +1047,12 @@ def sprint_pub_update(global_publication_db, key, value):
 
 
 def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = None):
-    """ update the global prefix map with a single publication
+    """update the global prefix map with a single publication
 
-        :param global_prefix_map map(node, set([str])): map of all prefixes
-            in the network
-        :param prefix_db lsdb_types.PrefixDatabase: publication from single
-            node
+    :param global_prefix_map map(node, set([str])): map of all prefixes
+        in the network
+    :param prefix_db lsdb_types.PrefixDatabase: publication from single
+        node
     """
 
     assert isinstance(prefix_db, lsdb_types.PrefixDatabase)
@@ -1077,13 +1077,13 @@ def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = 
 
 
 def sprint_adj_db_delta(new_adj_db, old_adj_db):
-    """ given serialized adjacency database, print neighbors delta as
-            compared to the supplied global state
+    """given serialized adjacency database, print neighbors delta as
+        compared to the supplied global state
 
-        :param new_adj_db lsdb_types.AdjacencyDatabase: latest from kv store
-        :param old_adj_db lsdb_types.AdjacencyDatabase: last one we had
+    :param new_adj_db lsdb_types.AdjacencyDatabase: latest from kv store
+    :param old_adj_db lsdb_types.AdjacencyDatabase: last one we had
 
-        :return [str]: list of string to be printed
+    :return [str]: list of string to be printed
     """
 
     # check for deltas between old and new
@@ -1132,17 +1132,17 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
 def sprint_prefixes_db_delta(
     global_prefixes_db: Dict, prefix_db: Dict, key: str = None
 ):
-    """ given serialzied prefixes for a single node, output the delta
-            between those prefixes and global prefixes snapshot
+    """given serialzied prefixes for a single node, output the delta
+        between those prefixes and global prefixes snapshot
 
-        prefix could be entire prefix DB or per prefix key
-        entire prefix DB: prefix:<node name>
-        per prefix key: prefix:<node name>:<area>:<[IP addr/prefix len]
+    prefix could be entire prefix DB or per prefix key
+    entire prefix DB: prefix:<node name>
+    per prefix key: prefix:<node name>:<area>:<[IP addr/prefix len]
 
-        :global_prefixes_db map(node, set([str])): global prefixes
-        :prefix_db lsdb_types.PrefixDatabase: latest from kv store
+    :global_prefixes_db map(node, set([str])): global prefixes
+    :prefix_db lsdb_types.PrefixDatabase: latest from kv store
 
-        :return [str]: the array of prefix strings
+    :return [str]: the array of prefix strings
     """
 
     this_node_name = prefix_db.thisNodeName
