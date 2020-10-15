@@ -197,6 +197,7 @@ Spark::SparkNeighbor::SparkNeighbor(
     const thrift::StepDetectorConfig& stepDetectorConfig,
     std::string const& domainName,
     std::string const& nodeName,
+    std::string const& localIfName,
     std::string const& remoteIfName,
     uint32_t label,
     uint64_t seqNum,
@@ -205,6 +206,7 @@ Spark::SparkNeighbor::SparkNeighbor(
     const std::string& adjArea)
     : domainName(domainName),
       nodeName(nodeName),
+      localIfName(localIfName),
       remoteIfName(remoteIfName),
       label(label),
       seqNum(seqNum),
@@ -214,9 +216,10 @@ Spark::SparkNeighbor::SparkNeighbor(
           samplingPeriod /* sampling period */,
           rttChangeCb /* callback function */),
       area(adjArea) {
-  CHECK(!(this->domainName.empty()));
-  CHECK(!(this->nodeName.empty()));
-  CHECK(!(this->remoteIfName.empty()));
+  CHECK(not this->domainName.empty());
+  CHECK(not this->nodeName.empty());
+  CHECK(not this->localIfName.empty());
+  CHECK(not this->remoteIfName.empty());
 }
 
 Spark::Spark(
@@ -671,11 +674,7 @@ Spark::processRttChange(
   sparkNeighbor.rtt = std::chrono::microseconds(newRtt);
   notifySparkNeighborEvent(
       thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE,
-      ifName,
-      sparkNeighbor.toThrift(),
-      sparkNeighbor.rtt.count(),
-      sparkNeighbor.label,
-      sparkNeighbor.area);
+      sparkNeighbor.toThrift());
 }
 
 void
@@ -1014,12 +1013,7 @@ Spark::neighborUpWrapper(
 
   // notify LinkMonitor about neighbor UP state
   notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_UP,
-      ifName,
-      neighbor.toThrift(),
-      neighbor.rtt.count(),
-      neighbor.label,
-      neighbor.area);
+      thrift::SparkNeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
 }
 
 void
@@ -1029,12 +1023,7 @@ Spark::neighborDownWrapper(
     std::string const& neighborName) {
   // notify LinkMonitor about neighbor DOWN state
   notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-      ifName,
-      neighbor.toThrift(),
-      neighbor.rtt.count(),
-      neighbor.label,
-      neighbor.area);
+      thrift::SparkNeighborEventType::NEIGHBOR_DOWN, neighbor.toThrift());
 
   // remove neighborship on this interface
   if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
@@ -1051,18 +1040,10 @@ Spark::neighborDownWrapper(
 void
 Spark::notifySparkNeighborEvent(
     thrift::SparkNeighborEventType eventType,
-    std::string const& ifName,
-    thrift::SparkNeighbor const& originator,
-    int64_t rttUs,
-    int32_t label,
-    const std::string& area) {
+    thrift::SparkNeighbor const& info) {
   thrift::SparkNeighborEvent event;
-  event.eventType = eventType;
-  event.ifName = ifName;
-  event.neighbor = originator;
-  event.rttUs = rttUs;
-  event.label = label;
-  *event.area_ref() = area;
+  event.eventType_ref() = eventType;
+  event.info_ref() = info;
   neighborUpdatesQueue_.push(std::move(event));
 }
 
@@ -1153,12 +1134,7 @@ Spark::processGRMsg(
     SparkNeighbor& neighbor) {
   // notify link-monitor for RESTARTING event
   notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
-      ifName,
-      neighbor.toThrift(),
-      neighbor.rtt.count(),
-      neighbor.label,
-      neighbor.area);
+      thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, neighbor.toThrift());
 
   // start graceful-restart timer
   neighbor.gracefulRestartHoldTimer = folly::AsyncTimeout::make(
@@ -1240,6 +1216,7 @@ Spark::processHelloMsg(
             *config_->getSparkConfig().step_detector_conf_ref(),
             domainName, // neighborNode domain
             neighborName, // neighborNode name
+            ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
             getNewLabelForIface(ifName), // label for Segment Routing
             remoteSeqNum, // seqNum reported by neighborNode
@@ -1403,11 +1380,7 @@ Spark::processHelloMsg(
 
     notifySparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
-        ifName,
-        neighbor.toThrift(),
-        neighbor.rtt.count(),
-        neighbor.label,
-        neighbor.area);
+        neighbor.toThrift());
 
     // start heartbeat timer again to make sure neighbor is alive
     neighbor.heartbeatHoldTimer = folly::AsyncTimeout::make(

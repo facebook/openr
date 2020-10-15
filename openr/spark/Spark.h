@@ -268,6 +268,7 @@ class Spark final : public OpenrEventBase {
         const thrift::StepDetectorConfig&,
         std::string const& domainName,
         std::string const& nodeName,
+        std::string const& localIfName,
         std::string const& remoteIfName,
         uint32_t label,
         uint64_t seqNum,
@@ -278,24 +279,41 @@ class Spark final : public OpenrEventBase {
     // util function to transfer to SparkNeighbor
     thrift::SparkNeighbor
     toThrift() const {
-      thrift::SparkNeighbor res;
-      *res.nodeName_ref() = nodeName;
-      *res.transportAddressV4_ref() = transportAddressV4;
-      *res.transportAddressV6_ref() = transportAddressV6;
-      res.kvStoreCmdPort_ref() = kvStoreCmdPort;
-      res.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
-      *res.ifName_ref() = remoteIfName;
-      return res;
+      thrift::SparkNeighbor info;
+
+      // populate basic info
+      info.nodeName_ref() = nodeName;
+      info.state_ref() = toStr(state); // translate to string
+      info.area_ref() = area;
+
+      // populate address/port info for TCP connection
+      info.transportAddressV4_ref() = transportAddressV4;
+      info.transportAddressV6_ref() = transportAddressV6;
+      info.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
+      info.kvStoreCmdPort_ref() = kvStoreCmdPort;
+
+      // populate interface info
+      info.localIfName_ref() = localIfName;
+      info.remoteIfName_ref() = remoteIfName;
+
+      // populate misc info
+      info.rttUs_ref() = rtt.count();
+      info.label_ref() = label;
+
+      return info;
     }
 
     // doamin name
-    const std::string domainName;
+    const std::string domainName{};
 
     // node name
-    const std::string nodeName;
+    const std::string nodeName{};
 
-    // interface name
-    const std::string remoteIfName;
+    // local interface name
+    const std::string localIfName{};
+
+    // remote interface name on neighbor side
+    const std::string remoteIfName{};
 
     // SR Label to reach Neighbor over this specific adjacency. Generated
     // using ifIndex to this neighbor. Only local within the node.
@@ -304,8 +322,8 @@ class Spark final : public OpenrEventBase {
     // Last sequence number received from neighbor
     uint64_t seqNum{0};
 
-    // neighbor state
-    SparkNeighState state;
+    // neighbor state(IDLE by default)
+    SparkNeighState state{SparkNeighState::IDLE};
 
     // timer to periodically send out handshake pkt
     std::unique_ptr<folly::AsyncTimeout> negotiateTimer{nullptr};
@@ -387,13 +405,7 @@ class Spark final : public OpenrEventBase {
 
   // utility call to send SparkNeighborEvent
   void notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType type,
-      std::string const& ifName,
-      thrift::SparkNeighbor const& originator,
-      int64_t rtt,
-      int32_t label,
-      const std::string& area =
-          openr::thrift::KvStore_constants::kDefaultArea());
+      thrift::SparkNeighborEventType type, thrift::SparkNeighbor const& info);
 
   // callback function for rtt change
   void processRttChange(

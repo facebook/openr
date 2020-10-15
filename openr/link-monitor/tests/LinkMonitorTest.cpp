@@ -71,16 +71,22 @@ const auto nb2 = createSparkNeighbor(
     toBinaryAddress(folly::IPAddress(nb2_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb2_v6_addr)),
     kvStoreCmdPort,
-    1, // openrCtrlThriftPort
-    "");
+    1, /* openrCtrlThriftPort */
+    1, /* label */
+    100, /* rtt */
+    "", /* remote interface name */
+    if_2_1 /* local interface name */);
 
 const auto nb3 = createSparkNeighbor(
     "node-3",
     toBinaryAddress(folly::IPAddress(nb3_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb3_v6_addr)),
     kvStoreCmdPort,
-    2, // openrCtrlThriftPort
-    "");
+    2, /* openrCtrlThriftPort */
+    1, /* label */
+    100, /* rtt */
+    "", /* remote interface name */
+    if_3_1 /* local interface name */);
 
 const uint64_t kTimestamp{1000000};
 const uint64_t kNodeLabel{0};
@@ -124,19 +130,6 @@ const auto adj_3_1 = createThriftAdjacency(
     kTimestamp /* timestamp */,
     Constants::kDefaultAdjWeight /* weight */,
     "" /* otherIfName */);
-
-thrift::SparkNeighborEvent
-createNeighborEvent(
-    thrift::SparkNeighborEventType eventType,
-    const std::string& ifName,
-    const thrift::SparkNeighbor& neighbor,
-    int64_t rttUs,
-    int32_t label,
-    const std::string& area = std::string{
-        openr::thrift::KvStore_constants::kDefaultArea()}) {
-  return createSparkNeighborEvent(
-      eventType, ifName, neighbor, rttUs, label, area);
-}
 
 thrift::AdjacencyDatabase
 createAdjDatabase(
@@ -782,12 +775,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // neighbor up
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1");
@@ -904,12 +893,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // 11. neighbor down
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
@@ -936,12 +921,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // 12. neighbor up
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor up event!";
     checkNextAdjPub("adj:node-1");
@@ -953,14 +934,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto cp = nb2;
     *cp.transportAddressV4_ref() = empty;
     *cp.transportAddressV6_ref() = empty;
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-        "iface_2_1",
-        cp,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
-    LOG(INFO) << "Testing neighbor down event witgh empty address!";
+    LOG(INFO) << "Testing neighbor down event with empty address!";
     checkNextAdjPub("adj:node-1");
   }
 }
@@ -1015,12 +992,8 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
   // neighbor up
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1028,23 +1001,15 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
   // another neighbor up
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_3_1",
-        nb3,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   // neighbor 3 down immediately
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-        "iface_3_1",
-        nb3,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1080,12 +1045,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor up
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1097,12 +1058,11 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor up on another interface
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_2",
-        nb2,
-        100 /* rtt-us */,
-        2 /* label */);
+    auto cp = nb2;
+    cp.localIfName_ref() = if_2_2;
+    cp.label_ref() = 2;
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1114,12 +1074,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor down
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1137,12 +1093,8 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   /* Single link case */
   // neighbor up
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1153,12 +1105,8 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
 
   // neighbor restart
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1169,12 +1117,8 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   EXPECT_TRUE(kvStoreWrapper->getPeers().empty());
 
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
@@ -1185,12 +1129,11 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   /* Parallel case */
   // neighbor up on another interface
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_2",
-        nb2,
-        100 /* rtt-us */,
-        2 /* label */);
+    auto cp = nb2;
+    cp.localIfName_ref() = if_2_2;
+    cp.label_ref() = 2;
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1201,12 +1144,8 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
 
   // neighbor restarting on iface_2_1
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
@@ -1216,12 +1155,8 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
 
   // neighbor restarted
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
@@ -1231,12 +1166,10 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
 
   // neighbor restarting iface_2_2
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
-        "iface_2_2",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto cp = nb2;
+    cp.localIfName_ref() = if_2_2;
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
@@ -1246,12 +1179,8 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
 
   // neighbor restarting iface_2_1
   {
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
@@ -2055,12 +1984,8 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
     {
-      auto neighborEvent = createNeighborEvent(
-          thrift::SparkNeighborEventType::NEIGHBOR_UP,
-          "iface_2_1",
-          nb2,
-          100 /* rtt-us */,
-          1 /* label */);
+      auto neighborEvent = createSparkNeighborEvent(
+          thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
       neighborUpdatesQueue.push(std::move(neighborEvent));
       LOG(INFO) << "Testing neighbor UP event in default area!";
 
@@ -2075,13 +2000,10 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, "plane");
     expectedAdjDbs.push(std::move(adjDb));
     {
-      auto neighborEvent = createNeighborEvent(
-          thrift::SparkNeighborEventType::NEIGHBOR_UP,
-          "iface_3_1",
-          nb3,
-          100 /* rtt-us */,
-          1 /* label */,
-          "plane");
+      auto cp = nb3;
+      cp.area_ref() = "plane";
+      auto neighborEvent = createSparkNeighborEvent(
+          thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
       neighborUpdatesQueue.push(std::move(neighborEvent));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
 
@@ -2092,12 +2014,8 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
   {
     auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_2_1",
-        nb2,
-        100 /* rtt-us */,
-        1 /* label */);
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub(
@@ -2108,13 +2026,11 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
   {
     auto adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, "plane");
     expectedAdjDbs.push(std::move(adjDb));
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP,
-        "iface_3_1",
-        nb3,
-        100 /* rtt-us */,
-        1 /* label */,
-        "plane");
+
+    auto cp = nb3;
+    cp.area_ref() = "plane";
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", "plane");
@@ -2124,13 +2040,11 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
   {
     auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel, "plane");
     expectedAdjDbs.push(std::move(adjDb));
-    auto neighborEvent = createNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-        "iface_3_1",
-        nb3,
-        100 /* rtt-us */,
-        1 /* label */,
-        "plane");
+
+    auto cp = nb3;
+    cp.area_ref() = "plane";
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1", "plane");

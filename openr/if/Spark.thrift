@@ -15,26 +15,6 @@ namespace lua openr.Spark
 include "Network.thrift"
 
 //
-// Data structure to send with SparkNeighborEvent to convey
-// info for a single unique neighbor for upper module usage
-//
-struct SparkNeighbor {
-  // the name of the node sending hello packets
-  1: string nodeName
-
-  // our transport addresses (right now - link local)
-  4: Network.BinaryAddress transportAddressV6
-  5: Network.BinaryAddress transportAddressV4
-
-  // port to establish TCP connection
-  7: i32 openrCtrlThriftPort = 0
-  8: i32 kvStoreCmdPort = 0
-
-  // remote interface name
-  9: string ifName
-}
-
-//
 // Describe timestamp information about send/recv of hello
 // packets. We use this to determine RTT of a node
 //
@@ -155,17 +135,49 @@ enum SparkNeighborEventType {
 }
 
 //
+// Data structure to send with SparkNeighborEvent to convey
+// info for a single unique neighbor for upper module usage
+//
+struct SparkNeighbor {
+  // the name of the node sending hello packets
+  1: string nodeName
+
+  // neighbor state
+  2: string state
+
+  // areaId to form adjacency
+  3: string area
+
+  // our transport addresses (right now - link local)
+  4: Network.BinaryAddress transportAddressV6
+  5: Network.BinaryAddress transportAddressV4
+
+  // port to establish TCP connection
+  6: i32 openrCtrlThriftPort = 0
+  7: i32 kvStoreCmdPort = 0
+
+  // remote interface name
+  8: string remoteIfName
+
+  // local interface name
+  9: string localIfName
+
+  // round-trip-time deduced
+  10: i64 rttUs
+
+  // derived based off of ifIndex (local per node)
+  11: i32 label
+}
+
+//
 // SparkNeighborEvent wraps up info comsumed by
 // upper level module for neighbor event defined
 // in `SparkNeighborEventType`
 //
-// TODO: Migrate SparkNeighborEvent to NOT use thrift structure
 struct SparkNeighborEvent {
+  // enum of neighbor event
   1: SparkNeighborEventType eventType
-  2: string ifName
-  3: SparkNeighbor neighbor
-  4: i64 rttUs
-  5: i32 label   // Derived based off of ifIndex (local per node)
-  // area ID
-  7: string area
+
+  // full snapshot of neighbor information
+  2: SparkNeighbor info
 }

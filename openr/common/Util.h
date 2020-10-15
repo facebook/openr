@@ -339,17 +339,17 @@ thrift::SparkNeighbor createSparkNeighbor(
     const std::string& nodeName,
     const thrift::BinaryAddress& v4Addr,
     const thrift::BinaryAddress& v6Addr,
-    int64_t kvStoreCmdPort,
-    int64_t openrCtrlThriftPort,
-    const std::string& ifName);
+    const int64_t kvStoreCmdPort,
+    const int64_t openrCtrlThriftPort,
+    const int32_t label,
+    const int64_t rttUs,
+    const std::string& remoteIfName,
+    const std::string& localIfName,
+    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea(),
+    const std::string& state = "IDLE");
 
 thrift::SparkNeighborEvent createSparkNeighborEvent(
-    thrift::SparkNeighborEventType event,
-    const std::string& ifName,
-    const thrift::SparkNeighbor& originator,
-    int64_t rttUs,
-    int32_t label,
-    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
+    thrift::SparkNeighborEventType event, const thrift::SparkNeighbor& info);
 
 thrift::Adjacency createAdjacency(
     const std::string& nodeName,

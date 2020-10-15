@@ -281,45 +281,44 @@ LinkMonitor::stop() {
 
 void
 LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& neighborAddrV4 = *event.neighbor_ref()->transportAddressV4_ref();
-  const auto& neighborAddrV6 = *event.neighbor_ref()->transportAddressV6_ref();
-  const std::string& ifName = event.ifName;
-  const std::string& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
-  const std::string& remoteIfName = *event.neighbor_ref()->ifName_ref();
-  const std::string& area = *event.area_ref();
-  const auto adjId = std::make_pair(remoteNodeName, ifName);
-  const int32_t kvStoreCmdPort = *event.neighbor_ref()->kvStoreCmdPort_ref();
-  const int32_t openrCtrlThriftPort =
-      *event.neighbor_ref()->openrCtrlThriftPort_ref();
-  auto rttMetric = getRttMetric(event.rttUs);
+  const auto& info = *event.info_ref();
+  const auto& neighborAddrV4 = *info.transportAddressV4_ref();
+  const auto& neighborAddrV6 = *info.transportAddressV6_ref();
+  const auto& localIfName = *info.localIfName_ref();
+  const auto& remoteIfName = *info.remoteIfName_ref();
+  const auto& remoteNodeName = *info.nodeName_ref();
+  const auto& area = *info.area_ref();
+  const auto kvStoreCmdPort = *info.kvStoreCmdPort_ref();
+  const auto openrCtrlThriftPort = *info.openrCtrlThriftPort_ref();
+  const auto rttUs = *info.rttUs_ref();
+
+  // current unixtime
   auto now = std::chrono::system_clock::now();
-  // current unixtime in s
   int64_t timestamp =
       std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
           .count();
 
   int64_t weight = 1;
-  if (interfaces_.count(ifName)) {
-    weight = interfaces_.at(ifName).getWeight();
+  if (interfaces_.count(localIfName)) {
+    weight = interfaces_.at(localIfName).getWeight();
   }
 
   thrift::Adjacency newAdj = createThriftAdjacency(
-      remoteNodeName /* otherNodeName */,
-      ifName,
+      remoteNodeName /* neighbor node name */,
+      localIfName /* local ifName neighbor discovered on */,
       toString(neighborAddrV6) /* nextHopV6 */,
       toString(neighborAddrV4) /* nextHopV4 */,
-      useRttMetric_ ? rttMetric : 1 /* metric */,
-      enableSegmentRouting_ ? event.label : 0 /* adjacency-label */,
+      useRttMetric_ ? getRttMetric(rttUs) : 1 /* metric */,
+      enableSegmentRouting_ ? *info.label_ref() : 0 /* adjacency-label */,
       false /* overload bit */,
-      useRttMetric_ ? event.rttUs : 0,
+      useRttMetric_ ? rttUs : 0 /* rtt */,
       timestamp,
       weight,
-      remoteIfName /* otherIfName */);
+      remoteIfName);
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is up on interface "
-               << ifName << ". Remote Interface: " << remoteIfName
-               << ", metric: " << *newAdj.metric_ref()
-               << ", rttUs: " << *event.rttUs_ref()
+               << localIfName << ". Remote Interface: " << remoteIfName
+               << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
                << ", addrV4: " << toString(neighborAddrV4)
                << ", addrV6: " << toString(neighborAddrV6)
                << ", area: " << area;
@@ -330,14 +329,17 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   if (!mockMode_) {
     // peer address used for KvStore external sync over ZMQ
     repUrl = folly::sformat(
-        "tcp://[{}%{}]:{}", toString(neighborAddrV6), ifName, kvStoreCmdPort);
+        "tcp://[{}%{}]:{}",
+        toString(neighborAddrV6),
+        localIfName,
+        kvStoreCmdPort);
     // peer address used for KvStore external sync over thrift
-    peerAddr = folly::sformat("{}%{}", toString(neighborAddrV6), ifName);
+    peerAddr = folly::sformat("{}%{}", toString(neighborAddrV6), localIfName);
   } else {
     // use inproc address
     repUrl = folly::sformat("inproc://{}-kvstore-cmd-global", remoteNodeName);
     // TODO: address value of peerAddr under system test environment
-    peerAddr = folly::sformat("::1%{}", ifName);
+    peerAddr = folly::sformat("::1%{}", localIfName);
   }
 
   CHECK(not repUrl.empty()) << "Got empty repUrl";
@@ -347,10 +349,8 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   // 1) the min interface changes: the previous min interface's connection will
   // be overridden by KvStoreClientInternal, thus no need to explicitly remove
   // it 2) does not change: the existing connection to a neighbor is retained
-  thrift::PeerSpec peerSpec;
-  *peerSpec.cmdUrl_ref() = repUrl;
-  *peerSpec.peerAddr_ref() = peerAddr;
-  peerSpec.ctrlPort_ref() = openrCtrlThriftPort;
+  auto peerSpec = createPeerSpec(repUrl, peerAddr, openrCtrlThriftPort);
+  const auto adjId = std::make_pair(remoteNodeName, localIfName);
   adjacencies_[adjId] =
       AdjacencyValue(peerSpec, std::move(newAdj), false, area);
 
@@ -363,15 +363,16 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
 
 void
 LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
-  const auto& ifName = event.ifName;
-  const auto& area = *event.area_ref();
-  const auto adjId = std::make_pair(remoteNodeName, ifName);
+  const auto& info = *event.info_ref();
+  const auto& remoteNodeName = *info.nodeName_ref();
+  const auto& localIfName = *info.localIfName_ref();
+  const auto& area = *info.area_ref();
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is down on interface "
-               << ifName;
+               << localIfName;
   fb303::fbData->addStatValue("link_monitor.neighbor_down", 1, fb303::SUM);
 
+  const auto adjId = std::make_pair(remoteNodeName, localIfName);
   auto adjValueIt = adjacencies_.find(adjId);
   if (adjValueIt != adjacencies_.end()) {
     // remove such adjacencies
@@ -384,17 +385,18 @@ LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
 
 void
 LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
-  const auto& ifName = event.ifName;
-  const auto& area = *event.area_ref();
-  const auto adjId = std::make_pair(remoteNodeName, ifName);
+  const auto& info = *event.info_ref();
+  const auto& remoteNodeName = *info.nodeName_ref();
+  const auto& localIfName = *info.localIfName_ref();
+  const auto& area = *info.area_ref();
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName
-               << " is restarting on interface " << ifName;
+               << " is restarting on interface " << localIfName;
   fb303::fbData->addStatValue(
       "link_monitor.neighbor_restarting", 1, fb303::SUM);
 
   // update adjacencies_ restarting-bit and advertise peers
+  const auto adjId = std::make_pair(remoteNodeName, localIfName);
   auto adjValueIt = adjacencies_.find(adjId);
   if (adjValueIt != adjacencies_.end()) {
     adjValueIt->second.isRestarting = true;
@@ -404,18 +406,20 @@ LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
 
 void
 LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& remoteNodeName = *event.neighbor_ref()->nodeName_ref();
-  const auto& ifName = event.ifName;
-  int32_t newRttMetric = getRttMetric(event.rttUs);
+  const auto& info = *event.info_ref();
+  const auto& remoteNodeName = *info.nodeName_ref();
+  const auto& localIfName = *info.localIfName_ref();
+  const auto& rttUs = *info.rttUs_ref();
+  int32_t newRttMetric = getRttMetric(rttUs);
 
-  VLOG(1) << "Metric value changed for neighbor " << remoteNodeName << " to "
-          << newRttMetric;
+  VLOG(1) << "Metric value changed for neighbor " << remoteNodeName
+          << " on interface: " << localIfName << " to " << newRttMetric;
 
-  auto it = adjacencies_.find({remoteNodeName, ifName});
+  auto it = adjacencies_.find({remoteNodeName, localIfName});
   if (it != adjacencies_.end()) {
     auto& adj = it->second.adjacency;
     adj.metric_ref() = newRttMetric;
-    adj.rtt_ref() = *event.rttUs_ref();
+    adj.rtt_ref() = rttUs;
     advertiseAdjacenciesThrottled_->operator()();
   }
 }
@@ -872,15 +876,19 @@ LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
 
 void
 LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
-  auto neighborAddrV4 = *event.neighbor_ref()->transportAddressV4_ref();
-  auto neighborAddrV6 = *event.neighbor_ref()->transportAddressV6_ref();
+  const auto& info = *event.info_ref();
+  const auto& neighborAddrV4 = *info.transportAddressV4_ref();
+  const auto& neighborAddrV6 = *info.transportAddressV6_ref();
+  const auto& localIfName = *info.localIfName_ref();
+  const auto& remoteIfName = *info.remoteIfName_ref();
+  const auto& remoteNodeName = *info.nodeName_ref();
+  const auto& area = *info.area_ref();
 
-  VLOG(1) << "Received neighbor event for "
-          << *event.neighbor_ref()->nodeName_ref() << " from "
-          << *event.neighbor_ref()->ifName_ref() << " at "
-          << *event.ifName_ref() << " with addrs " << toString(neighborAddrV6)
-          << " and " << (enableV4_ ? toString(neighborAddrV4) : "")
-          << " Area:" << *event.area_ref() << " Event Type: "
+  VLOG(1) << "Received neighbor event for " << remoteNodeName << " from "
+          << remoteIfName << " at " << localIfName << " with addrs "
+          << toString(neighborAddrV6) << " and "
+          << (enableV4_ ? toString(neighborAddrV4) : "") << " Area:" << area
+          << " Event Type: "
           << apache::thrift::util::enumNameSafe(*event.eventType_ref());
 
   switch (event.eventType) {
@@ -1200,13 +1208,13 @@ LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
       "event",
       apache::thrift::TEnumTraits<thrift::SparkNeighborEventType>::findName(
           event.eventType));
-  sample.addString("neighbor", *event.neighbor_ref()->nodeName_ref());
-  sample.addString("interface", event.ifName);
-  sample.addString("remote_interface", *event.neighbor_ref()->ifName_ref());
-  sample.addString("area", *event.area_ref());
-  sample.addInt("rtt_us", event.rttUs);
+  sample.addString("neighbor", *(event.info_ref()->nodeName_ref()));
+  sample.addString("interface", *(event.info_ref()->localIfName_ref()));
+  sample.addString("remote_interface", *(event.info_ref()->remoteIfName_ref()));
+  sample.addString("area", *(event.info_ref()->area_ref()));
+  sample.addInt("rtt_us", *(event.info_ref()->rttUs_ref()));
 
-  logSampleQueue_.push(sample);
+  logSampleQueue_.push(std::move(sample));
 }
 
 void
