@@ -990,6 +990,23 @@ Spark::floodRestartingMsg() {
   return sf;
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
+Spark::getNeighbors() {
+  folly::Promise<std::unique_ptr<std::vector<thrift::SparkNeighbor>>> promise;
+  auto sf = promise.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(promise)]() mutable {
+    std::vector<thrift::SparkNeighbor> res;
+    for (auto const& [ifName, neighbors] : sparkNeighbors_) {
+      for (auto const& [_, neighbor] : neighbors) {
+        res.emplace_back(neighbor.toThrift());
+      }
+    }
+    p.setValue(
+        std::make_unique<std::vector<thrift::SparkNeighbor>>(std::move(res)));
+  });
+  return sf;
+} // namespace openr
+
 void
 Spark::neighborUpWrapper(
     SparkNeighbor& neighbor,

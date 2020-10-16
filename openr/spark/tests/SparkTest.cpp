@@ -64,6 +64,7 @@ const auto NB_RTT_CHANGE = thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE;
 const auto WARM = SparkNeighState::WARM;
 const auto NEGOTIATE = SparkNeighState::NEGOTIATE;
 const auto ESTABLISHED = SparkNeighState::ESTABLISHED;
+const auto RESTART = SparkNeighState::RESTART;
 
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("Fire_and_Blood");
@@ -187,6 +188,73 @@ class SimpleSparkFixture : public SparkFixture {
   std::shared_ptr<SparkWrapper> node1;
   std::shared_ptr<SparkWrapper> node2;
 };
+
+//
+// Start 2 Spark instances and wait them forming adj.
+// Verify public API works as expected and check neighbor state.
+//
+TEST_F(SimpleSparkFixture, GetNeighborsTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
+
+  // get SparkNeigborDb via public API
+  auto db1 = *(node1->get()->getNeighbors().get());
+  auto db2 = *(node2->get()->getNeighbors().get());
+
+  EXPECT_EQ(1, db1.size());
+  EXPECT_EQ(1, db2.size());
+
+  // verify db content for individual neighbor
+  auto neighbor1 = db2.back();
+  auto neighbor2 = db1.back();
+
+  EXPECT_EQ(*neighbor1.state_ref(), Spark::toStr(ESTABLISHED));
+  EXPECT_EQ(*neighbor2.state_ref(), Spark::toStr(ESTABLISHED));
+  EXPECT_EQ(*neighbor1.localIfName_ref(), iface2);
+  EXPECT_EQ(*neighbor1.remoteIfName_ref(), iface1);
+  EXPECT_EQ(*neighbor2.localIfName_ref(), iface1);
+  EXPECT_EQ(*neighbor2.remoteIfName_ref(), iface2);
+}
+
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// force to send helloMsg with restarting flag indicating GR.
+// Verify public API works as expected and check neighbor state.
+//
+TEST_F(SimpleSparkFixture, ForceGRMsgTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
+
+  // force to send out helloMsg with restarting flag
+  node1->get()->floodRestartingMsg();
+  node2->get()->floodRestartingMsg();
+
+  // should report each other as 'RESTARTING'
+  const std::string nodeName1 = "node-1";
+  const std::string nodeName2 = "node-2";
+
+  {
+    auto event1 = node1->waitForEvent(NB_RESTARTING);
+    auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_EQ(iface1, *event1->info_ref()->localIfName_ref());
+    EXPECT_TRUE(nodeName2 == *event1->info_ref()->nodeName_ref());
+    EXPECT_TRUE(neighState1 == RESTART);
+
+    LOG(INFO) << "node-1 reported node-2 as RESTARTING";
+  }
+
+  {
+    auto event2 = node2->waitForEvent(NB_RESTARTING);
+    auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_EQ(iface2, *event2->info_ref()->localIfName_ref());
+    EXPECT_TRUE(nodeName1 == *event2->info_ref()->nodeName_ref());
+    EXPECT_TRUE(neighState2 == RESTART);
+
+    LOG(INFO) << "node-2 reported node-1 as RESTARTING";
+  }
+}
 
 //
 // Start 2 Spark instances and wait them forming adj. Then

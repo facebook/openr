@@ -460,6 +460,12 @@ OpenrCtrlHandler::semifuture_floodRestartingMsg() {
   return spark_->floodRestartingMsg();
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
+OpenrCtrlHandler::semifuture_getNeighbors() {
+  CHECK(spark_);
+  return spark_->getNeighbors();
+}
+
 //
 // Performance stats APIs
 //

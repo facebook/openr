@@ -46,6 +46,12 @@ class SparkWrapper {
   // stop spark
   void stop();
 
+  // get spark instance
+  std::shared_ptr<Spark>
+  get() {
+    return spark_;
+  }
+
   // add interfaceDb for Spark to tracking
   // return true upon success and false otherwise
   bool updateInterfaceDb(

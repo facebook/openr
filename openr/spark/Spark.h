@@ -92,10 +92,15 @@ class Spark final : public OpenrEventBase {
 
   // Public APIs
   folly::SemiFuture<folly::Unit> floodRestartingMsg();
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
+  getNeighbors();
 
   // get the current state of neighborNode, used for unit-testing
   folly::SemiFuture<std::optional<SparkNeighState>> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
+
+  // Util function to convert ENUM SparlNeighborState to string
+  static std::string toStr(SparkNeighState state);
 
   // override eventloop stop()
   void stop() override;
@@ -430,9 +435,6 @@ class Spark final : public OpenrEventBase {
   // process timeout for graceful restart
   void processGRTimeout(
       std::string const& ifName, std::string const& neighborName);
-
-  // Util function to convert ENUM SparlNeighborState to string
-  static std::string toStr(SparkNeighState state);
 
   // Util function for state transition
   static SparkNeighState getNextState(

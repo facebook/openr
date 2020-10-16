@@ -541,6 +541,11 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   void floodRestartingMsg() throws (1: OpenrError error)
 
+  /*
+   * Get info for Spark neighors
+   */
+  list<Spark.SparkNeighbor> getNeighbors() throws (1: OpenrError error)
+
   //
   //  Monitor APIs (get log events)
   //
