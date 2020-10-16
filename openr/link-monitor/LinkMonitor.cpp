@@ -268,6 +268,8 @@ LinkMonitor::LinkMonitor(
   fb303::fbData->addStatExportType(
       "link_monitor.advertise_adjacencies", fb303::SUM);
   fb303::fbData->addStatExportType("link_monitor.advertise_links", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "link_monitor.thrift.failure.getAllLinks", fb303::SUM);
 }
 
 void
