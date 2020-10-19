@@ -96,7 +96,6 @@ DECLARE_uint32(step_detector_upper_threshold);
 DECLARE_uint64(step_detector_ads_threshold);
 
 DECLARE_bool(enable_netlink_fib_handler);
-DECLARE_bool(enable_netlink_system_handler);
 
 DECLARE_int32(link_flap_initial_backoff_ms);
 DECLARE_int32(link_flap_max_backoff_ms);

@@ -239,10 +239,6 @@ DEFINE_bool(
     enable_netlink_fib_handler,
     false,
     "If set, netlink fib handler will be started for route programming.");
-DEFINE_bool(
-    enable_netlink_system_handler,
-    true,
-    "If set, netlink system handler will be started");
 DEFINE_int32(
     link_flap_initial_backoff_ms,
     1000,
