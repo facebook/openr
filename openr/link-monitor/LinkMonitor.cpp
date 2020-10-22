@@ -893,7 +893,7 @@ LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
           << " Event Type: "
           << apache::thrift::util::enumNameSafe(*event.eventType_ref());
 
-  switch (event.eventType) {
+  switch (*event.eventType_ref()) {
   case thrift::SparkNeighborEventType::NEIGHBOR_UP:
   case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
     logNeighborEvent(event);
@@ -919,7 +919,7 @@ LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
     break;
   }
   default:
-    LOG(ERROR) << "Unknown event type " << (int32_t)event.eventType;
+    LOG(ERROR) << "Unknown event type " << (int32_t)*event.eventType_ref();
   }
 }
 
@@ -1209,7 +1209,7 @@ LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
   sample.addString(
       "event",
       apache::thrift::TEnumTraits<thrift::SparkNeighborEventType>::findName(
-          event.eventType));
+          *event.eventType_ref()));
   sample.addString("neighbor", *(event.info_ref()->nodeName_ref()));
   sample.addString("interface", *(event.info_ref()->localIfName_ref()));
   sample.addString("remote_interface", *(event.info_ref()->remoteIfName_ref()));

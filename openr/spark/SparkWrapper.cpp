@@ -133,7 +133,7 @@ SparkWrapper::waitForEvent(
       continue;
     }
     auto& event = maybeEvent.value();
-    if (eventType == event.eventType) {
+    if (eventType == event.eventType_ref()) {
       return event;
     }
   }
