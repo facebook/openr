@@ -27,12 +27,6 @@ class PrefixState {
     return prefixes_;
   }
 
-  // update loopback prefix deletes
-  void updateLoopbackPrefixes(
-      thrift::IpPrefix const& prefix,
-      const std::string& nodename,
-      bool isDelete = false);
-
   // returns set of changed prefixes (i.e. a node started advertising or
   // withdrew or any attributes changed)
   std::unordered_set<thrift::IpPrefix> updatePrefixDatabase(
@@ -40,19 +34,6 @@ class PrefixState {
 
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases() const;
-
-  std::vector<thrift::NextHopThrift> getLoopbackVias(
-      std::unordered_set<std::string> const& nodes, bool const isV4) const;
-
-  std::unordered_map<std::string, thrift::BinaryAddress> const&
-  getNodeHostLoopbacksV4() const {
-    return nodeHostLoopbacksV4_;
-  }
-
-  std::unordered_map<std::string, thrift::BinaryAddress> const&
-  getNodeHostLoopbacksV6() const {
-    return nodeHostLoopbacksV6_;
-  }
 
   std::vector<thrift::ReceivedRouteDetail> getReceivedRoutesFiltered(
       thrift::ReceivedRouteFilter const& filter) const;
@@ -95,5 +76,4 @@ class PrefixState {
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
 };
-
 } // namespace openr

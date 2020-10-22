@@ -127,7 +127,7 @@ struct UnicastRoute {
   6: optional binary data
   7: bool doNotInstall = false
 
-  41: optional NextHopThrift bestNexthop
+  41: optional NextHopThrift bestNexthop (deprecated)
 
   # DEPREDCATED - Use nextHops instead
   # 2: list<BinaryAddress> deprecatedNexthops
