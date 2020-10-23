@@ -17,10 +17,12 @@
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
+// @deprecated
 DEFINE_bool(
     enable_netlink_fib_handler,
     true,
     "If set, netlink fib handler will be started for route programming.");
+
 DEFINE_int32(
     fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
 
@@ -54,24 +56,22 @@ main(int argc, char** argv) {
   nlEvb->waitUntilRunning();
 
   apache::thrift::ThriftServer linuxFibAgentServer;
-  if (FLAGS_enable_netlink_fib_handler) {
-    // start FibService thread
-    auto fibHandler = std::make_shared<NetlinkFibHandler>(nlSock.get());
+  auto fibHandler = std::make_shared<NetlinkFibHandler>(nlSock.get());
 
-    auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
-      folly::setThreadName("FibService");
-      linuxFibAgentServer.setNWorkerThreads(1);
-      linuxFibAgentServer.setNPoolThreads(1);
-      linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
-      linuxFibAgentServer.setInterface(fibHandler);
-      linuxFibAgentServer.setDuplex(true);
+  // start FibService thread
+  auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
+    folly::setThreadName("FibService");
+    linuxFibAgentServer.setNWorkerThreads(1);
+    linuxFibAgentServer.setNPoolThreads(1);
+    linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
+    linuxFibAgentServer.setInterface(fibHandler);
+    linuxFibAgentServer.setDuplex(true);
 
-      LOG(INFO) << "Fib Agent starting...";
-      linuxFibAgentServer.serve();
-      LOG(INFO) << "Fib Agent stopped.";
-    });
-    allThreads.emplace_back(std::move(fibThriftThread));
-  }
+    LOG(INFO) << "Fib Agent starting...";
+    linuxFibAgentServer.serve();
+    LOG(INFO) << "Fib Agent stopped.";
+  });
+  allThreads.emplace_back(std::move(fibThriftThread));
 
   LOG(INFO) << "Main event loop starting...";
   mainEventLoop.run();
@@ -80,20 +80,19 @@ main(int argc, char** argv) {
   // close queue
   netlinkEventsQueue.close();
 
+  // Stop eventbase
   nlEvb->terminateLoopSoon();
 
-  if (FLAGS_enable_netlink_fib_handler) {
-    linuxFibAgentServer.stop();
-  }
+  // Stop thrift server
+  linuxFibAgentServer.stop();
 
   // Wait for threads to finish
   for (auto& t : allThreads) {
     t.join();
   }
 
-  if (nlSock) {
-    nlSock.reset();
-  }
+  nlSock.reset();
+  nlEvb.reset();
 
   return 0;
 }
