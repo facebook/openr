@@ -313,10 +313,23 @@ class PathCmd(OpenrCtrlCmd):
         paths = []
 
         def _backtracking(cur, path, hop, visited, in_fib):
+            """
+            Depth-first search (DFS) for traversing graph and getting paths
+            from src to dst with lowest metric in total.
+
+            Attributes:
+                cur: current starting node
+                path: a list of the nodes who form the path from src to the current node
+                hop: how many hops from src node to the current node
+                visited: a set of visited nodes
+                in_fib: if current node is in fib path
+            """
             if hop > max_hop:
                 return
 
+            # get the longest prefix match for dst_addr from current node's advertising prefixes
             cur_lpm_len = self.get_lpm_len_from_node(cur, dst_addr)
+            # get the next hop nodes
             next_hop_nodes = self.get_nexthop_nodes(
                 client.getRouteDbComputed(cur),
                 dst_addr,
@@ -349,6 +362,7 @@ class PathCmd(OpenrCtrlCmd):
                     ):
                         is_nexthop_in_fib_path = True
 
+                # recursion - extend the path from next hop node
                 _backtracking(
                     next_hop_node_name,
                     path,
@@ -359,13 +373,58 @@ class PathCmd(OpenrCtrlCmd):
                 visited.remove(next_hop_node_name)
                 path.pop()
 
-        _backtracking(src, [], 1, set(src), True)
+        # initial call to begin the DFS to search paths
+        visited_set = set()
+        visited_set.add(src)
+        _backtracking(src, [], 1, visited_set, True)
+        return paths
+
+    def calculate_hop_metric(self, paths):
+        """
+        In the `paths` got from DFS, each hop only has the total metric toward the dst.
+
+        For example, assuming there is a path from node0 to node3:
+            node0 -(metric=50)-> node1 -(metric=20)-> node2 -(metric=80)-> node3
+
+        In the `paths` argument, each hop only has the total metric toward the node3:
+          Hop  NextHop Node    Interface      Metric (total metric toward the dst)
+            1  node0           po1            150 (50+20+80)
+            2  node1           po2            100 (20+80)
+            3  node2           po3            80
+
+        This function is trying to re-calculate the metric for each hop and make it like:
+          Hop  NextHop Node    Interface      Metric (hop metric)
+            1  node0           po1            50
+            2  node1           po2            20
+            3  node2           po3            80
+        """
+        if not paths:
+            return
+
+        for path in paths:
+            path_hops = path[1]
+            # only the path with more than one hop needed to re-caculculate
+            if len(path_hops) <= 1:
+                continue
+
+            pre_total_metric = 0
+            # iterate the hop metric in reverse way to do deduction, example:
+            # Hop  NextHop Node    cur_total_metric   pre_total_metric  Hop Metric
+            # 3    node2                 80                0            80-0    = 80
+            # 2    node1                 100               80           100-80  = 20
+            # 1    node0                 150               100          150-100 = 50
+            for hop_attr in reversed(path_hops):
+                cur_total_metric = hop_attr[3]
+                hop_attr[3] = cur_total_metric - pre_total_metric
+                pre_total_metric = cur_total_metric
         return paths
 
     def print_paths(self, paths):
         if not paths:
             print("No paths are found!")
             return
+
+        paths = self.calculate_hop_metric(paths)
 
         column_labels = ["Hop", "NextHop Node", "Interface", "Metric", "NextHop-v6"]
 
