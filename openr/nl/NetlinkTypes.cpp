@@ -589,7 +589,8 @@ bool
 operator==(const NextHop& lhs, const NextHop& rhs) {
   return lhs.getIfIndex() == rhs.getIfIndex() &&
       lhs.getGateway() == rhs.getGateway() &&
-      lhs.getWeight() == rhs.getWeight() &&
+      std::max(lhs.getWeight(), uint8_t(1)) ==
+      std::max(rhs.getWeight(), uint8_t(1)) &&
       lhs.getLabelAction() == rhs.getLabelAction() &&
       lhs.getSwapLabel() == rhs.getSwapLabel() &&
       lhs.getPushLabels() == rhs.getPushLabels() &&
@@ -605,7 +606,8 @@ NextHopHash::operator()(const NextHop& nh) const {
   if (nh.getGateway().has_value()) {
     res += std::hash<std::string>()(nh.getGateway().value().str());
   }
-  res += std::hash<std::string>()(std::to_string(nh.getWeight()));
+  res += std::hash<std::string>()(
+      std::to_string(std::max(nh.getWeight(), uint8_t(1))));
   return res;
 }
 
