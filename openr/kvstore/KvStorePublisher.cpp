@@ -55,7 +55,7 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   if ((not filter_.keys_ref().has_value() or (*filter_.keys_ref()).empty()) and
       (not filter_.originatorIds_ref().has_value() or
        (*filter_.originatorIds_ref()).empty()) and
-      not*filter_.ignoreTtl_ref()) {
+      not*filter_.ignoreTtl_ref() and not*filter_.doNotPublishValue_ref()) {
     // No filtering criteria. Accept all updates as TTL updates are not be
     // to be updated. If we don't optimize here, we will have go through
     // key values of a publication and copy them.
@@ -98,10 +98,19 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
       continue;
     }
 
-    if (keyPrefixFilter_.keyMatch(key, val, op)) {
+    if (not keyPrefixFilter_.keyMatch(key, val, op)) {
+      continue;
+    }
+
+    if ((not*filter_.doNotPublishValue_ref()) or
+        (not val.value_ref().has_value())) {
       keyvals.emplace(key, val);
+    } else {
+      // Exclude Value.value if it's filtered
+      keyvals.emplace(key, createThriftValueWithoutBinaryValue(val));
     }
   }
+
   if (keyvals.size()) {
     // There is at least one key value in the publication for the client
     publication_filtered.keyVals_ref() = keyvals;

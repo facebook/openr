@@ -215,11 +215,11 @@ class KvStoreDb : public DualNode {
   // get multiple keys at once
   thrift::Publication getKeyVals(std::vector<std::string> const& keys);
 
-  // dump the entries of my KV store whose keys match the given prefix
-  // if prefix is the empty sting, the full KV store is dumped
+  // dump the entries of my KV store whose keys match the filter
   thrift::Publication dumpAllWithFilters(
       KvStoreFilters const& kvFilters,
-      thrift::FilterOperator oper = thrift::FilterOperator::OR) const;
+      thrift::FilterOperator oper = thrift::FilterOperator::OR,
+      bool doNotPublishValue = false) const;
 
   // dump the hashes of my KV store whose keys match the given prefix
   // if prefix is the empty sting, the full hash store is dumped

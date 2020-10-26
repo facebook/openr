@@ -636,7 +636,8 @@ KvStore::dumpKvStoreKeys(
         oper = *keyDumpParams.oper_ref();
       }
 
-      auto thriftPub = kvStoreDb.dumpAllWithFilters(keyPrefixMatch, oper);
+      auto thriftPub = kvStoreDb.dumpAllWithFilters(
+          keyPrefixMatch, oper, *keyDumpParams.doNotPublishValue_ref());
       if (keyDumpParams.keyValHashes_ref().has_value()) {
         thriftPub = kvStoreDb.dumpDifference(
             *thriftPub.keyVals_ref(), keyDumpParams.keyValHashes_ref().value());
@@ -1278,11 +1279,12 @@ KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
   return thriftPub;
 }
 
-// dump the entries of my KV store whose keys match the given prefix
-// if prefix is the empty string, the full KV store is dumped
+// dump the entries of my KV store whose keys match filter
 thrift::Publication
 KvStoreDb::dumpAllWithFilters(
-    KvStoreFilters const& kvFilters, thrift::FilterOperator oper) const {
+    KvStoreFilters const& kvFilters,
+    thrift::FilterOperator oper,
+    bool doNotPublishValue) const {
   thrift::Publication thriftPub;
   *thriftPub.area_ref() = area_;
 
@@ -1292,7 +1294,12 @@ KvStoreDb::dumpAllWithFilters(
       if (not kvFilters.keyMatchAll(kv.first, kv.second)) {
         continue;
       }
-      thriftPub.keyVals_ref()[kv.first] = kv.second;
+      if (not doNotPublishValue) {
+        thriftPub.keyVals_ref()[kv.first] = kv.second;
+      } else {
+        thriftPub.keyVals_ref()[kv.first] =
+            createThriftValueWithoutBinaryValue(kv.second);
+      }
     }
     break;
   default:
@@ -1300,7 +1307,12 @@ KvStoreDb::dumpAllWithFilters(
       if (not kvFilters.keyMatch(kv.first, kv.second)) {
         continue;
       }
-      thriftPub.keyVals_ref()[kv.first] = kv.second;
+      if (not doNotPublishValue) {
+        thriftPub.keyVals_ref()[kv.first] = kv.second;
+      } else {
+        thriftPub.keyVals_ref()[kv.first] =
+            createThriftValueWithoutBinaryValue(kv.second);
+      }
     }
   }
   return thriftPub;

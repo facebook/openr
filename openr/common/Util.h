@@ -407,6 +407,8 @@ thrift::Value createThriftValue(
     int64_t ttlVersion = 0,
     std::optional<int64_t> hash = std::nullopt);
 
+thrift::Value createThriftValueWithoutBinaryValue(const thrift::Value& val);
+
 /**
  * Utility function to create `key, value` pair for updating route in KvStore
  */

@@ -851,6 +851,21 @@ createThriftValue(
   return value;
 }
 
+// Create thrift::Value without setting thrift::Value.value
+// Used for monitoring applications.
+thrift::Value
+createThriftValueWithoutBinaryValue(const thrift::Value& val) {
+  thrift::Value updatedVal;
+  updatedVal.version_ref() = *val.version_ref();
+  updatedVal.originatorId_ref() = *val.originatorId_ref();
+  updatedVal.ttl_ref() = *val.ttl_ref();
+  updatedVal.ttlVersion_ref() = *val.ttlVersion_ref();
+  if (val.hash_ref().has_value()) {
+    updatedVal.hash_ref() = *val.hash_ref();
+  }
+  return updatedVal;
+}
+
 /**
  * Utility function to create `key, value` pair for updating route in KvStore
  */

@@ -91,9 +91,12 @@ struct KeyGetParams {
 struct KeyDumpParams {
   1: string prefix    (deprecated)
   3: set<string> originatorIds
-  // TODO - if set to true (default), ignore TTL updates
+  // if set to true (default), ignore TTL updates
   // This field is more for subscriptions.
   6: bool ignoreTtl = true
+
+  // if set to true, Value.value binary will not be published in Value
+  7: bool doNotPublishValue = false
 
   // optional attribute to include keyValHashes information from peer.
   //  1) If NOT empty, ONLY respond with keyVals on which hash differs;

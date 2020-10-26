@@ -210,6 +210,16 @@ class OpenrCtrlFixture : public ::testing::Test {
     return prefixEntry;
   }
 
+  void
+  setKvStoreKeyVals(
+      const thrift::KeyVals& keyVals,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea()) {
+    thrift::KeySetParams setParams;
+    setParams.keyVals_ref() = keyVals;
+
+    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParams, area);
+  }
+
  private:
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
@@ -424,27 +434,11 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ((*area.areas_ref()).count("none"), 0);
   }
 
-  //
   // Key set/get
-  //
   {
-    thrift::KeySetParams setParams;
-    setParams.keyVals_ref() = keyVals;
-
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
-        setParams, thrift::KvStore_constants::kDefaultArea());
-
-    setParams.solicitResponse_ref() = false;
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
-        setParams, thrift::KvStore_constants::kDefaultArea());
-
-    thrift::KeySetParams setParamsPod;
-    setParamsPod.keyVals_ref() = keyValsPod;
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParamsPod, "pod");
-
-    thrift::KeySetParams setParamsPlane;
-    setParamsPlane.keyVals_ref() = keyValsPlane;
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParamsPlane, "plane");
+    setKvStoreKeyVals(keyVals);
+    setKvStoreKeyVals(keyValsPod, "pod");
+    setKvStoreKeyVals(keyValsPlane, "plane");
   }
 
   {
@@ -703,20 +697,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
   keyVals["key333"] =
       createThriftValue(1, "node33", std::string("value333"), 30000, 1);
 
-  //
-  // Key set/get
-  //
-  {
-    thrift::KeySetParams setParams;
-    setParams.keyVals_ref() = keyVals;
-
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
-        setParams, thrift::KvStore_constants::kDefaultArea());
-
-    setParams.solicitResponse_ref() = false;
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
-        setParams, thrift::KvStore_constants::kDefaultArea());
-  }
+  // Key set
+  setKvStoreKeyVals(keyVals);
 
   //
   // Subscribe and Get API
@@ -944,6 +926,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
               auto& pub = *t;
               EXPECT_EQ(1, (*pub.keyVals_ref()).size());
               ASSERT_EQ(1, (*pub.keyVals_ref()).count(key));
+              // Validates value is set with KeyDumpParams.doNotPublishValue =
+              // false
               EXPECT_EQ(
                   "value333", (*pub.keyVals_ref()).at(key).value_ref().value());
               received++;
@@ -1369,22 +1353,10 @@ TEST_F(
   keyVals["key333"] =
       createThriftValue(1, "node33", std::string("value333"), 30000, 1);
 
-  //
-  // Key set/get
-  //
-  {
-    thrift::KeySetParams setParams;
-    setParams.keyVals_ref() = keyVals;
+  // Key set
+  setKvStoreKeyVals(keyVals);
 
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
-        setParams, thrift::KvStore_constants::kDefaultArea());
-
-    setParams.solicitResponse_ref() = false;
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
-        setParams, thrift::KvStore_constants::kDefaultArea());
-  }
-
-  // ignoreTTL = false in specified in filter.
+  // ignoreTTL = false is specified in filter.
   // Client should receive publication associated with TTL update
   {
     const std::string key{"key1"};
@@ -1481,7 +1453,7 @@ TEST_F(
     }
   }
 
-  // ignoreTTL = true in specified in filter.
+  // ignoreTTL = true is specified in filter.
   // Client should not receive publication associated with TTL update
   {
     const std::string key{"key3"};
@@ -1581,6 +1553,90 @@ TEST_F(
     while (handler->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
+  }
+}
+
+// Verify that we can subscribe kvStore without value.
+// We use filters exactly mimicking what is needed for kvstore monitor.
+// Verify both in initial full dump and incremental updates we do not
+// see value.
+TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
+  thrift::KeyVals keyVals;
+  keyVals["key1"] =
+      createThriftValue(1, "node1", std::string("value1"), 30000, 1);
+  keyVals["key2"] =
+      createThriftValue(1, "node1", std::string("value2"), 30000, 1);
+
+  // Key set
+  setKvStoreKeyVals(keyVals);
+
+  // doNotPublishValue = true is specified in filter.
+  // ignoreTTL = false is specified in filter.
+  // Client should receive publication associated with TTL update
+  thrift::KeyDumpParams filter;
+  filter.ignoreTtl_ref() = false;
+  filter.doNotPublishValue_ref() = true;
+
+  auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
+  auto responseAndSubscription =
+      handler
+          ->semifuture_subscribeAndGetKvStoreFiltered(
+              std::make_unique<thrift::KeyDumpParams>(filter))
+          .get();
+
+  EXPECT_EQ(2, (*responseAndSubscription.response.keyVals_ref()).size());
+  for (const auto& key_ : {"key1", "key2"}) {
+    EXPECT_EQ(1, (*responseAndSubscription.response.keyVals_ref()).count(key_));
+    const auto& val1 = (*responseAndSubscription.response.keyVals_ref())[key_];
+    ASSERT_EQ(false, val1.value_ref().has_value()); /* value is null */
+    EXPECT_EQ(1, *val1.version_ref());
+    EXPECT_LT(10000, *val1.ttl_ref());
+    EXPECT_EQ(1, *val1.ttlVersion_ref());
+  }
+
+  std::atomic<bool> newUpdateSeen = false;
+  // Test key which gets updated.
+  auto test_key = "key1";
+
+  auto subscription =
+      std::move(responseAndSubscription.stream)
+          .toClientStream()
+          .subscribeExTry(
+              folly::getEventBase(), [&test_key, &newUpdateSeen](auto&& t) {
+                if (not t.hasValue()) {
+                  return;
+                }
+
+                auto& pub = *t;
+                ASSERT_EQ(1, (*pub.keyVals_ref()).count(test_key));
+                const auto& val = (*pub.keyVals_ref())[test_key];
+                newUpdateSeen = true;
+                // Verify no value seen in update
+                ASSERT_EQ(false, val.value_ref().has_value());
+                EXPECT_EQ(2, *val.ttlVersion_ref());
+              });
+
+  EXPECT_EQ(1, handler->getNumKvStorePublishers());
+
+  // Update value and publish to verify incremental update also filters value
+  auto thriftValue2 = keyVals[test_key];
+  thriftValue2.value_ref() = "value_updated";
+  thriftValue2.ttl_ref() = 50000;
+  *thriftValue2.ttlVersion_ref() += 1;
+  kvStoreWrapper_->setKey(test_key, thriftValue2);
+
+  // Wait until new update is seen by stream subscriber
+  while (not newUpdateSeen) {
+    std::this_thread::yield();
+  }
+
+  // Cancel subscription
+  subscription.cancel();
+  std::move(subscription).detach();
+
+  // Wait until publisher is destroyed
+  while (handler->getNumKvStorePublishers() != 0) {
+    std::this_thread::yield();
   }
 }
 
