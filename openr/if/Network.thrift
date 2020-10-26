@@ -108,6 +108,7 @@ enum PrefixType {
   PREFIX_ALLOCATOR = 4,
   BREEZE = 5,   // Prefixes injected via breeze
   RIB = 6,
+  SLO_PREFIX_ALLOCATOR = 7,
 
   // Placeholder Types
   TYPE_1 = 21,
