@@ -17,12 +17,6 @@
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
-// @deprecated
-DEFINE_bool(
-    enable_netlink_fib_handler,
-    true,
-    "If set, netlink fib handler will be started for route programming.");
-
 DEFINE_int32(
     fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
 
