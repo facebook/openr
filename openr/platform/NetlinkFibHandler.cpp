@@ -231,13 +231,16 @@ NetlinkFibHandler::semifuture_syncFib(
     if (v6Routes.hasError()) {
       throw fbnl::NlException("Failed fetching IPv6 routes", v6Routes.error());
     }
-    for (auto& route : std::move(v4Routes).value()) {
-      const auto prefix = route.getDestination();
-      existingRoutes.emplace(prefix, std::move(route));
-    }
-    for (auto& route : std::move(v6Routes).value()) {
-      const auto prefix = route.getDestination();
-      existingRoutes.emplace(prefix, std::move(route));
+    for (auto& routesPtr : {&v4Routes, &v6Routes}) {
+      for (auto& route : routesPtr->value()) {
+        const auto prefix = route.getDestination();
+        // Linux will report a null next-hop for RTN_BLACKHOLE type while
+        // RIB does not
+        if (route.getType() == RTN_BLACKHOLE) {
+          route.setNextHops({});
+        }
+        existingRoutes.emplace(prefix, std::move(route));
+      }
     }
   }
 
@@ -252,6 +255,13 @@ NetlinkFibHandler::semifuture_syncFib(
       // Existing route is same as the one we're trying to add. SKIP
       continue;
     }
+    if (it != existingRoutes.end()) {
+      LOG(INFO) << "Updating unicast-route "
+                << "\n[OLD] " << it->second.str() << "\n[NEW] "
+                << nlRoute.str();
+    } else {
+      LOG(INFO) << "Adding unicast-route \n[NEW]" << nlRoute.str();
+    }
     // Add new route or replace existing one
     result.emplace_back(nlSock_->addRoute(nlRoute));
   }
@@ -263,6 +273,8 @@ NetlinkFibHandler::semifuture_syncFib(
       continue;
     }
     // Delete stale route
+    LOG(INFO) << "Deleting unicast-route "
+              << folly::IPAddress::networkToString(prefix);
     result.emplace_back(nlSock_->deleteRoute(nlRoute));
   }
 
@@ -309,6 +321,13 @@ NetlinkFibHandler::semifuture_syncMplsFib(
       // Existing route is same as the one we're trying to add. SKIP
       continue;
     }
+    if (it != existingRoutes.end()) {
+      LOG(INFO) << "Updating mpls-route "
+                << "\n[OLD] " << it->second.str() << "\n[NEW] "
+                << nlRoute.str();
+    } else {
+      LOG(INFO) << "Adding mpls-route \n[NEW]" << nlRoute.str();
+    }
     // Add new route or replace existing one
     result.emplace_back(nlSock_->addRoute(nlRoute));
   }
@@ -320,6 +339,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
       continue;
     }
     // Delete stale route
+    LOG(INFO) << "Deleting mpls-route " << *nlRoute.getMplsLabel();
     result.emplace_back(nlSock_->deleteRoute(nlRoute));
   }
 
@@ -525,11 +545,11 @@ NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
 fbnl::Route
 NetlinkFibHandler::buildMplsRoute(
     const thrift::MplsRoute& mplsRoute, int protocol) {
-  // Craete route object
+  // Create route object
+  // NOTE: Priority for MPLS routes is not supported in Linux
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setMplsLabel(static_cast<uint32_t>(mplsRoute.topLabel))
       .setProtocolId(protocol)
-      .setPriority(protocolToPriority(protocol))
       .setFlags(0)
       .setValid(true);
 
