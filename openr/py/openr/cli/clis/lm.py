@@ -11,7 +11,6 @@
 import click
 from openr.cli.commands import kvstore, lm
 from openr.cli.utils import utils
-from openr.cli.utils.options import breeze_option
 from openr.cli.utils.utils import parse_nodes
 
 
