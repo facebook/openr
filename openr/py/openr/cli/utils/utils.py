@@ -1881,7 +1881,7 @@ def print_route_details(
     rows = []
 
     # Add marker information
-    rows.append("Markers: * - One of best entry, @ - The best entry")
+    rows.append("Markers: * - One of the best entries, @ - The best entry")
     if not detailed:
         rows.append(
             "Acronyms: SP - Source Preference, PP - Path Preference, D - Distance\n"
