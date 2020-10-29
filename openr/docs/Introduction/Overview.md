@@ -1,13 +1,12 @@
-`OpenR`
--------
+# Introduction to Open Routing
 
 Open Routing, OpenR, is Facebook's internally designed and developed routing
-protocol/platform. Primarily built for performing routing in the `Terragraph`
-network, it's awesome design and flexibility has led to its adoption in
-Facebook's WAN Network, `Express Backbone`, as the sole IGP routing protocol.
+protocol/platform. Primarily built for performing routing in the 
+[Terragraph](https://terragraph.com/) network, it's design and flexibility has 
+led to its adoption in Facebook's DC and
+WAN Network, `Express Backbone`, as the sole IGP routing protocol.
 
 ### Goals
----
 
 It all started with the original goal of building a simple and extensible routing
 protocol for the Terragraph project and beyond.
@@ -33,7 +32,6 @@ extensibility helps a lot. We are driven primarily by the idea of autonomic
 networking and the ability to innovate quickly.
 
 ### Why another protocol ?
----
 
 Our intent is not building a new protocol, but rather provide a modular solution
 to build distributed applications in the network of any kind (wireless mesh,
@@ -52,7 +50,6 @@ and tuned appropriately. In addition, we are looking to build upon the concepts
 of autonomic networking and make our networks easier to configure and manage.
 
 ### Routing Protocol Design
----
 
 The protocol implementation consists of the components depicted below:
 * `KvStore` - Key Value Store
@@ -73,76 +70,13 @@ for each module and you can read more about other modules in it's own section.
 
 
 ### Code Organization
----
 
 The code is very modularized and each module is self-contained. For more information
 about each module please refer to documentation in header files of that module.
 The code is very well documented. This README gives you an overview of how different
 modules/libraries come together to build OpenR.
 
-### Documentation
----
-
-High-level overview of the documentation organization (alphabetically ordered)
-
-#### [`Breeze.md`](Breeze.md)
-
-Python click based CLI tool to interact with OpenR
-
-#### [`Decision.md`](Decision.md)
-
-Detailed overview about `openr/decision` module
-
-#### [`DeveloperGuide.md`](DeveloperGuide.md)
-
-Instructions on how to contribute to `OpenR` project and follow best
-testing/coding practices.
-
-#### [`Fib.md`](Fib.md)
-
-Detailed overview about `openr/fib` module
-
-#### [`KvStore.md`](KvStore.md)
-
-Detailed overview about eventually replicated datastore, `openr/kvstore` and
-it's operations as well as features.
-
-#### [`LinkMonitor.md`](LinkMonitor.md)
-
-Detailed overview about `openr/link-monitor` module
-
-#### [`Miscellaneous.md`](Miscellaneous.md)
-
-Miscellaneous notes and references e.g. various `OpenR` features like v4,
-parallel links, drain and graceful restart, security concerns, marking control
-plane packets and potential extensions.
-
-#### [`Monitoring.md`](Monitoring.md)
-
-A detailed overview of monitoring operations of OpenR. e.g. syslog, special
-event logs (structured) and counters.
-
-#### [`Platform.md`](Platform.md)
-
-Guide for integrating OpenR on a new platform and overview about `openr/platform`
-codebase.
-
-#### [`PrefixManager.md`](PrefixManager.md)
-
-Managing prefix information in KvStore.
-
-#### [`Runbook.md`](Runbook.md)
-
-Documentation explaining in detail how to run and configure OpenR along with
-all supported configuration options
-
-#### [`Spark.md`](Spark.md)
-
-Neighbor discovery protocol of OpenR .... a simpler and extensible version
-of the well-documented `bfd` protocol.
-
 ### Roadmap
----
 
 Open/R is evolving rapidly and we expect to add several features in the short term
 to handle network routing requirements. The current list of features we have on our
@@ -154,7 +88,6 @@ mind is
 
 
 ### Releases
----
 
 Things move fast at Facebook which means our internal release cycle for a new
 rollout of OpenR is on the order of weeks. You will see weekly tags (`2017-11-15`)
@@ -166,7 +99,6 @@ In the future, our release plan might change and we might tag some stable releas
 but until then we will just have weekly tags.
 
 ### Extra Readings
----
 - [0MQ Internal Architecture](http://zeromq.org/whitepapers:architecture)
 - [Terragraph](https://code.facebook.com/posts/1072680049445290/introducing-facebook-s-new-terrestrial-connectivity-systems-terragraph-and-project-aries/)
 - [Express Backbone](https://code.facebook.com/posts/1782709872057497/building-express-backbone-facebook-s-new-long-haul-network/)

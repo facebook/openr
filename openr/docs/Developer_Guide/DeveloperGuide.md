@@ -1,5 +1,4 @@
-`DeveloperGuide`
-----------------
+# Developer Guide
 
 If you are actively using OpenR and interested in contributing back then we,
 the OpenR team at Facebook, are happy to help you get started. Here are some
