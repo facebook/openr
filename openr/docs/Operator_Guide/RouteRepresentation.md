@@ -1,5 +1,4 @@
-`Route Representation`
-----------------------
+# Route Representation
 
 Open/R provides flexible ways of expressing reachability information. It allows
 a network operator to express `Preference`, `Performance`, and `Policy Metadata`
@@ -7,7 +6,6 @@ with every route announcement. This document describes the route representation
 in detail.
 
 ### Design Rationale
----
 
 Simplicity and flexibility are the two main criteria that we considered into the
 design of Open/R route. Traditional protocols like BGP, OSPF, and ISIS influenced
@@ -20,7 +18,6 @@ the design. The key takeaways
 - Path tracing
 
 ### Definitions
----
 
 #### `transitive`
 Attributes that are preserved during route re-distribution at Area Border. Note
@@ -32,7 +29,6 @@ The route attribute that can be altered by the policy during route re-distributi
 at Area Border. `immutable` is the opposite of `mutable`.
 
 ### Attributes
----
 
 #### > `prefix`
 `transitive`, `immutable`
@@ -67,7 +63,7 @@ incremented by `igp_cost` of the route within the area during route re-distribut
 across area. Should never decrease if manipulated via policy to ensure loop-free
 routing. This resembles AS-Path length of BGP
 
-> Take a look at [Decision Route Computation](Decision.md) for understanding best
+> Take a look at [Decision Route Computation](../Protocol_Guide/Decision.md) for understanding best
 route selection process
 
 #### > `tags`
@@ -118,6 +114,5 @@ node advertising this route. This is only compatible with forwarding type
 
 
 ### Thrift Struct
----
 
-Refer to [struct PrefixEntry in openr/if/Lsdb.thrift](../if/Lsdb.thrift)
+Refer to [struct PrefixEntry in openr/if/Lsdb.thrift](https://github.com/facebook/openr/blob/master/openr/if/Lsdb.thrift)
