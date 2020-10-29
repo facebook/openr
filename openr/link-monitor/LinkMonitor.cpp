@@ -230,6 +230,9 @@ LinkMonitor::LinkMonitor(
     }
   });
 
+  // TODO: Add fiber to process KvStore InitialSync events
+  // processKvStoreInitialSyncEvent();
+
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
   interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     auto success = syncInterfaces();
@@ -466,15 +469,14 @@ LinkMonitor::advertiseKvStorePeers(
 
   // Get old and new peer list. Also update local state
   const auto oldPeers = std::move(peers_[area]);
-  peers_[area] = getPeersFromAdjacencies(adjacencies_, area);
-  const auto& newPeers = peers_[area];
+  const auto newPeers = getPeersFromAdjacencies(adjacencies_, area);
 
   // Get list of peers to delete
   std::vector<std::string> toDelPeers;
-  for (const auto& [nodeName, peerSpec] : oldPeers) {
+  for (const auto& [nodeName, peer] : oldPeers) {
     if (newPeers.find(nodeName) == newPeers.end()) {
       toDelPeers.emplace_back(nodeName);
-      logPeerEvent("DEL_PEER", nodeName, peerSpec);
+      logPeerEvent("DEL_PEER", nodeName, peer.tPeerSpec);
     }
   }
 
@@ -488,14 +490,30 @@ LinkMonitor::advertiseKvStorePeers(
   // Get list of peers to add
   std::unordered_map<std::string, thrift::PeerSpec> toAddPeers;
   for (const auto& [nodeName, peerSpec] : newPeers) {
+    const auto& oldPeerVal = oldPeers.find(nodeName);
+
+    // In parallel link case, inherit previous kvstore sync state
+    // TODO: We should just reserve previous KvStore Peer, instead of getting
+    // PeerSpec with smallest name
+    // There can only be one kvstore session with a remote node, no need to
+    // pull down existing kvstore session with new spec. This causes extra
+    // initial syncs.
+    bool initialSynced =
+        oldPeerVal == oldPeers.end() ? false : oldPeerVal->second.initialSynced;
+
+    peers_[area].emplace(nodeName, KvStorePeerValue(peerSpec, initialSynced));
+
+    // if old peer spec is same as new peer spec, skip
+    if (oldPeerVal != oldPeers.end() &&
+        oldPeerVal->second.tPeerSpec == peerSpec) {
+      continue;
+    }
+
     // send out peer-add to kvstore if
     // 1. it's a new peer (not exist in old-peers)
     // 2. old-peer but peer-spec changed (e.g parallel link case)
-    if (oldPeers.find(nodeName) == oldPeers.end() or
-        oldPeers.at(nodeName) != peerSpec) {
-      toAddPeers.emplace(nodeName, peerSpec);
-      logPeerEvent("ADD_PEER", nodeName, peerSpec);
-    }
+    toAddPeers.emplace(nodeName, peerSpec);
+    logPeerEvent("ADD_PEER", nodeName, peerSpec);
   }
 
   for (const auto& [name, spec] : upPeers) {
@@ -506,7 +524,7 @@ LinkMonitor::advertiseKvStorePeers(
       // already added, skip it
       continue;
     }
-    if (spec != peers_.at(area).at(name)) {
+    if (spec != peers_.at(area).at(name).tPeerSpec) {
       // spec does not match, skip it
       continue;
     }

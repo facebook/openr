@@ -1601,6 +1601,9 @@ KvStoreDb::processThriftSuccess(
   peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
   logStateTransition(peerName, oldState, peer.state);
 
+  // TODO: kvStorePeerSyncEventQueue_.push(KvStoreInitialSyncEvent(peerName,
+  // area_));
+
   // Log full-sync event via replicate queue
   logSyncEvent(peerName, timeDelta);
 

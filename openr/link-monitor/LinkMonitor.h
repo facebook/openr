@@ -63,6 +63,18 @@ struct AdjacencyValue {
         area(areaId) {}
 };
 
+// KvStore Peer Value
+struct KvStorePeerValue {
+  const thrift::PeerSpec tPeerSpec;
+  // one time flag set by KvStore Peer Initialized event
+  // Only when a peer reaches initialSynced state, its adjancency UP events
+  // can be announced to the network
+  bool initialSynced{false};
+
+  KvStorePeerValue(thrift::PeerSpec tPeerSpec, bool initialSynced)
+      : tPeerSpec(std::move(tPeerSpec)), initialSynced(initialSynced) {}
+};
+
 //
 // This class is responsible for reacting to neighbor
 // up and down events. The reaction constitutes of starting
@@ -325,7 +337,7 @@ class LinkMonitor final : public OpenrEventBase {
   // Previously announced KvStore peers
   std::unordered_map<
       std::string /* area */,
-      std::unordered_map<std::string /* node name */, thrift::PeerSpec>>
+      std::unordered_map<std::string /* node name */, KvStorePeerValue>>
       peers_;
 
   // all interfaces states, including DOWN one

@@ -37,4 +37,14 @@ BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 
+// KvStore Initial Sync Event send from KvStore to LinkMonitor
+// To signal adjancency UP event propagation
+struct KvStoreInitialSyncEvent {
+  const std::string nodeName;
+  const std::string area;
+
+  KvStoreInitialSyncEvent(const std::string& nodeName, const std::string& area)
+      : nodeName(nodeName), area(area) {}
+};
+
 } // namespace openr
