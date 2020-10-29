@@ -6,7 +6,7 @@ multicast via UDP to discover and maintain Adjacencies, aka neighbor relationshi
 The discovered neighbors, aka "Local Topology" of the node, is fed into the
 system for KvStore database synchronization, and SPF Computation.
 
-### Inter-Module Communications 
+### Inter-Module Communications
 ---
 
 <img src="https://user-images.githubusercontent.com/51382140/90570487-a33ec300-e164-11ea-84ca-98485a646157.png" alt="Spark inside Open/R">
@@ -26,7 +26,7 @@ system for KvStore database synchronization, and SPF Computation.
 `Spark` communicates to peer spark instance by broadcasting a UDP packet to
 link-local multicast address `ff02::1`. The packet is sent over every configured
 interface. The content of the packet evolves as neighboring spark instances
-starts to learn about each other. 
+starts to learn about each other.
 
 The content of the packet is a serialized thrift object of type `SparkPacket`.
 This internally consists of three main messages as its attributes. There will
@@ -189,5 +189,5 @@ we use `StepDetector` so that small changes in RTT measurements are ignored.
 ---
 
 When a node starts or a new link comes up, we perform fast initial neighbor
-discovery by sending `SparkHelloMsg` with `solicitResponse` bit set. This is to 
+discovery by sending `SparkHelloMsg` with `solicitResponse` bit set. This is to
 request immediate reply, which allows quicker discovery of new neighbors(configurable).

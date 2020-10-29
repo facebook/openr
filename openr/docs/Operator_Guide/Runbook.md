@@ -570,4 +570,3 @@ Serves two purposes
   double of the previous backoff. If the link remains stable for
   `LINK_FLAP_MAX_BACKOFF_MS` then all of its history is erased and link gets
   `LINK_FLAP_INITIAL_BACKOFF_MS` next time when it goes down.
-
