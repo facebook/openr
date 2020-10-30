@@ -12,11 +12,3 @@ Here we explain operating and managing Open Routing
    RouteRepresentation
    Runbook
    Versions
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

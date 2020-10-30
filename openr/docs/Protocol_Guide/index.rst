@@ -17,11 +17,3 @@ Here we explain in detail all components and protocols used within Open Routing
    PrefixAllocator
    PrefixManager
    Miscellaneous
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

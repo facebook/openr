@@ -9,11 +9,3 @@ Here we explain in detail all the features of Open/R.
 
    RibPolicy
    SourceRouting
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
