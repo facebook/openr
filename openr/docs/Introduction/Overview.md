@@ -1,8 +1,8 @@
 # Introduction to Open Routing
 
 Open Routing, OpenR, is Facebook's internally designed and developed routing
-protocol/platform. Primarily built for performing routing in the 
-[Terragraph](https://terragraph.com/) network, it's design and flexibility has 
+protocol/platform. Primarily built for performing routing in the
+[Terragraph](https://terragraph.com/) network, it's design and flexibility has
 led to its adoption in Facebook's DC and
 WAN Network, `Express Backbone`, as the sole IGP routing protocol.
 
