@@ -1,0 +1,15 @@
+# .readthedocs.yml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+version: 2
+sphinx:
+  configuration: openr/docs/conf.py
+
+formats:
+  - pdf
+
+python:
+  version: 3.9
+  install:
+    - requirements: openr/docs/requirements.txt
