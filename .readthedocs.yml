@@ -10,6 +10,6 @@ formats:
   - pdf
 
 python:
-  version: 3.9
+  version: 3
   install:
     - requirements: openr/docs/requirements.txt
