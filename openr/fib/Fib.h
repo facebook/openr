@@ -88,6 +88,18 @@ class Fib final : public OpenrEventBase {
           unicastRoutes);
 
   /**
+   * Show unicast routes which are to be added or updated
+   */
+  static void printUnicastRoutesAddUpdate(
+      const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate);
+
+  /**
+  Show MPLS routes which are to be added or updated
+  */
+  static void printMplsRoutesAddUpdate(
+      const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate);
+
+  /**
    * NOTE: DEPRECATED! Use getUnicastRoutes or getMplsRoutes.
    */
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getRouteDb();

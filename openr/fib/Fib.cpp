@@ -507,6 +507,38 @@ Fib::dumpPerfDb() const {
 }
 
 void
+Fib::printUnicastRoutesAddUpdate(
+    const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate) {
+  if (not unicastRoutesToUpdate.size()) {
+    return;
+  }
+
+  for (auto const& route : unicastRoutesToUpdate) {
+    VLOG(1) << "> " << toString(*route.dest_ref())
+            << ", NextHopsCount = " << route.nextHops_ref()->size();
+    for (auto const& nh : *route.nextHops_ref()) {
+      VLOG(2) << " " << toString(nh);
+    }
+  }
+}
+
+void
+Fib::printMplsRoutesAddUpdate(
+    const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate) {
+  if (not mplsRoutesToUpdate.size()) {
+    return;
+  }
+
+  for (auto const& route : mplsRoutesToUpdate) {
+    VLOG(1) << "> " << std::to_string(*route.topLabel_ref()) << ", "
+            << " NextHopsCount = " << route.nextHops_ref()->size();
+    for (auto const& nh : *route.nextHops_ref()) {
+      VLOG(2) << " " << toString(nh);
+    }
+  }
+}
+
+void
 Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
@@ -520,37 +552,6 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
   auto const& mplsRoutesToUpdate = createMplsRoutesWithSelectedNextHops(
       *routeDbDelta.mplsRoutesToUpdate_ref());
-
-  VLOG(2) << "Unicast routes to add/update";
-  for (auto const& route : unicastRoutesToUpdate) {
-    VLOG(2) << "> " << toString(*route.dest_ref()) << ", "
-            << route.nextHops_ref()->size();
-    for (auto const& nh : *route.nextHops_ref()) {
-      VLOG(2) << "  " << toString(nh);
-    }
-  }
-
-  VLOG(2) << "";
-  VLOG(2) << "Unicast routes to delete";
-  for (auto const& prefix : *routeDbDelta.unicastRoutesToDelete_ref()) {
-    VLOG(2) << "> " << toString(prefix);
-  }
-
-  VLOG(2) << "";
-  VLOG(2) << "Mpls routes to add/update";
-  for (auto const& route : mplsRoutesToUpdate) {
-    VLOG(2) << "> " << std::to_string(route.topLabel) << ", "
-            << route.nextHops_ref()->size();
-    for (auto const& nh : *route.nextHops_ref()) {
-      VLOG(2) << "  " << toString(nh);
-    }
-  }
-
-  VLOG(2) << "";
-  VLOG(2) << "MPLS routes to delete";
-  for (auto const& topLabel : *routeDbDelta.mplsRoutesToDelete_ref()) {
-    VLOG(2) << "> " << std::to_string(topLabel);
-  }
 
   if (dryrun_) {
     // Do not program routes in case of dryrun
@@ -600,6 +601,11 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
       LOG(INFO) << "Deleting "
                 << routeDbDelta.unicastRoutesToDelete_ref()->size()
                 << " unicast routes in FIB";
+
+      for (auto const& prefix : *routeDbDelta.unicastRoutesToDelete_ref()) {
+        VLOG(1) << "> " << toString(prefix);
+      }
+
       numOfRouteUpdates += routeDbDelta.unicastRoutesToDelete_ref()->size();
       client_->sync_deleteUnicastRoutes(
           kFibId_, *routeDbDelta.unicastRoutesToDelete_ref());
@@ -609,6 +615,9 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     if (unicastRoutesToUpdate.size()) {
       LOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
                 << " unicast routes in FIB";
+
+      printUnicastRoutesAddUpdate(unicastRoutesToUpdate);
+
       numOfRouteUpdates += unicastRoutesToUpdate.size();
       client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
     }
@@ -618,6 +627,11 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
         routeDbDelta.mplsRoutesToDelete_ref()->size()) {
       LOG(INFO) << "Deleting " << routeDbDelta.mplsRoutesToDelete_ref()->size()
                 << " mpls routes in FIB";
+
+      for (auto const& topLabel : *routeDbDelta.mplsRoutesToDelete_ref()) {
+        VLOG(1) << "> " << std::to_string(topLabel);
+      }
+
       numOfRouteUpdates += routeDbDelta.mplsRoutesToDelete_ref()->size();
       client_->sync_deleteMplsRoutes(
           kFibId_, *routeDbDelta.mplsRoutesToDelete_ref());
@@ -628,6 +642,9 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
       numOfRouteUpdates += mplsRoutesToUpdate.size();
       LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
                 << " mpls routes in FIB";
+
+      printMplsRoutesAddUpdate(mplsRoutesToUpdate);
+
       client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
     }
 
@@ -663,25 +680,12 @@ Fib::syncRouteDb() {
   // In dry run we just print the routes. No real action
   if (dryrun_) {
     LOG(INFO) << "Skipping programming of routes in dryrun ... ";
-    VLOG(2) << "Unicast routes to add/update";
-    for (auto const& route : unicastRoutes) {
-      VLOG(2) << "> " << toString(*route.dest_ref()) << ", "
-              << route.nextHops_ref()->size();
-      for (auto const& nh : *route.nextHops_ref()) {
-        VLOG(2) << "  " << toString(nh);
-      }
-    }
 
-    VLOG(2) << "";
-    VLOG(2) << "Mpls routes to add/update";
-    for (auto const& route : mplsRoutes) {
-      VLOG(2) << "> " << std::to_string(route.topLabel) << ", "
-              << route.nextHops_ref()->size();
-      for (auto const& nh : *route.nextHops_ref()) {
-        VLOG(2) << "  " << toString(nh);
-      }
-    }
+    LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes";
+    printUnicastRoutesAddUpdate(unicastRoutes);
 
+    LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes";
+    printMplsRoutesAddUpdate(mplsRoutes);
     return true;
   }
 
@@ -696,11 +700,13 @@ Fib::syncRouteDb() {
     LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes in FIB";
     client_->sync_syncFib(kFibId_, unicastRoutes);
     routeState_.dirtyPrefixes.clear();
+    printUnicastRoutesAddUpdate(unicastRoutes);
 
     // Sync mpls routes
     if (enableSegmentRouting_) {
       LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes in FIB";
       client_->sync_syncMplsFib(kFibId_, mplsRoutes);
+      printMplsRoutesAddUpdate(mplsRoutes);
     }
 
     const auto elapsedTime =
