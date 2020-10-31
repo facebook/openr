@@ -1,6 +1,7 @@
 # OpenR: Open Routing
 
 [![Build Status](https://github.com/facebook/openr/workflows/linux/badge.svg)](https://github.com/facebook/openr/actions?workflow=linux)
+[![Documentation Status](https://readthedocs.org/projects/openr/badge/?version=latest)](https://openr.readthedocs.io/en/latest/?badge=latest)
 
 Open Routing, OpenR, is Facebook's internally designed and developed Interior Routing
 Protocol/Platform. OpenR was originally designed and built for performing routing on the
@@ -11,8 +12,7 @@ its adoption in other networks, including Facebook's new WAN network, Express Ba
 
 ---
 
-Please refer to [`openr/docs/Overview.md`](openr/docs/Overview.md) to get
-started with OpenR.
+Please refer to our extensive [Documentation](https://openr.readthedocs.io/en/latest/) to get started with OpenR.
 
 ## Library Examples
 
@@ -33,7 +33,7 @@ leverage the openr and fbzmq libraries to build software to run with OpenR.
 
 ---
 
-Take a look at [`openr/docs/DeveloperGuide.md`](openr/docs/DeveloperGuide.md)
+Take a look at [`Developer Guide`](openr/docs/Developer_Guide/DeveloperGuide.md)
 and [`CONTRIBUTING.md`](CONTRIBUTING.md) to get started contributing.
 The Developer Guide outlines best practices for code contribution and testing.
 Any single change should be well tested for regressions and version
