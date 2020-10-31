@@ -230,10 +230,25 @@ main(int argc, char** argv) {
     maybeIpTos = FLAGS_ip_tos;
   }
 
-  // Hold time for advertising Prefix/Adj keys into KvStore
+  // Reference to spark config
   const auto& sparkConf = config->getSparkConfig();
-  const std::chrono::seconds initialDumpTime{2 *
-                                             *sparkConf.keepalive_time_s_ref()};
+
+  //
+  // Hold time for synchronizing adjacencies in KvStore. We expect all the
+  // adjacencies to be fully established within hold time after Open/R starts
+  //
+  const std::chrono::seconds initialAdjHoldTime{
+      2 * *sparkConf.keepalive_time_s_ref()};
+
+  //
+  // Hold time for synchronizing prefixes in KvStore. We expect all the
+  // prefixes to be recovered (Redistribute, Plugin etc.) within this time
+  // window.
+  // NOTE: Based on signals from sources that advertises the routes we can
+  // synchronize prefixes earlier. This time provides worst case bound.
+  //
+  const std::chrono::seconds initialPrefixHoldTime{
+      *config->getConfig().prefix_hold_time_s_ref()};
 
   // Set up the zmq context for this process.
   Context context;
@@ -396,7 +411,7 @@ main(int argc, char** argv) {
           configStore,
           kvStore,
           FLAGS_enable_perf_measurement,
-          initialDumpTime));
+          initialPrefixHoldTime));
 
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (config->isPrefixAllocationEnabled()) {
@@ -450,7 +465,7 @@ main(int argc, char** argv) {
           netlinkEventsQueue.getReader(),
           FLAGS_assume_drained,
           FLAGS_override_drain_state,
-          initialDumpTime));
+          initialAdjHoldTime));
 
   // Wait for the above two threads to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module

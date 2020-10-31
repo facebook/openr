@@ -235,9 +235,9 @@ struct OpenrConfig {
   1: string node_name
   2: string domain
   3: list<AreaConfig> areas = []
-  # The IP address to bind to
+
+  # Thrift Server - Bind dddress and port
   4: string listen_addr = "::"
-  # Port for the OpenR ctrl thrift service
   5: i32 openr_ctrl_port = 2018
 
   6: optional bool dryrun
@@ -259,13 +259,16 @@ struct OpenrConfig {
   15: KvstoreConfig kvstore_config
   16: LinkMonitorConfig link_monitor_config
   17: SparkConfig spark_config
+
   # Watchdog
   18: optional bool enable_watchdog
   19: optional WatchdogConfig watchdog_config
-  # prefix allocation
+
+  # Prefix allocation
   20: optional bool enable_prefix_allocation
   21: optional PrefixAllocationConfig prefix_allocation_config
-  # fib
+
+  # Fib
   22: optional bool enable_ordered_fib_programming
   23: i32 fib_port
 
@@ -290,6 +293,13 @@ struct OpenrConfig {
   # Flag for enabling best route selection based on PrefixMetrics
   # TODO: This is temporary & will go away once new prefix metrics is rolled out
   51: bool enable_best_route_selection = 0
+
+  # Maximum hold time for synchronizing the prefixes in KvStore after service
+  # starts up. It is expected that all the sources inform PrefixManager about
+  # the routes to be advertised within the hold time window. PrefixManager
+  # can choose to synchronize routes as soon as it receives END marker from
+  # all the expected sources.
+  52: i32 prefix_hold_time_s = 15
 
   # bgp
   100: optional bool enable_bgp_peering

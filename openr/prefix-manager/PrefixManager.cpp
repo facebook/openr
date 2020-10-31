@@ -276,6 +276,8 @@ PrefixManager::syncKvStore() {
   std::vector<std::pair<std::string, std::string>> keyVals;
   std::unordered_set<std::string> nowAdvertisingKeys;
 
+  LOG(INFO) << "Syncing " << prefixMap_.size() << " prefixes in KvStore";
+
   for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
     CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
     auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
