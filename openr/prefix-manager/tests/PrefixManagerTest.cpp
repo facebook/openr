@@ -1631,6 +1631,65 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   }
 }
 
+class RouteOriginationFixture : public PrefixManagerTestFixture {
+ public:
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = minSupportingRouteV4_;
+    originatedPrefixV6.prefix_ref() = v6Prefix_;
+    originatedPrefixV6.minimum_supporting_routes_ref() = minSupportingRouteV6_;
+
+    auto tConfig = PrefixManagerTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {originatedPrefixV4,
+                                         originatedPrefixV6};
+    return tConfig;
+  }
+
+ protected:
+  const std::string v4Prefix_ = "192.108.0.1/24";
+  const std::string v6Prefix_ = "2001::1/64";
+  const uint64_t minSupportingRouteV4_ = 4;
+  const uint64_t minSupportingRouteV6_ = 6;
+};
+
+TEST_F(RouteOriginationFixture, OriginatedPrefixReadFromConfig) {
+  // prefixManager will load prefixes to be originiated
+  // from openrConfig upon initialization
+  auto v4Address = folly::IPAddress::createNetwork(v4Prefix_);
+  auto v6Address = folly::IPAddress::createNetwork(v6Prefix_);
+  std::unordered_map<folly::CIDRNetwork, thrift::OriginatedPrefixEntry> mp;
+
+  auto prefixEntries = *(prefixManager->getOriginatedPrefixes().get());
+  for (auto const& prefixEntry : prefixEntries) {
+    if (prefixEntry.prefix_ref()->prefix_ref() == v4Prefix_) {
+      mp[v4Address] = prefixEntry;
+    }
+    if (prefixEntry.prefix_ref()->prefix_ref() == v6Prefix_) {
+      mp[v6Address] = prefixEntry;
+    }
+  }
+  ASSERT_TRUE(mp.size() == 2);
+
+  auto& prefixEntryV4 = mp.at(v4Address);
+  auto& prefixEntryV6 = mp.at(v6Address);
+
+  // verify attributes from originated prefix config
+  EXPECT_EQ(0, prefixEntryV4.supporting_prefixes_ref()->size());
+  EXPECT_EQ(0, prefixEntryV6.supporting_prefixes_ref()->size());
+  EXPECT_FALSE(*prefixEntryV4.isPrefixOriginated_ref());
+  EXPECT_FALSE(*prefixEntryV6.isPrefixOriginated_ref());
+  EXPECT_EQ(v4Prefix_, *prefixEntryV4.prefix_ref()->prefix_ref());
+  EXPECT_EQ(v6Prefix_, *prefixEntryV6.prefix_ref()->prefix_ref());
+  EXPECT_EQ(
+      minSupportingRouteV4_,
+      *prefixEntryV4.prefix_ref()->minimum_supporting_routes_ref());
+  EXPECT_EQ(
+      minSupportingRouteV6_,
+      *prefixEntryV6.prefix_ref()->minimum_supporting_routes_ref());
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

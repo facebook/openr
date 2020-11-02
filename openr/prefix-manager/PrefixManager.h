@@ -89,6 +89,9 @@ class PrefixManager final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
   getAdvertisedRoutesFiltered(thrift::AdvertisedRouteFilter filter);
 
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
+  getOriginatedPrefixes();
+
   /**
    * Filter routes only the <type> attribute
    */
@@ -142,6 +145,10 @@ class PrefixManager final : public OpenrEventBase {
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes,
       const std::unordered_set<std::string>& dstAreas);
+
+  // util function to read prefixes to be originated from config
+  void buildOriginatedPrefixDb(
+      const std::vector<thrift::OriginatedPrefix>& prefixes);
 
   // Update kvstore with both ephemeral and non-ephemeral prefixes
   void syncKvStore();
@@ -228,6 +235,48 @@ class PrefixManager final : public OpenrEventBase {
   //   }
 
   //   std::unordered_map<std::string, AreaInfo> areaInfos_;
+
+  //
+  // [Route Origination/Aggregation]
+  //
+  //  Local-originated prefixes will be advertise/withdrawn from
+  //  `Prefix-Manager` by calculating ref-count of supporting-
+  //  route from `Decision`.
+  //     --------                 ---------
+  //               ------------>
+  //     Decision                 PrefixMgr
+  //               <------------
+  //     --------                 ---------
+  //
+
+  // struct to represent local-originiated route
+  struct OriginatedRoute {
+    thrift::OriginatedPrefix originatedPrefix;
+    RibUnicastEntry unicastEntry;
+    std::unordered_set<folly::CIDRNetwork> supportingRoutes;
+
+    OriginatedRoute(
+        const thrift::OriginatedPrefix& originatedPrefix,
+        const RibUnicastEntry& unicastEntry,
+        const std::unordered_set<folly::CIDRNetwork>& supportingRoutes)
+        : originatedPrefix(originatedPrefix),
+          unicastEntry(unicastEntry),
+          supportingRoutes(supportingRoutes) {}
+
+    bool
+    operator==(const OriginatedRoute& other) const {
+      return originatedPrefix == other.originatedPrefix and
+          unicastEntry == other.unicastEntry and
+          supportingRoutes == other.supportingRoutes;
+    }
+  };
+
+  // prefixes to be originated from prefix-manager
+  std::unordered_map<folly::CIDRNetwork, thrift::OriginatedPrefixEntry>
+      originatedPrefixes_;
+
+  // prefixes received from decision
+  std::unordered_set<folly::CIDRNetwork> ribPrefixes_;
 }; // PrefixManager
 
 } // namespace openr

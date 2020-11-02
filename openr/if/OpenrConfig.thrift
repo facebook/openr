@@ -121,9 +121,9 @@ struct OriginatedPrefix {
   3: PrefixForwardingAlgorithm forwardingAlgorithm =
     PrefixForwardingAlgorithm.SP_ECMP
 
-  // minimum # of supporting routes to advertise this prefix. Decision will
-  // advertise/withdrawn this prefix when # of supporting routes change.
-  4: optional i32 minimum_supporting_routes
+  // minimum # of supporting routes to advertise this prefix.
+  // Prefix will be advertised/withdrawn when # of supporting routes change.
+  4: i16 minimum_supporting_routes
 
   // flag to indicate FIB programming
   5: optional bool install_to_fib
@@ -287,8 +287,7 @@ struct OpenrConfig {
   27: bool enable_periodic_sync = 1
 
   # V4/V6 prefixes to be originated
-  31: optional list<OriginatedPrefix> originated_prefixes_v4
-  32: optional list<OriginatedPrefix> originated_prefixes_v6
+  31: optional list<OriginatedPrefix> originated_prefixes
 
   # Flag for enabling best route selection based on PrefixMetrics
   # TODO: This is temporary & will go away once new prefix metrics is rolled out

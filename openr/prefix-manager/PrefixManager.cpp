@@ -22,11 +22,6 @@ namespace openr {
 namespace {
 // key for the persist config on disk
 const std::string kPfxMgrConfigKey{"prefix-manager-config"};
-// various error messages
-const std::string kErrorNoChanges{"No changes in prefixes to be advertised"};
-const std::string kErrorNoPrefixToRemove{"No prefix to remove"};
-const std::string kErrorNoPrefixesOfType{"No prefixes of type"};
-const std::string kErrorUnknownCommand{"Unknown command"};
 
 std::string
 getPrefixTypeName(thrift::PrefixType const& type) {
@@ -52,6 +47,7 @@ PrefixManager::PrefixManager(
       allAreas_{config->getAreaIds()} {
   CHECK(configStore_);
   CHECK(kvStore_);
+  CHECK(config);
 
   // Create KvStore client
   kvStoreClient_ =
@@ -79,6 +75,11 @@ PrefixManager::PrefixManager(
           addingEvents_[*entry.type_ref()][*entry.prefix_ref()],
           "LOADED_FROM_DISK");
     }
+  }
+
+  // Load openrConfig for local-originated routes
+  if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
+    buildOriginatedPrefixDb(*prefixes);
   }
 
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
@@ -170,7 +171,7 @@ PrefixManager::PrefixManager(
                   value.value().value_ref().value(), serializer_);
           if (not(*prefixDb.deletePrefix_ref()) &&
               nodeId_ == *prefixDb.thisNodeName_ref()) {
-            LOG(INFO) << "keysToClear_.emplace(" << key << ")";
+            LOG(INFO) << "Prepare to clear key: " << key;
             keysToClear_.emplace(key);
             syncKvStoreThrottled_->operator()();
           }
@@ -214,6 +215,18 @@ PrefixManager::stop() {
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
+}
+
+void
+PrefixManager::buildOriginatedPrefixDb(
+    const std::vector<thrift::OriginatedPrefix>& prefixes) {
+  for (const auto& prefix : prefixes) {
+    // upon initialization, there will be no supporting routes
+    auto entry = createOriginatedPrefixEntry(prefix);
+    auto network = folly::IPAddress::createNetwork(*prefix.prefix_ref());
+
+    originatedPrefixes_.emplace(std::move(network), std::move(entry));
+  }
 }
 
 void
@@ -452,6 +465,21 @@ PrefixManager::getAdvertisedRoutesFiltered(
         p.setValue(std::move(routes));
       });
   return std::move(sf);
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
+PrefixManager::getOriginatedPrefixes() {
+  folly::Promise<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p)]() mutable noexcept {
+    auto prefixes =
+        std::make_unique<std::vector<thrift::OriginatedPrefixEntry>>();
+    for (auto const& [_, entry] : originatedPrefixes_) {
+      prefixes->emplace_back(entry);
+    }
+    p.setValue(std::move(prefixes));
+  });
+  return sf;
 }
 
 void

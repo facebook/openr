@@ -1792,12 +1792,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
           continue;
         }
         auto nodePrefixDb = maybeNodePrefixDb.value();
-
         // TODO - this should directly come from KvStore.
         *nodePrefixDb.area_ref() = area;
-
-        VLOG(1) << "Updating prefix key: " << key << " of node: " << nodeName
-                << " in area: " << area;
 
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
@@ -1850,12 +1846,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         continue;
       }
       auto nodePrefixDb = maybeNodePrefixDb.value();
-
       // TODO - this should directly come from KvStore.
       *nodePrefixDb.area_ref() = area;
-
-      VLOG(1) << "Deleting expired prefix key: " << key
-              << " of node: " << nodeName << " in area: " << area;
 
       pendingUpdates_.applyPrefixStateChange(
           prefixState_.updatePrefixDatabase(nodePrefixDb));

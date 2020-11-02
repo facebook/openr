@@ -244,6 +244,10 @@ class Constants {
   static constexpr int32_t kDefaultPathPreference{1000}; // LIVE routes
   static constexpr int32_t kDefaultSourcePreference{200}; // Source pref
 
+  // Nexthops used to program drop route
+  static constexpr folly::StringPiece kLocalRouteNexthopV4{"0.0.0.0"};
+  static constexpr folly::StringPiece kLocalRouteNexthopV6{"::"};
+
   // OpenR ports
 
   // Openr Ctrl thrift server port

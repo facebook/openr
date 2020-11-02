@@ -36,6 +36,7 @@
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/Spark_types.h>
 
 /**
@@ -430,6 +431,11 @@ thrift::InterfaceInfo createThriftInterfaceInfo(
     const bool isUp,
     const int ifIndex,
     const std::vector<thrift::IpPrefix>& networks);
+
+thrift::OriginatedPrefixEntry createOriginatedPrefixEntry(
+    const thrift::OriginatedPrefix& originatedPrefix,
+    std::vector<std::string> supportingPrefixes = {},
+    bool isPrefixOriginated = false);
 
 thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,

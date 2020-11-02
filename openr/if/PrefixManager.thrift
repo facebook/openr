@@ -13,6 +13,7 @@ namespace lua openr.PrefixManager
 
 include "Lsdb.thrift"
 include "Network.thrift"
+include "OpenrConfig.thrift"
 
 enum PrefixUpdateCommand {
   ADD_PREFIXES = 1,
@@ -27,4 +28,11 @@ struct PrefixUpdateRequest {
   3: list<Lsdb.PrefixEntry> prefixes
   // empty list = inject to all configured areas
   4: set<string> dstAreas = {} (cpp2.type = "std::unordered_set<std::string>")
+}
+
+// struct to represent originated prefix from PrefixManager's view
+struct OriginatedPrefixEntry {
+  1: OpenrConfig.OriginatedPrefix prefix
+  2: list<string> supporting_prefixes
+  3: bool isPrefixOriginated = 0
 }

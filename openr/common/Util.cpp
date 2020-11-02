@@ -918,6 +918,18 @@ createThriftInterfaceInfo(
   return interfaceInfo;
 }
 
+thrift::OriginatedPrefixEntry
+createOriginatedPrefixEntry(
+    const thrift::OriginatedPrefix& originatedPrefix,
+    std::vector<std::string> supportingPrefixes,
+    bool isPrefixOriginated) {
+  thrift::OriginatedPrefixEntry entry;
+  entry.prefix_ref() = originatedPrefix;
+  entry.supporting_prefixes_ref() = supportingPrefixes;
+  entry.isPrefixOriginated_ref() = isPrefixOriginated;
+  return entry;
+}
+
 thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,
