@@ -1,5 +1,4 @@
-`Monitoring`
-------------
+# Monitoring
 
 Each module internally generates its own list of counters using the `ThreadData`
 library (which has supports for stats like SUM/RATE/COUNT over various
@@ -13,8 +12,8 @@ Further, each module logs important events like `IFACE_UP` or `NEIGHBOR_DOWN`
 in a structured fashion via ZmqMonitor which can be logged to data stores
 like `Druid` to do real-time monitoring of log events across the fleet.
 
+## Understanding Counters
 
-### Understanding Counters
 ---
 
 Counters are exported as key-value pairs where the key is string and value is a
@@ -24,15 +23,16 @@ encoded with the following method:
 
 `<module-name>.<counter-name>.<stat-type>.<seconds>`
 
-For e.g.
+For example:
+
 - `kvstore.received_key_vals.sum.60` represents number of key-value updates that
   happened in past one minute
 - `decision.spf_runs.count.3600` represents number of SPF runs in last one hour
 - `decision.spf.multipath_ms.avg.0` represents the average execution time across
   all SPF calculations
 
-
 ### Important Counters to Monitor
+
 ---
 
 Here are some important counters to monitor for a production system and alert
@@ -40,6 +40,7 @@ engineers quickly if something goes wrong. `breeze monitor counters` will list
 a lot of other counters as well. Most names are self-explanatory.
 
 #### KvStore Counters
+
 - `kvstore.num_keys` => This counter shouldn't exceed a certain threshold and
   must have some max limit for a given network. If the number of keys keeps
   increasing in KvStore that means the system will soon run out of memory
@@ -48,6 +49,7 @@ a lot of other counters as well. Most names are self-explanatory.
   counter should be 0 most of time
 
 #### Spark Counters
+
 - `spark.num_tracked_interfaces` => Indicates the number of interfaces learned by
   OpenR
 - `spark.num_adjacent_neighbors` must match with `spark.num_tracked_neighbors`
@@ -76,7 +78,8 @@ a lot of other counters as well. Most names are self-explanatory.
 - `link_monitor.advertise_links.sum.60` => higher number indicates a lot of link
   flapping on system
 
-### Log Events
+## Log Events
+
 ---
 
 Along with counters OpenR also publishes certain log events. Each log event is a
@@ -85,12 +88,14 @@ json sample described as dictionary of
 `<value-type> => map<key, value>`
 
 Each sample has following keys along with more information
+
 - `int` key named `time` indicating timestamp since epoch in number of seconds.
 - `string` key named `domain` indicating network name
 - `string` key named `name` indicating name of the node
 - `string` key named `event` indicating event name
 
-Some important evens names are
+Some important evens names are:
+
 - `ROUTE_CALC`
 - `ROUTE_UPDATE`
 - `NB_RTT_CHANGE`
