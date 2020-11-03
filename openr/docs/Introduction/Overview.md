@@ -68,7 +68,6 @@ protocols we do not focus on the wire format or interaction logic - rather, this
 is relegated to Thrift and ZMQ to deal with. Here is the high level of overview
 for each module and you can read more about other modules in it's own section.
 
-
 ### Code Organization
 
 The code is very modularized and each module is self-contained. For more information
@@ -81,11 +80,11 @@ modules/libraries come together to build OpenR.
 Open/R is evolving rapidly and we expect to add several features in the short term
 to handle network routing requirements. The current list of features we have on our
 mind is
-- Encryption and authentication for control plane communication
-- Segment Routing
-- Emulation - Testing framework
-- Weighted ECMP routing
 
+* Encryption and authentication for control plane communication
+* Segment Routing
+* Emulation - Testing framework
+* Weighted ECMP routing
 
 ### Releases
 
@@ -99,6 +98,6 @@ In the future, our release plan might change and we might tag some stable releas
 but until then we will just have weekly tags.
 
 ### Extra Readings
-- [0MQ Internal Architecture](http://zeromq.org/whitepapers:architecture)
-- [Terragraph](https://code.facebook.com/posts/1072680049445290/introducing-facebook-s-new-terrestrial-connectivity-systems-terragraph-and-project-aries/)
-- [Express Backbone](https://code.facebook.com/posts/1782709872057497/building-express-backbone-facebook-s-new-long-haul-network/)
+
+* [Terragraph](https://engineering.fb.com/2016/04/13/connectivity/introducing-facebook-s-new-terrestrial-connectivity-systems-terragraph-and-project-aries/)
+* [Express Backbone](https://engineering.fb.com/2017/05/01/data-center-engineering/building-express-backbone-facebook-s-new-long-haul-network/)

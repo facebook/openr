@@ -19,7 +19,7 @@ of `day`. Samples are:
 - version: `20200825`
 - lowestSupportedVersion: `20200214`
 
-See [docs/Spark.md](https://github.com/facebook/openr/blob/master/openr/docs/Spark.md)
+See [Spark.md](../Protocol_Guide/Spark.md)
 for more details about neighbor discivery mechanism inside `Spark`.
 
 ### Backward Compatibility

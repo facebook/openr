@@ -1,5 +1,4 @@
-`PrefixAllocator`
------------------
+# PrefixAllocator
 
 The class assigns each node with a unique prefix of a certain length from a
 given seed prefix in a distributed manner. It is built atop RangeAllocator.

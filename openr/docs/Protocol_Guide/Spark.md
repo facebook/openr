@@ -1,5 +1,4 @@
-# `Spark`
----
+# Spark
 
 `Spark` is the neighbor discovery module of Open/R. It leverages IPv6 link-local
 multicast via UDP to discover and maintain Adjacencies, aka neighbor relationships.

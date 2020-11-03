@@ -1,5 +1,4 @@
-`RangeAllocator`
--------------
+# RangeAllocator
 
 RangeAllocator is an abstract module built on the top of `KvStore` communication
 channel to elect a unique integer value from a given range in a distributed

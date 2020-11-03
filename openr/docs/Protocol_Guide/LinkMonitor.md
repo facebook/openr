@@ -1,5 +1,4 @@
-`LinkMonitor`
--------------
+# LinkMonitor
 
 This module is responsible for learning link information from the underlying
 system and managing neighbor sessions. At a high level it:
