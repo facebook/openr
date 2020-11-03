@@ -1043,8 +1043,9 @@ KvStoreDb::logStateTransition(
 // static util function to fetch current peer state
 std::optional<KvStorePeerState>
 KvStoreDb::getCurrentState(std::string const& peerName) {
-  if (thriftPeers_.count(peerName)) {
-    return thriftPeers_.at(peerName).state;
+  auto thriftPeerIt = thriftPeers_.find(peerName);
+  if (thriftPeerIt != thriftPeers_.end()) {
+    return thriftPeerIt->second.state;
   }
   return std::nullopt;
 }
@@ -1403,9 +1404,7 @@ KvStoreDb::requestThriftPeerSync() {
       getPeersByState(KvStorePeerState::SYNCING).size();
 
   // Scan over thriftPeers to promote IDLE peers to SYNCING
-  for (auto& kv : thriftPeers_) {
-    auto& peerName = kv.first; // std::string
-    auto& thriftPeer = kv.second; // KvStoreThriftPeer
+  for (auto& [peerName, thriftPeer] : thriftPeers_) {
     auto& peerSpec = thriftPeer.peerSpec; // thrift::PeerSpec
 
     // ignore peers in state other than IDLE
@@ -1497,27 +1496,28 @@ KvStoreDb::requestThriftPeerSync() {
         params, area_);
     std::move(sf)
         .via(evb_->getEvb())
-        .thenValue([this, peerName, startTime](thrift::Publication&& pub) {
-          // state transition to INITIALIZED
-          auto endTime = std::chrono::steady_clock::now();
-          auto timeDelta =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  endTime - startTime);
-          processThriftSuccess(peerName, std::move(pub), timeDelta);
-        })
-        .thenError(
-            [this, peerName, startTime](const folly::exception_wrapper& ew) {
-              // state transition to IDLE
+        .thenValue(
+            [this, peer = peerName, startTime](thrift::Publication&& pub) {
+              // state transition to INITIALIZED
               auto endTime = std::chrono::steady_clock::now();
               auto timeDelta =
                   std::chrono::duration_cast<std::chrono::milliseconds>(
                       endTime - startTime);
-              processThriftFailure(peerName, ew.what(), timeDelta);
+              processThriftSuccess(peer, std::move(pub), timeDelta);
+            })
+        .thenError([this, peer = peerName, startTime](
+                       const folly::exception_wrapper& ew) {
+          // state transition to IDLE
+          auto endTime = std::chrono::steady_clock::now();
+          auto timeDelta =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endTime - startTime);
+          processThriftFailure(peer, ew.what(), timeDelta);
 
-              // record telemetry for thrift calls
-              fb303::fbData->addStatValue(
-                  "kvstore.thrift.num_full_sync_failure", 1, fb303::COUNT);
-            });
+          // record telemetry for thrift calls
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.num_full_sync_failure", 1, fb303::COUNT);
+        });
 
     // in case pending peer size is over parallelSyncLimit,
     // wait until kMaxBackoff before sending next round of sync
@@ -1705,10 +1705,10 @@ KvStoreDb::addThriftPeers(
       peer.keepAliveTimer = folly::AsyncTimeout::make(
           *(evb_->getEvb()), [this, peerName]() noexcept {
             auto period = addJitter(Constants::kThriftClientKeepAliveInterval);
-            CHECK(thriftPeers_.at(peerName).client)
-                << "thrift client is NOT initialized";
-            thriftPeers_.at(peerName).client->semifuture_getStatus();
-            thriftPeers_.at(peerName).keepAliveTimer->scheduleTimeout(period);
+            auto& p = thriftPeers_.at(peerName);
+            CHECK(p.client) << "thrift client is NOT initialized";
+            p.client->semifuture_getStatus();
+            p.keepAliveTimer->scheduleTimeout(period);
           });
       thriftPeers_.emplace(peerName, std::move(peer));
     }
@@ -2027,12 +2027,12 @@ KvStoreDb::dumpPeers() {
   thrift::PeersMap peers;
 
   if (kvParams_.enableKvStoreThrift) {
-    for (auto const& kv : thriftPeers_) {
-      peers.emplace(kv.first, kv.second.peerSpec);
+    for (auto const& [peerName, thriftPeer] : thriftPeers_) {
+      peers.emplace(peerName, thriftPeer.peerSpec);
     }
   } else {
-    for (auto const& kv : peers_) {
-      peers.emplace(kv.first, kv.second.first);
+    for (auto const& [peerName, zmqPeer] : peers_) {
+      peers.emplace(peerName, zmqPeer.first);
     }
   }
   return peers;
@@ -2762,7 +2762,7 @@ KvStoreDb::finalizeFullSync(
       return;
     }
 
-    auto& thriftPeer = thriftPeers_.at(senderId);
+    auto& thriftPeer = peerIt->second;
     if (thriftPeer.state == KvStorePeerState::IDLE or (not thriftPeer.client)) {
       // peer in thriftPeers collection can still be in IDLE state.
       // Skip final full-sync with those peers.
@@ -2949,7 +2949,7 @@ KvStoreDb::floodPublication(
         continue;
       }
 
-      auto& thriftPeer = thriftPeers_.at(peerName);
+      auto& thriftPeer = peerIt->second;
       if (thriftPeer.state != KvStorePeerState::INITIALIZED or
           (not thriftPeer.client)) {
         // Skip flooding to those peers if peer has NOT finished
