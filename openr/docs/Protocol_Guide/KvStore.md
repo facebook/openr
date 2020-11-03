@@ -1,5 +1,4 @@
-`KvStore - Store and Sync`
---------------------------
+# KvStore - Store and Sync
 
 `KvStore` provides a self-contained, in-memory `key-value` datastore which is
 eventually consistent. Underlying implementation is based on  **conflict-free

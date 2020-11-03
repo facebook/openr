@@ -1,5 +1,4 @@
-`Fib`
------
+# Fib
 
 This module is responsible for programming the actual forwarding tables (e.g. in
 hardware) on the local node.

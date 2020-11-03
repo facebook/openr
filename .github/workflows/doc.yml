@@ -29,5 +29,8 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r "openr/docs/requirements.txt"
 
+      - name: Check all links resolve
+        run: make -C openr/docs linkcheck
+
       - name: Build documentation
         run: make -C openr/docs html

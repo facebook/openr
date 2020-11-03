@@ -1,5 +1,4 @@
-`PrefixManager`
----------------
+# PrefixManager
 
 This module is responsible for keeping track of the prefixes originating
 from the node and advertising them into the network via KvStore.
@@ -85,5 +84,5 @@ Use thrift APIs defined in `openr/if/OpenrCtrl.thrift` for querying, adding,
 removing or updating originating prefixes.
 
 Additionally, you can add and remove prefixes from the `breeze` cli. See
-[docs/Breeze.md](https://github.com/facebook/openr/blob/master/openr/docs/Breeze.md)
+[CLI.md](../Operator_Guide/CLI.md)
 for more details

@@ -1,5 +1,4 @@
-`RIB Policy`
-------------
+# RIB Policy
 
 Routing Information Base (RIB) Policy provides ability to police the computed
 routes before programming in underlying hardware. Currently supported use-case
@@ -8,15 +7,17 @@ in future to support changing `admin-distance` (aka route priority), add or drop
 next-hops, change route metric, and block route from programming or
 re-distribution.
 
-### Flow Diagram
+## Flow Diagram
+
 ---
 
 `Decision` module in Open/R implements the RIB Policy processing. The RIB Policy
 applied on computed routes just before they're sent off for programming.
 
-<img src="https://user-images.githubusercontent.com/1482609/84713146-3f5b0c80-af1f-11ea-8d6b-58d7ce7a6a90.png" alt="RIB Policy Flow Diagram" width="whatever" height="400">
+![Decision Flow](https://user-images.githubusercontent.com/1482609/84713146-3f5b0c80-af1f-11ea-8d6b-58d7ce7a6a90.png)
 
-### Creating RIB Policy
+## Creating RIB Policy
+
 ---
 
 RIB Policy is expressed in thrift specification and is defined as `struct RibPolicy`
@@ -30,7 +31,8 @@ One such pair of Match-Action is termed as `RibPolicyStatement`. Multiple
 such statements can be specified. However, note that only first matching action
 will be applied.
 
-### Setting RIB Policy
+## Setting RIB Policy
+
 ---
 
 RIB Policy can be set via RPC API (aka thrift API). It is not supported to be
@@ -39,7 +41,7 @@ RibPolicy. It is important to note that policy have `ttl_secs` field which
 specifies the validity of policy, beyond which it is expired and effects of
 policy will be reverted.
 
-```
+```c++
 // Set policy API
 void setRibPolicy(1: RibPolicy ribPolicy) throws (1: OpenrError error)
 
@@ -47,11 +49,12 @@ void setRibPolicy(1: RibPolicy ribPolicy) throws (1: OpenrError error)
 RibPolicy getRibPolicy() throws (1: OpenrError error)
 ```
 
-[SetRibPolicy](`https://github.com/facebook/openr/tree/master/examples/SetRibPolicyExample.cpp`) example code is provided for reference in terms of how to define and set RibPolicy.
+[SetRibPolicy](https://github.com/facebook/openr/blob/master/examples/SetRibPolicyExample.cpp) example code is provided for reference in terms of how to define and set RibPolicy.
 
 For more details refer to `OpenrCtrl` service interface in [`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift).
 
-### UseCase - NextHop Weight Transformation (UCMP)
+## UseCase - NextHop Weight Transformation (UCMP)
+
 ---
 
 Define and achieve policy driven weigted distribution of flows over multiple
@@ -71,6 +74,7 @@ will be removed. If policed route have no next-hop then it will be removed from
 RIB. This won't be programmed as well won't get re-distributed across the areas.
 
 ### Configuration Knob
+
 ---
 
 RibPolicy is by default disabled and RPC APIs will throw exception if an
@@ -79,11 +83,12 @@ this feature where it is not needed. You'll need to set the `enable_rib_policy`
 field in OpenrConfig to `true` to make use of RibPolicy feature.
 
 ### CLI
+
 ---
 
 Breeze CLI provides a command to view the currently configured RibPolicy.
 
-```
+```console
 $ breeze decision rib-policy
 > RibPolicy
   Validity: 291s

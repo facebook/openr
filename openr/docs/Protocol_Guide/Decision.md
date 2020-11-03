@@ -1,5 +1,4 @@
-`Decision`
-----------
+# Decision
 
 Computes the routing table (IPv4, IPv6, MPLS). Uses Topology and Reachability
 information received from KvStore in the computation. Outputs RIB, aka
@@ -88,7 +87,7 @@ Computed label routes leverage Penultimate Hop Popping (PHP) for pop & forward
 instruction to avoid duplicate lookup of a packet when it reaches the
 destination.
 
-For more details refer to [Source Routing in Open/R](SourceRouting.md)
+For more details refer to [Source Routing in Open/R](../Features/SourceRouting.md)
 
 ### Route Notifications
 ---
