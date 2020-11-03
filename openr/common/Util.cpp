@@ -804,6 +804,8 @@ createPrefixDb(
   return prefixDb;
 }
 
+// TODO: refactor this as prefixEntry struct has been
+// completely refactored.
 thrift::PrefixEntry
 createPrefixEntry(
     thrift::IpPrefix prefix,
@@ -921,12 +923,12 @@ createThriftInterfaceInfo(
 thrift::OriginatedPrefixEntry
 createOriginatedPrefixEntry(
     const thrift::OriginatedPrefix& originatedPrefix,
-    std::vector<std::string> supportingPrefixes,
-    bool isPrefixOriginated) {
+    const std::vector<std::string>& supportingPrefixes,
+    bool installed) {
   thrift::OriginatedPrefixEntry entry;
   entry.prefix_ref() = originatedPrefix;
   entry.supporting_prefixes_ref() = supportingPrefixes;
-  entry.isPrefixOriginated_ref() = isPrefixOriginated;
+  entry.installed_ref() = installed;
   return entry;
 }
 

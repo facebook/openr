@@ -434,8 +434,8 @@ thrift::InterfaceInfo createThriftInterfaceInfo(
 
 thrift::OriginatedPrefixEntry createOriginatedPrefixEntry(
     const thrift::OriginatedPrefix& originatedPrefix,
-    std::vector<std::string> supportingPrefixes = {},
-    bool isPrefixOriginated = false);
+    const std::vector<std::string>& supportingPrefixes,
+    bool installed = false);
 
 thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,

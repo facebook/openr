@@ -221,11 +221,45 @@ void
 PrefixManager::buildOriginatedPrefixDb(
     const std::vector<thrift::OriginatedPrefix>& prefixes) {
   for (const auto& prefix : prefixes) {
-    // upon initialization, there will be no supporting routes
-    auto entry = createOriginatedPrefixEntry(prefix);
     auto network = folly::IPAddress::createNetwork(*prefix.prefix_ref());
+    auto nh = network.first.isV4() ? Constants::kLocalRouteNexthopV4.toString()
+                                   : Constants::kLocalRouteNexthopV6.toString();
 
-    originatedPrefixes_.emplace(std::move(network), std::move(entry));
+    // Populate PrefixMetric struct
+    thrift::PrefixMetrics metrics;
+    if (auto pref = prefix.path_preference_ref()) {
+      metrics.path_preference_ref() = *pref;
+    }
+    if (auto pref = prefix.source_preference_ref()) {
+      metrics.source_preference_ref() = *pref;
+    }
+
+    // Populate PrefixEntry struct
+    thrift::PrefixEntry entry;
+    entry.prefix_ref() = toIpPrefix(network);
+    entry.metrics_ref() = std::move(metrics);
+    // ATTN: `area_stack` will be explicitly set to empty
+    //      as there is no "cross-area" behavior for local
+    //      originated prefixes.
+    CHECK(entry.area_stack_ref()->empty());
+    if (auto tags = prefix.tags_ref()) {
+      entry.tags_ref() = *tags;
+    }
+
+    // Populate RibUnicastEntry struct
+    RibUnicastEntry unicastEntry(network, {createNextHop(toBinaryAddress(nh))});
+    unicastEntry.bestPrefixEntry = std::move(entry);
+    if (auto installToFib = prefix.install_to_fib_ref()) {
+      unicastEntry.doNotInstall = (*installToFib ? 0 : 1);
+    }
+
+    // ATTN: upon initialization, no supporting routes
+    originatedPrefixDb_.emplace(
+        network,
+        OriginatedRoute(
+            prefix,
+            std::move(unicastEntry),
+            std::unordered_set<folly::CIDRNetwork>{}));
   }
 }
 
@@ -256,6 +290,8 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
   auto dstAreas = entry.dstAreas; // intended copy
   auto& prefixEntry = entry.tPrefixEntry;
   // prevent area_stack loop
+  // ATTN: for local-originated prefixes, `area_stack` is explicitly
+  //       set to empty.
   for (const auto fromArea : *prefixEntry.area_stack_ref()) {
     dstAreas.erase(fromArea);
   }
@@ -472,10 +508,23 @@ PrefixManager::getOriginatedPrefixes() {
   folly::Promise<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p)]() mutable noexcept {
+    // convert content inside originatedPrefixDb_ into thrift struct
     auto prefixes =
         std::make_unique<std::vector<thrift::OriginatedPrefixEntry>>();
-    for (auto const& [_, entry] : originatedPrefixes_) {
-      prefixes->emplace_back(entry);
+    for (auto const& [_, route] : originatedPrefixDb_) {
+      auto const& prefix = route.originatedPrefix;
+      auto supportingRoutes =
+          folly::gen::from(route.supportingRoutes) |
+          folly::gen::mapped([](const folly::CIDRNetwork& network) {
+            return folly::IPAddress::networkToString(network);
+          }) |
+          folly::gen::as<std::vector<std::string>>();
+
+      auto entry = createOriginatedPrefixEntry(
+          prefix,
+          supportingRoutes,
+          supportingRoutes.size() >= *prefix.minimum_supporting_routes_ref());
+      prefixes->emplace_back(std::move(entry));
     }
     p.setValue(std::move(prefixes));
   });
@@ -558,10 +607,9 @@ PrefixManager::advertisePrefixesImpl(
     }
     updated = true;
 
-    SYSLOG_IF(INFO, entry.dstAreas.size() > 0)
-        << "Advertising prefix: " << toString(prefix) << " to area  "
-        << folly::join(",", entry.dstAreas)
-        << ", client: " << getPrefixTypeName(type);
+    SYSLOG(INFO) << "Advertising prefix: " << toString(prefix) << " to area: ["
+                 << folly::join(",", entry.dstAreas)
+                 << "], client: " << getPrefixTypeName(type);
   }
 
   if (updated) {
@@ -654,22 +702,71 @@ PrefixManager::withdrawPrefixesByTypeImpl(thrift::PrefixType type) {
 }
 
 void
-PrefixManager::processDecisionRouteUpdates(
-    DecisionRouteUpdate&& decisionRouteUpdate) {
-  // if only one area is configured, no need to redisrtibute route
-  // We want to keep processDecisionRouteUpdates() running as dynamic
-  // configuration could add/remove areas.
-  if (allAreas_.size() == 1) {
+PrefixManager::updateOriginatedPrefixOnAdvertise(
+    const folly::CIDRNetwork& prefix) {
+  // ATTN: ignore attribute-ONLY update for existing RIB entries
+  //       as it won't affect `supporting_route_cnt`
+  auto [ribPrefixIt, inserted] =
+      ribPrefixDb_.emplace(prefix, std::vector<folly::CIDRNetwork>());
+  if (not inserted) {
     return;
   }
 
+  for (auto& [network, route] : originatedPrefixDb_) {
+    // folly::CIDRNetwork.first -> IPAddress
+    // folly::CIDRNetwork.second -> cidr length
+    if (not prefix.first.inSubnet(network.first, network.second)) {
+      continue;
+    }
+
+    LOG(INFO) << "[Route Origination] Adding supporting route "
+              << folly::IPAddress::networkToString(prefix)
+              << " for originated route "
+              << folly::IPAddress::networkToString(network);
+
+    // reverse mapping: RIB prefixEntry -> OriginatedPrefixes
+    ribPrefixIt->second.emplace_back(network);
+
+    // mapping: OriginatedPrefix -> RIB prefixEntries
+    route.supportingRoutes.emplace(prefix);
+  }
+}
+
+void
+PrefixManager::updateOriginatedPrefixOnWithdraw(
+    const folly::CIDRNetwork& prefix) {
+  // ignore invalid RIB entry
+  auto ribPrefixIt = ribPrefixDb_.find(prefix);
+  if (ribPrefixIt == ribPrefixDb_.end()) {
+    return;
+  }
+
+  // clean mapping
+  for (auto& network : ribPrefixIt->second) {
+    auto originatedPrefixIt = originatedPrefixDb_.find(network);
+    CHECK(originatedPrefixIt != originatedPrefixDb_.end());
+    originatedPrefixIt->second.supportingRoutes.erase(prefix);
+
+    LOG(INFO) << "[Route Origination] Removing supporting route "
+              << folly::IPAddress::networkToString(prefix)
+              << " for originated route "
+              << folly::IPAddress::networkToString(network);
+  }
+
+  // clean local caching
+  ribPrefixDb_.erase(prefix);
+}
+
+void
+PrefixManager::processDecisionRouteUpdates(
+    DecisionRouteUpdate&& decisionRouteUpdate) {
   std::vector<PrefixEntry> advertisePrefixes;
   std::vector<thrift::PrefixEntry> withdrawPrefixes;
 
   // Add/Update unicast routes to update
   // Self originated (include routes imported from local BGP)
   // won't show up in decisionRouteUpdate.
-  for (auto& [_, route] : decisionRouteUpdate.unicastRoutesToUpdate) {
+  for (auto& [prefix, route] : decisionRouteUpdate.unicastRoutesToUpdate) {
     auto& prefixEntry = route.bestPrefixEntry;
 
     // NOTE: future expansion - run egress policy here
@@ -689,18 +786,30 @@ PrefixManager::processDecisionRouteUpdates(
     for (const auto& nh : route.nexthops) {
       dstAreas.erase(apache::thrift::can_throw(*nh.area_ref()));
     }
-
     advertisePrefixes.emplace_back(prefixEntry, dstAreas);
+
+    // maybe inc supporting_route of originated prefixes
+    updateOriginatedPrefixOnAdvertise(prefix);
   }
 
   // Delete unicast routes
   for (const auto& prefix : decisionRouteUpdate.unicastRoutesToDelete) {
     withdrawPrefixes.emplace_back(
         createPrefixEntry(toIpPrefix(prefix), thrift::PrefixType::RIB));
+
+    // maybe dec supporting_route of originated prefixes
+    updateOriginatedPrefixOnWithdraw(prefix);
   }
 
-  advertisePrefixesImpl(advertisePrefixes);
-  withdrawPrefixesImpl(withdrawPrefixes);
+  // TODO: loop through originatedPrefixes collection and publish to decision
+
+  // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
+  // We want to keep processDecisionRouteUpdates() running as dynamic
+  // configuration could add/remove areas.
+  if (allAreas_.size() > 1) {
+    advertisePrefixesImpl(advertisePrefixes);
+    withdrawPrefixesImpl(withdrawPrefixes);
+  }
 
   // ignore mpls updates
 }

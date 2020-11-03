@@ -33,6 +33,6 @@ struct PrefixUpdateRequest {
 // struct to represent originated prefix from PrefixManager's view
 struct OriginatedPrefixEntry {
   1: OpenrConfig.OriginatedPrefix prefix
-  2: list<string> supporting_prefixes
-  3: bool isPrefixOriginated = 0
+  2: list<string> supporting_prefixes = {}
+  3: bool installed = 0
 }

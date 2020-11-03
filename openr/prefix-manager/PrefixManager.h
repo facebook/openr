@@ -169,6 +169,12 @@ class PrefixManager final : public OpenrEventBase {
   void addPerfEventIfNotExist(
       thrift::PerfEvents& perfEvents, std::string const& updateEvent);
 
+  // [Route Origination/Aggregation]
+  //
+  // Util function to update ref count upon prefix advertising/withdrawn
+  void updateOriginatedPrefixOnAdvertise(const folly::CIDRNetwork& prefix);
+  void updateOriginatedPrefixOnWithdraw(const folly::CIDRNetwork& prefix);
+
   // this node name
   const std::string nodeId_;
 
@@ -272,11 +278,20 @@ class PrefixManager final : public OpenrEventBase {
   };
 
   // prefixes to be originated from prefix-manager
-  std::unordered_map<folly::CIDRNetwork, thrift::OriginatedPrefixEntry>
-      originatedPrefixes_;
+  // ATTN: to support quick information retrieval, cache the mapping:
+  //
+  //  OriginatedPrefix -> set of RIB prefixEntry(i.e. supporting routes)
+  //
+  std::unordered_map<folly::CIDRNetwork, OriginatedRoute> originatedPrefixDb_;
 
   // prefixes received from decision
-  std::unordered_set<folly::CIDRNetwork> ribPrefixes_;
+  // ATTN: to avoid loop through ALL entries inside `originatedPrefixes`,
+  //       cache the reverse mapping:
+  //
+  //  RIB prefixEntry -> vector of OriginatedPrefix(i.e. subnet)
+  //
+  std::unordered_map<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
+      ribPrefixDb_;
 }; // PrefixManager
 
 } // namespace openr
