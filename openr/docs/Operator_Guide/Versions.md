@@ -46,22 +46,28 @@ make sure core functionality of Open/R can be fulfilled without interruption.
 ---
 
 - Version 20200825
+
   - Platform publisher service with ZMQ PUB/SUB deprecated
 
 - Version 20200801
+
   - System service deprecated
 
 - Version 20200701
+
   - Area feature becomes mandatory
 
 - Version 20200604
+
   - Old Spark feature deprecated
 
 - Version 20200421
+
   - Spark AREA feature support
 
-- Version  20191010
+- Version 20191010
+
   - Spark2 feature support
 
-- Version  20190805
+- Version 20190805
   - Per prefix key feature support

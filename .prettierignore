@@ -1,0 +1,5 @@
+# Ignore artifacts:
+.github/workflows/getdeps_linux.yml
+build
+coverage
+docs/build

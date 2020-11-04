@@ -1,6 +1,6 @@
 # Open/R CLI: `breeze`
 
---------
+---
 
 `breeze` is a `python-click` based CLI tool to peek into OpenR's state.
 It allows you to inspect:
@@ -21,7 +21,7 @@ It allows you to inspect:
 All OpenR modules expose various ZMQ APIs to access their internal state over
 TCP transport. OpenR has [python based
 clients](https://github.com/facebook/openr/tree/master/openr/py/openr/clients)
-for each module which  Breeze leverages to talk to OpenR, retrieve
+for each module which Breeze leverages to talk to OpenR, retrieve
 information, and display it
 
 ### How to use it
@@ -32,10 +32,9 @@ Breeze is very intuitive to use. Just do `--help` at any stage to see options,
 arguments, and subcommands. Later sections cover about each
 command in detail.
 
-To get auto-completion in your bash shell, simply copy `eval
-"$(_BREEZE_COMPLETE=source breeze)"` to your `~/.bashrc`.
+To get auto-completion in your bash shell, simply copy `eval "$(_BREEZE_COMPLETE=source breeze)"` to your `~/.bashrc`.
 
-```console
+````console
 $ breeze
 Usage: breeze [OPTIONS] COMMAND [ARGS]...
 
@@ -55,7 +54,7 @@ Commands:
   monitor        CLI tool to peek into Monitor module.
   perf           CLI tool to view latest perf log of each...
   prefixmgr      CLI tool to peek into Prefix Manager module.```
-```
+````
 
 ### KvStore Commands
 
@@ -198,8 +197,8 @@ $ breeze kvstore keyvals test-key
 
 > NOTE: You shouldn't try to erase keys originated by OpenR
 > NOTE: Erase only happens on all nodes reachable from the current node. Any
-node momentarily disconnected from the network might bring back the key you just
-erased.
+> node momentarily disconnected from the network might bring back the key you just
+> erased.
 
 ```console
 $ breeze kvstore erase-key test-key
@@ -221,7 +220,7 @@ dumped kv from fc00:cafe:babe::3
 #### KvStore Signature
 
 Returns a signature of the contents of the KV store for comparison with other
-nodes.  In case of a mismatch, use `kv-compare` to analyze differences.
+nodes. In case of a mismatch, use `kv-compare` to analyze differences.
 
 ```console
 $ breeze kvstore kv-signature
@@ -397,8 +396,8 @@ Set/unset custom metric value for a link.
 - Set custom link metric on one link and drain another link
 
 > NOTE: Setting link overload will make link completely unusable for routing
-while setting a high value as the link metric will make the link less
-preferable, mimicking hard-drain and soft-drain behavior respectively.
+> while setting a high value as the link metric will make the link less
+> preferable, mimicking hard-drain and soft-drain behavior respectively.
 
 ```console
 $ breeze lm set-link-metric if_1_2_0 5
@@ -527,7 +526,7 @@ Withdrew face:b00c::/80
 ```
 
 > NOTE: You can use different a prefix-type while advertising/syncing routes
-with the `--prefix-type` option
+> with the `--prefix-type` option
 
 ### Config Commands
 
@@ -728,9 +727,9 @@ $ breeze -H leb01.labdca1 fib list
 
 #### `linux` for platforms where we use Linux routing
 
-One can then use `linux`  specific commands, the most useful being "validate"
+One can then use `linux` specific commands, the most useful being "validate"
 which validates if the system (kernel routing table) has all the routes that
-OpenR intended to program.  In case of a mismatch, the discrepancies will be
+OpenR intended to program. In case of a mismatch, the discrepancies will be
 reported to aid debugging.
 
 ```console

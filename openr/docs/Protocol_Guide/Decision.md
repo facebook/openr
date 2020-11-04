@@ -4,18 +4,19 @@ Computes the routing table (IPv4, IPv6, MPLS). Uses Topology and Reachability
 information received from KvStore in the computation. Outputs RIB, aka
 `Routing Information Base`, which will get programmed and or redistributed.
 
-
 ### Flow Diagram (Modules)
+
 ---
 
 Below diagram describes two main things
+
 - The Flow of information in the context of Decision module and
 - Route computation flow-chart
 
 <img alt="openr-route-computation-flowchart" src="https://user-images.githubusercontent.com/1482609/89572763-70004980-d7de-11ea-8c07-a8b3e446ef40.png">
 
-
 ### Storage
+
 ---
 
 Decision models two major data-structures namely `PrefixState`, and `LinkState`.
@@ -39,18 +40,21 @@ identified by `Area ID`, and `Node Name`.
 LinkState offers much more structured data and APIs for network topology on the
 top of received data from KvStore. This hides away a good amount of complexity
 from route computation code. e.g.
+
 - Bi-directional check for the link. Both nodes should report each other as
   their neighbors
 - Incremental update of topology
 - Dijkstra Implementation (aka Shortest Path Computation)
 
 ### Computing Routes
+
 ---
 
 Decision computes two types of routes, Unicast (aka IPv4 or IPv6), and MPLS.
 Below we describe the steps involved for both route types.
 
 #### Unicast Routes
+
 Flow Diagram above captures the gist of the route computation steps for unicast
 routes. The route computation steps described below (and in the diagram) are in
 the context of a single route.
@@ -90,6 +94,7 @@ destination.
 For more details refer to [Source Routing in Open/R](../Features/SourceRouting.md)
 
 ### Route Notifications
+
 ---
 
 After the route computation step, Decision computes the route delta for both
@@ -102,6 +107,7 @@ create a `Reader` of the `ReplicateQueue` before decision module is started to
 ensure there is no loss of route update.
 
 ### Miscellaneous Features
+
 ---
 
 #### Loop Free Alternates
@@ -124,10 +130,11 @@ catching more events under heavy network churn. In practice, this helps save a
 lot of CPU under heavy network churn.
 
 > NOTE: we assume all links are point-to-point, no multi-access networks are
-being considered. This simplifies many things, e.g. there is no need to consider
-pseudo-nodes to develop special flooding schemes for shared segments.
+> being considered. This simplifies many things, e.g. there is no need to consider
+> pseudo-nodes to develop special flooding schemes for shared segments.
 
 ### More Reading
+
 ---
 
 - [Basic Specification for IP Fast Reroute: Loop-Free Alternates](https://tools.ietf.org/html/rfc5286)

@@ -7,18 +7,21 @@ default) to receive thrift client request for route programming. It is the
 abstract layer, which can be implemented differently on individual system.
 
 For example:
+
 - `NetlinkProtocolSocket` to program route on Linux platform;
 - Platform-specific agent on vendor device to fulfill SDK call;
 
 > NOTE: link information retrieval and interface address programming is done
-by directly interacting with `NetlinkProtocolSocket` via Linux Kernel Interface.
+> by directly interacting with `NetlinkProtocolSocket` via Linux Kernel Interface.
 
 ### Inter-Module Communications
+
 ---
 
 <img alt="Platform Architecture" src="https://user-images.githubusercontent.com/51382140/90934844-e09a8f00-e3b6-11ea-9695-cb9836240118.png">
 
 ### Thrift APIs
+
 ---
 
 #### Unicast Route APIs
@@ -100,10 +103,11 @@ list<Network.MplsRoute> getMplsRouteTableByClient(i16 clientId);
 ```
 
 For more information, checkout
+
 - [if/Platform.thrift](https://github.com/facebook/openr/blob/master/openr/if/Platform.thrift)
 
-
 ### Support on Linux Platform
+
 ---
 
 `NetlinkFibHandler` provides thrift service interface for on-box client modules
@@ -112,8 +116,8 @@ thrift call to update routes or get full route table from Platform. Client can
 periodically synchronize with service by keep alive check call, a re-sync request
 is supported by the handler to re-send routing information upon client restart.
 
-
 ### Support on other Platform
+
 ---
 
 To support platform other than Linux, developers should implement the thrift

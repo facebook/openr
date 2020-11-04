@@ -1,6 +1,7 @@
 # Miscellaneous
 
 ### OpenR and V4
+
 ---
 
 OpenR was initially designed to work on networks which support IPv6 only.
@@ -20,6 +21,7 @@ OpenR processes running on different machines and link discovery is done using
 IPv6 transport layer.
 
 ### Traffic Class for Control Packets
+
 ---
 
 All IP packets being exchanged between two OpenR intsnaces running on different
@@ -28,6 +30,7 @@ underlying network can differentiate control plane traffic from normal traffic
 packets and give them higher priority.
 
 ### OpenR Graceful Restart
+
 ---
 
 All the pieces of OpenR make it a routing protocol which is able to do
@@ -48,6 +51,7 @@ disruptions during software upgrades or restarts.
 The operation of graceful restart can be described in two domains
 
 #### Restarting Node
+
 Restart of a node can happen anytime (admin, crash or just software upgrade). GR
 is implemented to handle not-anticipated restart of neighbor. When a node
 restarts, it does the following:
@@ -63,6 +67,7 @@ It is assumed that network is not changing much when a node is restarting.
 However local link down events are taken into immediate effect.
 
 #### Node whose neighbor is restarting
+
 Spark-hello packets are exchanged between neighbors as a keep-alive mechanism.
 Each hello packet has a sequence number which is monotonically increasing on
 every hello packet sent from a neighbor. Every node keeps track of the latest hello
@@ -78,15 +83,16 @@ and it doesn't do unless it sees itself in the subsequent neighbor's hello
 packets.
 
 #### Notes on Timers
+
 Restarting node has to form adjacencies with all of its neighbors within it's
 holdTime from its last hello message sent before restarting.
 
-**adjHoldTime** = 2 * keepAliveTime
+**adjHoldTime** = 2 \* keepAliveTime
 
 Reason: At worst case 2 hello message needs to be exchanged between nodes to
 form adjacency
 
-**fibHoldTime** = 3 * keepAliveTime
+**fibHoldTime** = 3 \* keepAliveTime
 
 Reason: Giving out extra buffer of **keepAliveTime** to let our latest adjacency
 accepted by KvStore and then proceed with route programming.
@@ -99,6 +105,7 @@ great and we see no traffic disruptions even when two adjacent neighbors are
 restarting together.
 
 ### Parallel link Support
+
 ---
 
 Two nodes can have multiple Adjacencies between them if they are connected
@@ -109,6 +116,7 @@ value. When a node is selected as a nexthop then all interfaces over which the n
 has an adjacency will be used as the nexthop.
 
 ### Persistent Store
+
 ---
 
 This module helps in persisting various state information of OpenR so that
@@ -119,6 +127,7 @@ across restart/reboots OpenR comes back with the same state as before.
 - Previously elected prefix for a node
 
 ### Drain Support
+
 ---
 
 Drain/Undrain of links or nodes is often exercised for planned network
@@ -143,6 +152,7 @@ perform soft drain. Most traffic will be drained except traffic which doesn't
 have alternate paths.
 
 ### Security Concerns
+
 ---
 
 Currently, openr assumes it is running on a trusted network and makes no effort
@@ -157,8 +167,8 @@ We understand that this is a difficult problem with subtle pitfalls. Going
 forward we hope to move towards an approach built on top of widely deployed and
 well verified solutions such as OpenSSL.
 
-
 ### Potential Extensions
+
 ---
 
 Some potential extensions we have been thinking of and are on our roadmaps

@@ -6,20 +6,22 @@ The discovered neighbors, aka "Local Topology" of the node, is fed into the
 system for KvStore database synchronization, and SPF Computation.
 
 ### Inter-Module Communications
+
 ---
 
 <img src="https://user-images.githubusercontent.com/51382140/90570487-a33ec300-e164-11ea-84ca-98485a646157.png" alt="Spark inside Open/R">
 
 - [Producer]: `Spark` sends out neighbor event through `ReplicateQueue` to
-`LinkMonitor`, which includs: UP/DOWN/RESTART/RTT-CHANGE events.
+  `LinkMonitor`, which includs: UP/DOWN/RESTART/RTT-CHANGE events.
 
 - [Consumer]: `Spark` receives interface database update through `RQueue` from
-`LinkMonitor`. Neighbor discovery  will be applied on those interfaces ONLY.
+  `LinkMonitor`. Neighbor discovery will be applied on those interfaces ONLY.
 
 > NOTE: For link UP/DOWN event, we expect lower level(i.e. `Netlink`) to notify
-`LinkMonitor`. Further, it will notify `Spark` to start/stop sending out pkts.
+> `LinkMonitor`. Further, it will notify `Spark` to start/stop sending out pkts.
 
 ### Spark Packet
+
 ---
 
 `Spark` communicates to peer spark instance by broadcasting a UDP packet to
@@ -30,13 +32,14 @@ starts to learn about each other.
 The content of the packet is a serialized thrift object of type `SparkPacket`.
 This internally consists of three main messages as its attributes. There will
 be only one of them populated at a time to reduce control plane traffic.
+
 - `SparkHelloMsg`
 - `SparkHandshakeMsg`
 - `SparkHeartbeatMsg`
 
 > NOTE: By using thrift serialization/deserialization we completely avoid the
-encoding and decoding complexity of data exchange. Thrift further provides a
-good backward compatibility support as message structure evolves.
+> encoding and decoding complexity of data exchange. Thrift further provides a
+> good backward compatibility support as message structure evolves.
 
 Check out [if/Spark.thrift](https://github.com/facebook/openr/blob/master/openr/if/Spark.thrift)
 for detailed message structure.
@@ -51,6 +54,7 @@ High level speaking:
 - `SparkHeartbeatMsg` => Send out peridodically for keep-alive purpose.
 
 ### Finite State Machine
+
 ---
 
 <img src="https://user-images.githubusercontent.com/51382140/90571412-899e7b00-e166-11ea-97bd-419b493846cf.png" alt="Spark Neighbor State Transition Diagram">
@@ -80,47 +84,51 @@ SparkNeighEvent
 ```
 
 ### State Transition Map
+
 ---
 
-| EVENTs/STATEs           | IDLE  | WARM      | NEGOTIATE   | ESTABLISHED | RESTART     |
-|-------------------------|-------|-----------|-------------|-------------|-------------|
-| HELLO_RCVD_INFO         | WARM  | NEGOTIATE |             |             | ESTABLISHED |
-| HELLO_RCVD_NO_INFO      | WARM  |           |             | IDLE        |             |
-| HELLO_RCVD_RESTART      |       |           |             | RESTART     |             |
-| HEARTBEAT_RCVD          |       |           |             | ESTABLISHED |             |
-| HANDSHAKE_RCVD          |       |           | ESTABLISHED |             |             |
-| HEARTBEAT_TIMER_EXPIRE  |       |           |             | IDLE        |             |
-| NEGOTIATE_TIMER_EXPIRE  |       |           | WARM        |             |             |
-| GR_TIMER_EXPIRE         |       |           |             |             | IDLE        |
-| NEGOTIATION_FAILURE     |       |           | WARM        |             |             |
+| EVENTs/STATEs          | IDLE | WARM      | NEGOTIATE   | ESTABLISHED | RESTART     |
+| ---------------------- | ---- | --------- | ----------- | ----------- | ----------- |
+| HELLO_RCVD_INFO        | WARM | NEGOTIATE |             |             | ESTABLISHED |
+| HELLO_RCVD_NO_INFO     | WARM |           |             | IDLE        |             |
+| HELLO_RCVD_RESTART     |      |           |             | RESTART     |             |
+| HEARTBEAT_RCVD         |      |           |             | ESTABLISHED |             |
+| HANDSHAKE_RCVD         |      |           | ESTABLISHED |             |             |
+| HEARTBEAT_TIMER_EXPIRE |      |           |             | IDLE        |             |
+| NEGOTIATE_TIMER_EXPIRE |      |           | WARM        |             |             |
+| GR_TIMER_EXPIRE        |      |           |             |             | IDLE        |
+| NEGOTIATION_FAILURE    |      |           | WARM        |             |             |
 
 ### SparkHelloMsg
+
 ---
 
 - `SparkHelloMsg` contains node name, and the list of neighbors it has heard
-from on this interface. This allows ALL neighbors on a segment to agree on
-bidirectional visibility;
+  from on this interface. This allows ALL neighbors on a segment to agree on
+  bidirectional visibility;
 - Functionality:
-  1) To advertise its own existence and basic neighbor information;
-  2) To ask for immediate response for quick adjacency establishment;
-  3) To notify for its own "RESTART" to neighbors;
+  1. To advertise its own existence and basic neighbor information;
+  2. To ask for immediate response for quick adjacency establishment;
+  3. To notify for its own "RESTART" to neighbors;
 - `SparkHelloMsg` is sent per interface;
 
 ### SparkHandshakeMsg
+
 ---
 
 - `SparkHandshakeMsg` contains rest of necessary params to establish adjacency
-with neighbor besides what has been learned from `SparkHelloMsg`;
+  with neighbor besides what has been learned from `SparkHelloMsg`;
 - Functionality:
-  1) Exchange `peerAddr` and `port` info for peer to establish TCP connection;
-  2) areaId neogtiation;
-  3) hold time and GR time negotiation;
+  1. Exchange `peerAddr` and `port` info for peer to establish TCP connection;
+  2. areaId neogtiation;
+  3. hold time and GR time negotiation;
 - `SparkHandshakeMsg` is sent per (interface, neighbor) combination;
 
 > NOTE: `SparkHandshakeMsg` has destination node attribute. Neighbors on the
-same interface will ignore this message if it is NOT destined to itself.
+> same interface will ignore this message if it is NOT destined to itself.
 
 ### SparkHeartbeatMsg
+
 ---
 
 - `SparkHeartbeatMsg` contains node name, sequence number;
@@ -128,22 +136,26 @@ same interface will ignore this message if it is NOT destined to itself.
 - `SparkHeartbeatMsg` is sent per interface;
 
 ### Timers
+
 ---
 
 To maintain the state machine running smoothly, there are different kinds of timers used.
+
 1. `helloTimer`: timer to control frequency of helloMsg. It is set **per ifName**;
 2. `negotiateTimer`: timer to control frequency of handshakeMsg. It is set **per neighbor**;
 3. `heartbeatTimer`: timer to control frequency of heartbeatMsg. It is set **per ifName**;
 4. `heartbeatHoldTimer`: maximum hold time for neighbor adjacency. `SparkHeartbeatMsg`
-will extend it;
+   will extend it;
 5. `negotiateHoldTimer`: maximum time within `NEGOTIATE` state to avoid high volume of
-negotiate packets being sent;
+   negotiate packets being sent;
 6. `gracefulRestartHoldTimer`: maximum time to hold neighbor adjacency under GR;
 
 For typical configuration of above timer, please refer to `SparkConfig` section defined in
+
 - [if/OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
 
 ### Area Configuration
+
 ---
 
 As area negotiation happens by default between spark instances, neighbor adjacency will ONLY
@@ -168,15 +180,17 @@ AreaConfig = {
     neighbor_regexes : ["nodeA"]
 }
 ```
+
 Both nodes will apply combination of `neighbor_regex`(i.e. regex for node_name) and
 `interface_regex`(i.e. interface on which neighbor is discovered) to identify what area
 neighbor should fall into. With above example, both nodeA and nodeB think neighbor should
 be in area `1`. Hence the negotiation will go through.
 
 > NOTE: negotiation failure will trigger state transition from `NEGOTIATE` to `WARM`
-and stop sending `SparkHandshakeMsg`. See FSM transition part for deatils.
+> and stop sending `SparkHandshakeMsg`. See FSM transition part for deatils.
 
 ### RTT Measurement
+
 ---
 
 With spark exchanging multicast packets for neighbor discovery we can easily
@@ -185,6 +199,7 @@ RTT measurements we use `Kernel Timestamps`. To avoid noisy `RTT_CHANGED` events
 we use `StepDetector` so that small changes in RTT measurements are ignored.
 
 ### Fast Neighbor Discovery
+
 ---
 
 When a node starts or a new link comes up, we perform fast initial neighbor

@@ -20,22 +20,26 @@ the design. The key takeaways
 ### Definitions
 
 #### `transitive`
+
 Attributes that are preserved during route re-distribution at Area Border. Note
 that not all `transitive` attributes are `mutable` by the policy. `non-transitive`
 is the opposite of `transitive`.
 
 #### `mutable`
+
 The route attribute that can be altered by the policy during route re-distribution
 at Area Border. `immutable` is the opposite of `mutable`.
 
 ### Attributes
 
 #### > `prefix`
+
 `transitive`, `immutable`
 Express Network Layer Reachability Information (NLRI) for IPv4 or IPv6. This is
 a key attribute of the advertised route.
 
 #### > `metrics`
+
 Expresses the relative preference of route among all received advertisements.
 The metrics can be tuned to prefer one network path over another or prefer
 certain applications over another in-case of anycast addresses. Open/R supports
@@ -64,9 +68,10 @@ across area. Should never decrease if manipulated via policy to ensure loop-free
 routing. This resembles AS-Path length of BGP
 
 > Take a look at [Decision Route Computation](../Protocol_Guide/Decision.md) for understanding best
-route selection process
+> route selection process
 
 #### > `tags`
+
 `set[string]`, `transitive`, `mutable`
 Meta-data associated with the route to facilitate route policing as the route
 propagates through the network. Encoded as `set<string>` and hence there is no
@@ -75,6 +80,7 @@ origination node name, propagation scopes, route type, etc. This analogous to
 BGP Communities, except this, is much more flexible as there is no byte limit.
 
 #### > `area_stack`
+
 `list[string]`, `transitive`, `immutable`
 An ordered list of areas the route has traversed so far. The entry at the front
 indicates the `originating area`, while entry at the back indicates the
@@ -85,12 +91,14 @@ You can draw similar to BGP AS-Path. However, note that it is not used in best
 route selection and can't be modified by the policy.
 
 #### > `forwarding-algorithm`
+
 `non-transitive`, `mutable`
 Link-state algorithm for route computaion. Open/R supports two forwarding
 algorithm, `SP_ECMP` (Shortest Path ECMP) and `KSP2_ED_ECMP` (K-Shortest Path).
 The algorithm with the lowest value is chosen in-case of conflicting advertisements.
 
 #### > `forwarding-type`
+
 `non-transitive`, `mutable`
 Data plane forwarding mechanism to use. Open/R supports two forwarding types,
 `IP` (Usual IP routing) and `SR_MPLS` (Source Routing with MPLS data plane). The
@@ -99,6 +107,7 @@ type with the lowest value is chosen in-case of conflicting advertisements.
 > NOTE: `KSP2_ED_ECMP` is only compatible with `SR_MPLS` forwarding type.
 
 #### > `min-nexthops`
+
 `optional[numeric]`, `non-transitive`, `mutable`
 Expresses the minimum number of next-hops on a computed route. The route is programmed
 and hence re-distributed if min-next-hop criteria is met. Kind of a performance
@@ -107,11 +116,11 @@ when the capacity of one of the planes is reduced greatly compared to others
 because of maintenance or device failure.
 
 #### > `label-prepend`
+
 `optional[numeric]`, `non-transitive`, `mutable`
 The `MPLS` label to prepend for IP->MPLS routes when forwarding towards the
 node advertising this route. This is only compatible with forwarding type
 `SR_MPLS`
-
 
 ### Thrift Struct
 
