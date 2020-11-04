@@ -6,9 +6,9 @@ python tool `breeze` all installed under the appropriate bin directory on your
 system.
 
 - `FibService` => route programming interface
-FibService is main external service required to make Open/R functional,
-which comes pre-compiled with the `openr` binary for Linux only and can be
-enabled or disabled via command line flag or configuration options.
+  FibService is main external service required to make Open/R functional,
+  which comes pre-compiled with the `openr` binary for Linux only and can be
+  enabled or disabled via command line flag or configuration options.
 
 Checkout
 [Platform.thrift](https://github.com/facebook/openr/blob/master/openr/if/Platform.thrift)
@@ -37,10 +37,10 @@ eth0         Up                                         2          169.254.0.13
 
 ---
 
-> Open/R is currently *(202011)* moving to a thrift based JSON config file format so some of this
-documentation is out of date. This will be updated as soon as possible.
+> Open/R is currently _(202011)_ moving to a thrift based JSON config file format so some of this
+> documentation is out of date. This will be updated as soon as possible.
 
-The preferred way of running OpenR is via the  [run_openr.sh](https://github.com/facebook/openr/blob/master/openr/scripts/run_openr.sh)
+The preferred way of running OpenR is via the [run_openr.sh](https://github.com/facebook/openr/blob/master/openr/scripts/run_openr.sh)
 script. The benefit of it instead of directly passing parameters is that, it
 provides configuration options which are easier to work with and are less
 fragile than command line options.
@@ -58,11 +58,13 @@ VERBOSITY=1
 ```
 
 Run OpenR
+
 ```console
 $ run_openr.sh
 ```
 
 You can also pass in a custom configuration file and override/add openr flags:
+
 ```console
 $ run_openr.sh --help
 USAGE: run_openr.sh [config_file_path] [openr_flags]

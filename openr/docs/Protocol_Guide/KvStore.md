@@ -1,7 +1,7 @@
 # KvStore - Store and Sync
 
 `KvStore` provides a self-contained, in-memory `key-value` datastore which is
-eventually consistent. Underlying implementation is based on  **conflict-free
+eventually consistent. Underlying implementation is based on **conflict-free
 replicated data type (CRDT)**. The stores are interconnected in a mesh, and
 synchronize their contents in an eventually consistent fashion. This store is
 used to disseminate a set of key-value pairs to all nodes in the network/cluster.
@@ -10,9 +10,11 @@ neighbors under a key `adj:myRouteName` and this information will propagate to
 all other stores in the network, under the same key name.
 
 ### APIs
+
 ---
 
 For more information about message formats, check out
+
 - [if/KvStore.thrift](https://github.com/facebook/openr/blob/master/openr/if/KvStore.thrift)
 
 #### ROUTER Command Socket
@@ -20,6 +22,7 @@ For more information about message formats, check out
 This socket accepts various commands which allow for modifying the node's peer
 list as well as key-value content dynamically via KvStore. Some commands are
 listed below
+
 - `KEY_SET` => Set/Update key-value in a KvStore
 - `KEY_DUMP` => Get content of local KvStore. Optionally takes a filter argument
 
@@ -28,9 +31,11 @@ messages containing changes. All received incremental changes are processed and
 applied locally and conditionally forwarded.
 
 ### Implementation
+
 ---
 
 #### Incremental Updates - Flooding
+
 Whenever an update is received via glocalCmdSocket or thrift port, it is
 applied locally. If the update causes any change in local KvStore then it is
 forwarded to all neighbors. An update is ignored when it is echoed back which
@@ -40,12 +45,13 @@ Here we have a potential optimization opportunity to limit flooding only to a
 minimum spanning tree.
 
 #### Full Sync
+
 Full sync with a neighbor is performed when it is added to the local store.
 There is also periodic sync with a random neighbor (anti-entropy sync), in case
 any published message from a neighbor was missed.
 
-
 ### Data Encoding
+
 ---
 
 One prominent feature is that all values are opaquely encoded as Thrift objects
@@ -56,6 +62,7 @@ on the client side, this approach removes the burden of protocol
 encoding/decoding by using our standard Thrift libs.
 
 ### Versioning of Key-Values
+
 ---
 
 We implement very simple versions for merge conflict resolution. Every key has
@@ -66,6 +73,7 @@ the original version in the flooded message so that other folks can compare
 their versions with the original submission.
 
 ### Loop detection
+
 ---
 
 To avoid blind flooding, the KV store implements loop detection logic similar
@@ -75,7 +83,9 @@ matches then flooding stops. This allows one to design efficient flooding
 topologies and avoid excessive message duplication in the mesh.
 
 ### Delete Operation
+
 ---
+
 KvStore only supports `Add` or `Update` operations. Implementing `Delete`
 operation in CRDT is non-trivial and not well defined in eventual consistent
 fashion. For all practical purposes, `Delete` operation can be acheived via
@@ -83,6 +93,7 @@ optional `time to live` aka `ttl` field, which indicates the lifetime of
 key-value.
 
 #### ttl
+
 When advertising a key-value, set the `ttl` to a specified amount of time and
 submit to the local store. On update, the local store will flood it to all other
 stores in the network. Periodically every store will scan locally stored keys
@@ -93,12 +104,14 @@ ttl is sent (received - elapsed time) reflecting the remaining lifetime of a
 key-value since it's origination.
 
 #### ttl updates
+
 In order to keep key-values with limited lifetime persisted for long duration,
 originators are expected to emit `ttl updates` with new ttl values. On receipt
 of a ttl update (with higher version), the ttl of a key in local store is
 updated and the ttl update is flooded to neighbors.
 
 #### Key Expiry Notifications
+
 Whenever keys are expired in a given KvStore, the notification is generated
 and published on SUB socket. All subscribers can take appropriate action to
 handle an expired key (for e.g. Decision removes adj/prefix DB of nodes). These
@@ -106,6 +119,7 @@ notifications are ignored by other KvStores as they will be generating the very
 same notifications by themselves.
 
 ### KvStoreClientInternal
+
 ---
 
 KvStore is core and a heavily used module in OpenR. Interacting with KvStore
@@ -124,6 +138,7 @@ special `persist-key` operation which can ensure that key-value submitted
 doesn't get overridden by anyone else.
 
 ### More Reading
+
 ---
 
 - [Conflict Free Replicated Data Type (CRDT)](https://www.wikiwand.com/en/Conflict-free_replicated_data_type)

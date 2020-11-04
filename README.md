@@ -25,9 +25,9 @@ leverage the openr and fbzmq libraries to build software to run with OpenR.
 
 ---
 
-* Developer Group: https://www.facebook.com/groups/openr/
-* Github: https://github.com/facebook/openr/
-* IRC: #openr on freenode
+- Developer Group: https://www.facebook.com/groups/openr/
+- Github: https://github.com/facebook/openr/
+- IRC: #openr on freenode
 
 ## Contribute
 
@@ -52,8 +52,8 @@ The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 We have tried `OpenR` on Ubuntu-16.04, Ubuntu-18.04 and CentOS 7/8.
 OpenR should work on all Linux based platforms.
 
-* Compiler supporting C++17 or higher
-* libzmq-4.0.6 or greater
+- Compiler supporting C++17 or higher
+- libzmq-4.0.6 or greater
 
 ## Build
 
@@ -70,16 +70,16 @@ project. The `openr` directory contains the source for the project.
 OpenR requires these dependencies for
 your system and follows the traditional cmake build steps below.
 
-* `cmake`
-* `gflags`
-* `gtest`
-* `libsodium`
-* `libzmq`
-* `zstd`
-* `folly`
-* `fbthrift`
-* `fbzmq`
-* `re2-devel`
+- `cmake`
+- `gflags`
+- `gtest`
+- `libsodium`
+- `libzmq`
+- `zstd`
+- `folly`
+- `fbthrift`
+- `fbzmq`
+- `re2-devel`
 
 ### One Step Build - Ubuntu
 
@@ -116,9 +116,8 @@ libraries and all header files to `/opt/facebook/openr/lib` and
 `site-packages` directory.
 Note: the `build_openr.sh` script will run this step for you
 
-* Manually you can drive `getdeps.py` to install elsewhere
-  * refer to `build_openr.sh`
-
+- Manually you can drive `getdeps.py` to install elsewhere
+  - refer to `build_openr.sh`
 
 #### Installing Python Libraries
 
@@ -128,7 +127,7 @@ All library dependencies will be automatically installed except the
 similar to those described below. This will install `breeze`, a cli tool to
 interact with OpenR.
 
-* Python install requires a `fbthrift` / `thrift1` compiler to be installed and in PATH
+- Python install requires a `fbthrift` / `thrift1` compiler to be installed and in PATH
 
 ```console
 cd openr/openr/py

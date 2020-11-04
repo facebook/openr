@@ -10,6 +10,7 @@ There are three ways you can configure PrefixAllocator to achieve prefix
 allocation, assignment as well advertisement.
 
 Common configuration options for enabling prefix allocator is as below
+
 ```
 // Enable prefix allocator
 ENABLE_PREFIX_ALLOC=true
@@ -25,10 +26,12 @@ OVERRIDE_LOOPBACK_ADDR=true
 ```
 
 ### Seeded Allocation via flags
+
 `--seed_prefix` and `--alloc_prefix_len` using command line parameters. All
 nodes must be initialized with same paramters for allocation to be effective.
 
 Example configuration options are as below
+
 ```
 // NOTE: Seed prefix must be set and static allocation set to false
 SEED_PREFIX=face:b00c::/48
@@ -37,12 +40,14 @@ STATIC_PREFIX_ALLOC=false
 ```
 
 ### Seeded Allocation via KvStore
+
 More flexible way is to initialize PrefixAllocator via KvStore. You can set a
 special key `e2e-network-prefix` in KvStore with appropriate value which will
 be learned by PrefixAllocator on all nodes, almost immediately and they will
 trigger allocation process.
 
 Example configuration options are as below
+
 ```
 // NOTE: Seed prefix must be empty and static allocation set to false
 SEED_PREFIX=
@@ -70,6 +75,7 @@ breeze kvstore set-key e2e-network-prefix face:baba:c00c::/56,64
 ```
 
 ### Static Allocation via KvStore
+
 In static allocation mode, you can control which address should be assigned to
 which nodes via `thrift::StaticAllocation` object set in KvStore as special key,
 `e2e-network-allocations`. From centralized controller, you can update value of
@@ -78,6 +84,7 @@ assign their address if found, or withdraw previously assigned address if not
 found.
 
 Example configuration options are as below
+
 ```
 // NOTE: Seed prefix must be empty and static allocation set to true
 SEED_PREFIX=

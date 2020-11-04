@@ -12,20 +12,23 @@ It all started with the original goal of building a simple and extensible routin
 protocol for the Terragraph project and beyond.
 
 **Simplicity** is understood in two dimensions:
-* Maximum reuse of existing, well-tested components (boost graph lib, thrift2,
+
+- Maximum reuse of existing, well-tested components (boost graph lib, thrift2,
   ZMQ) for rapid development and code quality.
-* Building on basic link-state routing principles and avoiding complex designs.
+- Building on basic link-state routing principles and avoiding complex designs.
 
 **Extensibility**
-* quickly iterate on the basic model and incrementally add functionality such as
+
+- quickly iterate on the basic model and incrementally add functionality such as
   segment-routing label distribution, or loop-free alternatives, etc.
 
 Our primary protocol features are:
-* Shared data-bus - to allow adding distributed apps on top of it
-* Fast convergence - handling local failures in under 100ms timeframe
-* Secure bootstrap - avoiding unwanted participants in network routing
-* Address allocation - plug-and-play address allocation.
-* HW/SW Segregation - easily integrate with different hardware
+
+- Shared data-bus - to allow adding distributed apps on top of it
+- Fast convergence - handling local failures in under 100ms timeframe
+- Secure bootstrap - avoiding unwanted participants in network routing
+- Address allocation - plug-and-play address allocation.
+- HW/SW Segregation - easily integrate with different hardware
 
 We plan to add more functionality in the future, and this is where the
 extensibility helps a lot. We are driven primarily by the idea of autonomic
@@ -52,11 +55,12 @@ of autonomic networking and make our networks easier to configure and manage.
 ### Routing Protocol Design
 
 The protocol implementation consists of the components depicted below:
-* `KvStore` - Key Value Store
-* `LinkMonitor` - Module to discover and monitor links on a given system
-* `Spark` - Neighbor discovery module
-* `Decision` - Routes computation unit
-* `Fib` - Route programming unit, client interface
+
+- `KvStore` - Key Value Store
+- `LinkMonitor` - Module to discover and monitor links on a given system
+- `Spark` - Neighbor discovery module
+- `Decision` - Routes computation unit
+- `Fib` - Route programming unit, client interface
 
 ![openr-module-interaction-flow](https://user-images.githubusercontent.com/1482609/31962601-d95542ee-b8b2-11e7-8e6b-9ac38882e0b7.png)
 
@@ -81,10 +85,10 @@ Open/R is evolving rapidly and we expect to add several features in the short te
 to handle network routing requirements. The current list of features we have on our
 mind is
 
-* Encryption and authentication for control plane communication
-* Segment Routing
-* Emulation - Testing framework
-* Weighted ECMP routing
+- Encryption and authentication for control plane communication
+- Segment Routing
+- Emulation - Testing framework
+- Weighted ECMP routing
 
 ### Releases
 
@@ -99,5 +103,5 @@ but until then we will just have weekly tags.
 
 ### Extra Readings
 
-* [Terragraph](https://engineering.fb.com/2016/04/13/connectivity/introducing-facebook-s-new-terrestrial-connectivity-systems-terragraph-and-project-aries/)
-* [Express Backbone](https://engineering.fb.com/2017/05/01/data-center-engineering/building-express-backbone-facebook-s-new-long-haul-network/)
+- [Terragraph](https://engineering.fb.com/2016/04/13/connectivity/introducing-facebook-s-new-terrestrial-connectivity-systems-terragraph-and-project-aries/)
+- [Express Backbone](https://engineering.fb.com/2017/05/01/data-center-engineering/building-express-backbone-facebook-s-new-long-haul-network/)

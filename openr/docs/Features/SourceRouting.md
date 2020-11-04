@@ -165,7 +165,7 @@ within the node and has local significance only.
 - NodeSID will take node-label
 - AdjacencySID will take adjacency-label
 
-Open/R  supports allocating unique label/integer per node (LDP function). It is
+Open/R supports allocating unique label/integer per node (LDP function). It is
 implemented as a distributed computing enabled by KvStore. Also each adjacency
 is assigned unique label on a node, usually derived from interface index.
 

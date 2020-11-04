@@ -1,4 +1,4 @@
-name: Documentation Build
+name: Documentation Autoformat check + Build
 
 on:
   push:
@@ -24,7 +24,13 @@ jobs:
         with:
           python-version: 3.9
 
-      - name: Install dependencies
+      - name: Link check markdown + yaml with prettier
+        uses: actions/setup-node@v1
+        run: |
+          npm install prettier
+          npx prettier --check .
+
+      - name: Install docs dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r "openr/docs/requirements.txt"
