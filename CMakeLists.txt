@@ -46,7 +46,6 @@ find_package(fizz REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
-find_library(PROTOCOL protocol PATHS)
 find_library(RE2 re2)
 find_library(SODIUM sodium)
 find_package(FBThrift REQUIRED)
@@ -323,7 +322,6 @@ target_link_libraries(openrlib
   FBThrift::thriftcpp2
   fb303::fb303
   ${ASYNC}
-  ${PROTOCOL}
   ${CONCURRENCY}
   ${ZSTD}
   Folly::folly
@@ -357,7 +355,6 @@ target_link_libraries(openr_bin
   ${ZSTD}
   FBThrift::thriftcpp2
   ${ASYNC}
-  ${PROTOCOL}
   ${CONCURRENCY}
   Folly::folly
   ${FOLLY_EXCEPTION_TRACER}
@@ -388,7 +385,6 @@ if(BUILD_TOOLS)
     ${ZSTD}
     ${THRIFTCPP2}
     ${ASYNC}
-    ${PROTOCOL}
     ${TRANSPORT}
     ${CONCURRENCY}
     ${THRIFTPROTOCOL}
@@ -422,7 +418,6 @@ target_link_libraries(platform_linux
   FBThrift::thriftcpp2
   ${ZSTD}
   ${ASYNC}
-  ${PROTOCOL}
   ${CONCURRENCY}
   ${SODIUM}
   ${ZMQ}
@@ -556,7 +551,6 @@ if(BUILD_TESTS)
       ${ZMQ}
       ${GLOG}
       ${GFLAGS}
-      ${PROTOCOL}
       FBThrift::thriftcpp2
       ${ZSTD}
       Folly::folly
