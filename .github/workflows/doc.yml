@@ -18,6 +18,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-node@v1
 
       - name: Set up Python 3.9
         uses: actions/setup-python@v2
@@ -25,7 +26,6 @@ jobs:
           python-version: 3.9
 
       - name: Link check markdown + yaml with prettier
-        uses: actions/setup-node@v1
         run: |
           npm install prettier
           npx prettier --check .
