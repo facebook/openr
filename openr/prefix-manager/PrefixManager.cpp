@@ -798,7 +798,9 @@ PrefixManager::processDecisionRouteUpdates(
 
     auto dstAreas = allAreas_;
     for (const auto& nh : route.nexthops) {
-      dstAreas.erase(apache::thrift::can_throw(*nh.area_ref()));
+      if (nh.area_ref().has_value()) {
+        dstAreas.erase(*nh.area_ref());
+      }
     }
     advertisePrefixes.emplace_back(prefixEntry, dstAreas);
 

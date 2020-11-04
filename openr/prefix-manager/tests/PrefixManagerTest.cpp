@@ -1703,8 +1703,10 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
       toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()));
   auto nh_2 = createNextHop(
       toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()));
+  auto nh_3 = createNextHop(toBinaryAddress("fe80::1"));
   nh_1.area_ref() = thrift::KvStore_constants::kDefaultArea();
   nh_2.area_ref() = thrift::KvStore_constants::kDefaultArea();
+  nh_3.area_ref().reset(); // empty next-hop
 
   const std::string v4Prefix_1 = "192.108.0.8/30";
   const std::string v6Prefix_1 = "2001:1:2:3::1/70";
@@ -1736,12 +1738,12 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
       thrift::KvStore_constants::kDefaultArea());
   auto unicastEntryV4_2 = RibUnicastEntry(
       v4Network_2,
-      {nh_1},
+      {nh_1, nh_3},
       prefixEntryV4_2,
       thrift::KvStore_constants::kDefaultArea());
   auto unicastEntryV6_2 = RibUnicastEntry(
       v6Network_2,
-      {nh_2},
+      {nh_2, nh_3},
       prefixEntryV6_2,
       thrift::KvStore_constants::kDefaultArea());
 
