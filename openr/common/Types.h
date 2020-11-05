@@ -39,12 +39,17 @@ BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 
 // KvStore Initial Sync Event send from KvStore to LinkMonitor
 // To signal adjancency UP event propagation
-struct KvStoreInitialSyncEvent {
-  const std::string nodeName;
-  const std::string area;
+struct KvStoreSyncEvent {
+  std::string nodeName;
+  std::string area;
 
-  KvStoreInitialSyncEvent(const std::string& nodeName, const std::string& area)
+  KvStoreSyncEvent(const std::string& nodeName, const std::string& area)
       : nodeName(nodeName), area(area) {}
+
+  inline bool
+  operator==(const KvStoreSyncEvent& other) const {
+    return (nodeName == other.nodeName) && (area == other.area);
+  }
 };
 
 } // namespace openr

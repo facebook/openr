@@ -137,6 +137,7 @@ KvStore::KvStore(
     // initializers for immutable state
     fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
+    messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
     messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
@@ -148,6 +149,7 @@ KvStore::KvStore(
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
+          kvStoreSyncEventsQueue,
           logSampleQueue,
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
@@ -1601,8 +1603,7 @@ KvStoreDb::processThriftSuccess(
   peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
   logStateTransition(peerName, oldState, peer.state);
 
-  // TODO: kvStorePeerSyncEventQueue_.push(KvStoreInitialSyncEvent(peerName,
-  // area_));
+  kvParams_.kvStoreSyncEventsQueue.push(KvStoreSyncEvent(peerName, area_));
 
   // Log full-sync event via replicate queue
   logSyncEvent(peerName, timeDelta);

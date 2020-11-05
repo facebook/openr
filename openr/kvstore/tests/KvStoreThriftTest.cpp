@@ -257,6 +257,15 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         store2.get(), store1->getNodeId(), KvStorePeerState::INITIALIZED));
     EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
     EXPECT_TRUE(verifyKvStoreKeyVal(store2.get(), key1, thriftVal1));
+    // verify initial sync events
+    EXPECT_EQ(
+        KvStoreSyncEvent(
+            store2->getNodeId(), thrift::KvStore_constants::kDefaultArea()),
+        store1->recvSyncEvent());
+    EXPECT_EQ(
+        KvStoreSyncEvent(
+            store1->getNodeId(), thrift::KvStore_constants::kDefaultArea()),
+        store2->recvSyncEvent());
 
     EXPECT_EQ(2, store1->dumpAll().size());
     EXPECT_EQ(2, store2->dumpAll().size());
@@ -298,6 +307,11 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     EXPECT_TRUE(verifyKvStorePeerState(
         store1.get(), store2->getNodeId(), KvStorePeerState::INITIALIZED));
     EXPECT_TRUE(verifyKvStoreKeyVal(store1.get(), key2, thriftVal2));
+    // verify another initial sync event
+    EXPECT_EQ(
+        KvStoreSyncEvent(
+            store2->getNodeId(), thrift::KvStore_constants::kDefaultArea()),
+        store1->recvSyncEvent());
 
     evb.stop();
   });
@@ -350,7 +364,7 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
   EXPECT_TRUE(store1->addPeer(store2->getNodeId(), peerSpec1));
   EXPECT_TRUE(store2->addPeer(store1->getNodeId(), peerSpec2));
 
-  // verifying keys are exchanged between peers
+  // verifying keys are NOT exchanged between peers
   EXPECT_FALSE(verifyKvStoreKeyVal(
       store1.get(),
       key2,
@@ -363,6 +377,10 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
       thriftVal1,
       thrift::KvStore_constants::kDefaultArea(),
       waitTime_));
+
+  // verify no initial sync event
+  EXPECT_EQ(0, store1->getInitialSyncEventsReader().size());
+  EXPECT_EQ(0, store2->getInitialSyncEventsReader().size());
 
   EXPECT_EQ(1, store1->dumpAll().size());
   EXPECT_EQ(1, store2->dumpAll().size());

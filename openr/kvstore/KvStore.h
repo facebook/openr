@@ -126,6 +126,9 @@ struct KvStoreParams {
   // Queue for publishing KvStore updates to other modules within a process
   messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue;
 
+  // Queue for publishing kvstore peer initial sync events
+  messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue;
+
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue;
 
@@ -154,6 +157,7 @@ struct KvStoreParams {
   KvStoreParams(
       std::string nodeid,
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
+      messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
@@ -175,6 +179,7 @@ struct KvStoreParams {
       bool isfloodRoot)
       : nodeId(nodeid),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
+        kvStoreSyncEventsQueue(kvStoreSyncEventsQueue),
         logSampleQueue(logSampleQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
@@ -558,6 +563,8 @@ class KvStore final : public OpenrEventBase {
       fbzmq::Context& zmqContext,
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
+      // Queue for publishing kvstore peer initial sync events
+      messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
       // Queue for receiving peer updates
       messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
       // Queue for publishing the event log

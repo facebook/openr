@@ -34,6 +34,7 @@ KvStoreWrapper::KvStoreWrapper(
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
       kvStoreUpdatesQueue_,
+      kvStoreSyncEventsQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
                                    : dummyPeerUpdatesQueue_.getReader(),
       logSampleQueue_,
@@ -64,6 +65,7 @@ KvStoreWrapper::stop() {
 
   // Close queue
   kvStoreUpdatesQueue_.close();
+  kvStoreSyncEventsQueue_.close();
   dummyPeerUpdatesQueue_.close();
   logSampleQueue_.close();
 
@@ -184,6 +186,16 @@ KvStoreWrapper::recvPublication() {
   }
   auto pub = maybePublication.value();
   return pub;
+}
+
+KvStoreSyncEvent
+KvStoreWrapper::recvSyncEvent() {
+  auto maybeEvent = kvStoreSyncEventsQueueReader_.get(); // perform read
+  if (maybeEvent.hasError()) {
+    throw std::runtime_error(std::string("recvPublication failed"));
+  }
+  auto event = maybeEvent.value();
+  return event;
 }
 
 thrift::SptInfos

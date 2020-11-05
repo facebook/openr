@@ -258,6 +258,7 @@ main(int argc, char** argv) {
 
   // Queue for inter-module communication
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
   ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdateRequestQueue;
@@ -387,6 +388,7 @@ main(int argc, char** argv) {
       std::make_unique<KvStore>(
           context,
           kvStoreUpdatesQueue,
+          kvStoreSyncEventsQueue,
           peerUpdatesQueue.getReader(),
           logSampleQueue,
           KvStoreGlobalCmdUrl{folly::sformat(
@@ -595,6 +597,7 @@ main(int argc, char** argv) {
   interfaceUpdatesQueue.close();
   peerUpdatesQueue.close();
   neighborUpdatesQueue.close();
+  kvStoreSyncEventsQueue.close();
   prefixUpdateRequestQueue.close();
   kvStoreUpdatesQueue.close();
   staticRoutesUpdateQueue.close();

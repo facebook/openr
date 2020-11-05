@@ -65,7 +65,7 @@ struct AdjacencyValue {
 
 // KvStore Peer Value
 struct KvStorePeerValue {
-  const thrift::PeerSpec tPeerSpec;
+  thrift::PeerSpec tPeerSpec;
   // one time flag set by KvStore Peer Initialized event
   // Only when a peer reaches initialSynced state, its adjancency UP events
   // can be announced to the network

@@ -231,7 +231,7 @@ LinkMonitor::LinkMonitor(
   });
 
   // TODO: Add fiber to process KvStore InitialSync events
-  // processKvStoreInitialSyncEvent();
+  // processKvStoreSyncEvent();
 
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
   interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
