@@ -1,7 +1,7 @@
 # PrefixManager
 
-This module is responsible for keeping track of the prefixes originating
-from the node and advertising them into the network via KvStore.
+This module is responsible for keeping track of the prefixes originating from
+the node and advertising them into the network via KvStore.
 
 ### APIs
 
@@ -38,9 +38,9 @@ Supports the following commands
 There are two channels of information for managing route advertisements
 
 - `PrefixUpdateRequestQueue` -> Receives route advertise & withdraw commands.
-  Multiple sources within Open/R (LinkMonitor, PrefixAllocator, BgpRib) uses this
-  channel to manage their advertisements. Each source is assigned and expected to
-  use a unique type.
+  Multiple sources within Open/R (LinkMonitor, PrefixAllocator, BgpRib) uses
+  this channel to manage their advertisements. Each source is assigned and
+  expected to use a unique type.
 
 - `DecisionRouteUpdatesQueue` -> Received the computed (hence programmed)
   routes. The programmed routes are candidates for advertisements to other areas
@@ -67,8 +67,8 @@ workflow is as follows:
 ![RouteRedistributeLogicWithBgp](https://user-images.githubusercontent.com/5740745/90441674-3953ea00-e08e-11ea-99dc-5c0cc731dda8.png)
 
 A prefix can be requested to be advertised by multiple sources e.g. from
-configuration (originating route) or RIB (re-distributing route). However,
-only a single prefix information can be advertised to other nodes. We do so by
+configuration (originating route) or RIB (re-distributing route). However, only
+a single prefix information can be advertised to other nodes. We do so by
 following criteria:
 
 - Tie-breaking on Metrics
@@ -96,5 +96,4 @@ Use thrift APIs defined in `openr/if/OpenrCtrl.thrift` for querying, adding,
 removing or updating originating prefixes.
 
 Additionally, you can add and remove prefixes from the `breeze` cli. See
-[CLI.md](../Operator_Guide/CLI.md)
-for more details
+[CLI.md](../Operator_Guide/CLI.md) for more details

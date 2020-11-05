@@ -1,18 +1,18 @@
 # Platform
 
-Open/R relies on `Platform` layer to provide the service to program routes(
-i.e. Unicast Routes/MPLS Routes) on actual underneath system. `Platform`
-must provide Thrift based service via certain port(e.g. 60100 by
-default) to receive thrift client request for route programming. It is the
-abstract layer, which can be implemented differently on individual system.
+Open/R relies on `Platform` layer to provide the service to program routes( i.e.
+Unicast Routes/MPLS Routes) on actual underneath system. `Platform` must provide
+Thrift based service via certain port(e.g. 60100 by default) to receive thrift
+client request for route programming. It is the abstract layer, which can be
+implemented differently on individual system.
 
 For example:
 
 - `NetlinkProtocolSocket` to program route on Linux platform;
 - Platform-specific agent on vendor device to fulfill SDK call;
 
-> NOTE: link information retrieval and interface address programming is done
-> by directly interacting with `NetlinkProtocolSocket` via Linux Kernel Interface.
+> NOTE: link information retrieval and interface address programming is done by
+> directly interacting with `NetlinkProtocolSocket` via Linux Kernel Interface.
 
 ### Inter-Module Communications
 
@@ -113,12 +113,14 @@ For more information, checkout
 `NetlinkFibHandler` provides thrift service interface for on-box client modules
 (i.e. Fib) to program routes through Linux Kernel Interface. Client dispatches
 thrift call to update routes or get full route table from Platform. Client can
-periodically synchronize with service by keep alive check call, a re-sync request
-is supported by the handler to re-send routing information upon client restart.
+periodically synchronize with service by keep alive check call, a re-sync
+request is supported by the handler to re-send routing information upon client
+restart.
 
 ### Support on other Platform
 
 ---
 
 To support platform other than Linux, developers should implement the thrift
-service APIs in [if/Platform.thrift](https://github.com/facebook/openr/blob/master/openr/if/Platform.thrift)
+service APIs in
+[if/Platform.thrift](https://github.com/facebook/openr/blob/master/openr/if/Platform.thrift)

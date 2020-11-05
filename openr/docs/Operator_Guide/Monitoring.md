@@ -8,9 +8,9 @@ agent on the node or remotely can connect to `ZmqMonitor` and query the counters
 to perform monitoring on the top of these counters or build interactive
 dashboards.
 
-Further, each module logs important events like `IFACE_UP` or `NEIGHBOR_DOWN`
-in a structured fashion via ZmqMonitor which can be logged to data stores
-like `Druid` to do real-time monitoring of log events across the fleet.
+Further, each module logs important events like `IFACE_UP` or `NEIGHBOR_DOWN` in
+a structured fashion via ZmqMonitor which can be logged to data stores like
+`Druid` to do real-time monitoring of log events across the fleet.
 
 ## Understanding Counters
 
@@ -36,8 +36,8 @@ For example:
 ---
 
 Here are some important counters to monitor for a production system and alert
-engineers quickly if something goes wrong. `breeze monitor counters` will list
-a lot of other counters as well. Most names are self-explanatory.
+engineers quickly if something goes wrong. `breeze monitor counters` will list a
+lot of other counters as well. Most names are self-explanatory.
 
 #### KvStore Counters
 
@@ -50,15 +50,15 @@ a lot of other counters as well. Most names are self-explanatory.
 
 #### Spark Counters
 
-- `spark.num_tracked_interfaces` => Indicates the number of interfaces learned by
-  OpenR
+- `spark.num_tracked_interfaces` => Indicates the number of interfaces learned
+  by OpenR
 - `spark.num_adjacent_neighbors` must match with `spark.num_tracked_neighbors`
   as eventually adjacency must form between all connected nodes in the domain
 
 #### Decision Counters
 
-- `decision.adj_db_update.count.60` shouldn't exceed a certain threshold. A higher
-  number indicates an instable network
+- `decision.adj_db_update.count.60` shouldn't exceed a certain threshold. A
+  higher number indicates an instable network
 - `decision.prefix_db_update.count.60` shouldn't exceed a certain threshold.
   Higher number indicates a lot of churn in route advertisement
 - `decision.spf_runs.count.60` a higher number indicates a lot of network churn
@@ -73,8 +73,8 @@ a lot of other counters as well. Most names are self-explanatory.
 
 #### Link Monitor Counters
 
-- `link_monitor.advertise_adjacencies.sum.60` => higher number indicates a lot of
-  adjacency flapping
+- `link_monitor.advertise_adjacencies.sum.60` => higher number indicates a lot
+  of adjacency flapping
 - `link_monitor.advertise_links.sum.60` => higher number indicates a lot of link
   flapping on system
 

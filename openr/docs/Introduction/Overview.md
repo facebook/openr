@@ -3,13 +3,13 @@
 Open Routing, OpenR, is Facebook's internally designed and developed routing
 protocol/platform. Primarily built for performing routing in the
 [Terragraph](https://terragraph.com/) network, it's design and flexibility has
-led to its adoption in Facebook's DC and
-WAN Network, `Express Backbone`, as the sole IGP routing protocol.
+led to its adoption in Facebook's DC and WAN Network, `Express Backbone`, as the
+sole IGP routing protocol.
 
 ### Goals
 
-It all started with the original goal of building a simple and extensible routing
-protocol for the Terragraph project and beyond.
+It all started with the original goal of building a simple and extensible
+routing protocol for the Terragraph project and beyond.
 
 **Simplicity** is understood in two dimensions:
 
@@ -42,15 +42,16 @@ data-center, WAN). One of this applications happens to be the routing system. If
 you look at OSPF or ISIS, they have the distributed message flooding store as
 part of their design. However, this store is not being leveraged for any other
 purposes, rather than optimize for distributing routing/link-state information
-only, we decoupled the store and synchronize component of traditional IGPs into a
-module of its own, and use this to add functionality in separate new modules -
+only, we decoupled the store and synchronize component of traditional IGPs into
+a module of its own, and use this to add functionality in separate new modules -
 e.g. a module for ECMP routing, loop-free alternate failover, bandwidth
-allocation and so on. Effectively, our goal is to provide an underlying substrate
-to quickly iterate in the field of distributed network applications, whereas
-traditional routing protocols are rigid systems that are slow to extend. This
-`protocol` could be then universally used across different types of networks,
-and tuned appropriately. In addition, we are looking to build upon the concepts
-of autonomic networking and make our networks easier to configure and manage.
+allocation and so on. Effectively, our goal is to provide an underlying
+substrate to quickly iterate in the field of distributed network applications,
+whereas traditional routing protocols are rigid systems that are slow to extend.
+This `protocol` could be then universally used across different types of
+networks, and tuned appropriately. In addition, we are looking to build upon the
+concepts of autonomic networking and make our networks easier to configure and
+manage.
 
 ### Routing Protocol Design
 
@@ -74,16 +75,16 @@ for each module and you can read more about other modules in it's own section.
 
 ### Code Organization
 
-The code is very modularized and each module is self-contained. For more information
-about each module please refer to documentation in header files of that module.
-The code is very well documented. This README gives you an overview of how different
-modules/libraries come together to build OpenR.
+The code is very modularized and each module is self-contained. For more
+information about each module please refer to documentation in header files of
+that module. The code is very well documented. This README gives you an overview
+of how different modules/libraries come together to build OpenR.
 
 ### Roadmap
 
-Open/R is evolving rapidly and we expect to add several features in the short term
-to handle network routing requirements. The current list of features we have on our
-mind is
+Open/R is evolving rapidly and we expect to add several features in the short
+term to handle network routing requirements. The current list of features we
+have on our mind is
 
 - Encryption and authentication for control plane communication
 - Segment Routing
@@ -93,13 +94,13 @@ mind is
 ### Releases
 
 Things move fast at Facebook which means our internal release cycle for a new
-rollout of OpenR is on the order of weeks. You will see weekly tags (`2017-11-15`)
-in the repository and we aim to maintain backward compatibility with 3 months in
-the past. Prefer to pull the latest code and upgrade it into your network more
-frequently to leverage the latest features.
+rollout of OpenR is on the order of weeks. You will see weekly tags
+(`2017-11-15`) in the repository and we aim to maintain backward compatibility
+with 3 months in the past. Prefer to pull the latest code and upgrade it into
+your network more frequently to leverage the latest features.
 
-In the future, our release plan might change and we might tag some stable releases,
-but until then we will just have weekly tags.
+In the future, our release plan might change and we might tag some stable
+releases, but until then we will just have weekly tags.
 
 ### Extra Readings
 

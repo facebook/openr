@@ -72,7 +72,8 @@ the context of a single route.
 #### MPLS Routes
 
 Open/R implement source routing capabilities on the lines of
-[Segment Routing Architecture](https://tools.ietf.org/html/draft-ietf-spring-segment-routing-15) and with MPLS data plane support.
+[Segment Routing Architecture](https://tools.ietf.org/html/draft-ietf-spring-segment-routing-15)
+and with MPLS data plane support.
 
 The Decision module computes the MPLS routes, aka `Label Routes`, for two types
 of labels `Node Label`, and `Adjacency Label`.
@@ -91,7 +92,8 @@ Computed label routes leverage Penultimate Hop Popping (PHP) for pop & forward
 instruction to avoid duplicate lookup of a packet when it reaches the
 destination.
 
-For more details refer to [Source Routing in Open/R](../Features/SourceRouting.md)
+For more details refer to
+[Source Routing in Open/R](../Features/SourceRouting.md)
 
 ### Route Notifications
 
@@ -125,13 +127,13 @@ for load-sharing toward the prefix.
 
 We implemented simple event dampening - i.e. hold SPF runs on first received
 link state update to see if we can collect more before doing the full
-computation run. This timer could use exponential back-off to allow for
-catching more events under heavy network churn. In practice, this helps save a
-lot of CPU under heavy network churn.
+computation run. This timer could use exponential back-off to allow for catching
+more events under heavy network churn. In practice, this helps save a lot of CPU
+under heavy network churn.
 
 > NOTE: we assume all links are point-to-point, no multi-access networks are
-> being considered. This simplifies many things, e.g. there is no need to consider
-> pseudo-nodes to develop special flooding schemes for shared segments.
+> being considered. This simplifies many things, e.g. there is no need to
+> consider pseudo-nodes to develop special flooding schemes for shared segments.
 
 ### More Reading
 

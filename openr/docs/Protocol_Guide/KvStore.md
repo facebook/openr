@@ -4,10 +4,10 @@
 eventually consistent. Underlying implementation is based on **conflict-free
 replicated data type (CRDT)**. The stores are interconnected in a mesh, and
 synchronize their contents in an eventually consistent fashion. This store is
-used to disseminate a set of key-value pairs to all nodes in the network/cluster.
-For example, a node may post information to its local store about its adjacent
-neighbors under a key `adj:myRouteName` and this information will propagate to
-all other stores in the network, under the same key name.
+used to disseminate a set of key-value pairs to all nodes in the
+network/cluster. For example, a node may post information to its local store
+about its adjacent neighbors under a key `adj:myRouteName` and this information
+will propagate to all other stores in the network, under the same key name.
 
 ### APIs
 
@@ -36,10 +36,10 @@ applied locally and conditionally forwarded.
 
 #### Incremental Updates - Flooding
 
-Whenever an update is received via glocalCmdSocket or thrift port, it is
-applied locally. If the update causes any change in local KvStore then it is
-forwarded to all neighbors. An update is ignored when it is echoed back which
-limits the flooding.
+Whenever an update is received via glocalCmdSocket or thrift port, it is applied
+locally. If the update causes any change in local KvStore then it is forwarded
+to all neighbors. An update is ignored when it is echoed back which limits the
+flooding.
 
 Here we have a potential optimization opportunity to limit flooding only to a
 minimum spanning tree.
@@ -55,19 +55,19 @@ any published message from a neighbor was missed.
 ---
 
 One prominent feature is that all values are opaquely encoded as Thrift objects
-using client's choice of protocol (though this is not strictly required).
-The data-store itself does not care about the value contents, it only needs to
-be told if two values are different, when it propagates them. At the same time,
-on the client side, this approach removes the burden of protocol
-encoding/decoding by using our standard Thrift libs.
+using client's choice of protocol (though this is not strictly required). The
+data-store itself does not care about the value contents, it only needs to be
+told if two values are different, when it propagates them. At the same time, on
+the client side, this approach removes the burden of protocol encoding/decoding
+by using our standard Thrift libs.
 
 ### Versioning of Key-Values
 
 ---
 
-We implement very simple versions for merge conflict resolution. Every key has
-a 64-bit version value, which is compared to the incoming update message. Only
-if the incoming version is greater will we update the local store and flood the
+We implement very simple versions for merge conflict resolution. Every key has a
+64-bit version value, which is compared to the incoming update message. Only if
+the incoming version is greater will we update the local store and flood the
 original update message to our subscribers (peers). Notice that we'll preserve
 the original version in the flooded message so that other folks can compare
 their versions with the original submission.
@@ -76,11 +76,11 @@ their versions with the original submission.
 
 ---
 
-To avoid blind flooding, the KV store implements loop detection logic similar
-to BGP. We assign every KV store an "originatorId" which is unique in the
-system. When a store receives a message, it checks the originatorId, and if it
-matches then flooding stops. This allows one to design efficient flooding
-topologies and avoid excessive message duplication in the mesh.
+To avoid blind flooding, the KV store implements loop detection logic similar to
+BGP. We assign every KV store an "originatorId" which is unique in the system.
+When a store receives a message, it checks the originatorId, and if it matches
+then flooding stops. This allows one to design efficient flooding topologies and
+avoid excessive message duplication in the mesh.
 
 ### Delete Operation
 
@@ -112,9 +112,9 @@ updated and the ttl update is flooded to neighbors.
 
 #### Key Expiry Notifications
 
-Whenever keys are expired in a given KvStore, the notification is generated
-and published on SUB socket. All subscribers can take appropriate action to
-handle an expired key (for e.g. Decision removes adj/prefix DB of nodes). These
+Whenever keys are expired in a given KvStore, the notification is generated and
+published on SUB socket. All subscribers can take appropriate action to handle
+an expired key (for e.g. Decision removes adj/prefix DB of nodes). These
 notifications are ignored by other KvStores as they will be generating the very
 same notifications by themselves.
 
@@ -123,19 +123,19 @@ same notifications by themselves.
 ---
 
 KvStore is core and a heavily used module in OpenR. Interacting with KvStore
-involves sending and receiving proper thrift objects on sockets. This
-was leading to a lot of complexity in the code. `KvStoreClientInternal` is added
-to address this concern. It provides APIs to interact with KvStore and supports all
+involves sending and receiving proper thrift objects on sockets. This was
+leading to a lot of complexity in the code. `KvStoreClientInternal` is added to
+address this concern. It provides APIs to interact with KvStore and supports all
 the above APIs in really nice semantics so that writing code becomes easy and
 fun.
 
 While submitting `Key-Vals`, special care needs to be taken for the versions.
 Effectively it's up to you to ensure that your change makes it to the network,
 so you need to submit with a newer version, and then wait for your KV
-publication to come back to you. You should check publications
-to see if your key gets modified, and take actions accordingly. There is a
-special `persist-key` operation which can ensure that key-value submitted
-doesn't get overridden by anyone else.
+publication to come back to you. You should check publications to see if your
+key gets modified, and take actions accordingly. There is a special
+`persist-key` operation which can ensure that key-value submitted doesn't get
+overridden by anyone else.
 
 ### More Reading
 

@@ -20,16 +20,17 @@ applied on computed routes just before they're sent off for programming.
 
 ---
 
-RIB Policy is expressed in thrift specification and is defined as `struct RibPolicy`
-in [`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift). Please refer to the documentation associated with the defined
-structs for details.
+RIB Policy is expressed in thrift specification and is defined as
+`struct RibPolicy` in
+[`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift).
+Please refer to the documentation associated with the defined structs for
+details.
 
-At a high level RIB Policy consists of two parts, Matcher (Selection) and
-Action (Transformation). The matcher specified criteria for route selection
-on which action is to be performed. Action specifies the transformation intent.
-One such pair of Match-Action is termed as `RibPolicyStatement`. Multiple
-such statements can be specified. However, note that only first matching action
-will be applied.
+At a high level RIB Policy consists of two parts, Matcher (Selection) and Action
+(Transformation). The matcher specified criteria for route selection on which
+action is to be performed. Action specifies the transformation intent. One such
+pair of Match-Action is termed as `RibPolicyStatement`. Multiple such statements
+can be specified. However, note that only first matching action will be applied.
 
 ## Setting RIB Policy
 
@@ -49,9 +50,12 @@ void setRibPolicy(1: RibPolicy ribPolicy) throws (1: OpenrError error)
 RibPolicy getRibPolicy() throws (1: OpenrError error)
 ```
 
-[SetRibPolicy](https://github.com/facebook/openr/blob/master/examples/SetRibPolicyExample.cpp) example code is provided for reference in terms of how to define and set RibPolicy.
+[SetRibPolicy](https://github.com/facebook/openr/blob/master/examples/SetRibPolicyExample.cpp)
+example code is provided for reference in terms of how to define and set
+RibPolicy.
 
-For more details refer to `OpenrCtrl` service interface in [`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift).
+For more details refer to `OpenrCtrl` service interface in
+[`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift).
 
 ## UseCase - NextHop Weight Transformation (UCMP)
 
@@ -63,9 +67,10 @@ next-hops. This could be useful in context where correctness of forwarding state
 influence the traffic flows as per congesion in the network (e.g. send more to
 less congested part of network).
 
-RIB Policy allows operators to customize the weight for computed next-hops. As of
-now the weights can be customized per `area` or per `neighbor` fields. The `neighbor`
-weight takes precedence over the `area` weight. See `RibRouteActionWeight` struct in
+RIB Policy allows operators to customize the weight for computed next-hops. As
+of now the weights can be customized per `area` or per `neighbor` fields. The
+`neighbor` weight takes precedence over the `area` weight. See
+`RibRouteActionWeight` struct in
 [`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift)
 for more information.
 
@@ -78,9 +83,9 @@ RIB. This won't be programmed as well won't get re-distributed across the areas.
 ---
 
 RibPolicy is by default disabled and RPC APIs will throw exception if an
-application tries to set the policy. This is a safety mechanism to disable
-this feature where it is not needed. You'll need to set the `enable_rib_policy`
-field in OpenrConfig to `true` to make use of RibPolicy feature.
+application tries to set the policy. This is a safety mechanism to disable this
+feature where it is not needed. You'll need to set the `enable_rib_policy` field
+in OpenrConfig to `true` to make use of RibPolicy feature.
 
 ### CLI
 

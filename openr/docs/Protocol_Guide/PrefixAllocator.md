@@ -1,8 +1,8 @@
 # PrefixAllocator
 
 The class assigns each node with a unique prefix of a certain length from a
-given seed prefix in a distributed manner. It is built atop RangeAllocator.
-The seed prefix of length N is evenly divided into sub-prefixes of length M. The
+given seed prefix in a distributed manner. It is built atop RangeAllocator. The
+seed prefix of length N is evenly divided into sub-prefixes of length M. The
 underlying RangeAllocator allocates a unique integer I within [0, 2^(N - M) - 1]
 and PrefixAllocator allocates the I-th prefix of length M.
 
@@ -42,8 +42,8 @@ STATIC_PREFIX_ALLOC=false
 ### Seeded Allocation via KvStore
 
 More flexible way is to initialize PrefixAllocator via KvStore. You can set a
-special key `e2e-network-prefix` in KvStore with appropriate value which will
-be learned by PrefixAllocator on all nodes, almost immediately and they will
+special key `e2e-network-prefix` in KvStore with appropriate value which will be
+learned by PrefixAllocator on all nodes, almost immediately and they will
 trigger allocation process.
 
 Example configuration options are as below
@@ -63,8 +63,8 @@ An example for setting seed prefix is as below
 breeze kvstore set-key e2e-network-prefix face:b00c:cafe::/56,64
 ```
 
-If you ever need to change seed prefix, you can just change it via KvStore
-and all nodes will elect new prefix based on new seed prefix almost immediately.
+If you ever need to change seed prefix, you can just change it via KvStore and
+all nodes will elect new prefix based on new seed prefix almost immediately.
 
 ```
 // Extending range of seed prefix
@@ -79,9 +79,8 @@ breeze kvstore set-key e2e-network-prefix face:baba:c00c::/56,64
 In static allocation mode, you can control which address should be assigned to
 which nodes via `thrift::StaticAllocation` object set in KvStore as special key,
 `e2e-network-allocations`. From centralized controller, you can update value of
-this key. Each node will lookup their address in StaticAllocation map and
-assign their address if found, or withdraw previously assigned address if not
-found.
+this key. Each node will lookup their address in StaticAllocation map and assign
+their address if found, or withdraw previously assigned address if not found.
 
 Example configuration options are as below
 
@@ -91,8 +90,8 @@ SEED_PREFIX=
 STATIC_PREFIX_ALLOC=true
 ```
 
-Example for setting static allocation via breeze as below, ideally it should
-be done via `KvStoreClient::persistKey` from centralized Controller.
+Example for setting static allocation via breeze as below, ideally it should be
+done via `KvStoreClient::persistKey` from centralized Controller.
 
 ```
 // Set static allocation for node1 and node2 (they will learn and assign new

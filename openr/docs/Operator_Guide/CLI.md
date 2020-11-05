@@ -2,8 +2,8 @@
 
 ---
 
-`breeze` is a `python-click` based CLI tool to peek into OpenR's state.
-It allows you to inspect:
+`breeze` is a `python-click` based CLI tool to peek into OpenR's state. It
+allows you to inspect:
 
 - Link state database
 - Advertised prefix database
@@ -19,20 +19,20 @@ It allows you to inspect:
 ---
 
 All OpenR modules expose various ZMQ APIs to access their internal state over
-TCP transport. OpenR has [python based
-clients](https://github.com/facebook/openr/tree/master/openr/py/openr/clients)
-for each module which Breeze leverages to talk to OpenR, retrieve
-information, and display it
+TCP transport. OpenR has
+[python based clients](https://github.com/facebook/openr/tree/master/openr/py/openr/clients)
+for each module which Breeze leverages to talk to OpenR, retrieve information,
+and display it
 
 ### How to use it
 
 ---
 
 Breeze is very intuitive to use. Just do `--help` at any stage to see options,
-arguments, and subcommands. Later sections cover about each
-command in detail.
+arguments, and subcommands. Later sections cover about each command in detail.
 
-To get auto-completion in your bash shell, simply copy `eval "$(_BREEZE_COMPLETE=source breeze)"` to your `~/.bashrc`.
+To get auto-completion in your bash shell, simply copy
+`eval "$(_BREEZE_COMPLETE=source breeze)"` to your `~/.bashrc`.
 
 ````console
 $ breeze
@@ -195,10 +195,9 @@ $ breeze kvstore keyvals test-key
 
 - Erase key from KvStore. It is performed by setting TTL of the key to zero.
 
-> NOTE: You shouldn't try to erase keys originated by OpenR
-> NOTE: Erase only happens on all nodes reachable from the current node. Any
-> node momentarily disconnected from the network might bring back the key you just
-> erased.
+> NOTE: You shouldn't try to erase keys originated by OpenR NOTE: Erase only
+> happens on all nodes reachable from the current node. Any node momentarily
+> disconnected from the network might bring back the key you just erased.
 
 ```console
 $ breeze kvstore erase-key test-key

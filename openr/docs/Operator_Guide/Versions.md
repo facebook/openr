@@ -23,8 +23,8 @@ of `day`. Samples are:
 - version: `20200825`
 - lowestSupportedVersion: `20200214`
 
-See [Spark.md](../Protocol_Guide/Spark.md)
-for more details about neighbor discivery mechanism inside `Spark`.
+See [Spark.md](../Protocol_Guide/Spark.md) for more details about neighbor
+discivery mechanism inside `Spark`.
 
 ### Backward Compatibility
 

@@ -4,14 +4,15 @@
 
 ---
 
-Source Routing is a forwarding mechanism in a network where a path for the packet
-is determined at the source node. In contrast, in conventional routing, the
-path for the packet is determined at every node based on its destination address.
+Source Routing is a forwarding mechanism in a network where a path for the
+packet is determined at the source node. In contrast, in conventional routing,
+the path for the packet is determined at every node based on its destination
+address.
 
-Segment Routing, RFC [8402] leverages the Source Routing paradigm. Conceptually, a
-packet entering the network gets tagged with forwarding instructions, termed as
-segments. The tagging of segments can be carried out based on packet header such
-as destination address, class of service, etc, and is termed as Forwarding
+Segment Routing, RFC [8402] leverages the Source Routing paradigm. Conceptually,
+a packet entering the network gets tagged with forwarding instructions, termed
+as segments. The tagging of segments can be carried out based on packet header
+such as destination address, class of service, etc, and is termed as Forwarding
 Equivalence Classes (FEC).
 
 One or more ordered segments can be attached to the packet. Each segment encodes
@@ -32,8 +33,8 @@ Open/R supports two types of segments described in RFC [8402]. `Adjacency`
 segment and and `Node` segment.
 
 Regardless of type, there is a scope associated with each segment, being `Area`
-and `Local`. The scope determines the set of nodes that can understand and forward
-the packet as per the associated segment.
+and `Local`. The scope determines the set of nodes that can understand and
+forward the packet as per the associated segment.
 
 #### Scope - Local
 
@@ -48,12 +49,12 @@ node can process and forward the packet associated with this segment.
 
 #### Node Segment (Node SID)
 
-Node Segment is a unique segment associated with every node in an area. The scope
-of this segment is the `Area`.
+Node Segment is a unique segment associated with every node in an area. The
+scope of this segment is the `Area`.
 
 Node Segments forwards the network packets to the associated node via
-`Shortest Path` algorithm within an area. The segment instruction is retained
-on the packet, until it reaches the destination node. Packet is then routed
+`Shortest Path` algorithm within an area. The segment instruction is retained on
+the packet, until it reaches the destination node. Packet is then routed
 according to the next segment or IP routing.
 
 Penultimate NextHop Popping (PHP) is industry practice, where the last segment
@@ -79,7 +80,8 @@ through two data plane forwarding techniques, MPLS and SRv6.
 MPLS segment is encoded as 4-byte integer and is prepended onto the IP packet.
 Multiple segments can be added, each incurring 4-byte overhead. The packet is
 looked up based on the top label into a special Label Forwarding Information
-Base (L-FIB) in hardware and forwarded according to it. [Read more](https://tools.ietf.org/html/rfc3031)
+Base (L-FIB) in hardware and forwarded according to it.
+[Read more](https://tools.ietf.org/html/rfc3031)
 
 SRv6 is pure IPv6 based forwarding. The extended header of IPv6 packet is
 leveraged to encode segment information. Each segment is an IPv6 address and
@@ -124,7 +126,8 @@ reach in immediate next-hop to the destination indicated by the topmost label.
 
 #### Enabling Segment Routing
 
-Configuration Knob in [OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
+Configuration Knob in
+[OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
 
 ```thrift
   13: optional bool enable_segment_routing
@@ -142,13 +145,14 @@ Local Range: [50000, 59999]
 
 #### Enabling IP->MPLS
 
-Every route advertisement in Open/R allows the specification of forwarding
-type. Setting this to `SR_MPLS` via config will make all Label Edge Routers (LER)
-to programm `IP to MPLS` route for all advertisement from the node advertising
-IP prefixes. The advertised prefix will assume the node label (aka Prefix SID).
+Every route advertisement in Open/R allows the specification of forwarding type.
+Setting this to `SR_MPLS` via config will make all Label Edge Routers (LER) to
+programm `IP to MPLS` route for all advertisement from the node advertising IP
+prefixes. The advertised prefix will assume the node label (aka Prefix SID).
 This works with anycast prefixes as well.
 
-Configuration for Forwarding Type [OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
+Configuration for Forwarding Type
+[OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
 
 ```thrift
     12: PrefixForwardingAlgorithm prefix_forwarding_algorithm,
@@ -185,9 +189,10 @@ node33    if_1_33_1   if_33_1_1    1       *50007*  169.254.0.5  fe80::6821:64ff
 ---
 
 Open/R will compute MPLS routes as per the Segment Routing architecture. This
-will need to be programmed in HW. The [Platform](../Protocol_Guide/Platform.md) will need to provide
-implementation for programming these routes in HW. Open/R provides the
-implementation for programming these routes in MPLS enabled Linux kernel.
+will need to be programmed in HW. The [Platform](../Protocol_Guide/Platform.md)
+will need to provide implementation for programming these routes in HW. Open/R
+provides the implementation for programming these routes in MPLS enabled Linux
+kernel.
 
 ### References
 
