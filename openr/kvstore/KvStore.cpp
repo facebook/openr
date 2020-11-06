@@ -1824,6 +1824,9 @@ KvStoreDb::addPeers(
             peerName,
             ExponentialBackoff<std::chrono::milliseconds>(
                 Constants::kInitialBackoff, Constants::kMaxBackoff));
+        // send initial sync events immediately to unblock adj UP
+        kvParams_.kvStoreSyncEventsQueue.push(
+            KvStoreSyncEvent(peerName, area_));
       }
     } catch (std::exception const& e) {
       LOG(ERROR) << "Error connecting to: `" << peerName

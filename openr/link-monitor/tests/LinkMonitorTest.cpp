@@ -48,6 +48,7 @@ const auto nb3_v6_addr = "fe80::3";
 const auto if_2_1 = "iface_2_1";
 const auto if_2_2 = "iface_2_2";
 const auto if_3_1 = "iface_3_1";
+const auto if_3_2 = "iface_3_2";
 
 const auto kvStoreCmdPort = 10002;
 
@@ -125,6 +126,19 @@ const auto adj_3_1 = createThriftAdjacency(
     nb3_v4_addr,
     1 /* metric */,
     1 /* label */,
+    false /* overload-bit */,
+    0 /* rtt */,
+    kTimestamp /* timestamp */,
+    Constants::kDefaultAdjWeight /* weight */,
+    "" /* otherIfName */);
+
+const auto adj_3_2 = createThriftAdjacency(
+    "node-3",
+    if_3_2,
+    nb3_v6_addr,
+    nb3_v4_addr,
+    1 /* metric */,
+    2 /* label */,
     false /* overload-bit */,
     0 /* rtt */,
     kTimestamp /* timestamp */,
@@ -227,6 +241,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     interfaceUpdatesQueue.close();
     peerUpdatesQueue.close();
     neighborUpdatesQueue.close();
+    kvStoreSyncEventsQueue.close();
     prefixUpdatesQueue.close();
     routeUpdatesQueue.close();
     logSampleQueue.close();
@@ -319,6 +334,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         peerUpdatesQueue,
         logSampleQueue,
         neighborUpdatesQueue.getReader(),
+        kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
         assumeDrained,
         overrideDrainState,
@@ -529,6 +545,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   stopLinkMonitor() {
     // close queue first
     neighborUpdatesQueue.close();
+    kvStoreSyncEventsQueue.close();
     nlSock->closeQueue();
     kvStoreWrapper->closeQueue();
 
@@ -544,6 +561,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue;
+  messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
@@ -607,6 +625,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
+  kvStoreSyncEventsQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
   createLinkMonitor(
@@ -625,6 +644,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
+  kvStoreSyncEventsQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
   createLinkMonitor(
@@ -778,7 +798,16 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
-    LOG(INFO) << "Testing neighbor UP event!";
+    LOG(INFO) << "Sent neighbor UP event.";
+
+    // no adj up before KvStore Peer finish initial sync
+    CHECK_EQ(0, kvStoreWrapper->getReader().size());
+  }
+
+  // kvstore peer initial sync
+  {
+    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
     checkNextAdjPub("adj:node-1");
   }
 
@@ -907,9 +936,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   kvStoreWrapper->stop();
   kvStoreWrapper.reset();
 
-  // Create new neighborUpdatesQ/peerUpdatesQ/platformUpdatesQ.
+  // Create new
+  // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
   neighborUpdatesQueue =
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
+  kvStoreSyncEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
   peerUpdatesQueue = messaging::ReplicateQueue<thrift::PeerUpdateRequest>();
   nlSock->openQueue();
 
@@ -924,7 +955,9 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
-    LOG(INFO) << "Testing neighbor up event!";
+    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    LOG(INFO) << "Testing adj up event!";
     checkNextAdjPub("adj:node-1");
   }
 
@@ -960,6 +993,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
 
     // Create new neighbor update queue. Previous one is closed
     neighborUpdatesQueue.open();
+    kvStoreSyncEventsQueue.open();
     nlSock->openQueue();
     kvStoreWrapper->openQueue();
 
@@ -990,21 +1024,26 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
     }
   }
 
-  // neighbor up
+  // neighbor up on nb2 and nb3
   {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
-
-  // before throttled function kicks in
-
-  // another neighbor up
   {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
+
+  // initial sync event on nb2, kick advertiseAdjacenciesThrottled_
+  kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+      *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+  // another initial sync event from nb3
+  kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+      *nb3.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+
+  // before throttled function kicks in
 
   // neighbor 3 down immediately
   {
@@ -1041,6 +1080,14 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
       auto adjDb = createAdjDatabase("node-1", {adj_2_2}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
+
+    // neighbor 3: parallel link up at same time
+    {
+      // note: adj_3_1 adj_3_2
+      auto adjDb =
+          createAdjDatabase("node-1", {adj_3_2, adj_2_2, adj_3_1}, kNodeLabel);
+      expectedAdjDbs.push(std::move(adjDb));
+    }
   }
 
   // neighbor up
@@ -1048,9 +1095,19 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
+    LOG(INFO) << "Sent neighbor UP event.";
+
+    // no adj up before KvStore Peer finish initial sync
+    CHECK_EQ(0, kvStoreWrapper->getReader().size());
   }
 
-  checkNextAdjPub("adj:node-1");
+  // kvstore peer initial sync
+  {
+    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    checkNextAdjPub("adj:node-1");
+  }
+
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1066,7 +1123,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
+  // KvStore Peer has reached to the initial sync state,
+  // publish Adj UP immediately
   checkNextAdjPub("adj:node-1");
+
   // wait for this peer change to propogate
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1084,6 +1144,31 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
   checkPeerDump(*adj_2_2.otherNodeName_ref(), peerSpec_2_2);
+
+  // neighbor 3: both adj up
+  {
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb3);
+    neighborUpdatesQueue.push(std::move(neighborEvent));
+  }
+  {
+    auto cp = nb3;
+    cp.localIfName_ref() = if_3_2;
+    cp.label_ref() = 2;
+    auto neighborEvent = createSparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
+    neighborUpdatesQueue.push(std::move(neighborEvent));
+  }
+
+  // no adj up before KvStore Peer finish initial sync
+  CHECK_EQ(0, kvStoreWrapper->getReader().size());
+
+  // kvstore peer initial sync
+  {
+    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+        *nb3.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    checkNextAdjPub("adj:node-1");
+  }
 }
 
 // Verify neighbor-restarting event (including parallel case)
@@ -1682,6 +1767,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         peerUpdatesQueue,
         logSampleQueue,
         neighborUpdatesQueue.getReader(),
+        kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
         false, /* assumeDrained */
         false, /* overrideDrainState */
@@ -1726,6 +1812,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   // cleanup
   nlSock->closeQueue();
   neighborUpdatesQueue.close();
+  kvStoreSyncEventsQueue.close();
   kvStoreWrapper->closeQueue();
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
     linkMonitors[i]->stop();
@@ -1987,6 +2074,9 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
       auto neighborEvent = createSparkNeighborEvent(
           thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
       neighborUpdatesQueue.push(std::move(neighborEvent));
+      kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+          *nb2.nodeName_ref(),
+          openr::thrift::KvStore_constants::kDefaultArea()));
       LOG(INFO) << "Testing neighbor UP event in default area!";
 
       checkNextAdjPub(
@@ -2005,6 +2095,8 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
       auto neighborEvent = createSparkNeighborEvent(
           thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
       neighborUpdatesQueue.push(std::move(neighborEvent));
+      kvStoreSyncEventsQueue.push(
+          KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
 
       checkNextAdjPub("adj:node-1", "plane");
@@ -2017,6 +2109,8 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
+    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
+        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub(
         "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
@@ -2032,6 +2126,8 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
+    kvStoreSyncEventsQueue.push(
+        KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", "plane");
     checkPeerDump(*adj_3_1.otherNodeName_ref(), peerSpec_3_1, "plane");

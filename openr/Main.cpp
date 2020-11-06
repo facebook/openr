@@ -464,6 +464,7 @@ main(int argc, char** argv) {
           peerUpdatesQueue,
           logSampleQueue,
           neighborUpdatesQueue.getReader(),
+          kvStoreSyncEventsQueue.getReader(),
           netlinkEventsQueue.getReader(),
           FLAGS_assume_drained,
           FLAGS_override_drain_state,
