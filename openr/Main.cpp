@@ -480,7 +480,39 @@ main(int argc, char** argv) {
           FLAGS_override_drain_state,
           initialAdjHoldTime));
 
-  // Wait for the above two threads to start and run before running
+  // setup the SSL policy
+  std::shared_ptr<wangle::SSLContextConfig> sslContext;
+  if (FLAGS_enable_secure_thrift_server) {
+    CHECK(fileExists(FLAGS_x509_ca_path));
+    CHECK(fileExists(FLAGS_x509_cert_path));
+    auto& keyPath = FLAGS_x509_key_path;
+    if (!keyPath.empty()) {
+      CHECK(fileExists(keyPath));
+    } else {
+      keyPath = FLAGS_x509_cert_path;
+    }
+    sslContext = std::make_shared<wangle::SSLContextConfig>();
+    sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
+    sslContext->clientCAFile = FLAGS_x509_ca_path;
+    sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
+    sslContext->setNextProtocols(
+        **apache::thrift::ThriftServer::defaultNextProtocols());
+    // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
+    sslContext->clientVerification =
+        folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
+    sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
+  }
+
+  // Create bgp speaker module
+  if (config->isBgpPeeringEnabled()) {
+    pluginStart(PluginArgs{prefixUpdateRequestQueue,
+                           staticRoutesUpdateQueue,
+                           routeUpdatesQueue.getReader(),
+                           config,
+                           sslContext});
+  }
+
+  // Wait for the above three modules to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module
   // receives itself as one of the nodes before running the spf.
 
@@ -518,28 +550,7 @@ main(int argc, char** argv) {
 
   // Start OpenrCtrl thrift server
   apache::thrift::ThriftServer thriftCtrlServer;
-
-  // setup the SSL policy
-  std::shared_ptr<wangle::SSLContextConfig> sslContext;
   if (FLAGS_enable_secure_thrift_server) {
-    CHECK(fileExists(FLAGS_x509_ca_path));
-    CHECK(fileExists(FLAGS_x509_cert_path));
-    auto& keyPath = FLAGS_x509_key_path;
-    if (!keyPath.empty()) {
-      CHECK(fileExists(keyPath));
-    } else {
-      keyPath = FLAGS_x509_cert_path;
-    }
-    sslContext = std::make_shared<wangle::SSLContextConfig>();
-    sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
-    sslContext->clientCAFile = FLAGS_x509_ca_path;
-    sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
-    sslContext->setNextProtocols(
-        **apache::thrift::ThriftServer::defaultNextProtocols());
-    // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
-    sslContext->clientVerification =
-        folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
-    sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
     setupThriftServerTls(
         thriftCtrlServer,
         // TODO Change to REQUIRED after we have everyone using certs
@@ -591,15 +602,6 @@ main(int argc, char** argv) {
     LOG(INFO) << "thriftCtrlServer thread got stopped.";
   }));
 
-  // Call external module for platform specific implementations
-  if (config->isBgpPeeringEnabled()) {
-    pluginStart(PluginArgs{prefixUpdateRequestQueue,
-                           staticRoutesUpdateQueue,
-                           routeUpdatesQueue.getReader(),
-                           config,
-                           sslContext});
-  }
-
   // Wait for main-event loop to return
   mainEventLoopThread.join();
 
@@ -628,6 +630,11 @@ main(int argc, char** argv) {
     (*riter)->waitUntilStopped();
   }
 
+  // stop bgp speaker
+  if (config->isBgpPeeringEnabled()) {
+    pluginStop();
+  }
+
   if (nlEvb) {
     nlEvb->getEvb()->terminateLoopSoon();
   }
@@ -651,11 +658,6 @@ main(int argc, char** argv) {
   // Wait for all threads to finish
   for (auto& t : allThreads) {
     t.join();
-  }
-
-  // Call external module for platform specific implementations
-  if (config->isBgpPeeringEnabled()) {
-    pluginStop();
   }
 
   // Close syslog connection (this is optional)
