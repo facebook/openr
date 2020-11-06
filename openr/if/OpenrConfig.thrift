@@ -12,6 +12,10 @@ namespace py3 openr.thrift
 
 include "BgpConfig.thrift"
 
+exception ConfigError {
+  1: string message
+} ( message = "message" )
+
 struct KvstoreFloodRate {
   1: i32 flood_msg_per_sec
   2: i32 flood_msg_burst_size

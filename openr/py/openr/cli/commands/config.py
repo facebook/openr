@@ -50,7 +50,7 @@ class ConfigCompareCmd(OpenrCtrlCmd):
         try:
             file_conf = client.dryrunConfig(file)
         except OpenrError as ex:
-            print("invalid config {} : {}".format(file, ex))
+            click.echo(click.style("FAILED: {}".format(ex), fg="red"))
             return
 
         res = jsondiff.diff(running_conf, file_conf, load=True, syntax="explicit")

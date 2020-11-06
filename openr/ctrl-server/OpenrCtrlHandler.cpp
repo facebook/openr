@@ -334,7 +334,7 @@ OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
 void
 OpenrCtrlHandler::dryrunConfig(
     std::string& _return, std::unique_ptr<std::string> file) {
-  if (!file) {
+  if (not file) {
     throw thrift::OpenrError("Dereference nullptr for config file");
   }
 
@@ -344,15 +344,10 @@ OpenrCtrlHandler::dryrunConfig(
     throw thrift::OpenrError(
         folly::sformat("Config file doesn't exist: {}", fileName));
   }
-  std::string contents;
-  if (not folly::readFile(fileName.c_str(), contents)) {
-    throw thrift::OpenrError(
-        folly::sformat("Could not read config file: {}", fileName));
-  }
 
   try {
     // Create policy manager using new config file
-    auto config = Config(*file);
+    auto config = Config(fileName);
     _return = config.getRunningConfig();
   } catch (const std::exception& ex) {
     throw thrift::OpenrError(ex.what());

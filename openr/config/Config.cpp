@@ -18,16 +18,19 @@ namespace openr {
 Config::Config(const std::string& configFile) {
   std::string contents;
   if (not folly::readFile(configFile.c_str(), contents)) {
-    LOG(FATAL) << folly::sformat("Could not read config file: {}", configFile);
+    auto errStr = folly::sformat("Could not read config file: {}", configFile);
+    LOG(ERROR) << errStr;
+    throw thrift::ConfigError(errStr);
   }
 
   auto jsonSerializer = apache::thrift::SimpleJSONSerializer();
   try {
     jsonSerializer.deserialize(contents, config_);
   } catch (const std::exception& ex) {
-    LOG(ERROR) << "Could not parse OpenrConfig struct: "
-               << folly::exceptionStr(ex);
-    throw;
+    auto errStr = folly::sformat(
+        "Could not parse OpenrConfig struct: {}", folly::exceptionStr(ex));
+    LOG(ERROR) << errStr;
+    throw thrift::ConfigError(errStr);
   }
   populateInternalDb();
 }

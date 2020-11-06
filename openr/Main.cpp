@@ -53,6 +53,10 @@
 #include <openr/spark/Spark.h>
 #include <openr/watchdog/Watchdog.h>
 
+#if FOLLY_USE_SYMBOLIZER
+#include <folly/experimental/exception_tracer/ExceptionTracer.h>
+#endif
+
 using namespace fbzmq;
 using namespace openr;
 
@@ -166,6 +170,9 @@ main(int argc, char** argv) {
   BuildInfo::log(ss);
   gflags::SetVersionString(ss.str());
 
+  // Initialize all params
+  folly::init(&argc, &argv);
+
   // Initialize syslog
   // We log all messages upto INFO level.
   // LOG_CONS => Log to console on error
@@ -174,14 +181,6 @@ main(int argc, char** argv) {
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   SYSLOG(INFO) << "Starting OpenR daemon.";
-
-  LOG(INFO) << "With args: ";
-  for (int i = 0; i < argc; ++i) {
-    LOG(INFO) << argv[i];
-  }
-
-  // Initialize all params
-  folly::init(&argc, &argv);
 
   // Export and log build information
   BuildInfo::exportBuildInfo();
@@ -198,14 +197,25 @@ main(int argc, char** argv) {
 
   // start config module
   std::shared_ptr<Config> config;
-  if (not FLAGS_config.empty()) {
-    LOG(INFO) << "Reading config from " << FLAGS_config;
-    config = std::make_shared<Config>(FLAGS_config);
-  } else {
-    LOG(INFO) << "Constructing config from GFLAG value.";
-    config = GflagConfig::createConfigFromGflag();
+  try {
+    if (not FLAGS_config.empty()) {
+      LOG(INFO) << "Reading config from " << FLAGS_config;
+      config = std::make_shared<Config>(FLAGS_config);
+    } else {
+      LOG(INFO) << "Constructing config from GFLAG value.";
+      config = GflagConfig::createConfigFromGflag();
+    }
+  } catch (const thrift::ConfigError&) {
+#if FOLLY_USE_SYMBOLIZER
+    // collect stack strace then fail the process
+    for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
+      LOG(ERROR) << exInfo;
+    }
+#endif
+    LOG(FATAL) << "Failed to start OpenR. Invalid configuration.";
   }
-  LOG(INFO) << config->getRunningConfig();
+
+  SYSLOG(INFO) << config->getRunningConfig();
 
   // Sanity checks on Segment Routing labels
   const int32_t maxLabel = Constants::kMaxSrLabel;
