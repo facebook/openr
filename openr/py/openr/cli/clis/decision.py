@@ -214,7 +214,7 @@ class DecisionRibPolicyCli(object):
 
 
 class ReceivedRoutesCli(object):
-    @click.command("routes-received")
+    @click.command("received-routes")
     @click.argument("prefix", nargs=-1, type=str)
     @click.option("--node", help="Filter on node name", type=str)
     @click.option("--area", help="Filter on area name", type=str)

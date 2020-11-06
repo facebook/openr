@@ -93,14 +93,14 @@ class ViewCli(object):
     def view(cli_opts):  # noqa: B902
         """
         View the prefix of this node
-        TODO: Deprecated. Use routes-advertised instead
+        TODO: Deprecated. Use advertised-routes instead
         """
 
         prefix_mgr.ViewCmd(cli_opts).run()
 
 
 class AdvertisedRoutesCli(object):
-    @click.command("routes-advertised")
+    @click.command("advertised-routes")
     @click.argument("prefix", nargs=-1, type=str)
     @click.option(
         "--prefix-type",
