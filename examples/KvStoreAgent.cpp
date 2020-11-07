@@ -5,13 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStoreAgent.h"
-
-#include <cstdlib>
-
 #include <glog/logging.h>
 
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/public_tld/examples/KvStoreAgent.h>
 
 namespace openr {
 
@@ -38,14 +35,14 @@ KvStoreAgent::KvStoreAgent(std::string nodeId, KvStore* kvStore)
 
   // every once in a while, we need to change our value
   periodicValueChanger_ =
-      fbzmq::ZmqTimeout::make(getEvb(), [this, nodeId]() noexcept {
+      folly::AsyncTimeout::make(*getEvb(), [this, nodeId]() noexcept {
         std::srand(std::time(0));
         this->kvStoreClient_->persistKey(
             agentKeyPrefix + nodeId, std::to_string(std::rand()));
+        periodicValueChanger_->scheduleTimeout(std::chrono::seconds(60));
       });
 
-  periodicValueChanger_->scheduleTimeout(
-      std::chrono::seconds(60), true /* isPeriodic */);
+  periodicValueChanger_->scheduleTimeout(std::chrono::seconds(60));
 }
 
 } // namespace openr

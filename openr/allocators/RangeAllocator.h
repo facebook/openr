@@ -11,7 +11,6 @@
 #include <random>
 #include <string>
 
-#include <fbzmq/async/ZmqTimeout.h>
 #include <folly/Format.h>
 #include <folly/Optional.h>
 #include <folly/Random.h>

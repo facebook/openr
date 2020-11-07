@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/async/ZmqTimeout.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 
@@ -23,7 +21,7 @@ class KvStoreAgent : public OpenrEventBase {
  private:
   KvStore* kvStore_{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
-  std::unique_ptr<fbzmq::ZmqTimeout> periodicValueChanger_;
+  std::unique_ptr<folly::AsyncTimeout> periodicValueChanger_;
 
 }; // class KvStoreAgent
 } // namespace openr

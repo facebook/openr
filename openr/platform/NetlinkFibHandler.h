@@ -14,7 +14,6 @@
 #include <vector>
 
 #include <fb303/BaseService.h>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <folly/Expected.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
