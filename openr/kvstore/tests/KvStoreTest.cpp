@@ -367,7 +367,6 @@ TEST_F(KvStoreTestFixture, CounterReport) {
 
   // Verify the counter keys exist
   ASSERT_EQ(1, counters.count("kvstore.num_peers"));
-  ASSERT_EQ(1, counters.count("kvstore.pending_full_sync"));
   ASSERT_EQ(1, counters.count("kvstore.cmd_peer_dump.count"));
   ASSERT_EQ(1, counters.count("kvstore.cmd_peer_add.count"));
   ASSERT_EQ(1, counters.count("kvstore.cmd_per_del.count"));
@@ -386,7 +385,6 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_EQ(1, counters.count("kvstore.sent_publications.count"));
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));
-  EXPECT_EQ(0, counters.at("kvstore.pending_full_sync"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_peer_dump.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_peer_add.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_per_del.count"));
@@ -2991,7 +2989,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
 
   // Verify initial expectations
   EXPECT_EQ(0, store0->getPeers().size());
-  EXPECT_EQ(0, store0->getCounters().at("kvstore.pending_full_sync"));
 
   //
   // Create peer socket
@@ -3015,7 +3012,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
     auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
     ASSERT_TRUE(msgs.hasValue()) << msgs.error(); // No timeout
     validateFullSyncRequest(msgs.value());
-    EXPECT_EQ(1, store0->getCounters().at("kvstore.pending_full_sync"));
   }
 
   //
@@ -3028,7 +3024,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
     auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
     ASSERT_TRUE(msgs.hasValue()) << msgs.error(); // No timeout
     validateFullSyncRequest(msgs.value());
-    EXPECT_EQ(1, store0->getCounters().at("kvstore.pending_full_sync"));
   }
 
   //
@@ -3051,8 +3046,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
     auto msgsNew = peerSockNew.recvMultiple(std::chrono::milliseconds(1000));
     ASSERT_TRUE(msgsNew.hasValue()) << msgsNew.error();
     validateFullSyncRequest(msgsNew.value());
-
-    EXPECT_EQ(1, store0->getCounters().at("kvstore.pending_full_sync"));
   }
 
   //
@@ -3060,7 +3053,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
   //
   store0->delPeer("test-peer");
   EXPECT_EQ(0, store0->getPeers().size());
-  EXPECT_EQ(0, store0->getCounters().at("kvstore.pending_full_sync"));
 }
 
 int

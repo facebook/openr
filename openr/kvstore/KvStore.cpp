@@ -1852,9 +1852,6 @@ KvStoreDb::getCounters() const {
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
   counters["kvstore.num_peers"] = peers_.size();
-  // Add up pending and in-flight full sync
-  counters["kvstore.pending_full_sync"] =
-      peersToSyncWith_.size() + latestSentPeerSync_.size();
   return counters;
 }
 
@@ -2421,7 +2418,6 @@ KvStoreDb::processSyncResponse(
         std::chrono::steady_clock::now() - latestSentPeerSync_.at(requestId));
     fb303::fbData->addStatValue(
         "kvstore.full_sync_duration_ms", syncDuration.count(), fb303::AVG);
-    logSyncEvent(requestId, syncDuration);
     VLOG(1) << "It took " << syncDuration.count() << " ms to sync with "
             << requestId;
     latestSentPeerSync_.erase(requestId);
