@@ -292,8 +292,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : areas) {
       thrift::AreaConfig area;
-      *area.area_id_ref() = id;
-      area.neighbor_regexes_ref()->emplace_back(".*");
+      area.set_area_id(id);
+      area.set_include_interface_regexes(
+          {kTestVethNamePrefix + ".*", "iface.*"});
+      area.set_redistribute_interface_regexes({"loopback"});
       areaConfig.emplace_back(std::move(area));
     }
     auto tConfig =

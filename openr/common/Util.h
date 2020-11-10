@@ -155,13 +155,6 @@ uint32_t bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end);
 std::vector<folly::CIDRNetwork> getIfacePrefixes(
     std::string ifName, sa_family_t afNet);
 
-bool matchRegexSet(
-    const std::string& name, std::shared_ptr<const re2::RE2::Set> regexSet);
-bool checkIncludeExcludeRegex(
-    const std::string& name,
-    std::shared_ptr<const re2::RE2::Set> includeRegexSet,
-    std::shared_ptr<const re2::RE2::Set> excludeRegexSet);
-
 /**
  * @param prefixIndex subprefix index, starting from 0
  * @return n-th subprefix of allocated length in seed prefix
@@ -549,8 +542,10 @@ std::set<Key>
 selectBestPrefixMetrics(
     std::unordered_map<Key, MetricsWrapper> const& prefixes) {
   // Leveraging tuple for ease of comparision
-  std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{0, 0, 0};
-
+  std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{
+      std::numeric_limits<int32_t>::min(),
+      std::numeric_limits<int32_t>::min(),
+      std::numeric_limits<int32_t>::min()};
   std::set<Key> bestKeys;
   for (auto& [key, metricsWrapper] : prefixes) {
     auto& metrics = metricsWrapper.metrics_ref().value();

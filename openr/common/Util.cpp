@@ -125,27 +125,6 @@ executeShellCommand(const std::string& command) {
   return ret;
 }
 
-bool
-matchRegexSet(
-    const std::string& name, std::shared_ptr<const re2::RE2::Set> regexSet) {
-  if (not regexSet) {
-    return false;
-  }
-
-  std::vector<int> matches;
-  return regexSet->Match(name, &matches);
-}
-
-bool
-checkIncludeExcludeRegex(
-    const std::string& name,
-    std::shared_ptr<const re2::RE2::Set> includeRegexSet,
-    std::shared_ptr<const re2::RE2::Set> excludeRegexSet) {
-  return (
-      not matchRegexSet(name, excludeRegexSet) and
-      matchRegexSet(name, includeRegexSet));
-}
-
 std::vector<std::string>
 splitByComma(const std::string& input) {
   std::vector<std::string> output;

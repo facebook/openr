@@ -475,7 +475,6 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
 
 PacketValidationResult
 Spark::sanityCheckHelloPkt(
-    std::string const& domainName,
     std::string const& neighborName,
     std::string const& remoteIfName,
     uint32_t const& remoteVersion) {
@@ -485,16 +484,6 @@ Spark::sanityCheckHelloPkt(
     fb303::fbData->addStatValue(
         "spark.invalid_keepalive.looped_packet", 1, fb303::SUM);
     return PacketValidationResult::SKIP_LOOPED_SELF;
-  }
-  // domain check
-  if (domainName != myDomainName_) {
-    LOG(ERROR) << "Ignoring hello packet from node " << neighborName
-               << " on interface " << remoteIfName
-               << " because it's from different domain " << domainName
-               << ". My domain is " << myDomainName_;
-    fb303::fbData->addStatValue(
-        "spark.invalid_keepalive.different_domain", 1, fb303::SUM);
-    return PacketValidationResult::FAILURE;
   }
   // version check
   if (remoteVersion <
@@ -1192,8 +1181,8 @@ Spark::processHelloMsg(
     return;
   }
 
-  auto sanityCheckResult = sanityCheckHelloPkt(
-      domainName, neighborName, remoteIfName, remoteVersion);
+  auto sanityCheckResult =
+      sanityCheckHelloPkt(neighborName, remoteIfName, remoteVersion);
   if (PacketValidationResult::SKIP_LOOPED_SELF == sanityCheckResult) {
     VLOG(4) << "Received self-looped hello pkt";
     return;
@@ -1214,8 +1203,7 @@ Spark::processHelloMsg(
     // TODO: Spark is yet to support area change due to dynamic configuration.
     //       To avoid running area deducing logic for every single helloMsg,
     //       ONLY deduce for unknown neighbors.
-    auto area =
-        getNeighborArea(neighborName, ifName, config_->getAreaConfiguration());
+    auto area = getNeighborArea(neighborName, ifName, config_->getAreas());
     if (not area.has_value()) {
       return;
     }
@@ -1524,12 +1512,19 @@ Spark::processHandshakeMsg(
   //  2) neighbor.area: areaId that I think neighbor node should be in;
   //
   //  ONLY promote to NEGOTIATE state if areaId matches
-  if (neighbor.area != thrift::KvStore_constants::kDefaultArea() &&
-      *handshakeMsg.area_ref() != thrift::KvStore_constants::kDefaultArea()) {
-    // For backward compatible consideration, If:
-    //  1) neighbor.area == defaulArea: this node doesn't support areaConfig;
-    //  2) handshakeMsg.area == defaultArea: peer doesn't support areaConfig;
-    if (neighbor.area != *handshakeMsg.area_ref()) {
+  if (neighbor.area != *handshakeMsg.area_ref() ||
+      myDomainName_ != neighbor.domainName) {
+    bool mismatch = true;
+    if (handshakeMsg.get_area() == thrift::KvStore_constants::kDefaultArea() ||
+        neighbor.area == thrift::KvStore_constants::kDefaultArea()) {
+      fb303::fbData->addStatValue(
+          "spark.hello.default_area_rcvd", 1, fb303::SUM);
+      // for backward compatibility: if the peer is still advertising
+      // default area, we can check that domains match
+      // TODO remove when trasition to areas is complete
+      mismatch = myDomainName_ != neighbor.domainName;
+    }
+    if (mismatch) {
       LOG(ERROR)
           << "Inconsistent areaId deduced between local and remote review. "
           << "Neighbor's areaId: [" << neighbor.area << "], "
@@ -1547,10 +1542,6 @@ Spark::processHandshakeMsg(
       neighbor.negotiateHoldTimer.reset();
       return;
     }
-  } else {
-    // Backward compatibility:
-    // In case peer/me doesn't support AREA negotiation.
-    // Use local configuration: nerighbor.area. Ignore handshakeMsg.area msg.
   }
 
   // state transition
@@ -2062,32 +2053,20 @@ Spark::getNeighborArea(
     const std::string& localIfName,
     const std::unordered_map<std::string /* areaId */, AreaConfiguration>&
         areaConfigs) {
-  std::vector<std::string> candidateAreas{};
+  // IMPT: ordered set. Function yeilds lowest areaId in case of multiple
+  // candidate areas
+  std::set<std::string> candidateAreas{};
 
   // looping through areaIdRegexList
-  for (const auto& t : areaConfigs) {
-    const auto& areaId = t.first;
-    const auto& neighborRegex = t.second.neighborRegexList;
-    const auto& interfaceRegex = t.second.interfaceRegexList;
-
-    if (neighborRegex and interfaceRegex) {
-      if (matchRegexSet(peerNodeName, neighborRegex) and
-          matchRegexSet(localIfName, interfaceRegex)) {
-        VLOG(1) << folly::sformat(
-            "Area: {} found for neighbor: {}, interface: {}",
-            areaId,
-            peerNodeName,
-            localIfName);
-        candidateAreas.emplace_back(areaId);
-      }
-    } else if (neighborRegex and matchRegexSet(peerNodeName, neighborRegex)) {
+  for (const auto& [areaId, areaConfig] : areaConfigs) {
+    if (areaConfig.shouldDiscoverOnIface(localIfName) &&
+        areaConfig.shouldPeerWithNeighbor(peerNodeName)) {
       VLOG(1) << folly::sformat(
-          "Area: {} found for neighbor: {}", areaId, peerNodeName);
-      candidateAreas.emplace_back(areaId);
-    } else if (interfaceRegex and matchRegexSet(localIfName, interfaceRegex)) {
-      VLOG(1) << folly::sformat(
-          "Area: {} found for interface: {}", areaId, localIfName);
-      candidateAreas.emplace_back(areaId);
+          "Area: {} found for neighbor: {} on interface: {}",
+          areaId,
+          peerNodeName,
+          localIfName);
+      candidateAreas.insert(areaId);
     }
   }
 
@@ -2096,12 +2075,13 @@ Spark::getNeighborArea(
     fb303::fbData->addStatValue("spark.neighbor_no_area", 1, fb303::COUNT);
     return std::nullopt;
   } else if (candidateAreas.size() > 1) {
-    LOG(ERROR) << "Multiple area found for neighbor: " << peerNodeName;
+    LOG(ERROR)
+        << "Multiple area found for neighbor: " << peerNodeName
+        << ". Will use lowest candidate area: " << *candidateAreas.begin();
     fb303::fbData->addStatValue(
         "spark.neighbor_multiple_area", 1, fb303::COUNT);
-    return std::nullopt;
   }
-  return candidateAreas.back();
+  return *candidateAreas.begin();
 }
 
 void

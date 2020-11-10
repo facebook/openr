@@ -100,10 +100,7 @@ LinkMonitor::LinkMonitor(
       linkflapMaxBackoff_(std::chrono::milliseconds(
           *config->getLinkMonitorConfig().linkflap_max_backoff_ms_ref())),
       ttlKeyInKvStore_(config->getKvStoreKeyTtl()),
-      includeItfRegexes_(config->getIncludeItfRegexes()),
-      excludeItfRegexes_(config->getExcludeItfRegexes()),
-      redistributeItfRegexes_(config->getRedistributeItfRegexes()),
-      areas_(config->getAreaIds()),
+      areas_(config->getAreas()),
       interfaceUpdatesQueue_(intfUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
@@ -170,10 +167,11 @@ LinkMonitor::LinkMonitor(
 
   if (enableSegmentRouting_) {
     // create range allocator to get unique node labels
-    for (const auto& area : areas_) {
+    for (auto const& kv : areas_) {
+      auto const& areaId = kv.first;
       rangeAllocator_.emplace(
           std::piecewise_construct,
-          std::forward_as_tuple(area),
+          std::forward_as_tuple(areaId),
           std::forward_as_tuple(
               nodeId_,
               Constants::kNodeLabelRangePrefix.toString(),
@@ -187,16 +185,16 @@ LinkMonitor::LinkMonitor(
               false /* override owner */,
               nullptr, /* checkValueInUseCb */
               Constants::kRangeAllocTtl,
-              area));
+              areaId));
 
       // Delay range allocation until we have formed all of our adjcencies
       auto startAllocTimer =
-          folly::AsyncTimeout::make(*getEvb(), [this, area]() noexcept {
+          folly::AsyncTimeout::make(*getEvb(), [this, areaId]() noexcept {
             std::optional<int32_t> initValue;
             if (*state_.nodeLabel_ref() != 0) {
               initValue = *state_.nodeLabel_ref();
             }
-            rangeAllocator_.at(area).startAllocator(
+            rangeAllocator_.at(areaId).startAllocator(
                 Constants::kSrGlobalRange, initValue);
           });
       startAllocTimer->scheduleTimeout(adjHoldTime);
@@ -593,8 +591,8 @@ void
 LinkMonitor::advertiseKvStorePeers(
     const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
   // Get old and new peer list. Also update local state
-  for (const auto& area : areas_) {
-    advertiseKvStorePeers(area, upPeers);
+  for (const auto& [areaId, _] : areas_) {
+    advertiseKvStorePeers(areaId, upPeers);
   }
 }
 
@@ -637,9 +635,9 @@ void
 LinkMonitor::advertiseAdjacencies() {
   // advertise to all areas. Once area configuration per link is implemented
   // then adjacencies can be advertised to a specific area
-  for (const auto& area : areas_) {
+  for (const auto& [areaId, _] : areas_) {
     // Update KvStore
-    advertiseAdjacencies(area);
+    advertiseAdjacencies(areaId);
   }
 }
 
@@ -673,8 +671,7 @@ LinkMonitor::advertiseInterfaces() {
   *ifDb.thisNodeName_ref() = nodeId_;
   for (auto& [ifName, interface] : interfaces_) {
     // Perform regex match
-    if (not checkIncludeExcludeRegex(
-            ifName, includeItfRegexes_, excludeItfRegexes_)) {
+    if (not anyAreaShouldDiscoverOnIface(ifName)) {
       continue;
     }
     // Get interface info and override active status
@@ -692,7 +689,8 @@ LinkMonitor::advertiseRedistAddrs() {
   if (adjHoldTimer_->isScheduled()) {
     return;
   }
-  std::vector<thrift::PrefixEntry> prefixes;
+  std::unordered_map<std::string, std::vector<thrift::PrefixEntry>>
+      areaPrefixes;
 
   // Add redistribute addresses
   for (auto& [_, interface] : interfaces_) {
@@ -700,10 +698,8 @@ LinkMonitor::advertiseRedistAddrs() {
     if (not interface.isActive()) {
       continue;
     }
-    // Perform regex match
-    if (not matchRegexSet(interface.getIfName(), redistributeItfRegexes_)) {
-      continue;
-    }
+
+    std::vector<thrift::PrefixEntry> ifacePrefixes;
     // Add all prefixes of this interface
     for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
       prefix.forwardingType_ref() = prefixForwardingType_;
@@ -720,20 +716,34 @@ LinkMonitor::advertiseRedistAddrs() {
         metrics.path_preference_ref() = Constants::kDefaultPathPreference;
         metrics.source_preference_ref() = Constants::kDefaultSourcePreference;
       }
-      prefixes.emplace_back(std::move(prefix));
+      ifacePrefixes.emplace_back(std::move(prefix));
+    }
+
+    for (auto const& [areaId, areaConf] : areas_) {
+      if (areaConf.shouldRedistributeIface(interface.getIfName())) {
+        auto& prefixList = areaPrefixes[areaId];
+        prefixList.insert(
+            prefixList.end(), ifacePrefixes.begin(), ifacePrefixes.end());
+      }
     }
   }
 
-  LOG_IF(INFO, prefixes.empty()) << "Advertising empty LOOPBACK addresses.";
+  for (auto const& [areaId, _] : areas_) {
+    LOG_IF(INFO, !areaPrefixes.count(areaId) || areaPrefixes.at(areaId).empty())
+        << "Advertising empty LOOPBACK addresses for area: " << areaId;
+  }
 
-  // Advertise LOOPBACK prefix via replicate queue
-  thrift::PrefixUpdateRequest request;
-  request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-  request.type_ref() = openr::thrift::PrefixType::LOOPBACK;
-  *request.prefixes_ref() = std::move(prefixes);
-
-  // publish to prefix manager
-  prefixUpdatesQueue_.push(std::move(request));
+  for (auto& [areaId, _] : areas_) {
+    // Advertise via prefix manager client
+    thrift::PrefixUpdateRequest request;
+    request.set_cmd(thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE);
+    request.set_type(openr::thrift::PrefixType::LOOPBACK);
+    // default construct syncing empty set if we found nothing
+    request.set_prefixes(std::move(areaPrefixes[areaId]));
+    request.set_dstAreas({areaId});
+    // publish prefixes to prefix manager
+    prefixUpdatesQueue_.push(std::move(request));
+  }
 }
 
 std::chrono::milliseconds
@@ -825,9 +835,8 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
 InterfaceEntry* FOLLY_NULLABLE
 LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
   // Return null if ifName doesn't quality regex match criteria
-  if (not checkIncludeExcludeRegex(
-          ifName, includeItfRegexes_, excludeItfRegexes_) and
-      not matchRegexSet(ifName, redistributeItfRegexes_)) {
+  if (not anyAreaShouldDiscoverOnIface(ifName) &&
+      not anyAreaShouldRedistributeIface(ifName)) {
     return nullptr;
   }
 
@@ -1336,6 +1345,24 @@ LinkMonitor::logPeerEvent(
   sample.addString("cmd_url", *peerSpec.cmdUrl_ref());
 
   logSampleQueue_.push(sample);
+}
+
+bool
+LinkMonitor::anyAreaShouldDiscoverOnIface(std::string const& iface) const {
+  bool anyMatch = false;
+  for (auto const& [_, areaConf] : areas_) {
+    anyMatch |= areaConf.shouldDiscoverOnIface(iface);
+  }
+  return anyMatch;
+}
+
+bool
+LinkMonitor::anyAreaShouldRedistributeIface(std::string const& iface) const {
+  bool anyMatch = false;
+  for (auto const& [_, areaConf] : areas_) {
+    anyMatch |= areaConf.shouldRedistributeIface(iface);
+  }
+  return anyMatch;
 }
 
 } // namespace openr

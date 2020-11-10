@@ -1814,8 +1814,7 @@ def print_spt_infos(
 
 
 def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
-    openr_area_config = client.getAreasConfig()
-    return openr_area_config.areas
+    return {a.area_id for a in client.getRunningConfigThrift().areas}
 
 
 # This API is used by commands that need one and only one

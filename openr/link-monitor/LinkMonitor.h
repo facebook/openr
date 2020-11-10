@@ -283,6 +283,16 @@ class LinkMonitor final : public OpenrEventBase {
       const std::string& peerName,
       const thrift::PeerSpec& peerSpec);
 
+  // returns any(a.shouldDiscoverOnIface(iface) for a in areas_)
+  bool anyAreaShouldDiscoverOnIface(std::string const& iface) const;
+
+  // returns any(a.anyAreaShouldRedistributeIface(iface) for a in areas_)
+  bool anyAreaShouldRedistributeIface(std::string const& iface) const;
+
+  //
+  // immutable state/invariants
+  //
+
   // used to build the key names for this node
   const std::string nodeId_;
   // enable performance measurement
@@ -301,12 +311,8 @@ class LinkMonitor final : public OpenrEventBase {
   std::chrono::milliseconds linkflapMaxBackoff_;
   // TTL for a key in the key value store
   std::chrono::milliseconds ttlKeyInKvStore_;
-  // interface regexes
-  std::shared_ptr<const re2::RE2::Set> includeItfRegexes_;
-  std::shared_ptr<const re2::RE2::Set> excludeItfRegexes_;
-  std::shared_ptr<const re2::RE2::Set> redistributeItfRegexes_;
-  // area ids
-  std::unordered_set<std::string> areas_{};
+
+  std::unordered_map<std::string, AreaConfiguration> const areas_;
 
   //
   // Mutable state

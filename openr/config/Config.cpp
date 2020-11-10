@@ -1,5 +1,11 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
+#include <fb303/ServiceData.h>
 #include <folly/FileUtil.h>
 #include <glog/logging.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
@@ -14,6 +20,31 @@ using openr::thrift::PrefixForwardingAlgorithm;
 using openr::thrift::PrefixForwardingType;
 
 namespace openr {
+
+std::shared_ptr<re2::RE2::Set>
+AreaConfiguration::compileRegexSet(std::vector<std::string> const& strings) {
+  re2::RE2::Options regexOpts;
+  std::string regexErr;
+  regexOpts.set_case_sensitive(false);
+
+  auto reSet =
+      std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+
+  if (strings.empty()) {
+    // make this regex set unmatchable
+    std::string const unmatchable = "a^";
+    CHECK_NE(-1, reSet->Add(unmatchable, &regexErr)) << folly::sformat(
+        "Failed to add regex: {}. Error: {}", unmatchable, regexErr);
+  }
+  for (const auto& str : strings) {
+    if (reSet->Add(str, &regexErr) == -1) {
+      throw std::invalid_argument(
+          folly::sformat("Failed to add regex: {}. Error: {}", str, regexErr));
+    }
+  }
+  CHECK(reSet->Compile()) << "Regex compilation failed";
+  return reSet;
+}
 
 Config::Config(const std::string& configFile) {
   std::string contents;
@@ -81,98 +112,43 @@ Config::createPrefixAllocationParams(
 }
 
 void
-Config::addAreaRegex(
-    const std::string& areaId,
-    const std::vector<std::string>& neighborRegexes,
-    const std::vector<std::string>& interfaceRegexes) {
-  if (neighborRegexes.empty() and interfaceRegexes.empty()) {
-    throw std::invalid_argument(folly::sformat(
-        "Invalid config. At least one non-empty regexes for neighbor or interface"));
+Config::addAreaConfig(thrift::AreaConfig const& area) {
+  if (!areaConfigs_.emplace(area.get_area_id(), area).second) {
+    throw std::invalid_argument(
+        folly::sformat("Duplicate area config id: {}", area.get_area_id()));
   }
-
-  re2::RE2::Options regexOpts;
-  regexOpts.set_case_sensitive(false);
-  std::string regexErr;
-  std::shared_ptr<re2::RE2::Set> neighborRegexList{nullptr},
-      interfaceRegexList{nullptr};
-
-  // neighbor regex
-  if (not neighborRegexes.empty()) {
-    neighborRegexList =
-        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-
-    for (const auto& regexStr : neighborRegexes) {
-      if (-1 == neighborRegexList->Add(regexStr, &regexErr)) {
-        throw std::invalid_argument(folly::sformat(
-            "Failed to add neighbor regex: {} for area: {}. Error: {}",
-            regexStr,
-            areaId,
-            regexErr));
-      }
-    }
-    if (not neighborRegexList->Compile()) {
-      throw std::invalid_argument(
-          folly::sformat("Neighbor regex compilation failed"));
-    }
-  }
-
-  // interface regex
-  if (not interfaceRegexes.empty()) {
-    interfaceRegexList =
-        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-
-    for (const auto& regexStr : interfaceRegexes) {
-      if (-1 == interfaceRegexList->Add(regexStr, &regexErr)) {
-        throw std::invalid_argument(folly::sformat(
-            "Failed to add interface regex: {} for area: {}. Error: {}",
-            regexStr,
-            areaId,
-            regexErr));
-      }
-    }
-    if (not interfaceRegexList->Compile()) {
-      throw std::invalid_argument(
-          folly::sformat("Interface regex compilation failed"));
-    }
-  }
-
-  areaConfigs_.emplace(
-      areaId,
-      AreaConfiguration(
-          areaId, std::move(neighborRegexList), std::move(interfaceRegexList)));
 }
 
-// parse openrConfig to initialize:
-//  1) areaId => [node_name|interface_name] regex matching;
-//  2) etc.
 void
 Config::populateAreaConfig() {
-  //
-  // Area
-  //
-  thrift::AreaConfig defaultArea;
-  *defaultArea.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
-  defaultArea.interface_regexes_ref()->emplace_back(".*");
-  defaultArea.neighbor_regexes_ref()->emplace_back(".*");
-
-  const auto& areas = config_.areas_ref()->empty()
-      ? std::vector<thrift::AreaConfig>({defaultArea})
-      : *config_.areas_ref();
-
-  for (const auto& area : areas) {
-    // TODO: Check if we can remove areaIds_ and
-    // use areaConfigs_.
-    if (not areaIds_.emplace(*area.area_id_ref()).second) {
-      throw std::invalid_argument(folly::sformat(
-          "Duplicate area config: area_id {}", *area.area_id_ref()));
-    }
+  if (config_.get_areas().empty()) {
+    // TODO remove once transition to areas is complete
+    thrift::AreaConfig defaultArea;
+    defaultArea.set_area_id(thrift::KvStore_constants::kDefaultArea());
+    config_.set_areas({defaultArea});
   }
 
-  for (const auto& areaConfig : *config_.areas_ref()) {
-    addAreaRegex(
-        *areaConfig.area_id_ref(),
-        *areaConfig.neighbor_regexes_ref(),
-        *areaConfig.interface_regexes_ref());
+  for (auto& areaConf : *config_.areas_ref()) {
+    // Fill these values from linkMonitor config if not provided
+    // TODO remove once transition to areas is complete
+    auto const& lmConf = config_.get_link_monitor_config();
+    if (areaConf.get_redistribute_interface_regexes().empty()) {
+      areaConf.set_redistribute_interface_regexes(
+          lmConf.get_redistribute_interface_regexes());
+    }
+    if (areaConf.get_include_interface_regexes().empty()) {
+      areaConf.set_include_interface_regexes(
+          lmConf.get_include_interface_regexes());
+    }
+    if (areaConf.get_exclude_interface_regexes().empty()) {
+      areaConf.set_exclude_interface_regexes(
+          lmConf.get_exclude_interface_regexes());
+    }
+    if (areaConf.get_neighbor_regexes().empty()) {
+      areaConf.set_neighbor_regexes({".*"});
+    }
+
+    addAreaConfig(areaConf);
   }
 }
 
@@ -198,7 +174,7 @@ Config::populateInternalDb() {
   //
   // Fib
   //
-  if (isOrderedFibProgrammingEnabled() and areaIds_.size() > 1) {
+  if (isOrderedFibProgrammingEnabled() and areaConfigs_.size() > 1) {
     throw std::invalid_argument(folly::sformat(
         "enable_ordered_fib_programming only support single area config"));
   }
@@ -350,70 +326,15 @@ Config::populateInternalDb() {
         *lmConf.linkflap_max_backoff_ms_ref()));
   }
 
-  // Construct the regular expressions to match interface names against
-  re2::RE2::Options regexOpts;
-  std::string regexErr;
-
-  // include_interface_regexes and exclude_interface_regexes together
-  // define RE, which is fed into link-monitor
-
-  // Compiling empty Re2 Set will cause undefined error
-  if (lmConf.include_interface_regexes_ref()->size()) {
-    includeItfRegexes_ =
-        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    for (const auto& regexStr : *lmConf.include_interface_regexes_ref()) {
-      if (includeItfRegexes_->Add(regexStr, &regexErr) == -1) {
-        throw std::invalid_argument(folly::sformat(
-            "Add include_interface_regexes failed: {}", regexErr));
-      }
-    }
-    if (not includeItfRegexes_->Compile()) {
-      throw std::invalid_argument(
-          folly::sformat("include_interface_regexes compile failed"));
-    }
-  }
-
-  if (lmConf.exclude_interface_regexes_ref()->size()) {
-    excludeItfRegexes_ =
-        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    for (const auto& regexStr : *lmConf.exclude_interface_regexes_ref()) {
-      if (excludeItfRegexes_->Add(regexStr, &regexErr) == -1) {
-        throw std::invalid_argument(folly::sformat(
-            "Add exclude_interface_regexes failed: {}", regexErr));
-      }
-    }
-    if (not excludeItfRegexes_->Compile()) {
-      throw std::invalid_argument(
-          folly::sformat("exclude_interface_regexes compile failed"));
-    }
-  }
-
-  // redistribute_interface_regexes defines interface to be advertised
-  if (lmConf.redistribute_interface_regexes_ref()->size()) {
-    redistributeItfRegexes_ =
-        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    for (const auto& regexStr : *lmConf.redistribute_interface_regexes_ref()) {
-      if (redistributeItfRegexes_->Add(regexStr, &regexErr) == -1) {
-        throw std::invalid_argument(folly::sformat(
-            "Add redistribute_interface_regexes failed: {}", regexErr));
-      }
-    }
-    if (not redistributeItfRegexes_->Compile()) {
-      throw std::invalid_argument(
-          folly::sformat("redistribute_interface_regexes compile failed"));
-    }
-  }
-
   //
   // Prefix Allocation
   //
   if (isPrefixAllocationEnabled()) {
-    // by now areaIds should be filled.
-    if (areaIds_.size() > 1) {
+    // by now areaConfigs_ should be filled.
+    if (areaConfigs_.size() > 1) {
       throw std::invalid_argument(
           "prefix_allocation only support single area config");
     }
-
     const auto& paConf = config_.prefix_allocation_config_ref();
     // check if config exists
     if (not paConf) {

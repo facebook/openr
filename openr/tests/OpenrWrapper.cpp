@@ -52,7 +52,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   *lmConf.linkflap_initial_backoff_ms_ref() = linkFlapInitialBackoff.count();
   *lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
   *lmConf.use_rtt_metric_ref() = false;
-  *lmConf.include_interface_regexes_ref() = {"vethLMTest_" + nodeId_ + ".*"};
+  *lmConf.include_interface_regexes_ref() = {".*"};
 
   // prefix allocation config
   tConfig.enable_prefix_allocation_ref() = true;

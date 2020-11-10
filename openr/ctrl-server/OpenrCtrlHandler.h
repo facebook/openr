@@ -172,8 +172,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   //
   // KvStore APIs
   //
-  folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>
-  semifuture_getAreasConfig() override;
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreKeyVals(

@@ -40,6 +40,7 @@ const int ifIndex3{3};
 
 const std::string area1{"area1"};
 const std::string area2{"area2"};
+const std::string area3{"area3"};
 const std::string defaultArea{thrift::KvStore_constants::kDefaultArea()};
 
 const folly::CIDRNetwork ip1V4 =
@@ -670,8 +671,12 @@ TEST_F(SparkFixture, DomainTest) {
     EXPECT_FALSE(
         node2->waitForEvent(NB_UP, restart_time_s2, restart_time_s2 * 2)
             .has_value());
-    EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeStark).has_value());
-    EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeLannister).has_value());
+    EXPECT_EQ(
+        node1->getSparkNeighState(iface1, nodeStark).value(),
+        SparkNeighState::WARM);
+    EXPECT_EQ(
+        node2->getSparkNeighState(iface2, nodeLannister).value(),
+        SparkNeighState::WARM);
   }
 }
 
@@ -1265,6 +1270,9 @@ TEST_F(SparkFixture, AreaMatch) {
   auto areaConfig12 = createAreaConfig(area2, {"FSW.*"}, {".*"});
   auto areaConfig21 = createAreaConfig(area1, {"FSW.*"}, {".*"});
   auto areaConfig22 = createAreaConfig(area2, {"RSW.*"}, {".*"});
+  // overlaps with area2 config. node2 should choose aree2 config as it is lower
+  // alphabetically
+  auto areaConfig23 = createAreaConfig(area3, {"RSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
@@ -1273,7 +1281,8 @@ TEST_F(SparkFixture, AreaMatch) {
   // FSW: { 1 -> "FSW.*", 2 -> "RSW.*"}
 
   std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig11, areaConfig12};
-  std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig21, areaConfig22};
+  std::vector<openr::thrift::AreaConfig> vec2 = {
+      areaConfig21, areaConfig22, areaConfig23};
 
   auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
   auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);

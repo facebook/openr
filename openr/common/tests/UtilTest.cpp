@@ -329,61 +329,6 @@ TEST(UtilTest, getNthPrefix) {
   EXPECT_THROW(getNthPrefix(v4SeedPrefix, 15, 0), std::invalid_argument);
 }
 
-TEST(UtilTest, checkIncludeExcludeRegex) {
-  // Re2 support POSIX regular expressions by default, so we don't need
-  // extended flag. It's much better than std::regex, so we don't need optimize
-  // flag either
-  re2::RE2::Options options;
-  options.set_case_sensitive(false);
-  auto includeRegexList =
-      std::make_shared<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
-  std::string regexErr;
-  includeRegexList->Add("eth.*", &regexErr);
-  includeRegexList->Add("terra", &regexErr);
-  includeRegexList->Add("po.*", &regexErr);
-  EXPECT_TRUE(includeRegexList->Compile());
-  auto excludeRegexList =
-      std::make_shared<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
-  excludeRegexList->Add(".*pi.*", &regexErr);
-  excludeRegexList->Add("^(po)[0-9]{3}$", &regexErr);
-  EXPECT_TRUE(excludeRegexList->Compile());
-
-  EXPECT_TRUE(
-      checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
-  EXPECT_TRUE(
-      checkIncludeExcludeRegex("terra", includeRegexList, excludeRegexList));
-  EXPECT_TRUE(
-      checkIncludeExcludeRegex("eth1-2-3", includeRegexList, excludeRegexList));
-  EXPECT_TRUE(
-      checkIncludeExcludeRegex("Eth1-2-3", includeRegexList, excludeRegexList));
-  EXPECT_FALSE(checkIncludeExcludeRegex(
-      "helloterra", includeRegexList, excludeRegexList));
-  EXPECT_FALSE(
-      checkIncludeExcludeRegex("helloeth", includeRegexList, excludeRegexList));
-  EXPECT_FALSE(checkIncludeExcludeRegex(
-      "ethpihello", includeRegexList, excludeRegexList));
-  EXPECT_FALSE(
-      checkIncludeExcludeRegex("terr", includeRegexList, excludeRegexList));
-  EXPECT_FALSE(
-      checkIncludeExcludeRegex("hello", includeRegexList, excludeRegexList));
-  EXPECT_FALSE(
-      checkIncludeExcludeRegex("po101", includeRegexList, excludeRegexList));
-  EXPECT_TRUE(
-      checkIncludeExcludeRegex("po1010", includeRegexList, excludeRegexList));
-
-  excludeRegexList.reset();
-  EXPECT_TRUE(
-      checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
-  excludeRegexList =
-      std::make_shared<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
-  excludeRegexList->Add(".*pi.*", &regexErr);
-  excludeRegexList->Add("^(po)[0-9]{3}$", &regexErr);
-  EXPECT_TRUE(excludeRegexList->Compile());
-  includeRegexList.reset();
-  EXPECT_FALSE(
-      checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
-}
-
 TEST(UtilTest, createLoopbackAddr) {
   {
     auto network = folly::IPAddress::createNetwork("fc00::/64");

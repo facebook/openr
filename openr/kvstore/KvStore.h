@@ -604,7 +604,6 @@ class KvStore final : public OpenrEventBase {
   static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
   // Public APIs
-  folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>> getAreasConfig();
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>> getKvStoreKeyVals(
       thrift::KeyGetParams keyGetParams,
@@ -696,7 +695,6 @@ class KvStore final : public OpenrEventBase {
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
-  // list of areas
-  std::unordered_set<std::string> areas_{};
+  std::unordered_set<std::string> const areaIds_;
 };
 } // namespace openr

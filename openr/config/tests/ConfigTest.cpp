@@ -58,10 +58,12 @@ openr::thrift::AreaConfig
 getAreaConfig(const std::string& areaId) {
   openr::thrift::AreaConfig area;
   *area.area_id_ref() = areaId;
-  area.interface_regexes_ref()->emplace_back("fboss.*");
+  area.include_interface_regexes_ref()->emplace_back("fboss.*");
   area.neighbor_regexes_ref()->emplace_back("rsw.*");
   return area;
 }
+
+const std::string myArea = "myArea";
 
 } // namespace
 
@@ -151,20 +153,11 @@ TEST(ConfigTest, PopulateAreaConfig) {
     EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
   }
 
-  // area config - empty neighbor and interfsace regexes
-  {
-    openr::thrift::AreaConfig area;
-    *area.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
-    std::vector<openr::thrift::AreaConfig> vec = {area};
-    auto confInvalidArea = getBasicOpenrConfig("node-1", "domain", vec);
-    EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
-  }
-
   // non-empty interface regex
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
-    areaConfig.interface_regexes_ref()->emplace_back("iface.*");
+    *areaConfig.area_id_ref() = myArea;
+    areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
@@ -173,7 +166,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty neighbor regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+    *areaConfig.area_id_ref() = myArea;
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
@@ -183,8 +176,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty neighbor and interface regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
-    areaConfig.interface_regexes_ref()->emplace_back("iface.*");
+    *areaConfig.area_id_ref() = myArea;
+    areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
@@ -193,32 +186,76 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
-    areaConfig.interface_regexes_ref()->emplace_back("iface.*");
+    *areaConfig.area_id_ref() = myArea;
+    areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     Config cfg = Config(confValidArea);
-    EXPECT_EQ(cfg.getAreaConfiguration().size(), 1);
-    EXPECT_EQ(
-        cfg.getAreaConfiguration().count(
-            thrift::KvStore_constants::kDefaultArea()),
-        1);
-    EXPECT_EQ(cfg.getAreaConfiguration().count("1"), 0);
+    // default area and domain area
+    EXPECT_EQ(cfg.getAreas().size(), 1);
+    EXPECT_EQ(cfg.getAreas().count(myArea), 1);
+    EXPECT_EQ(cfg.getAreas().count("1"), 0);
   }
+
+  // invalid include_interface_regexes
+  {
+    openr::thrift::AreaConfig areaConfig;
+    *areaConfig.area_id_ref() = myArea;
+    areaConfig.include_interface_regexes_ref()->emplace_back("[0-9]++");
+    std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
+    auto conf = getBasicOpenrConfig("node-1", "domain", vec);
+    EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
+  }
+  //  invalid exclude_interface_regexes
+  {
+    openr::thrift::AreaConfig areaConfig;
+    *areaConfig.area_id_ref() = myArea;
+    areaConfig.exclude_interface_regexes_ref()->emplace_back("boom\\");
+    std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
+    auto conf = getBasicOpenrConfig("node-1", "domain", vec);
+    EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
+  }
+  //  invalid redistribute_interface_regexes
+  {
+    openr::thrift::AreaConfig areaConfig;
+    *areaConfig.area_id_ref() = myArea;
+    areaConfig.redistribute_interface_regexes_ref()->emplace_back("*");
+    std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
+    auto conf = getBasicOpenrConfig("node-1", "domain", vec);
+    EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
+  }
+}
+
+TEST(ConfigTest, AreaConfiguration) {
+  openr::thrift::AreaConfig areaConfig;
+  *areaConfig.area_id_ref() = "myArea";
+  areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
+  areaConfig.exclude_interface_regexes_ref()->emplace_back(".*400.*");
+  areaConfig.exclude_interface_regexes_ref()->emplace_back(".*450.*");
+  areaConfig.redistribute_interface_regexes_ref()->emplace_back("loopback1");
+  areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
+  Config cfg{getBasicOpenrConfig("node-1", "domain", {areaConfig})};
+
+  auto const& areaConf = cfg.getAreas().at("myArea");
+  EXPECT_TRUE(areaConf.shouldPeerWithNeighbor("fsw001"));
+  EXPECT_FALSE(areaConf.shouldPeerWithNeighbor("rsw001"));
+  EXPECT_FALSE(areaConf.shouldPeerWithNeighbor(""));
+
+  EXPECT_TRUE(areaConf.shouldDiscoverOnIface("iface20"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface("iface400"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface("iface450"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface("loopback1"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface(""));
+
+  EXPECT_TRUE(areaConf.shouldRedistributeIface("loopback1"));
+  EXPECT_FALSE(areaConf.shouldRedistributeIface("loopback10"));
+  EXPECT_FALSE(areaConf.shouldRedistributeIface("iface450"));
+  EXPECT_FALSE(areaConf.shouldRedistributeIface(""));
 }
 
 TEST(ConfigTest, PopulateInternalDb) {
   // features
-
-  // enable_ordered_fib_programming = true with multiple areas
-  {
-    auto confInvalid = getBasicOpenrConfig();
-    confInvalid.areas_ref()->emplace_back(getAreaConfig("1"));
-    confInvalid.areas_ref()->emplace_back(getAreaConfig("2"));
-    confInvalid.enable_ordered_fib_programming_ref() = true;
-    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
-  }
 
   // KSP2_ED_ECMP with IP
   {
@@ -395,50 +432,12 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
 
-  // invalid include_interface_regexes
-  {
-    auto confInvalidLm = getBasicOpenrConfig();
-    *confInvalidLm.link_monitor_config_ref() = getTestLinkMonitorConfig();
-    confInvalidLm.link_monitor_config_ref()
-        ->include_interface_regexes_ref()
-        ->emplace_back("[0-9]++");
-    EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
-  }
-  //  invalid exclude_interface_regexes
-  {
-    auto confInvalidLm = getBasicOpenrConfig();
-    *confInvalidLm.link_monitor_config_ref() = getTestLinkMonitorConfig();
-    confInvalidLm.link_monitor_config_ref()
-        ->exclude_interface_regexes_ref()
-        ->emplace_back("boom\\");
-    EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
-  }
-  //  invalid redistribute_interface_regexes
-  {
-    auto confInvalidLm = getBasicOpenrConfig();
-    *confInvalidLm.link_monitor_config_ref() = getTestLinkMonitorConfig();
-    confInvalidLm.link_monitor_config_ref()
-        ->redistribute_interface_regexes_ref()
-        ->emplace_back("*");
-    EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
-  }
-
   // prefix allocation
 
   // enable_prefix_allocation = true, prefix_allocation_config = null
   {
     auto confInvalidPa = getBasicOpenrConfig();
     confInvalidPa.enable_prefix_allocation_ref() = true;
-    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
-  }
-  // enable_prefix_allocation = true with multiple areas
-  {
-    auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.areas_ref()->emplace_back(getAreaConfig("1"));
-    confInvalidPa.areas_ref()->emplace_back(getAreaConfig("2"));
-    confInvalidPa.enable_prefix_allocation_ref() = true;
-    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
-        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
     EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
   // prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and
@@ -556,9 +555,9 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_EQ("domain", config.getDomainName());
 
     // getAreaIds
-    auto areaC = config.getAreaConfiguration();
-    EXPECT_EQ(1, areaC.size());
-    EXPECT_EQ(1, areaC.count(thrift::KvStore_constants::kDefaultArea()));
+    EXPECT_EQ(1, config.getAreas().size());
+    EXPECT_EQ(
+        1, config.getAreas().count(thrift::KvStore_constants::kDefaultArea()));
 
     // enable_v4
     EXPECT_TRUE(config.isV4Enabled());
@@ -624,34 +623,22 @@ TEST(ConfigTest, LinkMonitorGetter) {
   auto tConfig = getBasicOpenrConfig();
   const auto& lmConf = getTestLinkMonitorConfig();
   *tConfig.link_monitor_config_ref() = lmConf;
+  // set empty area list to see doamin get converted to area
+  tConfig.set_areas({});
   auto config = Config(tConfig);
 
   // getLinkMonitorConfig
   EXPECT_EQ(lmConf, config.getLinkMonitorConfig());
 
-  // getIncludeItfRegexes
-  auto includeItfRegexes = config.getIncludeItfRegexes();
-  {
-    std::vector<int> matches;
-    EXPECT_TRUE(includeItfRegexes->Match("fboss10", &matches));
-    EXPECT_FALSE(includeItfRegexes->Match("eth0", &matches));
-  }
+  // check to see the link monitor options got converted to an area config with
+  // domainName
+  auto const& domainNameArea =
+      config.getAreas().at(thrift::KvStore_constants::kDefaultArea());
+  EXPECT_TRUE(domainNameArea.shouldDiscoverOnIface("fboss10"));
+  EXPECT_FALSE(domainNameArea.shouldDiscoverOnIface("eth0"));
 
-  // getExcludeItfRegexes
-  auto excludeItfRegexes = config.getExcludeItfRegexes();
-  {
-    std::vector<int> matches;
-    EXPECT_TRUE(excludeItfRegexes->Match("eth0", &matches));
-    EXPECT_FALSE(excludeItfRegexes->Match("fboss10", &matches));
-  }
-
-  // getRedistributeItfRegexes
-  auto redistributeItfRegexes = config.getRedistributeItfRegexes();
-  {
-    std::vector<int> matches;
-    EXPECT_TRUE(redistributeItfRegexes->Match("lo", &matches));
-    EXPECT_FALSE(redistributeItfRegexes->Match("eth0", &matches));
-  }
+  EXPECT_TRUE(domainNameArea.shouldRedistributeIface("lo"));
+  EXPECT_FALSE(domainNameArea.shouldRedistributeIface("eth0"));
 }
 
 TEST(ConfigTest, PrefixAllocatorGetter) {

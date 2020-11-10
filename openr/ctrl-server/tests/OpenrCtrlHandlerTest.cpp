@@ -10,6 +10,7 @@
 
 #include <fbzmq/zmq/Context.h>
 #include <folly/init/Init.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <openr/common/Constants.h>
@@ -35,8 +36,9 @@ class OpenrCtrlFixture : public ::testing::Test {
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : {"0", "plane", "pod"}) {
       thrift::AreaConfig area;
-      *area.area_id_ref() = id;
-      area.neighbor_regexes_ref()->emplace_back(".*");
+      area.set_area_id(id);
+      area.set_include_interface_regexes({"po.*"});
+      area.set_neighbor_regexes({".*"});
       areaConfig.emplace_back(std::move(area));
     }
     // create config
@@ -146,7 +148,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         persistentStore.get() /* configStore */,
         prefixManager.get() /* prefixManager */,
         nullptr /* spark */,
-        nullptr /* config */);
+        config);
     openrThriftServerWrapper_->run();
 
     // initialize openrCtrlClient talking to server
@@ -424,15 +426,17 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // area list get
   //
   {
-    thrift::AreasConfig area;
-    openrCtrlThriftClient_->sync_getAreasConfig(area);
-    EXPECT_EQ(3, (*area.areas_ref()).size());
-    EXPECT_EQ((*area.areas_ref()).count("plane"), 1);
-    EXPECT_EQ((*area.areas_ref()).count("pod"), 1);
-    EXPECT_EQ(
-        (*area.areas_ref()).count(thrift::KvStore_constants::kDefaultArea()),
-        1);
-    EXPECT_EQ((*area.areas_ref()).count("none"), 0);
+    thrift::OpenrConfig config;
+    openrCtrlThriftClient_->sync_getRunningConfigThrift(config);
+    std::unordered_set<std::string> areas;
+    for (auto const& area : config.get_areas()) {
+      areas.insert(area.get_area_id());
+    }
+    EXPECT_THAT(areas, testing::SizeIs(3));
+    EXPECT_THAT(
+        areas,
+        testing::UnorderedElementsAre(
+            "plane", "pod", thrift::KvStore_constants::kDefaultArea()));
   }
 
   // Key set/get

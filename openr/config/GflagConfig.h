@@ -49,19 +49,6 @@ class GflagConfig final {
     *config.node_name_ref() = FLAGS_node_name;
     *config.domain_ref() = FLAGS_domain;
 
-    std::vector<std::string> areas;
-    folly::split(",", FLAGS_areas, areas, true);
-    if (areas.empty()) {
-      areas.emplace_back(openr::thrift::KvStore_constants::kDefaultArea());
-    }
-    for (const auto& area : areas) {
-      config.areas_ref()->emplace_back(
-          apache::thrift::FRAGILE,
-          area,
-          std::vector<std::string>{".*"},
-          std::vector<std::string>{".*"});
-    }
-
     *config.listen_addr_ref() = FLAGS_listen_addr;
     *config.openr_ctrl_port_ref() = FLAGS_openr_ctrl_port;
 

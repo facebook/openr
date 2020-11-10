@@ -145,9 +145,8 @@ class Spark final : public OpenrEventBase {
   // check neighbor's hello packet; return true if packet is valid and
   // passed the following checks:
   // (1) neighbor is not self (packet not looped back)
-  // (2) performs various other validation e.g. domain, version etc.
+  // (2) performs various other validation e.g. version
   PacketValidationResult sanityCheckHelloPkt(
-      std::string const& domainName,
       std::string const& neighborName,
       std::string const& remoteIfName,
       uint32_t const& remoteVersion);

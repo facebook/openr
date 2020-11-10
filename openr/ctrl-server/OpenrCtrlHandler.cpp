@@ -531,12 +531,6 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
 //
 // KvStore APIs
 //
-folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>
-OpenrCtrlHandler::semifuture_getAreasConfig() {
-  CHECK(kvStore_);
-  return kvStore_->getAreasConfig();
-}
-
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {

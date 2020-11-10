@@ -196,13 +196,6 @@ struct SptInfos {
   4: PeerNames floodPeers
 }
 
-
-// List of 'areas'
-struct AreasConfig {
-  // list of areas configured
-  1: set<string>  (cpp.type = "std::unordered_set<std::string>") areas
-}
-
 //
 // KvStoreRequest specification
 //

@@ -170,7 +170,7 @@ KvStore::KvStore(
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
               false),
           config->getKvStoreConfig().is_flood_root_ref().value_or(false)),
-      areas_(config->getAreaIds()) {
+      areaIds_(config->getAreaIds()) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& counter : getGlobalCounters()) {
@@ -226,7 +226,7 @@ KvStore::KvStore(
   });
 
   // create KvStoreDb instances
-  for (auto const& area : areas_) {
+  for (auto const& area : areaIds_) {
     kvStoreDb_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(area),
@@ -539,10 +539,10 @@ KvStore::processRequestMsg(
       *thriftRequest.area_ref(); // NOTE: Non constness is intended
   // TODO: migration workaround => if me/peer does is using default area,
   // always honor my config, ignore peer's config.
-  if (areas_.size() == 1 and
-      (areas_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
+  if (areaIds_.size() == 1 and
+      (areaIds_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
        area == openr::thrift::KvStore_constants::kDefaultArea())) {
-    area = *areas_.begin();
+    area = *areaIds_.begin();
   }
 
   VLOG(2) << "Request received for area " << area;
@@ -752,18 +752,6 @@ KvStore::setKvStoreKeyVals(
       // ready to return
       p.setValue();
     }
-  });
-  return sf;
-}
-
-folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>
-KvStore::getAreasConfig() {
-  folly::Promise<std::unique_ptr<thrift::AreasConfig>> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this, p = std::move(p)]() mutable {
-    auto areasConfig = thrift::AreasConfig{};
-    *areasConfig.areas_ref() = areas_;
-    p.setValue(std::make_unique<thrift::AreasConfig>(std::move(areasConfig)));
   });
   return sf;
 }

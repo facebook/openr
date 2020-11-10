@@ -18,17 +18,49 @@ namespace openr {
 
 typedef std::pair<folly::CIDRNetwork, uint8_t> PrefixAllocationParams;
 
-struct AreaConfiguration {
-  AreaConfiguration(
-      const std::string& area,
-      std::shared_ptr<re2::RE2::Set> neighborRegexList,
-      std::shared_ptr<re2::RE2::Set> interfaceRegexList)
-      : area_(area),
-        neighborRegexList(std::move(neighborRegexList)),
-        interfaceRegexList(std::move(interfaceRegexList)) {}
-  const std::string area_;
-  std::shared_ptr<re2::RE2::Set> neighborRegexList{nullptr};
-  std::shared_ptr<re2::RE2::Set> interfaceRegexList{nullptr};
+class AreaConfiguration {
+ public:
+  explicit AreaConfiguration(thrift::AreaConfig const& area)
+      : areaId_(area.get_area_id()) {
+    neighborRegexSet_ = compileRegexSet(area.get_neighbor_regexes());
+    interfaceIncludeRegexSet_ =
+        compileRegexSet(area.get_include_interface_regexes());
+    interfaceExcludeRegexSet_ =
+        compileRegexSet(area.get_exclude_interface_regexes());
+    interfaceRedistRegexSet_ =
+        compileRegexSet(area.get_redistribute_interface_regexes());
+  }
+
+  std::string const&
+  getAreaId() const {
+    return areaId_;
+  }
+
+  bool
+  shouldDiscoverOnIface(std::string const& iface) const {
+    return !interfaceExcludeRegexSet_->Match(iface, nullptr) &&
+        interfaceIncludeRegexSet_->Match(iface, nullptr);
+  }
+
+  bool
+  shouldPeerWithNeighbor(std::string const& neighbor) const {
+    return neighborRegexSet_->Match(neighbor, nullptr);
+  }
+
+  bool
+  shouldRedistributeIface(std::string const& iface) const {
+    return interfaceRedistRegexSet_->Match(iface, nullptr);
+  }
+
+ private:
+  const std::string areaId_;
+
+  // given a list of strings we will convert is to a compiled RE2::Set
+  static std::shared_ptr<re2::RE2::Set> compileRegexSet(
+      std::vector<std::string> const& strings);
+
+  std::shared_ptr<re2::RE2::Set> neighborRegexSet_, interfaceIncludeRegexSet_,
+      interfaceExcludeRegexSet_, interfaceRedistRegexSet_;
 };
 
 class Config {
@@ -112,26 +144,23 @@ class Config {
   //
   // area
   //
-  const std::unordered_set<std::string>&
-  getAreaIds() const {
-    return areaIds_;
-  }
 
-  const std::vector<thrift::AreaConfig>&
-  getAreas() const {
-    return *config_.areas_ref();
-  }
-
-  void addAreaRegex(
-      const std::string& areaId,
-      const std::vector<std::string>& neighborRegexes,
-      const std::vector<std::string>& interfaceRegexes);
+  void addAreaConfig(thrift::AreaConfig const& areaConfig);
 
   void populateAreaConfig();
 
   const std::unordered_map<std::string, AreaConfiguration>&
-  getAreaConfiguration() const {
+  getAreas() const {
     return areaConfigs_;
+  }
+
+  std::unordered_set<std::string>
+  getAreaIds() const {
+    std::unordered_set<std::string> ids;
+    for (auto const& [id, _] : areaConfigs_) {
+      ids.insert(id);
+    }
+    return ids;
   }
 
   //
@@ -167,21 +196,6 @@ class Config {
   const thrift::LinkMonitorConfig&
   getLinkMonitorConfig() const {
     return *config_.link_monitor_config_ref();
-  }
-
-  std::shared_ptr<const re2::RE2::Set>
-  getIncludeItfRegexes() const {
-    return includeItfRegexes_;
-  }
-
-  std::shared_ptr<const re2::RE2::Set>
-  getExcludeItfRegexes() const {
-    return excludeItfRegexes_;
-  }
-
-  std::shared_ptr<const re2::RE2::Set>
-  getRedistributeItfRegexes() const {
-    return redistributeItfRegexes_;
   }
 
   //
@@ -248,13 +262,9 @@ class Config {
 
  private:
   void populateInternalDb();
+
   // thrift config
   thrift::OpenrConfig config_;
-  std::unordered_set<std::string> areaIds_;
-  // link monitor regexes
-  std::shared_ptr<re2::RE2::Set> includeItfRegexes_{nullptr};
-  std::shared_ptr<re2::RE2::Set> excludeItfRegexes_{nullptr};
-  std::shared_ptr<re2::RE2::Set> redistributeItfRegexes_{nullptr};
   // prefix allocation
   folly::Optional<PrefixAllocationParams> prefixAllocationParams_{folly::none};
 

@@ -21,9 +21,7 @@ getBasicOpenrConfig(
     bool dryrun = true) {
   openr::thrift::LinkMonitorConfig linkMonitorConfig;
   *linkMonitorConfig.include_interface_regexes_ref() =
-      std::vector<std::string>{"et[0-9].*"};
-  *linkMonitorConfig.exclude_interface_regexes_ref() =
-      std::vector<std::string>{"eth0"};
+      std::vector<std::string>{".*"};
   *linkMonitorConfig.redistribute_interface_regexes_ref() =
       std::vector<std::string>{"lo1"};
 
@@ -51,17 +49,7 @@ getBasicOpenrConfig(
 
   *config.enable_rib_policy_ref() = true;
 
-  if (areaCfg.empty()) {
-    openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = "0";
-    *areaConfig.neighbor_regexes_ref() = {".*"};
-    *areaConfig.interface_regexes_ref() = {".*"};
-    config.areas_ref()->emplace_back(areaConfig);
-  } else {
-    for (const auto& areaCfg : areaCfg) {
-      config.areas_ref()->emplace_back(areaCfg);
-    }
-  }
+  config.set_areas(areaCfg);
 
   return config;
 }
@@ -75,7 +63,7 @@ createAreaConfig(
   openr::thrift::AreaConfig areaConfig;
   *areaConfig.area_id_ref() = areaId;
   *areaConfig.neighbor_regexes_ref() = neighborRegexes;
-  *areaConfig.interface_regexes_ref() = interfaceRegexes;
+  *areaConfig.include_interface_regexes_ref() = interfaceRegexes;
   return areaConfig;
 }
 } // namespace

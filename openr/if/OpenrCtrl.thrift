@@ -341,11 +341,6 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   Decision.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error)
 
-  //
-  // Get area feature configuration
-  //
-  KvStore.AreasConfig getAreasConfig()
-    throws (1: OpenrError error)
 
   //
   // KvStore APIs

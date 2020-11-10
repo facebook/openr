@@ -41,9 +41,11 @@ struct LinkMonitorConfig {
   1: i32 linkflap_initial_backoff_ms = 60000 # 60s
   2: i32 linkflap_max_backoff_ms = 300000 # 5min
   3: bool use_rtt_metric = true
-  4: list<string> include_interface_regexes = []
-  5: list<string> exclude_interface_regexes = []
-  6: list<string> redistribute_interface_regexes = []
+
+  // below fields are deprecated, prefer area config
+  4: list<string> include_interface_regexes = [] (deprecated)
+  5: list<string> exclude_interface_regexes = [] (deprecated)
+  6: list<string> redistribute_interface_regexes = [] (deprecated)
 }
 
 struct StepDetectorConfig {
@@ -150,33 +152,70 @@ struct OriginatedPrefix {
 }
 
 /**
- * NOTE: interfaces and nodes can be explicit or unix regex
- * 1) Config specifying interfaces:
+ * The area config specifies the area name, interfaces to perform discovery
+ * on, neighbor names to peer with, and interface addresses to redistribute
+ *
+ * 1) Config specifying patricular interface patterns and all neighbors. Will
+ *    perform discovery on interfaces matching any include pattern and no
+ *    exclude pattern and peer with any node in this area:
+ *
  *  config = {
- *    area_id : "1",
- *    interface_regexes : ["ethernet1, port-channel.*"],
- *    neighbor_regexes : []
+ *    area_id : "MyNetworkArea",
+ *    neighbor_regexes : [".*"],
+ *    include_interface_regexes : ["ethernet1", "port-channel.*"],
+ *    exclude_interface_regexes : ["loopback1"],
+ *    redistribute_interface_regexes: ["loopback10"],
  *  }
  *
- * 2) Config specifying nodes:
+ *
+ * 2) Config specifying particular neighbor patterns and all interfaces. Will
+ *    perform discovery on all available interfaces and peer with nodes in
+ *    this area matching any neighbor pattern:
+ *
  *  config = {
- *    area_id : "2",
- *    interface_regexes : [],
- *    neighbor_regexes : ["node123", "fsw.*"]
+ *    area_id : "MyNetworkArea",
+ *    neighbor_regexes : ["node123", "fsw.*"],
+ *    include_interface_regexes : [".*"],
+ *    exclude_interface_regexes : [],
+ *    redistribute_interface_regexes: ["loopback10"],
  *  }
  *
- * 3) Config specifying both. Tie breaker will be implementated
- *    from config reader side:
+ *
+ * 3) Config specifying both. Will perform discovery on interfaces matching
+ *    any include pattern and no exclude pattern and peer with nodes in this
+ *    area matching any neighbor pattern:
+ *
  *  config = {
- *    area_id : "3",
- *    interface_regexes : [loopback0],
+ *    area_id : "MyNetworkArea",
  *    neighbor_regexes : ["node1.*"],
+ *    include_interface_regexes : ["loopback0"],
+ *    exclude_interface_regexes : ["loopback1"],
+ *    redistribute_interface_regexes: ["loopback10"],
  *  }
+ *
+ *
+ * 4) Config specifying neither. Will perform discovery on no interfaces and
+ *    peer with no nodes:
+ *
+ *  config = {
+ *    area_id : "MyNetworkArea",
+ *    neighbor_regexes : [],
+ *    include_interface_regexes : [],
+ *    exclude_interface_regexes : [],
+ *    redistribute_interface_regexes: ["loopback10"],
+ *  }
+ *
+ *
  */
 struct AreaConfig {
   1: string area_id
-  2: list<string> interface_regexes
   3: list<string> neighbor_regexes
+  4: list<string> include_interface_regexes
+  5: list<string> exclude_interface_regexes
+
+  // will advertise addresses on interfaces matching these patterns into
+  // this area
+  6: list<string> redistribute_interface_regexes
 }
 
 /**
@@ -237,7 +276,8 @@ struct BgpRouteTranslationConfig {
 
 struct OpenrConfig {
   1: string node_name
-  2: string domain
+  # domain is deprecated, prefer area config
+  2: string domain (deprecated)
   3: list<AreaConfig> areas = []
 
   # Thrift Server - Bind dddress and port
