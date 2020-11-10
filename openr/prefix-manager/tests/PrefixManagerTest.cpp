@@ -45,58 +45,16 @@ const auto prefixEntry4 =
 const auto prefixEntry5 = createPrefixEntry(addr5, thrift::PrefixType::DEFAULT);
 const auto prefixEntry6 =
     createPrefixEntry(addr6, thrift::PrefixType::PREFIX_ALLOCATOR);
-const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::DEFAULT);
+const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::BGP);
 const auto prefixEntry8 =
     createPrefixEntry(addr8, thrift::PrefixType::PREFIX_ALLOCATOR);
-const auto ephemeralPrefixEntry9 = createPrefixEntry(
-    addr9,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    true);
 
-const auto persistentPrefixEntry9 = createPrefixEntry(
-    addr9,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    false);
-const auto ephemeralPrefixEntry10 = createPrefixEntry(
-    addr10,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    true);
-const auto persistentPrefixEntry10 = createPrefixEntry(
-    addr10,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    false);
 } // namespace
 
 class PrefixManagerTestFixture : public testing::Test {
  public:
   void
   SetUp() override {
-    // spin up a config store
-    storageFilePath = folly::sformat(
-        "/tmp/pm_ut_config_store.bin.{}",
-        std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    configStore = std::make_unique<PersistentStore>(
-        storageFilePath, true /*dryrun*/, false /*periodicallySaveToDisk*/);
-
-    configStoreThread = std::make_unique<std::thread>([this]() noexcept {
-      LOG(INFO) << "ConfigStore thread starting";
-      configStore->run();
-      LOG(INFO) << "ConfigStore thread finishing";
-    });
-    configStore->waitUntilRunning();
-
     // create config
     config = std::make_shared<Config>(createConfig());
 
@@ -110,7 +68,6 @@ class PrefixManagerTestFixture : public testing::Test {
         prefixUpdatesQueue.getReader(),
         routeUpdatesQueue.getReader(),
         config,
-        configStore.get(),
         kvStoreWrapper->getKvStore(),
         true /* prefix-mananger perf measurement */,
         std::chrono::seconds{0});
@@ -140,14 +97,6 @@ class PrefixManagerTestFixture : public testing::Test {
     prefixManager->stop();
     prefixManagerThread->join();
     prefixManager.reset();
-
-    // Erase data from config store
-    configStore->erase("prefix-manager-config").get();
-
-    // stop config store
-    configStore->stop();
-    configStoreThread->join();
-    configStore.reset();
 
     // stop the kvStore
     kvStoreWrapper->stop();
@@ -199,10 +148,6 @@ class PrefixManagerTestFixture : public testing::Test {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
 
-  std::string storageFilePath;
-  std::unique_ptr<PersistentStore> configStore;
-  std::unique_ptr<std::thread> configStoreThread;
-
   // Create the serializer for write/read
   CompactSerializer serializer;
   std::shared_ptr<Config> config{nullptr};
@@ -235,8 +180,8 @@ TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   EXPECT_FALSE(
       prefixManager->withdrawPrefixes({prefixEntry1, prefixEntry2}).get());
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
-  EXPECT_TRUE(prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get());
-  EXPECT_TRUE(prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
 }
 
 TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
@@ -259,7 +204,6 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   // all the DEFAULT type should be gone
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry3}).get());
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry5}).get());
-  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry7}).get());
 
   // The PREFIX_ALLOCATOR type should still be there to be withdrawed
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry2}).get());
@@ -369,7 +313,6 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         prefixManager->advertisePrefixes({prefixEntry6}).get();
         prefixManager->advertisePrefixes({prefixEntry7}).get();
         prefixManager->advertisePrefixes({prefixEntry8}).get();
-        prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
       });
 
   evl.scheduleTimeout(
@@ -403,7 +346,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value_ref().value(), serializer);
         auto prefixDb = getPrefixDb("prefix:node-1");
-        EXPECT_EQ(prefixDb.size(), 8);
+        EXPECT_EQ(prefixDb.size(), 7);
         ASSERT_TRUE(db.perfEvents_ref().has_value());
         ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
         {
@@ -843,7 +786,6 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       prefixUpdatesQueue.getReader(),
       routeUpdatesQueue.getReader(),
       config,
-      configStore.get(),
       kvStoreWrapper->getKvStore(),
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0));
@@ -930,44 +872,6 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   prefixManagerThread2->join();
 }
 
-TEST_F(PrefixManagerTestFixture, CheckReload) {
-  prefixManager->advertisePrefixes({prefixEntry1}).get();
-  prefixManager->advertisePrefixes({prefixEntry2}).get();
-  prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
-
-  auto tConfig = getBasicOpenrConfig("node-2");
-  auto config = std::make_shared<Config>(tConfig);
-  // spin up a new PrefixManager add verify that it loads the config
-  auto prefixManager2 = std::make_unique<PrefixManager>(
-      prefixUpdatesQueue.getReader(),
-      routeUpdatesQueue.getReader(),
-      config,
-      configStore.get(),
-      kvStoreWrapper->getKvStore(),
-      false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0));
-
-  auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
-    LOG(INFO) << "PrefixManager thread starting";
-    prefixManager2->run();
-    LOG(INFO) << "PrefixManager thread finishing";
-  });
-  prefixManager2->waitUntilRunning();
-
-  // verify that the new manager has only persistent prefixes.
-  // Ephemeral prefixes will not be reloaded.
-  EXPECT_TRUE(prefixManager2->withdrawPrefixes({prefixEntry1}).get());
-  EXPECT_TRUE(prefixManager2->withdrawPrefixes({prefixEntry2}).get());
-  EXPECT_FALSE(prefixManager2->withdrawPrefixes({ephemeralPrefixEntry9}).get());
-
-  // cleanup
-  prefixUpdatesQueue.close();
-  routeUpdatesQueue.close();
-  kvStoreWrapper->closeQueue();
-  prefixManager2->stop();
-  prefixManagerThread2->join();
-}
-
 TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   prefixManager->advertisePrefixes({prefixEntry1});
   prefixManager->advertisePrefixes({prefixEntry2});
@@ -992,7 +896,7 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
       prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
   ASSERT_TRUE(resp2);
   auto& prefixes2 = *resp2;
-  EXPECT_EQ(4, prefixes2.size());
+  EXPECT_EQ(3, prefixes2.size());
   EXPECT_NE(
       std::find(prefixes2.begin(), prefixes2.end(), prefixEntry3),
       prefixes2.end());
@@ -1008,97 +912,6 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
       prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
   EXPECT_TRUE(resp4);
   EXPECT_EQ(0, resp4->size());
-}
-
-// Verify that persist store is updated only when
-// non-ephemeral types are effected
-TEST_F(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
-  ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
-  // Verify that any action on persistent entries leads to update of store
-  prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2, prefixEntry3})
-      .get();
-  // 3 prefixes leads to 1 write
-  ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixes({prefixEntry1}).get();
-  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager
-      ->syncPrefixesByType(
-          thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry2, prefixEntry4})
-      .get();
-  ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixesByType(thrift::PrefixType::PREFIX_ALLOCATOR)
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  // Verify that any actions on ephemeral entries does not lead to update of
-  // store
-  prefixManager
-      ->advertisePrefixes({ephemeralPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager
-      ->syncPrefixesByType(thrift::PrefixType::BGP, {ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixesByType(thrift::PrefixType::BGP).get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-}
-
-// Verify that persist store is update properly when both persistent
-// and ephemeral entries are mixed for same prefix type
-TEST_F(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
-  ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
-  // Verify that any action on persistent entries leads to update of store
-  prefixManager
-      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
-
-  // Change persistance characterstic. Expect disk update
-  prefixManager
-      ->syncPrefixesByType(
-          thrift::PrefixType::BGP,
-          {ephemeralPrefixEntry9, persistentPrefixEntry10})
-      .get();
-  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
-
-  // Only ephemeral entry withdrawn, so no update to disk
-  prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get();
-  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
-
-  // Persistent entry withdrawn, expect update to disk
-  prefixManager->withdrawPrefixes({persistentPrefixEntry10}).get();
-  ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
-
-  // Restore the state to mix of ephemeral and persistent of a type
-  prefixManager
-      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  // Verify that withdraw by type, updates disk
-  prefixManager->withdrawPrefixesByType(thrift::PrefixType::BGP).get();
-  ASSERT_EQ(5, configStore->getNumOfDbWritesToDisk());
-
-  // Restore the state to mix of ephemeral and persistent of a type
-  prefixManager
-      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(6, configStore->getNumOfDbWritesToDisk());
-
-  // Verify that entry in DB being deleted is persistent so file is update
-  prefixManager
-      ->syncPrefixesByType(thrift::PrefixType::BGP, {ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(7, configStore->getNumOfDbWritesToDisk());
 }
 
 TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
@@ -1117,7 +930,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     // Send update request in queue
     thrift::PrefixUpdateRequest request;
     request.cmd_ref() = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-    *request.prefixes_ref() = {prefixEntry1, persistentPrefixEntry9};
+    *request.prefixes_ref() = {prefixEntry1, prefixEntry7};
     prefixUpdatesQueue.push(std::move(request));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
@@ -1126,8 +939,8 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
     EXPECT_EQ(2, prefixes->size());
-    EXPECT_THAT(*prefixes, testing::Contains(prefixEntry1));
-    EXPECT_THAT(*prefixes, testing::Contains(persistentPrefixEntry9));
+    EXPECT_THAT(
+        *prefixes, testing::UnorderedElementsAre(prefixEntry1, prefixEntry7));
   }
 
   // WITHDRAW_PREFIXES_BY_TYPE

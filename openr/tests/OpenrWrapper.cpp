@@ -196,7 +196,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       prefixUpdatesQueue_.getReader(),
       routeUpdatesQueue_.getReader(),
       config_,
-      configStore_.get(),
       kvStore_.get(),
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0));

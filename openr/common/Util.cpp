@@ -792,7 +792,6 @@ createPrefixEntry(
     const std::string& data,
     thrift::PrefixForwardingType forwardingType,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
-    std::optional<bool> ephemeral,
     std::optional<thrift::MetricVector> mv,
     std::optional<int64_t> minNexthop) {
   thrift::PrefixEntry prefixEntry;
@@ -803,7 +802,6 @@ createPrefixEntry(
   }
   prefixEntry.forwardingType_ref() = forwardingType;
   prefixEntry.forwardingAlgorithm_ref() = forwardingAlgorithm;
-  prefixEntry.ephemeral_ref().from_optional(ephemeral);
   prefixEntry.mv_ref().from_optional(mv);
   prefixEntry.minNexthop_ref().from_optional(minNexthop);
   return prefixEntry;

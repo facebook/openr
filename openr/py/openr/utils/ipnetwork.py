@@ -195,16 +195,6 @@ def sprint_prefix_forwarding_algorithm(
     )
 
 
-def sprint_prefix_is_ephemeral(prefix_entry: lsdb_types.PrefixEntry) -> str:
-    """
-    :param prefix_entry: lsdb_types.PrefixEntry
-    """
-
-    return (
-        str(prefix_entry.ephemeral) if prefix_entry.ephemeral is not None else "False"
-    )
-
-
 def ip_version(addr):
     """return ip addr version"""
 

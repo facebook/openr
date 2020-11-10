@@ -37,7 +37,6 @@ class PrefixManager final : public OpenrEventBase {
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
       messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
       std::shared_ptr<const Config> config,
-      PersistentStore* configStore,
       KvStore* kvStore,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
@@ -158,9 +157,6 @@ class PrefixManager final : public OpenrEventBase {
   std::unordered_set<std::string> updateKvStorePrefixEntry(
       PrefixEntry const& entry);
 
-  // Update persistent store with non-ephemeral prefix entries
-  void persistPrefixDb();
-
   // process decision route update, inject routes to different areas
   void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
 
@@ -178,14 +174,8 @@ class PrefixManager final : public OpenrEventBase {
   // this node name
   const std::string nodeId_;
 
-  // module ptr to interact with ConfigStore
-  PersistentStore* configStore_{nullptr};
-
   // module ptr to interact with KvStore
   KvStore* kvStore_{nullptr};
-
-  // keep track of prefixDB on disk
-  thrift::PrefixDatabase diskState_;
 
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};

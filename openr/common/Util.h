@@ -389,7 +389,6 @@ thrift::PrefixEntry createPrefixEntry(
         thrift::PrefixForwardingType::IP,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm =
         thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    std::optional<bool> ephemeral = std::nullopt,
     std::optional<thrift::MetricVector> mv = std::nullopt,
     std::optional<int64_t> minNexthop = std::nullopt);
 

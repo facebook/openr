@@ -220,7 +220,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         prefixUpdatesQueue.getReader(),
         routeUpdatesQueue.getReader(),
         config,
-        configStore.get(),
         kvStoreWrapper->getKvStore(),
         false,
         std::chrono::seconds(0));

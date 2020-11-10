@@ -102,7 +102,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         prefixUpdatesQueue_.getReader(),
         routeUpdatesQueue_.getReader(),
         config,
-        persistentStore.get(),
         kvStoreWrapper_->getKvStore(),
         false,
         std::chrono::seconds(0));

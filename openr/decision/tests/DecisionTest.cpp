@@ -759,7 +759,6 @@ TEST(BGPRedistribution, BasicOperation) {
       data1,
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      false,
       mv1,
       std::nullopt));
 
@@ -787,7 +786,6 @@ TEST(BGPRedistribution, BasicOperation) {
       data2,
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      false,
       mv2,
       std::nullopt));
   EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
@@ -939,7 +937,6 @@ TEST(BGPRedistribution, IgpMetric) {
       data1,
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      false,
       metricVector);
   // Make tie breaking metric different
   *metricVector.metrics_ref()->at(4).metric_ref() = {100}; // Make it different
@@ -949,7 +946,6 @@ TEST(BGPRedistribution, IgpMetric) {
       data1,
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      false,
       metricVector);
 
   //
@@ -3572,7 +3568,6 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
       "",
       thrift::PrefixForwardingType::SR_MPLS,
       thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP,
-      std::nullopt,
       std::nullopt,
       std::make_optional<int64_t>(4));
 
@@ -6273,7 +6268,6 @@ TEST_F(DecisionTestFixture, Counters) {
       "data=10.2.0.0/16",
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      std::nullopt,
       thrift::MetricVector{} /* empty metric vector */);
   auto bgpPrefixEntry2 = createPrefixEntry( // Missing metric vector
       toIpPrefix("10.3.0.0/16"),
@@ -6281,7 +6275,6 @@ TEST_F(DecisionTestFixture, Counters) {
       "data=10.3.0.0/16",
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      std::nullopt,
       std::nullopt /* missing metric vector */);
   auto bgpPrefixEntry3 = createPrefixEntry( // Conflicting forwarding type
       toIpPrefix("10.3.0.0/16"),
@@ -6289,7 +6282,6 @@ TEST_F(DecisionTestFixture, Counters) {
       "data=10.3.0.0/16",
       thrift::PrefixForwardingType::SR_MPLS,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      std::nullopt,
       thrift::MetricVector{} /* empty metric vector */);
   const auto prefixDb1 = createPrefixDb(
       "1", {createPrefixEntry(addr1), createPrefixEntry(addr1V4)});
@@ -6450,7 +6442,6 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
         "data=10.1.0.0/16",
         thrift::PrefixForwardingType::IP,
         thrift::PrefixForwardingAlgorithm::SP_ECMP,
-        std::nullopt,
         thrift::MetricVector{} /* empty metric vector */);
     auto ribPrefixEntry = createPrefixEntry(
         toIpPrefix("10.1.0.0/16"),

@@ -111,7 +111,6 @@ class PrefixAllocatorFixture : public ::testing::Test {
         prefixUpdatesQueue_.getReader(),
         routeUpdatesQueue_.getReader(),
         config_,
-        configStore_.get(),
         kvStoreWrapper_->getKvStore(),
         false,
         std::chrono::seconds(0));
@@ -430,7 +429,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           prefixQueues.at(i).getReader(),
           routeQueues.at(i).getReader(),
           currConfig,
-          tempConfigStore.get(),
           store->getKvStore(),
           false,
           std::chrono::seconds(0));

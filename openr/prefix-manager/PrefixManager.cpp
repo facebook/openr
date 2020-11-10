@@ -23,8 +23,11 @@ namespace fb303 = facebook::fb303;
 namespace openr {
 
 namespace {
-// key for the persist config on disk
-const std::string kPfxMgrConfigKey{"prefix-manager-config"};
+// various error messages
+const std::string kErrorNoChanges{"No changes in prefixes to be advertised"};
+const std::string kErrorNoPrefixToRemove{"No prefix to remove"};
+const std::string kErrorNoPrefixesOfType{"No prefixes of type"};
+const std::string kErrorUnknownCommand{"Unknown command"};
 
 std::string
 getPrefixTypeName(thrift::PrefixType const& type) {
@@ -37,48 +40,21 @@ PrefixManager::PrefixManager(
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
     messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
-    PersistentStore* configStore,
     KvStore* kvStore,
     bool enablePerfMeasurement,
     const std::chrono::seconds& initialDumpTime)
     : nodeId_(config->getNodeName()),
-      configStore_{configStore},
       kvStore_(kvStore),
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       allAreas_{config->getAreaIds()} {
-  CHECK(configStore_);
   CHECK(kvStore_);
   CHECK(config);
 
   // Create KvStore client
   kvStoreClient_ =
       std::make_unique<KvStoreClientInternal>(this, nodeId_, kvStore_);
-
-  // pick up prefixes from disk
-  auto maybePrefixDb =
-      configStore_->loadThriftObj<thrift::PrefixDatabase>(kPfxMgrConfigKey)
-          .get();
-  if (maybePrefixDb.hasValue()) {
-    diskState_ = std::move(maybePrefixDb.value());
-    LOG(INFO) << folly::sformat(
-        "Successfully loaded {} prefixes from disk.",
-        diskState_.prefixEntries_ref()->size());
-
-    for (const auto& entry : *diskState_.prefixEntries_ref()) {
-      LOG(INFO) << folly::sformat(
-          "  > {}, type {}",
-          toString(*entry.prefix_ref()),
-          getPrefixTypeName(*entry.type_ref()));
-      // TODO: change persist store to use C++ struct prefixMap_
-      prefixMap_[*entry.prefix_ref()][*entry.type_ref()] =
-          PrefixEntry(entry, allAreas_);
-      addPerfEventIfNotExist(
-          addingEvents_[*entry.type_ref()][*entry.prefix_ref()],
-          "LOADED_FROM_DISK");
-    }
-  }
 
   // Load openrConfig for local-originated routes
   if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
@@ -174,7 +150,7 @@ PrefixManager::PrefixManager(
   std::vector<std::string> keyPrefixList = {
       Constants::kPrefixDbMarker.toString() + nodeId_};
   kvStoreClient_->subscribeKeyFilter(
-      KvStoreFilters(keyPrefixList, {} /* originatorIds*/),
+      KvStoreFilters(keyPrefixList, {} /* originatorIds */),
       [this](
           const std::string& key, std::optional<thrift::Value> value) noexcept {
         // we're not currently persisting this key, it may be that we no longer
@@ -274,26 +250,6 @@ PrefixManager::buildOriginatedPrefixDb(
             prefix,
             std::move(unicastEntry),
             std::unordered_set<folly::CIDRNetwork>{}));
-  }
-}
-
-void
-PrefixManager::persistPrefixDb() {
-  // prefixDb persistent entries have changed,
-  // save the newest persistent entries to disk.
-  thrift::PrefixDatabase persistentPrefixDb;
-  *persistentPrefixDb.thisNodeName_ref() = nodeId_;
-  for (const auto& kv : prefixMap_) {
-    for (const auto& [_, entry] : kv.second) {
-      if (not entry.tPrefixEntry.ephemeral_ref().value_or(false)) {
-        persistentPrefixDb.prefixEntries_ref()->emplace_back(
-            entry.tPrefixEntry);
-      }
-    }
-  }
-  if (diskState_ != persistentPrefixDb) {
-    configStore_->storeThriftObj(kPfxMgrConfigKey, persistentPrefixDb).get();
-    diskState_ = std::move(persistentPrefixDb);
   }
 }
 
@@ -627,7 +583,6 @@ PrefixManager::advertisePrefixesImpl(
   }
 
   if (updated) {
-    persistPrefixDb();
     syncKvStoreThrottled_->operator()();
   }
 
@@ -667,7 +622,6 @@ PrefixManager::withdrawPrefixesImpl(
   }
 
   if (!prefixes.empty()) {
-    persistPrefixDb();
     syncKvStoreThrottled_->operator()();
   }
 

@@ -420,7 +420,6 @@ main(int argc, char** argv) {
           prefixUpdateRequestQueue.getReader(),
           routeUpdatesQueue.getReader(),
           config,
-          configStore,
           kvStore,
           FLAGS_enable_perf_measurement,
           initialPrefixHoldTime));

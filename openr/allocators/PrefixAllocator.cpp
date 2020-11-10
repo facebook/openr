@@ -632,7 +632,6 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
   prefixEntry.forwardingType_ref() = prefixForwardingType_;
   prefixEntry.forwardingAlgorithm_ref() = prefixForwardingAlgorithm_;
-  prefixEntry.ephemeral_ref().reset();
   prefixEntry.tags_ref()->emplace("AUTO-ALLOCATED");
   // Metrics
   {

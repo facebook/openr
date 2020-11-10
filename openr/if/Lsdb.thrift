@@ -291,15 +291,6 @@ struct PrefixEntry {
   7: OpenrConfig.PrefixForwardingAlgorithm forwardingAlgorithm =
     OpenrConfig.PrefixForwardingAlgorithm.SP_ECMP
 
-  // TODO has: This field is deprecated, it is only meaningful for the local
-  // node advertising this prefix and no use for modules that receives this
-  // information.
-  // Indicates if the prefix entry is ephemeral or persistent.
-  // If optional value is not present, then entry is persistent.
-  // Ephemeral entries are not saved into persistent store(file) and will be
-  // lost with restart, if not refreshed before cold start time.
-  5: optional bool ephemeral (deprecated)
-
   // TODO has: This is deprecated. Instead use `metrics` field, it is compact
   // and concise.
   // Metric vector for externally injected routes into openr
