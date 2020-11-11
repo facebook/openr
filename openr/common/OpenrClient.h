@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/io/SocketOptionMap.h>
+#include <folly/io/async/AsyncSSLSocket.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
@@ -30,6 +31,20 @@ static void
 setCompressionTransform(apache::thrift::RocketClientChannel* /*channel*/) {
   CHECK(false) << "Transform is not supported on rocket client channel";
 }
+
+/*
+ * Build OptionMap for client socket connection
+ */
+static folly::SocketOptionMap
+getSocketOptionMap(std::optional<int> maybeIpTos) {
+  folly::SocketOptionMap optionMap = folly::emptySocketOptionMap;
+  if (maybeIpTos.has_value()) {
+    folly::SocketOptionKey v6Opts = {IPPROTO_IPV6, IPV6_TCLASS};
+    optionMap.emplace(v6Opts, maybeIpTos.value());
+  }
+  return optionMap;
+}
+
 } // namespace detail
 
 /*
@@ -69,16 +84,13 @@ getOpenrCtrlPlainTextClient(
     auto transport = folly::AsyncSocket::UniquePtr(
         new folly::AsyncSocket(&evb), folly::DelayedDestruction::Destructor());
 
-    // Build OptionMap for client socket connection
-    folly::SocketOptionMap optionMap = folly::emptySocketOptionMap;
-    if (maybeIpTos.has_value()) {
-      folly::SocketOptionKey v6Opts = {IPPROTO_IPV6, IPV6_TCLASS};
-      optionMap.emplace(v6Opts, maybeIpTos.value());
-    }
-
     // Establish connection
     transport->connect(
-        nullptr, sa, connectTimeout.count(), optionMap, bindAddr);
+        nullptr,
+        sa,
+        connectTimeout.count(),
+        detail::getSocketOptionMap(maybeIpTos),
+        bindAddr);
 
     // Create channel and set timeout
     auto channel = ClientChannel::newChannel(std::move(transport));
@@ -98,11 +110,57 @@ getOpenrCtrlPlainTextClient(
   return client;
 }
 
-// TODO: Add support for creating TLSSocket
-//
-// std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
-// getOpenrCtrlSecureClient(...) {
-//   ...
-// }
+/*
+ * Create secured client for OpenrCtrlCpp service over AsyncSSLSocket.
+ */
+template <typename ClientChannel = apache::thrift::HeaderClientChannel>
+static std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
+getOpenrCtrlSecureClient(
+    folly::EventBase& evb,
+    const std::shared_ptr<folly::SSLContext> sslContext,
+    const folly::IPAddress& addr,
+    int32_t port = Constants::kOpenrCtrlPort,
+    std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
+    std::chrono::milliseconds processingTimeout =
+        Constants::kServiceProcTimeout,
+    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
+    std::optional<int> maybeIpTos = std::nullopt) {
+  // NOTE: It is possible to have caching for socket. We're not doing it as
+  // we expect clients to be persistent/sticky.
+  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+
+  evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
+    // Create a new UNCONNECTED AsyncSocket
+    const folly::SocketAddress sa(addr, port);
+
+    auto transport = folly::AsyncSocket::UniquePtr(
+        new folly::AsyncSSLSocket(std::move(sslContext), &evb),
+        folly::DelayedDestruction::Destructor());
+
+    // Establish connection
+    transport->connect(
+        nullptr,
+        sa,
+        connectTimeout.count(),
+        detail::getSocketOptionMap(maybeIpTos),
+        bindAddr);
+
+    // Create channel and set timeout
+    auto channel = ClientChannel::newChannel(std::move(transport));
+    channel->setTimeout(processingTimeout.count());
+
+    // Enable compression for efficient transport when available. This will
+    // incur CPU cost but it is insignificant for usual queries.
+    if (typeid(ClientChannel) == typeid(apache::thrift::HeaderClientChannel)) {
+      detail::setCompressionTransform(channel.get());
+    }
+
+    // Create client
+    client =
+        std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
+  });
+
+  return client;
+}
 
 } // namespace openr
