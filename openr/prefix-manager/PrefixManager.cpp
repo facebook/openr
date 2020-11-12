@@ -28,12 +28,6 @@ const std::string kErrorNoChanges{"No changes in prefixes to be advertised"};
 const std::string kErrorNoPrefixToRemove{"No prefix to remove"};
 const std::string kErrorNoPrefixesOfType{"No prefixes of type"};
 const std::string kErrorUnknownCommand{"Unknown command"};
-
-std::string
-getPrefixTypeName(thrift::PrefixType const& type) {
-  return apache::thrift::TEnumTraits<thrift::PrefixType>::findName(type);
-}
-
 } // namespace
 
 PrefixManager::PrefixManager(
@@ -79,13 +73,15 @@ PrefixManager::PrefixManager(
       [q = std::move(prefixUpdateRequestQueue), this]() mutable noexcept {
         while (true) {
           auto maybeUpdate = q.get(); // perform read
-          VLOG(1) << "Received prefix update request";
           if (maybeUpdate.hasError()) {
             LOG(INFO) << "Terminating prefix update request processing fiber";
             break;
           }
 
           auto& update = maybeUpdate.value();
+          VLOG(2) << "Received request from client "
+                  << toString(*update.type_ref());
+
           // if no specified dstination areas, apply to all areas
           std::unordered_set<std::string> dstAreas;
           if (update.dstAreas_ref()->empty()) {
@@ -125,13 +121,13 @@ PrefixManager::PrefixManager(
       [q = std::move(decisionRouteUpdatesQueue), this]() mutable noexcept {
         while (true) {
           auto maybeThriftObj = q.get(); // perform read
-          VLOG(1) << "Received route update from Decision";
           if (maybeThriftObj.hasError()) {
             LOG(INFO) << "Terminating route delta processing fiber";
             break;
           }
 
           try {
+            VLOG(2) << "Received RIB updates from Decision";
             processDecisionRouteUpdates(std::move(maybeThriftObj).value());
           } catch (const std::exception&) {
 #if FOLLY_USE_SYMBOLIZER
@@ -161,7 +157,7 @@ PrefixManager::PrefixManager(
                   value.value().value_ref().value(), serializer_);
           if (not(*prefixDb.deletePrefix_ref()) &&
               nodeId_ == *prefixDb.thisNodeName_ref()) {
-            LOG(INFO) << "Prepare to clear key: " << key;
+            VLOG(2) << "Learning previously announce route, key: " << key;
             keysToClear_.emplace(key);
             syncKvStoreThrottled_->operator()();
           }
@@ -173,8 +169,8 @@ PrefixManager::PrefixManager(
     auto result =
         kvStoreClient_->dumpAllWithPrefix(keyPrefixList.front(), area);
     if (!result.has_value()) {
-      LOG(ERROR) << "Failed dumping keys with prefix: " << keyPrefixList.front()
-                 << " from area: " << area;
+      LOG(ERROR) << "Failed dumping keys with prefix " << keyPrefixList.front()
+                 << " from area " << area;
       continue;
     }
     for (auto const& kv : result.value()) {
@@ -191,7 +187,6 @@ PrefixManager::~PrefixManager() {
   // - Otherwise, will wait the EventBase to run;
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // destory timers
-    LOG(INFO) << "Destroyed timers inside PrefixManager";
     initialSyncKvStoreTimer_.reset();
     syncKvStoreThrottled_.reset();
   });
@@ -281,10 +276,12 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
 
     bool changed = kvStoreClient_->persistKey(
         prefixKey, prefixDbStr, ttlKeyInKvStore_, toArea);
-
-    LOG_IF(INFO, changed) << "Advertising key: " << prefixKey
-                          << " toArea KvStore area: " << toArea << " type: "
-                          << getPrefixTypeName(*prefixEntry.type_ref());
+    fb303::fbData->addStatValue(
+        "prefix_manager.route_advertisements", 1, fb303::SUM);
+    VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
+                        << "Area: " << toArea << ", "
+                        << "Type: " << toString(*prefixEntry.type_ref()) << ", "
+                        << toString(prefixEntry, VLOG_IS_ON(2));
     prefixKeys.emplace(std::move(prefixKey));
   }
   return prefixKeys;
@@ -295,7 +292,8 @@ PrefixManager::syncKvStore() {
   std::vector<std::pair<std::string, std::string>> keyVals;
   std::unordered_set<std::string> nowAdvertisingKeys;
 
-  LOG(INFO) << "Syncing " << prefixMap_.size() << " prefixes in KvStore";
+  LOG(INFO) << "Syncing " << prefixMap_.size()
+            << " route advertisements in KvStore";
 
   for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
     CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
@@ -320,13 +318,20 @@ PrefixManager::syncKvStore() {
   for (auto const& key : keysToClear_) {
     auto prefixKey = PrefixKey::fromStr(key);
     if (prefixKey.hasValue()) {
-      // needed for backward compatibility
+      // Needed for backward compatibility
       thrift::PrefixEntry entry;
       entry.prefix_ref() = prefixKey.value().getIpPrefix();
       *deletedPrefixDb.prefixEntries_ref() = {entry};
+      VLOG(1) << "[ROUTE WITHDRAW] "
+              << "Area: " << prefixKey->getPrefixArea() << ", "
+              << toString(*entry.prefix_ref());
+      fb303::fbData->addStatValue(
+          "prefix_manager.route_withdraws", 1, fb303::SUM);
+    } else {
+      LOG(ERROR) << "[ROUTE WITHDRAW] Removing old key " << key
+                 << " from KvStore";
     }
-    LOG(INFO) << "Withdrawing key: " << key
-              << " from KvStore area: " << prefixKey->getPrefixArea();
+
     // one last key set with empty DB and deletePrefix set signifies withdraw
     // then the key should ttl out
     kvStoreClient_->clearKey(
@@ -576,10 +581,6 @@ PrefixManager::advertisePrefixesImpl(
       addPerfEventIfNotExist(addingEvents_[type][prefix], "UPDATE_PREFIX");
     }
     updated = true;
-
-    SYSLOG(INFO) << "Advertising prefix: " << toString(prefix) << " to area: ["
-                 << folly::join(",", entry.dstAreas)
-                 << "], client: " << getPrefixTypeName(type);
   }
 
   if (updated) {
@@ -600,8 +601,9 @@ PrefixManager::withdrawPrefixesImpl(
     }
     auto it = typeIt->second.find(*prefix.type_ref());
     if (it == typeIt->second.end()) {
-      LOG(ERROR) << "Cannot withdraw prefix: " << toString(*prefix.prefix_ref())
-                 << ", client: " << getPrefixTypeName(*prefix.type_ref());
+      LOG(ERROR) << "Cannot withdraw non-existent prefix "
+                 << toString(*prefix.prefix_ref())
+                 << ", client: " << toString(*prefix.type_ref());
       return false;
     }
   }
@@ -609,10 +611,6 @@ PrefixManager::withdrawPrefixesImpl(
   for (const auto& prefix : prefixes) {
     prefixMap_.at(*prefix.prefix_ref()).erase(*prefix.type_ref());
     addingEvents_.at(*prefix.type_ref()).erase(*prefix.prefix_ref());
-
-    SYSLOG(INFO) << "Withdrawing prefix: " << toString(*prefix.prefix_ref())
-                 << ", client: " << getPrefixTypeName(*prefix.type_ref());
-
     if (prefixMap_.at(*prefix.prefix_ref()).empty()) {
       prefixMap_.erase(*prefix.prefix_ref());
     }
@@ -633,7 +631,7 @@ PrefixManager::syncPrefixesByTypeImpl(
     thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& prefixEntries,
     const std::unordered_set<std::string>& dstAreas) {
-  LOG(INFO) << "Syncing prefixes of type: " << getPrefixTypeName(type);
+  LOG(INFO) << "Syncing prefixes of type " << toString(type);
   // building these lists so we can call add and remove and get detailed logging
   std::vector<thrift::PrefixEntry> toAddOrUpdate, toRemove;
   std::unordered_set<thrift::IpPrefix> toRemoveSet;
@@ -687,10 +685,10 @@ PrefixManager::updateOriginatedPrefixOnAdvertise(
       continue;
     }
 
-    LOG(INFO) << "[Route Origination] Adding supporting route "
-              << folly::IPAddress::networkToString(prefix)
-              << " for originated route "
-              << folly::IPAddress::networkToString(network);
+    VLOG(1) << "[ROUTE ORIGINATION] Adding supporting route "
+            << folly::IPAddress::networkToString(prefix)
+            << " for originated route "
+            << folly::IPAddress::networkToString(network);
 
     // reverse mapping: RIB prefixEntry -> OriginatedPrefixes
     ribPrefixIt->second.emplace_back(network);
@@ -715,10 +713,10 @@ PrefixManager::updateOriginatedPrefixOnWithdraw(
     CHECK(originatedPrefixIt != originatedPrefixDb_.end());
     originatedPrefixIt->second.supportingRoutes.erase(prefix);
 
-    LOG(INFO) << "[Route Origination] Removing supporting route "
-              << folly::IPAddress::networkToString(prefix)
-              << " for originated route "
-              << folly::IPAddress::networkToString(network);
+    VLOG(1) << "[ROUTE ORIGINATION] Removing supporting route "
+            << folly::IPAddress::networkToString(prefix)
+            << " for originated route "
+            << folly::IPAddress::networkToString(network);
   }
 
   // clean local caching

@@ -66,6 +66,24 @@
 namespace openr {
 
 /**
+ * Utility functions to convert thrift Enum value to string
+ */
+std::string toString(thrift::PrefixForwardingType const& value);
+std::string toString(thrift::PrefixForwardingAlgorithm const& value);
+std::string toString(thrift::PrefixType const& value);
+
+/**
+ * thrift::PrefixMetrics to string
+ */
+std::string toString(thrift::PrefixMetrics const& metrics);
+
+/**
+ * thrift::PrefixEntry to string. If detailed is set to true then output will
+ * include `tags` and `area-stack`
+ */
+std::string toString(thrift::PrefixEntry const& entry, bool detailed = false);
+
+/**
  * Setup thrift server for TLS
  */
 void setupThriftServerTls(

@@ -34,11 +34,7 @@ using namespace std;
 namespace fb303 = facebook::fb303;
 
 using apache::thrift::can_throw;
-using apache::thrift::FRAGILE;
-using apache::thrift::TEnumTraits;
-
 using Metric = openr::LinkStateMetric;
-
 using SpfResult = openr::LinkState::SpfResult;
 
 namespace openr {

@@ -26,6 +26,54 @@ namespace fs = std::experimental::filesystem;
 
 namespace openr {
 
+std::string
+toString(thrift::PrefixType const& value) {
+  return apache::thrift::TEnumTraits<thrift::PrefixType>::findName(value);
+}
+
+std::string
+toString(thrift::PrefixForwardingType const& value) {
+  return apache::thrift::TEnumTraits<thrift::PrefixForwardingType>::findName(
+      value);
+}
+
+std::string
+toString(thrift::PrefixForwardingAlgorithm const& value) {
+  return apache::thrift::TEnumTraits<
+      thrift::PrefixForwardingAlgorithm>::findName(value);
+}
+
+std::string
+toString(thrift::PrefixMetrics const& metrics) {
+  return folly::sformat(
+      "Metrics: [SP={}, PP={}, D={}]",
+      *metrics.source_preference_ref(),
+      *metrics.path_preference_ref(),
+      *metrics.distance_ref());
+}
+
+std::string
+toString(thrift::PrefixEntry const& entry, bool detailed) {
+  std::stringstream ss;
+  ss << toString(*entry.prefix_ref())
+     << folly::sformat(
+            ", Forwarding: [{}, {}], ",
+            toString(*entry.forwardingType_ref()),
+            toString(*entry.forwardingAlgorithm_ref()))
+     << toString(*entry.metrics_ref());
+  if (entry.minNexthop_ref()) {
+    ss << ", NM: " << *entry.minNexthop_ref();
+  }
+  if (entry.prependLabel_ref()) {
+    ss << ", PL: " << *entry.prependLabel_ref();
+  }
+  if (detailed) {
+    ss << ", Tags: [" << folly::join(", ", *entry.tags_ref()) << "]";
+    ss << ", AreaStack: [" << folly::join(", ", *entry.area_stack_ref()) << "]";
+  }
+  return ss.str();
+}
+
 void
 setupThriftServerTls(
     apache::thrift::ThriftServer& thriftServer,
