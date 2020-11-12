@@ -5,6 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#if __has_include("filesystem")
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <syslog.h>
 #include <fstream>
 #include <stdexcept>
@@ -482,11 +489,11 @@ main(int argc, char** argv) {
   // setup the SSL policy
   std::shared_ptr<wangle::SSLContextConfig> sslContext;
   if (FLAGS_enable_secure_thrift_server) {
-    CHECK(fileExists(FLAGS_x509_ca_path));
-    CHECK(fileExists(FLAGS_x509_cert_path));
+    CHECK(fs::exists(FLAGS_x509_ca_path));
+    CHECK(fs::exists(FLAGS_x509_cert_path));
     auto& keyPath = FLAGS_x509_key_path;
     if (!keyPath.empty()) {
-      CHECK(fileExists(keyPath));
+      CHECK(fs::exists(keyPath));
     } else {
       keyPath = FLAGS_x509_cert_path;
     }

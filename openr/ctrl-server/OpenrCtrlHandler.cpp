@@ -7,11 +7,18 @@
 
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 
-#include <re2/re2.h>
+#if __has_include("filesystem")
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 
 #include <folly/ExceptionString.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/io/async/ssl/OpenSSLUtils.h>
+#include <re2/re2.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/Constants.h>
@@ -340,7 +347,7 @@ OpenrCtrlHandler::dryrunConfig(
 
   // check if the config file exists and readable
   const auto& fileName = *file;
-  if (not fileExists(fileName)) {
+  if (not fs::exists(fileName)) {
     throw thrift::OpenrError(
         folly::sformat("Config file doesn't exist: {}", fileName));
   }

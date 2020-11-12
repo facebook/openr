@@ -5,8 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/common/ThriftUtil.h"
+#if __has_include("filesystem")
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
+
 #include "openr/common/Flags.h"
+#include "openr/common/ThriftUtil.h"
 #include "openr/common/Util.h"
 
 namespace openr {
@@ -22,7 +30,7 @@ setupThriftServerTls(
   // Allow non-secure clients on localhost (e.g. breeze / fbmeshd)
   thriftServer.setAllowPlaintextOnLoopback(true);
   thriftServer.setSSLConfig(sslContext);
-  if (fileExists(ticketSeedPath)) {
+  if (fs::exists(ticketSeedPath)) {
     thriftServer.watchTicketPathForChanges(ticketSeedPath, true);
   }
   return;

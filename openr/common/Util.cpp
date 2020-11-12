@@ -114,16 +114,6 @@ PrefixKey::getIpPrefix() const {
   return toIpPrefix(prefix_);
 }
 
-// TODO replace with `std::filesystem::exists(...) once transitioned to cpp17
-bool
-fileExists(const std::string& path) {
-  int fd = ::open(path.c_str(), O_RDONLY);
-  SCOPE_EXIT {
-    ::close(fd);
-  };
-  return 0 <= fd;
-}
-
 folly::IPAddress
 createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept {
   auto addr = prefix.first.mask(prefix.second);

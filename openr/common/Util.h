@@ -192,11 +192,6 @@ getDurationBetweenPerfEvents(
     const std::string& secondName) noexcept;
 
 /**
- * Check if the file pointed by `path` exists on the system
- */
-bool fileExists(const std::string& path);
-
-/**
  * Generate hash for each keyval pair
  * as a abstract of version number, originator and values
  * TODO: Remove the API in favor of other one
