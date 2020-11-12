@@ -63,16 +63,23 @@ struct KvStoreSyncEvent {
 };
 
 /**
- * Class to store re2 objects, provides API to match string with regex
- * TODO: The name `KeyPrefix` and `PrefixKey` (described below) are confusing
+ * Provides match capability on list of regexes. Will default to prefix match
+ * if regex is normal string.
  */
-class KeyPrefix {
+class RegexSet {
  public:
-  explicit KeyPrefix(std::vector<std::string> const& keyPrefixList);
-  bool keyMatch(std::string const& key) const;
+  /**
+   * Create regex set from list of regexes
+   */
+  explicit RegexSet(std::vector<std::string> const& regexOrPrefixList);
+
+  /**
+   * Match key with regex set
+   */
+  bool match(std::string const& key) const;
 
  private:
-  std::unique_ptr<re2::RE2::Set> keyPrefix_;
+  std::unique_ptr<re2::RE2::Set> regexSet_;
 };
 
 /**

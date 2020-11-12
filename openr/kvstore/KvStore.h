@@ -115,7 +115,7 @@ class KvStoreFilters {
   std::set<std::string> originatorIds_{};
 
   // keyPrefix class to create RE2 set and to match keys
-  KeyPrefix keyPrefixObjList_;
+  RegexSet keyRegexSet_;
 };
 
 // structure for common params across all instances of KvStoreDb

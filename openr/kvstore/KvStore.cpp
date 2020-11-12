@@ -58,7 +58,7 @@ KvStoreFilters::KvStoreFilters(
     std::set<std::string> const& nodeIds)
     : keyPrefixList_(keyPrefix),
       originatorIds_(nodeIds),
-      keyPrefixObjList_(KeyPrefix(keyPrefixList_)) {}
+      keyRegexSet_(RegexSet(keyPrefixList_)) {}
 
 bool
 KvStoreFilters::keyMatchAny(
@@ -66,7 +66,7 @@ KvStoreFilters::keyMatchAny(
   if (keyPrefixList_.empty() && originatorIds_.empty()) {
     return true;
   }
-  if (!keyPrefixList_.empty() && keyPrefixObjList_.keyMatch(key)) {
+  if (!keyPrefixList_.empty() && keyRegexSet_.match(key)) {
     return true;
   }
   if (!originatorIds_.empty() &&
@@ -97,7 +97,7 @@ KvStoreFilters::keyMatchAll(
     return true;
   }
 
-  if (!keyPrefixList_.empty() && not keyPrefixObjList_.keyMatch(key)) {
+  if (!keyPrefixList_.empty() && not keyRegexSet_.match(key)) {
     return false;
   }
 

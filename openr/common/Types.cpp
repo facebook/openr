@@ -11,36 +11,33 @@
 
 namespace openr {
 
-KeyPrefix::KeyPrefix(std::vector<std::string> const& keyPrefixList) {
+RegexSet::RegexSet(std::vector<std::string> const& keyPrefixList) {
   if (keyPrefixList.empty()) {
     return;
   }
   re2::RE2::Options re2Options;
   re2Options.set_case_sensitive(true);
-  keyPrefix_ =
+  regexSet_ =
       std::make_unique<re2::RE2::Set>(re2Options, re2::RE2::ANCHOR_START);
   std::string re2AddError{};
 
   for (auto const& keyPrefix : keyPrefixList) {
-    if (keyPrefix_->Add(keyPrefix, &re2AddError) < 0) {
+    if (regexSet_->Add(keyPrefix, &re2AddError) < 0) {
       LOG(FATAL) << "Failed to add prefixes to RE2 set: '" << keyPrefix << "', "
                  << "error: '" << re2AddError << "'";
       return;
     }
   }
-  if (!keyPrefix_->Compile()) {
+  if (!regexSet_->Compile()) {
     LOG(FATAL) << "Failed to compile re2 set";
-    keyPrefix_.reset();
   }
 }
 
 bool
-KeyPrefix::keyMatch(std::string const& key) const {
-  if (!keyPrefix_) {
-    return true;
-  }
+RegexSet::match(std::string const& key) const {
+  CHECK(regexSet_);
   std::vector<int> matches;
-  return keyPrefix_->Match(key, &matches);
+  return regexSet_->Match(key, &matches);
 }
 
 PrefixKey::PrefixKey(
