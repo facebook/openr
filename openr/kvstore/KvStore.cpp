@@ -236,8 +236,8 @@ KvStore::KvStore(
             area,
             fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT>(
                 zmqContext,
-                fbzmq::IdentityString{
-                    createPeerSyncId(config->getNodeName(), area)},
+                fbzmq::IdentityString{folly::to<std::string>(
+                    config->getNodeName(), "::TCP::SYNC::", area)},
                 folly::none,
                 fbzmq::NonblockingFlag{true}),
             config->getKvStoreConfig().is_flood_root_ref().value_or(false),

@@ -67,6 +67,7 @@ namespace openr {
 
 /**
  * Class to store re2 objects, provides API to match string with regex
+ * TODO: The name `KeyPrefix` and `PrefixKey` (described below) are confusing
  */
 class KeyPrefix {
  public:
@@ -83,7 +84,6 @@ class KeyPrefix {
  * and populate the parameters. In case the parsing fails all the parameters
  * are set to std::nullopt
  */
-
 class PrefixKey {
  public:
   // constructor using IP address, type and and subtype
@@ -137,23 +137,9 @@ class PrefixKey {
 };
 
 /**
- * Utility function to execute shell command and return true/false as
- * indication of it's success
+ * Set value of bit string
  */
-int executeShellCommand(const std::string& command);
-
-// get prefix length from ipv6 mask
-int maskToPrefixLen(const struct sockaddr_in6* mask);
-
-// get prefix length from ipv4 mask
-int maskToPrefixLen(const struct sockaddr_in* mask);
-
-// set value of bit string
 uint32_t bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end);
-
-// report all IPv6/IPv4 prefixes configured on the interface
-std::vector<folly::CIDRNetwork> getIfacePrefixes(
-    std::string ifName, sa_family_t afNet);
 
 /**
  * @param prefixIndex subprefix index, starting from 0
@@ -171,26 +157,12 @@ folly::CIDRNetwork getNthPrefix(
  * last bit of network block to `1`
  */
 folly::IPAddress createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept;
-
 folly::CIDRNetwork createLoopbackPrefix(
     const folly::CIDRNetwork& prefix) noexcept;
 
-template <typename SetT, typename T = typename SetT::value_type>
-SetT
-buildSetDifference(SetT const& lhs, SetT const& rhs) {
-  std::vector<T> result;
-  std::copy_if(
-      lhs.begin(), lhs.end(), std::back_inserter(result), [&rhs](T const& val) {
-        return rhs.find(val) == rhs.end();
-      });
-
-  SetT diff(
-      std::make_move_iterator(result.begin()),
-      std::make_move_iterator(result.end()));
-
-  return diff;
-}
-
+/**
+ * Return unix timestamp - Number of milliseconds elapsed since the epoch
+ */
 inline int64_t
 getUnixTimeStampMs() noexcept {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -199,17 +171,12 @@ getUnixTimeStampMs() noexcept {
 }
 
 /**
- * Add a perf event
+ * Add a perf event to perf event list
  */
 void addPerfEvent(
     thrift::PerfEvents& perfEvents,
     const std::string& nodeName,
     const std::string& eventDescr) noexcept;
-
-// util for parsing lists from the command line
-std::vector<std::string> splitByComma(const std::string& input);
-
-bool fileExists(const std::string& path);
 
 /**
  * Print perf event and return total convergence time
@@ -225,8 +192,14 @@ getDurationBetweenPerfEvents(
     const std::string& secondName) noexcept;
 
 /**
+ * Check if the file pointed by `path` exists on the system
+ */
+bool fileExists(const std::string& path);
+
+/**
  * Generate hash for each keyval pair
  * as a abstract of version number, originator and values
+ * TODO: Remove the API in favor of other one
  */
 int64_t generateHash(
     const int64_t version,
@@ -283,12 +256,12 @@ isMplsLabelValid(int32_t const mplsLabel) {
  */
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
-//
-// template method to return jittered time based on:
-//
-// @param: base => base value for random number generation;
-// @param: pct => percentage of the deviation from base value;
-//
+/**
+ * template method to return jittered time based on:
+ *
+ * @param: base => base value for random number generation;
+ * @param: pct => percentage of the deviation from base value;
+ */
 template <class T>
 T
 addJitter(T base, double pct = 20.0) {
@@ -300,11 +273,14 @@ addJitter(T base, double pct = 20.0) {
   return T(base.count() + roll());
 }
 
+/**
+ * Utility functions for creating thrift objects
+ */
+
 thrift::PeerSpec createPeerSpec(
     const std::string& cmdUrl,
     const std::string& thriftPeerAddr = "",
     const int32_t port = 0);
-
 thrift::SparkNeighbor createSparkNeighbor(
     const std::string& nodeName,
     const thrift::BinaryAddress& v4Addr,
@@ -379,7 +355,8 @@ thrift::Value createThriftValue(
 thrift::Value createThriftValueWithoutBinaryValue(const thrift::Value& val);
 
 /**
- * Utility function to create `key, value` pair for updating route in KvStore
+ * Utility function to create `key, value` pair for updating route advertisement
+ * in KvStore
  */
 std::pair<std::string, thrift::Value> createPrefixKeyValue(
     const std::string& nodeName,
@@ -446,8 +423,6 @@ std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHopsMap(
 
 std::string getNodeNameFromKey(const std::string& key);
 
-std::string createPeerSyncId(const std::string& node, const std::string& area);
-
 /**
  * Implements Open/R best route selection based on `thrift::PrefixMetrics`. The
  * metrics are compared and keys representing the best metric are returned. It
@@ -468,6 +443,10 @@ std::set<Key> selectBestPrefixMetrics(
 NodeAndArea selectBestNodeArea(
     std::set<NodeAndArea> const& allNodeAreas, std::string const& myNodeName);
 
+/**
+ * TODO: Deprecated and the support for best route selection based on metric
+ * vector will soon be dropped in favor of new `PrefixMetrics`
+ */
 namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };

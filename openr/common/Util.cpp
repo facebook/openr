@@ -114,25 +114,6 @@ PrefixKey::getIpPrefix() const {
   return toIpPrefix(prefix_);
 }
 
-int
-executeShellCommand(const std::string& command) {
-  int ret = system(command.c_str());
-  ret = WEXITSTATUS(ret);
-  if (ret != 0) {
-    LOG(ERROR) << "Failed to execute command: '" << command << "', "
-               << "exitCode: '" << ret << "'";
-  }
-  return ret;
-}
-
-std::vector<std::string>
-splitByComma(const std::string& input) {
-  std::vector<std::string> output;
-  folly::split(",", input, output);
-
-  return output;
-}
-
 // TODO replace with `std::filesystem::exists(...) once transitioned to cpp17
 bool
 fileExists(const std::string& path) {
@@ -165,59 +146,6 @@ createLoopbackPrefix(const folly::CIDRNetwork& prefix) noexcept {
   return folly::CIDRNetwork{addr, prefix.first.bitCount()};
 }
 
-int
-maskToPrefixLen(const struct sockaddr_in6* mask) {
-  int bits = 0;
-  const struct in6_addr* addr = &(mask->sin6_addr);
-  for (int i = 0; i < 16; i++) {
-    if (addr->s6_addr[i] == (uint8_t)'\xFF') {
-      bits += 8;
-    } else {
-      switch ((uint8_t)addr->s6_addr[i]) {
-      case (uint8_t)'\xFE':
-        bits += 7;
-        break;
-      case (uint8_t)'\xFC':
-        bits += 6;
-        break;
-      case (uint8_t)'\xF8':
-        bits += 5;
-        break;
-      case (uint8_t)'\xF0':
-        bits += 4;
-        break;
-      case (uint8_t)'\xE0':
-        bits += 3;
-        break;
-      case (uint8_t)'\xC0':
-        bits += 2;
-        break;
-      case (uint8_t)'\x80':
-        bits += 1;
-        break;
-      case (uint8_t)'\x00':
-        bits += 0;
-        break;
-      default:
-        return 0;
-      }
-      break;
-    }
-  }
-  return bits;
-}
-
-int
-maskToPrefixLen(const struct sockaddr_in* mask) {
-  int bits = 32;
-  uint32_t search = 1;
-  while (!(mask->sin_addr.s_addr & search)) {
-    --bits;
-    search <<= 1;
-  }
-  return bits;
-}
-
 // bit position starts from 0
 uint32_t
 bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end) {
@@ -230,60 +158,6 @@ bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end) {
     index |= ip.getNthMSBit(i);
   }
   return index;
-}
-
-std::vector<folly::CIDRNetwork>
-getIfacePrefixes(std::string ifName, sa_family_t afNet) {
-  struct ifaddrs* ifaddr{nullptr};
-  std::vector<folly::CIDRNetwork> results;
-
-  auto ret = ::getifaddrs(&ifaddr);
-  SCOPE_EXIT {
-    freeifaddrs(ifaddr);
-  };
-
-  if (ret < 0) {
-    LOG(ERROR) << folly::sformat(
-        "failure listing interfacs: {}", folly::errnoStr(errno));
-    return std::vector<folly::CIDRNetwork>{};
-  }
-
-  struct ifaddrs* ifa = ifaddr;
-  struct in6_addr ip6;
-  int prefixLength{0};
-
-  for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-    if (::strcmp(ifName.c_str(), ifa->ifa_name) || ifa->ifa_addr == nullptr ||
-        (afNet != AF_UNSPEC && ifa->ifa_addr->sa_family != afNet)) {
-      continue;
-    }
-    if (ifa->ifa_addr->sa_family == AF_INET6) {
-      ::memcpy(
-          &ip6,
-          &((struct sockaddr_in6*)ifa->ifa_addr)->sin6_addr,
-          sizeof(in6_addr));
-      prefixLength = maskToPrefixLen((struct sockaddr_in6*)ifa->ifa_netmask);
-      folly::IPAddressV6 ifaceAddr(ip6);
-      if (ifaceAddr.isLoopback() or ifaceAddr.isLinkLocal()) {
-        continue;
-      }
-      results.emplace_back(folly::CIDRNetwork{ifaceAddr, prefixLength});
-    }
-    if (ifa->ifa_addr->sa_family == AF_INET) {
-      struct in_addr ip;
-      ::memcpy(
-          &ip,
-          &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr,
-          sizeof(in_addr));
-      prefixLength = maskToPrefixLen((struct sockaddr_in*)ifa->ifa_netmask);
-      folly::IPAddressV4 ifaceAddr(ip);
-      if (ifaceAddr.isLoopback()) {
-        continue;
-      }
-      results.emplace_back(folly::CIDRNetwork{ifaceAddr, prefixLength});
-    }
-  }
-  return results;
 }
 
 folly::CIDRNetwork
@@ -1024,11 +898,6 @@ getNodeNameFromKey(const std::string& key) {
   }
   return split[1];
 }
-
-std::string
-createPeerSyncId(const std::string& node, const std::string& area) {
-  return folly::to<std::string>(node, "::TCP::SYNC::", area);
-};
 
 NodeAndArea
 selectBestNodeArea(
