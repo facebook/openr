@@ -19,8 +19,6 @@
 #include <folly/ScopeGuard.h>
 #include <folly/String.h>
 #include <glog/logging.h>
-#include <re2/re2.h>
-#include <re2/set.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <wangle/ssl/SSLContextConfig.h>
@@ -66,77 +64,6 @@
   }
 
 namespace openr {
-
-/**
- * Class to store re2 objects, provides API to match string with regex
- * TODO: The name `KeyPrefix` and `PrefixKey` (described below) are confusing
- */
-class KeyPrefix {
- public:
-  explicit KeyPrefix(std::vector<std::string> const& keyPrefixList);
-  bool keyMatch(std::string const& key) const;
-
- private:
-  std::unique_ptr<re2::RE2::Set> keyPrefix_;
-};
-
-/**
- * PrefixKey class to form and parse a PrefixKey. PrefixKey can be instantiated
- * by passing parameters to form a key, or by passing the key string to parse
- * and populate the parameters. In case the parsing fails all the parameters
- * are set to std::nullopt
- */
-class PrefixKey {
- public:
-  // constructor using IP address, type and and subtype
-  PrefixKey(
-      std::string const& node,
-      folly::CIDRNetwork const& prefix,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
-
-  // construct PrefixKey object from a give key string
-  static folly::Expected<PrefixKey, std::string> fromStr(
-      const std::string& key);
-
-  // return node name
-  std::string getNodeName() const;
-
-  // return the CIDR network address
-  folly::CIDRNetwork getCIDRNetwork() const;
-
-  // return prefix sub type
-  std::string getPrefixArea() const;
-
-  // return prefix key string to be used to flood to kvstore
-  std::string getPrefixKey() const;
-
-  // return thrift::IpPrefix
-  thrift::IpPrefix getIpPrefix() const;
-
-  static const RE2&
-  getPrefixRE2() {
-    static const RE2 prefixKeyPattern{folly::sformat(
-        "{}(?P<node>[a-zA-Z\\d\\.\\-\\_]+):"
-        "(?P<area>[a-zA-Z0-9\\.\\_\\-]+):"
-        "\\[(?P<IPAddr>[a-fA-F\\d\\.\\:]+)/"
-        "(?P<plen>[\\d]{{1,3}})\\]",
-        Constants::kPrefixDbMarker.toString())};
-    return prefixKeyPattern;
-  }
-
- private:
-  // node name
-  std::string node_{};
-
-  // IP address
-  folly::CIDRNetwork prefix_;
-
-  // prefix area
-  std::string prefixArea_;
-
-  // prefix key string
-  std::string prefixKeyString_;
-};
 
 /**
  * Setup thrift server for TLS
