@@ -618,7 +618,7 @@ LinkState::updateAdjacencyDatabase(
       // and check for holds when running spf. this ensures we don't add the
       // same hold twice
       addLink(*newIter);
-      VLOG(1) << "addLink " << (*newIter)->toString();
+      VLOG(1) << "[LINK UP]" << (*newIter)->toString();
       ++newIter;
       continue;
     }
@@ -630,7 +630,7 @@ LinkState::updateAdjacencyDatabase(
       // change the topology.
       change.topologyChanged |= (*oldIter)->isUp();
       removeLink(*oldIter);
-      VLOG(1) << "removeLink " << (*oldIter)->toString();
+      VLOG(1) << "[LINK DOWN] " << (*oldIter)->toString();
       ++oldIter;
       continue;
     }
@@ -643,8 +643,8 @@ LinkState::updateAdjacencyDatabase(
     // change the metric on the link object we already have
     if (newLink.getMetricFromNode(nodeName) !=
         oldLink.getMetricFromNode(nodeName)) {
-      LOG(INFO) << folly::sformat(
-          "Metric change on link {}: {} => {}",
+      VLOG(1) << folly::sformat(
+          "[LINK UPDATE] Metric change on link {}, {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getMetricFromNode(nodeName),
           newLink.getMetricFromNode(nodeName));
@@ -657,8 +657,8 @@ LinkState::updateAdjacencyDatabase(
 
     if (newLink.getOverloadFromNode(nodeName) !=
         oldLink.getOverloadFromNode(nodeName)) {
-      LOG(INFO) << folly::sformat(
-          "Overload change on link {}: {} => {}",
+      VLOG(1) << folly::sformat(
+          "[LINK UPDATE] Overload change on link {}: {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getOverloadFromNode(nodeName),
           newLink.getOverloadFromNode(nodeName));
@@ -673,7 +673,7 @@ LinkState::updateAdjacencyDatabase(
     if (newLink.getAdjLabelFromNode(nodeName) !=
         oldLink.getAdjLabelFromNode(nodeName)) {
       VLOG(1) << folly::sformat(
-          "AdjLabel change on link {}: {} => {}",
+          "[LINK UPDATE] AdjLabel change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getAdjLabelFromNode(nodeName),
           newLink.getAdjLabelFromNode(nodeName));
@@ -689,7 +689,7 @@ LinkState::updateAdjacencyDatabase(
     if (newLink.getNhV4FromNode(nodeName) !=
         oldLink.getNhV4FromNode(nodeName)) {
       VLOG(1) << folly::sformat(
-          "V4-NextHop address change on link {}: {} => {}",
+          "[LINK UPDATE] V4-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV4FromNode(nodeName)),
           toString(newLink.getNhV4FromNode(nodeName)));
@@ -700,7 +700,7 @@ LinkState::updateAdjacencyDatabase(
     if (newLink.getNhV6FromNode(nodeName) !=
         oldLink.getNhV6FromNode(nodeName)) {
       VLOG(1) << folly::sformat(
-          "V6-NextHop address change on link {}: {} => {}",
+          "[LINK UPDATE] V6-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV6FromNode(nodeName)),
           toString(newLink.getNhV6FromNode(nodeName)));
@@ -731,7 +731,7 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
     kthPathResults_.clear();
     change.topologyChanged = true;
   } else {
-    LOG(WARNING) << "Trying to delete adjacency db for nonexisting node "
+    LOG(WARNING) << "Trying to delete adjacency db for non-existing node "
                  << nodeName;
   }
   return change;
@@ -876,7 +876,7 @@ LinkState::runSpf(
   VLOG(3) << "Dijkstra loop count: " << loop;
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "SPF elapsed time: " << deltaTime.count() << "ms.";
+  VLOG(3) << "SPF elapsed time: " << deltaTime.count() << "ms.";
   fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
   return result;
 }

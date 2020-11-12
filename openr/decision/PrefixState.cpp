@@ -40,8 +40,9 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
       continue;
     }
 
-    VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
-            << nodeName << " from area " << area;
+    VLOG(1) << "[ROUTE WITHDRAW] "
+            << "Area: " << area << ", Node: " << nodeName << ", "
+            << toString(prefix);
 
     // Update prefix
     auto& entriesByOriginator = prefixes_.at(prefix);
@@ -68,9 +69,9 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     }
     changed.insert(*prefixEntry.prefix_ref());
 
-    VLOG(1) << "Prefix " << toString(*prefixEntry.prefix_ref())
-            << " has been advertised/updated by node " << nodeName
-            << " from area " << area;
+    VLOG(1) << "[ROUTE ADVERTISEMENT] "
+            << "Area: " << area << ", Node: " << nodeName << ", "
+            << toString(prefixEntry, VLOG_IS_ON(2));
   }
 
   if (newPrefixSet.empty()) {

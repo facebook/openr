@@ -366,9 +366,9 @@ SpfSolver::SpfSolverImpl::updateStaticRoutes(
   CHECK(staticRoutesDelta.unicastRoutesToDelete_ref()->empty());
 
   // Process MPLS routes to add or update
-  LOG(INFO) << "Adding/Updating static "
+  LOG(INFO) << "Adding/Updating "
             << staticRoutesDelta.mplsRoutesToUpdate_ref()->size()
-            << " mpls routes";
+            << " static mpls routes";
   for (auto& mplsRoute : *staticRoutesDelta.mplsRoutesToUpdate_ref()) {
     const auto topLabel = *mplsRoute.topLabel_ref();
     staticMplsRoutes_.insert_or_assign(
@@ -433,7 +433,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
 
   // Skip if no valid prefixes
   if (prefixEntries.empty()) {
-    VLOG(2) << "Skipping route to " << toString(prefix)
+    VLOG(3) << "Skipping route to " << toString(prefix)
             << " with no reachable node.";
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
@@ -443,7 +443,8 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   const bool isV4Prefix = prefix.prefixAddress_ref()->addr_ref()->size() ==
       folly::IPAddressV4::byteCount();
   if (isV4Prefix && !enableV4_) {
-    LOG(WARNING) << "Received v4 prefix while v4 is not enabled.";
+    LOG(WARNING) << "Received v4 prefix " << toString(prefix)
+                 << " while v4 is not enabled.";
     fb303::fbData->addStatValue(
         "decision.skipped_unicast_route", 1, fb303::COUNT);
     return std::nullopt;
@@ -516,7 +517,6 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   // prefix-entry with the prepend label. Once we support multi-area routing,
   // we can deprecate the check of hasSelfPrependLabel
   if (bestRouteSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
-    VLOG(3) << "Ignoring route to the self advertised node";
     return std::nullopt;
   }
 
@@ -556,7 +556,6 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     LOG(ERROR) << "Unknown prefix algorithm type "
                << apache::thrift::util::enumNameSafe(forwardingAlgo)
                << " for prefix " << toString(prefix);
-
     return std::nullopt;
   }
 }
@@ -616,7 +615,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       // of bigger node-ID
       auto iter = labelToNode.find(topLabel);
       if (iter != labelToNode.end()) {
-        LOG(INFO) << "Find duplicate label " << topLabel << "from "
+        LOG(INFO) << "Found duplicate label " << topLabel << "from "
                   << iter->second.first << " " << *adjDb.thisNodeName_ref();
         fb303::fbData->addStatValue(
             "decision.duplicate_node_label", 1, fb303::COUNT);
@@ -876,7 +875,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
   const auto nextHopsWithMetric = getNextHopsWithMetric(
       myNodeName, filteredBestNodeAreas, perDestination, areaLinkStates);
   if (nextHopsWithMetric.second.empty()) {
-    VLOG(2) << "No route to prefix " << toString(prefix);
+    VLOG(3) << "No route to prefix " << toString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
@@ -1860,14 +1859,14 @@ Decision::rebuildRoutes(std::string const& event) {
   }
 
   pendingUpdates_.addEvent(event);
-  VLOG(1) << "Decision: processing " << pendingUpdates_.getCount()
+  VLOG(2) << "Decision: processing " << pendingUpdates_.getCount()
           << " accumulated updates.";
   if (pendingUpdates_.perfEvents()) {
     if (auto expectedDuration = getDurationBetweenPerfEvents(
             *pendingUpdates_.perfEvents(),
             "DECISION_RECEIVED",
             "DECISION_DEBOUNCE")) {
-      VLOG(1) << "Debounced " << pendingUpdates_.getCount() << " events over "
+      VLOG(2) << "Debounced " << pendingUpdates_.getCount() << " events over "
               << expectedDuration->count() << "ms.";
     }
   }
@@ -1955,8 +1954,6 @@ Decision::updateCounters(
   const auto elapsedTime =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
   fb303::fbData->addStatValue(key, elapsedTime.count(), fb303::AVG);
-  LOG(INFO) << "Policy Processing time " << elapsedTime.count()
-            << " milliseconds";
 }
 
 void
