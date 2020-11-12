@@ -142,6 +142,11 @@ const thrift::NextHopThrift labelPopNextHop{createNextHop(
 const std::chrono::milliseconds debounceTimeoutMin{10};
 const std::chrono::milliseconds debounceTimeoutMax{500};
 
+// Empty Perf Events
+const thrift::AdjacencyDatabase kEmptyAdjDb;
+const apache::thrift::optional_field_ref<thrift::PerfEvents const&>
+    kEmptyPerfEventRef{kEmptyAdjDb.perfEvents_ref()};
+
 // TODO @girasoley - Remove this once we implement feature in BGP to not
 // program Open/R received routes.
 // Decision enforces the need for loopback address of the node
@@ -6478,10 +6483,10 @@ TEST(DecisionPendingUpdates, needsFullRebuild) {
   LinkState::LinkStateChange linkStateChange;
 
   linkStateChange.linkAttributesChanged = true;
-  updates.applyLinkStateChange("node2", linkStateChange);
+  updates.applyLinkStateChange("node2", linkStateChange, kEmptyPerfEventRef);
   EXPECT_FALSE(updates.needsRouteUpdate());
   EXPECT_FALSE(updates.needsFullRebuild());
-  updates.applyLinkStateChange("node1", linkStateChange);
+  updates.applyLinkStateChange("node1", linkStateChange, kEmptyPerfEventRef);
   EXPECT_TRUE(updates.needsRouteUpdate());
   EXPECT_TRUE(updates.needsFullRebuild());
 
@@ -6490,14 +6495,14 @@ TEST(DecisionPendingUpdates, needsFullRebuild) {
   EXPECT_FALSE(updates.needsFullRebuild());
   linkStateChange.linkAttributesChanged = false;
   linkStateChange.topologyChanged = true;
-  updates.applyLinkStateChange("node2", linkStateChange);
+  updates.applyLinkStateChange("node2", linkStateChange, kEmptyPerfEventRef);
   EXPECT_TRUE(updates.needsRouteUpdate());
   EXPECT_TRUE(updates.needsFullRebuild());
 
   updates.reset();
   linkStateChange.topologyChanged = false;
   linkStateChange.nodeLabelChanged = true;
-  updates.applyLinkStateChange("node2", linkStateChange);
+  updates.applyLinkStateChange("node2", linkStateChange, kEmptyPerfEventRef);
   EXPECT_TRUE(updates.needsRouteUpdate());
   EXPECT_TRUE(updates.needsFullRebuild());
 }
@@ -6510,17 +6515,17 @@ TEST(DecisionPendingUpdates, updatedPrefixes) {
   EXPECT_TRUE(updates.updatedPrefixes().empty());
 
   // empty update no change
-  updates.applyPrefixStateChange({});
+  updates.applyPrefixStateChange({}, kEmptyPerfEventRef);
   EXPECT_FALSE(updates.needsRouteUpdate());
   EXPECT_FALSE(updates.needsFullRebuild());
   EXPECT_TRUE(updates.updatedPrefixes().empty());
 
-  updates.applyPrefixStateChange({addr1, addr2V4});
+  updates.applyPrefixStateChange({addr1, addr2V4}, kEmptyPerfEventRef);
   EXPECT_TRUE(updates.needsRouteUpdate());
   EXPECT_FALSE(updates.needsFullRebuild());
   EXPECT_THAT(
       updates.updatedPrefixes(), testing::UnorderedElementsAre(addr1, addr2V4));
-  updates.applyPrefixStateChange({addr2});
+  updates.applyPrefixStateChange({addr2}, kEmptyPerfEventRef);
   EXPECT_TRUE(updates.needsRouteUpdate());
   EXPECT_FALSE(updates.needsFullRebuild());
   EXPECT_THAT(
@@ -6536,17 +6541,19 @@ TEST(DecisionPendingUpdates, updatedPrefixes) {
 TEST(DecisionPendingUpdates, perfEvents) {
   openr::detail::DecisionPendingUpdates updates("node1");
   LinkState::LinkStateChange linkStateChange;
-  updates.applyLinkStateChange("node2", linkStateChange);
+  updates.applyLinkStateChange("node2", linkStateChange, kEmptyPerfEventRef);
   EXPECT_THAT(*updates.perfEvents()->events_ref(), testing::SizeIs(1));
   EXPECT_EQ(
       *updates.perfEvents()->events_ref()->front().eventDescr_ref(),
       "DECISION_RECEIVED");
-  openr::thrift::PerfEvents earlierEvents;
+  thrift::PrefixDatabase perfEventDb;
+  perfEventDb.perfEvents_ref() = openr::thrift::PerfEvents();
+  auto& earlierEvents = *perfEventDb.perfEvents_ref();
   earlierEvents.events_ref()->push_back({});
   *earlierEvents.events_ref()->back().nodeName_ref() = "node3";
   *earlierEvents.events_ref()->back().eventDescr_ref() = "EARLIER";
   earlierEvents.events_ref()->back().unixTs_ref() = 1;
-  updates.applyPrefixStateChange({}, earlierEvents);
+  updates.applyPrefixStateChange({}, perfEventDb.perfEvents_ref());
 
   // expect what we hasd to be displaced by this
   EXPECT_THAT(*updates.perfEvents()->events_ref(), testing::SizeIs(2));

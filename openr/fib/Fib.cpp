@@ -360,7 +360,7 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
   // Send request to agent
-  updateRoutes(routeDelta);
+  updateRoutes(std::move(routeDelta));
 }
 
 void
@@ -493,7 +493,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     }
   } // end for ... routeDb_.mplsRoutes
 
-  updateRoutes(routeDbDelta);
+  updateRoutes(std::move(routeDbDelta));
 }
 
 thrift::PerfDatabase
@@ -539,7 +539,7 @@ Fib::printMplsRoutesAddUpdate(
 }
 
 void
-Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
+Fib::updateRoutes(thrift::RouteDatabaseDelta&& routeDbDelta) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
@@ -556,7 +556,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   if (dryrun_) {
     // Do not program routes in case of dryrun
     LOG(INFO) << "Skipping programming of routes in dryrun ... ";
-    logPerfEvents(castToStd(routeDbDelta.perfEvents_ref()));
+    logPerfEvents(routeDbDelta.perfEvents_ref());
     return;
   }
 
@@ -815,20 +815,22 @@ Fib::updateGlobalCounters() {
 }
 
 void
-Fib::logPerfEvents(std::optional<thrift::PerfEvents> perfEvents) {
+Fib::logPerfEvents(
+    apache::thrift::optional_field_ref<thrift::PerfEvents&> perfEvents) {
   if (not perfEvents.has_value() or not perfEvents->events_ref()->size()) {
     return;
   }
 
   // Ignore bad perf event sample if creation time of first event is
   // less than creation time of our recently logged perf events.
-  if (recentPerfEventCreateTs_ >= *perfEvents->events_ref()[0].unixTs_ref()) {
+  if (recentPerfEventCreateTs_ >=
+      *perfEvents->events_ref()->at(0).unixTs_ref()) {
     LOG(WARNING) << "Ignoring perf event with old create timestamp "
                  << *perfEvents->events_ref()[0].unixTs_ref() << ", expected > "
                  << recentPerfEventCreateTs_;
     return;
   } else {
-    recentPerfEventCreateTs_ = *perfEvents->events_ref()[0].unixTs_ref();
+    recentPerfEventCreateTs_ = *perfEvents->events_ref()->at(0).unixTs_ref();
   }
 
   // Add latest event information (this function is meant to be called after

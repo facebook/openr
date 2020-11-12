@@ -283,30 +283,6 @@ isMplsLabelValid(int32_t const mplsLabel) {
  */
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
-template <class T>
-auto
-castToStd(apache::thrift::optional_field_ref<T> t) {
-  return t.to_optional();
-}
-
-template <class T>
-std::optional<T>
-castToStd(const folly::Optional<T>& t) {
-  if (t) {
-    return *t;
-  }
-  return {};
-}
-
-template <class T>
-std::optional<T>
-castToStd(folly::Optional<T>&& t) {
-  if (t) {
-    return std::move(*t);
-  }
-  return {};
-}
-
 //
 // template method to return jittered time based on:
 //

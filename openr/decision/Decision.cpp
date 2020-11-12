@@ -49,7 +49,7 @@ void
 DecisionPendingUpdates::applyLinkStateChange(
     std::string const& nodeName,
     LinkState::LinkStateChange const& change,
-    std::optional<thrift::PerfEvents> const& perfEvents) {
+    apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents) {
   needsFullRebuild_ |=
       (change.topologyChanged || change.nodeLabelChanged ||
        // we only need a full rebuild if link attributes change locally
@@ -61,7 +61,7 @@ DecisionPendingUpdates::applyLinkStateChange(
 void
 DecisionPendingUpdates::applyPrefixStateChange(
     std::unordered_set<thrift::IpPrefix>&& change,
-    std::optional<thrift::PerfEvents> const& perfEvents) {
+    apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents) {
   updatedPrefixes_.merge(std::move(change));
   addUpdate(perfEvents);
 }
@@ -89,7 +89,7 @@ DecisionPendingUpdates::moveOutEvents() {
 }
 void
 DecisionPendingUpdates::addUpdate(
-    const std::optional<thrift::PerfEvents>& perfEvents) {
+    apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents) {
   ++count_;
 
   // Update local copy of perf evens if it is newer than the one to be added
@@ -102,7 +102,7 @@ DecisionPendingUpdates::addUpdate(
            *perfEvents->events_ref()->front().unixTs_ref())) {
     // if we don't have any perf events for this batch and this update also
     // doesn't have anything, let's start building the event list from now
-    perfEvents_ = perfEvents ? perfEvents : thrift::PerfEvents{};
+    perfEvents_ = perfEvents ? *perfEvents : thrift::PerfEvents{};
     addPerfEvent(*perfEvents_, myNodeName_, "DECISION_RECEIVED");
   }
 }
@@ -1773,7 +1773,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
             nodeName,
             areaLinkState.updateAdjacencyDatabase(
                 adjacencyDb, holdUpTtl, holdDownTtl),
-            castToStd(adjacencyDb.perfEvents_ref()));
+            adjacencyDb.perfEvents_ref());
         if (areaLinkState.hasHolds() && orderedFibTimer_ != nullptr &&
             !orderedFibTimer_->isScheduled()) {
           orderedFibTimer_->scheduleTimeout(getMaxFib());
@@ -1798,8 +1798,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyPrefixStateChange(
-            prefixState_.updatePrefixDatabase(nodePrefixDb)),
-            castToStd(nodePrefixDb.perfEvents_ref());
+            prefixState_.updatePrefixDatabase(nodePrefixDb),
+            nodePrefixDb.perfEvents_ref());
         continue;
       }
 
@@ -1830,7 +1830,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       pendingUpdates_.applyLinkStateChange(
           nodeName,
           areaLinkState.deleteAdjacencyDatabase(nodeName),
-          castToStd(thrift::PrefixDatabase().perfEvents_ref()));
+          thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
       continue;
     }
 
@@ -1850,7 +1850,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       *nodePrefixDb.area_ref() = area;
 
       pendingUpdates_.applyPrefixStateChange(
-          prefixState_.updatePrefixDatabase(nodePrefixDb));
+          prefixState_.updatePrefixDatabase(nodePrefixDb),
+          thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
       continue;
     }
   }
@@ -1930,7 +1931,9 @@ Decision::decrementOrderedFibHolds() {
   bool stillHasHolds = false;
   for (auto& [_, linkState] : areaLinkStates_) {
     pendingUpdates_.applyLinkStateChange(
-        myNodeName_, linkState.decrementHolds());
+        myNodeName_,
+        linkState.decrementHolds(),
+        thrift::AdjacencyDatabase().perfEvents_ref()); // Empty perf events
     stillHasHolds |= linkState.hasHolds();
   }
   if (pendingUpdates_.needsRouteUpdate()) {

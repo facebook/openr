@@ -166,7 +166,7 @@ class Fib final : public OpenrEventBase {
    * on success no action needed
    * on failure invokes syncRouteDbDebounced
    */
-  void updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta);
+  void updateRoutes(thrift::RouteDatabaseDelta&& routeDbDelta);
 
   /**
    * Sync the current routeDb_ with the switch agent.
@@ -191,7 +191,8 @@ class Fib final : public OpenrEventBase {
   void updateGlobalCounters();
 
   // log perf events
-  void logPerfEvents(std::optional<thrift::PerfEvents> perfEvents);
+  void logPerfEvents(
+      apache::thrift::optional_field_ref<thrift::PerfEvents&> perfEvents);
 
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.

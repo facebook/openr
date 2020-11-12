@@ -155,11 +155,11 @@ class DecisionPendingUpdates {
   void applyLinkStateChange(
       std::string const& nodeName,
       LinkState::LinkStateChange const& change,
-      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt);
+      apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents);
 
   void applyPrefixStateChange(
       std::unordered_set<thrift::IpPrefix>&& change,
-      std::optional<thrift::PerfEvents> const& perfEvents = std::nullopt);
+      apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents);
 
   void reset();
 
@@ -178,7 +178,8 @@ class DecisionPendingUpdates {
   }
 
  private:
-  void addUpdate(const std::optional<thrift::PerfEvents>& perfEvents);
+  void addUpdate(
+      apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents);
 
   // tracks how many updates are part of this batch
   uint32_t count_{0};
