@@ -39,7 +39,6 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Flags.h>
-#include <openr/common/ThriftUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>

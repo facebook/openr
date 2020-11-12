@@ -22,6 +22,8 @@
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <wangle/ssl/SSLContextConfig.h>
 
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
@@ -135,6 +137,15 @@ class PrefixKey {
   // prefix key string
   std::string prefixKeyString_;
 };
+
+/**
+ * Setup thrift server for TLS
+ */
+void setupThriftServerTls(
+    apache::thrift::ThriftServer& thriftServer,
+    apache::thrift::SSLPolicy sslPolicy,
+    std::string const& ticketSeedPath,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext);
 
 /**
  * Set value of bit string

@@ -14,6 +14,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#if __has_include("filesystem")
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
+
 #include <fbzmq/zmq/Common.h>
 
 namespace openr {
@@ -112,6 +120,22 @@ PrefixKey::getPrefixArea() const {
 thrift::IpPrefix
 PrefixKey::getIpPrefix() const {
   return toIpPrefix(prefix_);
+}
+
+void
+setupThriftServerTls(
+    apache::thrift::ThriftServer& thriftServer,
+    apache::thrift::SSLPolicy sslPolicy,
+    std::string const& ticketSeedPath,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext) {
+  thriftServer.setSSLPolicy(sslPolicy);
+  // Allow non-secure clients on localhost (e.g. breeze / fbmeshd)
+  thriftServer.setAllowPlaintextOnLoopback(true);
+  thriftServer.setSSLConfig(sslContext);
+  if (fs::exists(ticketSeedPath)) {
+    thriftServer.watchTicketPathForChanges(ticketSeedPath, true);
+  }
+  return;
 }
 
 folly::IPAddress
