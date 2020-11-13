@@ -1,0 +1,30 @@
+FROM ubuntu:20.04
+
+# Install tools needed for development
+RUN apt update && \
+    apt upgrade --yes && \
+    apt install --yes build-essential cython3 git libssl-dev m4 python3-pip
+
+# Copy needed source
+RUN mkdir -p /src/py
+ADD CMakeLists.txt FBGenCMakeBuildInfo.cmake ThriftLibrary.cmake /src/
+COPY build /src/build
+
+# Build fbthrift + deps as a docker step
+RUN cd /src && build/build_fbthrift.sh
+
+# Install `breeze` OpenR CLI
+COPY openr/if /src/if
+# Hack for thrift includes
+COPY openr/py/openr/ /src/py/openr
+RUN mkdir -p /src/openr && ln -s /src/if /src/openr/if
+COPY openr/py/build_thrift.py /src/py
+COPY openr/py/setup.py /src/py
+RUN cd /src/py && ../build/build_breeze.sh
+
+# Cleanup all we can to keep container as lean as possible
+#RUN apt remove --yes build-essential git libssl-dev m4 && \
+#    apt autoremove --yes && \
+#    rm -rf /src /tmp/* /var/lib/apt/lists/*
+
+CMD ["breeze --help"]
