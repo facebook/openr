@@ -371,14 +371,13 @@ SpfSolver::SpfSolverImpl::updateStaticRoutes(
             << " static mpls routes";
   for (auto& mplsRoute : *staticRoutesDelta.mplsRoutesToUpdate_ref()) {
     const auto topLabel = *mplsRoute.topLabel_ref();
-    staticMplsRoutes_.insert_or_assign(
-        topLabel, std::move(*mplsRoute.nextHops_ref()));
-
     VLOG(1) << "> " << std::to_string(topLabel)
             << ", NextHopsCount = " << mplsRoute.nextHops_ref()->size();
     for (auto const& nh : *mplsRoute.nextHops_ref()) {
       VLOG(2) << " via " << toString(nh);
     }
+    staticMplsRoutes_.insert_or_assign(
+        topLabel, std::move(*mplsRoute.nextHops_ref()));
   }
 
   LOG(INFO) << "Deleting " << staticRoutesDelta.mplsRoutesToDelete_ref()->size()
