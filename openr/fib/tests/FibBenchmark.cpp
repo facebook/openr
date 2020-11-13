@@ -93,6 +93,7 @@ class FibWrapper {
         port, // thrift port
         std::chrono::seconds(2), // coldStartDuration
         routeUpdatesQueue.getReader(),
+        staticRoutesUpdateQueue.getReader(),
         fibUpdatesQueue,
         logSampleQueue,
         nullptr /* KvStore module ptr */);
@@ -131,6 +132,7 @@ class FibWrapper {
     LOG(INFO) << "Closing queues";
     fibUpdatesQueue.close();
     routeUpdatesQueue.close();
+    staticRoutesUpdateQueue.close();
     logSampleQueue.close();
 
     LOG(INFO) << "Stopping openr-ctrl handler";
@@ -184,6 +186,7 @@ class FibWrapper {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
   messaging::ReplicateQueue<LogSample> logSampleQueue;
 

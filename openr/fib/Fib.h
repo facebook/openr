@@ -54,6 +54,7 @@ class Fib final : public OpenrEventBase {
       int32_t thriftPort,
       std::chrono::seconds coldStartDuration,
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
+      messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       KvStore* kvStore);
@@ -133,11 +134,6 @@ class Fib final : public OpenrEventBase {
   Fib& operator=(const Fib&) = delete;
 
   /**
-   * Process new route updates received from Decision module
-   */
-  void processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta);
-
-  /**
    * Convert local perfDb_ into PerfDataBase
    */
   thrift::PerfDatabase dumpPerfDb() const;
@@ -155,11 +151,17 @@ class Fib final : public OpenrEventBase {
       std::vector<int32_t> labels);
 
   /**
+   * Process new route updates received from Decision module
+   */
+  void processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta);
+
+  /**
    * Trigger add/del routes thrift calls
    * on success no action needed
    * on failure invokes syncRouteDbDebounced
    */
-  void updateRoutes(thrift::RouteDatabaseDelta&& routeDbDelta);
+  void updateRoutes(
+      thrift::RouteDatabaseDelta&& routeDbDelta, bool isStaticRoutes);
 
   /**
    * Sync the current routeDb_ with the switch agent.

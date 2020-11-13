@@ -222,6 +222,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       Constants::kFibAgentPort,
       fibColdStartDuration,
       routeUpdatesQueue_.getReader(),
+      staticRoutesQueue_.getReader(),
       fibUpdatesQueue_,
       logSampleQueue_,
       kvStore_.get());

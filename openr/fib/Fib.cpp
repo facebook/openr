@@ -28,6 +28,7 @@ Fib::Fib(
     int32_t thriftPort,
     std::chrono::seconds coldStartDuration,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
+    messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStore* kvStore)
@@ -115,6 +116,34 @@ Fib::Fib(
       processRouteUpdates(std::move(maybeThriftObj).value().toThrift());
     }
   });
+
+  // Fiber to process and program static route updates.
+  // - The routes are only programmed and updated but not deleted
+  // - Updates arriving before first Decision RIB update will be processed. The
+  //   fiber will terminate after that.
+  addFiberTask(
+      [q = std::move(staticRoutesUpdateQueue), this]() mutable noexcept {
+        LOG(INFO) << "Starting static routes update processing fiber";
+        while (true) {
+          auto maybeThriftPub = q.get(); // perform read
+
+          // Terminate if queue is closed or we've received RIB from Decision
+          if (maybeThriftPub.hasError() or routeState_.hasRoutesFromDecision) {
+            LOG(INFO) << "Terminating static routes update processing fiber";
+            break;
+          }
+
+          // NOTE: We only process the static MPLS routes to add or update
+          LOG(INFO) << "Received static routes update";
+          maybeThriftPub->unicastRoutesToUpdate_ref()->clear();
+          maybeThriftPub->unicastRoutesToDelete_ref()->clear();
+          maybeThriftPub->mplsRoutesToDelete_ref()->clear();
+
+          // Program received static route updates
+          updateRoutes(
+              std::move(maybeThriftPub).value(), true /* static routes */);
+        }
+      });
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("fib.convergence_time_ms", fb303::AVG);
@@ -339,7 +368,7 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
   // Send request to agent
-  updateRoutes(std::move(routeDelta));
+  updateRoutes(std::move(routeDelta), false /* static routes */);
 }
 
 thrift::PerfDatabase
@@ -385,7 +414,8 @@ Fib::printMplsRoutesAddUpdate(
 }
 
 void
-Fib::updateRoutes(thrift::RouteDatabaseDelta&& routeDbDelta) {
+Fib::updateRoutes(
+    thrift::RouteDatabaseDelta&& routeDbDelta, bool isStaticRoutes) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
@@ -417,12 +447,13 @@ Fib::updateRoutes(thrift::RouteDatabaseDelta&& routeDbDelta) {
     fibUpdatesQueue_.push(routeDbDelta);
   }
 
-  if (syncRoutesTimer_->isScheduled()) {
+  // For static routes we always update the provided routes immediately
+  if (!isStaticRoutes && syncRoutesTimer_->isScheduled()) {
     // Check if there's any full sync scheduled,
     // if so, skip partial sync
     LOG(INFO) << "Pending full sync is scheduled, skip delta sync for now...";
     return;
-  } else if (routeState_.dirtyRouteDb or not hasSyncedFib_) {
+  } else if (!isStaticRoutes && (routeState_.dirtyRouteDb or !hasSyncedFib_)) {
     if (hasSyncedFib_) {
       LOG(INFO) << "Previous route programming failed or, skip delta sync to "
                 << "enforce full fib sync...";

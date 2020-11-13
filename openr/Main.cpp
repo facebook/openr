@@ -549,6 +549,7 @@ main(int argc, char** argv) {
           *config->getConfig().fib_port_ref(),
           std::chrono::seconds(3 * *sparkConf.keepalive_time_s_ref()),
           routeUpdatesQueue.getReader(),
+          staticRoutesUpdateQueue.getReader(),
           fibUpdatesQueue,
           logSampleQueue,
           kvStore));
