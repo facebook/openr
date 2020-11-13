@@ -211,6 +211,11 @@ class KvStoreDb : public DualNode {
 
   ~KvStoreDb() override;
 
+  std::string const&
+  getAreaId() const {
+    return area_;
+  }
+
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
       const std::string& requestId, thrift::KvStoreRequest& thriftReq);
 
@@ -431,7 +436,7 @@ class KvStoreDb : public DualNode {
       peerStateMap_;
 
   // area identified of this KvStoreDb instance
-  const std::string area_{};
+  const std::string area_;
 
   // zmq ROUTER socket for requesting full dumps from peers
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
@@ -672,6 +677,15 @@ class KvStore final : public OpenrEventBase {
   void processPeerUpdates(thrift::PeerUpdateRequest&& req);
 
   std::map<std::string, int64_t> getGlobalCounters() const;
+
+  // helper for public semifuture API. Returns a reference to the relevant
+  // KvStoreDb (to be captured and operated on in this event loop) or throws an
+  // instance of OpenrError
+  // for backward compaytibilty, will allow getting single configured area if
+  // default area is requested or is the only one configured
+  // pass in id for caller for counting backward compatibility requests
+  KvStoreDb& getAreaDbOrThrow(
+      std::string const& areaId, std::string const& caller);
 
   //
   // Private variables

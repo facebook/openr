@@ -491,6 +491,32 @@ KvStore::prepareSocket(
   }
 }
 
+KvStoreDb&
+KvStore::getAreaDbOrThrow(
+    std::string const& areaId, std::string const& caller) {
+  auto search = kvStoreDb_.find(areaId);
+  if (kvStoreDb_.end() == search) {
+    LOG(ERROR) << "Area " << areaId
+               << " requested but not configured for this node.";
+    // TODO: migration workaround => if me/peer does is using default area,
+    // always honor my config, ignore peer's config.
+    if (areaIds_.size() == 1 and
+        (areaIds_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
+         areaId == openr::thrift::KvStore_constants::kDefaultArea())) {
+      LOG(INFO) << "Falling back to my single area: "
+                << kvStoreDb_.begin()->first;
+      fb303::fbData->addStatValue(
+          folly::sformat("kvstore.default_area_compatibility.{}", caller),
+          1,
+          fb303::COUNT);
+      return kvStoreDb_.begin()->second;
+    } else {
+      throw thrift::OpenrError(folly::sformat("Invalid area: {}", areaId));
+    }
+  }
+  return search->second;
+}
+
 void
 KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
   if (req.empty()) {
@@ -535,29 +561,19 @@ KvStore::processRequestMsg(
 
   auto& thriftRequest = maybeThriftReq.value();
   CHECK(not thriftRequest.area_ref()->empty());
-  std::string area =
-      *thriftRequest.area_ref(); // NOTE: Non constness is intended
-  // TODO: migration workaround => if me/peer does is using default area,
-  // always honor my config, ignore peer's config.
-  if (areaIds_.size() == 1 and
-      (areaIds_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
-       area == openr::thrift::KvStore_constants::kDefaultArea())) {
-    area = *areaIds_.begin();
-  }
 
-  VLOG(2) << "Request received for area " << area;
   try {
-    auto& kvStoreDb = kvStoreDb_.at(area);
+    auto& kvStoreDb =
+        getAreaDbOrThrow(thriftRequest.get_area(), "processRequestMsg");
+    VLOG(2) << "Request received for area " << kvStoreDb.getAreaId();
     auto response = kvStoreDb.processRequestMsgHelper(requestId, thriftRequest);
     if (response.hasValue()) {
       fb303::fbData->addStatValue(
           "kvstore.peers.bytes_sent", response->size(), fb303::SUM);
     }
     return response;
-  } catch (std::out_of_range const& e) {
-    LOG(ERROR) << "std::out_of_range for area " << area;
-    return folly::makeUnexpected(
-        fbzmq::Error(0, folly::sformat("Invalid area {}", area)));
+  } catch (thrift::OpenrError const& e) {
+    return folly::makeUnexpected(fbzmq::Error(0, e.get_message()));
   }
   return {folly::makeUnexpected(fbzmq::Error())};
 }
@@ -590,18 +606,16 @@ KvStore::getKvStoreKeyVals(
                         keyGetParams = std::move(keyGetParams),
                         area]() mutable {
     VLOG(3) << "Get key requested for AREA: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else {
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "getKvStoreKeyVals");
       fb303::fbData->addStatValue("kvstore.cmd_key_get", 1, fb303::COUNT);
 
-      auto& kvStoreDb = kvStoreDb_.at(area);
       auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys_ref());
       kvStoreDb.updatePublicationTtl(thriftPub);
 
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -685,14 +699,10 @@ KvStore::dumpKvStoreHashes(
                         keyDumpParams = std::move(keyDumpParams),
                         area]() mutable {
     VLOG(3) << "Dump all hashes requested for AREA: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else {
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreHashes");
       fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
 
-      auto& kvStoreDb = kvStoreDb_.at(area);
       std::set<std::string> originator{};
       std::vector<std::string> keyPrefixList{};
       if (keyDumpParams.keys_ref().has_value()) {
@@ -704,6 +714,8 @@ KvStore::dumpKvStoreHashes(
       auto thriftPub = kvStoreDb.dumpHashWithFilters(kvFilters);
       kvStoreDb.updatePublicationTtl(thriftPub);
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -719,11 +731,8 @@ KvStore::setKvStoreKeyVals(
                         keySetParams = std::move(keySetParams),
                         area]() mutable {
     VLOG(3) << "Set key requested for AREA: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else {
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
       // Update statistics
       fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
       if (keySetParams.timestamp_ms_ref().has_value()) {
@@ -736,7 +745,6 @@ KvStore::setKvStoreKeyVals(
       }
 
       // Update hash for key-values
-      auto& kvStoreDb = kvStoreDb_.at(area);
       for (auto& kv : *keySetParams.keyVals_ref()) {
         auto& value = kv.second;
         if (value.value_ref().has_value()) {
@@ -757,6 +765,8 @@ KvStore::setKvStoreKeyVals(
 
       // ready to return
       p.setValue();
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -769,12 +779,11 @@ KvStore::getKvStorePeerState(
   auto sf = promise.getSemiFuture();
   runInEventBaseThread(
       [this, p = std::move(promise), peerName, area]() mutable {
-        if (!kvStoreDb_.count(area)) {
-          p.setValue(std::nullopt);
-        } else {
-          auto& kvStoreDb = kvStoreDb_.at(area);
-          auto state = kvStoreDb.getCurrentState(peerName);
-          p.setValue(state);
+        try {
+          p.setValue(getAreaDbOrThrow(area, "getKvStorePeerState")
+                         .getCurrentState(peerName));
+        } catch (thrift::OpenrError const& e) {
+          p.setException(e);
         }
       });
   return sf;
@@ -786,15 +795,12 @@ KvStore::getKvStorePeers(std::string area) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
     VLOG(2) << "Peer dump requested for AREA: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else {
+    try {
+      p.setValue(std::make_unique<thrift::PeersMap>(
+          getAreaDbOrThrow(area, "getKvStorePeers").dumpPeers()));
       fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
-      auto& kvStoreDb = kvStoreDb_.at(area);
-      auto peers = kvStoreDb.dumpPeers();
-      p.setValue(std::make_unique<thrift::PeersMap>(std::move(peers)));
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -809,23 +815,23 @@ KvStore::addUpdateKvStorePeers(
                         p = std::move(p),
                         peerAddParams = std::move(peerAddParams),
                         area]() mutable {
-    auto peersToAdd = folly::gen::from(*peerAddParams.peers_ref()) |
-        folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
+    try {
+      auto peersToAdd = folly::gen::from(*peerAddParams.peers_ref()) |
+          folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
 
-    LOG(INFO) << "Peer addition for: [" << folly::join(",", peersToAdd)
-              << "] in area: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else if (peerAddParams.peers_ref()->empty()) {
-      p.setException(thrift::OpenrError(
-          "Empty peerNames from peer-add request, ignoring"));
-    } else {
-      fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
-      auto& kvStoreDb = kvStoreDb_.at(area);
-      kvStoreDb.addPeers(*peerAddParams.peers_ref());
-      p.setValue();
+      LOG(INFO) << "Peer addition for: [" << folly::join(",", peersToAdd)
+                << "] in area: " << area;
+      auto& kvStoreDb = getAreaDbOrThrow(area, "addUpdateKvStorePeers");
+      if (peerAddParams.peers_ref()->empty()) {
+        p.setException(thrift::OpenrError(
+            "Empty peerNames from peer-add request, ignoring"));
+      } else {
+        fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
+        kvStoreDb.addPeers(*peerAddParams.peers_ref());
+        p.setValue();
+      }
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -843,18 +849,18 @@ KvStore::deleteKvStorePeers(
     LOG(INFO) << "Peer deletion for: ["
               << folly::join(",", *peerDelParams.peerNames_ref())
               << "] in area: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else if (peerDelParams.peerNames_ref()->empty()) {
-      p.setException(thrift::OpenrError(
-          "Empty peerNames from peer-del request, ignoring"));
-    } else {
-      fb303::fbData->addStatValue("kvstore.cmd_per_del", 1, fb303::COUNT);
-      auto& kvStoreDb = kvStoreDb_.at(area);
-      kvStoreDb.delPeers(*peerDelParams.peerNames_ref());
-      p.setValue();
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "deleteKvStorePeers");
+      if (peerDelParams.peerNames_ref()->empty()) {
+        p.setException(thrift::OpenrError(
+            "Empty peerNames from peer-del request, ignoring"));
+      } else {
+        fb303::fbData->addStatValue("kvstore.cmd_per_del", 1, fb303::COUNT);
+        kvStoreDb.delPeers(*peerDelParams.peerNames_ref());
+        p.setValue();
+      }
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -866,14 +872,12 @@ KvStore::getSpanningTreeInfos(std::string area) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
     VLOG(3) << "FLOOD_TOPO_GET command requested for AREA: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else {
-      auto& kvStoreDb = kvStoreDb_.at(area);
-      auto sptInfos = kvStoreDb.processFloodTopoGet();
-      p.setValue(std::make_unique<thrift::SptInfos>(std::move(sptInfos)));
+    try {
+      p.setValue(std::make_unique<thrift::SptInfos>(
+          getAreaDbOrThrow(area, "getSpanningTreeInfos")
+              .processFloodTopoGet()));
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -889,14 +893,12 @@ KvStore::updateFloodTopologyChild(
                         floodTopoSetParams = std::move(floodTopoSetParams),
                         area]() mutable {
     VLOG(2) << "FLOOD_TOPO_SET command requested for AREA: " << area;
-
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else {
-      auto& kvStoreDb = kvStoreDb_.at(area);
-      kvStoreDb.processFloodTopoSet(std::move(floodTopoSetParams));
+    try {
+      getAreaDbOrThrow(area, "updateFloodTopologyChild")
+          .processFloodTopoSet(std::move(floodTopoSetParams));
       p.setValue();
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
@@ -912,20 +914,20 @@ KvStore::processKvStoreDualMessage(
                         dualMessages = std::move(dualMessages),
                         area]() mutable {
     VLOG(2) << "DUAL messages received for AREA: " << area;
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "processKvStoreDualMessage");
+      if (dualMessages.messages_ref()->empty()) {
+        LOG(ERROR) << "Empty DUAL msg receved";
+        p.setValue();
+      } else {
+        fb303::fbData->addStatValue(
+            "kvstore.received_dual_messages", 1, fb303::COUNT);
 
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else if (dualMessages.messages_ref()->empty()) {
-      LOG(ERROR) << "Empty DUAL msg receved";
-      p.setValue();
-    } else {
-      fb303::fbData->addStatValue(
-          "kvstore.received_dual_messages", 1, fb303::COUNT);
-
-      auto& kvStoreDb = kvStoreDb_.at(area);
-      kvStoreDb.processDualMessages(std::move(dualMessages));
-      p.setValue();
+        kvStoreDb.processDualMessages(std::move(dualMessages));
+        p.setValue();
+      }
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
     }
   });
   return sf;
