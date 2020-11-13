@@ -54,7 +54,6 @@ class Fib final : public OpenrEventBase {
       int32_t thriftPort,
       std::chrono::seconds coldStartDuration,
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-      messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       KvStore* kvStore);
@@ -139,12 +138,6 @@ class Fib final : public OpenrEventBase {
   void processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta);
 
   /**
-   * Process interface status information from LinkMonitor. We remove all
-   * routes associated with interface if we detect that it just went down.
-   */
-  void processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb);
-
-  /**
    * Convert local perfDb_ into PerfDataBase
    */
   thrift::PerfDatabase dumpPerfDb() const;
@@ -205,16 +198,6 @@ class Fib final : public OpenrEventBase {
     // routes to sync. will not synce routes with system until this is set
     bool hasRoutesFromDecision{false};
 
-    // Set of routes whose nexthops are auto-resized on link failure.
-    // Populated
-    // - when nexthop shrink happens on interface down
-    // Cleared on
-    // - receiving new route for prefix or label
-    // - full route sync happens
-    // - interface up event happens for disabled nexthop
-    std::unordered_set<thrift::IpPrefix> dirtyPrefixes;
-    std::unordered_set<uint32_t> dirtyLabels;
-
     // Flag to indicate the result of previous route programming attempt.
     // If set, it means what currently cached in local routes has not been 100%
     // successfully synced with agent, we have to trigger an enforced full fib
@@ -228,10 +211,6 @@ class Fib final : public OpenrEventBase {
 
   // Create timestamp of recently logged perf event
   int64_t recentPerfEventCreateTs_{0};
-
-  // Interface status map
-  std::unordered_map<std::string /* ifName*/, bool /* isUp */>
-      interfaceStatusDb_;
 
   // Name of node on which OpenR is running
   const std::string myNodeName_;
@@ -280,6 +259,7 @@ class Fib final : public OpenrEventBase {
 
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
+  // TODO: Remove if not needed
   // Semaphore to serialize route programming across two fibers (interface
   // updates & route updates)
   // NOTE: Initializing with a single slot to avoid parallel processing

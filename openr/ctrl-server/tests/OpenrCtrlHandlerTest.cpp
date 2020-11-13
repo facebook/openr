@@ -99,7 +99,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         -1, /* thrift port */
         std::chrono::seconds(2),
         routeUpdatesQueue_.getReader(),
-        interfaceUpdatesQueue_.getReader(),
         fibUpdatesQueue_,
         logSampleQueue_,
         kvStoreWrapper_->getKvStore());

@@ -28,7 +28,6 @@ Fib::Fib(
     int32_t thriftPort,
     std::chrono::seconds coldStartDuration,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-    messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStore* kvStore)
@@ -117,27 +116,11 @@ Fib::Fib(
     }
   });
 
-  // Fiber to process interface updates from LinkMonitor
-  addFiberTask([q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
-    while (true) {
-      auto maybeThriftObj = q.get(); // perform read
-      VLOG(1) << "Received interface updates";
-      if (maybeThriftObj.hasError()) {
-        LOG(INFO) << "Terminating interface update processing fiber";
-        break;
-      }
-
-      CHECK_EQ(myNodeName_, *maybeThriftObj.value().thisNodeName_ref());
-      processInterfaceDb(std::move(maybeThriftObj).value());
-    }
-  });
-
   // Initialize stats keys
   fb303::fbData->addStatExportType("fib.convergence_time_ms", fb303::AVG);
   fb303::fbData->addStatExportType(
       "fib.local_route_program_time_ms", fb303::AVG);
   fb303::fbData->addStatExportType("fib.num_of_route_updates", fb303::SUM);
-  fb303::fbData->addStatExportType("fib.process_interface_db", fb303::COUNT);
   fb303::fbData->addStatExportType("fib.process_route_db", fb303::COUNT);
   fb303::fbData->addStatExportType("fib.sync_fib_calls", fb303::COUNT);
   fb303::fbData->addStatExportType(
@@ -336,164 +319,27 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   // Add/Update unicast routes to update
   for (const auto& route : *routeDelta.unicastRoutesToUpdate_ref()) {
     routeState_.unicastRoutes[route.dest] = route;
-    routeState_.dirtyPrefixes.erase(route.dest);
   }
 
   // Add mpls routes to update
   for (const auto& route : *routeDelta.mplsRoutesToUpdate_ref()) {
     routeState_.mplsRoutes[route.topLabel] = route;
-    routeState_.dirtyLabels.erase(route.topLabel);
   }
 
   // Delete unicast routes
   for (const auto& dest : *routeDelta.unicastRoutesToDelete_ref()) {
     routeState_.unicastRoutes.erase(dest);
-    routeState_.dirtyPrefixes.erase(dest);
   }
 
   // Delete mpls routes
   for (const auto& topLabel : *routeDelta.mplsRoutesToDelete_ref()) {
     routeState_.mplsRoutes.erase(topLabel);
-    routeState_.dirtyLabels.erase(topLabel);
   }
 
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
   // Send request to agent
   updateRoutes(std::move(routeDelta));
-}
-
-void
-Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
-  fb303::fbData->addStatValue("fib.process_interface_db", 1, fb303::COUNT);
-
-  if (interfaceDb.perfEvents_ref()) {
-    addPerfEvent(
-        *interfaceDb.perfEvents_ref(), myNodeName_, "FIB_INTF_DB_RECEIVED");
-  }
-
-  //
-  // Update interface states
-  //
-  for (auto const& kv : *interfaceDb.interfaces_ref()) {
-    const auto& ifName = kv.first;
-    const auto isUp = kv.second.isUp;
-    const auto wasUp = folly::get_default(interfaceStatusDb_, ifName, false);
-
-    // UP -> DOWN transition
-    if (wasUp and not isUp) {
-      LOG(INFO) << "Interface " << ifName << " transitioned from UP -> DOWN";
-    }
-    // DOWN -> UP transition
-    if (not wasUp and isUp) {
-      LOG(INFO) << "Interface " << ifName << " transitioned from DOWN -> UP";
-    }
-
-    // Update new status
-    interfaceStatusDb_[ifName] = isUp;
-  }
-
-  thrift::RouteDatabaseDelta routeDbDelta;
-  routeDbDelta.perfEvents_ref().move_from(interfaceDb.perfEvents_ref());
-
-  //
-  // Compute unicast route changes
-  //
-  for (auto const& kv : routeState_.unicastRoutes) {
-    auto const& route = kv.second;
-
-    // Find previous best nexthops
-    const auto& prevNextHops = *route.nextHops_ref();
-
-    // Find valid nexthops for route
-    std::vector<thrift::NextHopThrift> validNextHops;
-    for (auto const& nextHop : *route.nextHops_ref()) {
-      const auto ifName = nextHop.address_ref()->ifName_ref();
-      if (not ifName.has_value() ||
-          (folly::get_default(interfaceStatusDb_, *ifName, false))) {
-        validNextHops.emplace_back(nextHop);
-      }
-    } // end for ... kv.second
-
-    // Remove route if no valid nexthops
-    if (not validNextHops.size()) {
-      VLOG(1) << "Removing prefix " << toString(route.dest)
-              << " because of no valid nextHops.";
-      routeDbDelta.unicastRoutesToDelete_ref()->emplace_back(*route.dest_ref());
-      routeState_.dirtyPrefixes.emplace(route.dest); // Mark prefix as dirty
-      continue; // Skip rest
-    }
-
-    if (validNextHops != prevNextHops) {
-      // Nexthop group shrink
-      VLOG(1) << "bestPaths group resize for prefix: " << toString(route.dest)
-              << ", old: " << prevNextHops.size()
-              << ", new: " << validNextHops.size();
-      thrift::UnicastRoute newRoute;
-      newRoute.dest = route.dest;
-      *newRoute.nextHops_ref() = std::move(validNextHops);
-      routeDbDelta.unicastRoutesToUpdate_ref()->emplace_back(
-          std::move(newRoute));
-      routeState_.dirtyPrefixes.emplace(route.dest); // Mark prefix as dirty
-    } else if (routeState_.dirtyPrefixes.count(route.dest)) {
-      // Nexthop group restore - previously best
-      routeDbDelta.unicastRoutesToUpdate_ref()->emplace_back(route);
-      routeState_.dirtyPrefixes.erase(route.dest); // Remove from dirty list
-    }
-  } // end for ... routeDb_.unicastRoutes
-
-  //
-  // Compute MPLS route changes
-  //
-  for (const auto& kv : routeState_.mplsRoutes) {
-    const auto& route = kv.second;
-
-    // Find valid nexthops for route
-    std::vector<thrift::NextHopThrift> validNextHops;
-    for (auto const& nextHop : *route.nextHops_ref()) {
-      // We don't have ifName for `POP_AND_LOOKUP` mpls action
-      auto const ifName = nextHop.address_ref()->ifName_ref();
-      if (not ifName.has_value() or
-          folly::get_default(interfaceStatusDb_, *ifName, false)) {
-        validNextHops.emplace_back(nextHop);
-      }
-    }
-
-    // Find previous best nexthops
-    auto prevBestNextHops = selectMplsNextHops(*route.nextHops_ref());
-
-    // Find new valid best nexthops
-    auto validBestNextHops = selectMplsNextHops(validNextHops);
-
-    // Remove route if no valid nexthops
-    if (not validBestNextHops.size()) {
-      VLOG(1) << "Removing label route " << *route.topLabel_ref()
-              << " because of no valid nextHops.";
-      routeDbDelta.mplsRoutesToDelete_ref()->emplace_back(
-          *route.topLabel_ref());
-      routeState_.dirtyLabels.emplace(*route.topLabel_ref()); // Mark prefix as
-                                                              // dirty
-      continue; // Skip rest
-    }
-
-    if (validBestNextHops != prevBestNextHops) {
-      // Nexthop group shrink
-      VLOG(1) << "bestPaths group resize for label: " << route.topLabel
-              << ", old: " << prevBestNextHops.size()
-              << ", new: " << validBestNextHops.size();
-      thrift::MplsRoute newRoute;
-      newRoute.topLabel = route.topLabel;
-      *newRoute.nextHops_ref() = std::move(validBestNextHops);
-      routeDbDelta.mplsRoutesToUpdate_ref()->emplace_back(std::move(newRoute));
-      routeState_.dirtyLabels.emplace(route.topLabel);
-    } else if (routeState_.dirtyLabels.count(route.topLabel)) {
-      // Nexthop group restore - previously best
-      routeDbDelta.mplsRoutesToUpdate_ref()->emplace_back(route);
-      routeState_.dirtyLabels.erase(route.topLabel); // Remove from dirty list
-    }
-  } // end for ... routeDb_.mplsRoutes
-
-  updateRoutes(std::move(routeDbDelta));
 }
 
 thrift::PerfDatabase
@@ -699,7 +545,6 @@ Fib::syncRouteDb() {
     // Sync unicast routes
     LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes in FIB";
     client_->sync_syncFib(kFibId_, unicastRoutes);
-    routeState_.dirtyPrefixes.clear();
     printUnicastRoutesAddUpdate(unicastRoutes);
 
     // Sync mpls routes
@@ -716,7 +561,6 @@ Fib::syncRouteDb() {
               << "ms to sync routes in FIB";
     fb303::fbData->addStatValue(
         "fib.route_sync.time_ms", elapsedTime.count(), fb303::AVG);
-    routeState_.dirtyLabels.clear();
     routeState_.dirtyRouteDb = false;
     return true;
   } catch (std::exception const& e) {
@@ -799,10 +643,6 @@ Fib::updateGlobalCounters() {
       "fib.num_unicast_routes", routeState_.unicastRoutes.size());
   fb303::fbData->setCounter(
       "fib.num_mpls_routes", routeState_.mplsRoutes.size());
-  fb303::fbData->setCounter(
-      "fib.num_dirty_prefixes", routeState_.dirtyPrefixes.size());
-  fb303::fbData->setCounter(
-      "fib.num_dirty_labels", routeState_.dirtyLabels.size());
 
   // Count the number of bgp routes
   int64_t bgpCounter = 0;

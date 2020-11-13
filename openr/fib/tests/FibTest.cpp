@@ -248,7 +248,6 @@ class FibTestFixture : public ::testing::Test {
         port, /* thrift port */
         std::chrono::seconds(2), /* coldStartDuration */
         routeUpdatesQueue.getReader(),
-        interfaceUpdatesQueue.getReader(),
         fibUpdatesQueue,
         logSampleQueue,
         nullptr /* KvStore module ptr */);
@@ -288,7 +287,6 @@ class FibTestFixture : public ::testing::Test {
     LOG(INFO) << "Closing queues";
     fibUpdatesQueue.close();
     routeUpdatesQueue.close();
-    interfaceUpdatesQueue.close();
     logSampleQueue.close();
 
     LOG(INFO) << "Stopping openr ctrl handler";
@@ -388,7 +386,6 @@ class FibTestFixture : public ::testing::Test {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
@@ -681,228 +678,6 @@ TEST_F(FibTestFixture, processRouteDb) {
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
   EXPECT_TRUE(checkEqualRouteDatabaseUnicast(routeDb, getRouteDb()));
-}
-
-TEST_F(FibTestFixture, processInterfaceDb) {
-  // Make sure fib starts with clean route database
-  std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 0);
-  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
-
-  // initial syncFib debounce
-  mockFibHandler->waitForSyncFib();
-  mockFibHandler->waitForSyncMplsFib();
-
-  // Mimic interface initially coming up
-  thrift::InterfaceDatabase intfDb(
-      FRAGILE,
-      "node-1",
-      {
-          {
-              path1_2_1.address_ref()->ifName_ref().value(),
-              createThriftInterfaceInfo(true, 121, {}),
-          },
-          {
-              path1_2_2.address_ref()->ifName_ref().value(),
-              createThriftInterfaceInfo(true, 122, {}),
-          },
-      },
-      thrift::PerfEvents());
-  intfDb.perfEvents_ref().reset();
-  LOG(INFO) << "Pushing interface update";
-  interfaceUpdatesQueue.push(intfDb);
-
-  // Mimic decision pub sock publishing RouteDatabaseDelta
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(
-        RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1, path1_2_2}));
-    routeUpdate.addRouteToUpdate(
-        RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label2, {mpls_path1_2_1, mpls_path1_2_2}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label1, {mpls_path1_2_1}));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
-
-  mockFibHandler->waitForUpdateUnicastRoutes();
-  mockFibHandler->waitForUpdateMplsRoutes();
-
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
-  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 2);
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 2);
-  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 2);
-
-  // Mimic interface going down
-  thrift::InterfaceDatabase intfChange_1(
-      FRAGILE,
-      "node-1",
-      {
-          {
-              path1_2_1.address_ref()->ifName_ref().value(),
-              createThriftInterfaceInfo(false, 121, {}),
-          },
-      },
-      thrift::PerfEvents());
-  intfChange_1.perfEvents_ref().reset();
-  LOG(INFO) << "Pushing interface update";
-  interfaceUpdatesQueue.push(intfChange_1);
-
-  mockFibHandler->waitForDeleteUnicastRoutes();
-  mockFibHandler->waitForUpdateUnicastRoutes();
-  mockFibHandler->waitForDeleteMplsRoutes();
-  mockFibHandler->waitForUpdateMplsRoutes();
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 3);
-  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
-  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 3);
-  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 1);
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 1);
-  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 1);
-
-  //
-  // Send new route for prefix2 (see it gets updated right through)
-  //
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(
-        RibUnicastEntry(toIPNetwork(prefix1), {path1_2_2}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label1, {mpls_path1_2_2}));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
-
-  mockFibHandler->waitForUpdateUnicastRoutes();
-  mockFibHandler->waitForUpdateMplsRoutes();
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 4);
-  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
-  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 4);
-  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 1);
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 2);
-  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 2);
-
-  // Mimic interface going down
-  // the route entry associated with the prefix shall be removed this time
-  thrift::InterfaceDatabase intfChange_2(
-      FRAGILE,
-      "node-1",
-      {
-          {
-              path1_2_2.address_ref()->ifName_ref().value(),
-              createThriftInterfaceInfo(false, 122, {}),
-          },
-      },
-      thrift::PerfEvents());
-  intfChange_2.perfEvents_ref().reset();
-  LOG(INFO) << "Pushing interface update";
-  interfaceUpdatesQueue.push(intfChange_2);
-
-  mockFibHandler->waitForDeleteUnicastRoutes();
-  mockFibHandler->waitForDeleteMplsRoutes();
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 4);
-  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 3);
-  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 4);
-  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 3);
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 0);
-  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
-
-  //
-  // Bring up both of these interfaces and verify that route appears back
-  //
-  LOG(INFO) << "Pushing interface update";
-  interfaceUpdatesQueue.push(intfDb);
-
-  mockFibHandler->waitForUpdateUnicastRoutes();
-  mockFibHandler->waitForUpdateMplsRoutes();
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 6);
-  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 3);
-  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 6);
-  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 3);
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 2);
-  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 2);
-}
-
-// verify when iterface goes down, the nexthop of unicast route with
-// no interface name specified won't get dropped.
-TEST_F(FibTestFixture, processInterfaceDbWithNoIfnameNexthop) {
-  // Make sure fib starts with clean route database
-  std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 0);
-  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
-
-  // initial syncFib debounce
-  mockFibHandler->waitForSyncFib();
-  mockFibHandler->waitForSyncMplsFib();
-
-  // Mimic interface initially coming up
-  thrift::InterfaceDatabase intfDb(
-      FRAGILE,
-      "node-1",
-      {
-          {
-              path1_2_1.address_ref()->ifName_ref().value(),
-              createThriftInterfaceInfo(true, 121, {}),
-          },
-      },
-      thrift::PerfEvents());
-  intfDb.perfEvents_ref().reset();
-  LOG(INFO) << "Pushing interface update";
-  interfaceUpdatesQueue.push(intfDb);
-
-  // Mimic decision pub sock publishing RouteDatabaseDelta
-  DecisionRouteUpdate routeUpdate;
-  auto path1_2_1_no_if_name = path1_2_1;
-  path1_2_1_no_if_name.address_ref()->ifName_ref().reset();
-  routeUpdate.unicastRoutesToUpdate.emplace(
-      toIPNetwork(prefix2),
-      RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1_no_if_name}));
-  routeUpdate.addRouteToUpdate(
-      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-  routeUpdatesQueue.push(std::move(routeUpdate));
-  mockFibHandler->waitForUpdateUnicastRoutes();
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  LOG(INFO) << toString(routes[0]);
-  LOG(INFO) << toString(routes[1]);
-  EXPECT_EQ(routes.size(), 2);
-  // Mimic interface going down
-  thrift::InterfaceDatabase intfChange_1(
-      FRAGILE,
-      "node-1",
-      {
-          {
-              path1_2_1.address_ref()->ifName_ref().value(),
-              createThriftInterfaceInfo(false, 121, {}),
-          },
-      },
-      thrift::PerfEvents());
-  intfChange_1.perfEvents_ref().reset();
-  LOG(INFO) << "Pushing interface update";
-  interfaceUpdatesQueue.push(intfChange_1);
-
-  mockFibHandler->waitForDeleteUnicastRoutes();
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
-  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
-  mockFibHandler->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 1);
-  // verify that the nexthop without interface name is still there
-  EXPECT_EQ(routes[0].nextHops_ref()->size(), 1);
 }
 
 TEST_F(FibTestFixture, basicAddAndDelete) {
@@ -1357,79 +1132,6 @@ TEST_F(FibTestFixture, doNotInstall) {
 
   // now 2 routes are installable
   EXPECT_EQ(routes.size(), 2);
-}
-
-/**
- * Introduce error in route programming by detaching interface
- * - Verify that routes are programmed serially
- * - Verify that routes are synced after encountering the error
- */
-TEST_F(FibTestFixture, ThriftServerError) {
-  // InterfaceUpdates - Send initial interface update
-  thrift::InterfaceDatabase intfDb;
-  *intfDb.thisNodeName_ref() = "node-1";
-  intfDb.interfaces_ref()->emplace(
-      "iface_1_2_1", createThriftInterfaceInfo(true, 121, {}));
-  intfDb.interfaces_ref()->emplace(
-      "iface_1_2_2", createThriftInterfaceInfo(true, 122, {}));
-  interfaceUpdatesQueue.push(intfDb);
-
-  // Wait for route sync before starting rest of the UT
-  mockFibHandler->waitForSyncFib();
-  mockFibHandler->waitForSyncMplsFib();
-
-  //
-  // NOTE: Set the failure injection to throw ERROR on 50% of the requests
-  //
-  BaseThriftServer::FailureInjection failureInjection;
-  failureInjection.errorFraction = 0.5;
-  server->setFailureInjection(failureInjection);
-
-  // RouteUpdates - Send route update for unicast & mpls routes
-  DecisionRouteUpdate routeUpdate;
-  routeUpdate.addRouteToUpdate(
-      RibUnicastEntry(toIPNetwork(prefix2), {path1_2_2}));
-  routeUpdate.addRouteToUpdate(
-      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(
-      RibMplsEntry(label2, {mpls_path1_2_2}));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(
-      RibMplsEntry(label1, {mpls_path1_2_1}));
-  routeUpdatesQueue.push(std::move(routeUpdate));
-
-  // InterfaceUpdates - Send interface down event
-  intfDb.interfaces_ref()->at("iface_1_2_1").isUp_ref() = false;
-  interfaceUpdatesQueue.push(intfDb);
-
-  //
-  // Wait for either success case or for failure
-  //
-  while (true) {
-    if (mockFibHandler->getAddRoutesCount() == 2 &&
-        mockFibHandler->getAddMplsRoutesCount() == 2 &&
-        mockFibHandler->getDelRoutesCount() == 1 &&
-        mockFibHandler->getDelMplsRoutesCount() == 1) {
-      // SUCCESS; nothing to do
-      return;
-    }
-
-    int64_t failures = folly::get_default(
-        facebook::fb303::fbData->getCounters(),
-        "fib.thrift.failure.add_del_route.count",
-        0);
-    if (failures > 0) {
-      // FAILURE; wait for FibSync
-      break;
-    }
-    std::this_thread::yield();
-  }
-
-  //
-  // Reset failure inject and wait for FibSync
-  //
-  server->setFailureInjection(BaseThriftServer::FailureInjection());
-  mockFibHandler->waitForSyncFib();
-  mockFibHandler->waitForSyncMplsFib();
 }
 
 int
