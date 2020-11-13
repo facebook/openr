@@ -344,6 +344,12 @@ struct OpenrConfig {
   # all the expected sources.
   52: i32 prefix_hold_time_s = 15
 
+  # Delay in seconds for MPLS route deletes. The delay would allow the remote
+  # nodes to converge to new prepend-label associated with route advertisement.
+  # This will avoid packet drops because of label route lookup
+  # NOTE: Label route add or update will happen immediately
+  53: i32 mpls_route_delete_delay_s = 10
+
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
