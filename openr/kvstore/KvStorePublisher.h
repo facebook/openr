@@ -19,6 +19,7 @@ namespace openr {
 class KvStorePublisher {
  public:
   KvStorePublisher(
+      std::set<std::string> const& selectAreas,
       thrift::KeyDumpParams filter,
       apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher);
 
@@ -34,6 +35,8 @@ class KvStorePublisher {
   }
 
  private:
+  // set of areas whose updates should be published. If empty, publish all
+  std::set<std::string> selectAreas_;
   thrift::KeyDumpParams filter_;
   KvStoreFilters keyPrefixFilter_{{}, {}};
   apache::thrift::ServerStreamPublisher<thrift::Publication> publisher_;

@@ -123,7 +123,8 @@ class PrefixManagerTestFixture : public testing::Test {
   getPrefixDb(const std::string& keyPrefix) {
     std::vector<thrift::PrefixEntry> prefixEntries{};
     auto marker = PrefixDbMarker{Constants::kPrefixDbMarker.toString()};
-    auto keyPrefixDbs = kvStoreClient->dumpAllWithPrefix(keyPrefix);
+    auto keyPrefixDbs =
+        kvStoreClient->dumpAllWithPrefix(kTestingAreaName, keyPrefix);
     for (const auto& pkey : keyPrefixDbs.value()) {
       if (pkey.first.find(marker) == 0) {
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
@@ -275,7 +276,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   auto prefixKey = PrefixKey(
       "node-1",
       folly::IPAddress::createNetwork(toString(*prefixEntry1.prefix_ref())),
-      thrift::KvStore_constants::kDefaultArea());
+      kTestingAreaName);
   keyStr = prefixKey.getPrefixKey();
 
   // start kvStoreClientInternal separately with different thread
@@ -289,7 +290,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
           scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
-        auto maybeValue = kvStoreClient->getKey(keyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, keyStr);
         EXPECT_TRUE(maybeValue.has_value());
         db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
@@ -320,7 +321,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
           scheduleAt += Constants::kPrefixMgrKvThrottleTimeout.count() / 2),
       [&]() {
         // Verify that before throttle expires, we don't see any update
-        auto maybeValue1 = kvStoreClient->getKey(keyStr);
+        auto maybeValue1 = kvStoreClient->getKey(kTestingAreaName, keyStr);
         EXPECT_TRUE(maybeValue1.has_value());
         auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue1.value().value_ref().value(), serializer);
@@ -341,7 +342,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
           scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
-        auto maybeValue2 = kvStoreClient->getKey(keyStr);
+        auto maybeValue2 = kvStoreClient->getKey(kTestingAreaName, keyStr);
         EXPECT_TRUE(maybeValue2.has_value());
         auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value_ref().value(), serializer);
@@ -365,7 +366,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
           scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
-        auto maybeValue3 = kvStoreClient->getKey(keyStr);
+        auto maybeValue3 = kvStoreClient->getKey(kTestingAreaName, keyStr);
         EXPECT_TRUE(maybeValue3.has_value());
         auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue3.value().value_ref().value(), serializer);
@@ -430,11 +431,8 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
       addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
 
   std::string keyStr{"prefix:node-1"};
-  keyStr = PrefixKey(
-               "node-1",
-               toIPNetwork(addr1),
-               thrift::KvStore_constants::kDefaultArea())
-               .getPrefixKey();
+  keyStr =
+      PrefixKey("node-1", toIPNetwork(addr1), kTestingAreaName).getPrefixKey();
 
   // Synchronization primitive
   folly::Baton baton;
@@ -446,6 +444,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
       &evl, "node-1", kvStoreWrapper->getKvStore());
 
   kvStoreClient->subscribeKey(
+      kTestingAreaName,
       keyStr,
       [&](std::string const&, std::optional<thrift::Value> val) mutable {
         ASSERT_TRUE(val.has_value());
@@ -531,11 +530,11 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
   auto prefixKey1 = PrefixKey(
       "node-1",
       folly::IPAddress::createNetwork(toString(*prefixEntry1.prefix_ref())),
-      thrift::KvStore_constants::kDefaultArea());
+      kTestingAreaName);
   auto prefixKey2 = PrefixKey(
       "node-1",
       folly::IPAddress::createNetwork(toString(*prefixEntry2.prefix_ref())),
-      thrift::KvStore_constants::kDefaultArea());
+      kTestingAreaName);
 
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
       &evl, "node-1", kvStoreWrapper->getKvStore());
@@ -551,7 +550,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(*maybeValue.value().version_ref(), 1);
       });
@@ -570,12 +569,13 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
           waitDuration += 4 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
         prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue2 =
+            kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
         EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
       });
@@ -594,13 +594,14 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
         // verify key is withdrawn
         prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue2 =
+            kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value_ref().value(), serializer);
@@ -636,7 +637,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   auto prefixKey = PrefixKey(
       "node-1",
       folly::IPAddress::createNetwork(toString(*prefixEntry.prefix_ref())),
-      thrift::KvStore_constants::kDefaultArea());
+      kTestingAreaName);
   prefixKeyStr = prefixKey.getPrefixKey();
 
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
@@ -653,7 +654,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         keyVersion = *maybeValue.value().version_ref();
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
@@ -675,6 +676,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   evl.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
         kvStoreClient->setKey(
+            kTestingAreaName,
             prefixKeyStr,
             emptyPrefxDbStr,
             keyVersion + 1,
@@ -686,7 +688,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
@@ -708,7 +710,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
@@ -735,6 +737,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         kvStoreClient->setKey(
+            kTestingAreaName,
             prefixKeyStr,
             nonEmptyPrefxDbStr,
             staleKeyVersion,
@@ -747,7 +750,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
@@ -800,11 +803,11 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   auto prefixKey1 = PrefixKey(
       "node-2",
       folly::IPAddress::createNetwork(toString(*prefixEntry1.prefix_ref())),
-      thrift::KvStore_constants::kDefaultArea());
+      kTestingAreaName);
   auto prefixKey2 = PrefixKey(
       "node-2",
       folly::IPAddress::createNetwork(toString(*prefixEntry2.prefix_ref())),
-      thrift::KvStore_constants::kDefaultArea());
+      kTestingAreaName);
 
   // insert two prefixes
   evl.scheduleTimeout(
@@ -819,12 +822,13 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
         prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue2 =
+            kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
         EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
       });
@@ -845,11 +849,12 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
           2 * Constants::kPrefixMgrKvThrottleTimeout.count() + ttl.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue = kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_FALSE(maybeValue.has_value());
 
         prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue2 =
+            kvStoreClient->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
         EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
 

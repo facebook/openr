@@ -84,50 +84,45 @@ class KvStoreWrapper {
    * returns false.
    */
   bool setKey(
+      AreaId const& area,
       std::string key,
       thrift::Value value,
-      std::optional<std::vector<std::string>> nodeIds = std::nullopt,
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+      std::optional<std::vector<std::string>> nodeIds = std::nullopt);
 
   /**
    * API to retrieve an existing key-value from KvStore. Returns empty if none
    * exists.
    */
-  std::optional<thrift::Value> getKey(
-      std::string key,
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+  std::optional<thrift::Value> getKey(AreaId const& area, std::string key);
 
   /**
    * APIs to set key-values into the KvStore. Returns true on success else
    * returns false.
    */
   bool setKeys(
+      AreaId const& area,
       const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
-      std::optional<std::vector<std::string>> nodeIds = std::nullopt,
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+      std::optional<std::vector<std::string>> nodeIds = std::nullopt);
 
   /**
    * API to get dump from KvStore.
    * if we pass a prefix, only return keys that match it
    */
   std::unordered_map<std::string /* key */, thrift::Value> dumpAll(
-      std::optional<KvStoreFilters> filters = std::nullopt,
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area, std::optional<KvStoreFilters> filters = std::nullopt);
 
   /**
    * API to get dump hashes from KvStore.
    * if we pass a prefix, only return keys that match it
    */
   std::unordered_map<std::string /* key */, thrift::Value> dumpHashes(
-      std::string const& prefix = "",
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area, std::string const& prefix = "");
 
   /**
    * API to get key vals on which hash differs from provided keyValHashes.
    */
   std::unordered_map<std::string /* key */, thrift::Value> syncKeyVals(
-      thrift::KeyVals const& keyValHashes,
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area, thrift::KeyVals const& keyValHashes);
 
   /**
    * API to listen for a publication on PUB queue.
@@ -142,30 +137,23 @@ class KvStoreWrapper {
   /*
    * Get flooding topology information
    */
-  thrift::SptInfos getFloodTopo(
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+  thrift::SptInfos getFloodTopo(AreaId const& area);
 
   /**
    * APIs to manage (add/remove) KvStore peers. Returns true on success else
    * returns false.
    */
-  bool addPeer(
-      std::string peerName,
-      thrift::PeerSpec spec,
-      std::string area = thrift::KvStore_constants::kDefaultArea());
-  bool delPeer(
-      std::string peerName,
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+  bool addPeer(AreaId const& area, std::string peerName, thrift::PeerSpec spec);
+  bool delPeer(AreaId const& area, std::string peerName);
 
   std::optional<KvStorePeerState> getPeerState(
-      std::string const& peerName,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area, std::string const& peerName);
 
   /**
    * APIs to get existing peers of a KvStore.
    */
   std::unordered_map<std::string /* peerName */, thrift::PeerSpec> getPeers(
-      std::string area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area);
 
   /**
    * Utility function to get peer-spec for owned KvStore

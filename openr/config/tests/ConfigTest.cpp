@@ -556,8 +556,7 @@ TEST(ConfigTest, GeneralGetter) {
 
     // getAreaIds
     EXPECT_EQ(1, config.getAreas().size());
-    EXPECT_EQ(
-        1, config.getAreas().count(thrift::KvStore_constants::kDefaultArea()));
+    EXPECT_EQ(1, config.getAreas().count(kTestingAreaName));
 
     // enable_v4
     EXPECT_TRUE(config.isV4Enabled());

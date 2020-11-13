@@ -150,8 +150,7 @@ createAdjDatabase(
     const std::string& thisNodeName,
     const std::vector<thrift::Adjacency>& adjacencies,
     int32_t nodeLabel,
-    const std::string& area =
-        openr::thrift::KvStore_constants::kDefaultArea()) {
+    const std::string& area = kTestingAreaName) {
   return createAdjDb(thisNodeName, adjacencies, nodeLabel, false, area);
 }
 
@@ -184,7 +183,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   virtual void
   SetUp(
-      std::unordered_set<std::string> areas,
+      std::unordered_set<std::string> areas = {},
       std::chrono::milliseconds flapInitalBackoff =
           std::chrono::milliseconds(1),
       std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
@@ -282,11 +281,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   thrift::OpenrConfig
   getTestOpenrConfig(
-      std::unordered_set<std::string> areas =
-          {openr::thrift::KvStore_constants::kDefaultArea()},
+      std::unordered_set<std::string> areas = {},
       std::chrono::milliseconds flapInitalBackoff =
           std::chrono ::milliseconds(1),
       std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
+    if (areas.empty()) {
+      areas.insert(kTestingAreaName);
+    }
     // create config
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : areas) {
@@ -429,9 +430,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   std::optional<thrift::Value>
   getPublicationValueForKey(
-      std::string const& key,
-      std::string const& area =
-          openr::thrift::KvStore_constants::kDefaultArea()) {
+      std::string const& key, std::string const& area = kTestingAreaName) {
     LOG(INFO) << "Waiting to receive publication for key " << key << " area "
               << area;
     auto pub = kvStoreWrapper->recvPublication();
@@ -456,9 +455,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   // expecting for a given key
   void
   checkNextAdjPub(
-      std::string const& key,
-      std::string const& area =
-          openr::thrift::KvStore_constants::kDefaultArea()) {
+      std::string const& key, std::string const& area = kTestingAreaName) {
     CHECK(!expectedAdjDbs.empty());
 
     LOG(INFO) << "[EXPECTED ADJ]";
@@ -503,8 +500,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   checkPeerDump(
       std::string const& nodeName,
       thrift::PeerSpec peerSpec,
-      std::string const& area =
-          openr::thrift::KvStore_constants::kDefaultArea()) {
+      AreaId const& area = kTestingAreaName) {
     auto const peers = kvStoreWrapper->getPeers(area);
     EXPECT_EQ(peers.count(nodeName), 1);
     if (!peers.count(nodeName)) {
@@ -517,15 +513,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>
   getNextPrefixDb(
-      std::string const& originatorId,
-      std::string const& area =
-          openr::thrift::KvStore_constants::kDefaultArea()) {
+      std::string const& originatorId, AreaId const& area = kTestingAreaName) {
     std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes;
 
     // Leverage KvStoreFilter to get `prefix:*` change
     std::optional<KvStoreFilters> kvFilters{KvStoreFilters(
         {Constants::kPrefixDbMarker.toString()}, {originatorId})};
-    auto kvs = kvStoreWrapper->dumpAll(std::move(kvFilters), area);
+    auto kvs = kvStoreWrapper->dumpAll(area, std::move(kvFilters));
     for (const auto& [key, val] : kvs) {
       if (auto value = val.value_ref()) {
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
@@ -593,7 +587,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 // Start LinkMonitor and ensure empty adjacency database and prefixes are
 // received upon initial hold-timeout expiry
 TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   // Verify that we receive empty adjacency database
   expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel));
   checkNextAdjPub("adj:node-1");
@@ -602,7 +596,7 @@ TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
 // Start LinkMonitor and ensure drain state are set correctly according to
 // parameters
 TEST_F(LinkMonitorTestFixture, DrainState) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
 
   // 1. default setup:
   // persistent store == null, assume_drain = false, override_drain_state =
@@ -659,7 +653,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 // receive neighbor up/down events from "spark"
 // form peer connections and inform KvStore of adjacencies
 TEST_F(LinkMonitorTestFixture, BasicOperation) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   const int linkMetric = 123;
   const int adjMetric = 100;
 
@@ -807,8 +801,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // kvstore peer initial sync
   {
-    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    kvStoreSyncEventsQueue.push(
+        KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
     checkNextAdjPub("adj:node-1");
   }
 
@@ -956,8 +950,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
-    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    kvStoreSyncEventsQueue.push(
+        KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
     LOG(INFO) << "Testing adj up event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -978,7 +972,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
 // Test linkMonitor restarts to honor `enableSegmentRouting` flag
 TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   {
     // Intertionally save nodeLabel to be non-zero value
     thrift::LinkMonitorState state;
@@ -1007,15 +1001,15 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
 
     // nodeLabel is non-zero value read from config_, override to 0 to
     // honor flag.
-    auto thriftAdjDb = linkMonitor->getAdjacencies().get();
-    EXPECT_TRUE(thriftAdjDb);
-    EXPECT_EQ(0, *thriftAdjDb->nodeLabel_ref());
+    auto thriftAdjDbs = linkMonitor->getAdjacencies().get();
+    EXPECT_EQ(1, thriftAdjDbs->size());
+    EXPECT_EQ(0, thriftAdjDbs->at(0).get_nodeLabel());
   }
 }
 
 // Test throttling
 TEST_F(LinkMonitorTestFixture, Throttle) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   {
     InSequence dummy;
 
@@ -1038,11 +1032,11 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
   }
 
   // initial sync event on nb2, kick advertiseAdjacenciesThrottled_
-  kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-      *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+  kvStoreSyncEventsQueue.push(
+      KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
   // another initial sync event from nb3
-  kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-      *nb3.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+  kvStoreSyncEventsQueue.push(
+      KvStoreSyncEvent(*nb3.nodeName_ref(), kTestingAreaName));
 
   // before throttled function kicks in
 
@@ -1058,7 +1052,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
 // parallel adjacencies between two nodes via different interfaces
 TEST_F(LinkMonitorTestFixture, ParallelAdj) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   {
     InSequence dummy;
 
@@ -1104,8 +1098,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // kvstore peer initial sync
   {
-    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    kvStoreSyncEventsQueue.push(
+        KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
     checkNextAdjPub("adj:node-1");
   }
 
@@ -1166,15 +1160,15 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // kvstore peer initial sync
   {
-    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-        *nb3.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    kvStoreSyncEventsQueue.push(
+        KvStoreSyncEvent(*nb3.nodeName_ref(), kTestingAreaName));
     checkNextAdjPub("adj:node-1");
   }
 }
 
 // Verify neighbor-restarting event (including parallel case)
 TEST_F(LinkMonitorTestFixture, NeighborRestart) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
 
   /* Single link case */
   // neighbor up
@@ -1200,7 +1194,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
   // peers should be gone
-  EXPECT_TRUE(kvStoreWrapper->getPeers().empty());
+  EXPECT_TRUE(kvStoreWrapper->getPeers(kTestingAreaName).empty());
 
   {
     auto neighborEvent = createSparkNeighborEvent(
@@ -1273,14 +1267,11 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
   // peers should be gone
-  EXPECT_TRUE(kvStoreWrapper->getPeers().empty());
+  EXPECT_TRUE(kvStoreWrapper->getPeers(kTestingAreaName).empty());
 }
 
 TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
-  SetUp(
-      {openr::thrift::KvStore_constants::kDefaultArea()},
-      std::chrono::milliseconds(2000),
-      std::chrono::milliseconds(4000));
+  SetUp({}, std::chrono::milliseconds(2000), std::chrono::milliseconds(4000));
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1513,7 +1504,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
 // Test Interface events to Spark
 TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1578,7 +1569,7 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
 }
 
 TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1746,7 +1737,7 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
 
 // Test getting unique nodeLabels
 TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
   size_t kNumNodesToTest = 10;
 
   // spin up kNumNodesToTest - 1 new link monitors. 1 is spun up in setup()
@@ -1830,7 +1821,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
  * - set link to down state and verify that it removes all associated addresses
  */
 TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
-  SetUp({thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
 
   const std::string nodeName = "node-1";
   const std::string linkLocalAddr1 = "fe80::1/128";
@@ -1846,8 +1837,7 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   //
 
   std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes{};
-  prefixes =
-      getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
+  prefixes = getNextPrefixDb(nodeName);
   EXPECT_EQ(0, prefixes.size());
 
   //
@@ -1875,8 +1865,7 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   LOG(INFO) << "Testing address advertisements";
 
   while (prefixes.size() != 5) {
-    prefixes =
-        getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
+    prefixes = getNextPrefixDb(nodeName);
   }
 
   // verify prefixes with VALID prefixes has been advertised
@@ -1909,8 +1898,7 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   LOG(INFO) << "Testing address withdraws";
 
   while (prefixes.size() != 1) {
-    prefixes =
-        getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
+    prefixes = getNextPrefixDb(nodeName);
   }
 
   ASSERT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6_2)));
@@ -1935,15 +1923,14 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
 
   // Verify all addresses are withdrawn on link down event
   while (prefixes.size() != 0) {
-    prefixes =
-        getNextPrefixDb(nodeName, thrift::KvStore_constants::kDefaultArea());
+    prefixes = getNextPrefixDb(nodeName);
   }
 
   LOG(INFO) << "All prefixes get withdrawn.";
 }
 
 TEST_F(LinkMonitorTestFixture, GetAllLinks) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp({});
 
   // Empty links
   auto links = linkMonitor->getAllLinks().get();
@@ -1985,53 +1972,69 @@ TEST(LinkMonitor, GetPeersFromAdjacencies) {
   const auto peerSpec3 = createPeerSpec("tcp://[fe80::2%iface3]:10002");
 
   // Get peer spec
-  adjacencies[{"node1", "iface1"}] = {peerSpec1, thrift::Adjacency()};
-  adjacencies[{"node2", "iface2"}] = {peerSpec2, thrift::Adjacency()};
+  adjacencies[{"node1", "iface1"}] = {
+      kTestingAreaName, peerSpec1, thrift::Adjacency()};
+  adjacencies[{"node2", "iface2"}] = {
+      kTestingAreaName, peerSpec2, thrift::Adjacency()};
   peers["node1"] = peerSpec1;
   peers["node2"] = peerSpec2;
   EXPECT_EQ(2, adjacencies.size());
   EXPECT_EQ(2, peers.size());
-  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+  EXPECT_EQ(
+      peers,
+      LinkMonitor::getPeersFromAdjacencies(adjacencies, kTestingAreaName));
 
   // Add {node2, iface3} to adjacencies and see no changes peers
-  adjacencies[{"node2", "iface3"}] = {peerSpec3, thrift::Adjacency()};
+  adjacencies[{"node2", "iface3"}] = {
+      kTestingAreaName, peerSpec3, thrift::Adjacency()};
   EXPECT_EQ(3, adjacencies.size());
   EXPECT_EQ(2, peers.size());
-  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+  EXPECT_EQ(
+      peers,
+      LinkMonitor::getPeersFromAdjacencies(adjacencies, kTestingAreaName));
 
   // Add {node1, iface0} to adjacencies and see node1 changes to peerSpec0
-  adjacencies[{"node1", "iface0"}] = {peerSpec0, thrift::Adjacency()};
+  adjacencies[{"node1", "iface0"}] = {
+      kTestingAreaName, peerSpec0, thrift::Adjacency()};
   peers["node1"] = peerSpec0;
   EXPECT_EQ(4, adjacencies.size());
   EXPECT_EQ(2, peers.size());
-  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+  EXPECT_EQ(
+      peers,
+      LinkMonitor::getPeersFromAdjacencies(adjacencies, kTestingAreaName));
 
   // Remove {node2, iface2} from adjacencies and see node2 changes to peerSpec3
   adjacencies.erase({"node2", "iface2"});
   peers["node2"] = peerSpec3;
   EXPECT_EQ(3, adjacencies.size());
   EXPECT_EQ(2, peers.size());
-  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+  EXPECT_EQ(
+      peers,
+      LinkMonitor::getPeersFromAdjacencies(adjacencies, kTestingAreaName));
 
   // Remove {node2, iface3} from adjacencies and see node2 no longer exists
   adjacencies.erase({"node2", "iface3"});
   peers.erase("node2");
   EXPECT_EQ(2, adjacencies.size());
   EXPECT_EQ(1, peers.size());
-  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+  EXPECT_EQ(
+      peers,
+      LinkMonitor::getPeersFromAdjacencies(adjacencies, kTestingAreaName));
 
   // Test for empty adjacencies
   adjacencies.clear();
   peers.clear();
   EXPECT_EQ(0, adjacencies.size());
   EXPECT_EQ(0, peers.size());
-  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+  EXPECT_EQ(
+      peers,
+      LinkMonitor::getPeersFromAdjacencies(adjacencies, kTestingAreaName));
 
   // with different areas
   adjacencies[{"node1", "iface1"}] = {
-      peerSpec1, thrift::Adjacency(), false, "pod"};
+      "pod", peerSpec1, thrift::Adjacency(), false};
   adjacencies[{"node2", "iface2"}] = {
-      peerSpec2, thrift::Adjacency(), false, "pod"};
+      "pod", peerSpec2, thrift::Adjacency(), false};
   peers["node1"] = peerSpec1;
   peers["node2"] = peerSpec2;
   EXPECT_EQ(2, adjacencies.size());
@@ -2039,23 +2042,24 @@ TEST(LinkMonitor, GetPeersFromAdjacencies) {
   EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies, "pod"));
 
   adjacencies[{"node2", "iface3"}] = {
-      peerSpec3, thrift::Adjacency(), false, "plane"};
+      "plane", peerSpec3, thrift::Adjacency(), false};
   EXPECT_EQ(3, adjacencies.size());
   EXPECT_EQ(
       1, LinkMonitor::getPeersFromAdjacencies(adjacencies, "plane").size());
 }
 
 TEST_F(LinkMonitorTestFixture, AreaTest) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea(), "pod", "plane"});
+  SetUp({kTestingAreaName, "pod", "plane"});
 
   // Verify that we receive empty adjacency database in all 3 areas
+  expectedAdjDbs.push(
+      createAdjDatabase("node-1", {}, kNodeLabel, kTestingAreaName));
   expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel, "plane"));
   expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel, "pod"));
-  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel));
+
+  checkNextAdjPub("adj:node-1", kTestingAreaName);
   checkNextAdjPub("adj:node-1", "plane");
   checkNextAdjPub("adj:node-1", "pod");
-  checkNextAdjPub(
-      "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
 
   // add link up event. AdjDB should get updated with link interface
   // Will be updated in all areas
@@ -2069,19 +2073,18 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     recvAndReplyIfUpdate();
     // expect neighbor up first
     // node-2 neighbor up in iface_2_1
-    auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+    auto adjDb =
+        createAdjDatabase("node-1", {adj_2_1}, kNodeLabel, kTestingAreaName);
     expectedAdjDbs.push(std::move(adjDb));
     {
       auto neighborEvent = createSparkNeighborEvent(
           thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
       neighborUpdatesQueue.push(std::move(neighborEvent));
-      kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-          *nb2.nodeName_ref(),
-          openr::thrift::KvStore_constants::kDefaultArea()));
+      kvStoreSyncEventsQueue.push(
+          KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
       LOG(INFO) << "Testing neighbor UP event in default area!";
 
-      checkNextAdjPub(
-          "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
+      checkNextAdjPub("adj:node-1", kTestingAreaName);
     }
 
     // bring up iface3_1, neighbor up event in plane area. Adj db in "plane"
@@ -2110,16 +2113,16 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     auto neighborEvent = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
-    kvStoreSyncEventsQueue.push(KvStoreSyncEvent(
-        *nb2.nodeName_ref(), openr::thrift::KvStore_constants::kDefaultArea()));
+    kvStoreSyncEventsQueue.push(
+        KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
     LOG(INFO) << "Testing neighbor UP event!";
-    checkNextAdjPub(
-        "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
+    checkNextAdjPub("adj:node-1", kTestingAreaName);
     checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
   }
   // neighbor up on "plane" area
   {
-    auto adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, "plane");
+    auto adjDb =
+        createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, AreaId{"plane"});
     expectedAdjDbs.push(std::move(adjDb));
 
     auto cp = nb3;
@@ -2131,7 +2134,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
         KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", "plane");
-    checkPeerDump(*adj_3_1.otherNodeName_ref(), peerSpec_3_1, "plane");
+    checkPeerDump(*adj_3_1.otherNodeName_ref(), peerSpec_3_1, AreaId{"plane"});
   }
   // verify neighbor down in "plane" area
   {

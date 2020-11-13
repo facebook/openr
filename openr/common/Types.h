@@ -45,6 +45,8 @@ BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 
+BOOST_STRONG_TYPEDEF(std::string, AreaId);
+
 /**
  * Structure defining KvStore peer sync event, published to subscribers.
  * LinkMonitor subscribes this event for signal adjancency UP event propagation
@@ -141,3 +143,11 @@ class PrefixKey {
 };
 
 } // namespace openr
+
+template <>
+struct std::hash<openr::AreaId> {
+  size_t
+  operator()(openr::AreaId const& areaId) const {
+    return hash<string>()(areaId);
+  }
+};

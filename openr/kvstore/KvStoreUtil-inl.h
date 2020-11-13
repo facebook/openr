@@ -45,21 +45,22 @@ std::pair<
     std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithPrefixMultipleAndParse(
+    std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
     std::optional<int> maybeIpTos /* std::nullopt */,
-    const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
-    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
+    const folly::SocketAddress&
+        bindAddr /* folly::AsyncSocket::anyAddress()*/) {
   auto val = dumpAllWithThriftClientFromMultiple(
+      area,
       sockAddrs,
       keyPrefix,
       connectTimeout,
       processTimeout,
       maybeIpTos,
-      bindAddr,
-      area);
+      bindAddr);
   if (not val.first) {
     return std::make_pair(std::nullopt, val.second);
   }
@@ -71,13 +72,14 @@ std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithThriftClientFromMultiple(
+    std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
     std::optional<int> maybeIpTos /* std::nullopt */,
-    const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
-    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
+    const folly::SocketAddress&
+        bindAddr /* folly::AsyncSocket::anyAddress()*/) {
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   std::unordered_map<std::string, thrift::Value> merged;
@@ -125,7 +127,8 @@ dumpAllWithThriftClientFromMultiple(
             << sockAddr.getAddressStr();
 
     calls.emplace_back(
-        client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
+        area ? client->semifuture_getKvStoreKeyValsFilteredArea(params, *area)
+             : client->semifuture_getKvStoreKeyValsFiltered(params));
   }
 
   // can't connect to ANY single Open/R instance

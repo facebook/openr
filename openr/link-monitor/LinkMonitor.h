@@ -53,10 +53,10 @@ struct AdjacencyValue {
   std::string area{};
   AdjacencyValue() {}
   AdjacencyValue(
+      std::string areaId,
       thrift::PeerSpec spec,
       thrift::Adjacency adj,
-      bool restarting = false,
-      std::string areaId = openr::thrift::KvStore_constants::kDefaultArea())
+      bool restarting = false)
       : peerSpec(spec),
         adjacency(adj),
         isRestarting(restarting),
@@ -148,15 +148,15 @@ class LinkMonitor final : public OpenrEventBase {
       std::string adjNodeName,
       std::optional<int32_t> overrideMetric);
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
-  folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
-  getAdjacencies();
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
+  getAdjacencies(thrift::AdjacenciesFilter filter = {});
   folly::SemiFuture<std::vector<LinkEntry>> getAllLinks();
 
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
   static std::unordered_map<std::string, thrift::PeerSpec>
   getPeersFromAdjacencies(
       const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
+      const std::string& area);
 
  private:
   // make no-copy
@@ -264,8 +264,7 @@ class LinkMonitor final : public OpenrEventBase {
   std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
 
   // build AdjacencyDatabase
-  thrift::AdjacencyDatabase buildAdjacencyDatabase(
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
+  thrift::AdjacencyDatabase buildAdjacencyDatabase(const std::string& area);
 
   // submit events to monitor
   void logNeighborEvent(thrift::SparkNeighborEvent const& event);

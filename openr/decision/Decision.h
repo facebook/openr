@@ -293,15 +293,10 @@ class Decision : public OpenrEventBase {
   folly::SemiFuture<StaticMplsRoutes> getMplsStaticRoutes();
 
   /*
-   * Retrieve AdjacencyDatabase for kDefaultArea
-   */
-  folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>> getDecisionAdjacencyDbs();
-
-  /*
    * Retrieve AdjacencyDatabase for all nodes in all areas
    */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
-  getAllDecisionAdjacencyDbs();
+  getDecisionAdjacenciesFiltered(thrift::AdjacenciesFilter filter = {});
 
   /*
    * Retrieve PrefixDatabase as a map.

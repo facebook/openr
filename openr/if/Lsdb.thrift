@@ -338,5 +338,5 @@ struct PrefixDatabase {
   5: bool deletePrefix
 
   // openr area in which prefix is advertised
-  7: string area = KvStore.kDefaultArea
+  7: string area
 }

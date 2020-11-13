@@ -24,6 +24,7 @@ const std::string kConfigKey{"prefix-allocator-config"};
 namespace openr {
 
 PrefixAllocator::PrefixAllocator(
+    AreaId const& area,
     std::shared_ptr<const Config> config,
     fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
@@ -42,7 +43,7 @@ PrefixAllocator::PrefixAllocator(
       prefixForwardingType_(*config->getConfig().prefix_forwarding_type_ref()),
       prefixForwardingAlgorithm_(
           *config->getConfig().prefix_forwarding_algorithm_ref()),
-      area_(*config->getAreaIds().begin()),
+      area_(area),
       nlSock_(nlSock),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
@@ -90,6 +91,7 @@ void
 PrefixAllocator::staticAllocation() {
   // subscribe for incremental updates of static prefix allocation key
   kvStoreClient_->subscribeKey(
+      area_,
       Constants::kStaticPrefixAllocParamKey.toString(),
       [&](std::string const& key, std::optional<thrift::Value> value) {
         CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
@@ -97,8 +99,7 @@ PrefixAllocator::staticAllocation() {
           processStaticPrefixAllocUpdate(value.value());
         }
       },
-      false,
-      area_);
+      false);
 
   // get initial value if missed out in incremental updates (one time only)
   initTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -110,11 +111,11 @@ PrefixAllocator::staticAllocation() {
 
     // 1) Get initial value from KvStore!
     auto maybeValue = kvStoreClient_->getKey(
-        Constants::kStaticPrefixAllocParamKey.toString(), area_);
+        area_, Constants::kStaticPrefixAllocParamKey.toString());
     if (!maybeValue.has_value()) {
       LOG(ERROR) << "Failed to retrieve prefix alloc key: "
                  << Constants::kStaticPrefixAllocParamKey.toString()
-                 << " from KvStore, area: " << area_;
+                 << " from KvStore, area: " << area_.t;
     } else {
       processStaticPrefixAllocUpdate(maybeValue.value());
       return;
@@ -152,6 +153,7 @@ void
 PrefixAllocator::dynamicAllocationLeafNode() {
   // subscribe for incremental updates of seed prefix
   kvStoreClient_->subscribeKey(
+      area_,
       Constants::kSeedPrefixAllocParamKey.toString(),
       [&](std::string const& key, std::optional<thrift::Value> value) {
         CHECK_EQ(Constants::kSeedPrefixAllocParamKey.toString(), key);
@@ -159,10 +161,10 @@ PrefixAllocator::dynamicAllocationLeafNode() {
           processAllocParamUpdate(value.value());
         }
       },
-      false,
-      area_);
+      false);
 
   kvStoreClient_->subscribeKey(
+      area_,
       Constants::kStaticPrefixAllocParamKey.toString(),
       [&](std::string const& key, std::optional<thrift::Value> value) {
         CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
@@ -170,8 +172,7 @@ PrefixAllocator::dynamicAllocationLeafNode() {
           processNetworkAllocationsUpdate(value.value());
         }
       },
-      false,
-      area_);
+      false);
 
   // get initial value if missed out in incremental updates (one time only)
   initTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -183,11 +184,11 @@ PrefixAllocator::dynamicAllocationLeafNode() {
 
     // 1) Get initial value from KvStore!
     auto maybeValue = kvStoreClient_->getKey(
-        Constants::kSeedPrefixAllocParamKey.toString(), area_);
+        area_, Constants::kSeedPrefixAllocParamKey.toString());
     if (!maybeValue.has_value()) {
       LOG(ERROR) << "Failed to retrieve prefix alloc key: "
                  << Constants::kStaticPrefixAllocParamKey.toString()
-                 << " from KvStore, area: " << area_;
+                 << " from KvStore, area: " << area_.t;
     } else {
       processAllocParamUpdate(maybeValue.value());
       return;
@@ -521,6 +522,7 @@ PrefixAllocator::startAllocation(
 
   // create range allocator to get unique prefixes
   rangeAllocator_ = std::make_unique<RangeAllocator<uint32_t>>(
+      area_,
       myNodeName_,
       Constants::kPrefixAllocMarker.toString(),
       kvStoreClient_.get(),
@@ -535,8 +537,7 @@ PrefixAllocator::startAllocation(
       [this](uint32_t allocIndex) noexcept->bool {
         return checkE2eAllocIndex(allocIndex);
       },
-      Constants::kRangeAllocTtl,
-      area_);
+      Constants::kRangeAllocTtl);
 
   // start range allocation
   LOG(INFO) << "Starting prefix allocation with seed prefix: "

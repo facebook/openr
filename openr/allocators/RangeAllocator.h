@@ -47,6 +47,7 @@ class RangeAllocator {
    * higher priority allocator instances joining later
    */
   RangeAllocator(
+      AreaId const& area,
       const std::string& nodeName,
       const std::string& keyPrefix,
       KvStoreClientInternal* const kvStoreClient,
@@ -56,8 +57,8 @@ class RangeAllocator {
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
       const bool overrideOwner = true,
       const std::function<bool(T)> checkValueInUseCb = nullptr,
-      const std::chrono::milliseconds rangeAllocTtl = Constants::kRangeAllocTtl,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
+      const std::chrono::milliseconds rangeAllocTtl =
+          Constants::kRangeAllocTtl);
 
   /**
    * user must call this to start allocation
@@ -177,7 +178,7 @@ class RangeAllocator {
   const std::chrono::milliseconds rangeAllocTtl_;
 
   // area ID
-  const std::string area_{};
+  const AreaId area_{};
 };
 
 } // namespace openr

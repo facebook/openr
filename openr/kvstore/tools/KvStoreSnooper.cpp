@@ -34,18 +34,24 @@ main(int argc, char** argv) {
           FLAGS_port,
           std::chrono::milliseconds(FLAGS_connect_timeout_ms),
           std::chrono::milliseconds(FLAGS_processing_timeout_ms));
-  auto response = client->semifuture_subscribeAndGetKvStore().get();
-  auto& globalKeyVals = *response.response.keyVals_ref();
+  auto response = client->semifuture_subscribeAndGetAreaKvStores({}, {}).get();
+  std::unordered_map<
+      std::string /* area */,
+      std::unordered_map<std::string /* key */, openr::thrift::Value>>
+      areaKeyVals;
   LOG(INFO) << "Stream is connected, updates will follow";
-  LOG(INFO) << "Received " << globalKeyVals.size()
-            << " entries in initial dump.";
+  for (auto const& pub : response.response) {
+    LOG(INFO) << "Received " << pub.get_keyVals().size()
+              << " entries in initial dump for area: " << pub.get_area();
+    areaKeyVals[pub.get_area()] = pub.get_keyVals();
+  }
   LOG(INFO) << "";
 
   auto subscription =
       std::move(response.stream)
           .subscribeExTry(
               folly::Executor::getKeepAliveToken(&evb),
-              [&globalKeyVals](
+              [areaKeyVals = std::move(areaKeyVals)](
                   folly::Try<openr::thrift::Publication>&& maybePub) mutable {
                 if (maybePub.hasException()) {
                   LOG(ERROR) << maybePub.exception().what();
@@ -60,7 +66,7 @@ main(int argc, char** argv) {
 
                 // Print updates
                 auto updatedKeyVals = openr::KvStore::mergeKeyValues(
-                    globalKeyVals, *pub.keyVals_ref());
+                    areaKeyVals.at(pub.get_area()), *pub.keyVals_ref());
                 for (auto& kv : updatedKeyVals) {
                   std::cout << (kv.second.value_ref().has_value() ? "Updated"
                                                                   : "Refreshed")

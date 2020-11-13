@@ -35,6 +35,7 @@ namespace openr {
 class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
+      AreaId const& area,
       std::shared_ptr<const Config> config,
       // raw ptr for modules
       fbnl::NetlinkProtocolSocket* nlSock,
@@ -166,8 +167,8 @@ class PrefixAllocator : public OpenrEventBase {
   thrift::PrefixForwardingType prefixForwardingType_;
   thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;
 
-  // areas
-  std::string area_;
+  // area in which to allocate prefix
+  AreaId area_;
 
   // Allocation parameters e.g., fc00:cafe::/56, 64
   std::optional<PrefixAllocationParams> allocParams_;

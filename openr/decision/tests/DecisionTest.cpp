@@ -42,8 +42,6 @@ using apache::thrift::FRAGILE;
 
 namespace {
 
-const auto kDefaultArea{openr::thrift::KvStore_constants::kDefaultArea()};
-
 /// R1 -> R2, R3
 const auto adj12 =
     createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 100002);
@@ -135,7 +133,7 @@ const thrift::NextHopThrift labelPopNextHop{createNextHop(
     std::nullopt /* ifName */,
     0 /* metric */,
     labelPopAction,
-    kDefaultArea)};
+    kTestingAreaName)};
 
 // timeout to wait until decision debounce
 // (i.e. spf recalculation, route rebuild) finished
@@ -209,7 +207,7 @@ createNextHopFromAdj(
     bool isV4,
     int32_t metric,
     std::optional<thrift::MplsAction> mplsAction = std::nullopt,
-    const std::string& area = kDefaultArea) {
+    const std::string& area = kTestingAreaName) {
   return createNextHop(
       isV4 ? *adj.nextHopV4_ref() : *adj.nextHopV6_ref(),
       *adj.ifName_ref(),
@@ -416,8 +414,8 @@ TEST(ShortestPathTest, UnreachableNodes) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
@@ -454,8 +452,8 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1's AdjDb and all prefixes, but do not
@@ -487,8 +485,8 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1's AdjDb and all prefixes, but do not
@@ -520,7 +518,7 @@ TEST(ShortestPathTest, UnknownNode) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
   PrefixState prefixState;
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
@@ -542,8 +540,8 @@ TEST(SpfSolver, AdjacencyUpdate) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1 and R2's adjacency + prefix dbs
@@ -678,8 +676,8 @@ TEST(MplsRoutes, BasicTest) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
 
   PrefixState prefixState;
   // Add all adjacency DBs
@@ -723,8 +721,8 @@ TEST(BGPRedistribution, BasicOperation) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
@@ -917,8 +915,8 @@ TEST(BGPRedistribution, IgpMetric) {
       false /* bgpDryRun */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
   // Create BGP prefix
@@ -1088,8 +1086,8 @@ TEST(Decision, BestRouteSelection) {
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 3);
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
@@ -1138,8 +1136,8 @@ TEST(Decision, BestRouteSelection) {
     ASSERT_EQ(1, bestRoutesCache.count(addr1));
     auto& bestRoutes = bestRoutesCache.at(addr1);
     EXPECT_EQ(2, bestRoutes.allNodeAreas.size());
-    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", "0"}));
-    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"3", "0"}));
+    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", kTestingAreaName}));
+    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"3", kTestingAreaName}));
     EXPECT_EQ("2", bestRoutes.bestNodeArea.first);
   }
 
@@ -1172,7 +1170,7 @@ TEST(Decision, BestRouteSelection) {
     ASSERT_EQ(1, bestRoutesCache.count(addr1));
     auto& bestRoutes = bestRoutesCache.at(addr1);
     EXPECT_EQ(1, bestRoutes.allNodeAreas.size());
-    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", "0"}));
+    EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", kTestingAreaName}));
     EXPECT_EQ("2", bestRoutes.bestNodeArea.first);
   }
 
@@ -1228,8 +1226,8 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
   EXPECT_EQ(
@@ -1283,8 +1281,8 @@ TEST(ConnectivityTest, OverloadNodeTest) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
   // Add all adjacency DBs
@@ -1381,8 +1379,8 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
   // Add all adjacency DBs
@@ -1518,8 +1516,8 @@ class SimpleRingMeshTopologyFixture
     adjacencyDb3 = createAdjDb("3", {adj31, adj32, adj34}, 3);
     adjacencyDb4 = createAdjDb("4", {adj41, adj42, adj43}, 4);
 
-    areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-    auto& linkState = areaLinkStates.at(kDefaultArea);
+    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName);
 
     EXPECT_EQ(
         LinkState::LinkStateChange(false, false, true),
@@ -1665,7 +1663,7 @@ TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
   validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies_ref());
 
   adjacencyDb3.isOverloaded_ref() = true;
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
 
@@ -1705,8 +1703,8 @@ class SimpleRingTopologyFixture
     adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
     adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
 
-    areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-    auto& linkState = areaLinkStates.at(kDefaultArea);
+    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName);
 
     EXPECT_EQ(
         LinkState::LinkStateChange(false, false, true),
@@ -1949,7 +1947,7 @@ TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
   fb303::fbData->resetAllData();
   // make node1's mpls label same as node2.
   adjacencyDb1.nodeLabel_ref() = 2;
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   linkState.updateAdjacencyDatabase(adjacencyDb1);
 
   // verify route DB change in node 1, 2 ,3.
@@ -2458,7 +2456,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
   // are overloaded. In such case, there is no route from node 1 to node 2 and 4
   adjacencyDb1.adjacencies_ref()[0].isOverloaded_ref() = true;
   adjacencyDb3.isOverloaded_ref() = true;
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
@@ -2823,7 +2821,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
   CustomSetUp(true /* multipath */, false /* useKsp2Ed */);
   adjacencyDb2.isOverloaded_ref() = true;
   adjacencyDb3.isOverloaded_ref() = true;
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
@@ -2938,7 +2936,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
   CustomSetUp(true /* multipath */, false /* useKsp2Ed */);
   adjacencyDb3.adjacencies_ref()[0].isOverloaded_ref() =
       true; // make adj31 overloaded
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
   auto routeMap = getRouteMap(
@@ -3199,8 +3197,8 @@ class ParallelAdjRingTopologyFixture
     adjacencyDb4 = createAdjDb("4", {adj42_1, adj43_1, adj43_2, adj43_3}, 4);
 
     // Adjacency db's
-    areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-    auto& linkState = areaLinkStates.at(kDefaultArea);
+    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName);
     EXPECT_FALSE(
         linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
     EXPECT_TRUE(
@@ -3629,7 +3627,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
 
   adjacencyDb1.adjacencies_ref()->at(1).isOverloaded_ref() = true;
   adjacencyDb3.adjacencies_ref()->at(2).isOverloaded_ref() = true;
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
@@ -3745,7 +3743,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   adjacencyDb1.adjacencies_ref()->at(1).isOverloaded_ref() = true;
   adjacencyDb3.adjacencies_ref()->at(2).isOverloaded_ref() = true;
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
 
@@ -3895,8 +3893,8 @@ TEST(DecisionTest, Ip2MplsRoutes) {
   auto spfSolver = std::make_unique<SpfSolver>(nodeName, false, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
   // R1
@@ -4272,8 +4270,8 @@ class GridTopologyFixture : public ::testing::TestWithParam<int> {
   void
   SetUp() override {
     n = GetParam();
-    areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-    auto& linkState = areaLinkStates.at(kDefaultArea);
+    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName);
     createGrid(linkState, prefixState, n);
   }
 
@@ -4363,8 +4361,8 @@ TEST(GridTopology, StressTest) {
   SpfSolver spfSolver(nodeName, false, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kDefaultArea, LinkState(kDefaultArea));
-  auto& linkState = areaLinkStates.at(kDefaultArea);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
   createGrid(linkState, prefixState, 99);
@@ -4498,7 +4496,7 @@ class DecisionTestFixture : public ::testing::Test {
       const string& node,
       int64_t version,
       const vector<thrift::IpPrefix>& prefixes = {},
-      const string& area = kDefaultArea) {
+      const string& area = kTestingAreaName) {
     vector<thrift::PrefixEntry> prefixEntries;
     for (const auto& prefix : prefixes) {
       prefixEntries.emplace_back(createPrefixEntry(prefix));
@@ -4517,7 +4515,7 @@ class DecisionTestFixture : public ::testing::Test {
       const auto prefixKey = PrefixKey(
           node,
           folly::IPAddress::createNetwork(toString(prefix)),
-          thrift::KvStore_constants::kDefaultArea());
+          kTestingAreaName);
       keyVal[prefixKey.getPrefixKey()] = createThriftValue(
           version,
           node,
@@ -6047,6 +6045,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
  */
 TEST_F(DecisionTestFixture, DecisionSubReliability) {
   thrift::Publication initialPub;
+  initialPub.set_area(kTestingAreaName);
 
   // wait for the inital coldstart sync, expect it to be empty
   EXPECT_EQ(0, recvRouteUpdates().unicastRoutesToUpdate.size());
@@ -6093,6 +6092,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // is not going to cause any SPF computation
   //
   thrift::Publication duplicatePub;
+  duplicatePub.set_area(kTestingAreaName);
   duplicatePub.keyVals_ref()["prefix:1"] =
       initialPub.keyVals_ref()->at("prefix:1");
   int64_t totalSent = 0;
@@ -6121,6 +6121,8 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // updates).
   //
   thrift::Publication newPub;
+  newPub.set_area(kTestingAreaName);
+
   auto newAddr = toIpPrefix("face:b00c:babe::1/128");
   newPub.keyVals_ref()["prefix:1"] = createPrefixValue("1", 2, {newAddr});
   LOG(INFO) << "Advertising prefix update";

@@ -438,6 +438,7 @@ main(int argc, char** argv) {
         watchdog,
         "PrefixAllocator",
         std::make_unique<PrefixAllocator>(
+            AreaId{*config->getAreaIds().begin()},
             config,
             nlSock.get(),
             kvStore,

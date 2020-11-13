@@ -14,6 +14,7 @@
 #include <folly/Random.h>
 #include <folly/init/Init.h>
 
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
@@ -172,7 +173,7 @@ floodingUpdate(
     keyVals.emplace_back(keyVal);
   }
   suspender.dismiss(); // Start measuring benchmark time
-  kvStore->setKeys(keyVals);
+  kvStore->setKeys(kTestingAreaName, keyVals);
   version++;
 
   // Receive publication from kvStore for new key-update
@@ -250,12 +251,12 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
         thriftVal.value_ref());
 
     // Adding key to kvStore
-    kvStore->setKey(key, thriftVal);
+    kvStore->setKey(kTestingAreaName, key, thriftVal);
   }
 
   suspender.dismiss(); // Start measuring benchmark time
   for (uint32_t i = 0; i < iters; i++) {
-    kvStore->dumpAll();
+    kvStore->dumpAll(kTestingAreaName);
   }
 }
 

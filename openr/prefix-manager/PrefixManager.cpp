@@ -143,7 +143,7 @@ PrefixManager::PrefixManager(
       });
 
   // register kvstore publication callback
-  std::vector<std::string> keyPrefixList = {
+  std::vector<std::string> const keyPrefixList = {
       Constants::kPrefixDbMarker.toString() + nodeId_};
   kvStoreClient_->subscribeKeyFilter(
       KvStoreFilters(keyPrefixList, {} /* originatorIds */),
@@ -167,7 +167,7 @@ PrefixManager::PrefixManager(
   // get initial dump of keys related to us
   for (const auto& area : allAreas_) {
     auto result =
-        kvStoreClient_->dumpAllWithPrefix(keyPrefixList.front(), area);
+        kvStoreClient_->dumpAllWithPrefix(AreaId{area}, keyPrefixList.front());
     if (!result.has_value()) {
       LOG(ERROR) << "Failed dumping keys with prefix " << keyPrefixList.front()
                  << " from area " << area;
@@ -275,7 +275,7 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
         fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_);
 
     bool changed = kvStoreClient_->persistKey(
-        prefixKey, prefixDbStr, ttlKeyInKvStore_, toArea);
+        AreaId{toArea}, prefixKey, prefixDbStr, ttlKeyInKvStore_);
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
@@ -335,10 +335,10 @@ PrefixManager::syncKvStore() {
     // one last key set with empty DB and deletePrefix set signifies withdraw
     // then the key should ttl out
     kvStoreClient_->clearKey(
+        AreaId{prefixKey->getPrefixArea()},
         key,
         fbzmq::util::writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
-        ttlKeyInKvStore_,
-        prefixKey->getPrefixArea());
+        ttlKeyInKvStore_);
   }
 
   // anything we don't advertise next time, we need to clear

@@ -63,8 +63,9 @@
             << "ms";                                                         \
   }
 
-namespace openr {
+const openr::AreaId kTestingAreaName{"test_area_name"};
 
+namespace openr {
 /**
  * Utility functions to convert thrift Enum value to string
  */
@@ -242,7 +243,7 @@ thrift::SparkNeighbor createSparkNeighbor(
     const int64_t rttUs,
     const std::string& remoteIfName,
     const std::string& localIfName,
-    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea(),
+    const std::string& area = kTestingAreaName,
     const std::string& state = "IDLE");
 
 thrift::SparkNeighborEvent createSparkNeighborEvent(
@@ -276,13 +277,12 @@ thrift::AdjacencyDatabase createAdjDb(
     const std::vector<thrift::Adjacency>& adjs,
     int32_t nodeLabel,
     bool overLoadBit = false,
-    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
+    const std::string& area = kTestingAreaName);
 
 thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,
     const std::vector<thrift::PrefixEntry>& prefixEntries = {},
-    const std::string& area = std::string{
-        openr::thrift::KvStore_constants::kDefaultArea()});
+    const std::string& area = kTestingAreaName);
 
 thrift::PrefixEntry createPrefixEntry(
     thrift::IpPrefix prefix,
@@ -321,7 +321,7 @@ thrift::Publication createThriftPublication(
     const std::optional<std::vector<std::string>>& nodeIds = std::nullopt,
     const std::optional<std::vector<std::string>>& keysToUpdate = std::nullopt,
     const std::optional<std::string>& floodRootId = std::nullopt,
-    const std::string& area = openr::thrift::KvStore_constants::kDefaultArea());
+    const std::string& area = kTestingAreaName);
 
 thrift::InterfaceInfo createThriftInterfaceInfo(
     const bool isUp,

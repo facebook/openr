@@ -1491,7 +1491,11 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   std::string nodeName2 = "fsw002";
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto tConfig1 = getBasicOpenrConfig(
+      nodeName1,
+      kDomainName,
+      {createAreaConfig(
+          thrift::KvStore_constants::kDefaultArea(), {".*"}, {".*"})});
   auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);

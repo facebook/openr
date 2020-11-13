@@ -10,6 +10,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
+#include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
@@ -53,13 +54,13 @@ static std::pair<
     std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithPrefixMultipleAndParse(
+    std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& prefix,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
     std::optional<int> maybeIpTos = std::nullopt,
-    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
-    const std::string& area = thrift::KvStore_constants::kDefaultArea());
+    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
 /*
  * This will be a static method to do a full-dump of KvStore key-val to
@@ -82,13 +83,13 @@ static std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithThriftClientFromMultiple(
+    std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& prefix,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
     std::optional<int> maybeIpTos = std::nullopt,
-    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
-    const std::string& area = thrift::KvStore_constants::kDefaultArea());
+    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
 } // namespace openr
 

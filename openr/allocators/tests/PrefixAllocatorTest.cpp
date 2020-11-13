@@ -90,6 +90,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   void
   createPrefixAllocator() {
     prefixAllocator_ = std::make_unique<PrefixAllocator>(
+        kTestingAreaName,
         config_,
         nlSock_.get(),
         kvStoreWrapper_->getKvStore(),
@@ -365,7 +366,9 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           folly::IPAddress::networkToString(seedPrefix),
           kAllocPrefixLen);
       auto res = kvStoreClient->setKey(
-          Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
+          kTestingAreaName,
+          Constants::kSeedPrefixAllocParamKey.toString(),
+          prefixAllocParam);
       EXPECT_TRUE(res.has_value());
     }
 
@@ -439,6 +442,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       prefixManagers.emplace_back(std::move(prefixManager));
 
       auto allocator = std::make_unique<PrefixAllocator>(
+          kTestingAreaName,
           currConfig,
           nlSock_.get(),
           store->getKvStore(),
@@ -483,7 +487,9 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           kAllocPrefixLen);
       evb.getEvb()->runInEventBaseThreadAndWait([&]() {
         auto res = kvStoreClient->setKey(
-            Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
+            kTestingAreaName,
+            Constants::kSeedPrefixAllocParamKey.toString(),
+            prefixAllocParam);
         EXPECT_TRUE(res.has_value());
       });
 
@@ -611,7 +617,9 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
       "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res = kvStoreClient_->setKey(
-        Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
+        kTestingAreaName,
+        Constants::kSeedPrefixAllocParamKey.toString(),
+        prefixAllocParam);
     EXPECT_TRUE(res.has_value());
   });
   // busy loop until we have prefix
@@ -657,11 +665,13 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
         {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
     kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
     kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kSeedPrefixAllocParamKey.toString(),
         "",
         0,
         std::chrono::milliseconds(10)); // erase-key
-    kvStoreClient_->unsetKey(Constants::kSeedPrefixAllocParamKey.toString());
+    kvStoreClient_->unsetKey(
+        kTestingAreaName, Constants::kSeedPrefixAllocParamKey.toString());
   });
   configStore_->erase("prefix-allocator-config").get();
   // wait long enough for key to expire
@@ -683,7 +693,9 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   hasAllocPrefix.store(false, std::memory_order_relaxed);
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
     auto res2 = kvStoreClient_->setKey(
-        Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
+        kTestingAreaName,
+        Constants::kSeedPrefixAllocParamKey.toString(),
+        prefixAllocParam);
     EXPECT_TRUE(res2.has_value());
   });
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
@@ -720,7 +732,9 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
       "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res = kvStoreClient_->setKey(
-        Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
+        kTestingAreaName,
+        Constants::kSeedPrefixAllocParamKey.toString(),
+        prefixAllocParam);
     EXPECT_TRUE(res.has_value());
   });
 
@@ -731,8 +745,8 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     std::optional<std::unordered_map<std::string, thrift::Value>> maybeVals;
 
     while (true) {
-      maybeVals = kvStoreClient_->dumpAllWithPrefix(
-          expPrefixKey, thrift::KvStore_constants::kDefaultArea());
+      maybeVals =
+          kvStoreClient_->dumpAllWithPrefix(kTestingAreaName, expPrefixKey);
       if (maybeVals.has_value() and maybeVals.value().size()) {
         break;
       }
@@ -766,6 +780,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
       toIpPrefix(folly::IPAddress::networkToString(prevAllocPrefix));
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res0 = kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
         fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
         1);
@@ -780,13 +795,12 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
         "{}{}:{}:[{}]",
         Constants::kPrefixDbMarker.toString(),
         myNodeName_,
-        thrift::KvStore_constants::kDefaultArea(),
+        kTestingAreaName.t,
         folly::IPAddress::networkToString(prevAllocPrefix));
     std::vector<thrift::PrefixEntry> prefixes{};
 
     while (true) {
-      auto maybeVal = kvStoreClient_->getKey(
-          expPrefixKey, thrift::KvStore_constants::kDefaultArea());
+      auto maybeVal = kvStoreClient_->getKey(kTestingAreaName, expPrefixKey);
       ASSERT_TRUE(maybeVal.has_value());
       ASSERT_TRUE(maybeVal.value().value_ref().has_value());
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
@@ -842,6 +856,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res5 = kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
         fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
         2);
@@ -861,11 +876,10 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
         "{}{}:{}:[{}/{}]",
         Constants::kPrefixDbMarker.toString(),
         myNodeName_,
-        thrift::KvStore_constants::kDefaultArea(),
+        kTestingAreaName.t,
         expectedPrefix,
         allocPrefixLen);
-    auto maybeVal = kvStoreClient_->getKey(
-        expPrefixKey, thrift::KvStore_constants::kDefaultArea());
+    auto maybeVal = kvStoreClient_->getKey(kTestingAreaName, expPrefixKey);
     ASSERT_TRUE(maybeVal.has_value());
     ASSERT_TRUE(maybeVal.value().value_ref().has_value());
     auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
@@ -939,6 +953,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("1.2.3.0/24");
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res = kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
         fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res.has_value());
@@ -985,11 +1000,13 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
     kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
     kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
         "",
         0,
         std::chrono::milliseconds(10)); // erase-key
-    kvStoreClient_->unsetKey(Constants::kStaticPrefixAllocParamKey.toString());
+    kvStoreClient_->unsetKey(
+        kTestingAreaName, Constants::kStaticPrefixAllocParamKey.toString());
   });
   configStore_->erase("prefix-allocator-config").get();
   // wait long enough for key to expire
@@ -1012,6 +1029,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("3.2.1.0/24");
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res2 = kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
         fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res2.has_value());
@@ -1034,6 +1052,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("5.6.7.0/24");
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res3 = kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
         fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res3.has_value());
@@ -1056,6 +1075,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   staticAlloc.nodePrefixes_ref()->erase(myNodeName_);
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res4 = kvStoreClient_->setKey(
+        kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
         fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res4.has_value());

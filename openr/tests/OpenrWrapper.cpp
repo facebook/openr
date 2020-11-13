@@ -122,6 +122,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // Subscribe our own prefixDb
   kvStoreClient_->subscribeKey(
+      kTestingAreaName,
       folly::sformat("prefix:{}", nodeId_),
       [&](const std::string& /* key */,
           std::optional<thrift::Value> value) noexcept {
@@ -230,6 +231,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create PrefixAllocator
   //
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
+      kTestingAreaName,
       config_,
       nlSock_.get(),
       kvStore_.get(),
@@ -398,8 +400,8 @@ OpenrWrapper<Serializer>::getIpPrefix() {
 
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
   eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    keys =
-        kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+    keys = kvStoreClient_->dumpAllWithPrefix(
+        kTestingAreaName, folly::sformat("prefix:{}", nodeId_));
   });
 
   SYNCHRONIZED(ipPrefix_) {
@@ -427,8 +429,8 @@ bool
 OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
   eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    keys =
-        kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+    keys = kvStoreClient_->dumpAllWithPrefix(
+        kTestingAreaName, folly::sformat("prefix:{}", nodeId_));
   });
   return keys.has_value();
 }

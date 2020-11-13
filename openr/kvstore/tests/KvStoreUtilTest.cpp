@@ -363,7 +363,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   sockAddrs.push_back(folly::SocketAddress{localhost_, port2});
 
   // Step1: verify there is NOTHING inside kvStore instances
-  auto preDb = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+  auto preDb =
+      dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, prefix);
   EXPECT_TRUE(preDb.first.has_value());
   EXPECT_TRUE(preDb.first.value().empty());
   EXPECT_TRUE(preDb.second.empty());
@@ -383,19 +384,26 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     {
       value.value_ref() = "test_value1";
       EXPECT_TRUE(client1->setKey(
-          key1, fbzmq::util::writeThriftObjStr(value, serializer), 100));
+          kTestingAreaName,
+          key1,
+          fbzmq::util::writeThriftObjStr(value, serializer),
+          100));
     }
     {
       value.value_ref() = "test_value2";
       EXPECT_TRUE(client2->setKey(
-          key2, fbzmq::util::writeThriftObjStr(value, serializer), 200));
+          kTestingAreaName,
+          key2,
+          fbzmq::util::writeThriftObjStr(value, serializer),
+          200));
     }
   });
 
   // Step4: verify we can fetch 2 keys from different servers as aggregation
   // result
   {
-    auto postDb = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+    auto postDb = dumpAllWithThriftClientFromMultiple(
+        kTestingAreaName, sockAddrs, prefix);
     ASSERT_TRUE(postDb.first.has_value());
     auto pub = postDb.first.value();
     EXPECT_TRUE(pub.size() == 2);
@@ -405,8 +413,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
 
   // Step5: verify dumpAllWithPrefixMultipleAndParse API
   {
-    auto maybe =
-        dumpAllWithPrefixMultipleAndParse<thrift::Value>(sockAddrs, "test_");
+    auto maybe = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
+        kTestingAreaName, sockAddrs, "test_");
     ASSERT_TRUE(maybe.first.has_value());
     auto pub = maybe.first.value();
     EXPECT_EQ(2, pub.size());
@@ -427,7 +435,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     thriftServer2_->stop();
     thriftServer2_.reset();
 
-    auto db = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+    auto db = dumpAllWithThriftClientFromMultiple(
+        kTestingAreaName, sockAddrs, prefix);
     ASSERT_TRUE(db.first.has_value());
     ASSERT_TRUE(db.first.value().empty());
   }

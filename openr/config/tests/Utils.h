@@ -7,9 +7,25 @@
 
 #pragma once
 
+#include <openr/common/Types.h>
+#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 
 namespace {
+
+// utility function to construct thrift::AreaConfig
+openr::thrift::AreaConfig
+createAreaConfig(
+    const std::string& areaId,
+    const std::vector<std::string>& neighborRegexes,
+    const std::vector<std::string>& interfaceRegexes) {
+  openr::thrift::AreaConfig areaConfig;
+  areaConfig.set_area_id(areaId);
+  areaConfig.set_neighbor_regexes(neighborRegexes);
+  areaConfig.set_include_interface_regexes(interfaceRegexes);
+  return areaConfig;
+}
+
 openr::thrift::OpenrConfig
 getBasicOpenrConfig(
     const std::string nodeName = "",
@@ -49,21 +65,13 @@ getBasicOpenrConfig(
 
   *config.enable_rib_policy_ref() = true;
 
-  config.set_areas(areaCfg);
+  if (areaCfg.empty()) {
+    config.set_areas({createAreaConfig(kTestingAreaName, {".*"}, {".*"})});
+  } else {
+    config.set_areas(areaCfg);
+  }
 
   return config;
 }
 
-// utility function to construct thrift::AreaConfig
-openr::thrift::AreaConfig
-createAreaConfig(
-    const std::string& areaId,
-    const std::vector<std::string>& neighborRegexes,
-    const std::vector<std::string>& interfaceRegexes) {
-  openr::thrift::AreaConfig areaConfig;
-  *areaConfig.area_id_ref() = areaId;
-  *areaConfig.neighbor_regexes_ref() = neighborRegexes;
-  *areaConfig.include_interface_regexes_ref() = interfaceRegexes;
-  return areaConfig;
-}
 } // namespace

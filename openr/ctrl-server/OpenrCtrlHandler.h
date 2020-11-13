@@ -161,7 +161,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   semifuture_getDecisionAdjacencyDbs() override;
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
-  semifuture_getAllDecisionAdjacencyDbs() override;
+  semifuture_getDecisionAdjacenciesFiltered(
+      std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
 
   folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
   semifuture_getDecisionPrefixDbs() override;
@@ -225,7 +226,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler
   apache::thrift::ServerStream<thrift::Publication> subscribeKvStoreFilter(
-      std::unique_ptr<thrift::KeyDumpParams>);
+      std::unique_ptr<thrift::KeyDumpParams> filter,
+      std::unique_ptr<std::set<std::string>> selectAreas);
+
   apache::thrift::ServerStream<thrift::RouteDatabaseDelta> subscribeFib();
 
   folly::SemiFuture<apache::thrift::ResponseAndServerStream<
@@ -240,12 +243,23 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
   folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+      std::vector<thrift::Publication>,
+      thrift::Publication>>
+  semifuture_subscribeAndGetAreaKvStores(
+      std::unique_ptr<thrift::KeyDumpParams> filter,
+      std::unique_ptr<std::set<std::string>> selectAreas) override;
+
+  folly::SemiFuture<apache::thrift::ResponseAndServerStream<
       thrift::RouteDatabase,
       thrift::RouteDatabaseDelta>>
   semifuture_subscribeAndGetFib() override;
 
   // Long poll support
   folly::SemiFuture<bool> semifuture_longPollKvStoreAdj(
+      std::unique_ptr<thrift::KeyVals> snapshot) override;
+
+  folly::SemiFuture<bool> semifuture_longPollKvStoreAdjArea(
+      std::unique_ptr<std::string> area,
       std::unique_ptr<thrift::KeyVals> snapshot) override;
 
   //
@@ -279,6 +293,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   semifuture_getLinkMonitorAdjacencies() override;
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
+  semifuture_getLinkMonitorAdjacenciesFiltered(
+      std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
 
   // Explicitly override blocking API call as no ASYNC needed
   void getOpenrVersion(thrift::OpenrVersions& openrVersion) override;
@@ -336,6 +354,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   }
 
  private:
+  // returns the single area name configured for this node or throws if not
+  // eaxclty 1 area is configured
+  std::unique_ptr<std::string> getSingleAreaOrThrow(std::string const& caller);
+
   void authorizeConnection();
   void closeKvStorePublishers();
   void closeFibPublishers();
@@ -371,8 +393,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // pending longPoll requests from clients, which consists of
   // 1). promise; 2). timestamp when req received on server
   std::atomic<int64_t> pendingRequestId_{0};
-  folly::Synchronized<
-      std::unordered_map<int64_t, std::pair<folly::Promise<bool>, int64_t>>>
+  folly::Synchronized<std::unordered_map<
+      std::string /* area */,
+      std::unordered_map<int64_t, std::pair<folly::Promise<bool>, int64_t>>>>
       longPollReqs_;
 
   // fiber task future hold for kvStore update, fib update reader's

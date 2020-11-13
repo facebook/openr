@@ -173,6 +173,7 @@ LinkMonitor::LinkMonitor(
           std::piecewise_construct,
           std::forward_as_tuple(areaId),
           std::forward_as_tuple(
+              AreaId{areaId},
               nodeId_,
               Constants::kNodeLabelRangePrefix.toString(),
               kvStoreClient_.get(),
@@ -184,8 +185,7 @@ LinkMonitor::LinkMonitor(
               std::chrono::seconds(2), /* maxBackoffDur */
               false /* override owner */,
               nullptr, /* checkValueInUseCb */
-              Constants::kRangeAllocTtl,
-              areaId));
+              Constants::kRangeAllocTtl));
 
       // Delay range allocation until we have formed all of our adjcencies
       auto startAllocTimer =
@@ -366,9 +366,8 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   // it 2) does not change: the existing connection to a neighbor is retained
   auto peerSpec = createPeerSpec(repUrl, peerAddr, openrCtrlThriftPort);
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
-
-  adjacencies_[adjId] = AdjacencyValue(
-      peerSpec, std::move(newAdj), false /* isRestarting */, area);
+  adjacencies_[adjId] =
+      AdjacencyValue(area, peerSpec, std::move(newAdj), false);
 
   // Advertise KvStore peers immediately
   advertiseKvStorePeers(area, {{remoteNodeName, peerSpec}});
@@ -616,7 +615,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   // Persist `adj:node_Id` key into KvStore via KvStoreClientInternal
   const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
-  kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_, area);
+  kvStoreClient_->persistKey(AreaId{area}, keyName, adjDbStr, ttlKeyInKvStore_);
 
   // Config is most likely to have changed. Update it in `ConfigStore`
   configStore_->storeThriftObj(kConfigKey, state_); // not awaiting on result
@@ -1237,17 +1236,27 @@ LinkMonitor::getInterfaces() {
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
-LinkMonitor::getAdjacencies() {
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
+LinkMonitor::getAdjacencies(thrift::AdjacenciesFilter filter) {
   VLOG(2) << "Dump adj requested, reply with " << adjacencies_.size()
           << " adjs";
 
-  folly::Promise<std::unique_ptr<thrift::AdjacencyDatabase>> p;
+  folly::Promise<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([this, p = std::move(p)]() mutable {
-    auto adjDb = buildAdjacencyDatabase();
-    p.setValue(std::make_unique<thrift::AdjacencyDatabase>(std::move(adjDb)));
-  });
+  runInEventBaseThread(
+      [this, p = std::move(p), filter = std::move(filter)]() mutable {
+        auto res = std::make_unique<std::vector<thrift::AdjacencyDatabase>>();
+        if (filter.get_selectAreas().empty()) {
+          for (auto const& [areaId, _] : areas_) {
+            res->push_back(buildAdjacencyDatabase(areaId));
+          }
+        } else {
+          for (auto const& areaId : filter.get_selectAreas()) {
+            res->push_back(buildAdjacencyDatabase(areaId));
+          }
+        }
+        p.setValue(std::move(res));
+      });
   return sf;
 }
 

@@ -108,7 +108,9 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
     // catch  up the time
     startTime = std::chrono::steady_clock::now();
     kvStoreWrapper_->setKey(
-        adjKey_, createThriftValue(1, nodeName_, std::string("value1")));
+        kTestingAreaName,
+        adjKey_,
+        createThriftValue(1, nodeName_, std::string("value1")));
 
     // stop the evl
     evl_.stop();
@@ -123,7 +125,8 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
     // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     thrift::KeyVals snapshot;
-    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged =
+        client1_->sync_longPollKvStoreAdjArea(kTestingAreaName, snapshot);
     endTime = std::chrono::steady_clock::now();
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {
@@ -154,7 +157,9 @@ TEST_F(LongPollFixture, LongPollTimeout) {
   evl_.scheduleTimeout(std::chrono::milliseconds(5000), [&]() noexcept {
     LOG(INFO) << "Prefix key set...";
     kvStoreWrapper_->setKey(
-        prefixKey_, createThriftValue(1, nodeName_, std::string("value1")));
+        kTestingAreaName,
+        prefixKey_,
+        createThriftValue(1, nodeName_, std::string("value1")));
 
     // stop the evl
     evl_.stop();
@@ -169,7 +174,8 @@ TEST_F(LongPollFixture, LongPollTimeout) {
     // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     thrift::KeyVals snapshot;
-    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged =
+        client1_->sync_longPollKvStoreAdjArea(kTestingAreaName, snapshot);
   } catch (std::exception& ex) {
     LOG(INFO) << "Exception happened: " << folly::exceptionStr(ex);
     isTimeout = true;
@@ -201,7 +207,9 @@ TEST_F(LongPollFixture, LongPollAdjModified) {
 
   // inject key to kvstore and openrCtrlThriftServer should have adj key
   kvStoreWrapper_->setKey(
-      adjKey_, createThriftValue(2, nodeName_, std::string("value1")));
+      kTestingAreaName,
+      adjKey_,
+      createThriftValue(2, nodeName_, std::string("value1")));
 
   try {
     // mimicking scenario that server has different value for the same key
@@ -212,7 +220,8 @@ TEST_F(LongPollFixture, LongPollAdjModified) {
     // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     startTime = std::chrono::steady_clock::now();
-    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged =
+        client1_->sync_longPollKvStoreAdjArea(kTestingAreaName, snapshot);
     endTime = std::chrono::steady_clock::now();
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {
@@ -236,7 +245,9 @@ TEST_F(LongPollFixture, LongPollAdjUnchanged) {
 
   // inject key to kvstore and openrCtrlThriftServer should have adj key
   kvStoreWrapper_->setKey(
-      adjKey_, createThriftValue(1, nodeName_, std::string("value1")));
+      kTestingAreaName,
+      adjKey_,
+      createThriftValue(1, nodeName_, std::string("value1")));
 
   // mimick there is a new publication from kvstore.
   // This publication should clean up pending req.
@@ -245,7 +256,9 @@ TEST_F(LongPollFixture, LongPollAdjUnchanged) {
       [&]() noexcept {
         LOG(INFO) << "Prefix key set...";
         kvStoreWrapper_->setKey(
-            prefixKey_, createThriftValue(1, nodeName_, std::string("value1")));
+            kTestingAreaName,
+            prefixKey_,
+            createThriftValue(1, nodeName_, std::string("value1")));
 
         // stop the evl
         evl_.stop();
@@ -261,7 +274,8 @@ TEST_F(LongPollFixture, LongPollAdjUnchanged) {
         adjKey_, createThriftValue(1, nodeName_, std::string("value1")));
 
     LOG(INFO) << "Start long poll...";
-    isAdjChanged = client2_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged =
+        client2_->sync_longPollKvStoreAdjArea(kTestingAreaName, snapshot);
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {
     LOG(INFO) << "Exception happened: " << folly::exceptionStr(ex);
@@ -296,7 +310,8 @@ TEST_F(LongPollFixture, LongPollAdjExpired) {
     // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     startTime = std::chrono::steady_clock::now();
-    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged =
+        client1_->sync_longPollKvStoreAdjArea(kTestingAreaName, snapshot);
     endTime = std::chrono::steady_clock::now();
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {

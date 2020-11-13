@@ -21,9 +21,12 @@
 namespace openr {
 
 KvStorePublisher::KvStorePublisher(
+    std::set<std::string> const& selectAreas,
     thrift::KeyDumpParams filter,
     apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher)
-    : filter_(filter), publisher_(std::move(publisher)) {
+    : selectAreas_(selectAreas),
+      filter_(filter),
+      publisher_(std::move(publisher)) {
   std::vector<std::string> keyPrefix;
 
   if (filter.keys_ref().has_value()) {
@@ -52,6 +55,11 @@ KvStorePublisher::KvStorePublisher(
  */
 void
 KvStorePublisher::publish(const thrift::Publication& pub) {
+  LOG(INFO) << pub.get_area();
+  if (not(selectAreas_.empty() || selectAreas_.count(pub.get_area()))) {
+    LOG(INFO) << "Skipping pub not in selectAreas";
+    return;
+  }
   if ((not filter_.keys_ref().has_value() or (*filter_.keys_ref()).empty()) and
       (not filter_.originatorIds_ref().has_value() or
        (*filter_.originatorIds_ref()).empty()) and

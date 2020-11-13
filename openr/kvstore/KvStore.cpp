@@ -569,19 +569,20 @@ KvStore::getKvStoreUpdatesReader() {
 
 void
 KvStore::processPeerUpdates(thrift::PeerUpdateRequest&& req) {
+  CHECK(not req.get_area().empty());
   // Req can contain peerAdd/peerDel simultaneously
   if (req.peerAddParams_ref().has_value()) {
-    addUpdateKvStorePeers(req.peerAddParams_ref().value(), *req.area_ref())
+    addUpdateKvStorePeers(*req.area_ref(), req.peerAddParams_ref().value())
         .get();
   }
   if (req.peerDelParams_ref().has_value()) {
-    deleteKvStorePeers(req.peerDelParams_ref().value(), *req.area_ref()).get();
+    deleteKvStorePeers(*req.area_ref(), req.peerDelParams_ref().value()).get();
   }
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 KvStore::getKvStoreKeyVals(
-    thrift::KeyGetParams keyGetParams, std::string area) {
+    std::string area, thrift::KeyGetParams keyGetParams) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -606,24 +607,28 @@ KvStore::getKvStoreKeyVals(
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
 KvStore::dumpKvStoreKeys(
-    thrift::KeyDumpParams keyDumpParams, std::string area) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
+    thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
+  folly::Promise<std::unique_ptr<std::vector<thrift::Publication>>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
                         p = std::move(p),
-                        keyDumpParams = std::move(keyDumpParams),
-                        area]() mutable {
-    VLOG(3) << "Dump all keys requested for AREA: " << area;
+                        selectAreas = std::move(selectAreas),
+                        keyDumpParams = std::move(keyDumpParams)]() mutable {
+    VLOG(3)
+        << "Dump all keys requested for "
+        << (selectAreas.empty()
+                ? "all areas."
+                : folly::sformat("areas: {}.", folly::join(", ", selectAreas)));
 
-    if (!kvStoreDb_.count(area)) {
-      p.setException(
-          thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
-    } else {
+    auto result = std::make_unique<std::vector<thrift::Publication>>();
+    for (auto& [area, kvStoreDb] : kvStoreDb_) {
+      if (not selectAreas.empty() && not selectAreas.count(area)) {
+        continue;
+      }
       fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
-      auto& kvStoreDb = kvStoreDb_.at(area);
       std::vector<std::string> keyPrefixList;
       if (keyDumpParams.keys_ref().has_value()) {
         keyPrefixList = *keyDumpParams.keys_ref();
@@ -663,15 +668,16 @@ KvStore::dumpKvStoreKeys(
                   << thriftPub.keyVals_ref()->size() << " key-vals and "
                   << numMissingKeys << " missing keys";
       }
-      p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
+      result->push_back(std::move(thriftPub));
     }
+    p.setValue(std::move(result));
   });
   return sf;
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 KvStore::dumpKvStoreHashes(
-    thrift::KeyDumpParams keyDumpParams, std::string area) {
+    std::string area, thrift::KeyDumpParams keyDumpParams) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -705,7 +711,7 @@ KvStore::dumpKvStoreHashes(
 
 folly::SemiFuture<folly::Unit>
 KvStore::setKvStoreKeyVals(
-    thrift::KeySetParams keySetParams, std::string area) {
+    std::string area, thrift::KeySetParams keySetParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -758,7 +764,7 @@ KvStore::setKvStoreKeyVals(
 
 folly::SemiFuture<std::optional<KvStorePeerState>>
 KvStore::getKvStorePeerState(
-    std::string const& peerName, std::string const& area) {
+    std::string const& area, std::string const& peerName) {
   folly::Promise<std::optional<KvStorePeerState>> promise;
   auto sf = promise.getSemiFuture();
   runInEventBaseThread(
@@ -796,7 +802,7 @@ KvStore::getKvStorePeers(std::string area) {
 
 folly::SemiFuture<folly::Unit>
 KvStore::addUpdateKvStorePeers(
-    thrift::PeerAddParams peerAddParams, std::string area) {
+    std::string area, thrift::PeerAddParams peerAddParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -827,7 +833,7 @@ KvStore::addUpdateKvStorePeers(
 
 folly::SemiFuture<folly::Unit>
 KvStore::deleteKvStorePeers(
-    thrift::PeerDelParams peerDelParams, std::string area) {
+    std::string area, thrift::PeerDelParams peerDelParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -875,7 +881,7 @@ KvStore::getSpanningTreeInfos(std::string area) {
 
 folly::SemiFuture<folly::Unit>
 KvStore::updateFloodTopologyChild(
-    thrift::FloodTopoSetParams floodTopoSetParams, std::string area) {
+    std::string area, thrift::FloodTopoSetParams floodTopoSetParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -898,7 +904,7 @@ KvStore::updateFloodTopologyChild(
 
 folly::SemiFuture<folly::Unit>
 KvStore::processKvStoreDualMessage(
-    thrift::DualMessages dualMessages, std::string area) {
+    std::string area, thrift::DualMessages dualMessages) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -960,34 +966,33 @@ KvStore::getGlobalCounters() const {
 // certain event. Invalid state jump will cause fatal error.
 //
 const std::vector<std::vector<std::optional<KvStorePeerState>>>
-    KvStoreDb::peerStateMap_ = {
-        /*
-         * index 0 - IDLE
-         * PEER_ADD => SYNCING
-         * THRIFT_API_ERROR => IDLE
-         */
-        {KvStorePeerState::SYNCING,
-         std::nullopt,
-         std::nullopt,
-         KvStorePeerState::IDLE},
-        /*
-         * index 1 - SYNCING
-         * SYNC_RESP_RCVD => INITIALIZED
-         * THRIFT_API_ERROR => IDLE
-         */
-        {std::nullopt,
-         std::nullopt,
-         KvStorePeerState::INITIALIZED,
-         KvStorePeerState::IDLE},
-        /*
-         * index 2 - INITIALIZED
-         * SYNC_RESP_RCVD => INITIALIZED
-         * THRIFT_API_ERROR => IDLE
-         */
-        {std::nullopt,
-         std::nullopt,
-         KvStorePeerState::INITIALIZED,
-         KvStorePeerState::IDLE}};
+    KvStoreDb::peerStateMap_ = {/*
+                                 * index 0 - IDLE
+                                 * PEER_ADD => SYNCING
+                                 * THRIFT_API_ERROR => IDLE
+                                 */
+                                {KvStorePeerState::SYNCING,
+                                 std::nullopt,
+                                 std::nullopt,
+                                 KvStorePeerState::IDLE},
+                                /*
+                                 * index 1 - SYNCING
+                                 * SYNC_RESP_RCVD => INITIALIZED
+                                 * THRIFT_API_ERROR => IDLE
+                                 */
+                                {std::nullopt,
+                                 std::nullopt,
+                                 KvStorePeerState::INITIALIZED,
+                                 KvStorePeerState::IDLE},
+                                /*
+                                 * index 2 - INITIALIZED
+                                 * SYNC_RESP_RCVD => INITIALIZED
+                                 * THRIFT_API_ERROR => IDLE
+                                 */
+                                {std::nullopt,
+                                 std::nullopt,
+                                 KvStorePeerState::INITIALIZED,
+                                 KvStorePeerState::IDLE}};
 
 // static util function for logging
 std::string
@@ -1067,9 +1072,9 @@ KvStoreDb::KvStorePeer::KvStorePeer(
 }
 
 //
-// KvStoreDb is the class instance that maintains the KV pairs with internal map
-// per AREA. KvStoreDb will sync with peers to maintain eventual consistency.
-// It supports external message exchanging through:
+// KvStoreDb is the class instance that maintains the KV pairs with internal
+// map per AREA. KvStoreDb will sync with peers to maintain eventual
+// consistency. It supports external message exchanging through:
 //
 //  1) ZMQ socket(TO BE DEPRECATED);
 //  2) Thrift channel interface;
@@ -1078,29 +1083,26 @@ KvStoreDb::KvStorePeer::KvStorePeer(
 // This module exposes fb303 counters that can be leveraged for monitoring
 // KvStoreDb's correctness and performance behevior in production
 //
-//  kvstore.thrift.num_client_connection_failure: # of client creation failures
-//  kvstore.thrift.num_full_sync: # of full-sync performed;
-//  kvstore.thrift.num_missing_keys: # of missing keys from syncing with peer;
-//  kvstore.thrift.num_full_sync_success: # of successful full-sync performed;
-//  kvstore.thrift.num_full_sync_failure: # of failed full-sync performed;
-//  kvstore.thrift.full_sync_duration_ms: avg time elapsed for a full-sync req;
+//  kvstore.thrift.num_client_connection_failure: # of client creation
+//  failures kvstore.thrift.num_full_sync: # of full-sync performed;
+//  kvstore.thrift.num_missing_keys: # of missing keys from syncing with
+//  peer; kvstore.thrift.num_full_sync_success: # of successful full-sync
+//  performed; kvstore.thrift.num_full_sync_failure: # of failed full-sync
+//  performed; kvstore.thrift.full_sync_duration_ms: avg time elapsed for a
+//  full-sync req;
 //
 //  kvstore.thrift.num_flood_pub: # of flooding req issued;
-//  kvstore.thrift.num_flood_key_vals: # of keyVals one flooding req contains;
-//  kvstore.thrift.num_flood_pub_success: # of successful flooding req
-//  performed;
-//  kvstore.thrift.num_flood_pub_failure: # of failed flooding req
-//  performed;
-//  kvstore.thrift.flood_pub_duration_ms: avg time elapsed for a
-//  flooding req;
+//  kvstore.thrift.num_flood_key_vals: # of keyVals one flooding req
+//  contains; kvstore.thrift.num_flood_pub_success: # of successful flooding
+//  req performed; kvstore.thrift.num_flood_pub_failure: # of failed
+//  flooding req performed; kvstore.thrift.flood_pub_duration_ms: avg time
+//  elapsed for a flooding req;
 //
 //  kvstore.thrift.num_finalized_sync: # of finalized full-sync performed;
-//  kvstore.thrift.num_finalized_sync_success: # of successful finalized sync
-//  performed;
-//  kvstore.thrift.num_finalized_sync_failure: # of failed finalized
-//  sync performed;
-//  kvstore.thrift.finalized_sync_duration_ms: avg time elapsed
-//  for a finalized sync req;
+//  kvstore.thrift.num_finalized_sync_success: # of successful finalized
+//  sync performed; kvstore.thrift.num_finalized_sync_failure: # of failed
+//  finalized sync performed; kvstore.thrift.finalized_sync_duration_ms: avg
+//  time elapsed for a finalized sync req;
 //
 KvStoreDb::KvStoreDb(
     OpenrEventBase* evb,
@@ -1419,7 +1421,8 @@ KvStoreDb::requestThriftPeerSync() {
       // TODO: migrate to secure thrift connection
       auto client = getOpenrCtrlPlainTextClient(
           *(evb_->getEvb()),
-          folly::IPAddress(*peerSpec.peerAddr_ref()), /* v6LinkLocal%iface */
+          folly::IPAddress(*peerSpec.peerAddr_ref()), /* v6LinkLocal%iface
+                                                       */
           *peerSpec.ctrlPort_ref(), /* port to establish TCP connection */
           Constants::kServiceConnTimeout, /* client connection timeout */
           Constants::kServiceProcTimeout, /* request processing timeout */
@@ -1482,6 +1485,8 @@ KvStoreDb::requestThriftPeerSync() {
 
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
+    // TODO: switch to getKvStoreKeyValsFiltered() when all nodes have
+    // version with area param
     auto sf = thriftPeer.client->semifuture_getKvStoreKeyValsFilteredArea(
         params, area_);
     std::move(sf)
@@ -1632,7 +1637,8 @@ KvStoreDb::processThriftFailure(
             << ". Peer name: " << peerName
             << ". Processing time: " << timeDelta.count() << "ms.";
 
-  // reset client to reconnect later in next batch of thriftSyncTimer_ scanning
+  // reset client to reconnect later in next batch of thriftSyncTimer_
+  // scanning
   auto& peer = thriftPeers_.at(peerName);
   peer.keepAliveTimer->cancelTimeout();
   peer.expBackoff.reportError(); // apply exponential backoff
@@ -2057,8 +2063,8 @@ KvStoreDb::updatePublicationTtl(
     }
 
     // Set the time-left and decrement it by one so that ttl decrement
-    // deterministically whenever it is exchanged between KvStores. This will
-    // avoid looping of updates between stores.
+    // deterministically whenever it is exchanged between KvStores. This
+    // will avoid looping of updates between stores.
     kv->second.ttl_ref() = timeLeft.count() - kvParams_.ttlDecr.count();
   }
 }
@@ -2112,6 +2118,7 @@ KvStoreDb::processRequestMsgHelper(
     rcvdPublication.nodeIds_ref().move_from(ketSetParamsVal.nodeIds_ref());
     rcvdPublication.floodRootId_ref().move_from(
         ketSetParamsVal.floodRootId_ref());
+    rcvdPublication.set_area(area_);
     mergePublication(rcvdPublication);
 
     // respond to the client
@@ -2328,20 +2335,21 @@ KvStoreDb::processNexthopChange(
   // set new parent if any
   if (newNh.has_value()) {
     // peers_ MUST have this new parent
-    // if peers_ does not have this peer, that means KvStore already recevied
-    // NEIGHBOR-DOWN event (so does dual), but dual still think I should have
-    // this neighbor as nexthop, then something is wrong with DUAL
+    // if peers_ does not have this peer, that means KvStore already
+    // recevied NEIGHBOR-DOWN event (so does dual), but dual still think I
+    // should have this neighbor as nexthop, then something is wrong with
+    // DUAL
     CHECK(peers_.count(*newNh))
         << rootId << ": trying to set new spt-parent who does not exist "
         << *newNh;
     CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
     setChild(rootId, *newNh);
 
-    // Enqueue new-nexthop for full-sync (insert only if entry doesn't exists)
-    // NOTE we have to perform full-sync after we do FLOOD_TOPO_SET, so that
-    // we can be sure that I won't be in a disconnected state after we got
-    // full synced. (ps: full-sync is 3-way-sync, one direction sync should be
-    // good enough)
+    // Enqueue new-nexthop for full-sync (insert only if entry doesn't
+    // exists) NOTE we have to perform full-sync after we do FLOOD_TOPO_SET,
+    // so that we can be sure that I won't be in a disconnected state after
+    // we got full synced. (ps: full-sync is 3-way-sync, one direction sync
+    // should be good enough)
     LOG(INFO) << "Enqueuing full-sync request for peer " << *newNh;
     peersToSyncWith_.emplace(
         *newNh,
@@ -2429,9 +2437,9 @@ KvStoreDb::processSyncResponse(
   parallelSyncLimit_ = std::min(
       2 * parallelSyncLimit_, Constants::kMaxFullSyncPendingCountThreshold);
 
-  // Schedule timeout immediately to resume sending full sync requests. If no
-  // outstanding sync is required, then cancel the timeout. Cancelling timeout
-  // will let the subsequent sync requests to proceed immediately.
+  // Schedule timeout immediately to resume sending full sync requests. If
+  // no outstanding sync is required, then cancel the timeout. Cancelling
+  // timeout will let the subsequent sync requests to proceed immediately.
   if (not peersToSyncWith_.empty()) {
     fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
   } else {
@@ -2646,7 +2654,8 @@ KvStoreDb::cleanupTtlCountdownQueue() {
   //       via replicate-queue. KvStore will NOT flood publication
   //       with expired keys ONLY to external peers.
   thrift::Publication expiredKeysPub{};
-  *expiredKeysPub.expiredKeys_ref() = std::move(expiredKeys);
+  expiredKeysPub.set_expiredKeys(std::move(expiredKeys));
+  expiredKeysPub.set_area(area_);
   floodPublication(std::move(expiredKeysPub));
 }
 
@@ -2867,7 +2876,8 @@ KvStoreDb::floodPublication(
   }
 
   // Find from whom we might have got this publication. Last entry is our ID
-  // and hence second last entry is the node from whom we get this publication
+  // and hence second last entry is the node from whom we get this
+  // publication
   std::optional<std::string> senderId;
   if (publication.nodeIds_ref().has_value() and
       publication.nodeIds_ref()->size()) {
@@ -2933,7 +2943,8 @@ KvStoreDb::floodPublication(
       }
 
       if (senderId.has_value() && senderId.value() == peerName) {
-        // Do not flood towards senderId from whom we received this publication
+        // Do not flood towards senderId from whom we received this
+        // publication
         continue;
       }
 
@@ -2990,7 +3001,8 @@ KvStoreDb::floodPublication(
   } else {
     for (const auto& peer : floodPeers) {
       if (senderId.has_value() && senderId.value() == peer) {
-        // Do not flood towards senderId from whom we received this publication
+        // Do not flood towards senderId from whom we received this
+        // publication
         continue;
       }
       VLOG(4) << "Forwarding publication, received from: "

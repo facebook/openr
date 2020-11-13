@@ -66,9 +66,12 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     }
 
     for (uint32_t i = 1; i < kNumStores; i++) {
-      stores[i - 1]->addPeer(stores[i]->getNodeId(), stores[i]->getPeerSpec());
+      stores[i - 1]->addPeer(
+          kTestingAreaName, stores[i]->getNodeId(), stores[i]->getPeerSpec());
       stores[i]->addPeer(
-          stores[i - 1]->getNodeId(), stores[i - 1]->getPeerSpec());
+          kTestingAreaName,
+          stores[i - 1]->getNodeId(),
+          stores[i - 1]->getPeerSpec());
     }
 
     for (uint32_t i = 0; i < kNumClients; i++) {
@@ -118,6 +121,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     std::vector<std::unique_ptr<RangeAllocator<T>>> allocators;
     for (size_t i = 0; i < clients.size(); i++) {
       auto allocator = std::make_unique<RangeAllocator<T>>(
+          kTestingAreaName,
           createClientName(i),
           "value:",
           clients[i].get(),

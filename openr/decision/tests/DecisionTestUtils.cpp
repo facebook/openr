@@ -8,6 +8,7 @@
 #include <folly/Format.h>
 
 #include <openr/common/Util.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 
 #include <openr/decision/tests/DecisionTestUtils.h>
@@ -16,7 +17,7 @@ namespace openr {
 LinkState
 getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
   using folly::sformat;
-  LinkState linkState{openr::thrift::KvStore_constants::kDefaultArea()};
+  LinkState linkState{kTestingAreaName};
   for (auto const& [node, adjList] : adjMap) {
     CHECK_LT(node, 0x1 << 16);
     std::vector<thrift::Adjacency> adjs;

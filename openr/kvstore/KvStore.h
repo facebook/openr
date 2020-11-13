@@ -606,42 +606,38 @@ class KvStore final : public OpenrEventBase {
   // Public APIs
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>> getKvStoreKeyVals(
-      thrift::KeyGetParams keyGetParams,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area, thrift::KeyGetParams keyGetParams);
 
   folly::SemiFuture<folly::Unit> setKvStoreKeyVals(
-      thrift::KeySetParams keySetParams,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area, thrift::KeySetParams keySetParams);
 
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>> dumpKvStoreKeys(
+  // return publication for each area in selectAreas or all areas if select
+  // areas is empty
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
+  dumpKvStoreKeys(
       thrift::KeyDumpParams keyDumpParams,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::set<std::string> selectAreas = {});
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>> dumpKvStoreHashes(
-      thrift::KeyDumpParams keyDumpParams,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area, thrift::KeyDumpParams keyDumpParams);
 
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>> getKvStorePeers(
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area);
 
   folly::SemiFuture<folly::Unit> addUpdateKvStorePeers(
-      thrift::PeerAddParams peerAddParams,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area, thrift::PeerAddParams peerAddParams);
 
   folly::SemiFuture<folly::Unit> deleteKvStorePeers(
-      thrift::PeerDelParams peerDelParams,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area, thrift::PeerDelParams peerDelParams);
 
   folly::SemiFuture<std::unique_ptr<thrift::SptInfos>> getSpanningTreeInfos(
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area);
 
   folly::SemiFuture<folly::Unit> updateFloodTopologyChild(
-      thrift::FloodTopoSetParams floodTopoSetParams,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area, thrift::FloodTopoSetParams floodTopoSetParams);
 
   folly::SemiFuture<folly::Unit> processKvStoreDualMessage(
-      thrift::DualMessages dualMessages,
-      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+      std::string area, thrift::DualMessages dualMessages);
 
   folly::SemiFuture<std::map<std::string, int64_t>> getCounters();
 
@@ -650,9 +646,7 @@ class KvStore final : public OpenrEventBase {
 
   // API to fetch state of peerNode, used for unit-testing
   folly::SemiFuture<std::optional<KvStorePeerState>> getKvStorePeerState(
-      std::string const& peerName,
-      std::string const& area =
-          openr::thrift::KvStore_constants::kDefaultArea());
+      std::string const& area, std::string const& peerName);
 
  private:
   // disable copying

@@ -68,6 +68,10 @@ struct ReceivedRouteFilter {
   3: optional string areaName;
 }
 
+struct AdjacenciesFilter {
+  1: set<string> selectAreas;
+}
+
 //
 // RIB Policy related data structures
 //
@@ -321,7 +325,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * area topology from Decision module. This represents currently active nodes
    * (includes bi-directional check)
    * only selects default area adj DBs. Deprecated, perfer
-   * getAllDecisionAdjacencyDbs()
+   * getDecisionAdjacenciesFiltered()
    */
   Decision.AdjDbs getDecisionAdjacencyDbs() throws (1: OpenrError error)
 
@@ -331,8 +335,9 @@ service OpenrCtrl extends fb303_core.BaseService {
    * than one AdjDb for a node (one per area)
    * (includes bi-directional check)
    */
-  list<Lsdb.AdjacencyDatabase> getAllDecisionAdjacencyDbs()
-    throws (1: OpenrError error)
+  list<Lsdb.AdjacencyDatabase> getDecisionAdjacenciesFiltered(
+    1: AdjacenciesFilter filter
+  ) throws (1: OpenrError error)
 
   /**
    * Get global prefix databases. This represents prefixes of actives nodes
@@ -358,7 +363,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   KvStore.Publication getKvStoreKeyValsArea(
     1: list<string> filterKeys,
-    2: string area =  KvStore.kDefaultArea
+    2: string area
   ) throws (1: OpenrError error)
 
   /**
@@ -373,7 +378,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   KvStore.Publication getKvStoreKeyValsFilteredArea(
     1: KvStore.KeyDumpParams filter,
-    2: string area = KvStore.kDefaultArea
+    2: string area
   ) throws (1: OpenrError error)
 
   /**
@@ -387,7 +392,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   KvStore.Publication getKvStoreHashFilteredArea(
     1: KvStore.KeyDumpParams filter,
-    2: string area =  KvStore.kDefaultArea
+    2: string area
   ) throws (1: OpenrError error)
 
   /**
@@ -395,13 +400,18 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   void setKvStoreKeyVals(
     1: KvStore.KeySetParams setParams,
-    2: string area = KvStore.kDefaultArea
+    2: string area
   ) throws (1: OpenrError error)
 
   /**
    * Long poll API to get KvStore
    * Will return true/false with our own KeyVal snapshot provided
    */
+   bool longPollKvStoreAdjArea(1: string area, 2: KvStore.KeyVals snapshot)
+    throws (1: OpenrError error)
+
+  // Deprecated, prefer API sepcfying area
+  // TODO, remove once EBB has transition away from this
   bool longPollKvStoreAdj(1: KvStore.KeyVals snapshot)
     throws (1: OpenrError error)
 
@@ -410,7 +420,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   void processKvStoreDualMessage(
     1: Dual.DualMessages messages
-    2: string area = KvStore.kDefaultArea
+    2: string area
   ) throws (1: OpenrError error)
 
   /**
@@ -418,7 +428,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   void updateFloodTopologyChild(
     1: KvStore.FloodTopoSetParams params,
-    2: string area = KvStore.kDefaultArea
+    2: string area
   ) throws (1: OpenrError error)
 
   /**
@@ -489,10 +499,20 @@ service OpenrCtrl extends fb303_core.BaseService {
   LinkMonitor.DumpLinksReply getInterfaces() throws (1: OpenrError error)
 
   /**
-   * Get the current adjacencies information
+   * Get the current adjacencies information, only works for nodes with one
+   * configured area. DEPRECATED, prefer
    */
   Lsdb.AdjacencyDatabase getLinkMonitorAdjacencies()
     throws (1: OpenrError error)
+
+  /**
+   * Get the current adjacencies information, provide set of areas to get
+   * adjancecy databases for. Providing an empty set will return a DB for
+   * all configured areas
+   */
+  list<Lsdb.AdjacencyDatabase> getLinkMonitorAdjacenciesFiltered(
+    1: AdjacenciesFilter filter
+  ) throws (1: OpenrError error)
 
   /**
    * Command to request OpenR version

@@ -105,7 +105,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
           // thrift::Publication contains "adj:*" key change.
           // Clean ALL pending promises
           longPollReqs_.withWLock([&](auto& longPollReqs) {
-            for (auto& kv : longPollReqs) {
+            for (auto& kv : longPollReqs[maybePublication->get_area()]) {
               auto& p = kv.second.first;
               p.setValue(true);
             }
@@ -115,7 +115,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
           longPollReqs_.withWLock([&](auto& longPollReqs) {
             auto now = getUnixTimeStampMs();
             std::vector<int64_t> reqsToClean;
-            for (auto& kv : longPollReqs) {
+            for (auto& kv : longPollReqs[maybePublication->get_area()]) {
               auto& clientId = kv.first;
               auto& req = kv.second;
 
@@ -132,7 +132,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 
             // cleanup expired requests since no ADJ change observed
             for (auto& clientId : reqsToClean) {
-              longPollReqs.erase(clientId);
+              longPollReqs[maybePublication->get_area()].erase(clientId);
             }
           });
         }
@@ -371,6 +371,18 @@ OpenrCtrlHandler::getRunningConfigThrift(thrift::OpenrConfig& _config) {
   _config = config_->getConfig();
 }
 
+std::unique_ptr<std::string>
+OpenrCtrlHandler::getSingleAreaOrThrow(std::string const& caller) {
+  fb303::fbData->addStatValue(
+      folly::sformat("ctrl.get_single_area.{}", caller), 1, fb303::COUNT);
+  auto const& areas = config_->getAreas();
+  if (1 != areas.size()) {
+    throw thrift::OpenrError(
+        "Iterface requires node to be confgiured with exactly one area");
+  }
+  return std::make_unique<std::string>(areas.begin()->first);
+}
+
 //
 // PrefixManager APIs
 //
@@ -519,14 +531,25 @@ OpenrCtrlHandler::semifuture_getRouteDbComputed(
 
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
 OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
-  CHECK(decision_);
-  return decision_->getDecisionAdjacencyDbs();
+  auto filter = std::make_unique<thrift::AdjacenciesFilter>();
+  filter->set_selectAreas({*getSingleAreaOrThrow("getDecisionAdjacencyDbs")});
+  return semifuture_getDecisionAdjacenciesFiltered(std::move(filter))
+      .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
+                         adjDbs) mutable {
+        auto res = std::make_unique<thrift::AdjDbs>();
+        for (auto& db : *adjDbs) {
+          auto name = db.get_thisNodeName();
+          res->emplace(std::move(name), std::move(db));
+        }
+        return res;
+      });
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
-OpenrCtrlHandler::semifuture_getAllDecisionAdjacencyDbs() {
+OpenrCtrlHandler::semifuture_getDecisionAdjacenciesFiltered(
+    std::unique_ptr<thrift::AdjacenciesFilter> filter) {
   CHECK(decision_);
-  return decision_->getAllDecisionAdjacencyDbs();
+  return decision_->getDecisionAdjacenciesFiltered(std::move(*filter));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
@@ -541,11 +564,8 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
-  thrift::KeyGetParams params;
-  *params.keys_ref() = std::move(*filterKeys);
-
-  CHECK(kvStore_);
-  return kvStore_->getKvStoreKeyVals(std::move(params));
+  return semifuture_getKvStoreKeyValsArea(
+      std::move(filterKeys), getSingleAreaOrThrow("getKvStoreKeyVals"));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
@@ -556,14 +576,14 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
   *params.keys_ref() = std::move(*filterKeys);
 
   CHECK(kvStore_);
-  return kvStore_->getKvStoreKeyVals(std::move(params), std::move(*area));
+  return kvStore_->getKvStoreKeyVals(std::move(*area), std::move(params));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  CHECK(kvStore_);
-  return kvStore_->dumpKvStoreKeys(std::move(*filter));
+  return semifuture_getKvStoreKeyValsFilteredArea(
+      std::move(filter), getSingleAreaOrThrow("getKvStoreKeyValsFiltered"));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
@@ -571,14 +591,20 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->dumpKvStoreKeys(std::move(*filter), std::move(*area));
+  return kvStore_->dumpKvStoreKeys(std::move(*filter), {*area})
+      .deferValue(
+          [](std::unique_ptr<std::vector<thrift::Publication>>&& pubs) mutable {
+            thrift::Publication pub = pubs->empty() ? thrift::Publication{}
+                                                    : std::move(*pubs->begin());
+            return std::make_unique<thrift::Publication>(std::move(pub));
+          });
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreHashFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  CHECK(kvStore_);
-  return kvStore_->dumpKvStoreHashes(std::move(*filter));
+  return semifuture_getKvStoreHashFilteredArea(
+      std::move(filter), getSingleAreaOrThrow("getKvStoreHashFiltered"));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
@@ -586,7 +612,7 @@ OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->dumpKvStoreHashes(std::move(*filter), std::move(*area));
+  return kvStore_->dumpKvStoreHashes(std::move(*area), std::move(*filter));
 }
 
 folly::SemiFuture<folly::Unit>
@@ -594,11 +620,19 @@ OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->setKvStoreKeyVals(std::move(*setParams), std::move(*area));
+  return kvStore_->setKvStoreKeyVals(std::move(*area), std::move(*setParams));
 }
 
 folly::SemiFuture<bool>
 OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
+    std::unique_ptr<thrift::KeyVals> snapshot) {
+  return semifuture_longPollKvStoreAdjArea(
+      getSingleAreaOrThrow("longPollKvStoreAdj"), std::move(snapshot));
+}
+
+folly::SemiFuture<bool>
+OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
+    std::unique_ptr<std::string> area,
     std::unique_ptr<thrift::KeyVals> snapshot) {
   folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
@@ -626,8 +660,9 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
   // Explicitly do SYNC call to KvStore
   std::unique_ptr<thrift::Publication> thriftPub{nullptr};
   try {
-    thriftPub = semifuture_getKvStoreKeyValsFiltered(
-                    std::make_unique<thrift::KeyDumpParams>(params))
+    thriftPub = semifuture_getKvStoreKeyValsFilteredArea(
+                    std::make_unique<thrift::KeyDumpParams>(params),
+                    std::make_unique<std::string>(*area))
                     .get();
   } catch (std::exception const& ex) {
     p.setException(thrift::OpenrError(ex.what()));
@@ -648,7 +683,8 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
     // from KvStore.
     VLOG(3) << "No adj change detected. Store req as pending request";
     longPollReqs_.withWLock([&](auto& longPollReq) {
-      longPollReq.emplace(requestId, std::make_pair(std::move(p), timeStamp));
+      longPollReq[*area].emplace(
+          requestId, std::make_pair(std::move(p), timeStamp));
     });
   }
   return sf;
@@ -660,7 +696,7 @@ OpenrCtrlHandler::semifuture_processKvStoreDualMessage(
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
   return kvStore_->processKvStoreDualMessage(
-      std::move(*messages), std::move(*area));
+      std::move(*area), std::move(*messages));
 }
 
 folly::SemiFuture<folly::Unit>
@@ -669,7 +705,7 @@ OpenrCtrlHandler::semifuture_updateFloodTopologyChild(
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
   return kvStore_->updateFloodTopologyChild(
-      std::move(*params), std::move(*area));
+      std::move(*area), std::move(*params));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
@@ -681,8 +717,8 @@ OpenrCtrlHandler::semifuture_getSpanningTreeInfos(
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeers() {
-  CHECK(kvStore_);
-  return kvStore_->getKvStorePeers();
+  return semifuture_getKvStorePeersArea(
+      getSingleAreaOrThrow("getKvStorePeers"));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
@@ -694,7 +730,8 @@ OpenrCtrlHandler::semifuture_getKvStorePeersArea(
 
 apache::thrift::ServerStream<thrift::Publication>
 OpenrCtrlHandler::subscribeKvStoreFilter(
-    std::unique_ptr<thrift::KeyDumpParams> filter) {
+    std::unique_ptr<thrift::KeyDumpParams> filter,
+    std::unique_ptr<std::set<std::string>> selectAreas) {
   // Get new client-ID (monotonically increasing)
   auto clientToken = publisherToken_++;
 
@@ -716,9 +753,10 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
 
   SYNCHRONIZED(kvStorePublishers_) {
     assert(kvStorePublishers_.count(clientToken) == 0);
-    LOG(INFO) << "KvStore snoop stream-" << clientToken << " started.";
+    LOG(INFO) << "KvStore snoop stream-" << clientToken
+              << " started for areas: " << folly::join(", ", *selectAreas);
     auto kvStorePublisher = std::make_unique<KvStorePublisher>(
-        std::move(*filter), std::move(streamAndPublisher.second));
+        *selectAreas, std::move(*filter), std::move(streamAndPublisher.second));
     kvStorePublishers_.emplace(clientToken, std::move(kvStorePublisher));
     fb303::fbData->setCounter("subscribers.kvstore", kvStorePublishers_.size());
   }
@@ -738,18 +776,41 @@ folly::SemiFuture<apache::thrift::ResponseAndServerStream<
     thrift::Publication>>
 OpenrCtrlHandler::semifuture_subscribeAndGetKvStoreFiltered(
     std::unique_ptr<thrift::KeyDumpParams> dumpParams) {
-  auto subscriptionParams =
-      std::make_unique<thrift::KeyDumpParams>(*dumpParams);
-  return semifuture_getKvStoreKeyValsFiltered(std::move(dumpParams))
-      .defer(
-          [stream = subscribeKvStoreFilter(std::move(subscriptionParams))](
-              folly::Try<std::unique_ptr<thrift::Publication>>&& pub) mutable {
-            pub.throwIfFailed();
-            return apache::thrift::ResponseAndServerStream<
-                thrift::Publication,
-                thrift::Publication>{std::move(*pub.value()),
-                                     std::move(stream)};
-          });
+  auto selectAreas = std::make_unique<std::set<std::string>>();
+  selectAreas->insert(*getSingleAreaOrThrow("subscribeAndGetKvStoreFiltered"));
+  return semifuture_subscribeAndGetAreaKvStores(
+             std::move(dumpParams), std::move(selectAreas))
+      .deferValue([](apache::thrift::ResponseAndServerStream<
+                      std::vector<thrift::Publication>,
+                      thrift::Publication>&& responses) mutable {
+        thrift::Publication pub = responses.response.empty()
+            ? thrift::Publication{}
+            : std::move(*responses.response.begin());
+        return apache::thrift::
+            ResponseAndServerStream<thrift::Publication, thrift::Publication>{
+                std::move(pub), std::move(responses.stream)};
+      });
+}
+
+folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+    std::vector<thrift::Publication>,
+    thrift::Publication>>
+OpenrCtrlHandler::semifuture_subscribeAndGetAreaKvStores(
+    std::unique_ptr<thrift::KeyDumpParams> dumpParams,
+    std::unique_ptr<std::set<std::string>> selectAreas) {
+  auto dumpParamsCopy = std::make_unique<thrift::KeyDumpParams>(*dumpParams);
+  auto selectAreasCopy = std::make_unique<std::set<std::string>>(*selectAreas);
+  return kvStore_
+      ->dumpKvStoreKeys(std::move(*dumpParams), std::move(*selectAreas))
+      .defer([stream = subscribeKvStoreFilter(
+                  std::move(dumpParamsCopy), std::move(selectAreasCopy))](
+                 folly::Try<std::unique_ptr<std::vector<thrift::Publication>>>&&
+                     pubs) mutable {
+        pubs.throwIfFailed();
+        return apache::thrift::ResponseAndServerStream<
+            std::vector<thrift::Publication>,
+            thrift::Publication>{std::move(*pubs.value()), std::move(stream)};
+      });
 }
 
 apache::thrift::ServerStream<thrift::RouteDatabaseDelta>
@@ -869,7 +930,24 @@ OpenrCtrlHandler::semifuture_getInterfaces() {
 folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
   CHECK(linkMonitor_);
-  return linkMonitor_->getAdjacencies();
+  auto filter = std::make_unique<thrift::AdjacenciesFilter>();
+  filter->set_selectAreas({*getSingleAreaOrThrow("getLinkMonitorAdjacencies")});
+  return semifuture_getLinkMonitorAdjacenciesFiltered(std::move(filter))
+      .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
+                         dbs) mutable {
+        thrift::AdjacencyDatabase db;
+        if (!dbs->empty()) {
+          db = std::move(*dbs->begin());
+        }
+        return std::make_unique<thrift::AdjacencyDatabase>(std::move(db));
+      });
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
+OpenrCtrlHandler::semifuture_getLinkMonitorAdjacenciesFiltered(
+    std::unique_ptr<thrift::AdjacenciesFilter> filter) {
+  CHECK(linkMonitor_);
+  return linkMonitor_->getAdjacencies(std::move(*filter));
 }
 
 //

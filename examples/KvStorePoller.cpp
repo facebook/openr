@@ -20,6 +20,7 @@ std::pair<
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<thrift::AdjacencyDatabase>(
+      AreaId{"my_area_name"},
       sockAddrs_,
       Constants::kAdjDbMarker.toString(),
       Constants::kServiceConnTimeout,
@@ -31,6 +32,7 @@ std::pair<
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStorePoller::getPrefixDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<thrift::PrefixDatabase>(
+      AreaId{"my_area_name"},
       sockAddrs_,
       Constants::kPrefixDbMarker.toString(),
       Constants::kServiceConnTimeout,

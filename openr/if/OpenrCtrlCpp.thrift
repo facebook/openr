@@ -24,10 +24,20 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
    *
    * There may be some replicated entries in stream that are also in snapshot.
    */
+  // DEPRECATED
   KvStore.Publication, stream<KvStore.Publication> subscribeAndGetKvStore()
-
+  // DEPRECATED
   KvStore.Publication, stream<KvStore.Publication>
     subscribeAndGetKvStoreFiltered(1: KvStore.KeyDumpParams filter)
+
+  // Prefer this API, above do not specfy area to subcribe to, default
+  // constructing filter will yield all kvstore keys. provide set of areas to
+  // dump and subscribe to. Providing an empty set will subscribe on all areas
+  list<KvStore.Publication>, stream<KvStore.Publication>
+  subscribeAndGetAreaKvStores(
+    1: KvStore.KeyDumpParams filter,
+    2: set<string> selectAreas,
+  )
 
   /**
    * Retrieve Fib snapshot and subscribe for subsequent updates.

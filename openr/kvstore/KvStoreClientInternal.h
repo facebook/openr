@@ -73,10 +73,10 @@ class KvStoreClientInternal {
    * change the value or ttl for the persistented key or start persisting a key
    */
   bool persistKey(
+      AreaId const& area,
       std::string const& key,
       std::string const& value,
-      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval);
 
   /**
    * Advertise the key-value into KvStore with specified version. If version is
@@ -88,49 +88,42 @@ class KvStoreClientInternal {
    * Second flavour directly forwards the value to KvStore.
    */
   std::optional<folly::Unit> setKey(
+      AreaId const& area,
       std::string const& key,
       std::string const& value,
       uint32_t version = 0,
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
   std::optional<folly::Unit> setKey(
-      std::string const& key,
-      thrift::Value const& value,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area, std::string const& key, thrift::Value const& value);
 
   /**
    * Unset key from KvStore. It really doesn't delete the key from KvStore,
    * instead it just leave it as it is.
    */
-  void unsetKey(
-      std::string const& key,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+  void unsetKey(AreaId const& area, std::string const& key);
 
   /**
    * Clear key's value by seeting default value of empty string or value passed
    * by the caller, cancel ttl timers, advertise with higher version.
    */
   void clearKey(
+      AreaId const& area,
       std::string const& key,
       std::string value = "",
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
 
   /**
    * Get key from KvStore. It gets from local snapshot KeyVals of the kvstore.
    */
   std::optional<thrift::Value> getKey(
-      std::string const& key,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area, std::string const& key);
 
   /**
    * Dump the entries of my KV store whose keys match the given prefix
    * If the prefix is empty string, the full KV store is dumped
    */
   std::optional<std::unordered_map<std::string, thrift::Value>>
-  dumpAllWithPrefix(
-      const std::string& prefix = "",
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
+  dumpAllWithPrefix(AreaId const& area, const std::string& prefix = "");
 
   /**
    * APIs to subscribe/unsubscribe to value change of a key in KvStore
@@ -139,11 +132,11 @@ class KvStoreClientInternal {
    * @param fetchInitValue - returns key value from KvStore if set to 'true'
    */
   std::optional<thrift::Value> subscribeKey(
+      AreaId const& area,
       std::string const& key,
       KeyCallback callback,
-      bool fetchInitValue = false,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  void unsubscribeKey(std::string const& key);
+      bool fetchInitValue = false);
+  void unsubscribeKey(AreaId const& area, std::string const& key);
 
   // Set callback for all kv publications
   void setKvCallback(KeyCallback callback);
@@ -188,18 +181,18 @@ class KvStoreClientInternal {
    *            <lastKnownVersion> will be checked against KvStore
    */
   thrift::Value buildThriftValue(
+      AreaId const& area,
       std::string const& key,
       std::string const& value,
       uint32_t version = 0,
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
 
   /**
    * Utility function to SET keys in KvStore.
    */
   std::optional<folly::Unit> setKeysHelper(
-      std::unordered_map<std::string, thrift::Value> keyVals,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      AreaId const& area,
+      std::unordered_map<std::string, thrift::Value> keyVals);
 
   /**
    * Helper function to advertise the pending keys considering the exponential
@@ -212,12 +205,12 @@ class KvStoreClientInternal {
    * Helper function to schedule TTL update advertisement
    */
   void scheduleTtlUpdates(
+      AreaId const& area,
       std::string const& key,
       uint32_t version,
       uint32_t ttlVersion,
       int64_t ttl,
-      bool advertiseImmediately,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
+      bool advertiseImmediately);
 
   /**
    * Helper function to advertise TTL update
@@ -257,12 +250,15 @@ class KvStoreClientInternal {
 
   // Locally advertised authorative key-vals using `persistKey`
   std::unordered_map<
-      std::string /* area */,
+      AreaId,
       std::unordered_map<std::string /* key */, thrift::Value>>
       persistedKeyVals_;
 
   // Subscribed keys to their callback functions
-  std::unordered_map<std::string, KeyCallback> keyCallbacks_;
+  std::unordered_map<
+      AreaId,
+      std::unordered_map<std::string /* key */, KeyCallback>>
+      keyCallbacks_;
 
   // callback for every key published
   KeyCallback kvCallback_{nullptr};
@@ -272,13 +268,15 @@ class KvStoreClientInternal {
 
   // backoff associated with each key for re-advertisements
   std::unordered_map<
-      std::string /* key */,
-      ExponentialBackoff<std::chrono::milliseconds>>
+      AreaId,
+      std::unordered_map<
+          std::string /* key */,
+          ExponentialBackoff<std::chrono::milliseconds>>>
       backoffs_;
 
   // backoff associated with each key for freshing TTL
   std::unordered_map<
-      std::string /* area */,
+      AreaId,
       std::unordered_map<
           std::string /* key */,
           std::pair<
@@ -287,9 +285,7 @@ class KvStoreClientInternal {
       keyTtlBackoffs_;
 
   // Set of local keys to be re-advertised.
-  std::unordered_map<
-      std::string /* area */,
-      std::unordered_set<std::string /* key */>>
+  std::unordered_map<AreaId, std::unordered_set<std::string /* key */>>
       keysToAdvertise_;
 
   // Timer to advertised pending key-vals

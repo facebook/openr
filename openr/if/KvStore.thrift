@@ -146,7 +146,7 @@ struct PeerDelParams {
 
 // peer updateRequest
 struct PeerUpdateRequest {
-  1: string area = kDefaultArea
+  1: string area
   2: optional PeerAddParams peerAddParams
   3: optional PeerDelParams peerDelParams
 }
@@ -239,5 +239,5 @@ struct Publication {
   6: optional string floodRootId;
 
   // area to which this publication belongs
-  7: string area = kDefaultArea;
+  7: string area;
 }

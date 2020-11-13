@@ -1515,33 +1515,23 @@ Decision::getMplsStaticRoutes() {
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
-Decision::getDecisionAdjacencyDbs() {
-  folly::Promise<std::unique_ptr<thrift::AdjDbs>> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([p = std::move(p), this]() mutable {
-    auto search =
-        areaLinkStates_.find(thrift::KvStore_constants::kDefaultArea());
-    p.setValue(std::make_unique<thrift::AdjDbs>(
-        search != areaLinkStates_.end() ? search->second.getAdjacencyDatabases()
-                                        : thrift::AdjDbs{}));
-  });
-  return sf;
-}
-
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
-Decision::getAllDecisionAdjacencyDbs() {
+Decision::getDecisionAdjacenciesFiltered(thrift::AdjacenciesFilter filter) {
   folly::Promise<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([p = std::move(p), this]() mutable {
-    auto adjDbs = std::make_unique<std::vector<thrift::AdjacencyDatabase>>();
-    for (auto const& [_, linkState] : areaLinkStates_) {
-      for (auto const& [_, db] : linkState.getAdjacencyDatabases()) {
-        adjDbs->push_back(db);
-      }
-    }
-    p.setValue(std::move(adjDbs));
-  });
+  runInEventBaseThread(
+      [p = std::move(p), filter = std::move(filter), this]() mutable {
+        auto res = std::make_unique<std::vector<thrift::AdjacencyDatabase>>();
+        for (auto const& [area, linkState] : areaLinkStates_) {
+          if (filter.get_selectAreas().empty() ||
+              filter.get_selectAreas().count(area)) {
+            for (auto const& [_, db] : linkState.getAdjacencyDatabases()) {
+              res->push_back(db);
+            }
+          }
+        }
+        p.setValue(std::move(res));
+      });
   return sf;
 }
 
