@@ -70,8 +70,9 @@ createUnicastRoute(size_t index, size_t numNhs, bool isV4) {
   CHECK_LT(0, numNhs); // Number of nexthops must be non-zero
   thrift::UnicastRoute route;
   const auto& format = isV4 ? kPrefixV4 : kPrefixV6;
-  route.dest = toIpPrefix(folly::sformat(format, index / 255, 1 + index % 255));
-  *route.nextHops_ref() = createNextHops(numNhs, isV4);
+  route.dest_ref() =
+      toIpPrefix(folly::sformat(format, index / 255, 1 + index % 255));
+  route.nextHops_ref() = createNextHops(numNhs, isV4);
   return route;
 }
 
@@ -93,8 +94,8 @@ createMplsRoute(
     bool isV4,
     const thrift::MplsAction& mplsAction) {
   thrift::MplsRoute route;
-  route.topLabel = index + 1;
-  *route.nextHops_ref() = createNextHops(numNhs, isV4, mplsAction);
+  route.topLabel_ref() = index + 1;
+  route.nextHops_ref() = createNextHops(numNhs, isV4, mplsAction);
   return route;
 }
 
@@ -303,7 +304,7 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
   // Remove route
   handler
       .semifuture_deleteUnicastRoute(
-          kClientId, std::make_unique<thrift::IpPrefix>(r1.dest))
+          kClientId, std::make_unique<thrift::IpPrefix>(*r1.dest_ref()))
       .get();
   routes = handler.semifuture_getRouteTableByClient(kClientId).get();
   EXPECT_EQ(0, routes->size());
@@ -311,7 +312,7 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
   // Remove route again
   handler
       .semifuture_deleteUnicastRoute(
-          kClientId, std::make_unique<thrift::IpPrefix>(r1.dest))
+          kClientId, std::make_unique<thrift::IpPrefix>(*r1.dest_ref()))
       .get();
   routes = handler.semifuture_getRouteTableByClient(kClientId).get();
   EXPECT_EQ(0, routes->size());
@@ -423,7 +424,7 @@ TEST_P(FibHandlerFixture, UnicastMultipleClients) {
   thrift::UnicastRoute c2r1 = createUnicastRoute(0, 2, isV4); // 2 nexthop
 
   // Make sure prefix for both routes are same
-  ASSERT_EQ(c1r1.dest, c2r1.dest);
+  ASSERT_EQ(*c1r1.dest_ref(), *c2r1.dest_ref());
 
   // Expect no routes in the beginning for both clients
   {
@@ -472,7 +473,7 @@ TEST_P(FibHandlerFixture, UnicastMultipleClients) {
   {
     handler
         .semifuture_deleteUnicastRoute(
-            kClient1, std::make_unique<thrift::IpPrefix>(c1r1.dest))
+            kClient1, std::make_unique<thrift::IpPrefix>(*c1r1.dest_ref()))
         .get();
 
     auto c1r = handler.semifuture_getRouteTableByClient(kClient1).get();
@@ -488,7 +489,7 @@ TEST_P(FibHandlerFixture, UnicastMultipleClients) {
   {
     handler
         .semifuture_deleteUnicastRoute(
-            kClient2, std::make_unique<thrift::IpPrefix>(c2r1.dest))
+            kClient2, std::make_unique<thrift::IpPrefix>(*c2r1.dest_ref()))
         .get();
 
     auto c1r = handler.semifuture_getRouteTableByClient(kClient1).get();
@@ -509,7 +510,7 @@ TEST_P(FibHandlerFixture, MplsAddDelPop) {
   popNh.mplsAction_ref() =
       createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
   thrift::MplsRoute r1;
-  r1.topLabel = 1;
+  r1.topLabel_ref() = 1;
   r1.nextHops_ref()->emplace_back(popNh);
 
   // Add route with pop action
@@ -527,7 +528,7 @@ TEST_P(FibHandlerFixture, MplsAddDelPop) {
 
   // Delete route
   {
-    std::vector<int32_t> labels{r1.topLabel};
+    std::vector<int32_t> labels{*r1.topLabel_ref()};
     handler
         .semifuture_deleteMplsRoutes(
             kClientId, std::make_unique<std::vector<int32_t>>(labels))
@@ -546,7 +547,7 @@ TEST_P(FibHandlerFixture, MplsAddUpdateDelSwapPhp) {
   const auto phpAction = createMplsAction(thrift::MplsActionCode::PHP);
 
   auto r1 = createMplsRoute(0, 2, isV4, swapAction); // 2 nexthops
-  const std::vector<int32_t> labels{r1.topLabel};
+  const std::vector<int32_t> labels{*r1.topLabel_ref()};
 
   // Expect no routes in the beginning
   auto routes = handler.semifuture_getMplsRouteTableByClient(kClientId).get();
@@ -678,7 +679,7 @@ TEST_P(FibHandlerFixture, MplsMultipleClient) {
   thrift::MplsRoute c2r1 = createMplsRoute(0, 2, isV4, action2);
 
   // Make sure prefix for both routes are same
-  ASSERT_EQ(c1r1.topLabel, c2r1.topLabel);
+  ASSERT_EQ(*c1r1.topLabel_ref(), *c2r1.topLabel_ref());
 
   // Expect no routes in the beginning for both clients
   {
@@ -729,7 +730,7 @@ TEST_P(FibHandlerFixture, MplsMultipleClient) {
 
   // Remove c1r1 (ensure c2r1 remains)
   {
-    const std::vector<int32_t> labels{c1r1.topLabel};
+    const std::vector<int32_t> labels{*c1r1.topLabel_ref()};
     handler
         .semifuture_deleteMplsRoutes(
             kClient1, std::make_unique<std::vector<int32_t>>(labels))
@@ -746,7 +747,7 @@ TEST_P(FibHandlerFixture, MplsMultipleClient) {
 
   // Remove c2r1 (ensure both are gone)
   {
-    const std::vector<int32_t> labels{c2r1.topLabel};
+    const std::vector<int32_t> labels{*c2r1.topLabel_ref()};
     handler
         .semifuture_deleteMplsRoutes(
             kClient2, std::make_unique<std::vector<int32_t>>(labels))

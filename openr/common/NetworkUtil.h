@@ -95,7 +95,7 @@ template <class IPAddressVx>
 thrift::BinaryAddress
 toBinaryAddressImpl(const IPAddressVx& addr) {
   thrift::BinaryAddress result;
-  result.addr.append(
+  result.addr_ref()->append(
       reinterpret_cast<const char*>(addr.bytes()), IPAddressVx::byteCount());
   return result;
 }
@@ -129,8 +129,8 @@ toIPAddress(const std::string& binAddr) {
 inline folly::IPAddress
 toIPAddress(const thrift::BinaryAddress& addr) {
   return folly::IPAddress::fromBinary(folly::ByteRange(
-      reinterpret_cast<const unsigned char*>(addr.addr.data()),
-      addr.addr.size()));
+      reinterpret_cast<const unsigned char*>(addr.addr_ref()->data()),
+      addr.addr_ref()->size()));
 }
 
 inline folly::CIDRNetwork
@@ -154,7 +154,7 @@ toIpPrefix(const std::string& prefix) {
 
 inline std::string
 toString(const thrift::BinaryAddress& addr) {
-  return addr.addr.empty() ? "" : toIPAddress(addr).str();
+  return addr.addr_ref()->empty() ? "" : toIPAddress(addr).str();
 }
 
 inline std::string
@@ -194,7 +194,8 @@ toString(const thrift::NextHopThrift& nextHop) {
 inline std::string
 toString(const thrift::UnicastRoute& route) {
   std::vector<std::string> lines;
-  lines.emplace_back(folly::sformat("> Prefix: {}", toString(route.dest)));
+  lines.emplace_back(
+      folly::sformat("> Prefix: {}", toString(*route.dest_ref())));
   for (const auto& nh : *route.nextHops_ref()) {
     lines.emplace_back("  " + toString(nh));
   }
@@ -204,7 +205,7 @@ toString(const thrift::UnicastRoute& route) {
 inline std::string
 toString(const thrift::MplsRoute& route) {
   std::vector<std::string> lines;
-  lines.emplace_back(folly::sformat("> Label: {}", route.topLabel));
+  lines.emplace_back(folly::sformat("> Label: {}", *route.topLabel_ref()));
   for (const auto& nh : *route.nextHops_ref()) {
     lines.emplace_back("  " + toString(nh));
   }

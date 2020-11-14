@@ -491,7 +491,7 @@ bool
 OpenrWrapper<Serializer>::checkPrefixExists(
     const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb) {
   for (auto const& route : *routeDb.unicastRoutes_ref()) {
-    if (prefix == route.dest) {
+    if (prefix == *route.dest_ref()) {
       return true;
     }
   }

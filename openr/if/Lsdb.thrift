@@ -45,8 +45,8 @@ struct PerfEvents {
 // next best routes
 //
 struct InterfaceInfo {
-  1: required bool isUp
-  2: required i64 ifIndex
+  1: bool isUp
+  2: i64 ifIndex
   // ip prefixes of all v4 and v6 link local addresses
   5: list<Network.IpPrefix> networks
 }

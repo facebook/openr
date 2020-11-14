@@ -105,13 +105,13 @@ checkEqualUnicastRoutes(
       rhsRoutes;
   for (auto const& route : lhs) {
     lhsRoutes.emplace(
-        route.dest,
+        *route.dest_ref(),
         std::set<thrift::NextHopThrift>(
             route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
   }
   for (auto const& route : rhs) {
     rhsRoutes.emplace(
-        route.dest,
+        *route.dest_ref(),
         std::set<thrift::NextHopThrift>(
             route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
   }
@@ -154,13 +154,13 @@ checkEqualRouteDatabaseMpls(
   std::unordered_map<int32_t, std::set<thrift::NextHopThrift>> rhsRoutes;
   for (auto const& route : *lhs.mplsRoutes_ref()) {
     lhsRoutes.emplace(
-        route.topLabel,
+        *route.topLabel_ref(),
         std::set<thrift::NextHopThrift>(
             route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
   }
   for (auto const& route : *rhs.mplsRoutes_ref()) {
     rhsRoutes.emplace(
-        route.topLabel,
+        *route.topLabel_ref(),
         std::set<thrift::NextHopThrift>(
             route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
   }
@@ -740,13 +740,13 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
-  EXPECT_EQ(routes.at(0).dest, prefix1);
+  EXPECT_EQ(*routes.at(0).dest_ref(), prefix1);
   EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
 
   mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
   EXPECT_EQ(mplsRoutes.size(), 1);
-  EXPECT_EQ(mplsRoutes.at(0).topLabel, label2);
+  EXPECT_EQ(*mplsRoutes.at(0).topLabel_ref(), label2);
   EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 3);
   EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 2);
 

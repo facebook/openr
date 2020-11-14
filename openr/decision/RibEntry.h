@@ -75,10 +75,10 @@ struct RibUnicastEntry : RibEntry {
   thrift::UnicastRoute
   toThrift() const {
     thrift::UnicastRoute tUnicast;
-    tUnicast.dest = toIpPrefix(prefix);
-    *tUnicast.nextHops_ref() =
+    tUnicast.dest_ref() = toIpPrefix(prefix);
+    tUnicast.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
-    *tUnicast.doNotInstall_ref() = doNotInstall;
+    tUnicast.doNotInstall_ref() = doNotInstall;
     if (*bestPrefixEntry.type_ref() == thrift::PrefixType::BGP) {
       tUnicast.prefixType_ref() = thrift::PrefixType::BGP;
       if (bestPrefixEntry.data_ref()) {
@@ -102,7 +102,7 @@ struct RibMplsEntry : RibEntry {
   static RibMplsEntry
   fromThrift(const thrift::MplsRoute& tMpls) {
     return RibMplsEntry(
-        tMpls.topLabel,
+        *tMpls.topLabel_ref(),
         std::unordered_set<thrift::NextHopThrift>(
             tMpls.nextHops_ref()->begin(), tMpls.nextHops_ref()->end()));
   }
@@ -120,8 +120,8 @@ struct RibMplsEntry : RibEntry {
   thrift::MplsRoute
   toThrift() const {
     thrift::MplsRoute tMpls;
-    tMpls.topLabel = label;
-    *tMpls.nextHops_ref() =
+    tMpls.topLabel_ref() = label;
+    tMpls.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
     return tMpls;
   }

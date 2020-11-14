@@ -277,7 +277,7 @@ fillRouteMap(
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
   for (auto const& route : *routeDb.unicastRoutes_ref()) {
-    auto prefix = toString(route.dest);
+    auto prefix = toString(*route.dest_ref());
     for (const auto& nextHop : *route.nextHops_ref()) {
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
               << toString(nextHop);
@@ -286,7 +286,7 @@ fillRouteMap(
     }
   }
   for (auto const& route : *routeDb.mplsRoutes_ref()) {
-    auto topLabelStr = std::to_string(route.topLabel);
+    auto topLabelStr = std::to_string(*route.topLabel_ref());
     for (const auto& nextHop : *route.nextHops_ref()) {
       VLOG(4) << "node: " << node << " label: " << topLabelStr << " -> "
               << toString(nextHop);
@@ -375,7 +375,7 @@ validatePopLabelRoute(
 void
 printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
   for (const auto ucRoute : *routeDb.value().unicastRoutes_ref()) {
-    LOG(INFO) << "dest: " << toString(ucRoute.dest);
+    LOG(INFO) << "dest: " << toString(*ucRoute.dest_ref());
     if (ucRoute.adminDistance_ref().has_value()) {
       LOG(INFO) << "ad_dis: "
                 << static_cast<int>(ucRoute.adminDistance_ref().value());
@@ -866,8 +866,9 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, bgpPrefix1),
-          Truly([&data2](auto i) { return i.data_ref() == data2; }),
+          Truly([&data2, &bgpPrefix1](auto i) {
+            return i.dest_ref() == bgpPrefix1 and i.data_ref() == data2;
+          }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -906,6 +907,8 @@ TEST(BGPRedistribution, BasicOperation) {
  * 4) Undrain link; prefix1 -> {node2, node3}
  */
 TEST(BGPRedistribution, IgpMetric) {
+  const std::string data1{"data1"};
+  const auto expectedAddr = addr1;
   std::string nodeName("1");
   SpfSolver spfSolver(
       nodeName,
@@ -933,7 +936,6 @@ TEST(BGPRedistribution, IgpMetric) {
         (i == numMetrics - 1);
     *metricVector.metrics_ref()[i].metric_ref() = {i};
   }
-  const std::string data1{"data1"};
   const auto bgpPrefix2 = createPrefixEntry(
       addr1,
       thrift::PrefixType::BGP,
@@ -981,8 +983,9 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data_ref() == data1; }),
+          Truly([&data1, &expectedAddr](auto i) {
+            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
+          }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -1000,8 +1003,9 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data_ref() == data1; }),
+          Truly([&data1, &expectedAddr](auto i) {
+            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
+          }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -1020,8 +1024,9 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data_ref() == data1; }),
+          Truly([&data1, &expectedAddr](auto i) {
+            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
+          }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -1039,8 +1044,9 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data_ref() == data1; }),
+          Truly([&data1, &expectedAddr](auto i) {
+            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
+          }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -1057,8 +1063,9 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data_ref() == data1; }),
+          Truly([&data1, &expectedAddr](auto i) {
+            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
+          }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -1068,6 +1075,7 @@ TEST(BGPRedistribution, IgpMetric) {
 
 TEST(Decision, BestRouteSelection) {
   std::string nodeName("1");
+  const auto expectedAddr = addr1;
   SpfSolver spfSolver(
       nodeName,
       false /* enableV4 */,
@@ -1121,7 +1129,8 @@ TEST(Decision, BestRouteSelection) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
+          Truly(
+              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -1157,7 +1166,8 @@ TEST(Decision, BestRouteSelection) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Field(&thrift::UnicastRoute::dest, addr1),
+          Truly(
+              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
               getNextHops,
               testing::UnorderedElementsAre(
@@ -2640,7 +2650,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   *nh.address_ref() = toBinaryAddress("1.1.1.1");
   nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
   thrift::MplsRoute staticMplsRoute;
-  staticMplsRoute.topLabel = staticMplsRouteLabel;
+  staticMplsRoute.topLabel_ref() = staticMplsRouteLabel;
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
   *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
@@ -2735,7 +2745,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   *nh.address_ref() = toBinaryAddress("1.1.1.1");
   nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
   thrift::MplsRoute staticMplsRoute;
-  staticMplsRoute.topLabel = staticMplsRouteLabel;
+  staticMplsRoute.topLabel_ref() = staticMplsRouteLabel;
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
   *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
@@ -4779,8 +4789,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   nh1.mplsAction_ref() =
       createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
   thrift::MplsRoute route;
-  route.topLabel = 32011;
-  *route.nextHops_ref() = {nh};
+  route.topLabel_ref() = 32011;
+  route.nextHops_ref() = {nh};
   input.mplsRoutesToUpdate_ref()->push_back(route);
 
   // Update 32011 and make sure only that is updated
@@ -4790,8 +4800,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_EQ(routesDelta.toThrift(), input);
 
   // Update 32012 and make sure only that is updated
-  route.topLabel = 32012;
-  *input.mplsRoutesToUpdate_ref() = {route};
+  route.topLabel_ref() = 32012;
+  input.mplsRoutesToUpdate_ref() = {route};
   sendStaticRoutesUpdate(input);
   routesDelta = routeUpdatesQueueReader.get().value();
   routesDelta.perfEvents.reset();
@@ -4804,14 +4814,14 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // Test our consolidating logic, we first update 32011 then delete 32011
   // making sure only delete for 32011 is emitted.
-  route.topLabel = 32011;
-  *route.nextHops_ref() = {nh, nh1};
-  *input.mplsRoutesToUpdate_ref() = {route};
+  route.topLabel_ref() = 32011;
+  route.nextHops_ref() = {nh, nh1};
+  input.mplsRoutesToUpdate_ref() = {route};
   input.mplsRoutesToDelete_ref()->clear();
   sendStaticRoutesUpdate(input);
 
   input.mplsRoutesToUpdate_ref()->clear();
-  *input.mplsRoutesToDelete_ref() = {32011};
+  input.mplsRoutesToDelete_ref() = {32011};
   sendStaticRoutesUpdate(input);
 
   routesDelta = routeUpdatesQueueReader.get().value();
@@ -4826,12 +4836,12 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // test our consolidating logic, we first delete 32012 then update 32012
   // making sure only update for 32012 is emitted.
   input.mplsRoutesToUpdate_ref()->clear();
-  *input.mplsRoutesToDelete_ref() = {32012};
+  input.mplsRoutesToDelete_ref() = {32012};
   sendStaticRoutesUpdate(input);
 
-  route.topLabel = 32012;
-  *route.nextHops_ref() = {nh, nh1};
-  *input.mplsRoutesToUpdate_ref() = {route};
+  route.topLabel_ref() = 32012;
+  route.nextHops_ref() = {nh, nh1};
+  input.mplsRoutesToUpdate_ref() = {route};
   input.mplsRoutesToDelete_ref()->clear();
   sendStaticRoutesUpdate(input);
 

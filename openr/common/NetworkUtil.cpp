@@ -25,7 +25,7 @@ hash<openr::thrift::IpPrefix>::operator()(
 size_t
 hash<openr::thrift::BinaryAddress>::operator()(
     openr::thrift::BinaryAddress const& addr) const {
-  size_t res = hash<string>()(addr.addr);
+  size_t res = hash<string>()(*addr.addr_ref());
   if (addr.ifName_ref().has_value()) {
     res += hash<string>()(addr.ifName_ref().value());
   }
@@ -71,7 +71,7 @@ hash<openr::thrift::NextHopThrift>::operator()(
 size_t
 hash<openr::thrift::UnicastRoute>::operator()(
     openr::thrift::UnicastRoute const& route) const {
-  size_t res = hash<openr::thrift::IpPrefix>()(route.dest);
+  size_t res = hash<openr::thrift::IpPrefix>()(*route.dest_ref());
   for (const auto& nh : *route.nextHops_ref()) {
     res += hash<openr::thrift::BinaryAddress>()(*nh.address_ref());
     res += hash<int32_t>()(*nh.weight_ref());

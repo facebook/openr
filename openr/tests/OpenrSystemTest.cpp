@@ -146,7 +146,7 @@ fillRouteMap(
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
   for (auto const& route : *routeDb.unicastRoutes_ref()) {
-    auto prefix = toString(route.dest);
+    auto prefix = toString(*route.dest_ref());
     for (const auto& nextHop : *route.nextHops_ref()) {
       const auto nextHopAddr = toIPAddress(*nextHop.address_ref());
       assert(nextHop.address_ref()->ifName_ref());

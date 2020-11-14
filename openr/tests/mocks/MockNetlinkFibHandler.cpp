@@ -176,12 +176,9 @@ MockNetlinkFibHandler::getRouteTableByClient(
   SYNCHRONIZED(unicastRouteDb_) {
     routes.clear();
     VLOG(2) << "MockNetlinkFibHandler: get route table by client";
-    for (auto const& kv : unicastRouteDb_) {
-      auto const& prefix = kv.first;
-      auto const& nextHops = kv.second;
-
+    for (auto const& [prefix, nhs] : unicastRouteDb_) {
       auto thriftNextHops =
-          from(nextHops) |
+          from(nhs) |
           mapped([](const std::pair<std::string, folly::IPAddress>& nextHop) {
             VLOG(2) << "mapping next-hop " << nextHop.second.str() << " dev "
                     << nextHop.first;
@@ -193,8 +190,8 @@ MockNetlinkFibHandler::getRouteTableByClient(
           as<std::vector>();
 
       thrift::UnicastRoute route;
-      route.dest = toIpPrefix(prefix);
-      *route.nextHops_ref() = std::move(thriftNextHops);
+      route.dest_ref() = toIpPrefix(prefix);
+      route.nextHops_ref() = std::move(thriftNextHops);
       routes.emplace_back(std::move(route));
     }
   }
@@ -205,10 +202,10 @@ MockNetlinkFibHandler::getMplsRouteTableByClient(
     std::vector<openr::thrift::MplsRoute>& routes, int16_t) {
   SYNCHRONIZED(mplsRouteDb_) {
     routes.clear();
-    for (auto const& kv : mplsRouteDb_) {
+    for (auto const& [topLabel, nhs] : mplsRouteDb_) {
       thrift::MplsRoute route;
-      route.topLabel = kv.first;
-      *route.nextHops_ref() = kv.second;
+      route.topLabel_ref() = topLabel;
+      route.nextHops_ref() = nhs;
       routes.emplace_back(std::move(route));
     }
   }

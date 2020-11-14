@@ -338,7 +338,8 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   auto i = routeDelta.unicastRoutesToUpdate_ref()->begin();
   while (i != routeDelta.unicastRoutesToUpdate_ref()->end()) {
     if (*i->doNotInstall_ref()) {
-      LOG(INFO) << "Not installing route for prefix " << toString(i->dest);
+      LOG(INFO) << "Not installing route for prefix "
+                << toString(*i->dest_ref());
       i = routeDelta.unicastRoutesToUpdate_ref()->erase(i);
     } else {
       ++i;
@@ -347,12 +348,12 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
 
   // Add/Update unicast routes to update
   for (const auto& route : *routeDelta.unicastRoutesToUpdate_ref()) {
-    routeState_.unicastRoutes[route.dest] = route;
+    routeState_.unicastRoutes[*route.dest_ref()] = route;
   }
 
   // Add mpls routes to update
   for (const auto& route : *routeDelta.mplsRoutesToUpdate_ref()) {
-    routeState_.mplsRoutes[route.topLabel] = route;
+    routeState_.mplsRoutes[*route.topLabel_ref()] = route;
   }
 
   // Delete unicast routes

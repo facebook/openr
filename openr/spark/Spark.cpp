@@ -1704,11 +1704,10 @@ Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
   // - have a v6LinkLocal IP
   // - have an IPv4 addr when v4 is enabled
   //
-  for (const auto& kv : *ifDb.interfaces_ref()) {
-    const auto& ifName = kv.first;
-    const auto isUp = kv.second.isUp;
-    const auto& ifIndex = kv.second.ifIndex;
-    const auto& networks = *kv.second.networks_ref();
+  for (const auto& [ifName, info] : *ifDb.interfaces_ref()) {
+    const auto& isUp = *info.isUp_ref();
+    const auto& ifIndex = *info.ifIndex_ref();
+    const auto& networks = *info.networks_ref();
 
     // Sort networks and use the lowest one (other node will do similar)
     std::set<folly::CIDRNetwork> v4Networks;
@@ -1795,9 +1794,7 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
     LOG(INFO) << "Removing " << ifName << " from Spark. "
               << "It is down, declaring all neighbors down";
 
-    for (const auto& kv : sparkNeighbors_.at(ifName)) {
-      auto& neighborName = kv.first;
-      auto& neighbor = kv.second;
+    for (const auto& [neighborName, neighbor] : sparkNeighbors_.at(ifName)) {
       allocatedLabels_.erase(neighbor.label);
       LOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                 << ifName << " down";
@@ -1808,8 +1805,8 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
       // Spark will NOT notify neighbor DOWN event in following cases:
       //    1). v6Addr is empty for this neighbor;
       //    2). v4 enabled and v4Addr is empty for this neighbor;
-      if (neighbor.transportAddressV6.addr.empty() ||
-          (enableV4_ && neighbor.transportAddressV4.addr.empty())) {
+      if (neighbor.transportAddressV6.addr_ref()->empty() ||
+          (enableV4_ && neighbor.transportAddressV4.addr_ref()->empty())) {
         continue;
       }
       neighborDownWrapper(neighbor, ifName, neighborName);

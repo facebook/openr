@@ -53,7 +53,7 @@ struct MplsAction {
 }
 
 struct BinaryAddress {
-  1: required binary addr
+  1: binary addr
   3: optional string ifName
 }
 
@@ -96,7 +96,7 @@ struct NextHopThrift {
 }
 
 struct MplsRoute {
-  1: required i32 topLabel
+  1: i32 topLabel
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
 }
@@ -119,7 +119,7 @@ enum PrefixType {
 }
 
 struct UnicastRoute {
-  1: required IpPrefix dest
+  1: IpPrefix dest
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
 

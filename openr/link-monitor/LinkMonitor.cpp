@@ -675,7 +675,7 @@ LinkMonitor::advertiseInterfaces() {
     }
     // Get interface info and override active status
     auto interfaceInfo = interface.getInterfaceInfo();
-    interfaceInfo.isUp = interface.isActive();
+    interfaceInfo.isUp_ref() = interface.isActive();
     ifDb.interfaces_ref()->emplace(ifName, std::move(interfaceInfo));
   }
 

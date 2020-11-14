@@ -359,10 +359,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
     ASSERT_TRUE(ifDb.hasValue());
     sparkIfDb = std::move(*ifDb.value().interfaces_ref());
     LOG(INFO) << "----------- Interface Updates ----------";
-    for (const auto& kv : sparkIfDb) {
-      LOG(INFO) << "  Name=" << kv.first << ", Status=" << kv.second.isUp
-                << ", IfIndex=" << kv.second.ifIndex
-                << ", networks=" << kv.second.networks_ref()->size();
+    for (const auto& [ifName, info] : sparkIfDb) {
+      LOG(INFO) << "  Name=" << ifName << ", Status=" << *info.isUp_ref()
+                << ", IfIndex=" << *info.ifIndex_ref()
+                << ", networks=" << info.networks_ref()->size();
     }
   }
 
@@ -372,8 +372,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
       const std::map<std::string, thrift::InterfaceInfo>& sparkIfDb,
       int expectedUpCount) {
     int receiveUpCount = 0;
-    for (const auto& kv : sparkIfDb) {
-      if (kv.second.isUp) {
+    for (const auto& [_, info] : sparkIfDb) {
+      if (*info.isUp_ref()) {
         receiveUpCount++;
       }
     }
@@ -395,16 +395,15 @@ class LinkMonitorTestFixture : public ::testing::Test {
   collateIfUpdates(
       const std::map<std::string, thrift::InterfaceInfo>& interfaces) {
     CollatedIfUpdates res;
-    for (const auto& kv : interfaces) {
-      const auto& ifName = kv.first;
-      if (kv.second.isUp) {
+    for (const auto& [ifName, info] : interfaces) {
+      if (*info.isUp_ref()) {
         res[ifName].isUpCount++;
       } else {
         res[ifName].isDownCount++;
       }
       int v4AddrsCount = 0;
       int v6LinkLocalAddrsCount = 0;
-      for (const auto& network : *kv.second.networks_ref()) {
+      for (const auto& network : *info.networks_ref()) {
         const auto& ipNetwork = toIPNetwork(network);
         if (ipNetwork.first.isV4()) {
           v4AddrsCount++;

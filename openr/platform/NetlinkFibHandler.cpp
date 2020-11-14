@@ -247,7 +247,7 @@ NetlinkFibHandler::semifuture_syncFib(
   // Go over the new routes. Add or update
   std::unordered_set<folly::CIDRNetwork> newPrefixes;
   for (auto& route : *unicastRoutes) {
-    const auto network = toIPNetwork(route.dest);
+    const auto network = toIPNetwork(*route.dest_ref());
     newPrefixes.insert(network);
     auto nlRoute = buildRoute(route, protocol.value());
     auto it = existingRoutes.find(network);
@@ -314,9 +314,10 @@ NetlinkFibHandler::semifuture_syncMplsFib(
   // Go over the new routes. Add or update
   std::unordered_set<uint32_t> newLabels;
   for (auto& route : *mplsRoutes) {
-    newLabels.insert(route.topLabel);
+    const auto label = *route.topLabel_ref();
+    newLabels.insert(label);
     auto nlRoute = buildMplsRoute(route, protocol.value());
-    auto it = existingRoutes.find(route.topLabel);
+    auto it = existingRoutes.find(label);
     if (it != existingRoutes.end() and it->second == nlRoute) {
       // Existing route is same as the one we're trying to add. SKIP
       continue;
@@ -388,8 +389,8 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
               }
               for (auto& nlRoute : nlRoutes.value().value()) {
                 thrift::UnicastRoute route;
-                route.dest = toIpPrefix(nlRoute.getDestination());
-                *route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
+                route.dest_ref() = toIpPrefix(nlRoute.getDestination());
+                route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
                 routes->emplace_back(std::move(route));
               }
             }
@@ -418,8 +419,8 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
             routes->reserve(nlRoutes->size());
             for (auto& nlRoute : nlRoutes.value()) {
               thrift::MplsRoute route;
-              route.topLabel = nlRoute.getMplsLabel().value();
-              *route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
+              route.topLabel_ref() = nlRoute.getMplsLabel().value();
+              route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
               routes->emplace_back(std::move(route));
             }
             return routes;
@@ -525,7 +526,7 @@ fbnl::Route
 NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
   // Create route object
   fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setDestination(toIPNetwork(route.dest))
+  rtBuilder.setDestination(toIPNetwork(*route.dest_ref()))
       .setProtocolId(protocol)
       .setPriority(protocolToPriority(protocol))
       .setFlags(0)
@@ -548,7 +549,7 @@ NetlinkFibHandler::buildMplsRoute(
   // Create route object
   // NOTE: Priority for MPLS routes is not supported in Linux
   fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setMplsLabel(static_cast<uint32_t>(mplsRoute.topLabel))
+  rtBuilder.setMplsLabel(static_cast<uint32_t>(*mplsRoute.topLabel_ref()))
       .setProtocolId(protocol)
       .setFlags(0)
       .setValid(true);

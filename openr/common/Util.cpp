@@ -382,19 +382,19 @@ findDeltaRoutes(
   // Find entry of prefix to be removed
   std::set<thrift::IpPrefix> prefixesToRemove;
   for (const auto& route : unicastRoutesToDelete) {
-    prefixesToRemove.emplace(route.dest);
+    prefixesToRemove.emplace(*route.dest_ref());
   }
   for (const auto& route : unicastRoutesToUpdate) {
-    prefixesToRemove.erase(route.dest);
+    prefixesToRemove.erase(*route.dest_ref());
   }
 
   // Find labels to be removed
   std::set<int32_t> labelsToRemove;
   for (const auto& route : mplsRoutesToDelete) {
-    labelsToRemove.emplace(route.topLabel);
+    labelsToRemove.emplace(*route.topLabel_ref());
   }
   for (const auto& route : mplsRoutesToUpdate) {
-    labelsToRemove.erase(route.topLabel);
+    labelsToRemove.erase(*route.topLabel_ref());
   }
 
   // Build routes to be programmed.
@@ -731,9 +731,9 @@ createThriftInterfaceInfo(
     const int ifIndex,
     const std::vector<thrift::IpPrefix>& networks) {
   thrift::InterfaceInfo interfaceInfo;
-  interfaceInfo.isUp = isUp;
-  interfaceInfo.ifIndex = ifIndex;
-  *interfaceInfo.networks_ref() = networks;
+  interfaceInfo.isUp_ref() = isUp;
+  interfaceInfo.ifIndex_ref() = ifIndex;
+  interfaceInfo.networks_ref() = networks;
   return interfaceInfo;
 }
 
@@ -792,9 +792,9 @@ thrift::UnicastRoute
 createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops) {
   thrift::UnicastRoute unicastRoute;
-  unicastRoute.dest = std::move(dest);
+  unicastRoute.dest_ref() = std::move(dest);
   std::sort(nextHops.begin(), nextHops.end());
-  *unicastRoute.nextHops_ref() = std::move(nextHops);
+  unicastRoute.nextHops_ref() = std::move(nextHops);
   return unicastRoute;
 }
 
@@ -807,9 +807,9 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
   }
 
   thrift::MplsRoute mplsRoute;
-  mplsRoute.topLabel = topLabel;
+  mplsRoute.topLabel_ref() = topLabel;
   std::sort(nextHops.begin(), nextHops.end());
-  *mplsRoute.nextHops_ref() = std::move(nextHops);
+  mplsRoute.nextHops_ref() = std::move(nextHops);
   return mplsRoute;
 }
 
