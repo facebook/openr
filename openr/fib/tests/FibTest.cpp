@@ -855,7 +855,7 @@ TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
   EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 0);
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
 
-  EXPECT_EQ(mockFibHandler->getFibMplsSyncCount(), 2);
+  EXPECT_EQ(mockFibHandler->getFibMplsSyncCount(), 1);
   EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 0);
   EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 0);
 }
@@ -1135,6 +1135,80 @@ TEST_F(FibTestFixture, doNotInstall) {
 
   // now 2 routes are installable
   EXPECT_EQ(routes.size(), 2);
+}
+
+/**
+ * Ensure FIB processes static routes with following in-variant
+ * - Only MPLS route Add/Update are processed. All others are ignored
+ * - Static routes are only processed before first RIB instance
+ * - Fiber terminates after receipt of first RIB instance
+ */
+TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
+  // Make sure fib starts with clean route database
+  std::vector<thrift::UnicastRoute> routes;
+  std::vector<thrift::MplsRoute> mplsRoutes;
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
+  EXPECT_EQ(mplsRoutes.size(), 0);
+
+  // Send the static route update (with all types of updates)
+  thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.unicastRoutesToUpdate_ref()->emplace_back(
+      createUnicastRoute(prefix1, {path1_2_1}));
+  routeDbDelta.unicastRoutesToDelete_ref()->emplace_back(prefix2);
+  routeDbDelta.mplsRoutesToUpdate_ref()->emplace_back(
+      createMplsRoute(label1, {mpls_path1_2_1}));
+  routeDbDelta.mplsRoutesToDelete_ref()->emplace_back(label2);
+  staticRoutesUpdateQueue.push(routeDbDelta);
+
+  // Wait for MPLS route updates
+  mockFibHandler->waitForUpdateMplsRoutes();
+
+  // Verify counters
+  EXPECT_EQ(mockFibHandler->getFibSyncCount(), 0);
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getFibMplsSyncCount(), 0);
+  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 1);
+  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 0);
+
+  // Verify routes
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
+  EXPECT_EQ(mplsRoutes.size(), 1);
+
+  // Mimic decision pub sock publishing RouteDatabaseDelta (empty DB)
+  DecisionRouteUpdate routeUpdate;
+  routeUpdatesQueue.push(std::move(routeUpdate));
+
+  // Expect FIB sync for unicast & mpls routes
+  mockFibHandler->waitForSyncFib();
+  mockFibHandler->waitForSyncMplsFib();
+
+  // ensure no other calls occured
+  EXPECT_EQ(mockFibHandler->getFibSyncCount(), 1);
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getFibMplsSyncCount(), 1);
+  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 1);
+  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 0);
+
+  // Verify routes
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
+  EXPECT_EQ(mplsRoutes.size(), 0);
+
+  // Expect fiber for processing static route to be active
+  EXPECT_EQ(1, staticRoutesUpdateQueue.getNumReaders());
+
+  // Publish same event and we can expect it to terminate
+  staticRoutesUpdateQueue.push(routeDbDelta);
+  while (staticRoutesUpdateQueue.getNumReaders()) {
+    std::this_thread::yield();
+  }
 }
 
 int

@@ -120,7 +120,7 @@ MockNetlinkFibHandler::syncFib(
       unicastRouteDb_.emplace(prefix, newNextHops);
     }
   }
-  fibSyncCount_++;
+  ++fibSyncCount_;
   syncFibBaton_.post();
 }
 
@@ -157,7 +157,7 @@ MockNetlinkFibHandler::syncMplsFib(
       mplsRouteDb_[*route.topLabel_ref()] = std::move(*route.nextHops_ref());
     }
   }
-  fibMplsSyncCount_ += routes->size();
+  ++fibMplsSyncCount_;
   syncMplsFibBaton_.post();
 }
 
