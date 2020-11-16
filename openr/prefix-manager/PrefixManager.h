@@ -34,9 +34,15 @@ class PrefixManager final : public OpenrEventBase {
   struct PrefixEntry; // Forward declaration
 
   PrefixManager(
+      // producer queue
+      messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
+          staticRoutesUpdateQueue,
+      // consumer queue
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
       messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
+      // config
       std::shared_ptr<const Config> config,
+      // raw ptr for modules
       KvStore* kvStore,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
@@ -145,12 +151,34 @@ class PrefixManager final : public OpenrEventBase {
       const std::vector<thrift::PrefixEntry>& prefixes,
       const std::unordered_set<std::string>& dstAreas);
 
-  // util function to read prefixes to be originated from config
+  // Util function to interact KvStore to inject/withdraw keys
+  void syncKvStore();
+
+  /*
+   * [Route Origination/Aggregation]
+   *
+   * Methods implement utility function for route origination/aggregation.
+   */
+
+  /*
+   * Read routes from OpenrConfig and stored in `OriginatedPrefixDb_`
+   * for potential advertisement/withdrawn based on min_supporting_route
+   * ref-count.
+   */
   void buildOriginatedPrefixDb(
       const std::vector<thrift::OriginatedPrefix>& prefixes);
 
-  // Update kvstore with both ephemeral and non-ephemeral prefixes
-  void syncKvStore();
+  /*
+   * Util function to process ribEntry update from `Decision` and populate
+   * aggregates to advertise
+   */
+  void aggregatesToAdvertise(const folly::CIDRNetwork& prefix);
+
+  /*
+   * Util function to process ribEntry update from `Decision` and populate
+   * aggregates to withdraw
+   */
+  void aggregatesToWithdraw(const folly::CIDRNetwork& prefix);
 
   // add entry.tPrefixEntry in entry.dstAreas kvstore, return a set of per
   // prefix key name for successful injected areas
@@ -165,14 +193,12 @@ class PrefixManager final : public OpenrEventBase {
   void addPerfEventIfNotExist(
       thrift::PerfEvents& perfEvents, std::string const& updateEvent);
 
-  // [Route Origination/Aggregation]
-  //
-  // Util function to update ref count upon prefix advertising/withdrawn
-  void updateOriginatedPrefixOnAdvertise(const folly::CIDRNetwork& prefix);
-  void updateOriginatedPrefixOnWithdraw(const folly::CIDRNetwork& prefix);
-
   // this node name
   const std::string nodeId_;
+
+  // queue to publish originated route updates to decision
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
+      staticRouteUpdatesQueue_;
 
   // module ptr to interact with KvStore
   KvStore* kvStore_{nullptr};
@@ -232,24 +258,32 @@ class PrefixManager final : public OpenrEventBase {
 
   //   std::unordered_map<std::string, AreaInfo> areaInfos_;
 
-  //
-  // [Route Origination/Aggregation]
-  //
-  //  Local-originated prefixes will be advertise/withdrawn from
-  //  `Prefix-Manager` by calculating ref-count of supporting-
-  //  route from `Decision`.
-  //     --------                 ---------
-  //               ------------>
-  //     Decision                 PrefixMgr
-  //               <------------
-  //     --------                 ---------
-  //
+  /*
+   * [Route Origination/Aggregation]
+   *
+   * Local-originated prefixes will be advertise/withdrawn from
+   * `Prefix-Manager` by calculating ref-count of supporting-
+   * route from `Decision`.
+   *  --------               ---------
+   *           ------------>
+   *  Decision               PrefixMgr
+   *           <------------
+   *  --------               ---------
+   */
 
   // struct to represent local-originiated route
   struct OriginatedRoute {
+    // thrift structure read from config
     thrift::OriginatedPrefix originatedPrefix;
+
+    // unicastEntry contains nexthops info
     RibUnicastEntry unicastEntry;
-    std::unordered_set<folly::CIDRNetwork> supportingRoutes;
+
+    // supporting routes for this originated prefix
+    std::unordered_set<folly::CIDRNetwork> supportingRoutes{};
+
+    // flag indicates is local route has been originated
+    bool isAdvertised{false};
 
     OriginatedRoute(
         const thrift::OriginatedPrefix& originatedPrefix,
@@ -258,28 +292,23 @@ class PrefixManager final : public OpenrEventBase {
         : originatedPrefix(originatedPrefix),
           unicastEntry(unicastEntry),
           supportingRoutes(supportingRoutes) {}
-
-    bool
-    operator==(const OriginatedRoute& other) const {
-      return originatedPrefix == other.originatedPrefix and
-          unicastEntry == other.unicastEntry and
-          supportingRoutes == other.supportingRoutes;
-    }
   };
 
-  // prefixes to be originated from prefix-manager
-  // ATTN: to support quick information retrieval, cache the mapping:
-  //
-  //  OriginatedPrefix -> set of RIB prefixEntry(i.e. supporting routes)
-  //
+  /*
+   * prefixes to be originated from prefix-manager
+   * ATTN: to support quick information retrieval, cache the mapping:
+   *
+   *  OriginatedPrefix -> set of RIB prefixEntry(i.e. supporting routes)
+   */
   std::unordered_map<folly::CIDRNetwork, OriginatedRoute> originatedPrefixDb_;
 
-  // prefixes received from decision
-  // ATTN: to avoid loop through ALL entries inside `originatedPrefixes`,
-  //       cache the reverse mapping:
-  //
-  //  RIB prefixEntry -> vector of OriginatedPrefix(i.e. subnet)
-  //
+  /*
+   * prefixes received from decision
+   * ATTN: to avoid loop through ALL entries inside `originatedPrefixes`,
+   *       cache the reverse mapping:
+   *
+   *  RIB prefixEntry -> vector of OriginatedPrefix(i.e. subnet)
+   */
   std::unordered_map<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
       ribPrefixDb_;
 }; // PrefixManager

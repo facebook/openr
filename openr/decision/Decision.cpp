@@ -719,6 +719,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
         std::unordered_set<thrift::NextHopThrift>{nhs.begin(), nhs.end()}));
   }
 
+  // TODO: add support for originated routes
+
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";

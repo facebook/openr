@@ -77,9 +77,6 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   if (newPrefixSet.empty()) {
     nodeToPrefixes_.erase(nodeAndArea);
   }
-
-  // TODO: check reference count threshold for local originiated prefixes
-
   return changed;
 }
 

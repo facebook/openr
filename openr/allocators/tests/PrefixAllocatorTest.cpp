@@ -109,6 +109,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   void
   createPrefixManager() {
     prefixManager_ = std::make_unique<PrefixManager>(
+        staticRoutesUpdateQueue_,
         prefixUpdatesQueue_.getReader(),
         routeUpdatesQueue_.getReader(),
         config_,
@@ -124,6 +125,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    staticRoutesUpdateQueue_.close();
     prefixUpdatesQueue_.close();
     routeUpdatesQueue_.close();
     logSampleQueue_.close();
@@ -184,6 +186,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
   std::vector<std::thread> threads_;
 
   // Queue for publishing prefix-updates to PrefixManager
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
+      staticRoutesUpdateQueue_;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
 
@@ -274,6 +278,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>> routeQueues{
         numAllocators};
     messaging::ReplicateQueue<LogSample> logSampleQueue;
+    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
+        staticRoutesUpdateQueue;
     std::vector<std::unique_ptr<PrefixAllocator>> allocators;
     std::vector<std::thread> threads;
 
@@ -429,6 +435,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
+          staticRoutesUpdateQueue,
           prefixQueues.at(i).getReader(),
           routeQueues.at(i).getReader(),
           currConfig,
@@ -506,6 +513,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     for (auto& queue : routeQueues) {
       queue.close();
     }
+    staticRoutesUpdateQueue.close();
     logSampleQueue.close();
     store->closeQueue();
 

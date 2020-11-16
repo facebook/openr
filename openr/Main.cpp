@@ -423,6 +423,7 @@ main(int argc, char** argv) {
       watchdog,
       "PrefixManager",
       std::make_unique<PrefixManager>(
+          staticRoutesUpdateQueue,
           prefixUpdateRequestQueue.getReader(),
           routeUpdatesQueue.getReader(),
           config,

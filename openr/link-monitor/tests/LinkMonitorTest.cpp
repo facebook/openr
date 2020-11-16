@@ -216,6 +216,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
+        staticRouteUpdatesQueue,
         prefixUpdatesQueue.getReader(),
         routeUpdatesQueue.getReader(),
         config,
@@ -557,6 +558,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};

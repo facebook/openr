@@ -24,7 +24,6 @@ struct RouteDatabase {
 }
 
 struct RouteDatabaseDelta {
-  // [Deprecated] 1: string thisNodeName
   2: list<Network.UnicastRoute> unicastRoutesToUpdate
   3: list<Network.IpPrefix> unicastRoutesToDelete;
   4: list<Network.MplsRoute> mplsRoutesToUpdate

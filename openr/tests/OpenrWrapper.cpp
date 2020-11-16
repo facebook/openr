@@ -194,6 +194,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // Create prefix manager
   //
   prefixManager_ = std::make_unique<PrefixManager>(
+      staticRoutesQueue_,
       prefixUpdatesQueue_.getReader(),
       routeUpdatesQueue_.getReader(),
       config_,

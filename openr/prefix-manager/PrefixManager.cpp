@@ -22,15 +22,9 @@ namespace fb303 = facebook::fb303;
 
 namespace openr {
 
-namespace {
-// various error messages
-const std::string kErrorNoChanges{"No changes in prefixes to be advertised"};
-const std::string kErrorNoPrefixToRemove{"No prefix to remove"};
-const std::string kErrorNoPrefixesOfType{"No prefixes of type"};
-const std::string kErrorUnknownCommand{"Unknown command"};
-} // namespace
-
 PrefixManager::PrefixManager(
+    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
+        staticRouteUpdatesQueue,
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
     messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
@@ -38,6 +32,7 @@ PrefixManager::PrefixManager(
     bool enablePerfMeasurement,
     const std::chrono::seconds& initialDumpTime)
     : nodeId_(config->getNodeName()),
+      staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvStore_(kvStore),
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(std::chrono::milliseconds(
@@ -232,6 +227,7 @@ PrefixManager::buildOriginatedPrefixDb(
     }
 
     // Populate RibUnicastEntry struct
+    // ATTN: AREA field is empty for NHs
     RibUnicastEntry unicastEntry(network, {createNextHop(toBinaryAddress(nh))});
     unicastEntry.bestPrefixEntry = std::move(entry);
     if (auto installToFib = prefix.install_to_fib_ref()) {
@@ -668,8 +664,7 @@ PrefixManager::withdrawPrefixesByTypeImpl(thrift::PrefixType type) {
 }
 
 void
-PrefixManager::updateOriginatedPrefixOnAdvertise(
-    const folly::CIDRNetwork& prefix) {
+PrefixManager::aggregatesToAdvertise(const folly::CIDRNetwork& prefix) {
   // ATTN: ignore attribute-ONLY update for existing RIB entries
   //       as it won't affect `supporting_route_cnt`
   auto [ribPrefixIt, inserted] =
@@ -699,8 +694,7 @@ PrefixManager::updateOriginatedPrefixOnAdvertise(
 }
 
 void
-PrefixManager::updateOriginatedPrefixOnWithdraw(
-    const folly::CIDRNetwork& prefix) {
+PrefixManager::aggregatesToWithdraw(const folly::CIDRNetwork& prefix) {
   // ignore invalid RIB entry
   auto ribPrefixIt = ribPrefixDb_.find(prefix);
   if (ribPrefixIt == ribPrefixDb_.end()) {
@@ -711,12 +705,14 @@ PrefixManager::updateOriginatedPrefixOnWithdraw(
   for (auto& network : ribPrefixIt->second) {
     auto originatedPrefixIt = originatedPrefixDb_.find(network);
     CHECK(originatedPrefixIt != originatedPrefixDb_.end());
-    originatedPrefixIt->second.supportingRoutes.erase(prefix);
+    auto& route = originatedPrefixIt->second;
 
     VLOG(1) << "[ROUTE ORIGINATION] Removing supporting route "
             << folly::IPAddress::networkToString(prefix)
             << " for originated route "
             << folly::IPAddress::networkToString(network);
+
+    route.supportingRoutes.erase(prefix);
   }
 
   // clean local caching
@@ -726,8 +722,9 @@ PrefixManager::updateOriginatedPrefixOnWithdraw(
 void
 PrefixManager::processDecisionRouteUpdates(
     DecisionRouteUpdate&& decisionRouteUpdate) {
-  std::vector<PrefixEntry> advertisePrefixes;
-  std::vector<thrift::PrefixEntry> withdrawPrefixes;
+  std::vector<PrefixEntry> advertisePrefixes{};
+  std::vector<thrift::PrefixEntry> withdrawPrefixes{};
+  thrift::RouteDatabaseDelta routeUpdates;
 
   // Add/Update unicast routes to update
   // Self originated (include routes imported from local BGP)
@@ -756,8 +753,8 @@ PrefixManager::processDecisionRouteUpdates(
     }
     advertisePrefixes.emplace_back(prefixEntry, dstAreas);
 
-    // maybe inc supporting_route of originated prefixes
-    updateOriginatedPrefixOnAdvertise(prefix);
+    // populate originated prefixes to be advertised
+    aggregatesToAdvertise(prefix);
   }
 
   // Delete unicast routes
@@ -765,11 +762,52 @@ PrefixManager::processDecisionRouteUpdates(
     withdrawPrefixes.emplace_back(
         createPrefixEntry(toIpPrefix(prefix), thrift::PrefixType::RIB));
 
-    // maybe dec supporting_route of originated prefixes
-    updateOriginatedPrefixOnWithdraw(prefix);
+    // populate originated prefixes to be withdrawn
+    aggregatesToWithdraw(prefix);
   }
 
-  // TODO: loop through originatedPrefixes collection and publish to decision
+  for (auto& [network, route] : originatedPrefixDb_) {
+    bool installToFib = route.originatedPrefix.install_to_fib_ref().has_value()
+        ? *route.originatedPrefix.install_to_fib_ref()
+        : true;
+    if (not installToFib) {
+      VLOG(2) << "Skip originated prefix: "
+              << folly::IPAddress::networkToString(network)
+              << " since route is marked as NO-installation";
+      continue;
+    }
+
+    const auto& minSupportingCnt =
+        *route.originatedPrefix.minimum_supporting_routes_ref();
+    if ((not route.isAdvertised) and
+        route.supportingRoutes.size() >= minSupportingCnt) {
+      // skip processing if originatedPrefix is marked as `doNotInstall`
+      route.isAdvertised = true; // mark as advertised
+      routeUpdates.unicastRoutesToUpdate_ref()->emplace_back(
+          route.unicastEntry.toThrift());
+
+      SYSLOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
+                   << folly::IPAddress::networkToString(network);
+    }
+
+    if (route.isAdvertised and
+        route.supportingRoutes.size() < minSupportingCnt) {
+      route.isAdvertised = false; // mark as withdrawn
+      routeUpdates.unicastRoutesToDelete_ref()->emplace_back(
+          toIpPrefix(network));
+
+      SYSLOG(INFO) << "[ROUTE ORIGINATION] Withdrawing originated route "
+                   << folly::IPAddress::networkToString(network);
+    }
+  }
+
+  // push originatedRoutes update via replicate queue
+  if (routeUpdates.unicastRoutesToUpdate_ref()->size() or
+      routeUpdates.unicastRoutesToDelete_ref()->size()) {
+    CHECK(routeUpdates.mplsRoutesToUpdate_ref()->empty());
+    CHECK(routeUpdates.mplsRoutesToDelete_ref()->empty());
+    staticRouteUpdatesQueue_.push(std::move(routeUpdates));
+  }
 
   // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
   // We want to keep processDecisionRouteUpdates() running as dynamic
@@ -780,7 +818,7 @@ PrefixManager::processDecisionRouteUpdates(
   }
 
   // ignore mpls updates
-}
+} // namespace openr
 
 void
 PrefixManager::addPerfEventIfNotExist(
