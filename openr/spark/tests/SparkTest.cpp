@@ -470,6 +470,8 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
   createAndConnect();
 
   auto startTime = std::chrono::steady_clock::now();
+  auto waitTime = std::chrono::seconds(
+      *node1->getSparkConfig().graceful_restart_time_s_ref());
 
   // tell node1 to remove interface to mimick request from linkMonitor
   EXPECT_TRUE(node1->updateInterfaceDb({}));
@@ -485,8 +487,7 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     ASSERT_TRUE(
         endTime - startTime <=
         std::min(
-            std::chrono::seconds(
-                *node1->getSparkConfig().graceful_restart_time_s_ref()),
+            waitTime,
             std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref())));
     LOG(INFO)
         << "node-1 reported down adjacency to node-2 due to interface removal";
@@ -496,24 +497,15 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     EXPECT_TRUE(node2->waitForEvent(NB_DOWN).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(
-        endTime - startTime <=
-        std::chrono::seconds(
-            *node2->getSparkConfig().graceful_restart_time_s_ref()));
+    ASSERT_TRUE(endTime - startTime <= waitTime);
     LOG(INFO)
         << "node-2 reported down adjacency to node-2 due to heartbeat expired";
   }
 
   {
     // should NOT receive any event after down adj
-    EXPECT_TRUE(node1
-                    ->recvNeighborEvent(std::chrono::seconds(
-                        *node1->getSparkConfig().graceful_restart_time_s_ref()))
-                    .hasError());
-    EXPECT_TRUE(node2
-                    ->recvNeighborEvent(std::chrono::seconds(
-                        *node2->getSparkConfig().graceful_restart_time_s_ref()))
-                    .hasError());
+    EXPECT_FALSE(node1->recvNeighborEvent(waitTime).has_value());
+    EXPECT_FALSE(node2->recvNeighborEvent(waitTime).has_value());
   }
 
   // Resume interface connection
@@ -1014,7 +1006,6 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
-
   auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
   auto config1 = std::make_shared<Config>(tConfig1);
 
@@ -1024,27 +1015,18 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   auto node1 = createSpark("node-1", config1);
   auto node2 = createSpark("node-2", config2);
 
+  auto waitTime = std::chrono::seconds(
+      *config1->getSparkConfig().graceful_restart_time_s_ref());
+
   // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    EXPECT_TRUE(
-        node1
-            ->recvNeighborEvent(
-                std::chrono::seconds(
-                    *config1->getSparkConfig().graceful_restart_time_s_ref()) *
-                2)
-            .hasError());
+    EXPECT_FALSE(node1->recvNeighborEvent(waitTime * 2).has_value());
     LOG(INFO) << "node-1 doesn't have any neighbor event";
 
-    EXPECT_TRUE(
-        node2
-            ->recvNeighborEvent(
-                std::chrono::seconds(
-                    *config2->getSparkConfig().graceful_restart_time_s_ref()) *
-                2)
-            .hasError());
+    EXPECT_FALSE(node2->recvNeighborEvent(waitTime * 2).has_value());
     LOG(INFO) << "node-2 doesn't have any neighbor event";
   }
 

@@ -7,12 +7,6 @@
 
 #pragma once
 
-#include <chrono>
-#include <memory>
-#include <string>
-#include <utility>
-
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
@@ -336,7 +330,7 @@ class LinkMonitor final : public OpenrEventBase {
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;
 
-  // used for communicating over thrift/zmq sockets
+  // ser/deser binary data for transmission
   apache::thrift::CompactSerializer serializer_;
 
   // currently active adjacencies

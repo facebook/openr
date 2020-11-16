@@ -4481,7 +4481,7 @@ class DecisionTestFixture : public ::testing::Test {
         FRAGILE,
         version,
         "originator-1",
-        fbzmq::util::writeThriftObjStr(adjDB, serializer),
+        writeThriftObjStr(adjDB, serializer),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -4495,7 +4495,7 @@ class DecisionTestFixture : public ::testing::Test {
     return createThriftValue(
         version,
         node,
-        fbzmq::util::writeThriftObjStr(prefixDb, serializer),
+        writeThriftObjStr(prefixDb, serializer),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -4529,7 +4529,7 @@ class DecisionTestFixture : public ::testing::Test {
       keyVal[prefixKey.getPrefixKey()] = createThriftValue(
           version,
           node,
-          fbzmq::util::writeThriftObjStr(
+          writeThriftObjStr(
               createPrefixDb(node, {createPrefixEntry(prefix)}), serializer),
           Constants::kTtlInfinity /* ttl */,
           0 /* ttl version */,

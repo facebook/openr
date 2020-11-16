@@ -226,6 +226,34 @@ addJitter(T base, double pct = 20.0) {
 }
 
 /**
+ * Utility functions for conversion between thrift objects and string/IOBuf
+ */
+
+template <typename ThriftType, typename Serializer>
+std::string
+writeThriftObjStr(ThriftType const& obj, Serializer& serializer) {
+  std::string result;
+  serializer.serialize(obj, &result);
+  return result;
+}
+
+template <typename ThriftType, typename Serializer>
+ThriftType
+readThriftObj(folly::IOBuf& buf, Serializer& serializer) {
+  ThriftType obj;
+  serializer.deserialize(&buf, obj);
+  return obj;
+}
+
+template <typename ThriftType, typename Serializer>
+ThriftType
+readThriftObjStr(const std::string& buf, Serializer& serializer) {
+  ThriftType obj;
+  serializer.deserialize(buf, obj);
+  return obj;
+}
+
+/**
  * Utility functions for creating thrift objects
  */
 

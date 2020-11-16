@@ -130,7 +130,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           return;
         }
         // Parse PrefixDb
-        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             value.value().value_ref().value(), serializer_);
 
         SYNCHRONIZED(ipPrefix_) {
@@ -407,7 +407,7 @@ OpenrWrapper<Serializer>::getIpPrefix() {
 
   SYNCHRONIZED(ipPrefix_) {
     for (const auto& key : keys.value()) {
-      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           key.second.value_ref().value(), serializer_);
       if (*prefixDb.deletePrefix_ref()) {
         // Skip prefixes which are about to be deleted

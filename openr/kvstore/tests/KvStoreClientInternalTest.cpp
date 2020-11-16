@@ -308,7 +308,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
       client1->setKey(
           kTestingAreaName,
           "test_key1",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           100);
     }
     {
@@ -316,7 +316,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
       client2->setKey(
           kTestingAreaName,
           "test_key2",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           200);
     }
     {
@@ -324,7 +324,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
       client3->setKey(
           kTestingAreaName,
           "test_key3",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           300);
     }
 
@@ -370,7 +370,7 @@ TEST_F(
       client1->setKey(
           kTestingAreaName,
           "test_key",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           300);
     }
     {
@@ -378,7 +378,7 @@ TEST_F(
       client2->setKey(
           kTestingAreaName,
           "test_key",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           200);
     }
     {
@@ -386,7 +386,7 @@ TEST_F(
       client3->setKey(
           kTestingAreaName,
           "test_key",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           100);
     }
 
@@ -430,7 +430,7 @@ TEST_F(
       client1->setKey(
           kTestingAreaName,
           "test_key",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           1);
     }
     {
@@ -438,7 +438,7 @@ TEST_F(
       client2->setKey(
           kTestingAreaName,
           "test_key",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           1);
     }
     {
@@ -446,7 +446,7 @@ TEST_F(
       client3->setKey(
           kTestingAreaName,
           "test_key",
-          fbzmq::util::writeThriftObjStr(value, serializer),
+          writeThriftObjStr(value, serializer),
           1);
     }
 
@@ -1339,39 +1339,36 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
         valuePlane1.version_ref() = 1;
         valuePlane1.value_ref() = "test_value1";
         // key set within invalid area, must return false
-        EXPECT_FALSE(
-            client1
-                ->setKey(
-                    kTestingAreaName,
-                    "plane_key1",
-                    fbzmq::util::writeThriftObjStr(valuePlane1, serializer),
-                    100,
-                    Constants::kTtlInfInterval)
-                .has_value());
+        EXPECT_FALSE(client1
+                         ->setKey(
+                             kTestingAreaName,
+                             "plane_key1",
+                             writeThriftObjStr(valuePlane1, serializer),
+                             100,
+                             Constants::kTtlInfInterval)
+                         .has_value());
 
-        EXPECT_TRUE(
-            client1
-                ->setKey(
-                    planeArea,
-                    "plane_key1",
-                    fbzmq::util::writeThriftObjStr(valuePlane1, serializer),
-                    100,
-                    Constants::kTtlInfInterval)
-                .has_value());
+        EXPECT_TRUE(client1
+                        ->setKey(
+                            planeArea,
+                            "plane_key1",
+                            writeThriftObjStr(valuePlane1, serializer),
+                            100,
+                            Constants::kTtlInfInterval)
+                        .has_value());
 
         // set key in pod are on node3
         thrift::Value valuePod1;
         valuePod1.version_ref() = 1;
         valuePod1.value_ref() = "test_value1";
-        EXPECT_TRUE(
-            client3
-                ->setKey(
-                    podArea,
-                    "pod_key1",
-                    fbzmq::util::writeThriftObjStr(valuePlane1, serializer),
-                    100,
-                    Constants::kTtlInfInterval)
-                .has_value());
+        EXPECT_TRUE(client3
+                        ->setKey(
+                            podArea,
+                            "pod_key1",
+                            writeThriftObjStr(valuePlane1, serializer),
+                            100,
+                            Constants::kTtlInfInterval)
+                        .has_value());
       });
 
   // get keys from pod and play area and ensure keys are not leaked across

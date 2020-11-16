@@ -7,8 +7,6 @@
 
 #include "SparkWrapper.h"
 
-using namespace fbzmq;
-
 namespace openr {
 
 SparkWrapper::SparkWrapper(
@@ -95,7 +93,7 @@ SparkWrapper::updateInterfaceDb(
   return true;
 }
 
-folly::Expected<thrift::SparkNeighborEvent, Error>
+std::optional<thrift::SparkNeighborEvent>
 SparkWrapper::recvNeighborEvent(
     std::optional<std::chrono::milliseconds> timeout) {
   auto startTime = std::chrono::steady_clock::now();
@@ -103,7 +101,7 @@ SparkWrapper::recvNeighborEvent(
     // Break if timeout occurs
     auto now = std::chrono::steady_clock::now();
     if (timeout.has_value() && now - startTime > timeout.value()) {
-      return folly::makeUnexpected(Error(-1, std::string("timed out")));
+      return std::nullopt;
     }
     // Yield the thread
     std::this_thread::yield();
@@ -127,14 +125,11 @@ SparkWrapper::waitForEvent(
                  << procTimeout.value().count();
       break;
     }
-    auto maybeEvent = recvNeighborEvent(rcvdTimeout);
-    if (maybeEvent.hasError()) {
-      LOG(ERROR) << "recvNeighborEvent failed: " << maybeEvent.error();
-      continue;
-    }
-    auto& event = maybeEvent.value();
-    if (eventType == event.eventType_ref()) {
-      return event;
+    if (auto maybeEvent = recvNeighborEvent(rcvdTimeout)) {
+      auto& event = maybeEvent.value();
+      if (eventType == event.eventType_ref()) {
+        return event;
+      }
     }
   }
   return std::nullopt;

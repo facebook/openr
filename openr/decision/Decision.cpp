@@ -1737,9 +1737,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     try {
       // adjacencyDb: update keys starting with "adj:"
       if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-        auto adjacencyDb =
-            fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
-                rawVal.value_ref().value(), serializer_);
+        auto adjacencyDb = readThriftObjStr<thrift::AdjacencyDatabase>(
+            rawVal.value_ref().value(), serializer_);
         CHECK_EQ(nodeName, *adjacencyDb.thisNodeName_ref());
 
         // TODO - this should directly come from KvStore.
@@ -1769,7 +1768,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 
       // prefixDb: update keys starting with "prefix:"
       if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
-        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
         CHECK_EQ(nodeName, *prefixDb.thisNodeName_ref());
 

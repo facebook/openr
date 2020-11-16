@@ -10,7 +10,6 @@
 #include <netinet/in.h>
 
 #include <fb303/ServiceData.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/GLog.h>
 #include <folly/IPAddress.h>
 #include <folly/MapUtil.h>
@@ -589,8 +588,7 @@ Spark::parsePacket(
   // Copy buffer into string object and parse it into helloPacket.
   std::string readBuf(reinterpret_cast<const char*>(&buf[0]), bytesRead);
   try {
-    pkt = fbzmq::util::readThriftObjStr<thrift::SparkHelloPacket>(
-        readBuf, serializer_);
+    pkt = readThriftObjStr<thrift::SparkHelloPacket>(readBuf, serializer_);
   } catch (std::out_of_range const& err) {
     LOG(INFO) << "Malformed Thrift packet: " << folly::exceptionStr(err);
     return false;
@@ -780,7 +778,7 @@ Spark::sendHandshakeMsg(
   thrift::SparkHelloPacket pkt;
   pkt.handshakeMsg_ref() = std::move(handshakeMsg);
 
-  auto packet = fbzmq::util::writeThriftObjStr(pkt, serializer_);
+  auto packet = writeThriftObjStr(pkt, serializer_);
 
   // send the pkt
   folly::SocketAddress dstAddr(
@@ -840,7 +838,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   thrift::SparkHelloPacket pkt;
   pkt.heartbeatMsg_ref() = std::move(heartbeatMsg);
 
-  auto packet = fbzmq::util::writeThriftObjStr(pkt, serializer_);
+  auto packet = writeThriftObjStr(pkt, serializer_);
 
   // send the pkt
   folly::SocketAddress dstAddr(
@@ -1663,7 +1661,7 @@ Spark::sendHelloMsg(
   helloPacket.helloMsg_ref() = std::move(helloMsg);
 
   // send the payload
-  auto packet = fbzmq::util::writeThriftObjStr(helloPacket, serializer_);
+  auto packet = writeThriftObjStr(helloPacket, serializer_);
   folly::SocketAddress dstAddr(
       folly::IPAddress(Constants::kSparkMcastAddr.toString()),
       neighborDiscoveryPort_);

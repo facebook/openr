@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/futures/Promise.h>
 
@@ -273,7 +272,7 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
   // Parse thrift::Value into thrift::StaticAllocation
   thrift::StaticAllocation staticAlloc;
   try {
-    staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
+    staticAlloc = readThriftObjStr<thrift::StaticAllocation>(
         *value.value_ref(), serializer_);
   } catch (std::exception const& e) {
     LOG(ERROR) << "Error parsing static prefix allocation value. Error: "
@@ -350,7 +349,7 @@ PrefixAllocator::processNetworkAllocationsUpdate(
 
   thrift::StaticAllocation staticAlloc;
   try {
-    staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
+    staticAlloc = readThriftObjStr<thrift::StaticAllocation>(
         *e2eValue.value_ref(), serializer_);
     /* skip if same version */
     if (e2eAllocIndex_.first == *e2eValue.version_ref()) {

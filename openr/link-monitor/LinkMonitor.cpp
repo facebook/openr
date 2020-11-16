@@ -5,14 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "LinkMonitor.h"
-
-#include <functional>
-
 #include <fb303/ServiceData.h>
-#include <fbzmq/service/if/gen-cpp2/Monitor_types.h>
 #include <fbzmq/service/logging/LogSample.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/MapUtil.h>
 #include <folly/Memory.h>
 #include <folly/futures/Future.h>
@@ -29,6 +23,7 @@
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/link-monitor/LinkMonitor.h>
 #include <openr/spark/Spark.h>
 
 namespace fb303 = facebook::fb303;
@@ -614,7 +609,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
 
   // Persist `adj:node_Id` key into KvStore via KvStoreClientInternal
   const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
-  std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
+  std::string adjDbStr = writeThriftObjStr(adjDb, serializer_);
   kvStoreClient_->persistKey(AreaId{area}, keyName, adjDbStr, ttlKeyInKvStore_);
 
   // Config is most likely to have changed. Update it in `ConfigStore`

@@ -22,8 +22,6 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
 
-#include <fbzmq/zmq/Common.h>
-
 namespace openr {
 
 std::string
@@ -702,9 +700,7 @@ createPrefixKeyValue(
   apache::thrift::CompactSerializer serializer;
   return {prefixKey,
           createThriftValue(
-              version,
-              nodeName,
-              fbzmq::util::writeThriftObjStr(prefixDb, serializer))};
+              version, nodeName, writeThriftObjStr(prefixDb, serializer))};
 }
 
 thrift::Publication

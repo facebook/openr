@@ -7,10 +7,6 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
-
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 #include <folly/futures/Future.h>

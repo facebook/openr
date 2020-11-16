@@ -523,7 +523,7 @@ class Spark final : public OpenrEventBase {
   // ordered set to keep track of allocated labels
   std::set<int32_t> allocatedLabels_{};
 
-  // to serdeser messages over ZMQ sockets
+  // ser/deser messages over sockets
   apache::thrift::CompactSerializer serializer_;
 
   // The IO primitives provider; this is used for mocking

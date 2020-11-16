@@ -7,7 +7,7 @@
 
 #include <atomic>
 
-#include <fbzmq/zmq/Common.h>
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <folly/synchronization/Baton.h>
 #include <glog/logging.h>
@@ -293,7 +293,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // Parse PrefixDb
       ASSERT_TRUE(value.has_value());
       ASSERT_TRUE(value.value().value_ref().has_value());
-      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           value.value().value_ref().value(), serializer_);
       auto prefixes = *prefixDb.prefixEntries_ref();
       bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
@@ -580,7 +580,7 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value_ref().has_value());
-    auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+    auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
         value.value().value_ref().value(), serializer);
     auto prefixes = *prefixDb.prefixEntries_ref();
     bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
@@ -764,7 +764,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     // verify allocated prefix
     for (const auto& [key, rawVal] : maybeVals.value()) {
       ASSERT_TRUE(rawVal.value_ref().has_value());
-      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           rawVal.value_ref().value(), serializer);
       auto prefixes = *prefixDb.prefixEntries_ref();
       EXPECT_EQ(1, prefixes.size());
@@ -790,7 +790,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     auto res0 = kvStoreClient_->setKey(
         kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
-        fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
+        writeThriftObjStr(staticAlloc, serializer),
         1);
     EXPECT_TRUE(res0.has_value());
   });
@@ -811,7 +811,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
       auto maybeVal = kvStoreClient_->getKey(kTestingAreaName, expPrefixKey);
       ASSERT_TRUE(maybeVal.has_value());
       ASSERT_TRUE(maybeVal.value().value_ref().has_value());
-      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           maybeVal.value().value_ref().value(), serializer);
       prefixes = *prefixDb.prefixEntries_ref();
       if (*prefixDb.deletePrefix_ref()) {
@@ -866,7 +866,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     auto res5 = kvStoreClient_->setKey(
         kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
-        fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
+        writeThriftObjStr(staticAlloc, serializer),
         2);
     EXPECT_TRUE(res5.has_value());
   });
@@ -890,7 +890,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     auto maybeVal = kvStoreClient_->getKey(kTestingAreaName, expPrefixKey);
     ASSERT_TRUE(maybeVal.has_value());
     ASSERT_TRUE(maybeVal.value().value_ref().has_value());
-    auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+    auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
         maybeVal.value().value_ref().value(), serializer);
     auto prefixes = *prefixDb.prefixEntries_ref();
     EXPECT_EQ(1, prefixes.size());
@@ -921,7 +921,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value_ref().has_value());
-    auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+    auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
         value.value().value_ref().value(), serializer);
     auto& prefixes = *prefixDb.prefixEntries_ref();
     bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
@@ -963,7 +963,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     auto res = kvStoreClient_->setKey(
         kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
-        fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
+        writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res.has_value());
   });
   // busy loop until we have prefix
@@ -1039,7 +1039,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     auto res2 = kvStoreClient_->setKey(
         kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
-        fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
+        writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res2.has_value());
   });
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
@@ -1062,7 +1062,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     auto res3 = kvStoreClient_->setKey(
         kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
-        fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
+        writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res3.has_value());
   });
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
@@ -1085,7 +1085,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     auto res4 = kvStoreClient_->setKey(
         kTestingAreaName,
         Constants::kStaticPrefixAllocParamKey.toString(),
-        fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
+        writeThriftObjStr(staticAlloc, serializer));
     EXPECT_TRUE(res4.has_value());
   });
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {

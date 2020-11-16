@@ -124,11 +124,10 @@ class DecisionWrapper {
     if (perfEvents.has_value()) {
       adjDb.perfEvents_ref().from_optional(perfEvents);
     }
-    return thrift::Value(
-        FRAGILE,
+    return createThriftValue(
         version,
         "originator-1",
-        fbzmq::util::writeThriftObjStr(adjDb, serializer),
+        writeThriftObjStr(adjDb, serializer),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -150,12 +149,10 @@ class DecisionWrapper {
             thrift::PrefixForwardingType::SR_MPLS;
       }
     }
-    return thrift::Value(
-        FRAGILE,
+    return createThriftValue(
         version,
         "originator-1",
-        fbzmq::util::writeThriftObjStr(
-            createPrefixDb(nodeId, prefixEntries), serializer),
+        writeThriftObjStr(createPrefixDb(nodeId, prefixEntries), serializer),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);

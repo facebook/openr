@@ -58,7 +58,7 @@ class SparkWrapper {
       const std::vector<SparkInterfaceEntry>& interfaceEntries);
 
   // receive spark neighbor event
-  folly::Expected<thrift::SparkNeighborEvent, fbzmq::Error> recvNeighborEvent(
+  std::optional<thrift::SparkNeighborEvent> recvNeighborEvent(
       std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
   std::optional<thrift::SparkNeighborEvent> waitForEvent(

@@ -9,7 +9,6 @@
 
 #include <fb303/ServiceData.h>
 #include <fbzmq/service/logging/LogSample.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/MapUtil.h>
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>

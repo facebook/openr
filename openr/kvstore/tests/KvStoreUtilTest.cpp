@@ -384,18 +384,12 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     {
       value.value_ref() = "test_value1";
       EXPECT_TRUE(client1->setKey(
-          kTestingAreaName,
-          key1,
-          fbzmq::util::writeThriftObjStr(value, serializer),
-          100));
+          kTestingAreaName, key1, writeThriftObjStr(value, serializer), 100));
     }
     {
       value.value_ref() = "test_value2";
       EXPECT_TRUE(client2->setKey(
-          kTestingAreaName,
-          key2,
-          fbzmq::util::writeThriftObjStr(value, serializer),
-          200));
+          kTestingAreaName, key2, writeThriftObjStr(value, serializer), 200));
     }
   });
 

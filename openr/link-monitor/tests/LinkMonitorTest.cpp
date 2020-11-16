@@ -474,7 +474,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         return;
       }
 
-      auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
+      auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
           value->value_ref().value(), serializer);
       // we can not know what the nodeLabel will be
       adjDb.nodeLabel_ref() = kNodeLabel;
@@ -485,9 +485,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
       LOG(INFO) << "[RECEIVED ADJ]";
       printAdjDb(adjDb);
-      auto adjDbstr = fbzmq::util::writeThriftObjStr(adjDb, serializer);
+      auto adjDbstr = writeThriftObjStr(adjDb, serializer);
       auto expectedAdjDbstr =
-          fbzmq::util::writeThriftObjStr(expectedAdjDbs.front(), serializer);
+          writeThriftObjStr(expectedAdjDbs.front(), serializer);
       if (adjDbstr == expectedAdjDbstr) {
         expectedAdjDbs.pop();
         return;
@@ -522,8 +522,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
     auto kvs = kvStoreWrapper->dumpAll(area, std::move(kvFilters));
     for (const auto& [key, val] : kvs) {
       if (auto value = val.value_ref()) {
-        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            *value, serializer);
+        auto prefixDb =
+            readThriftObjStr<thrift::PrefixDatabase>(*value, serializer);
         // skip prefix entries marked as deleted
         if (*prefixDb.deletePrefix_ref()) {
           continue;
@@ -1785,7 +1785,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
     auto pub = kvStoreWrapper->recvPublication();
     for (auto const& kv : *pub.keyVals_ref()) {
       if (kv.first.find("adj:") == 0 and kv.second.value_ref()) {
-        auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
+        auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
             kv.second.value_ref().value(), serializer);
         nodeLabels[*adjDb.thisNodeName_ref()] = *adjDb.nodeLabel_ref();
         if (*adjDb.nodeLabel_ref() == 0) {

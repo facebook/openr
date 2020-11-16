@@ -147,9 +147,8 @@ PrefixManager::PrefixManager(
         // we're not currently persisting this key, it may be that we no longer
         // want it advertised
         if (value.has_value() and value.value().value_ref().has_value()) {
-          const auto prefixDb =
-              fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-                  value.value().value_ref().value(), serializer_);
+          const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+              value.value().value_ref().value(), serializer_);
           if (not(*prefixDb.deletePrefix_ref()) &&
               nodeId_ == *prefixDb.thisNodeName_ref()) {
             VLOG(2) << "Learning previously announce route, key: " << key;
@@ -267,8 +266,7 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
       prefixDb.perfEvents_ref() =
           addingEvents_[*prefixEntry.type_ref()][*prefixEntry.prefix_ref()];
     }
-    auto prefixDbStr =
-        fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_);
+    auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     bool changed = kvStoreClient_->persistKey(
         AreaId{toArea}, prefixKey, prefixDbStr, ttlKeyInKvStore_);
@@ -333,7 +331,7 @@ PrefixManager::syncKvStore() {
     kvStoreClient_->clearKey(
         AreaId{prefixKey->getPrefixArea()},
         key,
-        fbzmq::util::writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
+        writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
         ttlKeyInKvStore_);
   }
 
