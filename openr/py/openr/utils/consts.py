@@ -49,3 +49,8 @@ class Consts(object):
         + r"\[(?P<ipaddr>[a-fA-F0-9\.\:].*)/"
         + r"(?P<plen>[0-9]{1,3})\]"
     )
+
+    # Source/Segment Routing Constants
+    SR_GLOBAL_RANGE = (101, 49999)
+    SR_LOCAL_RANGE = (50000, 59999)
+    SR_STATIC_RANGE = (60000, 69999)
