@@ -769,7 +769,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
@@ -875,7 +875,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
@@ -892,7 +892,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription_other =
         std::move(responseAndSubscription_other.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, random_key](auto&& t) {
                   if (!t.hasValue() or
@@ -972,7 +972,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
@@ -1048,7 +1048,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, keyvals](auto&& t) {
                   if (not t.hasValue()) {
@@ -1135,7 +1135,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, keyvals](auto&& t) {
                   if (!t.hasValue()) {
@@ -1234,7 +1234,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, keyvals](auto&& t) {
                   if (!t.hasValue()) {
@@ -1320,7 +1320,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
                 return;
@@ -1385,7 +1385,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, keyvals](auto&& t) {
                   if (not t.hasValue()) {
@@ -1524,7 +1524,7 @@ TEST_F(
     std::atomic<bool> newTtlVersionSeen = false;
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [keyvals, &newTtlVersionSeen](auto&& t) {
                   if (not t.hasValue()) {
@@ -1627,7 +1627,7 @@ TEST_F(
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .toClientStream()
+            .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [keyvals](auto&& t) {
               if (not t.hasValue()) {
                 return;
@@ -1732,7 +1732,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
 
   auto subscription =
       std::move(responseAndSubscription.stream)
-          .toClientStream()
+          .toClientStreamUnsafeDoNotUse()
           .subscribeExTry(
               folly::getEventBase(), [&test_key, &newUpdateSeen](auto&& t) {
                 if (not t.hasValue()) {
