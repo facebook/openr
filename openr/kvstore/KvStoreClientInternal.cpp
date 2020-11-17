@@ -389,7 +389,7 @@ KvStoreClientInternal::clearKey(
     std::chrono::milliseconds ttl) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
-  VLOG(1) << "KvStoreClientInternal: clear key called for key " << key;
+  VLOG(2) << "KvStoreClientInternal: clear key called for key " << key;
 
   // erase keys
   unsetKey(area, key);
@@ -545,7 +545,6 @@ KvStoreClientInternal::processPublication(
   // Go through received key-values and find out the ones which need update
   CHECK(not publication.area_ref()->empty());
   AreaId area{publication.get_area()};
-  LOG(INFO) << "Area: " << area.t;
   // NOTE: default construct empty containers if they didn't exist
   auto& persistedKeyVals = persistedKeyVals_[area];
   auto& keyTtlBackoffs = keyTtlBackoffs_[area];
@@ -555,7 +554,6 @@ KvStoreClientInternal::processPublication(
   for (auto const& kv : *publication.keyVals_ref()) {
     auto const& key = kv.first;
     auto const& rcvdValue = kv.second;
-    LOG(INFO) << "Key: " << key;
     if (not rcvdValue.value_ref()) {
       // ignore TTL update
       continue;
@@ -588,7 +586,7 @@ KvStoreClientInternal::processPublication(
         // NOTE: We don't need to advertise the value back
         if (sk != keyTtlBackoffs.end() and
             *sk->second.first.ttlVersion_ref() < *rcvdValue.ttlVersion_ref()) {
-          VLOG(1) << "Bumping TTL version for (key, version, originatorId) "
+          VLOG(2) << "Bumping TTL version for (key, version, originatorId) "
                   << folly::sformat(
                          "({}, {}, {})",
                          key,
@@ -704,7 +702,7 @@ KvStoreClientInternal::advertisePendingKeys() {
       // Proceed only if backoff is active
       auto& backoff = backoffs_[area].at(key);
       auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
-      VLOG(1) << eventType
+      VLOG(2) << eventType
               << " (key, version, originatorId, ttlVersion, ttl, area) "
               << folly::sformat(
                      "({}, {}, {}, {}, {})",
