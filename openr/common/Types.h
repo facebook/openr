@@ -96,7 +96,7 @@ class PrefixKey {
   PrefixKey(
       std::string const& node,
       folly::CIDRNetwork const& prefix,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
+      const std::string& area);
 
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStr(
