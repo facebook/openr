@@ -40,8 +40,7 @@ fbnl::IfAddress createIfAddress(const int ifIndex, const std::string& addrMask);
  */
 class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
  public:
-  explicit MockNetlinkProtocolSocket(folly::EventBase* evb)
-      : NetlinkProtocolSocket(evb, netlinkEventsQueue_) {}
+  explicit MockNetlinkProtocolSocket(folly::EventBase* evb);
 
   /**
    * API to create links for testing purposes

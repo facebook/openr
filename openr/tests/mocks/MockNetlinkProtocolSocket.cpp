@@ -7,6 +7,10 @@
 
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
+#include <fb303/ServiceData.h>
+
+namespace fb303 = facebook::fb303;
+
 namespace openr::fbnl {
 
 namespace utils {
@@ -44,8 +48,16 @@ createIfAddress(const int ifIndex, const std::string& addrMask) {
 
 } // namespace utils
 
+MockNetlinkProtocolSocket::MockNetlinkProtocolSocket(folly::EventBase* evb)
+    : NetlinkProtocolSocket(evb, netlinkEventsQueue_) {
+  // Initialize stats
+  fb303::fbData->addStatExportType("nlmock.add_route", fb303::SUM);
+  fb303::fbData->addStatExportType("nlmock.delete_route", fb303::SUM);
+}
+
 folly::SemiFuture<int>
 MockNetlinkProtocolSocket::addRoute(const fbnl::Route& route) {
+  fb303::fbData->addStatValue("nlmock.add_route", 1, fb303::SUM);
   // Blindly replace existing route
   const auto proto = route.getProtocolId();
   if (route.getFamily() == AF_MPLS) {
@@ -58,6 +70,7 @@ MockNetlinkProtocolSocket::addRoute(const fbnl::Route& route) {
 
 folly::SemiFuture<int>
 MockNetlinkProtocolSocket::deleteRoute(const fbnl::Route& route) {
+  fb303::fbData->addStatValue("nlmock.delete_route", 1, fb303::SUM);
   // Count number of elements erased
   int cnt{0};
   const auto proto = route.getProtocolId();
