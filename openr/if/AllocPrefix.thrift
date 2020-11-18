@@ -10,6 +10,7 @@ namespace go openr.AllocPrefix
 namespace py openr.AllocPrefix
 namespace py3 openr.thrift
 namespace lua openr.AllocPrefix
+namespace wiki Open_Routing.Thrift_APIs
 
 include "Network.thrift"
 

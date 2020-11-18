@@ -12,6 +12,7 @@ namespace py openr.Lsdb
 namespace py3 openr.thrift
 namespace php OpenR_Lsdb
 namespace lua openr.Lsdb
+namespace wiki Open_Routing.Thrift_APIs
 
 include "Network.thrift"
 include "KvStore.thrift"

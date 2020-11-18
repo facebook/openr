@@ -9,6 +9,7 @@ namespace cpp2 openr.thrift
 namespace go openr.OpenrConfig
 namespace py openr.OpenrConfig
 namespace py3 openr.thrift
+namespace wiki Open_Routing.Thrift_APIs
 
 include "BgpConfig.thrift"
 

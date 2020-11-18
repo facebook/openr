@@ -12,6 +12,7 @@ namespace php Openr
 namespace py openr.Dual
 namespace py3 openr.thrift
 namespace lua openr.Dual
+namespace wiki Open_Routing.Thrift_APIs
 
 // DUAL message type
 enum DualMessageType {
