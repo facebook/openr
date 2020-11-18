@@ -101,6 +101,7 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
   // TODO: handle case when openr received SIGTERM when waiting for fibService
   auto waitForFibStart = std::chrono::steady_clock::now();
   auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
+  folly::EventBase evb;
   std::shared_ptr<folly::AsyncSocket> socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
 
@@ -108,7 +109,6 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
          facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG(INFO) << "Waiting for FibService to come up...";
-    folly::EventBase evb;
     openr::Fib::createFibClient(evb, socket, client, port);
     try {
       fibStatus = client->sync_getStatus();
@@ -365,16 +365,6 @@ main(int argc, char** argv) {
         });
   }
 
-  // Starting openrCtrlEvb for thrift handler
-  OpenrEventBase ctrlEvb;
-  std::thread ctrlEvbThread([&]() noexcept {
-    LOG(INFO) << "Starting openrCtrl eventbase...";
-    folly::setThreadName("openrCtrl");
-    ctrlEvb.run();
-    LOG(INFO) << "OpenrCtrl eventbase stopped...";
-  });
-  ctrlEvb.waitUntilRunning();
-
   // Start config-store URL
   auto configStore = startEventBase(
       allThreads,
@@ -555,17 +545,17 @@ main(int argc, char** argv) {
           kvStore));
 
   // Start OpenrCtrl thrift server
-  apache::thrift::ThriftServer thriftCtrlServer;
+  auto thriftCtrlServer = std::make_unique<apache::thrift::ThriftServer>();
   if (FLAGS_enable_secure_thrift_server) {
     setupThriftServerTls(
-        thriftCtrlServer,
+        *thriftCtrlServer,
         // TODO Change to REQUIRED after we have everyone using certs
         apache::thrift::SSLPolicy::PERMITTED,
         FLAGS_tls_ticket_seed_path,
         sslContext);
   }
   // set the port and interface
-  thriftCtrlServer.setPort(*config->getConfig().openr_ctrl_port_ref());
+  thriftCtrlServer->setPort(*config->getConfig().openr_ctrl_port_ref());
 
   std::unordered_set<std::string> acceptableNamesSet; // empty set by default
   if (FLAGS_enable_secure_thrift_server) {
@@ -574,39 +564,54 @@ main(int argc, char** argv) {
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
   }
 
-  std::shared_ptr<openr::OpenrCtrlHandler> ctrlHandler{nullptr};
-  ctrlEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
-    ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
-        config->getNodeName(),
-        acceptableNamesSet,
-        &ctrlEvb,
-        decision,
-        fib,
-        kvStore,
-        linkMonitor,
-        monitor,
-        configStore,
-        prefixManager,
-        spark,
-        config);
+  // Create Open/R control handler
+  OpenrEventBase ctrlEvb;
+  auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
+      config->getNodeName(),
+      acceptableNamesSet,
+      &ctrlEvb,
+      decision,
+      fib,
+      kvStore,
+      linkMonitor,
+      monitor,
+      configStore,
+      prefixManager,
+      spark,
+      config);
+  // Starting openrCtrlEvb for thrift handler
+  std::thread ctrlEvbThread([&]() noexcept {
+    LOG(INFO) << "Starting openrCtrl eventbase...";
+    folly::setThreadName("openrCtrl");
+    ctrlEvb.run();
+    LOG(INFO) << "OpenrCtrl eventbase stopped...";
   });
+  ctrlEvb.waitUntilRunning();
 
   CHECK(ctrlHandler);
-  thriftCtrlServer.setInterface(ctrlHandler);
-  thriftCtrlServer.setNumIOWorkerThreads(1);
+  thriftCtrlServer->setInterface(ctrlHandler);
+  thriftCtrlServer->setNumIOWorkerThreads(1);
   // Intentionally kept this as (1). If you're changing to higher number please
   // address thread safety for private member variables in OpenrCtrlHandler
-  thriftCtrlServer.setNumCPUWorkerThreads(1);
+  thriftCtrlServer->setNumCPUWorkerThreads(1);
   // Enable TOS reflection on the server socket
-  thriftCtrlServer.setTosReflect(true);
+  thriftCtrlServer->setTosReflect(true);
 
   // serve
-  allThreads.emplace_back(std::thread([&thriftCtrlServer]() noexcept {
-    LOG(INFO) << "Starting thriftCtrlServer thread ...";
-    folly::setThreadName("openr-thriftService");
-    thriftCtrlServer.serve();
-    LOG(INFO) << "thriftCtrlServer thread got stopped.";
-  }));
+  std::thread thriftCtrlServerThread([&thriftCtrlServer]() noexcept {
+    LOG(INFO) << "Starting ThriftCtrlServer thread ...";
+    folly::setThreadName("openr-ThriftCtrlServer");
+    thriftCtrlServer->serve();
+    LOG(INFO) << "ThriftCtrlServer thread got stopped.";
+  });
+  // Wait until thrift server starts
+  while (true) {
+    auto evb = thriftCtrlServer->getServeEventBase();
+    if (evb != nullptr and evb->isRunning()) {
+      break;
+    }
+    std::this_thread::yield();
+  }
 
   // Wait for main eventbase to stop
   mainEvbThread.join();
@@ -624,10 +629,18 @@ main(int argc, char** argv) {
   netlinkEventsQueue.close();
   logSampleQueue.close();
 
+  // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
+  thriftCtrlServer->stop();
+  thriftCtrlServerThread.join();
+  thriftCtrlServer.reset();
+
+  // Destroy ctrlHandler
+  CHECK(ctrlHandler.unique()) << "Unexpected ownership of ctrlHandler pointer";
   ctrlHandler.reset();
+
+  // Stop ctrlEvb
   ctrlEvb.stop();
   ctrlEvb.waitUntilStopped();
-  thriftCtrlServer.stop();
 
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {

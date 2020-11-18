@@ -137,6 +137,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
           });
         }
       }
+      LOG(INFO) << "KvStore updates processing fiber stopped";
     });
 
     workers_.push_back(std::move(taskFutureKvStore));
@@ -163,6 +164,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               }
             });
           }
+          LOG(INFO) << "Fib updates processing fiber stopped";
         });
 
     workers_.push_back(std::move(taskFutureFib));
