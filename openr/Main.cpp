@@ -16,7 +16,6 @@ namespace fs = std::experimental::filesystem;
 #include <fstream>
 #include <stdexcept>
 
-#include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/Format.h>
@@ -63,7 +62,6 @@ namespace fs = std::experimental::filesystem;
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
 
-using namespace fbzmq;
 using namespace openr;
 
 using namespace folly::gen;
@@ -99,17 +97,18 @@ checkIsIpv6Enabled() {
 }
 
 void
-waitForFibService(const fbzmq::ZmqEventLoop& evl, int port) {
+waitForFibService(const folly::EventBase& mainEvb, int port) {
+  // TODO: handle case when openr received SIGTERM when waiting for fibService
   auto waitForFibStart = std::chrono::steady_clock::now();
-
   auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
-  folly::EventBase evb;
   std::shared_ptr<folly::AsyncSocket> socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
-  while (evl.isRunning() &&
+
+  while (mainEvb.isRunning() &&
          facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG(INFO) << "Waiting for FibService to come up...";
+    folly::EventBase evb;
     openr::Fib::createFibClient(evb, socket, client, port);
     try {
       fibStatus = client->sync_getStatus();
@@ -143,7 +142,7 @@ startEventBase(
   // Start a thread
   allThreads.emplace_back(std::thread([evb = evb.get(), name]() noexcept {
     LOG(INFO) << "Starting " << name << " thread ...";
-    folly::setThreadName(name);
+    folly::setThreadName(folly::sformat("openr-{}", name));
     evb->run();
     LOG(INFO) << name << " thread got stopped.";
   }));
@@ -163,14 +162,6 @@ startEventBase(
 
 int
 main(int argc, char** argv) {
-  // Register the signals to handle before anything else. This guarantees that
-  // any threads created below will inherit the signal mask
-  ZmqEventLoop mainEventLoop;
-  StopEventLoopSignalHandler handler(&mainEventLoop);
-  handler.registerSignalHandler(SIGINT);
-  handler.registerSignalHandler(SIGQUIT);
-  handler.registerSignalHandler(SIGTERM);
-
   // Set version string to show when `openr --version` is invoked
   std::stringstream ss;
   BuildInfo::log(ss);
@@ -178,6 +169,14 @@ main(int argc, char** argv) {
 
   // Initialize all params
   folly::init(&argc, &argv);
+
+  // Register the signals to handle before anything else. This guarantees that
+  // any threads created below will inherit the signal mask
+  folly::EventBase mainEvb;
+  EventBaseStopSignalHandler handler(&mainEvb);
+  handler.registerSignalHandler(SIGINT);
+  handler.registerSignalHandler(SIGQUIT);
+  handler.registerSignalHandler(SIGTERM);
 
   // Initialize syslog
   // We log all messages upto INFO level.
@@ -267,7 +266,7 @@ main(int argc, char** argv) {
       *config->getConfig().prefix_hold_time_s_ref()};
 
   // Set up the zmq context for this process.
-  Context context;
+  fbzmq::Context context;
 
   // Set main thread name
   folly::setThreadName("openr");
@@ -301,17 +300,17 @@ main(int argc, char** argv) {
   }
 
   // Starting main event-loop
-  std::thread mainEventLoopThread([&]() noexcept {
-    LOG(INFO) << "Starting main event loop...";
-    folly::setThreadName("MainLoop");
-    mainEventLoop.run();
-    LOG(INFO) << "Main event loop got stopped";
+  std::thread mainEvbThread([&]() noexcept {
+    LOG(INFO) << "Starting openr main event-base...";
+    folly::setThreadName("openr-main");
+    mainEvb.loopForever();
+    LOG(INFO) << "Main event-base stopped...";
   });
-  mainEventLoop.waitUntilRunning();
+  mainEvb.waitUntilRunning();
 
   if (FLAGS_enable_fib_service_waiting and
       (not config->isNetlinkFibHandlerEnabled())) {
-    waitForFibService(mainEventLoop, *config->getConfig().fib_port_ref());
+    waitForFibService(mainEvb, *config->getConfig().fib_port_ref());
   }
 
   // Create ThreadManager for thrift services
@@ -334,7 +333,7 @@ main(int argc, char** argv) {
       nlEvb->getEvb(), netlinkEventsQueue);
   allThreads.emplace_back([&]() {
     LOG(INFO) << "Starting NetlinkEvb thread ...";
-    folly::setThreadName("NetlinkEvb");
+    folly::setThreadName("openr-netlinkEvb");
     nlEvb->getEvb()->loopForever();
     LOG(INFO) << "NetlinkEvb thread got stopped.";
   });
@@ -356,7 +355,7 @@ main(int argc, char** argv) {
 
     netlinkFibServerThread =
         std::make_unique<std::thread>([&netlinkFibServer, &nlSock]() {
-          folly::setThreadName("FibService");
+          folly::setThreadName("openr-fibService");
           auto fibHandler = std::make_shared<NetlinkFibHandler>(nlSock.get());
           netlinkFibServer->setInterface(std::move(fibHandler));
 
@@ -604,13 +603,13 @@ main(int argc, char** argv) {
   // serve
   allThreads.emplace_back(std::thread([&thriftCtrlServer]() noexcept {
     LOG(INFO) << "Starting thriftCtrlServer thread ...";
-    folly::setThreadName("thriftCtrlServer");
+    folly::setThreadName("openr-thriftService");
     thriftCtrlServer.serve();
     LOG(INFO) << "thriftCtrlServer thread got stopped.";
   }));
 
-  // Wait for main-event loop to return
-  mainEventLoopThread.join();
+  // Wait for main eventbase to stop
+  mainEvbThread.join();
 
   // Stop all threads (in reverse order of their creation)
   routeUpdatesQueue.close();
@@ -625,11 +624,10 @@ main(int argc, char** argv) {
   netlinkEventsQueue.close();
   logSampleQueue.close();
 
-  thriftCtrlServer.stop();
   ctrlHandler.reset();
   ctrlEvb.stop();
   ctrlEvb.waitUntilStopped();
-  ctrlEvbThread.join();
+  thriftCtrlServer.stop();
 
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {
@@ -663,6 +661,8 @@ main(int argc, char** argv) {
   }
 
   // Wait for all threads to finish
+  ctrlEvbThread.join();
+
   for (auto& t : allThreads) {
     t.join();
   }
