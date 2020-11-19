@@ -50,6 +50,7 @@ dumpAllWithPrefixMultipleAndParse(
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
+    const std::shared_ptr<folly::SSLContext> sslContext,
     std::optional<int> maybeIpTos /* std::nullopt */,
     const folly::SocketAddress&
         bindAddr /* folly::AsyncSocket::anyAddress()*/) {
@@ -59,6 +60,7 @@ dumpAllWithPrefixMultipleAndParse(
       keyPrefix,
       connectTimeout,
       processTimeout,
+      sslContext,
       maybeIpTos,
       bindAddr);
   if (not val.first) {
@@ -77,6 +79,7 @@ dumpAllWithThriftClientFromMultiple(
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
+    const std::shared_ptr<folly::SSLContext> sslContext,
     std::optional<int> maybeIpTos /* std::nullopt */,
     const folly::SocketAddress&
         bindAddr /* folly::AsyncSocket::anyAddress()*/) {
@@ -99,25 +102,54 @@ dumpAllWithThriftClientFromMultiple(
       }) |
       folly::gen::as<std::vector<std::string>>();
 
-  LOG(INFO) << "Dump kvStore key-vals from: " << folly::join(",", addrStrs);
+  LOG(INFO) << "Dump kvStore key-vals from: " << folly::join(",", addrStrs)
+            << ". Required SSL secure connection: " << std::boolalpha
+            << (sslContext != nullptr);
 
   auto startTime = std::chrono::steady_clock::now();
   for (auto const& sockAddr : sockAddrs) {
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
-    try {
-      client = getOpenrCtrlPlainTextClient(
-          evb,
-          folly::IPAddress(sockAddr.getAddressStr()),
-          sockAddr.getPort(),
-          connectTimeout,
-          processTimeout,
-          bindAddr,
-          maybeIpTos);
-    } catch (const std::exception& ex) {
-      LOG(ERROR) << "Failed to connect to Open/R instance at address of: "
-                 << sockAddr.getAddressStr()
-                 << ". Exception: " << folly::exceptionStr(ex);
+    if (sslContext) {
+      VLOG(2) << "Try to connect Open/R SSL secure client.";
+      try {
+        client = getOpenrCtrlSecureClient(
+            evb,
+            sslContext,
+            folly::IPAddress(sockAddr.getAddressStr()),
+            sockAddr.getPort(),
+            connectTimeout,
+            processTimeout,
+            bindAddr,
+            maybeIpTos);
+      } catch (const std::exception& ex) {
+        LOG(ERROR)
+            << "Failed to connect to Open/R instance at: "
+            << sockAddr.getAddressStr()
+            << " via secure client. Exception: " << folly::exceptionStr(ex);
+      }
     }
+
+    // Cannot connect to Open/R via secure client. Try plain-text client
+    if (!client) {
+      VLOG(2) << "Try to connect Open/R plain-text client.";
+      try {
+        client = getOpenrCtrlPlainTextClient(
+            evb,
+            folly::IPAddress(sockAddr.getAddressStr()),
+            sockAddr.getPort(),
+            connectTimeout,
+            processTimeout,
+            bindAddr,
+            maybeIpTos);
+      } catch (const std::exception& ex) {
+        LOG(ERROR)
+            << "Failed to connect to Open/R instance at: "
+            << sockAddr.getAddressStr()
+            << "via plain-text client. Exception: " << folly::exceptionStr(ex);
+      }
+    }
+
+    // Cannot connect to Open/R via either plain-text client or secured client
     if (!client) {
       unreachedUrls.push_back(fbzmq::SocketUrl{sockAddr.getAddressStr()});
       continue;

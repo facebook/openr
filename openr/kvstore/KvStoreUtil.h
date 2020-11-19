@@ -59,6 +59,7 @@ dumpAllWithPrefixMultipleAndParse(
     const std::string& prefix,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
+    const std::shared_ptr<folly::SSLContext> sslContext = nullptr,
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
@@ -88,6 +89,7 @@ dumpAllWithThriftClientFromMultiple(
     const std::string& prefix,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
+    const std::shared_ptr<folly::SSLContext> sslContext = nullptr,
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 

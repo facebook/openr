@@ -1466,6 +1466,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
             "test_",
             Constants::kServiceConnTimeout,
             Constants::kServiceProcTimeout,
+            nullptr, /* disable SSLSocket Connection for UT */
             192, /* IP_TOS */
             folly::AsyncSocket::anyAddress());
         // there will be plane area key "test_ttl_key_plane"
@@ -1479,6 +1480,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
             "test_",
             Constants::kServiceConnTimeout,
             Constants::kServiceProcTimeout,
+            nullptr, /* disable SSLSocket Connection for UT */
             192, /* IP_TOS */
             folly::AsyncSocket::anyAddress());
         // there will be plane area key "test_ttl_key_plane"
