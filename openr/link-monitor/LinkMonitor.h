@@ -94,7 +94,6 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // consumer queue
       messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
-      messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will assume drained if no drain state is found in the
       // persitentStore
@@ -169,11 +168,6 @@ class LinkMonitor final : public OpenrEventBase {
   void neighborRestartingEvent(const thrift::SparkNeighborEvent& event);
   void neighborDownEvent(const thrift::SparkNeighborEvent& event);
   void neighborRttChangeEvent(const thrift::SparkNeighborEvent& event);
-
-  /*
-   * [KvStore] initial sync event
-   */
-  void processKvStoreSyncEvent(KvStoreSyncEvent&& event);
 
   /*
    * [Netlink Platform] related functions

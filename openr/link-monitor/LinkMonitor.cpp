@@ -77,7 +77,6 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
-    messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool assumeDrained,
     bool overrideDrainState,
@@ -224,19 +223,8 @@ LinkMonitor::LinkMonitor(
     }
   });
 
-  // Add fiber to process KvStore Sync events
-  addFiberTask(
-      [q = std::move(kvStoreSyncEventsQueue), this]() mutable noexcept {
-        while (true) {
-          auto maybeEvent = q.get();
-          if (maybeEvent.hasError()) {
-            LOG(INFO)
-                << "Terminating kvstore peer sync events processing fiber";
-            break;
-          }
-          processKvStoreSyncEvent(std::move(maybeEvent).value());
-        }
-      });
+  // TODO: Add fiber to process KvStore InitialSync events
+  // processKvStoreSyncEvent();
 
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
   interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -432,38 +420,6 @@ LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighborEvent& event) {
     adj.rtt_ref() = rttUs;
     advertiseAdjacenciesThrottled_->operator()();
   }
-}
-
-void
-LinkMonitor::processKvStoreSyncEvent(KvStoreSyncEvent&& event) {
-  const auto& nodeName = event.nodeName;
-  const auto& area = event.area;
-
-  const auto& areaPeers = peers_.find(area);
-  // ignore invalid initial sync events
-  if (areaPeers == peers_.end()) {
-    return;
-  }
-
-  const auto& peerVal = areaPeers->second.find(nodeName);
-  // spark neighbor down events erased this peer, nothing to do
-  if (peerVal == areaPeers->second.end()) {
-    return;
-  }
-
-  // parallel link caused KvStore Peer session re-establishment
-  // no need to refresh initialSynced state.
-  if (peerVal->second.initialSynced) {
-    return;
-  }
-
-  // set initialSynced = true, promote neighbor's adj up events
-  peerVal->second.initialSynced = true;
-
-  SYSLOG(INFO) << "Neighbor " << nodeName << " finished Initial Sync "
-               << ", area: " << area << ". Promoting Adjacency UP events.";
-
-  advertiseAdjacenciesThrottled_->operator()();
 }
 
 std::unordered_map<std::string, thrift::PeerSpec>
@@ -769,28 +725,11 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
   *adjDb.area_ref() = area;
 
-  for (const auto& [adjKey, adjValue] : adjacencies_) {
+  for (const auto& [_, adjValue] : adjacencies_) {
     // ignore unrelated area
     if (adjValue.area != area) {
       continue;
     }
-
-    // ignore adjs that are waiting first KvStore full sync
-    bool waitingInitialSync{true};
-
-    const auto& areaPeers = peers_.find(area);
-    if (areaPeers != peers_.end()) {
-      const auto& peerVal = areaPeers->second.find(adjKey.first);
-      // set waitingInitialSync false if peer has reached initial sync state
-      if (peerVal != areaPeers->second.end() && peerVal->second.initialSynced) {
-        waitingInitialSync = false;
-      }
-    }
-
-    if (waitingInitialSync) {
-      continue;
-    }
-
     // NOTE: copy on purpose
     auto adj = folly::copy(adjValue.adjacency);
 
@@ -805,11 +744,11 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
         *adj.metric_ref());
 
     // Override metric with adj metric if it exists
-    thrift::AdjKey tAdjKey;
-    *tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
-    *tAdjKey.ifName_ref() = *adj.ifName_ref();
+    thrift::AdjKey adjKey;
+    *adjKey.nodeName_ref() = *adj.otherNodeName_ref();
+    *adjKey.ifName_ref() = *adj.ifName_ref();
     adj.metric_ref() = folly::get_default(
-        *state_.adjMetricOverrides_ref(), tAdjKey, *adj.metric_ref());
+        *state_.adjMetricOverrides_ref(), adjKey, *adj.metric_ref());
 
     adjDb.adjacencies_ref()->emplace_back(std::move(adj));
   }

@@ -138,7 +138,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         peerUpdatesQueue_,
         logSampleQueue_,
         neighborUpdatesQueue_.getReader(),
-        kvStoreWrapper_->getInitialSyncEventsReader(),
         nlSock_->getReader(),
         false, /* assumeDrained */
         false, /* overrideDrainState */
