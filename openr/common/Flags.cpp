@@ -142,7 +142,6 @@ DEFINE_string(
 DEFINE_bool(enable_prefix_alloc, false, "Enable automatic prefix allocation");
 DEFINE_int32(alloc_prefix_len, 128, "Allocated prefix length");
 DEFINE_bool(static_prefix_alloc, false, "Perform static prefix allocation");
-DEFINE_bool(per_prefix_keys, false, "Create per IP prefix keys in Kvstore");
 DEFINE_bool(
     set_loopback_address,
     false,

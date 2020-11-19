@@ -49,9 +49,6 @@ DECLARE_bool(enable_lfa);
 DECLARE_int32(decision_debounce_min_ms);
 DECLARE_int32(decision_debounce_max_ms);
 
-// TODO: TO BE DEPRECATED
-DECLARE_bool(per_prefix_keys);
-
 //
 // TODO: [DEPRECATED] All following flags are deprecated in favor of config
 //
