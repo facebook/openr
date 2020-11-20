@@ -107,13 +107,14 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
 
   while (mainEvb.isRunning() &&
          facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    LOG(INFO) << "Waiting for FibService to come up...";
     openr::Fib::createFibClient(evb, socket, client, port);
     try {
       fibStatus = client->sync_getStatus();
     } catch (const std::exception& e) {
     }
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    LOG(INFO) << "Waiting for FibService to come up...";
   }
 
   auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
