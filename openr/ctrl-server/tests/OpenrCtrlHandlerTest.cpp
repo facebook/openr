@@ -1711,14 +1711,13 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
               std::make_unique<std::set<std::string>>(kSpineOnlySet))
           .get();
 
-  EXPECT_EQ(
-      2, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+  auto initialPub = responseAndSubscription.response.begin();
+  EXPECT_EQ(2, (*initialPub->keyVals_ref()).size());
+  // Verify timestamp is set
+  EXPECT_TRUE(initialPub->timestamp_ms_ref().has_value());
   for (const auto& key_ : {"key1", "key2"}) {
-    EXPECT_EQ(
-        1,
-        (*responseAndSubscription.response.begin()->keyVals_ref()).count(key_));
-    const auto& val1 =
-        (*responseAndSubscription.response.begin()->keyVals_ref())[key_];
+    EXPECT_EQ(1, (*initialPub->keyVals_ref()).count(key_));
+    const auto& val1 = (*initialPub->keyVals_ref())[key_];
     ASSERT_EQ(false, val1.value_ref().has_value()); /* value is null */
     EXPECT_EQ(1, *val1.version_ref());
     EXPECT_LT(10000, *val1.ttl_ref());
@@ -1745,6 +1744,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
                 // Verify no value seen in update
                 ASSERT_EQ(false, val.value_ref().has_value());
                 EXPECT_EQ(2, *val.ttlVersion_ref());
+                // Verify timestamp is set
+                EXPECT_TRUE(pub.timestamp_ms_ref().has_value());
               });
 
   EXPECT_EQ(1, handler->getNumKvStorePublishers());

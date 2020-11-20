@@ -809,6 +809,10 @@ OpenrCtrlHandler::semifuture_subscribeAndGetAreaKvStores(
                  folly::Try<std::unique_ptr<std::vector<thrift::Publication>>>&&
                      pubs) mutable {
         pubs.throwIfFailed();
+        for (auto& pub : *pubs.value()) {
+          // Set the publication timestamp
+          pub.timestamp_ms_ref() = getUnixTimeStampMs();
+        }
         return apache::thrift::ResponseAndServerStream<
             std::vector<thrift::Publication>,
             thrift::Publication>{std::move(*pubs.value()), std::move(stream)};

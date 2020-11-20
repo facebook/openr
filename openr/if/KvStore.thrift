@@ -241,4 +241,8 @@ struct Publication {
 
   // area to which this publication belongs
   7: string area;
+
+  // optional timestamp when publication is sent. This is system timestamp
+  // in milliseconds since epoch
+  8: optional i64 timestamp_ms
 }
