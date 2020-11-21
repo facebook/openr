@@ -121,9 +121,14 @@ class Constants {
   // LinkMonitor specific
   //
 
-  // the time we hold on announcing a link when it comes up
-  static constexpr std::chrono::milliseconds kLinkThrottleTimeout{1000};
+  // Hold time to wait before advertising link events. We use different
+  // timers for UP (Throttle=100ms) and DOWN events are immediately
+  static constexpr std::chrono::milliseconds kLinkThrottleTimeout{100};
   static constexpr std::chrono::milliseconds kLinkImmediateTimeout{1};
+
+  // Hold time to wait before advertising adjacency UP event to KvStore.
+  // Adjacency DOWN event is immediately advertised.
+  static constexpr std::chrono::milliseconds kAdjacencyThrottleTimeout{1000};
 
   // overloaded note metric value
   static constexpr uint64_t kOverloadNodeMetric{1ull << 32};

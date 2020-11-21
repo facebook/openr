@@ -117,7 +117,7 @@ LinkMonitor::LinkMonitor(
 
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<AsyncThrottle>(
-      getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
+      getEvb(), Constants::kAdjacencyThrottleTimeout, [this]() noexcept {
         // will advertise to all areas but will not trigger a adj key update
         // if nothing changed.
         advertiseAdjacencies();
