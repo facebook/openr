@@ -12,7 +12,7 @@ namespace php Openr
 namespace py openr.KvStore
 namespace py3 openr.thrift
 namespace lua openr.KvStore
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.KvStore
 
 include "Dual.thrift"
 

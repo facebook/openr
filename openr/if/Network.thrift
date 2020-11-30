@@ -12,7 +12,7 @@ namespace py openr.Network
 namespace py3 openr.thrift
 namespace php Openr
 namespace lua openr.Network
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.Network
 
 // Using the defaults from here:
 // https://en.wikipedia.org/wiki/Administrative_distance

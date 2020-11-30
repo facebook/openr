@@ -11,7 +11,7 @@ namespace go openr.Spark
 namespace py openr.Spark
 namespace py3 openr.thrift
 namespace lua openr.Spark
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.Spark
 
 include "Network.thrift"
 

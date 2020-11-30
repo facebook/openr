@@ -7,7 +7,7 @@
 
 namespace cpp2 openr.thrift
 namespace py3 openr.thrift
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.OpenrCtrlCpp
 
 include "openr/if/Fib.thrift"
 include "openr/if/KvStore.thrift"

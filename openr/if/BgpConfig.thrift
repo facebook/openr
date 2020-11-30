@@ -9,7 +9,7 @@ namespace cpp2 openr.thrift
 namespace go openr.BgpConfig
 namespace py openr.BgpConfig
 namespace py3 openr.thrift
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.BgpConfig
 
 struct BgpPeerTimers {
   1: i32 hold_time_seconds,

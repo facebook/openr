@@ -11,7 +11,7 @@ namespace go openr.Decision
 namespace py openr.Decision
 namespace py3 openr.thrift
 namespace lua openr.Decision
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.Decision
 
 include "Lsdb.thrift"
 

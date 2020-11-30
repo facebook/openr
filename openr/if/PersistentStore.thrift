@@ -10,7 +10,6 @@ namespace go openr.PersistentStore
 namespace py openr.PersistentStore
 namespace py3 openr.thrift
 namespace lua openr.PersistentStore
-namespace wiki Open_Routing.Thrift_APIs
 
 struct StoreDatabase {
   // map <key -> data>

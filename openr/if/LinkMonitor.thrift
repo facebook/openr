@@ -12,7 +12,7 @@ namespace php Openr
 namespace py openr.LinkMonitor
 namespace py3 openr.thrift
 namespace lua openr.LinkMonitor
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.LinkMonitor
 
 include "Lsdb.thrift"
 

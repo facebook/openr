@@ -12,7 +12,7 @@ namespace php Openr
 namespace py openr.Fib
 namespace py3 openr.thrift
 namespace lua openr.Fib
-namespace wiki Open_Routing.Thrift_APIs
+namespace wiki Open_Routing.Thrift_APIs.Fib
 
 include "Network.thrift"
 include "Lsdb.thrift"
