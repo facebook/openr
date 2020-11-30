@@ -40,7 +40,6 @@
 OPENR=openr
 
 # Keep this list in sorted order
-AREAS=""
 ASSUME_DRAINED=false
 CONFIG=""
 CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
@@ -85,8 +84,6 @@ VMODULE=""
 X509_CA_PATH=""
 X509_CERT_PATH=""
 X509_KEY_PATH=""
-ENABLE_FLOOD_OPTIMIZATION=false
-IS_FLOOD_ROOT=false
 PLUGIN_ARGS=
 
 #
@@ -137,7 +134,6 @@ fi
 #
 
 ARGS="\
-  --areas=${AREAS} \
   --assume_drained=${ASSUME_DRAINED} \
   --config=${CONFIG} \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
@@ -146,13 +142,11 @@ ARGS="\
   --decision_graceful_restart_window_s=${DECISION_GRACEFUL_RESTART_WINDOW_S} \
   --dryrun=${DRYRUN} \
   --enable_bgp_route_programming=${ENABLE_BGP_ROUTE_PROGRAMMING} \
-  --enable_flood_optimization=${ENABLE_FLOOD_OPTIMIZATION} \
   --enable_fib_service_waiting=${ENABLE_FIB_SERVICE_WAITING} \
   --enable_lfa=${ENABLE_LFA} \
   --enable_netlink_fib_handler=${ENABLE_NETLINK_FIB_HANDLER} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
   --enable_plugin=${ENABLE_PLUGIN} \
-  --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
   --enable_rtt_metric=${ENABLE_RTT_METRIC} \
   --enable_secure_thrift_server=${ENABLE_SECURE_THRIFT_SERVER} \
   --enable_v4=${ENABLE_V4} \
@@ -161,7 +155,6 @@ ARGS="\
   --iface_regex_exclude=${IFACE_REGEX_EXCLUDE} \
   --iface_regex_include=${IFACE_REGEX_INCLUDE} \
   --ip_tos=${IP_TOS} \
-  --is_flood_root=${IS_FLOOD_ROOT} \
   --key_prefix_filters=${KEY_PREFIX_FILTERS} \
   --kvstore_key_ttl_ms=${KVSTORE_KEY_TTL_MS} \
   --kvstore_sync_interval_s=${KVSTORE_SYNC_INTERVAL_S} \
