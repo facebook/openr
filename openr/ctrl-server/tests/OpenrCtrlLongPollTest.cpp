@@ -84,7 +84,7 @@ class LongPollFixture : public ::testing::Test {
   const std::string adjKey_ = folly::sformat("adj:{}", nodeName_);
   const std::string prefixKey_ = folly::sformat("prefix:{}", nodeName_);
 
-  fbzmq::ZmqEventLoop evl_;
+  openr::OpenrEventBase testEvb_;
   std::shared_ptr<Config> config_{nullptr};
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
@@ -103,7 +103,7 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
   std::chrono::steady_clock::time_point endTime;
 
   // mimick there is a new publication from kvstore
-  evl_.scheduleTimeout(std::chrono::milliseconds(5000), [&]() noexcept {
+  testEvb_.scheduleTimeout(std::chrono::milliseconds(5000), [&]() noexcept {
     LOG(INFO) << "AdjKey set...";
     // catch  up the time
     startTime = std::chrono::steady_clock::now();
@@ -113,12 +113,12 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
         createThriftValue(1, nodeName_, std::string("value1")));
 
     // stop the evl
-    evl_.stop();
+    testEvb_.stop();
   });
 
   // start eventloop
-  std::thread evlThread([&]() { evl_.run(); });
-  evl_.waitUntilRunning();
+  std::thread evlThread([&]() { testEvb_.run(); });
+  testEvb_.waitUntilRunning();
 
   // client starts to do long-poll
   try {
@@ -141,7 +141,7 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
   ASSERT_TRUE(isAdjChanged);
 
   // wait for evl before cleanup
-  evl_.waitUntilStopped();
+  testEvb_.waitUntilStopped();
   evlThread.join();
 }
 
@@ -154,7 +154,7 @@ TEST_F(LongPollFixture, LongPollTimeout) {
   bool isAdjChanged = false;
 
   // mimick there is a new publication from kvstore
-  evl_.scheduleTimeout(std::chrono::milliseconds(5000), [&]() noexcept {
+  testEvb_.scheduleTimeout(std::chrono::milliseconds(5000), [&]() noexcept {
     LOG(INFO) << "Prefix key set...";
     kvStoreWrapper_->setKey(
         kTestingAreaName,
@@ -162,12 +162,12 @@ TEST_F(LongPollFixture, LongPollTimeout) {
         createThriftValue(1, nodeName_, std::string("value1")));
 
     // stop the evl
-    evl_.stop();
+    testEvb_.stop();
   });
 
   // start eventloop
-  std::thread evlThread([&]() { evl_.run(); });
-  evl_.waitUntilRunning();
+  std::thread evlThread([&]() { testEvb_.run(); });
+  testEvb_.waitUntilRunning();
 
   // client starts to do long-poll
   try {
@@ -190,7 +190,7 @@ TEST_F(LongPollFixture, LongPollTimeout) {
       ->cleanupPendingLongPollReqs();
 
   // wait for evl before cleanup
-  evl_.waitUntilStopped();
+  testEvb_.waitUntilStopped();
   evlThread.join();
 }
 
@@ -251,7 +251,7 @@ TEST_F(LongPollFixture, LongPollAdjUnchanged) {
 
   // mimick there is a new publication from kvstore.
   // This publication should clean up pending req.
-  evl_.scheduleTimeout(
+  testEvb_.scheduleTimeout(
       Constants::kLongPollReqHoldTime + std::chrono::milliseconds(5000),
       [&]() noexcept {
         LOG(INFO) << "Prefix key set...";
@@ -261,12 +261,12 @@ TEST_F(LongPollFixture, LongPollAdjUnchanged) {
             createThriftValue(1, nodeName_, std::string("value1")));
 
         // stop the evl
-        evl_.stop();
+        testEvb_.stop();
       });
 
   // start eventloop
-  std::thread evlThread([&]() { evl_.run(); });
-  evl_.waitUntilRunning();
+  std::thread evlThread([&]() { testEvb_.run(); });
+  testEvb_.waitUntilRunning();
 
   try {
     thrift::KeyVals snapshot;
@@ -286,7 +286,7 @@ TEST_F(LongPollFixture, LongPollAdjUnchanged) {
   ASSERT_FALSE(isTimeout);
 
   // wait for evl before cleanup
-  evl_.waitUntilStopped();
+  testEvb_.waitUntilStopped();
   evlThread.join();
 }
 
