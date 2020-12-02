@@ -77,22 +77,22 @@ PrefixKey::fromStr(const std::string& key) {
   return PrefixKey(node, ipaddress, area);
 }
 
-std::string
+std::string const&
 PrefixKey::getNodeName() const {
   return node_;
 };
 
-folly::CIDRNetwork
+folly::CIDRNetwork const&
 PrefixKey::getCIDRNetwork() const {
   return prefix_;
 }
 
-std::string
+std::string const&
 PrefixKey::getPrefixKey() const {
   return prefixKeyString_;
 }
 
-std::string
+std::string const&
 PrefixKey::getPrefixArea() const {
   return prefixArea_;
 }

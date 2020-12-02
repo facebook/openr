@@ -103,16 +103,16 @@ class PrefixKey {
       const std::string& key);
 
   // return node name
-  std::string getNodeName() const;
+  std::string const& getNodeName() const;
 
   // return the CIDR network address
-  folly::CIDRNetwork getCIDRNetwork() const;
+  folly::CIDRNetwork const& getCIDRNetwork() const;
 
   // return prefix sub type
-  std::string getPrefixArea() const;
+  std::string const& getPrefixArea() const;
 
   // return prefix key string to be used to flood to kvstore
-  std::string getPrefixKey() const;
+  std::string const& getPrefixKey() const;
 
   // return thrift::IpPrefix
   thrift::IpPrefix getIpPrefix() const;
@@ -130,16 +130,16 @@ class PrefixKey {
 
  private:
   // node name
-  std::string node_{};
+  std::string const node_;
 
   // IP address
-  folly::CIDRNetwork prefix_;
+  folly::CIDRNetwork const prefix_;
 
   // prefix area
-  std::string prefixArea_;
+  std::string const prefixArea_;
 
-  // prefix key string
-  std::string prefixKeyString_;
+  // key string used for KvStore
+  std::string const prefixKeyString_;
 };
 
 } // namespace openr
