@@ -613,11 +613,13 @@ thrift::PrefixDatabase
 createPrefixDb(
     const std::string& nodeName,
     const std::vector<thrift::PrefixEntry>& prefixEntries,
-    const std::string& area) {
+    const std::string& area,
+    bool withdraw) {
   thrift::PrefixDatabase prefixDb;
   *prefixDb.thisNodeName_ref() = nodeName;
   *prefixDb.prefixEntries_ref() = prefixEntries;
   prefixDb.area_ref() = area;
+  prefixDb.set_deletePrefix(withdraw);
   return prefixDb;
 }
 
@@ -683,24 +685,39 @@ createThriftValueWithoutBinaryValue(const thrift::Value& val) {
   return updatedVal;
 }
 
-/**
- * Utility function to create `key, value` pair for updating route in KvStore
- */
+std::pair<PrefixKey, thrift::PrefixDatabase>
+createPrefixKeyAndDb(
+    const std::string& nodeName,
+    const thrift::PrefixEntry& prefixEntry,
+    const std::string& area,
+    bool withdraw) {
+  return {PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix_ref()), area),
+          createPrefixDb(nodeName, {prefixEntry}, area, withdraw)};
+}
+
 std::pair<std::string, thrift::Value>
 createPrefixKeyValue(
     const std::string& nodeName,
     const int64_t version,
     const thrift::PrefixEntry& prefixEntry,
-    const std::string& area) {
-  auto prefixDb = createPrefixDb(nodeName, {prefixEntry}, area);
-  auto prefixKey =
-      PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix_ref()), area)
-          .getPrefixKey();
-
+    const std::string& area,
+    bool withdraw) {
   apache::thrift::CompactSerializer serializer;
-  return {prefixKey,
+  auto [key, db] = createPrefixKeyAndDb(nodeName, prefixEntry, area, withdraw);
+  return {key.getPrefixKey(),
           createThriftValue(
-              version, nodeName, writeThriftObjStr(prefixDb, serializer))};
+              version, nodeName, writeThriftObjStr(std::move(db), serializer))};
+}
+
+std::pair<std::string, thrift::Value>
+createPrefixKeyValue(
+    const std::string& nodeName,
+    const int64_t version,
+    thrift::IpPrefix const& prefix,
+    const std::string& area,
+    bool withdraw) {
+  return createPrefixKeyValue(
+      nodeName, version, createPrefixEntry(prefix), area, withdraw);
 }
 
 thrift::Publication

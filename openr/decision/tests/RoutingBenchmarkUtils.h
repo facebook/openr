@@ -29,9 +29,14 @@
  * benchmarking and passes a parameter to another one. This is common for
  * benchmarks that need a "problem size" in addition to "number of iterations".
  */
-#define BENCHMARK_COUNTERS_PARAM(name, counters, size, forwarding) \
-  BENCHMARK_COUNTERS_NAME_PARAM(                                   \
-      name, counters, FB_CONCATENATE(size, forwarding), size, forwarding)
+#define BENCHMARK_COUNTERS_PARAM(name, counters, size, forwarding, prefixNum) \
+  BENCHMARK_COUNTERS_NAME_PARAM(                                              \
+      name,                                                                   \
+      counters,                                                               \
+      FB_CONCATENATE(FB_CONCATENATE(size, forwarding), prefixNum),            \
+      size,                                                                   \
+      forwarding,                                                             \
+      prefixNum)
 
 /*
  * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
@@ -133,31 +138,6 @@ class DecisionWrapper {
         0 /* hash */);
   }
 
-  thrift::Value
-  createPrefixValue(
-      const std::string& nodeId,
-      int64_t version,
-      const std::vector<thrift::IpPrefix>& prefixes,
-      thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
-    std::vector<thrift::PrefixEntry> prefixEntries;
-    for (const auto& prefix : prefixes) {
-      prefixEntries.emplace_back(createPrefixEntry(prefix));
-      prefixEntries.back().forwardingAlgorithm_ref() = forwardingAlgorithm;
-      if (thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
-          forwardingAlgorithm) {
-        prefixEntries.back().forwardingType_ref() =
-            thrift::PrefixForwardingType::SR_MPLS;
-      }
-    }
-    return createThriftValue(
-        version,
-        "originator-1",
-        writeThriftObjStr(createPrefixDb(nodeId, prefixEntries), serializer),
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-  }
-
   // publish routeDb
   void
   sendKvPublication(const thrift::Publication& publication) {
@@ -220,14 +200,33 @@ std::string getNodeName(
 void accumulatePerfTimes(
     const thrift::PerfEvents& perfEvents, std::vector<uint64_t>& processTimes);
 
-// Send adjacencies update to decision and receive routes
+// Send kvstore update to decision and receive routes
 void sendRecvUpdate(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    thrift::Publication& newPub,
+    std::vector<uint64_t>& processTimes,
+    thrift::Publication& newPub);
+
+void sendRecvInitialUpdate(
+    std::shared_ptr<DecisionWrapper> const& decisionWrapper,
+    std::vector<uint64_t>& processTimes,
+    const std::string& nodeName,
+    std::unordered_map<std::string, thrift::AdjacencyDatabase>&& adjs,
+    std::unordered_map<std::string, thrift::PrefixDatabase>&& prefixes);
+
+// Send kvstore update for a given node's adjacency DB
+void sendRecvAdjUpdate(
+    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
+    std::vector<uint64_t>& processTimes,
     const std::string& nodeName,
     const std::vector<thrift::Adjacency>& adjs,
+    bool overloadBit);
+
+// Send kvstore update for a given node's prefox advertisement
+void sendRecvPrefixUpdate(
+    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::vector<uint64_t>& processTimes,
-    bool overloadBit = false);
+    const std::string& nodeName,
+    std::pair<PrefixKey, thrift::PrefixDatabase>&& keyDbPair);
 
 // Add an adjacency to node
 inline void createAdjacencyEntry(
@@ -266,8 +265,10 @@ inline std::vector<thrift::Adjacency> createGridAdjacencys(
     const int row, const int col, const uint32_t n);
 
 // Create a grid topology
-thrift::Publication createGrid(
-    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
+std::pair<
+    std::unordered_map<std::string, thrift::AdjacencyDatabase>,
+    std::unordered_map<std::string, thrift::PrefixDatabase>>
+createGrid(
     const int n,
     const int numPrefixes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
@@ -338,6 +339,16 @@ void updateRandomFabricAdjs(
 
 //
 // Choose a random nodeId for update or revert the last updated nodeId:
+// toggle it's advertisement of default route
+//
+void updateRandomGridPrefixes(
+    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
+    std::optional<std::pair<int, int>>& selectedNode,
+    const int n,
+    std::vector<uint64_t>& processTimes);
+
+//
+// Choose a random nodeId for update or revert the last updated nodeId:
 // toggle it's overload bit in AdjacencyDb
 //
 void updateRandomGridAdjs(
@@ -356,14 +367,29 @@ void insertUserCounters(
     std::optional<thrift::PrefixForwardingAlgorithm> forwardingAlgorithm);
 
 //
-// Benchmark test for grid topology
+// Benchmark tests for grid topology
 //
-void BM_DecisionGrid(
+
+void BM_DecisionGridInitialUpdate(
     folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfSws,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
-    uint32_t numberOfPrefixes = 1);
+    uint32_t numberOfPrefixes);
+
+void BM_DecisionGridPrefixUpdates(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfSws,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    uint32_t numberOfPrefixes);
+
+void BM_DecisionGridAdjUpdates(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfSws,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    uint32_t numberOfPrefixes);
 
 //
 // Benchmark test for fabric topology.
@@ -372,7 +398,8 @@ void BM_DecisionFabric(
     folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfSws,
-    thrift::PrefixForwardingAlgorithm /* TODO use this */);
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    uint32_t numberOfPrefixes = 1);
 
 const auto SP_ECMP = thrift::PrefixForwardingAlgorithm::SP_ECMP;
 const auto KSP2_ED_ECMP = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;

@@ -310,7 +310,8 @@ thrift::AdjacencyDatabase createAdjDb(
 thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,
     const std::vector<thrift::PrefixEntry>& prefixEntries = {},
-    const std::string& area = kTestingAreaName);
+    const std::string& area = kTestingAreaName,
+    bool withdraw = false);
 
 thrift::PrefixEntry createPrefixEntry(
     thrift::IpPrefix prefix,
@@ -334,14 +335,28 @@ thrift::Value createThriftValue(
 thrift::Value createThriftValueWithoutBinaryValue(const thrift::Value& val);
 
 /**
- * Utility function to create `key, value` pair for updating route advertisement
- * in KvStore
+ * Utility functions to create `key, value` pairs for updating route
+ * advertisement in KvStore
  */
+std::pair<PrefixKey, thrift::PrefixDatabase> createPrefixKeyAndDb(
+    const std::string& nodeName,
+    const thrift::PrefixEntry& prefixEntry,
+    const std::string& area = kTestingAreaName,
+    bool withdraw = false);
+
 std::pair<std::string, thrift::Value> createPrefixKeyValue(
     const std::string& nodeName,
     const int64_t version,
     const thrift::PrefixEntry& prefixEntry,
-    const std::string& area);
+    const std::string& area = kTestingAreaName,
+    bool withdraw = false);
+
+std::pair<std::string, thrift::Value> createPrefixKeyValue(
+    const std::string& nodeName,
+    const int64_t version,
+    thrift::IpPrefix const& prefix,
+    const std::string& area = kTestingAreaName,
+    bool withdraw = false);
 
 thrift::Publication createThriftPublication(
     const std::unordered_map<std::string, thrift::Value>& kv,

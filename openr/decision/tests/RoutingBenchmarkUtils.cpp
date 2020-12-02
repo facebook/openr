@@ -48,35 +48,103 @@ nodeToPrefixV6(const uint32_t nodeId) {
   return folly::sformat(
       "fc00:{}::{}/128", toHex(nodeId >> 16), toHex(nodeId & 0xffff));
 }
+
 // Send adjacencies update to decision and receive routes
 void
 sendRecvUpdate(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    thrift::Publication& newPub,
-    const std::string& nodeName,
-    const std::vector<thrift::Adjacency>& adjs,
     std::vector<uint64_t>& processTimes,
-    bool overloadBit) {
-  // Add perfevent
+    thrift::Publication& pub) {
+  decisionWrapper->sendKvPublication(pub);
+
+  // Receive route update from Decision
+  auto routes = decisionWrapper->recvMyRouteDb();
+
+  // Extract time from perfevent and accumulate processing time
+  if (routes.perfEvents.has_value()) {
+    accumulatePerfTimes(routes.perfEvents.value(), processTimes);
+  }
+}
+
+void
+sendRecvInitialUpdate(
+    std::shared_ptr<DecisionWrapper> const& decisionWrapper,
+    std::vector<uint64_t>& processTimes,
+    const std::string& nodeName,
+    std::unordered_map<std::string, thrift::AdjacencyDatabase>&& adjDbs,
+    std::unordered_map<std::string, thrift::PrefixDatabase>&& prefixDbs) {
   thrift::PerfEvents perfEvents;
   addPerfEvent(perfEvents, nodeName, "DECISION_INIT_UPDATE");
 
-  // Add adjs to publication
-  (*newPub.keyVals_ref())[folly::sformat("adj:{}", nodeName)] =
-      decisionWrapper->createAdjValue(
-          nodeName, 2, adjs, std::move(perfEvents), overloadBit);
-
-  LOG(INFO) << "Advertising adj update";
-  decisionWrapper->sendKvPublication(newPub);
-
-  // Receive route update from Decision
-  auto routes2 = decisionWrapper->recvMyRouteDb();
-
-  // Extract time from perfevent and accumulate processing time
-  if (routes2.perfEvents.has_value()) {
-    accumulatePerfTimes(routes2.perfEvents.value(), processTimes);
+  std::unordered_map<std::string, thrift::Value> keyVals;
+  apache::thrift::CompactSerializer serializer;
+  for (auto& [key, adjDb] : adjDbs) {
+    adjDb.set_perfEvents(perfEvents);
+    keyVals.emplace(
+        key,
+        createThriftValue(
+            1,
+            adjDb.get_thisNodeName(),
+            writeThriftObjStr(std::move(adjDb), serializer)));
   }
+  for (auto& [key, prefixDb] : prefixDbs) {
+    prefixDb.set_perfEvents(perfEvents);
+    keyVals.emplace(
+        key,
+        createThriftValue(
+            1,
+            prefixDb.get_thisNodeName(),
+            writeThriftObjStr(std::move(prefixDb), serializer)));
+  }
+
+  thrift::Publication pub;
+  pub.set_area(kTestingAreaName);
+  pub.set_keyVals(std::move(keyVals));
+  sendRecvUpdate(decisionWrapper, processTimes, pub);
 }
+
+// Send adjacencies update to decision and receive routes
+void
+sendRecvAdjUpdate(
+    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
+    std::vector<uint64_t>& processTimes,
+    const std::string& nodeName,
+    const std::vector<thrift::Adjacency>& adjs,
+    bool overloadBit) {
+  LOG(INFO) << "Advertising adj update";
+  thrift::Publication pub;
+  pub.set_area(kTestingAreaName);
+  thrift::PerfEvents perfEvents;
+  addPerfEvent(perfEvents, nodeName, "DECISION_ADJ_UPDATE");
+
+  pub.set_keyVals(
+      {{folly::sformat("adj:{}", nodeName),
+        decisionWrapper->createAdjValue(
+            nodeName, 2, adjs, std::move(perfEvents), overloadBit)}});
+  sendRecvUpdate(decisionWrapper, processTimes, pub);
+}
+
+void
+sendRecvPrefixUpdate(
+    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
+    std::vector<uint64_t>& processTimes,
+    const std::string& nodeName,
+    std::pair<PrefixKey, thrift::PrefixDatabase>&& keyDbPair) {
+  thrift::PerfEvents perfEvents;
+  addPerfEvent(perfEvents, nodeName, "DECISION_INIT_UPDATE");
+  keyDbPair.second.set_perfEvents(std::move(perfEvents));
+  apache::thrift::CompactSerializer serializer;
+  thrift::Publication pub;
+  pub.set_area(kTestingAreaName);
+  pub.set_keyVals(
+      {{keyDbPair.first.getPrefixKey(),
+        createThriftValue(
+            1,
+            nodeName,
+            writeThriftObjStr(std::move(keyDbPair.second), serializer))}});
+  sendRecvUpdate(decisionWrapper, processTimes, pub);
+}
+
 // Add an adjacency to node
 inline void
 createAdjacencyEntry(
@@ -201,15 +269,17 @@ createGridAdjacencys(const int row, const int col, const uint32_t n) {
 }
 
 // Create a grid topology
-thrift::Publication
+std::pair<
+    std::unordered_map<std::string, thrift::AdjacencyDatabase>,
+    std::unordered_map<std::string, thrift::PrefixDatabase>>
 createGrid(
-    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     const int n,
     const int numPrefixes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
   LOG(INFO) << "grid: " << n << " by " << n;
   LOG(INFO) << " number of prefixes " << numPrefixes;
-  thrift::Publication initialPub;
+  std::unordered_map<std::string, thrift::AdjacencyDatabase> adjDbs;
+  std::unordered_map<std::string, thrift::PrefixDatabase> prefixDbs;
 
   // Grid topology
   for (int row = 0; row < n; ++row) {
@@ -218,25 +288,28 @@ createGrid(
       auto nodeName = folly::sformat("{}", nodeId);
       // Add adjs
       auto adjs = createGridAdjacencys(row, col, n);
-      (*initialPub.keyVals_ref())
-          .emplace(
-              folly::sformat("adj:{}", nodeName),
-              decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
+      adjDbs.emplace(
+          folly::sformat("adj:{}", nodeName),
+          createAdjDb(nodeName, adjs, nodeId));
 
       // prefixes
-      std::vector<thrift::IpPrefix> prefixes;
       for (int i = 0; i < numPrefixes; i++) {
-        prefixes.push_back(toIpPrefix(nodeToPrefixV6(nodeId + i)));
+        auto [key, db] = createPrefixKeyAndDb(
+            nodeName,
+            createPrefixEntry(
+                toIpPrefix(nodeToPrefixV6(nodeId + i)),
+                thrift::PrefixType::LOOPBACK,
+                "",
+                thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
+                        forwardingAlgorithm
+                    ? thrift::PrefixForwardingType::SR_MPLS
+                    : thrift::PrefixForwardingType::IP,
+                forwardingAlgorithm));
+        prefixDbs.emplace(key.getPrefixKey(), std::move(db));
       }
-
-      (*initialPub.keyVals_ref())
-          .emplace(
-              folly::sformat("prefix:{}", nodeName),
-              decisionWrapper->createPrefixValue(
-                  nodeName, 1, prefixes, forwardingAlgorithm));
     }
   }
-  return initialPub;
+  return std::make_pair(std::move(adjDbs), std::move(prefixDbs));
 }
 
 /**
@@ -361,6 +434,7 @@ createFabric(
     const int numOfRswsPerPod) {
   LOG(INFO) << "Pods number: " << numOfPods;
   thrift::Publication initialPub;
+  initialPub.set_area(kTestingAreaName);
 
   // ssw: each ssw connects to one fsw of each pod
   auto numOfPlanes = numOfFswsPerPod;
@@ -411,8 +485,6 @@ updateRandomFabricAdjs(
     const int numOfFswsPerPod,
     const int numOfRswsPerPod,
     std::vector<uint64_t>& processTimes) {
-  thrift::Publication newPub;
-
   // Choose a random pod
   auto podId = selectedNode.has_value() ? selectedNode.value().first
                                         : folly::Random::rand32() % numOfPods;
@@ -442,8 +514,8 @@ updateRandomFabricAdjs(
       : std::optional<std::pair<int, int>>(std::make_pair(podId, rswIdInPod));
 
   // Send the update to decision and receive the routes
-  sendRecvUpdate(
-      decisionWrapper, newPub, rwsNodeName, adjsRsw, processTimes, overloadBit);
+  sendRecvAdjUpdate(
+      decisionWrapper, processTimes, rwsNodeName, adjsRsw, overloadBit);
 }
 
 //
@@ -456,8 +528,6 @@ updateRandomGridAdjs(
     std::optional<std::pair<int, int>>& selectedNode,
     const int n,
     std::vector<uint64_t>& processTimes) {
-  thrift::Publication newPub;
-
   // If there has been an update, revert the update,
   // otherwise, choose a random nodeId for update
   auto row = selectedNode.has_value() ? selectedNode.value().first
@@ -474,8 +544,43 @@ updateRandomGridAdjs(
       : std::optional<std::pair<int, int>>(std::make_pair(row, col));
 
   // Send the update to decision and receive the routes
-  sendRecvUpdate(
-      decisionWrapper, newPub, nodeName, adjs, processTimes, overloadBit);
+  sendRecvAdjUpdate(decisionWrapper, processTimes, nodeName, adjs, overloadBit);
+}
+
+//
+// Choose a random nodeId for update or revert the last updated nodeId:
+// toggle it's advertisement of default route
+//
+void
+updateRandomGridPrefixes(
+    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
+    std::optional<std::pair<int, int>>& selectedNode,
+    const int n,
+    std::vector<uint64_t>& processTimes) {
+  // If there has been an update, revert the update,
+  // otherwise, choose a random nodeId for update
+  auto row = selectedNode.has_value() ? selectedNode.value().first
+                                      : folly::Random::rand32() % n;
+  auto col = selectedNode.has_value() ? selectedNode.value().second
+                                      : folly::Random::rand32() % n;
+
+  auto nodeName = folly::sformat("{}", row * n + col);
+  // withdraw this iteration if we advertised in the last
+  bool withdraw = selectedNode.has_value();
+  auto keyDbPair = createPrefixKeyAndDb(
+      nodeName,
+      createPrefixEntry(toIpPrefix("::/0")),
+      kTestingAreaName,
+      withdraw);
+
+  // Record the updated nodeId
+  selectedNode = selectedNode.has_value()
+      ? std::nullopt
+      : std::optional<std::pair<int, int>>(std::make_pair(row, col));
+
+  // Send the update to decision and receive the routes
+  sendRecvPrefixUpdate(
+      decisionWrapper, processTimes, nodeName, std::move(keyDbPair));
 }
 
 //
@@ -493,29 +598,64 @@ insertUserCounters(
   }
 
   // Add customized counters to state.
-  counters["adj_receive"] = processTimes[0];
+  counters["pub_received"] = processTimes.at(0);
+  counters["decision_debounce"] = processTimes.at(1);
 
   // Counter for spf is for regular benchmark output
-  counters["spf"] = processTimes[2];
+  counters["spf"] = processTimes.at(2);
   if (forwardingAlgorithm.has_value()) {
     CHECK(
         forwardingAlgorithm.value() == SP_ECMP ||
         forwardingAlgorithm.value() == KSP2_ED_ECMP);
 
     if (forwardingAlgorithm.value() == SP_ECMP) {
-      counters["openr.rib_computation.benchmark_spf.time_ms"] = processTimes[2];
+      counters["openr.rib_computation.benchmark_spf.time_ms"] =
+          processTimes.at(2);
     } else {
       counters["openr.rib_computation.benchmark_kspf.time_ms"] =
-          processTimes[2];
+          processTimes.at(2);
     }
   }
 }
 
-//
-// Benchmark test for grid topology
-//
 void
-BM_DecisionGrid(
+BM_DecisionGridInitialUpdate(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfSws,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    uint32_t numberOfPrefixes) {
+  auto suspender = folly::BenchmarkSuspender();
+  const std::string nodeName{"1"};
+  int n = std::sqrt(numOfSws);
+  auto [adjs, prefixes] = createGrid(n, numberOfPrefixes, forwardingAlgorithm);
+
+  //
+  // Customized time counter
+  // processTimes[0] is the time of sending adjDB from Kvstore (simulated) to
+  // Decision, processTimes[1] is the time of debounce, and processTimes[2] is
+  // the time of spf solver
+  //
+  std::vector<uint64_t> intitalProcessTimes{0, 0, 0};
+  suspender.dismiss(); // Start measuring benchmark time
+  for (uint32_t i = 0; i < iters; i++) {
+    auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
+    sendRecvInitialUpdate(
+        decisionWrapper,
+        intitalProcessTimes,
+        nodeName,
+        std::move(adjs),
+        std::move(prefixes));
+  }
+  suspender.rehire(); // Stop measuring time again
+
+  counters["initial_pub_till_route_build"] =
+      (intitalProcessTimes.at(0) + intitalProcessTimes.at(1)) / iters;
+  counters["initial_route_build"] = intitalProcessTimes.at(2) / iters;
+}
+
+void
+BM_DecisionGridAdjUpdates(
     folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfSws,
@@ -525,32 +665,64 @@ BM_DecisionGrid(
   const std::string nodeName{"1"};
   auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
   int n = std::sqrt(numOfSws);
-  auto initialPub =
-      createGrid(decisionWrapper, n, numberOfPrefixes, forwardingAlgorithm);
+  auto [adjs, prefixes] = createGrid(n, numberOfPrefixes, forwardingAlgorithm);
 
-  //
-  // Publish initial link state info to KvStore, This should trigger the
-  // SPF run.
-  //
-  decisionWrapper->sendKvPublication(initialPub);
+  std::vector<uint64_t> intitalProcessTimes{0, 0, 0};
 
-  // Receive RouteUpdate from Decision
-  decisionWrapper->recvMyRouteDb();
+  sendRecvInitialUpdate(
+      decisionWrapper,
+      intitalProcessTimes,
+      nodeName,
+      std::move(adjs),
+      std::move(prefixes));
 
   // Record the updated nodeId
   std::optional<std::pair<int, int>> selectedNode = std::nullopt;
-  //
-  // Customized time counter
-  // processTimes[0] is the time of sending adjDB from Kvstore (simulated) to
-  // Decision, processTimes[1] is the time of debounce, and processTimes[2] is
-  // the time of spf solver
-  //
   std::vector<uint64_t> processTimes{0, 0, 0};
+
   suspender.dismiss(); // Start measuring benchmark time
 
   for (uint32_t i = 0; i < iters; i++) {
     // Advertise adj update. This should trigger the SPF run.
     updateRandomGridAdjs(decisionWrapper, selectedNode, n, processTimes);
+  }
+
+  suspender.rehire(); // Stop measuring time again
+  // Insert processTimes as user counters
+  insertUserCounters(counters, iters, processTimes, forwardingAlgorithm);
+}
+
+void
+BM_DecisionGridPrefixUpdates(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfSws,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    uint32_t numberOfPrefixes) {
+  auto suspender = folly::BenchmarkSuspender();
+  const std::string nodeName{"1"};
+  auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
+  int n = std::sqrt(numOfSws);
+  auto [adjs, prefixes] = createGrid(n, numberOfPrefixes, forwardingAlgorithm);
+
+  std::vector<uint64_t> intitalProcessTimes{0, 0, 0};
+
+  sendRecvInitialUpdate(
+      decisionWrapper,
+      intitalProcessTimes,
+      nodeName,
+      std::move(adjs),
+      std::move(prefixes));
+
+  // Record the updated nodeId
+  std::optional<std::pair<int, int>> selectedNode = std::nullopt;
+  std::vector<uint64_t> processTimes{0, 0, 0};
+
+  suspender.dismiss(); // Start measuring benchmark time
+
+  for (uint32_t i = 0; i < iters; i++) {
+    // Advertise prefix update. This should trigger route recalc for the prefix
+    updateRandomGridPrefixes(decisionWrapper, selectedNode, n, processTimes);
   }
 
   suspender.rehire(); // Stop measuring time again
@@ -566,7 +738,10 @@ BM_DecisionFabric(
     folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfSws,
-    thrift::PrefixForwardingAlgorithm /* TODO use this */) {
+    // TODO: allow for variance in forwadrting algo and number of prefixes
+    // per node
+    thrift::PrefixForwardingAlgorithm /* forwardingAlgorithm */,
+    uint32_t /* numberOfPrefixes */) {
   auto suspender = folly::BenchmarkSuspender();
   const std::string nodeName = folly::sformat("{}-{}", kFswMarker, "0-0");
   auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
@@ -575,8 +750,8 @@ BM_DecisionFabric(
   const int numOfSswsPerPlane = kNumOfSswsPerPlane;
   const int numOfPlanes = numOfFswsPerPod;
 
-  // Check the total number of switches is no smaller than (the number of ssws +
-  // the number of switches in one pod)
+  // Check the total number of switches is no smaller than (the number of ssws
+  // + the number of switches in one pod)
   CHECK_LE(
       numOfPlanes * numOfSswsPerPlane + numOfFswsPerPod + numOfRswsPerPod,
       numOfSws);
