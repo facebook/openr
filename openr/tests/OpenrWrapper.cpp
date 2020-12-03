@@ -176,6 +176,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       peerUpdatesQueue_,
       logSampleQueue_,
       neighborUpdatesQueue_.getReader(),
+      kvStoreSyncEventsQueue_.getReader(),
       nlSock_->getReader(),
       false, /* assumeDrained */
       false, /* overrideDrainState */

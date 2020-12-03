@@ -69,6 +69,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
+    messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool assumeDrained,
     bool overrideDrainState,
@@ -215,8 +216,19 @@ LinkMonitor::LinkMonitor(
     }
   });
 
-  // TODO: Add fiber to process KvStore InitialSync events
-  // processKvStoreSyncEvent();
+  // Add fiber to process KvStore Sync events
+  addFiberTask(
+      [q = std::move(kvStoreSyncEventsQueue), this]() mutable noexcept {
+        while (true) {
+          auto maybeEvent = q.get();
+          if (maybeEvent.hasError()) {
+            LOG(INFO)
+                << "Terminating kvstore peer sync events processing fiber";
+            break;
+          }
+          processKvStoreSyncEvent(std::move(maybeEvent).value());
+        }
+      });
 
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
   interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -335,17 +347,22 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   CHECK(not repUrl.empty()) << "Got empty repUrl";
   CHECK(not peerAddr.empty()) << "Got empty peerAddr";
 
-  // two cases upon this event:
-  // 1) the min interface changes: the previous min interface's connection will
-  // be overridden by KvStoreClientInternal, thus no need to explicitly remove
-  // it 2) does not change: the existing connection to a neighbor is retained
-  auto peerSpec = createPeerSpec(repUrl, peerAddr, openrCtrlThriftPort);
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
-  adjacencies_[adjId] =
-      AdjacencyValue(area, peerSpec, std::move(newAdj), false);
+  const auto& oldAdj = adjacencies_.find(adjId);
+  // Record GR status of old adj, new KvStore Sync event will reset this field.
+  bool isRestarting{false};
+  if (oldAdj != adjacencies_.end() and oldAdj->second.isRestarting) {
+    isRestarting = true;
+  }
 
-  // Advertise KvStore peers immediately
-  advertiseKvStorePeers(area, {{remoteNodeName, peerSpec}});
+  adjacencies_[adjId] = AdjacencyValue(
+      area,
+      createPeerSpec(repUrl, peerAddr, openrCtrlThriftPort),
+      std::move(newAdj),
+      isRestarting);
+
+  // update kvstore peer
+  updateKvStorePeerNeighborUp(area, adjId, adjacencies_[adjId]);
 
   // Advertise new adjancies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -364,12 +381,19 @@ LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
 
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
   auto adjValueIt = adjacencies_.find(adjId);
-  if (adjValueIt != adjacencies_.end()) {
-    // remove such adjacencies
-    adjacencies_.erase(adjValueIt);
+
+  // invalid adj, ignore
+  if (adjValueIt == adjacencies_.end()) {
+    return;
   }
-  // advertise both peers and adjacencies
-  advertiseKvStorePeers(area);
+
+  // update KvStore Peer
+  updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second);
+
+  // remove such adjacencies
+  adjacencies_.erase(adjValueIt);
+
+  // advertise adjacencies
   advertiseAdjacencies(area);
 }
 
@@ -385,13 +409,19 @@ LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
   fb303::fbData->addStatValue(
       "link_monitor.neighbor_restarting", 1, fb303::SUM);
 
-  // update adjacencies_ restarting-bit and advertise peers
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
   auto adjValueIt = adjacencies_.find(adjId);
-  if (adjValueIt != adjacencies_.end()) {
-    adjValueIt->second.isRestarting = true;
+
+  // invalid adj, ignore
+  if (adjValueIt == adjacencies_.end()) {
+    return;
   }
-  advertiseKvStorePeers(area);
+
+  // update adjacencies_ restarting-bit and advertise peers
+  adjValueIt->second.isRestarting = true;
+
+  // update KvStore Peer
+  updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second);
 }
 
 void
@@ -414,128 +444,159 @@ LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighborEvent& event) {
   }
 }
 
-std::unordered_map<std::string, thrift::PeerSpec>
-LinkMonitor::getPeersFromAdjacencies(
-    const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
-    const std::string& area) {
-  std::unordered_map<std::string, std::string> neighborToIface;
-  for (const auto& [adjKey, adjValue] : adjacencies) {
-    if (adjValue.area != area or adjValue.isRestarting) {
-      continue;
-    }
-    const auto& nodeName = adjKey.first;
-    const auto& iface = adjKey.second;
+void
+LinkMonitor::processKvStoreSyncEvent(KvStoreSyncEvent&& event) {
+  const auto& nodeName = event.nodeName;
+  const auto& area = event.area;
 
-    // Look up for node
-    auto it = neighborToIface.find(nodeName);
-    if (it == neighborToIface.end()) {
-      // Add nbr-iface if not found
-      neighborToIface.emplace(nodeName, iface);
-    } else if (it->second > iface) {
-      // Update iface if it is smaller (minimum interface)
-      it->second = iface;
+  const auto& areaPeers = peers_.find(area);
+  // ignore invalid initial sync events
+  if (areaPeers == peers_.end()) {
+    return;
+  }
+
+  const auto& peerVal = areaPeers->second.find(nodeName);
+  // spark neighbor down events erased this peer, nothing to do
+  if (peerVal == areaPeers->second.end()) {
+    return;
+  }
+
+  // parallel link caused KvStore Peer session re-establishment
+  // no need to refresh initialSynced state.
+  if (peerVal->second.initialSynced) {
+    return;
+  }
+
+  // set initialSynced = true, promote neighbor's adj up events
+  peerVal->second.initialSynced = true;
+
+  SYSLOG(INFO) << "Neighbor " << nodeName << " finished Initial Sync "
+               << ", area: " << area << ". Promoting Adjacency UP events.";
+
+  // update adjacency status
+  for (const auto& adjId : peerVal->second.establishedSparkNeighbors) {
+    auto it = adjacencies_.find(adjId);
+    if (it != adjacencies_.end()) {
+      // kvstore sync is done, exit GR mode
+      if (it->second.isRestarting) {
+        LOG(INFO) << "Neighbor " << adjId.first << " on interface "
+                  << adjId.second << " exiting GR successfully";
+        it->second.isRestarting = false;
+      }
     }
   }
 
-  std::unordered_map<std::string, thrift::PeerSpec> peers;
-  for (const auto& kv : neighborToIface) {
-    peers.emplace(kv.first, adjacencies.at(kv).peerSpec);
-  }
-  return peers;
+  advertiseAdjacenciesThrottled_->operator()();
 }
 
 void
-LinkMonitor::advertiseKvStorePeers(
+LinkMonitor::updateKvStorePeerNeighborUp(
     const std::string& area,
-    const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
-  // Prepare peer update request
+    const AdjacencyKey& adjId,
+    const AdjacencyValue& adjVal) {
+  const auto& remoteNodeName = adjId.first;
+
+  // update kvstore peers
+  auto areaPeers = peers_.find(area);
+  if (areaPeers == peers_.end()) {
+    areaPeers =
+        peers_
+            .emplace(area, std::unordered_map<std::string, KvStorePeerValue>())
+            .first;
+  }
+
+  auto peerVal = areaPeers->second.find(remoteNodeName);
+  // kvstore peer exists, no need to refresh KvStore session
+  if (peerVal != areaPeers->second.end()) {
+    // update established adjs
+    peerVal->second.establishedSparkNeighbors.emplace(adjId);
+    return;
+  }
+
+  // create new KvStore Peer struct if it's first adj up
+  areaPeers->second.emplace(
+      remoteNodeName, KvStorePeerValue(adjVal.peerSpec, false, {adjId}));
+  // Advertise KvStore peers immediately
+  thrift::PeerAddParams params;
+  params.peers_ref()->emplace(remoteNodeName, adjVal.peerSpec);
+  logPeerEvent("ADD_PEER", remoteNodeName, adjVal.peerSpec);
+
   thrift::PeerUpdateRequest req;
   *req.area_ref() = area;
-
-  // Get old and new peer list. Also update local state
-  const auto oldPeers = std::move(peers_[area]);
-  const auto newPeers = getPeersFromAdjacencies(adjacencies_, area);
-
-  // Get list of peers to delete
-  std::vector<std::string> toDelPeers;
-  for (const auto& [nodeName, peer] : oldPeers) {
-    if (newPeers.find(nodeName) == newPeers.end()) {
-      toDelPeers.emplace_back(nodeName);
-      logPeerEvent("DEL_PEER", nodeName, peer.tPeerSpec);
-    }
-  }
-
-  // Delete old peers
-  if (toDelPeers.size() > 0) {
-    thrift::PeerDelParams params;
-    *params.peerNames_ref() = std::move(toDelPeers);
-    req.peerDelParams_ref() = std::move(params);
-  }
-
-  // Get list of peers to add
-  std::unordered_map<std::string, thrift::PeerSpec> toAddPeers;
-  for (const auto& [nodeName, peerSpec] : newPeers) {
-    const auto& oldPeerVal = oldPeers.find(nodeName);
-
-    // In parallel link case, inherit previous kvstore sync state
-    // TODO: We should just reserve previous KvStore Peer, instead of getting
-    // PeerSpec with smallest name
-    // There can only be one kvstore session with a remote node, no need to
-    // pull down existing kvstore session with new spec. This causes extra
-    // initial syncs.
-    bool initialSynced =
-        oldPeerVal == oldPeers.end() ? false : oldPeerVal->second.initialSynced;
-
-    peers_[area].emplace(nodeName, KvStorePeerValue(peerSpec, initialSynced));
-
-    // if old peer spec is same as new peer spec, skip
-    if (oldPeerVal != oldPeers.end() &&
-        oldPeerVal->second.tPeerSpec == peerSpec) {
-      continue;
-    }
-
-    // send out peer-add to kvstore if
-    // 1. it's a new peer (not exist in old-peers)
-    // 2. old-peer but peer-spec changed (e.g parallel link case)
-    toAddPeers.emplace(nodeName, peerSpec);
-    logPeerEvent("ADD_PEER", nodeName, peerSpec);
-  }
-
-  for (const auto& [name, spec] : upPeers) {
-    // upPeer MUST already be in current state peers_
-    CHECK(peers_.at(area).count(name));
-
-    if (toAddPeers.count(name)) {
-      // already added, skip it
-      continue;
-    }
-    if (spec != peers_.at(area).at(name).tPeerSpec) {
-      // spec does not match, skip it
-      continue;
-    }
-    toAddPeers.emplace(name, spec);
-  }
-
-  // Add new peers
-  if (toAddPeers.size() > 0) {
-    thrift::PeerAddParams params;
-    *params.peers_ref() = std::move(toAddPeers);
-    req.peerAddParams_ref() = std::move(params);
-  }
-
-  if (req.peerDelParams_ref().has_value() ||
-      req.peerAddParams_ref().has_value()) {
-    peerUpdatesQueue_.push(std::move(req));
-  }
+  req.peerAddParams_ref() = std::move(params);
+  peerUpdatesQueue_.push(std::move(req));
 }
 
 void
-LinkMonitor::advertiseKvStorePeers(
-    const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
-  // Get old and new peer list. Also update local state
-  for (const auto& [areaId, _] : areas_) {
-    advertiseKvStorePeers(areaId, upPeers);
+LinkMonitor::updateKvStorePeerNeighborDown(
+    const std::string& area,
+    const AdjacencyKey& adjId,
+    const AdjacencyValue& adjVal) {
+  const auto& remoteNodeName = adjId.first;
+
+  // find kvstore peer for adj
+  const auto& areaPeers = peers_.find(area);
+  if (areaPeers == peers_.end()) {
+    LOG(WARNING) << "No previous established KvStorePeer found for neighbor "
+                 << remoteNodeName
+                 << ". Skip updateKvStorePeer for interface down event on "
+                 << adjId.second;
+    return;
   }
+  const auto& peerVal = areaPeers->second.find(remoteNodeName);
+  if (peerVal == areaPeers->second.end()) {
+    LOG(WARNING) << "No previous established KvStorePeer found for neighbor "
+                 << remoteNodeName
+                 << ". Skip updateKvStorePeer for interface down event on "
+                 << adjId.second;
+    return;
+  }
+
+  // get handler of peer to update internal fields
+  auto& peer = peerVal->second;
+
+  // remove neighbor from establishedSparkNeighbors list
+  peer.establishedSparkNeighbors.erase(adjId);
+
+  // send peer delete request if all spark session is down for this neighbor
+  if (peer.establishedSparkNeighbors.empty()) {
+    thrift::PeerDelParams params;
+    *params.peerNames_ref() = {remoteNodeName};
+    logPeerEvent("DEL_PEER", remoteNodeName, peer.tPeerSpec);
+
+    thrift::PeerUpdateRequest req;
+    *req.area_ref() = area;
+    req.peerDelParams_ref() = std::move(params);
+    peerUpdatesQueue_.push(std::move(req));
+
+    // remove kvstore peer from internal store.
+    areaPeers->second.erase(remoteNodeName);
+
+    return;
+  }
+
+  // If current KvStore tPeerSpec != this sparkNeighbor's peerSpec, no need to
+  // update peer spec, we are done.
+  if (adjVal.peerSpec != peer.tPeerSpec) {
+    return;
+  }
+
+  // Update tPeerSpec to peerSpec in remaining establishedSparkNeighbors.
+  // e.g. adj_1 up -> adj_1 peer spec is used in KvStore Peer
+  //      adj_2 up -> peer spec does not change
+  //      adj_1 down -> Now adj_2 will be the peer-spec being used to establish
+  peer.tPeerSpec =
+      adjacencies_.at(*peer.establishedSparkNeighbors.begin()).peerSpec;
+
+  // peer spec change, send peer add request
+  thrift::PeerAddParams params;
+  params.peers_ref()->emplace(remoteNodeName, peer.tPeerSpec);
+  logPeerEvent("ADD_PEER", remoteNodeName, peer.tPeerSpec);
+
+  thrift::PeerUpdateRequest req;
+  *req.area_ref() = area;
+  req.peerAddParams_ref() = std::move(params);
+  peerUpdatesQueue_.push(std::move(req));
 }
 
 void
@@ -717,11 +778,30 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
   *adjDb.area_ref() = area;
 
-  for (const auto& [_, adjValue] : adjacencies_) {
+  for (auto& [adjKey, adjValue] : adjacencies_) {
     // ignore unrelated area
     if (adjValue.area != area) {
       continue;
     }
+
+    // ignore adjs that are waiting first KvStore full sync
+    bool waitingInitialSync{true};
+
+    const auto& areaPeers = peers_.find(area);
+    if (areaPeers != peers_.end()) {
+      const auto& peerVal = areaPeers->second.find(adjKey.first);
+      // set waitingInitialSync false if peer has reached initial sync state
+      if (peerVal != areaPeers->second.end() && peerVal->second.initialSynced) {
+        waitingInitialSync = false;
+      }
+    }
+
+    // If adj is not in GR and it's waiting for kvstore sync,
+    // skip announcement
+    if (not adjValue.isRestarting && waitingInitialSync) {
+      continue;
+    }
+
     // NOTE: copy on purpose
     auto adj = folly::copy(adjValue.adjacency);
 
@@ -736,11 +816,11 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
         *adj.metric_ref());
 
     // Override metric with adj metric if it exists
-    thrift::AdjKey adjKey;
-    *adjKey.nodeName_ref() = *adj.otherNodeName_ref();
-    *adjKey.ifName_ref() = *adj.ifName_ref();
+    thrift::AdjKey tAdjKey;
+    *tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
+    *tAdjKey.ifName_ref() = *adj.ifName_ref();
     adj.metric_ref() = folly::get_default(
-        *state_.adjMetricOverrides_ref(), adjKey, *adj.metric_ref());
+        *state_.adjMetricOverrides_ref(), tAdjKey, *adj.metric_ref());
 
     adjDb.adjacencies_ref()->emplace_back(std::move(adj));
   }

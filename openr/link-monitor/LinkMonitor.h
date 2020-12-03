@@ -45,6 +45,7 @@ struct AdjacencyValue {
   thrift::Adjacency adjacency;
   bool isRestarting{false};
   std::string area{};
+
   AdjacencyValue() {}
   AdjacencyValue(
       std::string areaId,
@@ -59,14 +60,32 @@ struct AdjacencyValue {
 
 // KvStore Peer Value
 struct KvStorePeerValue {
+  // Current established KvStorePeer Spec, this usually is taken from the first
+  // established Spark Neighbor
   thrift::PeerSpec tPeerSpec;
+
   // one time flag set by KvStore Peer Initialized event
   // Only when a peer reaches initialSynced state, its adjancency UP events
   // can be announced to the network
   bool initialSynced{false};
 
-  KvStorePeerValue(thrift::PeerSpec tPeerSpec, bool initialSynced)
-      : tPeerSpec(std::move(tPeerSpec)), initialSynced(initialSynced) {}
+  // Established spark neighbors related to remoteNodeName. KvStore Peer State
+  // Machine is a continuation of Spark Neighbor State Machine, tracking spark
+  // neighbors here help us decide when to send ADD/DEL KvStorePeer request.
+  //
+  // * Notice this is different from Adjacencies.
+  // An Adjancency remains up when remote spark neighbor performs a graceful
+  // restart, but spark neighbor state is IDLE during neighbor restart. Here
+  // we only track spark neighbors in ESTABLISHED state.
+  std::unordered_set<AdjacencyKey> establishedSparkNeighbors;
+
+  KvStorePeerValue(
+      thrift::PeerSpec tPeerSpec,
+      bool initialSynced,
+      std::unordered_set<AdjacencyKey> establishedSparkNeighbors)
+      : tPeerSpec(std::move(tPeerSpec)),
+        initialSynced(initialSynced),
+        establishedSparkNeighbors(std::move(establishedSparkNeighbors)) {}
 };
 
 //
@@ -94,6 +113,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // consumer queue
       messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
+      messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will assume drained if no drain state is found in the
       // persitentStore
@@ -170,6 +190,11 @@ class LinkMonitor final : public OpenrEventBase {
   void neighborRttChangeEvent(const thrift::SparkNeighborEvent& event);
 
   /*
+   * [KvStore] initial sync event
+   */
+  void processKvStoreSyncEvent(KvStoreSyncEvent&& event);
+
+  /*
    * [Netlink Platform] related functions
    */
 
@@ -195,25 +220,25 @@ class LinkMonitor final : public OpenrEventBase {
 
   /*
    * [Kvstore] PEER UP/DOWN events sent to Kvstore over peerUpdatesQueue_
-   *
-   * Called upon spark neighbor events: up/down/restarting
    */
 
-  // derive current peer-spec info from current adjacencies_
-  // calculate delta and announce them to KvStore (peer add/remove) if any
-  //
-  // upPeers: a set of peers we just detected them UP.
-  // this covers the case where peer restarted, but we didn't detect restarting
-  // spark packet (e.g peer non-graceful-shutdown or all spark messages lost)
-  // in this case, the above delta will miss these peers, advertise them
-  // if peer-spec matches
-  void advertiseKvStorePeers(
+  // Called upon spark neighborUp events
+  // If there's only one adj for this peer, we create new KvStorePeerValue and
+  // send peer add requrest to KvStore. If there are established adjs, only
+  // update establishedSparkNeighbors in existing KvStorePeer struct
+  void updateKvStorePeerNeighborUp(
       const std::string& area,
-      const std::unordered_map<std::string, thrift::PeerSpec>& upPeers = {});
+      const AdjacencyKey& adjId,
+      const AdjacencyValue& adjVal);
 
-  // advertise to all areas
-  void advertiseKvStorePeers(
-      const std::unordered_map<std::string, thrift::PeerSpec>& upPeers = {});
+  // Called upon spark neighborRestarting, neighborDown events
+  // In single adj case, send KvStorePeer Delete Request.
+  // In parallel adj case, update peer spec with left adj peer spec, send
+  // KvStore Peer Add request if new peer spec is different.
+  void updateKvStorePeerNeighborDown(
+      const std::string& area,
+      const AdjacencyKey& adjId,
+      const AdjacencyValue& adjVal);
 
   /*
    * [Kvstore] Advertise my adjacencies_ (kvStoreClient_->persistKey)
