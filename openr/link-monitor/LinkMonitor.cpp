@@ -6,16 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
-#include <fbzmq/service/logging/LogSample.h>
-#include <folly/MapUtil.h>
-#include <folly/Memory.h>
 #include <folly/futures/Future.h>
-#include <folly/gen/Base.h>
-#include <folly/system/ThreadName.h>
-#include <thrift/lib/cpp/protocol/TProtocolTypes.h>
-#include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp/util/EnumUtils.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>

@@ -5,11 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "Fib.h"
-
 #include <fb303/ServiceData.h>
-#include <fbzmq/service/logging/LogSample.h>
-#include <folly/MapUtil.h>
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
@@ -17,6 +13,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/fib/Fib.h>
 
 namespace fb303 = facebook::fb303;
 
