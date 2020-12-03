@@ -16,6 +16,7 @@
 #include <folly/String.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/EventLogger.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 
@@ -1032,7 +1033,7 @@ KvStoreDb::logStateTransition(
     std::string const& peerName,
     KvStorePeerState oldState,
     KvStorePeerState newState) {
-  SYSLOG(INFO) << "State change: [" << toStr(oldState) << "] -> ["
+  SYSLOG(INFO) << EventTag() << "State change: [" << toStr(oldState) << "] -> ["
                << toStr(newState) << "] "
                << "for peer: " << peerName;
 }

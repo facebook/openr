@@ -9,6 +9,7 @@
 #include <folly/futures/Future.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/EventLogger.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
@@ -305,12 +306,12 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
       weight,
       remoteIfName);
 
-  SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is up on interface "
-               << localIfName << ". Remote Interface: " << remoteIfName
-               << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
-               << ", addrV4: " << toString(neighborAddrV4)
-               << ", addrV6: " << toString(neighborAddrV6)
-               << ", area: " << area;
+  SYSLOG(INFO)
+      << EventTag() << "Neighbor " << remoteNodeName << " is up on interface "
+      << localIfName << ". Remote Interface: " << remoteIfName
+      << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
+      << ", addrV4: " << toString(neighborAddrV4)
+      << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
   std::string repUrl{""};
@@ -357,8 +358,8 @@ LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
   const auto& localIfName = *info.localIfName_ref();
   const auto& area = *info.area_ref();
 
-  SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is down on interface "
-               << localIfName;
+  SYSLOG(INFO) << EventTag() << "Neighbor " << remoteNodeName
+               << " is down on interface " << localIfName;
   fb303::fbData->addStatValue("link_monitor.neighbor_down", 1, fb303::SUM);
 
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
@@ -379,7 +380,7 @@ LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
   const auto& localIfName = *info.localIfName_ref();
   const auto& area = *info.area_ref();
 
-  SYSLOG(INFO) << "Neighbor " << remoteNodeName
+  SYSLOG(INFO) << EventTag() << "Neighbor " << remoteNodeName
                << " is restarting on interface " << localIfName;
   fb303::fbData->addStatValue(
       "link_monitor.neighbor_restarting", 1, fb303::SUM);
@@ -950,7 +951,7 @@ LinkMonitor::setNodeOverload(bool isOverloaded) {
                 << (isOverloaded ? "OVERLOADED" : "NOT OVERLOADED") << "]";
     } else {
       state_.isOverloaded_ref() = isOverloaded;
-      SYSLOG(INFO) << (isOverloaded ? "Setting" : "Unsetting")
+      SYSLOG(INFO) << EventTag() << (isOverloaded ? "Setting" : "Unsetting")
                    << " overload bit for node";
       advertiseAdjacencies();
     }
@@ -964,43 +965,45 @@ LinkMonitor::setInterfaceOverload(
     std::string interfaceName, bool isOverloaded) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        interfaceName,
-                        isOverloaded]() mutable {
-    std::string cmd =
-        isOverloaded ? "SET_LINK_OVERLOAD" : "UNSET_LINK_OVERLOAD";
-    if (0 == interfaces_.count(interfaceName)) {
-      LOG(ERROR) << "Skip cmd: [" << cmd
-                 << "] due to unknown interface: " << interfaceName;
-      p.setValue();
-      return;
-    }
+  runInEventBaseThread(
+      [this, p = std::move(p), interfaceName, isOverloaded]() mutable {
+        std::string cmd =
+            isOverloaded ? "SET_LINK_OVERLOAD" : "UNSET_LINK_OVERLOAD";
+        if (0 == interfaces_.count(interfaceName)) {
+          LOG(ERROR) << "Skip cmd: [" << cmd
+                     << "] due to unknown interface: " << interfaceName;
+          p.setValue();
+          return;
+        }
 
-    if (isOverloaded && state_.overloadedLinks_ref()->count(interfaceName)) {
-      LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
-                << " is already overloaded";
-      p.setValue();
-      return;
-    }
+        if (isOverloaded &&
+            state_.overloadedLinks_ref()->count(interfaceName)) {
+          LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
+                    << " is already overloaded";
+          p.setValue();
+          return;
+        }
 
-    if (!isOverloaded && !state_.overloadedLinks_ref()->count(interfaceName)) {
-      LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
-                << " is currently NOT overloaded";
-      p.setValue();
-      return;
-    }
+        if (!isOverloaded &&
+            !state_.overloadedLinks_ref()->count(interfaceName)) {
+          LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
+                    << " is currently NOT overloaded";
+          p.setValue();
+          return;
+        }
 
-    if (isOverloaded) {
-      state_.overloadedLinks_ref()->insert(interfaceName);
-      SYSLOG(INFO) << "Setting overload bit for interface " << interfaceName;
-    } else {
-      state_.overloadedLinks_ref()->erase(interfaceName);
-      SYSLOG(INFO) << "Unsetting overload bit for interface " << interfaceName;
-    }
-    advertiseAdjacenciesThrottled_->operator()();
-    p.setValue();
-  });
+        if (isOverloaded) {
+          state_.overloadedLinks_ref()->insert(interfaceName);
+          SYSLOG(INFO) << EventTag() << "Setting overload bit for interface "
+                       << interfaceName;
+        } else {
+          state_.overloadedLinks_ref()->erase(interfaceName);
+          SYSLOG(INFO) << EventTag() << "Unsetting overload bit for interface "
+                       << interfaceName;
+        }
+        advertiseAdjacenciesThrottled_->operator()();
+        p.setValue();
+      });
   return sf;
 }
 

@@ -21,6 +21,7 @@
 #include <folly/gen/Base.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/EventLogger.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
@@ -871,7 +872,7 @@ Spark::logStateTransition(
     std::string const& ifName,
     SparkNeighState const& oldState,
     SparkNeighState const& newState) {
-  SYSLOG(INFO) << "State change: [" << toStr(oldState) << "] -> ["
+  SYSLOG(INFO) << EventTag() << "State change: [" << toStr(oldState) << "] -> ["
                << toStr(newState) << "] "
                << "for neighbor: (" << neighborName << ") on interface: ("
                << ifName << ").";
