@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/async/StopEventLoopSignalHandler.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/system/ThreadName.h>
@@ -14,6 +12,7 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
+#include <openr/common/OpenrEventBase.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
@@ -27,12 +26,11 @@ main(int argc, char** argv) {
   // Init everything
   folly::init(&argc, &argv);
 
-  fbzmq::ZmqEventLoop mainEventLoop;
-
-  fbzmq::StopEventLoopSignalHandler eventLoopHandler(&mainEventLoop);
-  eventLoopHandler.registerSignalHandler(SIGINT);
-  eventLoopHandler.registerSignalHandler(SIGQUIT);
-  eventLoopHandler.registerSignalHandler(SIGTERM);
+  folly::EventBase mainEvb;
+  openr::EventBaseStopSignalHandler handler(&mainEvb);
+  handler.registerSignalHandler(SIGINT);
+  handler.registerSignalHandler(SIGQUIT);
+  handler.registerSignalHandler(SIGTERM);
 
   std::vector<std::thread> allThreads{};
 
@@ -68,7 +66,7 @@ main(int argc, char** argv) {
   allThreads.emplace_back(std::move(fibThriftThread));
 
   LOG(INFO) << "Main event loop starting...";
-  mainEventLoop.run();
+  mainEvb.loopForever();
   LOG(INFO) << "Main event loop stopped.";
 
   // close queue
@@ -85,6 +83,7 @@ main(int argc, char** argv) {
     t.join();
   }
 
+  fibHandler.reset();
   nlSock.reset();
   nlEvb.reset();
 
