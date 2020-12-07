@@ -317,6 +317,7 @@ endif()
 
 target_link_libraries(openrlib
   build_info
+  ${BENCHMARK}
   ${OPENR_THRIFT_LIBS}
   fbzmq::fbzmq
   fbzmq::monitor_cpp2
