@@ -685,6 +685,15 @@ createThriftValueWithoutBinaryValue(const thrift::Value& val) {
   return updatedVal;
 }
 
+std::pair<PrefixKey, thrift::PrefixEntry>
+createPrefixKeyAndEntry(
+    const std::string& nodeName,
+    thrift::IpPrefix const& prefix,
+    const std::string& area) {
+  return {PrefixKey(nodeName, toIPNetwork(prefix), area),
+          createPrefixEntry(prefix)};
+}
+
 std::pair<PrefixKey, thrift::PrefixDatabase>
 createPrefixKeyAndDb(
     const std::string& nodeName,

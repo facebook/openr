@@ -406,13 +406,6 @@ class Decision : public OpenrEventBase {
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 
-  // need to store all this for backward compatibility, otherwise a key update
-  // can lead to mistakenly withdrawing some prefixes
-  std::unordered_map<
-      std::string,
-      std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>>
-      perPrefixPrefixEntries_, fullDbPrefixEntries_;
-
   // this node's name and the key markers
   const std::string myNodeName_;
 

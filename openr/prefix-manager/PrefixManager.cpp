@@ -258,10 +258,9 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
 
   for (const auto& toArea : dstAreas) {
     // TODO: run ingress policy
-    auto prefixKey =
-        PrefixKey(nodeId_, toIPNetwork(*prefixEntry.prefix_ref()), toArea)
-            .getPrefixKey();
-    auto prefixDb = createPrefixDb(nodeId_, {prefixEntry}, toArea);
+    auto [prefixKey, prefixDb] =
+        createPrefixKeyAndDb(nodeId_, prefixEntry, toArea);
+
     if (enablePerfMeasurement_) {
       prefixDb.perfEvents_ref() =
           addingEvents_[*prefixEntry.type_ref()][*prefixEntry.prefix_ref()];
@@ -269,14 +268,17 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     bool changed = kvStoreClient_->persistKey(
-        AreaId{toArea}, prefixKey, prefixDbStr, ttlKeyInKvStore_);
+        AreaId{toArea},
+        prefixKey.getPrefixKey(),
+        prefixDbStr,
+        ttlKeyInKvStore_);
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
                         << "Area: " << toArea << ", "
                         << "Type: " << toString(*prefixEntry.type_ref()) << ", "
                         << toString(prefixEntry, VLOG_IS_ON(2));
-    prefixKeys.emplace(std::move(prefixKey));
+    prefixKeys.insert(prefixKey.getPrefixKey());
   }
   return prefixKeys;
 }

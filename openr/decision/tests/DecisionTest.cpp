@@ -4603,8 +4603,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
        {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
       {},
@@ -4644,7 +4644,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23}, false, 2)},
        {"adj:4", createAdjValue("4", 1, {}, false, 4)}, // No adjacencies
-       {"prefix:3", createPrefixValue("3", 1, {addr3})}},
+       createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
       {},
@@ -4747,7 +4747,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   publication = createThriftPublication(
       {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
        {"adj:2", createAdjValue("2", 4, {adj21, adj23}, false, 2)},
-       {"prefix:3", createPrefixValue("3", 1, {addr3})}},
+       createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
       {},
@@ -4895,8 +4895,8 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
 
   // Send prefix publication
   sendKvPublication(createThriftPublication(
-      {createPrefixKeyValue("1", 1, createPrefixEntry(addr1), "0"),
-       createPrefixKeyValue("2", 1, createPrefixEntry(addr2), "0")},
+      {createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
       {},
@@ -4945,8 +4945,8 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
        {"adj:2", createAdjValue("2", 1, {adj21, adj24}, false, 2)},
        {"adj:4", createAdjValue("4", 1, {adj42}, false, 4)},
-       {"prefix:1", createPrefixValue("1", 1, {addr1}, "A")},
-       {"prefix:2", createPrefixValue("2", 1, {addr2}, "A")}},
+       createPrefixKeyValue("1", 1, addr1, "A"),
+       createPrefixKeyValue("2", 1, addr2, "A")},
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
@@ -4965,8 +4965,8 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       {{"adj:1", createAdjValue("1", 1, {adj13}, false, 1)},
        {"adj:3", createAdjValue("3", 1, {adj31, adj34}, false, 3)},
        {"adj:4", createAdjValue("4", 1, {adj43}, false, 4)},
-       {"prefix:3", createPrefixValue("3", 1, {addr3}, "B")},
-       {"prefix:4", createPrefixValue("4", 1, {addr4}, "B")}},
+       createPrefixKeyValue("3", 1, addr3, "B"),
+       createPrefixKeyValue("4", 1, addr4, "B")},
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
@@ -5040,7 +5040,7 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   // "1" originate addr1 into B
   //
   publication = createThriftPublication(
-      {{"prefix:1", createPrefixValue("1", 1, {addr1}, "B")}},
+      {createPrefixKeyValue("1", 1, addr1, "B")},
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
@@ -5167,8 +5167,8 @@ TEST_F(DecisionTestFixture, RibPolicy) {
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
        {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
       {},
@@ -5244,14 +5244,15 @@ TEST_F(DecisionTestFixture, RibPolicy) {
 
   // trigger addr2 recalc by flapping the advertisement
   publication = createThriftPublication(
-      {{"prefix:2", createPrefixValue("2", 2)}}, {}, {}, {}, std::string(""));
-  sendKvPublication(publication);
-  publication = createThriftPublication(
-      {{"prefix:2", createPrefixValue("2", 3, {addr2})}},
+      {createPrefixKeyValue(
+          "2", 2, addr2, kTestingAreaName, true /* withdraw */)},
       {},
       {},
       {},
       std::string(""));
+  sendKvPublication(publication);
+  publication = createThriftPublication(
+      {createPrefixKeyValue("2", 3, addr2)}, {}, {}, {}, std::string(""));
   sendKvPublication(publication);
 
   {
@@ -5371,8 +5372,8 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12_1, adj12_2})},
        {"adj:2", createAdjValue("2", 1, {adj21_1, adj21_2})},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
       {},
@@ -5475,8 +5476,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
       {},
@@ -5504,7 +5505,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   publication = createThriftPublication(
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
-       {"prefix:3", createPrefixValue("3", 1, {addr3})}},
+       createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
       {},
@@ -5536,11 +5537,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   auto getRouteForPrefixCount =
       counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
-      {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
-      {},
-      {},
-      {},
-      std::string(""));
+      {createPrefixKeyValue("4", 1, addr4)}, {}, {}, {}, std::string(""));
   sendKvPublication(publication);
   recvRouteUpdates();
 
@@ -5560,7 +5557,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // Some tricks here; we need to bump the time-stamp on router 4's data, so
   // it can override existing;
   publication = createThriftPublication(
-      {{"prefix:4", createPrefixValue("4", 2, {addr4, addr5})}},
+      {createPrefixKeyValue("4", 2, addr4),
+       createPrefixKeyValue("4", 2, addr5)},
       {},
       {},
       {},
@@ -5589,7 +5587,12 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   getRouteForPrefixCount = counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
-      {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
+      {createPrefixKeyValue("4", 5, addr4)}, {}, {}, {}, std::string(""));
+  sendKvPublication(publication);
+
+  publication = createThriftPublication(
+      {createPrefixKeyValue("4", 7, addr4),
+       createPrefixKeyValue("4", 7, addr6)},
       {},
       {},
       {},
@@ -5597,15 +5600,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   sendKvPublication(publication);
 
   publication = createThriftPublication(
-      {{"prefix:4", createPrefixValue("4", 7, {addr4, addr6})}},
-      {},
-      {},
-      {},
-      std::string(""));
-  sendKvPublication(publication);
-
-  publication = createThriftPublication(
-      {{"prefix:4", createPrefixValue("4", 8, {addr4, addr5, addr6})}},
+      {createPrefixKeyValue("4", 8, addr4),
+       createPrefixKeyValue("4", 8, addr5),
+       createPrefixKeyValue("4", 8, addr6)},
       {},
       {},
       {},
@@ -5616,9 +5613,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   counters = fb303::fbData->getCounters();
   // only prefix has changed so spf_runs is unchanged
   EXPECT_EQ(6, counters["decision.spf_runs.count"]);
-  // addr5 and addr6 are seen to have changed or flapped during this interval
+  // addr6 is seen to have been advertised in this  interval
   EXPECT_EQ(
-      getRouteForPrefixCount + 2,
+      getRouteForPrefixCount + 1,
       counters["decision.get_route_for_prefix.count"]);
 }
 
@@ -5634,8 +5631,8 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   auto publication = createThriftPublication(
       {{"adj2:1", createAdjValue("1", 1, {adj12})},
        {"adji2:2", createAdjValue("2", 1, {adj21})},
-       {"prefix2:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix2:2", createPrefixValue("2", 1, {addr2})}},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
       {},
@@ -5667,8 +5664,8 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   auto const publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
       {},
@@ -5731,9 +5728,9 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
       {{"adj:1", createAdjValue("1", 1, {adj12, adj13})},
        {"adj:2", createAdjValue("2", 1, {adj21, adj23})},
        {"adj:3", createAdjValue("3", 1, {adj31, adj32})},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})},
-       {"prefix:3", createPrefixValue("3", 1, {addr3})}},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2),
+       createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
       {},
@@ -5879,11 +5876,11 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"adj:3", createAdjValue("3", 1, {adj31})},
        {"adj:4", createAdjValue("4", 1, {adj41})},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2),
        // node3 has same address w/ node2
-       {"prefix:3", createPrefixValue("3", 1, {addr2})},
-       {"prefix:4", createPrefixValue("4", 1, {addr4})}},
+       createPrefixKeyValue("3", 1, addr2),
+       createPrefixKeyValue("4", 1, addr4)},
       {},
       {},
       {},
@@ -6060,14 +6057,20 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // wait for the inital coldstart sync, expect it to be empty
   EXPECT_EQ(0, recvRouteUpdates().unicastRoutesToUpdate.size());
 
+  std::string keyToDup;
+
   // Create full topology
   for (int i = 1; i <= 1000; i++) {
     const std::string src = folly::to<std::string>(i);
 
     // Create prefixDb value
     const auto addr = toIpPrefix(folly::sformat("face:cafe:babe::{}/128", i));
-    initialPub.keyVals_ref()->emplace(
-        folly::sformat("prefix:{}", i), createPrefixValue(src, 1, {addr}));
+    auto kv = createPrefixKeyValue(src, 1, addr);
+    if (1 == i) {
+      // arbitrarily choose the first key to send duplicate publications for
+      keyToDup = kv.first;
+    }
+    initialPub.keyVals_ref()->emplace(kv);
 
     // Create adjDb value
     vector<thrift::Adjacency> adjs;
@@ -6103,8 +6106,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   //
   thrift::Publication duplicatePub;
   duplicatePub.set_area(kTestingAreaName);
-  duplicatePub.keyVals_ref()["prefix:1"] =
-      initialPub.keyVals_ref()->at("prefix:1");
+  duplicatePub.keyVals_ref()[keyToDup] = initialPub.keyVals_ref()->at(keyToDup);
   int64_t totalSent = 0;
   auto start = std::chrono::steady_clock::now();
   while (true) {
@@ -6134,7 +6136,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   newPub.set_area(kTestingAreaName);
 
   auto newAddr = toIpPrefix("face:b00c:babe::1/128");
-  newPub.keyVals_ref()["prefix:1"] = createPrefixValue("1", 2, {newAddr});
+  newPub.set_keyVals({createPrefixKeyValue("1", 1, newAddr)});
   LOG(INFO) << "Advertising prefix update";
   sendKvPublication(newPub);
   // Receive RouteDelta from Decision
@@ -6152,110 +6154,6 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   EXPECT_EQ(4, counters["decision.spf_runs.count"]);
   EXPECT_EQ(adjUpdateCnt, counters["decision.adj_db_update.count"]);
   EXPECT_EQ(prefixUpdateCnt, counters["decision.prefix_db_update.count"]);
-}
-
-/*
- * The following topology is used:
- *
- * 1---2
- *
- * Test case to test if old prefix key expiry does not delete prefixes from
- * FIB when migrating from old prefix key format to 'per prefix key' format
- *
- *  node1 [old key format]   ------- node2 [prefix:node1 {p1, p2, p3}]
- *
- *  now change node1 to 'per prefix key'
- *
- *  node1 [per prefix key]   ------- node2 [prefix:node1 {p1, p2, p3},
- *                                          prefix:node1:p1,
- *                                          prefix:node1:p2,
- *                                          prefix:node1:p3]
- *
- *  "prefix:node1 {p1, p2, p3}" -- will expire, but p1, p2, p3 shouldn't be
- *  removed from decision.
- */
-
-TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
-  //
-  // publish the link state info to KvStore
-  //
-
-  auto publication0 = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12})},
-       {"adj:2", createAdjValue("2", 1, {adj21})},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2",
-        createPrefixValue("2", 1, {addr2, addr5, addr6, addr1V4, addr4V4})}},
-      {},
-      {},
-      {},
-      std::string(""));
-  auto routeDbBefore = dumpRouteDb({"1"})["1"];
-  std::sort(
-      routeDbBefore.unicastRoutes_ref()->begin(),
-      routeDbBefore.unicastRoutes_ref()->end());
-  sendKvPublication(publication0);
-  auto routeDbDelta = recvRouteUpdates();
-  EXPECT_EQ(5, routeDbDelta.unicastRoutesToUpdate.size());
-  auto routeDb = dumpRouteDb({"1"})["1"];
-  std::sort(
-      routeDb.unicastRoutes_ref()->begin(), routeDb.unicastRoutes_ref()->end());
-  auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
-  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
-
-  RouteMap routeMap;
-  fillRouteMap("1", routeMap, routeDb);
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj12, false, 10)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr5))],
-      NextHops({createNextHopFromAdj(adj12, false, 10)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr6))],
-      NextHops({createNextHopFromAdj(adj12, false, 10)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr1V4))],
-      NextHops({createNextHopFromAdj(adj12, true, 10)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr4V4))],
-      NextHops({createNextHopFromAdj(adj12, true, 10)}));
-
-  // expire prefix:2, must delete all 5 routes
-  auto publication =
-      createThriftPublication({}, {"prefix:2"}, {}, {}, std::string(""));
-  sendKvPublication(publication);
-  routeDbDelta = recvRouteUpdates();
-  EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(5, routeDbDelta.unicastRoutesToDelete.size());
-
-  // add 5 routes using old foramt
-  sendKvPublication(publication0);
-  routeDbDelta = recvRouteUpdates();
-  EXPECT_EQ(5, routeDbDelta.unicastRoutesToUpdate.size());
-
-  // re-add 4 routes using per prefix key format, one of the old key must
-  // be deleted
-  auto perPrefixKeyValue =
-      createPerPrefixKeyValue("2", 1, {addr2, addr6, addr1V4, addr4V4});
-  publication =
-      createThriftPublication(perPrefixKeyValue, {}, {}, {}, std::string(""));
-  sendKvPublication(publication);
-
-  auto routeDb1 = dumpRouteDb({"1"})["1"];
-  // expect to still have all 5 routes
-  EXPECT_EQ(5, routeDb1.unicastRoutes_ref()->size());
-  // again send expire 'prefix:2' key, now we expect the one extra route to
-  // be deleted
-  LOG(INFO) << "Sending prefix key expiry";
-  publication =
-      createThriftPublication({}, {"prefix:2"}, {}, {}, std::string(""));
-  sendKvPublication(publication);
-  routeDbDelta = recvRouteUpdates();
-  EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
-  EXPECT_EQ(toIPNetwork(addr5), routeDbDelta.unicastRoutesToDelete.at(0));
 }
 
 //
@@ -6300,36 +6198,32 @@ TEST_F(DecisionTestFixture, Counters) {
       thrift::PrefixForwardingType::SR_MPLS,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
       thrift::MetricVector{} /* empty metric vector */);
-  const auto prefixDb1 = createPrefixDb(
-      "1", {createPrefixEntry(addr1), createPrefixEntry(addr1V4)});
-  const auto prefixDb2 = createPrefixDb(
-      "2", {createPrefixEntry(addr2), createPrefixEntry(addr2V4)});
-  const auto prefixDb3 = createPrefixDb(
-      "3",
-      {createPrefixEntry(addr3),
-       bgpPrefixEntry1,
-       bgpPrefixEntry3,
-       mplsPrefixEntry1});
-  const auto prefixDb4 =
-      createPrefixDb("4", {createPrefixEntry(addr4), bgpPrefixEntry2});
+  std::unordered_map<std::string, thrift::Value> pubKvs = {
+      {"adj:1", createAdjValue("1", 1, {adj12, adj13}, false, 1)},
+      {"adj:2", createAdjValue("2", 1, {adj21, adj23}, false, 2)},
+      {"adj:3", createAdjValue("3", 1, {adj31}, false, 3 << 20)}, // invalid
+                                                                  // mpls
+                                                                  // label
+      {"adj:4", createAdjValue("4", 1, {}, false, 4)} // Disconnected node
+  };
+  pubKvs.emplace(createPrefixKeyValue("1", 1, addr1));
+  pubKvs.emplace(createPrefixKeyValue("1", 1, addr1V4));
+
+  pubKvs.emplace(createPrefixKeyValue("2", 1, addr2));
+  pubKvs.emplace(createPrefixKeyValue("2", 1, addr2V4));
+
+  pubKvs.emplace(createPrefixKeyValue("3", 1, addr3));
+  pubKvs.emplace(createPrefixKeyValue("3", 1, bgpPrefixEntry1));
+  pubKvs.emplace(createPrefixKeyValue("3", 1, bgpPrefixEntry3));
+  pubKvs.emplace(createPrefixKeyValue("3", 1, mplsPrefixEntry1));
+
+  pubKvs.emplace(createPrefixKeyValue("4", 1, addr4));
+  pubKvs.emplace(createPrefixKeyValue("4", 1, bgpPrefixEntry2));
 
   // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
   // Node2 has partial adjacency
-  auto publication0 = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12, adj13}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21, adj23}, false, 2)},
-       {"adj:3", createAdjValue("3", 1, {adj31}, false, 3 << 20)}, // invalid
-                                                                   // mpls
-                                                                   // label
-       {"adj:4", createAdjValue("4", 1, {}, false, 4)}, // Disconnected node
-       {"prefix:1", createPrefixValue("1", 1, prefixDb1)},
-       {"prefix:2", createPrefixValue("2", 1, prefixDb2)},
-       {"prefix:3", createPrefixValue("3", 1, prefixDb3)},
-       {"prefix:4", createPrefixValue("4", 1, prefixDb4)}},
-      {},
-      {},
-      {},
-      std::string(""));
+  auto publication0 =
+      createThriftPublication(pubKvs, {}, {}, {}, std::string(""));
   sendKvPublication(publication0);
   const auto routeDb = recvRouteUpdates();
   for (const auto& [_, uniRoute] : routeDb.unicastRoutesToUpdate) {
@@ -6371,7 +6265,7 @@ TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
   for (int i = debounceTimeoutMin.count(); true; i *= 2) {
     auto nodeName = std::to_string(i);
     auto publication = createThriftPublication(
-        {{"prefix:" + nodeName, createPrefixValue(nodeName, 1, {addr1})}},
+        {createPrefixKeyValue(nodeName, 1, addr1)},
         {},
         {},
         {},
@@ -6388,11 +6282,7 @@ TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
       debounceTimeoutMax + std::chrono::milliseconds(100));
   // send one more update
   auto publication = createThriftPublication(
-      {{"prefix:2", createPrefixValue("2", 1, {addr1})}},
-      {},
-      {},
-      {},
-      std::string(""));
+      {createPrefixKeyValue("2", 1, addr1)}, {}, {}, {}, std::string(""));
   sendKvPublication(publication);
 }
 
@@ -6440,8 +6330,10 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
         {{"adj:1", createAdjValue("1", 1, {adj12, adj13}, false, 1)},
          {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
          {"adj:3", createAdjValue("3", 1, {adj31}, false, 3)},
-         {"prefix:2", createPrefixValue("2", 1, prefixDb2)},
-         {"prefix:3", createPrefixValue("3", 1, prefixDb3)}},
+         createPrefixKeyValue("2", 1, addr2),
+         createPrefixKeyValue("2", 1, addr2V4),
+         createPrefixKeyValue("3", 1, addr3),
+         createPrefixKeyValue("3", 1, addr3V4)},
         {},
         {},
         {},
@@ -6466,14 +6358,11 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
         "",
         thrift::PrefixForwardingType::IP,
         thrift::PrefixForwardingAlgorithm::SP_ECMP);
-    // node 2 announce BGP prefix with loopback
-    const auto prefixDb2 = createPrefixDb("2", {bgpPrefixEntry});
-    const auto prefixDb3 = createPrefixDb("3", {ribPrefixEntry});
 
-    // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
     auto publication = createThriftPublication(
-        {{"prefix:2", createPrefixValue("2", 1, prefixDb2)},
-         {"prefix:3", createPrefixValue("3", 1, prefixDb3)}},
+        // node 2 announce BGP prefix with loopback
+        {createPrefixKeyValue("2", 1, bgpPrefixEntry),
+         createPrefixKeyValue("3", 1, ribPrefixEntry)},
         {},
         {},
         {},

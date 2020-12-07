@@ -27,10 +27,19 @@ class PrefixState {
     return prefixes_;
   }
 
-  // returns set of changed prefixes (i.e. a node started advertising or
-  // withdrew or any attributes changed)
+  // Deprecated, retained for test logic will be removed in follow up diff
+  // prefer updatePrefix, deletePrefix
   std::unordered_set<thrift::IpPrefix> updatePrefixDatabase(
       thrift::PrefixDatabase const& prefixDb);
+
+  // returns set of changed prefixes (i.e. a node started advertising or any
+  // attributes changed)
+  std::unordered_set<thrift::IpPrefix> updatePrefix(
+      PrefixKey const& key, thrift::PrefixEntry const& entry);
+
+  // returns set of changed prefixes (i.e. a node withdrew a prefix) will be
+  // empty if node/area did not previosuly advertise
+  std::unordered_set<thrift::IpPrefix> deletePrefix(PrefixKey const& key);
 
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases() const;
@@ -71,9 +80,5 @@ class PrefixState {
   // (Reverse Mapping) Data structure to maintain mapping from:
   //  [node, area] combination -> set of IpPrefix
   std::unordered_map<NodeAndArea, std::set<thrift::IpPrefix>> nodeToPrefixes_;
-
-  // loopbackV4/V6 address for each node
-  std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
-  std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
 };
 } // namespace openr

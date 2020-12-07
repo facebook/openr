@@ -336,8 +336,13 @@ thrift::Value createThriftValueWithoutBinaryValue(const thrift::Value& val);
 
 /**
  * Utility functions to create `key, value` pairs for updating route
- * advertisement in KvStore
+ * advertisements in KvStore or tests
  */
+std::pair<PrefixKey, thrift::PrefixEntry> createPrefixKeyAndEntry(
+    const std::string& nodeName,
+    thrift::IpPrefix const& prefix,
+    const std::string& area = kTestingAreaName);
+
 std::pair<PrefixKey, thrift::PrefixDatabase> createPrefixKeyAndDb(
     const std::string& nodeName,
     const thrift::PrefixEntry& prefixEntry,

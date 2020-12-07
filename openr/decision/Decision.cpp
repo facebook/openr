@@ -1651,59 +1651,6 @@ Decision::getRibPolicy() {
   return std::move(sf);
 }
 
-std::optional<thrift::PrefixDatabase>
-Decision::updateNodePrefixDatabase(
-    const std::string& key, const thrift::PrefixDatabase& prefixDb) {
-  auto const& nodeName = *prefixDb.thisNodeName_ref();
-
-  auto prefixKey = PrefixKey::fromStr(key);
-  // per prefix key
-  if (prefixKey.hasValue()) {
-    if (*prefixDb.deletePrefix_ref()) {
-      perPrefixPrefixEntries_[nodeName].erase(prefixKey.value().getIpPrefix());
-    } else {
-      CHECK_EQ(1, prefixDb.prefixEntries_ref()->size());
-      auto prefixEntry = prefixDb.prefixEntries_ref()->at(0);
-
-      // Ignore self redistributed route reflection
-      // These routes are programmed by Decision,
-      // re-origintaed by me to areas that do not have the best prefix entry
-      if (nodeName == myNodeName_ && prefixEntry.area_stack_ref()->size() > 0 &&
-          areaLinkStates_.count(prefixEntry.area_stack_ref()->back())) {
-        LOG(INFO) << "Ignore self redistributed route reflection for prefix: "
-                  << key << " area_stack: "
-                  << folly::join(",", *prefixEntry.area_stack_ref());
-        return std::nullopt;
-      }
-
-      perPrefixPrefixEntries_[nodeName][prefixKey.value().getIpPrefix()] =
-          prefixEntry;
-    }
-  } else {
-    // TODO: deprecate non per-prefix-key logic
-    //       fullDbPrefixEntries_ can be retired
-    fullDbPrefixEntries_[nodeName].clear();
-    for (auto const& entry : *prefixDb.prefixEntries_ref()) {
-      fullDbPrefixEntries_[nodeName][*entry.prefix_ref()] = entry;
-    }
-  }
-
-  thrift::PrefixDatabase nodePrefixDb;
-  *nodePrefixDb.thisNodeName_ref() = nodeName;
-  nodePrefixDb.perfEvents_ref().copy_from(prefixDb.perfEvents_ref());
-  nodePrefixDb.prefixEntries_ref()->reserve(
-      perPrefixPrefixEntries_[nodeName].size());
-  for (auto& kv : perPrefixPrefixEntries_[nodeName]) {
-    nodePrefixDb.prefixEntries_ref()->emplace_back(kv.second);
-  }
-  for (auto& kv : fullDbPrefixEntries_[nodeName]) {
-    if (not perPrefixPrefixEntries_[nodeName].count(kv.first)) {
-      nodePrefixDb.prefixEntries_ref()->emplace_back(kv.second);
-    }
-  }
-  return nodePrefixDb;
-}
-
 void
 Decision::processPublication(thrift::Publication const& thriftPub) {
   CHECK(not thriftPub.area_ref()->empty());
@@ -1728,20 +1675,15 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       continue;
     }
 
-    // parse nodeName from keys:
-    //  1) prefix:*
-    //  2) adj:*
-    //  3) fibtime:*
-    const std::string nodeName = getNodeNameFromKey(key);
-
     try {
       // adjacencyDb: update keys starting with "adj:"
       if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
         auto adjacencyDb = readThriftObjStr<thrift::AdjacencyDatabase>(
             rawVal.value_ref().value(), serializer_);
-        CHECK_EQ(nodeName, *adjacencyDb.thisNodeName_ref());
+        auto& nodeName = adjacencyDb.get_thisNodeName();
 
-        // TODO - this should directly come from KvStore.
+        // TODO - this should directly come from KvStore. Needed for
+        // compatibility between default and non-default areas
         adjacencyDb.area_ref() = area;
 
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
@@ -1770,21 +1712,34 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
-        CHECK_EQ(nodeName, *prefixDb.thisNodeName_ref());
-
-        auto maybeNodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
-        if (not maybeNodePrefixDb.has_value()) {
+        if (1 != prefixDb.get_prefixEntries().size()) {
+          LOG(ERROR) << "Expecting exactly one entry per prefix key";
+          fb303::fbData->addStatValue("decision.error", 1, fb303::COUNT);
           continue;
         }
-        auto nodePrefixDb = maybeNodePrefixDb.value();
-        // TODO - this should directly come from KvStore.
-        *nodePrefixDb.area_ref() = area;
+        auto const& entry = prefixDb.get_prefixEntries().front();
+        auto const& areaStack = entry.get_area_stack();
+        // Ignore self redistributed route reflection
+        // These routes are programmed by Decision,
+        // re-origintaed by me to areas that do not have the best prefix entry
+        if (prefixDb.get_thisNodeName() == myNodeName_ &&
+            areaStack.size() > 0 && areaLinkStates_.count(areaStack.back())) {
+          VLOG(2) << "Ignore self redistributed route reflection for prefix: "
+                  << key << " area_stack: " << folly::join(",", areaStack);
+          continue;
+        }
+
+        // construct new prefix key with local publication area id
+        PrefixKey prefixKey(
+            prefixDb.get_thisNodeName(), toIPNetwork(entry.get_prefix()), area);
 
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyPrefixStateChange(
-            prefixState_.updatePrefixDatabase(nodePrefixDb),
-            nodePrefixDb.perfEvents_ref());
+            prefixDb.get_deletePrefix()
+                ? prefixState_.deletePrefix(prefixKey)
+                : prefixState_.updatePrefix(prefixKey, entry),
+            prefixDb.perfEvents_ref());
         continue;
       }
 
@@ -1792,7 +1747,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       if (key.find(Constants::kFibTimeMarker.toString()) == 0) {
         try {
           std::chrono::milliseconds fibTime{stoll(rawVal.value_ref().value())};
-          fibTimes_[nodeName] = fibTime;
+          fibTimes_[getNodeNameFromKey(key)] = fibTime;
         } catch (...) {
           LOG(ERROR) << "Could not convert "
                      << Constants::kFibTimeMarker.toString()
@@ -1821,21 +1776,20 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 
     // prefixDb: delete keys starting with "prefix:"
     if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
-      // manually build delete prefix db to signal delete just as a client would
-      thrift::PrefixDatabase deletePrefixDb;
-      *deletePrefixDb.thisNodeName_ref() = nodeName;
-      deletePrefixDb.deletePrefix_ref() = true;
-
-      auto maybeNodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
-      if (not maybeNodePrefixDb.has_value()) {
+      VLOG(2) << "Deleting expired prefix key: " << key
+              << " of node: " << nodeName << " in area: " << area;
+      auto maybePrefixKey = PrefixKey::fromStr(key);
+      if (maybePrefixKey.hasError()) {
+        LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
         continue;
       }
-      auto nodePrefixDb = maybeNodePrefixDb.value();
-      // TODO - this should directly come from KvStore.
-      *nodePrefixDb.area_ref() = area;
-
+      // construct new prefix key with local publication area id
+      PrefixKey prefixKey(
+          maybePrefixKey.value().getNodeName(),
+          maybePrefixKey.value().getCIDRNetwork(),
+          area);
       pendingUpdates_.applyPrefixStateChange(
-          prefixState_.updatePrefixDatabase(nodePrefixDb),
+          prefixState_.deletePrefix(prefixKey),
           thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
       continue;
     }
@@ -1957,7 +1911,8 @@ Decision::updateGlobalCounters() const {
       nodeSet.insert(kv.first);
       const auto& adjDb = kv.second;
       size_t numLinks = linkState.linksFromNode(kv.first).size();
-      // Consider partial adjacency only iff node is reachable from current node
+      // Consider partial adjacency only iff node is reachable from current
+      // node
       if (mySpfResult.count(*adjDb.thisNodeName_ref()) && 0 != numLinks) {
         // only add to the count if this node is not completely disconnected
         size_t diff = adjDb.adjacencies_ref()->size() - numLinks;
