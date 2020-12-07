@@ -773,10 +773,10 @@ KvStore::setKvStoreKeyVals(
   return sf;
 }
 
-folly::SemiFuture<std::optional<KvStorePeerState>>
+folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
 KvStore::getKvStorePeerState(
     std::string const& area, std::string const& peerName) {
-  folly::Promise<std::optional<KvStorePeerState>> promise;
+  folly::Promise<std::optional<thrift::KvStorePeerState>> promise;
   auto sf = promise.getSemiFuture();
   runInEventBaseThread(
       [this, p = std::move(promise), peerName, area]() mutable {
@@ -962,65 +962,13 @@ KvStore::getGlobalCounters() const {
   return flatCounters;
 }
 
-//
-// This is the state transition matrix for KvStorePeerState. It is a
-// sparse-matrix with row representing `KvStorePeerState` and column
-// representing `KvStorePeerEvent`. State transition is driven by
-// certain event. Invalid state jump will cause fatal error.
-//
-const std::vector<std::vector<std::optional<KvStorePeerState>>>
-    KvStoreDb::peerStateMap_ = {/*
-                                 * index 0 - IDLE
-                                 * PEER_ADD => SYNCING
-                                 * THRIFT_API_ERROR => IDLE
-                                 */
-                                {KvStorePeerState::SYNCING,
-                                 std::nullopt,
-                                 std::nullopt,
-                                 KvStorePeerState::IDLE},
-                                /*
-                                 * index 1 - SYNCING
-                                 * SYNC_RESP_RCVD => INITIALIZED
-                                 * THRIFT_API_ERROR => IDLE
-                                 */
-                                {std::nullopt,
-                                 std::nullopt,
-                                 KvStorePeerState::INITIALIZED,
-                                 KvStorePeerState::IDLE},
-                                /*
-                                 * index 2 - INITIALIZED
-                                 * SYNC_RESP_RCVD => INITIALIZED
-                                 * THRIFT_API_ERROR => IDLE
-                                 */
-                                {std::nullopt,
-                                 std::nullopt,
-                                 KvStorePeerState::INITIALIZED,
-                                 KvStorePeerState::IDLE}};
-
-// static util function for logging
-std::string
-KvStoreDb::toStr(KvStorePeerState state) {
-  std::string res = "UNDEFINED";
-  switch (state) {
-  case KvStorePeerState::IDLE:
-    return "IDLE";
-  case KvStorePeerState::SYNCING:
-    return "SYNCING";
-  case KvStorePeerState::INITIALIZED:
-    return "INITIALIZED";
-  default:
-    LOG(ERROR) << "Undefined peer state";
-  }
-  return res;
-}
-
 // static util function to fetch peers by state
 std::vector<std::string>
-KvStoreDb::getPeersByState(KvStorePeerState state) {
+KvStoreDb::getPeersByState(thrift::KvStorePeerState state) {
   std::vector<std::string> res;
   for (auto const& kv : thriftPeers_) {
     auto const& peer = kv.second;
-    if (peer.state == state) {
+    if (peer.peerSpec.get_state() == state) {
       res.emplace_back(peer.nodeName);
     }
   }
@@ -1031,33 +979,72 @@ KvStoreDb::getPeersByState(KvStorePeerState state) {
 void
 KvStoreDb::logStateTransition(
     std::string const& peerName,
-    KvStorePeerState oldState,
-    KvStorePeerState newState) {
-  SYSLOG(INFO) << EventTag() << "State change: [" << toStr(oldState) << "] -> ["
-               << toStr(newState) << "] "
-               << "for peer: " << peerName;
+    thrift::KvStorePeerState oldState,
+    thrift::KvStorePeerState newState) {
+  SYSLOG(INFO)
+      << EventTag() << "State change: ["
+      << apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(oldState)
+      << "] -> ["
+      << apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(newState)
+      << "] "
+      << "for peer: " << peerName;
 }
 
 // static util function to fetch current peer state
-std::optional<KvStorePeerState>
+std::optional<thrift::KvStorePeerState>
 KvStoreDb::getCurrentState(std::string const& peerName) {
   auto thriftPeerIt = thriftPeers_.find(peerName);
   if (thriftPeerIt != thriftPeers_.end()) {
-    return thriftPeerIt->second.state;
+    return thriftPeerIt->second.peerSpec.get_state();
   }
   return std::nullopt;
 }
 
 // static util function for state transition
-KvStorePeerState
+thrift::KvStorePeerState
 KvStoreDb::getNextState(
-    std::optional<KvStorePeerState> const& currState,
+    std::optional<thrift::KvStorePeerState> const& currState,
     KvStorePeerEvent const& event) {
+  //
+  // This is the state transition matrix for KvStorePeerState. It is a
+  // sparse-matrix with row representing `KvStorePeerState` and column
+  // representing `KvStorePeerEvent`. State transition is driven by
+  // certain event. Invalid state jump will cause fatal error.
+  //
+  static const std::vector<std::vector<std::optional<thrift::KvStorePeerState>>>
+      stateMap = {/*
+                   * index 0 - IDLE
+                   * PEER_ADD => SYNCING
+                   * THRIFT_API_ERROR => IDLE
+                   */
+                  {thrift::KvStorePeerState::SYNCING,
+                   std::nullopt,
+                   std::nullopt,
+                   thrift::KvStorePeerState::IDLE},
+                  /*
+                   * index 1 - SYNCING
+                   * SYNC_RESP_RCVD => INITIALIZED
+                   * THRIFT_API_ERROR => IDLE
+                   */
+                  {std::nullopt,
+                   std::nullopt,
+                   thrift::KvStorePeerState::INITIALIZED,
+                   thrift::KvStorePeerState::IDLE},
+                  /*
+                   * index 2 - INITIALIZED
+                   * SYNC_RESP_RCVD => INITIALIZED
+                   * THRIFT_API_ERROR => IDLE
+                   */
+                  {std::nullopt,
+                   std::nullopt,
+                   thrift::KvStorePeerState::INITIALIZED,
+                   thrift::KvStorePeerState::IDLE}};
+
   CHECK(currState.has_value()) << "Current state is 'UNDEFINED'";
 
-  std::optional<KvStorePeerState> nextState =
-      peerStateMap_[static_cast<uint32_t>(currState.value())]
-                   [static_cast<uint32_t>(event)];
+  std::optional<thrift::KvStorePeerState> nextState =
+      stateMap[static_cast<uint32_t>(currState.value())]
+              [static_cast<uint32_t>(event)];
 
   CHECK(nextState.has_value()) << "Next state is 'UNDEFINED'";
   return nextState.value();
@@ -1065,9 +1052,10 @@ KvStoreDb::getNextState(
 
 KvStoreDb::KvStorePeer::KvStorePeer(
     const std::string& nodeName,
-    const thrift::PeerSpec& peerSpec,
+    const thrift::PeerSpec& ps,
     const ExponentialBackoff<std::chrono::milliseconds>& expBackoff)
-    : nodeName(nodeName), peerSpec(peerSpec), expBackoff(expBackoff) {
+    : nodeName(nodeName), peerSpec(ps), expBackoff(expBackoff) {
+  peerSpec.set_state(thrift::KvStorePeerState::IDLE);
   CHECK(not this->nodeName.empty());
   CHECK(not this->peerSpec.peerAddr_ref()->empty());
   CHECK(
@@ -1396,14 +1384,14 @@ KvStoreDb::requestThriftPeerSync() {
 
   // pre-fetch of peers in "SYNCING" state for later calculation
   uint32_t numThriftPeersInSync =
-      getPeersByState(KvStorePeerState::SYNCING).size();
+      getPeersByState(thrift::KvStorePeerState::SYNCING).size();
 
   // Scan over thriftPeers to promote IDLE peers to SYNCING
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     auto& peerSpec = thriftPeer.peerSpec; // thrift::PeerSpec
 
     // ignore peers in state other than IDLE
-    if (thriftPeer.state != KvStorePeerState::IDLE) {
+    if (thriftPeer.peerSpec.get_state() != thrift::KvStorePeerState::IDLE) {
       continue;
     }
 
@@ -1456,9 +1444,10 @@ KvStoreDb::requestThriftPeerSync() {
     }
 
     // state transition
-    KvStorePeerState oldState = thriftPeer.state;
-    thriftPeer.state = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
-    logStateTransition(peerName, oldState, thriftPeer.state);
+    auto oldState = thriftPeer.peerSpec.get_state();
+    thriftPeer.peerSpec.set_state(
+        getNextState(oldState, KvStorePeerEvent::PEER_ADD));
+    logStateTransition(peerName, oldState, thriftPeer.peerSpec.get_state());
 
     // mark peer from IDLE -> SYNCING
     numThriftPeersInSync += 1;
@@ -1530,7 +1519,7 @@ KvStoreDb::requestThriftPeerSync() {
 
   // process the rest after min timeout if NOT scheduled
   uint32_t numThriftPeersInIdle =
-      getPeersByState(KvStorePeerState::IDLE).size();
+      getPeersByState(thrift::KvStorePeerState::IDLE).size();
   if (numThriftPeersInIdle > 0 or
       numThriftPeersInSync > parallelSyncLimitOverThrift_) {
     LOG_IF(INFO, numThriftPeersInIdle)
@@ -1564,7 +1553,7 @@ KvStoreDb::processThriftSuccess(
   //       response and will rely on the new full-sync response to
   //       promote the state.
   auto& peer = thriftPeers_.at(peerName);
-  if (peer.state == KvStorePeerState::IDLE) {
+  if (peer.peerSpec.get_state() == thrift::KvStorePeerState::IDLE) {
     LOG(WARNING) << "Ignore response from: " << peerName
                  << " as it is in IDLE state";
     return;
@@ -1595,9 +1584,10 @@ KvStoreDb::processThriftSuccess(
             << " Processing time: " << timeDelta.count() << "ms.";
 
   // State transition
-  KvStorePeerState oldState = peer.state;
-  peer.state = getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
-  logStateTransition(peerName, oldState, peer.state);
+  auto oldState = peer.peerSpec.get_state();
+  peer.peerSpec.set_state(
+      getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD));
+  logStateTransition(peerName, oldState, peer.peerSpec.get_state());
 
   kvParams_.kvStoreSyncEventsQueue.push(KvStoreSyncEvent(peerName, area_));
 
@@ -1615,7 +1605,7 @@ KvStoreDb::processThriftSuccess(
   // Schedule another round of `thriftSyncTimer_` full-sync request if
   // there is still peer in IDLE state. If no IDLE peer, cancel timeout.
   uint32_t numThriftPeersInIdle =
-      getPeersByState(KvStorePeerState::IDLE).size();
+      getPeersByState(thrift::KvStorePeerState::IDLE).size();
   if (numThriftPeersInIdle > 0) {
     thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
   } else {
@@ -1648,9 +1638,10 @@ KvStoreDb::processThriftFailure(
   peer.client.reset();
 
   // state transition
-  KvStorePeerState oldState = peer.state;
-  peer.state = getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR);
-  logStateTransition(peerName, oldState, peer.state);
+  auto oldState = peer.peerSpec.get_state();
+  peer.peerSpec.set_state(
+      getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR));
+  logStateTransition(peerName, oldState, peer.peerSpec.get_state());
 
   // Schedule another round of `thriftSyncTimer_` in case it is
   // NOT scheduled.
@@ -1682,10 +1673,13 @@ KvStoreDb::addThriftPeers(
                   << " to: " << *newPeerSpec.peerAddr_ref();
       }
       logStateTransition(
-          peerName, peerIter->second.state, KvStorePeerState::IDLE);
+          peerName,
+          peerIter->second.peerSpec.get_state(),
+          thrift::KvStorePeerState::IDLE);
 
       peerIter->second.peerSpec = newPeerSpec; // update peerSpec
-      peerIter->second.state = KvStorePeerState::IDLE; // set IDLE initially
+      peerIter->second.peerSpec.set_state(
+          thrift::KvStorePeerState::IDLE); // set IDLE initially
       peerIter->second.keepAliveTimer->cancelTimeout(); // cancel timer
       peerIter->second.client.reset(); // destruct thriftClient
     } else {
@@ -2763,7 +2757,8 @@ KvStoreDb::finalizeFullSync(
     }
 
     auto& thriftPeer = peerIt->second;
-    if (thriftPeer.state == KvStorePeerState::IDLE or (not thriftPeer.client)) {
+    if (thriftPeer.peerSpec.get_state() == thrift::KvStorePeerState::IDLE or
+        (not thriftPeer.client)) {
       // peer in thriftPeers collection can still be in IDLE state.
       // Skip final full-sync with those peers.
       return;
@@ -2952,7 +2947,8 @@ KvStoreDb::floodPublication(
       }
 
       auto& thriftPeer = peerIt->second;
-      if (thriftPeer.state != KvStorePeerState::INITIALIZED or
+      if (thriftPeer.peerSpec.get_state() !=
+              thrift::KvStorePeerState::INITIALIZED or
           (not thriftPeer.client)) {
         // Skip flooding to those peers if peer has NOT finished
         // initial sync(i.e. promoted to `INITIALIZED`)

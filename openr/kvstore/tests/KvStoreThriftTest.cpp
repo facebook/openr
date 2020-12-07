@@ -115,7 +115,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
   verifyKvStorePeerState(
       KvStoreWrapper* kvStore,
       const std::string& peerName,
-      KvStorePeerState expPeerState,
+      thrift::KvStorePeerState expPeerState,
       const AreaId& area,
       std::optional<std::chrono::milliseconds> processingTimeout =
           Constants::kPlatformRoutesProcTimeout) noexcept {
@@ -125,7 +125,9 @@ class KvStoreThriftTestFixture : public ::testing::Test {
       auto endTime = std::chrono::steady_clock::now();
       if (endTime - startTime > processingTimeout.value()) {
         LOG(ERROR)
-            << "Timeout verifying state: " << KvStoreDb::toStr(expPeerState)
+            << "Timeout verifying state: "
+            << apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(
+                   expPeerState)
             << " against peer: " << peerName;
         break;
       }
@@ -244,25 +246,27 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     EXPECT_TRUE(
         store2->addPeer(kTestingAreaName, store1->getNodeId(), peerSpec2));
 
+    // verifying keys are exchanged between peers
+    EXPECT_TRUE(verifyKvStorePeerState(
+        store1.get(),
+        store2->getNodeId(),
+        thrift::KvStorePeerState::INITIALIZED,
+        kTestingAreaName));
+    EXPECT_TRUE(verifyKvStorePeerState(
+        store2.get(),
+        store1->getNodeId(),
+        thrift::KvStorePeerState::INITIALIZED,
+        kTestingAreaName));
+
     // dump peers to make sure they are aware of each other
+    peerSpec1.set_state(thrift::KvStorePeerState::INITIALIZED);
+    peerSpec2.set_state(thrift::KvStorePeerState::INITIALIZED);
     std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
         {store2->getNodeId(), peerSpec1}};
     std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
         {store1->getNodeId(), peerSpec2}};
     EXPECT_EQ(expPeer1_1, store1->getPeers(kTestingAreaName));
     EXPECT_EQ(expPeer2_1, store2->getPeers(kTestingAreaName));
-
-    // verifying keys are exchanged between peers
-    EXPECT_TRUE(verifyKvStorePeerState(
-        store1.get(),
-        store2->getNodeId(),
-        KvStorePeerState::INITIALIZED,
-        kTestingAreaName));
-    EXPECT_TRUE(verifyKvStorePeerState(
-        store2.get(),
-        store1->getNodeId(),
-        KvStorePeerState::INITIALIZED,
-        kTestingAreaName));
 
     EXPECT_TRUE(
         verifyKvStoreKeyVal(store1.get(), key2, thriftVal2, kTestingAreaName));
@@ -303,20 +307,23 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         "inproc://dummy-spec-2", // TODO: remove dummy url once zmq deprecated
         Constants::kPlatformHost.toString(),
         thriftServers_.back()->getOpenrCtrlThriftPort());
-    std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
-        {store2->getNodeId(), newPeerSpec}};
 
     // TODO: add counter verification for state change to IDLE
     EXPECT_TRUE(
         store1->addPeer(kTestingAreaName, store2->getNodeId(), newPeerSpec));
-    EXPECT_EQ(newExpPeer, store1->getPeers(kTestingAreaName));
 
     // verify another full-sync request being sent
     EXPECT_TRUE(verifyKvStorePeerState(
         store1.get(),
         store2->getNodeId(),
-        KvStorePeerState::INITIALIZED,
+        thrift::KvStorePeerState::INITIALIZED,
         kTestingAreaName));
+
+    newPeerSpec.set_state(thrift::KvStorePeerState::INITIALIZED);
+    std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
+        {store2->getNodeId(), newPeerSpec}};
+    EXPECT_EQ(newExpPeer, store1->getPeers(kTestingAreaName));
+
     EXPECT_TRUE(
         verifyKvStoreKeyVal(store1.get(), key2, thriftVal2, kTestingAreaName));
     EXPECT_TRUE(
@@ -654,17 +661,17 @@ TEST_F(KvStoreThriftTestFixture, RingTopoFloodingOverThrift) {
   EXPECT_TRUE(verifyKvStorePeerState(
       store1.get(),
       store2->getNodeId(),
-      KvStorePeerState::INITIALIZED,
+      thrift::KvStorePeerState::INITIALIZED,
       kTestingAreaName));
   EXPECT_TRUE(verifyKvStorePeerState(
       store2.get(),
       store3->getNodeId(),
-      KvStorePeerState::INITIALIZED,
+      thrift::KvStorePeerState::INITIALIZED,
       kTestingAreaName));
   EXPECT_TRUE(verifyKvStorePeerState(
       store3.get(),
       store1->getNodeId(),
-      KvStorePeerState::INITIALIZED,
+      thrift::KvStorePeerState::INITIALIZED,
       kTestingAreaName));
   EXPECT_EQ(0, store1->dumpAll(kTestingAreaName).size());
   EXPECT_EQ(0, store2->dumpAll(kTestingAreaName).size());
@@ -703,42 +710,42 @@ TEST_F(KvStoreThriftTestFixture, RingTopoFloodingOverThrift) {
 TEST(KvStore, StateTransitionTest) {
   {
     // IDLE => SYNCING
-    auto oldState = KvStorePeerState::IDLE;
+    auto oldState = thrift::KvStorePeerState::IDLE;
     auto event = KvStorePeerEvent::PEER_ADD;
     auto newState = KvStoreDb::getNextState(oldState, event);
 
-    EXPECT_EQ(newState, KvStorePeerState::SYNCING);
+    EXPECT_EQ(newState, thrift::KvStorePeerState::SYNCING);
   }
 
   {
     // SYNCING => INITIALIZED
-    auto oldState = KvStorePeerState::SYNCING;
+    auto oldState = thrift::KvStorePeerState::SYNCING;
     auto event = KvStorePeerEvent::SYNC_RESP_RCVD;
     auto newState = KvStoreDb::getNextState(oldState, event);
 
-    EXPECT_EQ(newState, KvStorePeerState::INITIALIZED);
+    EXPECT_EQ(newState, thrift::KvStorePeerState::INITIALIZED);
   }
 
   {
     // SYNCING => IDLE
-    auto oldState = KvStorePeerState::SYNCING;
+    auto oldState = thrift::KvStorePeerState::SYNCING;
     auto event = KvStorePeerEvent::THRIFT_API_ERROR;
     auto newState = KvStoreDb::getNextState(oldState, event);
 
-    EXPECT_EQ(newState, KvStorePeerState::IDLE);
+    EXPECT_EQ(newState, thrift::KvStorePeerState::IDLE);
   }
 
   {
     // INITIALIZED => IDLE
     // INITIALIZED => INITIIALIZED
-    auto oldState = KvStorePeerState::INITIALIZED;
+    auto oldState = thrift::KvStorePeerState::INITIALIZED;
     auto event1 = KvStorePeerEvent::SYNC_RESP_RCVD;
     auto newState1 = KvStoreDb::getNextState(oldState, event1);
     auto event2 = KvStorePeerEvent::THRIFT_API_ERROR;
     auto newState2 = KvStoreDb::getNextState(newState1, event2);
 
-    EXPECT_EQ(newState1, KvStorePeerState::INITIALIZED);
-    EXPECT_EQ(newState2, KvStorePeerState::IDLE);
+    EXPECT_EQ(newState1, thrift::KvStorePeerState::INITIALIZED);
+    EXPECT_EQ(newState2, thrift::KvStorePeerState::IDLE);
   }
 }
 

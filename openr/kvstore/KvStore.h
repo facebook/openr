@@ -40,16 +40,6 @@
 namespace openr {
 
 //
-// Define KvStorePeerState to maintain peer's state transition
-// during peer coming UP/DOWN for initial sync.
-//
-enum class KvStorePeerState {
-  IDLE = 0,
-  SYNCING = 1,
-  INITIALIZED = 2,
-};
-
-//
 // Define KvStorePeerEvent which triggers the peer state
 // transition.
 //
@@ -272,7 +262,8 @@ class KvStoreDb : public DualNode {
   thrift::PeersMap dumpPeers();
 
   // util funtion to fetch KvStorePeerState
-  std::optional<KvStorePeerState> getCurrentState(std::string const& peerName);
+  std::optional<thrift::KvStorePeerState> getCurrentState(
+      std::string const& peerName);
 
   // process spanning-tree-set command to set/unset a child for a given root
   void processFloodTopoSet(
@@ -282,15 +273,12 @@ class KvStoreDb : public DualNode {
   thrift::SptInfos processFloodTopoGet() noexcept;
 
   // util function to fetch peer by its state
-  std::vector<std::string> getPeersByState(KvStorePeerState state);
+  std::vector<std::string> getPeersByState(thrift::KvStorePeerState state);
 
   // util function for state transition
-  static KvStorePeerState getNextState(
-      std::optional<KvStorePeerState> const& currState,
+  static thrift::KvStorePeerState getNextState(
+      std::optional<thrift::KvStorePeerState> const& currState,
       KvStorePeerEvent const& event);
-
-  // util function to convert ENUM KvStorePeerState to string
-  static std::string toStr(KvStorePeerState state);
 
  private:
   // disable copying
@@ -300,8 +288,8 @@ class KvStoreDb : public DualNode {
   // util function to log state transition
   static void logStateTransition(
       std::string const& peerName,
-      KvStorePeerState oldState,
-      KvStorePeerState newState);
+      thrift::KvStorePeerState oldState,
+      thrift::KvStorePeerState newState);
 
   // method to scan over thriftPeers to send full-dump request
   void requestThriftPeerSync();
@@ -428,13 +416,6 @@ class KvStoreDb : public DualNode {
   // Kv store parameters
   KvStoreParams& kvParams_;
 
-  // state transition matrix for Finiite-State-Machine
-  // i.e.
-  //  next_state = peerStateMap_[current_state][event]
-  //
-  static const std::vector<std::vector<std::optional<KvStorePeerState>>>
-      peerStateMap_;
-
   // area identified of this KvStoreDb instance
   const std::string area_;
 
@@ -449,7 +430,7 @@ class KvStoreDb : public DualNode {
   struct KvStorePeer {
     KvStorePeer(
         const std::string& nodeName,
-        const thrift::PeerSpec& peerSpec,
+        const thrift::PeerSpec& ps,
         const ExponentialBackoff<std::chrono::milliseconds>& expBackoff);
     // node name
     const std::string nodeName;
@@ -459,9 +440,6 @@ class KvStoreDb : public DualNode {
 
     // exponetial backoff in case of retry after sync failure
     ExponentialBackoff<std::chrono::milliseconds> expBackoff;
-
-    // peer state
-    KvStorePeerState state{KvStorePeerState::IDLE};
 
     // thrift client for this peer
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
@@ -650,8 +628,8 @@ class KvStore final : public OpenrEventBase {
   messaging::RQueue<thrift::Publication> getKvStoreUpdatesReader();
 
   // API to fetch state of peerNode, used for unit-testing
-  folly::SemiFuture<std::optional<KvStorePeerState>> getKvStorePeerState(
-      std::string const& area, std::string const& peerName);
+  folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
+  getKvStorePeerState(std::string const& area, std::string const& peerName);
 
  private:
   // disable copying

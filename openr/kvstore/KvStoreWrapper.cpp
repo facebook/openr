@@ -237,7 +237,7 @@ KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
   return true;
 }
 
-std::optional<KvStorePeerState>
+std::optional<thrift::KvStorePeerState>
 KvStoreWrapper::getPeerState(AreaId const& area, std::string const& peerName) {
   return kvStore_->getKvStorePeerState(area, peerName).get();
 }

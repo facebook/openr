@@ -114,6 +114,16 @@ struct KeyDumpParams {
   5: optional list<string> keys;
 }
 
+//
+// Define KvStorePeerState to maintain peer's state transition
+// during peer coming UP/DOWN for initial sync.
+//
+enum KvStorePeerState {
+  IDLE = 0,
+  SYNCING = 1,
+  INITIALIZED = 2,
+}
+
 // Peer's publication and command socket URLs
 // This is used in peer add requests and in
 // the dump results
@@ -126,6 +136,8 @@ struct PeerSpec {
 
   // thrift port
   4: i32 ctrlPort = 0
+
+  5: KvStorePeerState state
 }
 
 typedef map<string, PeerSpec>

@@ -146,7 +146,7 @@ class KvStoreWrapper {
   bool addPeer(AreaId const& area, std::string peerName, thrift::PeerSpec spec);
   bool delPeer(AreaId const& area, std::string peerName);
 
-  std::optional<KvStorePeerState> getPeerState(
+  std::optional<thrift::KvStorePeerState> getPeerState(
       AreaId const& area, std::string const& peerName);
 
   /**
