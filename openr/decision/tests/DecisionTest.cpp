@@ -398,6 +398,44 @@ getNextHops(const thrift::UnicastRoute& r) {
   return *r.nextHops_ref();
 }
 
+// DPERECTAED: utility finction provided for old test callsites that once used
+// PrefixState::updatePrefixDatabase() expecting all node route advertisments to
+// be synced.
+// Prefer PrefixState::updatePrefix() and PrefixState::deletePrefix() in newly
+// written tests
+std::unordered_set<thrift::IpPrefix>
+updatePrefixDatabase(
+    PrefixState& state, thrift::PrefixDatabase const& prefixDb) {
+  auto const& nodeName = prefixDb.get_thisNodeName();
+  auto const& area = prefixDb.get_area();
+
+  std::unordered_set<PrefixKey> oldKeys, newKeys;
+  for (auto const& [_, db] : state.getPrefixDatabases()) {
+    if (nodeName == db.get_thisNodeName() && area == db.get_area()) {
+      for (auto const& entry : db.get_prefixEntries()) {
+        oldKeys.emplace(nodeName, toIPNetwork(entry.get_prefix()), area);
+      }
+      break;
+    }
+  }
+
+  std::unordered_set<thrift::IpPrefix> changed;
+
+  for (auto const& entry : prefixDb.get_prefixEntries()) {
+    PrefixKey key(nodeName, toIPNetwork(entry.get_prefix()), area);
+    changed.merge(state.updatePrefix(key, entry));
+    newKeys.insert(std::move(key));
+  }
+
+  for (auto const& key : oldKeys) {
+    if (not newKeys.count(key)) {
+      changed.merge(state.deletePrefix(key));
+    }
+  }
+
+  return changed;
+}
+
 } // anonymous namespace
 
 //
@@ -421,8 +459,8 @@ TEST(ShortestPathTest, UnreachableNodes) {
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
 
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
 
   unordered_map<
       pair<string /* node name */, string /* ip prefix */>,
@@ -461,8 +499,8 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   //
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
@@ -495,8 +533,8 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
 
   // dump routes for both nodes, expect no routing entries
 
@@ -557,8 +595,8 @@ TEST(SpfSolver, AdjacencyUpdate) {
     EXPECT_TRUE(res.topologyChanged);
     EXPECT_TRUE(res.nodeLabelChanged);
   }
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
 
   //
   // dump routes for both nodes, expect 4 route entries (1 unicast, 3 label) on
@@ -765,8 +803,8 @@ TEST(BGPRedistribution, BasicOperation) {
       mv1,
       std::nullopt));
 
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1WithBGP).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1WithBGP).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2WithBGP).empty());
 
   auto decisionRouteDb =
       *spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
@@ -791,7 +829,7 @@ TEST(BGPRedistribution, BasicOperation) {
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
       mv2,
       std::nullopt));
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2WithBGP).empty());
   decisionRouteDb = *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(1));
@@ -806,7 +844,7 @@ TEST(BGPRedistribution, BasicOperation) {
       ->at(numMetrics - 1)
       .metric_ref()
       ->front()--;
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2WithBGP).empty());
   decisionRouteDb = *spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(2));
@@ -821,7 +859,7 @@ TEST(BGPRedistribution, BasicOperation) {
       ->at(numMetrics - 1)
       .metric_ref()
       ->front() += 2;
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2WithBGP).empty());
 
   auto route2 = createUnicastRoute(
       bgpPrefix1, {createNextHopFromAdj(adj12, false, *adj12.metric_ref())});
@@ -849,8 +887,8 @@ TEST(BGPRedistribution, BasicOperation) {
       .metrics_ref()
       ->at(numMetrics - 1)
       .isBestPathTieBreaker_ref() = true;
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1WithBGP).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBGP).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1WithBGP).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2WithBGP).empty());
 
   // 1 and 2 will not program BGP route
   EXPECT_THAT(
@@ -970,8 +1008,8 @@ TEST(BGPRedistribution, IgpMetric) {
       createPrefixDb("2", {createPrefixEntry(addr2), bgpPrefix2});
   auto prefixDb3WithBgp =
       createPrefixDb("3", {createPrefixEntry(addr3), bgpPrefix3});
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2WithBgp).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3WithBgp).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2WithBgp).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3WithBgp).empty());
 
   //
   // Step-1 prefix1 -> {node2, node3}
@@ -1108,10 +1146,10 @@ TEST(Decision, BestRouteSelection) {
   const auto node3Prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
   EXPECT_FALSE(
-      prefixState.updatePrefixDatabase(createPrefixDb("2", {node2Prefix}))
+      updatePrefixDatabase(prefixState, createPrefixDb("2", {node2Prefix}))
           .empty());
   EXPECT_FALSE(
-      prefixState.updatePrefixDatabase(createPrefixDb("3", {node3Prefix}))
+      updatePrefixDatabase(prefixState, createPrefixDb("3", {node3Prefix}))
           .empty());
 
   //
@@ -1155,10 +1193,9 @@ TEST(Decision, BestRouteSelection) {
   //
   const auto node2PrefixPreferred = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 100, 0));
-  EXPECT_FALSE(
-      prefixState
-          .updatePrefixDatabase(createPrefixDb("2", {node2PrefixPreferred}))
-          .empty());
+  EXPECT_FALSE(updatePrefixDatabase(
+                   prefixState, createPrefixDb("2", {node2PrefixPreferred}))
+                   .empty());
 
   decisionRouteDb = *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   routeDb = decisionRouteDb.toThrift();
@@ -1194,10 +1231,9 @@ TEST(Decision, BestRouteSelection) {
       addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 100, 0));
   node2PrefixPreferredMpls.forwardingType_ref() =
       thrift::PrefixForwardingType::SR_MPLS;
-  EXPECT_FALSE(
-      prefixState
-          .updatePrefixDatabase(createPrefixDb("2", {node2PrefixPreferredMpls}))
-          .empty());
+  EXPECT_FALSE(updatePrefixDatabase(
+                   prefixState, createPrefixDb("2", {node2PrefixPreferredMpls}))
+                   .empty());
   decisionRouteDb = *spfSolver.buildRouteDb("3", areaLinkStates, prefixState);
   routeDb = decisionRouteDb.toThrift();
   EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(1));
@@ -1250,9 +1286,9 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
       LinkState::LinkStateChange(!partitioned, false, true),
       linkState.updateAdjacencyDatabase(adjacencyDb3));
 
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
 
   // route from 1 to 3
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
@@ -1303,9 +1339,9 @@ TEST(ConnectivityTest, OverloadNodeTest) {
   // Make node-2 overloaded
   adjacencyDb2.isOverloaded_ref() = true;
 
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
@@ -1398,9 +1434,9 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   auto adjacencyDb2 = createAdjDb("2", {adj21_old_1, adj23}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj32, adj31_old}, 3);
 
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
@@ -1552,7 +1588,8 @@ class SimpleRingMeshTopologyFixture
     auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
     auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
 
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb1,
@@ -1562,7 +1599,8 @@ class SimpleRingMeshTopologyFixture
                   std::nullopt,
                   v4Enabled)
             : pdb1);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb2,
@@ -1572,7 +1610,8 @@ class SimpleRingMeshTopologyFixture
                   std::nullopt,
                   v4Enabled)
             : pdb2);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb3,
@@ -1582,7 +1621,8 @@ class SimpleRingMeshTopologyFixture
                   std::nullopt,
                   v4Enabled)
             : pdb3);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb4,
@@ -1739,7 +1779,8 @@ class SimpleRingTopologyFixture
     auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
     auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
 
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb1,
@@ -1749,7 +1790,8 @@ class SimpleRingTopologyFixture
                   std::nullopt,
                   v4Enabled)
             : pdb1);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb2,
@@ -1759,7 +1801,8 @@ class SimpleRingTopologyFixture
                   std::nullopt,
                   v4Enabled)
             : pdb2);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb3,
@@ -1769,7 +1812,8 @@ class SimpleRingTopologyFixture
                   std::nullopt,
                   v4Enabled)
             : pdb3);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   pdb4,
@@ -2177,7 +2221,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
     entity.metric_ref()->emplace_back(1);
     entry1.mv_ref()->metrics_ref()->push_back(entity);
   }
-  prefixState.updatePrefixDatabase(prefixDb);
+  updatePrefixDatabase(prefixState, prefixDb);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
@@ -2202,7 +2246,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   // doesn't qualify min-nexthop requirement of 2
   //
   entry1.minNexthop_ref() = 2;
-  prefixState.updatePrefixDatabase(prefixDb);
+  updatePrefixDatabase(prefixState, prefixDb);
   routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
@@ -2221,7 +2265,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   // Case-3 Add label prepend instruction
   //
   entry1.prependLabel_ref() = prependLabel;
-  prefixState.updatePrefixDatabase(prefixDb);
+  updatePrefixDatabase(prefixState, prefixDb);
   routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
@@ -2247,7 +2291,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
     auto& entry4 = prefixDb4.prefixEntries_ref()->back();
     entry4.mv_ref()->metrics_ref()->at(0).metric_ref()->at(0) += 1;
   }
-  prefixState.updatePrefixDatabase(prefixDb4);
+  updatePrefixDatabase(prefixState, prefixDb4);
 
   // insert the new nexthop to mpls static routes cache
   const auto nh1Addr = toBinaryAddress("1.1.1.1");
@@ -2521,8 +2565,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // node 2 is announcing the prefix without prependLabel.
   prefixDBOne.prefixEntries_ref()[1].prependLabel_ref() = 60000;
 
-  prefixState.updatePrefixDatabase(prefixDBOne);
-  prefixState.updatePrefixDatabase(prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
 
   auto routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
 
@@ -2565,8 +2609,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   // change data to some special case for verification
   prefixDBOne.prefixEntries_ref()->at(1).data_ref() = "123";
-  prefixState.updatePrefixDatabase(prefixDBTwo);
-  prefixState.updatePrefixDatabase(prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
@@ -2589,7 +2633,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       ->at(numMetrics - 1)
       .metric_ref()
       ->front() += 2;
-  prefixState.updatePrefixDatabase(prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
@@ -2618,8 +2662,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       .metrics_ref()
       ->at(numMetrics - 1)
       .isBestPathTieBreaker_ref() = true;
-  prefixState.updatePrefixDatabase(prefixDBTwo);
-  prefixState.updatePrefixDatabase(prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
 
   // createNextHopFromAdj(adj34, v4Enabled, 30, push12, true) getting ignored
@@ -2730,8 +2774,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
       ->at(numMetrics - 1)
       .isBestPathTieBreaker_ref() = true;
 
-  prefixState.updatePrefixDatabase(prefixDBOne);
-  prefixState.updatePrefixDatabase(prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
   auto pushCode = thrift::MplsActionCode::PUSH;
 
   // verify on node 1. From node 1 point of view, both node 1 and node 2 are
@@ -2763,7 +2807,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
                 createNextHopFromAdj(adj12, v4Enabled, 10, std::nullopt)}));
 
   prefixDBOne.prefixEntries_ref()->at(1).minNexthop_ref() = 3;
-  prefixState.updatePrefixDatabase(prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
 
   EXPECT_EQ(
@@ -2785,8 +2829,8 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
       "1", {createPrefixEntry(addr1), createPrefixEntry(defaultRoute)});
   auto prefixDb4 = createPrefixDb(
       "4", {createPrefixEntry(addr4), createPrefixEntry(defaultRoute)});
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1).empty());
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb4).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb4).empty());
 
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
@@ -3220,22 +3264,26 @@ class ParallelAdjRingTopologyFixture
 
     // Prefix db's
 
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   prefixDb1, prefixType, std::nullopt, std::nullopt, false)
             : prefixDb1);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   prefixDb2, prefixType, std::nullopt, std::nullopt, false)
             : prefixDb2);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   prefixDb3, prefixType, std::nullopt, std::nullopt, false)
             : prefixDb3);
-    prefixState.updatePrefixDatabase(
+    updatePrefixDatabase(
+        prefixState,
         useKsp2Ed
             ? createPrefixDbWithKspfAlgo(
                   prefixDb4, prefixType, std::nullopt, std::nullopt, false)
@@ -3585,7 +3633,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
       std::make_optional<int64_t>(4));
 
   prefixDBFour.prefixEntries_ref()->push_back(newPrefix);
-  prefixState.updatePrefixDatabase(prefixDBFour);
+  updatePrefixDatabase(prefixState, prefixDBFour);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
 
   // in theory, kspf will choose adj12_2, adj13_1 as nexthops,
@@ -3599,7 +3647,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   apache::thrift::fromFollyOptional(
       newPrefix.minNexthop_ref(), folly::make_optional<int64_t>(2));
   prefixDBFour.prefixEntries_ref()->push_back(newPrefix);
-  prefixState.updatePrefixDatabase(prefixDBFour);
+  updatePrefixDatabase(prefixState, prefixDBFour);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(bgpAddr1))],
@@ -3619,7 +3667,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   apache::thrift::fromFollyOptional(
       newPrefix.minNexthop_ref(), folly::make_optional<int64_t>(4));
   prefixDBThr.prefixEntries_ref()->push_back(newPrefix);
-  prefixState.updatePrefixDatabase(prefixDBThr);
+  updatePrefixDatabase(prefixState, prefixDBThr);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
 
   EXPECT_EQ(routeMap.find(make_pair("1", toString(bgpAddr1))), routeMap.end());
@@ -3627,8 +3675,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   // Revert the setup to normal state
   prefixDBFour.prefixEntries_ref()->pop_back();
   prefixDBThr.prefixEntries_ref()->pop_back();
-  prefixState.updatePrefixDatabase(prefixDBFour);
-  prefixState.updatePrefixDatabase(prefixDBThr);
+  updatePrefixDatabase(prefixState, prefixDBFour);
+  updatePrefixDatabase(prefixState, prefixDBThr);
 
   //
   // Bring down adj12_2 and adj34_2 to make our nexthop validations easy
@@ -3783,8 +3831,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   prefixDBTwo.prefixEntries_ref()->push_back(
       prefixDBOne.prefixEntries_ref()->front());
 
-  prefixState.updatePrefixDatabase(prefixDBOne);
-  prefixState.updatePrefixDatabase(prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
 
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
 
@@ -3805,8 +3853,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
       ->front()--;
   prefixDBTwo.prefixEntries_ref()->back().minNexthop_ref() = 4;
   prefixDBOne.prefixEntries_ref()->front().minNexthop_ref() = 2;
-  prefixState.updatePrefixDatabase(prefixDBTwo);
-  prefixState.updatePrefixDatabase(prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
 
   // validate router 3
@@ -3820,8 +3868,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // and we should not program/annouce any routes
   prefixDBTwo.prefixEntries_ref()->back().minNexthop_ref() = 2;
   prefixDBOne.prefixEntries_ref()->front().minNexthop_ref() = 4;
-  prefixState.updatePrefixDatabase(prefixDBTwo);
-  prefixState.updatePrefixDatabase(prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
 
   // validate router 3
@@ -3829,8 +3877,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // reset min nexthop to rest of checks
   prefixDBTwo.prefixEntries_ref()->back().minNexthop_ref().reset();
   prefixDBOne.prefixEntries_ref()->front().minNexthop_ref().reset();
-  prefixState.updatePrefixDatabase(prefixDBTwo);
-  prefixState.updatePrefixDatabase(prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
 
   // decrease mv for the second node, now router 3 should point to 2
   prefixDBTwo.prefixEntries_ref()
@@ -3841,7 +3889,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
       ->at(numMetrics - 1)
       .metric_ref()
       ->front() += 2;
-  prefixState.updatePrefixDatabase(prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
 
   // validate router 3
@@ -3866,8 +3914,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
       .metrics_ref()
       ->at(numMetrics - 1)
       .isBestPathTieBreaker_ref() = true;
-  prefixState.updatePrefixDatabase(prefixDBTwo);
-  prefixState.updatePrefixDatabase(prefixDBOne);
+  updatePrefixDatabase(prefixState, prefixDBTwo);
+  updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
 
   // createNextHopFromAdj(adj34, v4Enabled, 30, push12, true) getting ignored
@@ -3963,7 +4011,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb1_).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1_).empty());
   const auto prefixDb2_ = createPrefixDb(
       "2",
       {createPrefixEntry(
@@ -3971,7 +4019,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb2_).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2_).empty());
   const auto prefixDb3_ = createPrefixDb(
       "3",
       {createPrefixEntry(
@@ -3979,7 +4027,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb3_).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3_).empty());
   const auto prefixDb4_ = createPrefixDb(
       "4",
       {createPrefixEntry(
@@ -3987,7 +4035,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb4_).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb4_).empty());
   const auto prefixDb5_ = createPrefixDb(
       "5",
       {createPrefixEntry(
@@ -3995,7 +4043,7 @@ TEST(DecisionTest, Ip2MplsRoutes) {
           thrift::PrefixType::LOOPBACK,
           {},
           thrift::PrefixForwardingType::SR_MPLS)});
-  EXPECT_FALSE(prefixState.updatePrefixDatabase(prefixDb5_).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb5_).empty());
 
   // Some actions
   auto const labelPush1 = createMplsAction(
@@ -4266,8 +4314,8 @@ createGrid(LinkState& linkState, PrefixState& prefixState, int n) {
 
       // prefix
       auto addrV6 = toIpPrefix(nodeToPrefixV6(node));
-      prefixState.updatePrefixDatabase(
-          createPrefixDb(nodeName, {createPrefixEntry(addrV6)}));
+      updatePrefixDatabase(
+          prefixState, createPrefixDb(nodeName, {createPrefixEntry(addrV6)}));
     }
   }
 }

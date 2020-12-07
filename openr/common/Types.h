@@ -128,6 +128,12 @@ class PrefixKey {
     return prefixKeyPattern;
   }
 
+  bool
+  operator==(openr::PrefixKey const& other) const {
+    return prefix_ == other.prefix_ && node_ == other.node_ &&
+        prefixArea_ == other.prefixArea_;
+  }
+
  private:
   // node name
   std::string const node_;
@@ -149,5 +155,16 @@ struct std::hash<openr::AreaId> {
   size_t
   operator()(openr::AreaId const& areaId) const {
     return hash<string>()(areaId);
+  }
+};
+
+template <>
+struct std::hash<openr::PrefixKey> {
+  size_t
+  operator()(openr::PrefixKey const& prefixKey) const {
+    return folly::hash::hash_combine(
+        prefixKey.getNodeName(),
+        prefixKey.getCIDRNetwork(),
+        prefixKey.getPrefixArea());
   }
 };

@@ -27,11 +27,6 @@ class PrefixState {
     return prefixes_;
   }
 
-  // Deprecated, retained for test logic will be removed in follow up diff
-  // prefer updatePrefix, deletePrefix
-  std::unordered_set<thrift::IpPrefix> updatePrefixDatabase(
-      thrift::PrefixDatabase const& prefixDb);
-
   // returns set of changed prefixes (i.e. a node started advertising or any
   // attributes changed)
   std::unordered_set<thrift::IpPrefix> updatePrefix(
