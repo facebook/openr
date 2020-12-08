@@ -17,13 +17,9 @@ std::unordered_set<thrift::IpPrefix>
 PrefixState::updatePrefix(
     PrefixKey const& key, thrift::PrefixEntry const& entry) {
   std::unordered_set<thrift::IpPrefix> changed;
-  auto const nodeAndArea =
-      std::make_pair(key.getNodeName(), key.getPrefixArea());
 
-  // Update our state with this newly advertised entry
-  nodeToPrefixes_[nodeAndArea].insert(key.getIpPrefix());
   auto [it, inserted] =
-      prefixes_[key.getIpPrefix()].emplace(nodeAndArea, entry);
+      prefixes_[key.getIpPrefix()].emplace(key.getNodeAndArea(), entry);
 
   // Skip rest of code, if prefix exists and has no change
   if (not inserted && it->second == entry) {
@@ -44,40 +40,19 @@ PrefixState::updatePrefix(
 std::unordered_set<thrift::IpPrefix>
 PrefixState::deletePrefix(PrefixKey const& key) {
   std::unordered_set<thrift::IpPrefix> changed;
-  auto const nodeAndArea =
-      std::make_pair(key.getNodeName(), key.getPrefixArea());
-  if (nodeToPrefixes_[nodeAndArea].erase(key.getIpPrefix())) {
+  auto search = prefixes_.find(key.getIpPrefix());
+  if (search != prefixes_.end() && search->second.erase(key.getNodeAndArea())) {
     changed.insert(key.getIpPrefix());
     VLOG(1) << "[ROUTE WITHDRAW] "
             << "Area: " << key.getPrefixArea()
             << ", Node: " << key.getNodeName() << ", "
             << toString(key.getIpPrefix());
-    prefixes_[key.getIpPrefix()].erase(nodeAndArea);
     // clean up data structures
-    if (nodeToPrefixes_[nodeAndArea].empty()) {
-      nodeToPrefixes_.erase(nodeAndArea);
-    }
-    if (prefixes_[key.getIpPrefix()].empty()) {
-      prefixes_.erase(key.getIpPrefix());
+    if (search->second.empty()) {
+      prefixes_.erase(search);
     }
   }
   return changed;
-}
-
-std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
-PrefixState::getPrefixDatabases() const {
-  std::unordered_map<std::string, thrift::PrefixDatabase> prefixDatabases;
-  for (auto const& [nodeAndArea, prefixes] : nodeToPrefixes_) {
-    thrift::PrefixDatabase prefixDb;
-    *prefixDb.thisNodeName_ref() = nodeAndArea.first;
-    prefixDb.area_ref() = nodeAndArea.second;
-    for (auto const& prefix : prefixes) {
-      prefixDb.prefixEntries_ref()->emplace_back(
-          prefixes_.at(prefix).at(nodeAndArea));
-    }
-    prefixDatabases.emplace(nodeAndArea.first, std::move(prefixDb));
-  }
-  return prefixDatabases;
 }
 
 std::vector<thrift::ReceivedRouteDetail>

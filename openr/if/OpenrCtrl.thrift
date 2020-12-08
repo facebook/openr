@@ -344,6 +344,8 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get global prefix databases. This represents prefixes of actives nodes
    * only. While KvStore can represent dead node's information until their keys
    * expires
+   *
+   * DEPRECATED. Prefer getReceivedRoutes APIs
    */
   Decision.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error)
 

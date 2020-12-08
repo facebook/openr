@@ -102,6 +102,8 @@ class PrefixKey {
   static folly::Expected<PrefixKey, std::string> fromStr(
       const std::string& key);
 
+  NodeAndArea const& getNodeAndArea() const;
+
   // return node name
   std::string const& getNodeName() const;
 
@@ -130,19 +132,15 @@ class PrefixKey {
 
   bool
   operator==(openr::PrefixKey const& other) const {
-    return prefix_ == other.prefix_ && node_ == other.node_ &&
-        prefixArea_ == other.prefixArea_;
+    return prefix_ == other.prefix_ && nodeAndArea_ == other.nodeAndArea_;
   }
 
  private:
   // node name
-  std::string const node_;
+  NodeAndArea const nodeAndArea_;
 
   // IP address
   folly::CIDRNetwork const prefix_;
-
-  // prefix area
-  std::string const prefixArea_;
 
   // key string used for KvStore
   std::string const prefixKeyString_;

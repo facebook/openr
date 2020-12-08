@@ -36,9 +36,6 @@ class PrefixState {
   // empty if node/area did not previosuly advertise
   std::unordered_set<thrift::IpPrefix> deletePrefix(PrefixKey const& key);
 
-  std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
-  getPrefixDatabases() const;
-
   std::vector<thrift::ReceivedRouteDetail> getReceivedRoutesFiltered(
       thrift::ReceivedRouteFilter const& filter) const;
 
@@ -71,9 +68,5 @@ class PrefixState {
   // Data structure to maintain mapping from:
   //  IpPrefix -> collection of originator(i.e. [node, area] combination)
   std::unordered_map<thrift::IpPrefix, PrefixEntries> prefixes_;
-
-  // (Reverse Mapping) Data structure to maintain mapping from:
-  //  [node, area] combination -> set of IpPrefix
-  std::unordered_map<NodeAndArea, std::set<thrift::IpPrefix>> nodeToPrefixes_;
 };
 } // namespace openr

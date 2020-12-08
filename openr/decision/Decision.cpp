@@ -1537,17 +1537,6 @@ Decision::getDecisionAdjacenciesFiltered(thrift::AdjacenciesFilter filter) {
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
-Decision::getDecisionPrefixDbs() {
-  folly::Promise<std::unique_ptr<thrift::PrefixDbs>> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([p = std::move(p), this]() mutable {
-    p.setValue(
-        std::make_unique<thrift::PrefixDbs>(prefixState_.getPrefixDatabases()));
-  });
-  return sf;
-}
-
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
 Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
   auto [p, sf] = folly::makePromiseContract<

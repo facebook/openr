@@ -24,21 +24,22 @@ class PrefixStateTestFixture : public ::testing::Test {
   }
 
   PrefixState state_;
-  std::unordered_map<
-      std::string,
-      std::vector<std::pair<PrefixKey, thrift::PrefixEntry>>>
-      prefixKeys_;
+  std::unordered_map<thrift::IpPrefix, PrefixEntries> initialEntries_;
 
   void
   SetUp() override {
     auto const numNodes = getNumNodes();
     for (size_t i = 0; i < numNodes; ++i) {
       std::string nodeName = std::to_string(i);
-      prefixKeys_[nodeName] = createPrefixDbForNode(nodeName, i);
-      for (auto const& [key, entry] : prefixKeys_[nodeName]) {
+      for (auto const& [key, entry] : createPrefixDbForNode(nodeName, i)) {
         EXPECT_FALSE(state_.updatePrefix(key, entry).empty());
+        initialEntries_[key.getIpPrefix()].emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(key.getNodeName(), key.getPrefixArea()),
+            std::forward_as_tuple(entry));
       }
     }
+    EXPECT_EQ(initialEntries_, state_.prefixes());
   }
 
   virtual size_t
@@ -54,16 +55,9 @@ class PrefixStateTestFixture : public ::testing::Test {
 };
 
 TEST_F(PrefixStateTestFixture, basicOperation) {
-  for (auto const& [nodeName, db] : state_.getPrefixDatabases()) {
-    std::vector<thrift::PrefixEntry> entries;
-    for (auto const& [_, entry] : prefixKeys_.at(nodeName)) {
-      entries.push_back(entry);
-    }
-    EXPECT_THAT(
-        db.get_prefixEntries(), testing::UnorderedElementsAreArray(entries));
-  }
-
-  auto [key, entry] = prefixKeys_.begin()->second.at(0);
+  auto& [nodeArea, entry] = *(initialEntries_.begin()->second.begin());
+  const PrefixKey key(
+      nodeArea.first, toIPNetwork(entry.get_prefix()), nodeArea.second);
   EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
 
   entry.set_type(thrift::PrefixType::BREEZE);
@@ -71,26 +65,14 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
       state_.updatePrefix(key, entry),
       testing::UnorderedElementsAre(key.getIpPrefix()));
   EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
-  EXPECT_THAT(
-      state_.getPrefixDatabases().at(key.getNodeName()).get_prefixEntries(),
-      testing::Contains(entry));
+  EXPECT_EQ(state_.prefixes().at(entry.get_prefix()).at(nodeArea), entry);
 
   entry.set_forwardingType(thrift::PrefixForwardingType::SR_MPLS);
   EXPECT_THAT(
       state_.updatePrefix(key, entry),
       testing::UnorderedElementsAre(key.getIpPrefix()));
   EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
-  EXPECT_THAT(
-      state_.getPrefixDatabases().at(key.getNodeName()).get_prefixEntries(),
-      testing::Contains(entry));
-
-  // remove all prefixes for a node
-  for (auto const& [key, _] : prefixKeys_.begin()->second) {
-    EXPECT_THAT(
-        state_.deletePrefix(key),
-        testing::UnorderedElementsAre(key.getIpPrefix()));
-  }
-  EXPECT_EQ(0, state_.getPrefixDatabases().count(prefixKeys_.begin()->first));
+  EXPECT_EQ(state_.prefixes().at(entry.get_prefix()).at(nodeArea), entry);
 }
 
 /**

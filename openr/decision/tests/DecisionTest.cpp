@@ -398,11 +398,32 @@ getNextHops(const thrift::UnicastRoute& r) {
   return *r.nextHops_ref();
 }
 
-// DPERECTAED: utility finction provided for old test callsites that once used
+// DPERECTAED: utility functions provided for old test callsites that once used
 // PrefixState::updatePrefixDatabase() expecting all node route advertisments to
 // be synced.
-// Prefer PrefixState::updatePrefix() and PrefixState::deletePrefix() in newly
-// written tests
+//
+// In newly written tests, prefer
+// PrefixState::updatePrefix() and PrefixState::deletePrefix() for writing
+// PrefixState::getReceivedRoutesFiltered() for reading
+
+thrift::PrefixDatabase
+getPrefixDbForNode(
+    PrefixState const& state,
+    std::string const& name,
+    std::string const& area = kTestingAreaName) {
+  thrift::PrefixDatabase prefixDb;
+  prefixDb.set_thisNodeName(name);
+  prefixDb.set_area(area);
+  thrift::ReceivedRouteFilter filter;
+  filter.set_nodeName(name);
+  filter.set_areaName(area);
+  for (auto const& routeDetail : state.getReceivedRoutesFiltered(filter)) {
+    prefixDb.prefixEntries_ref()->push_back(
+        routeDetail.get_routes().at(0).get_route());
+  }
+  return prefixDb;
+}
+
 std::unordered_set<thrift::IpPrefix>
 updatePrefixDatabase(
     PrefixState& state, thrift::PrefixDatabase const& prefixDb) {
@@ -410,15 +431,11 @@ updatePrefixDatabase(
   auto const& area = prefixDb.get_area();
 
   std::unordered_set<PrefixKey> oldKeys, newKeys;
-  for (auto const& [_, db] : state.getPrefixDatabases()) {
-    if (nodeName == db.get_thisNodeName() && area == db.get_area()) {
-      for (auto const& entry : db.get_prefixEntries()) {
-        oldKeys.emplace(nodeName, toIPNetwork(entry.get_prefix()), area);
-      }
-      break;
-    }
+  auto oldDb = getPrefixDbForNode(
+      state, prefixDb.get_thisNodeName(), prefixDb.get_area());
+  for (auto const& entry : oldDb.get_prefixEntries()) {
+    oldKeys.emplace(nodeName, toIPNetwork(entry.get_prefix()), area);
   }
-
   std::unordered_set<thrift::IpPrefix> changed;
 
   for (auto const& entry : prefixDb.get_prefixEntries()) {
@@ -2206,8 +2223,8 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   //
   // Case-1 IP to MPLS routes towards node1
   //
-  auto prefixDb = prefixState.getPrefixDatabases()["1"];
-  auto& entry1 = prefixDb.prefixEntries_ref()->front();
+  auto prefixDb = getPrefixDbForNode(prefixState, "1");
+  auto& entry1 = prefixDb.prefixEntries_ref()->back();
   for (auto& prefixEntry : prefixDb.prefixEntries_ref().value()) {
     prefixEntry.forwardingAlgorithm_ref() =
         thrift::PrefixForwardingAlgorithm::SP_ECMP;
@@ -2285,7 +2302,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   //
 
   // Advertise addr1[V4] from node4 as well with prepend label
-  auto prefixDb4 = prefixState.getPrefixDatabases()["4"];
+  auto prefixDb4 = getPrefixDbForNode(prefixState, "4");
   prefixDb4.prefixEntries_ref()->emplace_back(entry1);
   if (entry1.mv_ref()) {
     auto& entry4 = prefixDb4.prefixEntries_ref()->back();
@@ -2553,9 +2570,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
         *mv2.metrics_ref()[i].metric_ref() = {i};
   }
 
-  auto prefixDBs = prefixState.getPrefixDatabases();
-  auto prefixDBOne = prefixDBs["1"];
-  auto prefixDBTwo = prefixDBs["2"];
+  auto prefixDBOne = getPrefixDbForNode(prefixState, "1");
+  auto prefixDBTwo = getPrefixDbForNode(prefixState, "2");
 
   // set metric vector for two prefixes in two nodes to be same
   prefixDBOne.prefixEntries_ref()->at(1).mv_ref() = mv1;
@@ -2737,9 +2753,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
         *mv2.metrics_ref()[i].metric_ref() = {i};
   }
 
-  auto prefixDBs = prefixState.getPrefixDatabases();
-  auto prefixDBOne = prefixDBs["1"];
-  auto prefixDBTwo = prefixDBs["2"];
+  auto prefixDBOne = getPrefixDbForNode(prefixState, "1");
+  auto prefixDBTwo = getPrefixDbForNode(prefixState, "2");
 
   // set metric vector for two prefixes in two nodes to be same
   prefixDBOne.prefixEntries_ref()->at(1).mv_ref() = mv1;
@@ -3618,8 +3633,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
                 createNextHopFromAdj(adj12_2, false, 11, std::nullopt),
                 createNextHopFromAdj(adj12_3, false, 20, std::nullopt)}));
 
-  auto prefixDBs = prefixState.getPrefixDatabases();
-  auto prefixDBFour = prefixDBs["4"];
+  auto prefixDBFour = getPrefixDbForNode(prefixState, "4");
 
   // start to test minNexthop feature by injecting an ondeman prefix with
   // threshold to be 4 at the beginning.
@@ -3663,7 +3677,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   // 3 and 4. so nexthops should be adj12_2, adj13_1(shortes to node 4)
   // and adj13_1 shortest to node 3. The second shortes are all eliminated
   // becasue of purging logic we have for any cast ip.
-  auto prefixDBThr = prefixDBs["3"];
+  auto prefixDBThr = getPrefixDbForNode(prefixState, "3");
   apache::thrift::fromFollyOptional(
       newPrefix.minNexthop_ref(), folly::make_optional<int64_t>(4));
   prefixDBThr.prefixEntries_ref()->push_back(newPrefix);
@@ -3822,20 +3836,27 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
         *mv2.metrics_ref()[i].metric_ref() = {i};
   }
 
-  auto prefixDBs = prefixState.getPrefixDatabases();
-  auto prefixDBOne = prefixDBs["1"];
-  auto prefixDBTwo = prefixDBs["2"];
+  auto prefixDBOne = getPrefixDbForNode(prefixState, "1");
+  auto prefixDBTwo = getPrefixDbForNode(prefixState, "2");
 
   // set metric vector for addr1 prefixes in two nodes to be same
-  prefixDBOne.prefixEntries_ref()->front().mv_ref() = mv1;
-  prefixDBTwo.prefixEntries_ref()->push_back(
-      prefixDBOne.prefixEntries_ref()->front());
+  // for both, put this element at the back of the entries list
+  auto& entriesVec = *prefixDBOne.prefixEntries_ref();
+  for (auto entryIter = entriesVec.begin(); entryIter != entriesVec.end();
+       ++entryIter) {
+    if (entryIter->get_prefix() == addr1) {
+      entryIter->set_mv(mv1);
+      prefixDBTwo.prefixEntries_ref()->push_back(*entryIter);
+      entriesVec.erase(entryIter);
+      break;
+    }
+  }
+  entriesVec.push_back(prefixDBTwo.prefixEntries_ref()->back());
 
   updatePrefixDatabase(prefixState, prefixDBOne);
   updatePrefixDatabase(prefixState, prefixDBTwo);
 
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
-
   // validate router 3
   EXPECT_EQ(routeMap.find(make_pair("3", toString(addr1))), routeMap.end());
 
@@ -3852,7 +3873,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
       .metric_ref()
       ->front()--;
   prefixDBTwo.prefixEntries_ref()->back().minNexthop_ref() = 4;
-  prefixDBOne.prefixEntries_ref()->front().minNexthop_ref() = 2;
+  prefixDBOne.prefixEntries_ref()->back().minNexthop_ref() = 2;
   updatePrefixDatabase(prefixState, prefixDBTwo);
   updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
@@ -3867,7 +3888,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // threshold on  node 2 is 2. In such case, threshold should be respected
   // and we should not program/annouce any routes
   prefixDBTwo.prefixEntries_ref()->back().minNexthop_ref() = 2;
-  prefixDBOne.prefixEntries_ref()->front().minNexthop_ref() = 4;
+  prefixDBOne.prefixEntries_ref()->back().minNexthop_ref() = 4;
   updatePrefixDatabase(prefixState, prefixDBTwo);
   updatePrefixDatabase(prefixState, prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"}, areaLinkStates, prefixState);
@@ -3876,7 +3897,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   EXPECT_EQ(routeMap.find(make_pair("3", toString(addr1))), routeMap.end());
   // reset min nexthop to rest of checks
   prefixDBTwo.prefixEntries_ref()->back().minNexthop_ref().reset();
-  prefixDBOne.prefixEntries_ref()->front().minNexthop_ref().reset();
+  prefixDBOne.prefixEntries_ref()->back().minNexthop_ref().reset();
   updatePrefixDatabase(prefixState, prefixDBTwo);
   updatePrefixDatabase(prefixState, prefixDBOne);
 
@@ -3908,7 +3929,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
       .isBestPathTieBreaker_ref() = true;
 
   prefixDBOne.prefixEntries_ref()
-      ->front()
+      ->back()
       .mv_ref()
       .value()
       .metrics_ref()
@@ -5149,7 +5170,6 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
 
   sendKvPublication(publication);
   recvRouteUpdates();
-  auto expectedPrefixDbs = *decision->getDecisionPrefixDbs().get();
 
   //
   // publish area B adj and prefix
@@ -5191,8 +5211,6 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   std::this_thread::sleep_for(
       debounceTimeoutMax + std::chrono::milliseconds(100));
 
-  auto prefixDbs = *decision->getDecisionPrefixDbs().get();
-  EXPECT_EQ(expectedPrefixDbs, prefixDbs);
   EXPECT_EQ(0, routeUpdatesQueueReader.size());
 }
 

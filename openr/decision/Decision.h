@@ -299,11 +299,6 @@ class Decision : public OpenrEventBase {
   getDecisionAdjacenciesFiltered(thrift::AdjacenciesFilter filter = {});
 
   /*
-   * Retrieve PrefixDatabase as a map.
-   */
-  folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>> getDecisionPrefixDbs();
-
-  /*
    * Retrieve received routes along with best route selection output.
    */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>

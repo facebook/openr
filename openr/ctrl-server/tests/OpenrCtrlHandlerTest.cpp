@@ -392,12 +392,6 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
   }
 
   {
-    thrift::PrefixDbs db;
-    openrCtrlThriftClient_->sync_getDecisionPrefixDbs(db);
-    EXPECT_EQ(0, db.size());
-  }
-
-  {
     std::vector<thrift::ReceivedRouteDetail> routes;
     openrCtrlThriftClient_->sync_getReceivedRoutes(routes);
     EXPECT_EQ(0, routes.size());
