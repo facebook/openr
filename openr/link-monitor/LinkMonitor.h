@@ -313,6 +313,11 @@ class LinkMonitor final : public OpenrEventBase {
   bool enableV4_{false};
   // enable segment routing
   bool enableSegmentRouting_{false};
+  // Feature gate for new graceful restart behavior:
+  // If enableNewGRBehavior_, GR = neighbor restart -> kvstore initial sync.
+  // We promote adj up after kvstore initial sync event.
+  // Else: GR = neighbor restart -> spark neighbor establishment.
+  bool enableNewGRBehavior_{false};
   // prefix forwarding type and algorithm
   thrift::PrefixForwardingType prefixForwardingType_;
   thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;

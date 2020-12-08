@@ -107,6 +107,11 @@ class Config {
   }
 
   bool
+  isNewGRBehaviorEnabled() const {
+    return *config_.enable_new_gr_behavior_ref();
+  }
+
+  bool
   isOrderedFibProgrammingEnabled() const {
     return config_.enable_ordered_fib_programming_ref().value_or(false);
   }

@@ -78,6 +78,7 @@ LinkMonitor::LinkMonitor(
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
+      enableNewGRBehavior_(config->isNewGRBehaviorEnabled()),
       prefixForwardingType_(*config->getConfig().prefix_forwarding_type_ref()),
       prefixForwardingAlgorithm_(
           *config->getConfig().prefix_forwarding_algorithm_ref()),
@@ -349,9 +350,14 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
 
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
   const auto& oldAdj = adjacencies_.find(adjId);
-  // Record GR status of old adj, new KvStore Sync event will reset this field.
+
+  // If enableNewGRBehavior_, GR = neighbor restart -> kvstore initial sync.
+  // We record GR status of old adj, KvStore Sync event will reset this field.
+  // Else: GR = neighbor restart -> spark neighbor establishment.
+  // We restart isRestarting flag to False here.
   bool isRestarting{false};
-  if (oldAdj != adjacencies_.end() and oldAdj->second.isRestarting) {
+  if (enableNewGRBehavior_ and oldAdj != adjacencies_.end() and
+      oldAdj->second.isRestarting) {
     isRestarting = true;
   }
 
@@ -513,9 +519,14 @@ LinkMonitor::updateKvStorePeerNeighborUp(
     return;
   }
 
+  // if not enableNewGRBehavior_, set initialSynced = true to promote adj up
+  // event immediately
+  bool initialSynced = enableNewGRBehavior_ ? false : true;
+
   // create new KvStore Peer struct if it's first adj up
   areaPeers->second.emplace(
-      remoteNodeName, KvStorePeerValue(adjVal.peerSpec, false, {adjId}));
+      remoteNodeName,
+      KvStorePeerValue(adjVal.peerSpec, initialSynced, {adjId}));
   // Advertise KvStore peers immediately
   thrift::PeerAddParams params;
   params.peers_ref()->emplace(remoteNodeName, adjVal.peerSpec);

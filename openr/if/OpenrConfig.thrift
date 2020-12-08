@@ -351,6 +351,12 @@ struct OpenrConfig {
   # NOTE: Label route add or update will happen immediately
   53: i32 mpls_route_delete_delay_s = 10
 
+  # Feature gate for new graceful restart behavior
+  # New workflow is to promote adj up after kvstore reaches initial sync state
+  # This is a series of new changes in turn to address traffic loss during
+  # agent cold boot
+  54: bool enable_new_gr_behavior = 0
+
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config

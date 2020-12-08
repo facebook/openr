@@ -311,6 +311,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
     *lmConf.include_interface_regexes_ref() = {kTestVethNamePrefix + ".*",
                                                "iface.*"};
     *lmConf.redistribute_interface_regexes_ref() = {"loopback"};
+
+    tConfig.enable_new_gr_behavior_ref() = true;
     return tConfig;
   }
 
