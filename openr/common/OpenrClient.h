@@ -81,8 +81,7 @@ getOpenrCtrlPlainTextClient(
     // Create a new UNCONNECTED AsyncSocket
     // ATTN: don't change contructor flavor to connect automatically.
     const folly::SocketAddress sa(addr, port);
-    auto transport = folly::AsyncSocket::UniquePtr(
-        new folly::AsyncSocket(&evb), folly::DelayedDestruction::Destructor());
+    auto transport = folly::AsyncSocket::newSocket(&evb);
 
     // Establish connection
     transport->connect(
@@ -134,8 +133,7 @@ getOpenrCtrlSecureClient(
     const folly::SocketAddress sa(addr, port);
 
     auto transport = folly::AsyncSocket::UniquePtr(
-        new folly::AsyncSSLSocket(std::move(sslContext), &evb),
-        folly::DelayedDestruction::Destructor());
+        new folly::AsyncSSLSocket(std::move(sslContext), &evb));
 
     // Establish connection
     transport->connect(
