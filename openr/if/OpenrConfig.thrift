@@ -357,6 +357,13 @@ struct OpenrConfig {
   # agent cold boot
   54: bool enable_new_gr_behavior = 0
 
+  # Maximum hold time for synchronizing the adjacencies in KvStore after service
+  # starts up. We expect all the adjacencies to be fully established
+  # within hold time after Open/R starts LinkMonitor. LinkMonitor
+  # can choose to synchronize adjacencies as soon as it receives all expected
+  # established KvStore Peer Sync Events.
+  55: i32 adj_hold_time_s = 4
+
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config

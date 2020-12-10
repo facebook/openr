@@ -254,7 +254,7 @@ main(int argc, char** argv) {
   // adjacencies to be fully established within hold time after Open/R starts
   //
   const std::chrono::seconds initialAdjHoldTime{
-      2 * *sparkConf.keepalive_time_s_ref()};
+      *config->getConfig().adj_hold_time_s_ref()};
 
   //
   // Hold time for synchronizing prefixes in KvStore. We expect all the
