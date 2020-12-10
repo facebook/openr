@@ -1,28 +1,45 @@
 # Spark
 
+### Introduction
+
+---
+
 `Spark` is the neighbor discovery module of Open/R. It leverages IPv6 link-local
-multicast via UDP to discover and maintain Adjacencies, aka neighbor
-relationships. The discovered neighbors, aka "Local Topology" of the node, is
+multicast via UDP socket to discover and maintain adjacencies, aka "Neighbor
+Relationships". The discovered neighbors, aka "Local Topology" of the node, is
 fed into the system for KvStore database synchronization, and SPF Computation.
 
-### Inter-Module Communications
+### Inter Module Communication
 
 ---
 
 <img src="https://user-images.githubusercontent.com/51382140/90570487-a33ec300-e164-11ea-84ca-98485a646157.png" alt="Spark inside Open/R">
 
-- [Producer]: `Spark` sends out neighbor event through `ReplicateQueue` to
-  `LinkMonitor`, which includs: UP/DOWN/RESTART/RTT-CHANGE events.
+- [Producer]: `Spark` sends out neighbor event via `NeighborUpdatesQueue` to
+  `LinkMonitor`, which includes: `UP`/`DOWN`/`RESTART`/`RTT-CHANGE` events.
 
-- [Consumer]: `Spark` receives interface database update through `RQueue` from
-  `LinkMonitor`. Neighbor discovery will be applied on those interfaces ONLY.
+- [Consumer]: `Spark` receives interface database update via
+  `InterfaceUpdatesQueue` from `LinkMonitor`. Neighbor discovery will be applied
+  on those interfaces ONLY.
 
-> NOTE: For link UP/DOWN event, we expect lower level(i.e. `Netlink`) to notify
-> `LinkMonitor`. Further, it will notify `Spark` to start/stop sending out pkts.
-
-### Spark Packet
+### Operations
 
 ---
+
+`Spark` relies on `LinkMonitor` for interface and address notifications of the
+underlying system. Then states and timers will decide which types of packet to
+be periodically sent. See **Module Deep Dive** for details. Upon link event,
+corresponding interfaces will be modified inside database:
+
+- Interface UP: start performing neighbor discovery and record neighbor state;
+- Interface DOWN: remove tracked neighbor over this interface and generate
+  neighbor down notification;
+
+### Deep Dive
+
+---
+
+#### Spark Packet
 
 `Spark` communicates to peer spark instance by broadcasting a UDP packet to
 link-local multicast address `ff02::1`. The packet is sent over every configured
@@ -55,9 +72,7 @@ High level speaking:
   includes version, timers, and area configuration that we'll discuss below.
 - `SparkHeartbeatMsg` => Send out peridodically for keep-alive purpose.
 
-### Finite State Machine
-
----
+#### Finite State Machine
 
 <img src="https://user-images.githubusercontent.com/51382140/90571412-899e7b00-e166-11ea-97bd-419b493846cf.png" alt="Spark Neighbor State Transition Diagram">
 
@@ -85,25 +100,21 @@ SparkNeighEvent
 - NEGOTIATION_FAILURE       => negotiate procedure failed(e.g. area negotiation failure);
 ```
 
-### State Transition Map
+#### State Transition Map
 
----
+| EVENTs/STATEs | IDLE | WARM | NEGOTIATE | ESTABLISHED | RESTART |
+|-------|-------|-------|-------|-------|-------|
+| HELLO_RCVD_INFO | WARM | NEGOTIATE |  |  | ESTABLISHED |
+| HELLO_RCVD_NO_INFO | WARM |  |  | IDLE |  |
+| HELLO_RCVD_RESTART | |  |  | RESTART |  |
+| HEARTBEAT_RCVD |  |  |  | ESTABLISHED |  |
+| HANDSHAKE_RCVD |  |  | ESTABLISHED |  |  |
+| HEARTBEAT_TIMER_EXPIRE | |  |  | IDLE |  |
+| NEGOTIATE_TIMER_EXPIRE | |  | WARM |  | |
+| GR_TIMER_EXPIRE | |  |  |  | IDLE |
+| NEGOTIATION_FAILURE | | | WARM |  | |
 
-| EVENTs/STATEs          | IDLE | WARM      | NEGOTIATE   | ESTABLISHED | RESTART     |
-| ---------------------- | ---- | --------- | ----------- | ----------- | ----------- |
-| HELLO_RCVD_INFO        | WARM | NEGOTIATE |             |             | ESTABLISHED |
-| HELLO_RCVD_NO_INFO     | WARM |           |             | IDLE        |             |
-| HELLO_RCVD_RESTART     |      |           |             | RESTART     |             |
-| HEARTBEAT_RCVD         |      |           |             | ESTABLISHED |             |
-| HANDSHAKE_RCVD         |      |           | ESTABLISHED |             |             |
-| HEARTBEAT_TIMER_EXPIRE |      |           |             | IDLE        |             |
-| NEGOTIATE_TIMER_EXPIRE |      |           | WARM        |             |             |
-| GR_TIMER_EXPIRE        |      |           |             |             | IDLE        |
-| NEGOTIATION_FAILURE    |      |           | WARM        |             |             |
-
-### SparkHelloMsg
-
----
+#### SparkHelloMsg
 
 - `SparkHelloMsg` contains node name, and the list of neighbors it has heard
   from on this interface. This allows ALL neighbors on a segment to agree on
@@ -114,9 +125,7 @@ SparkNeighEvent
   3. To notify for its own "RESTART" to neighbors;
 - `SparkHelloMsg` is sent per interface;
 
-### SparkHandshakeMsg
-
----
+#### SparkHandshakeMsg
 
 - `SparkHandshakeMsg` contains rest of necessary params to establish adjacency
   with neighbor besides what has been learned from `SparkHelloMsg`;
@@ -129,17 +138,13 @@ SparkNeighEvent
 > NOTE: `SparkHandshakeMsg` has destination node attribute. Neighbors on the
 > same interface will ignore this message if it is NOT destined to itself.
 
-### SparkHeartbeatMsg
-
----
+#### SparkHeartbeatMsg
 
 - `SparkHeartbeatMsg` contains node name, sequence number;
 - Functionality: notify its own aliveness
 - `SparkHeartbeatMsg` is sent per interface;
 
-### Timers
-
----
+#### Timers
 
 To maintain the state machine running smoothly, there are different kinds of
 timers used.
@@ -161,9 +166,7 @@ defined in
 
 - [if/OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
 
-### Area Configuration
-
----
+#### Area Configuration
 
 As area negotiation happens by default between spark instances, neighbor
 adjacency will ONLY be formed if they can reach agreement on area.
@@ -198,18 +201,14 @@ through.
 > `WARM` and stop sending `SparkHandshakeMsg`. See FSM transition part for
 > deatils.
 
-### RTT Measurement
-
----
+#### RTT Measurement
 
 With spark exchanging multicast packets for neighbor discovery we can easily
 deduce the RTT between neighbors (reflection time). To reduce noise in RTT
 measurements we use `Kernel Timestamps`. To avoid noisy `RTT_CHANGED` events we
 use `StepDetector` so that small changes in RTT measurements are ignored.
 
-### Fast Neighbor Discovery
-
----
+#### Fast Neighbor Discovery
 
 When a node starts or a new link comes up, we perform fast initial neighbor
 discovery by sending `SparkHelloMsg` with `solicitResponse` bit set. This is to
