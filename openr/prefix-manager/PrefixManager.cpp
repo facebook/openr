@@ -229,9 +229,6 @@ PrefixManager::buildOriginatedPrefixDb(
     // ATTN: AREA field is empty for NHs
     RibUnicastEntry unicastEntry(network, {createNextHop(toBinaryAddress(nh))});
     unicastEntry.bestPrefixEntry = std::move(entry);
-    if (auto installToFib = prefix.install_to_fib_ref()) {
-      unicastEntry.doNotInstall = (*installToFib ? 0 : 1);
-    }
 
     // ATTN: upon initialization, no supporting routes
     originatedPrefixDb_.emplace(

@@ -394,7 +394,12 @@ printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
 }
 
 const auto&
-getNextHops(const thrift::UnicastRoute& r) {
+getUnicastNextHops(const thrift::UnicastRoute& r) {
+  return *r.nextHops_ref();
+}
+
+const auto&
+getMplsNextHops(const thrift::MplsRoute& r) {
   return *r.nextHops_ref();
 }
 
@@ -925,7 +930,7 @@ TEST(BGPRedistribution, BasicOperation) {
             return i.dest_ref() == bgpPrefix1 and i.data_ref() == data2;
           }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj31, false, 10))))));
 
@@ -1042,7 +1047,7 @@ TEST(BGPRedistribution, IgpMetric) {
             return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
           }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10),
                   createNextHopFromAdj(adj13, false, 10))))));
@@ -1062,7 +1067,7 @@ TEST(BGPRedistribution, IgpMetric) {
             return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
           }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
 
@@ -1083,7 +1088,7 @@ TEST(BGPRedistribution, IgpMetric) {
             return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
           }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj13, false, 20))))));
 
@@ -1103,7 +1108,7 @@ TEST(BGPRedistribution, IgpMetric) {
             return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
           }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj13, false, 20))))));
 
@@ -1122,7 +1127,7 @@ TEST(BGPRedistribution, IgpMetric) {
             return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
           }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 20),
                   createNextHopFromAdj(adj13, false, 20))))));
@@ -1187,7 +1192,7 @@ TEST(Decision, BestRouteSelection) {
           Truly(
               [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10),
                   createNextHopFromAdj(adj13, false, 10))))));
@@ -1223,7 +1228,7 @@ TEST(Decision, BestRouteSelection) {
           Truly(
               [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
-              getNextHops,
+              getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
   //
@@ -2322,7 +2327,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   thrift::RouteDatabaseDelta routesDelta;
   routesDelta.mplsRoutesToUpdate_ref() = {
       createMplsRoute(prependLabel, staticNextHops)};
-  spfSolver->updateStaticRoutes(std::move(routesDelta));
+  spfSolver->updateStaticMplsRoutes(std::move(routesDelta));
 
   // Get and verify next-hops. Both node1 & node4 will report static next-hops
   // NOTE: PUSH action is removed.
@@ -2714,7 +2719,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
   *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
-  spfSolver->updateStaticRoutes(std::move(routesDelta));
+  spfSolver->updateStaticMplsRoutes(std::move(routesDelta));
 
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -2808,7 +2813,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
   *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
-  spfSolver->updateStaticRoutes(std::move(routesDelta));
+  spfSolver->updateStaticMplsRoutes(std::move(routesDelta));
 
   auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -4862,6 +4867,10 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   route.nextHops_ref() = {nh};
   input.mplsRoutesToUpdate_ref()->push_back(route);
 
+  // record number of mplsRoute as reference
+  const auto mplsRouteCnt =
+      decision->getDecisionRouteDb("").get()->mplsRoutes_ref()->size();
+
   // Update 32011 and make sure only that is updated
   sendStaticRoutesUpdate(input);
   auto routesDelta = routeUpdatesQueueReader.get().value();
@@ -4876,10 +4885,16 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routesDelta.perfEvents.reset();
   EXPECT_EQ(routesDelta.toThrift(), input);
 
-  auto staticRoutes = decision->getMplsStaticRoutes().get();
-  EXPECT_EQ(staticRoutes.size(), 2);
-  EXPECT_THAT(staticRoutes[32012], testing::UnorderedElementsAreArray({nh}));
-  EXPECT_THAT(staticRoutes[32011], testing::UnorderedElementsAreArray({nh}));
+  auto mplsRoutes = *decision->getDecisionRouteDb("").get()->mplsRoutes_ref();
+  EXPECT_THAT(mplsRoutes, testing::SizeIs(mplsRouteCnt + 2));
+  EXPECT_THAT(
+      mplsRoutes,
+      testing::Contains(AllOf(
+          Truly([&](auto route) {
+            return route.topLabel_ref() == 32011 or
+                route.topLabel_ref() == 32012;
+          }),
+          ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh)))));
 
   // Test our consolidating logic, we first update 32011 then delete 32011
   // making sure only delete for 32011 is emitted.
@@ -4898,9 +4913,13 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_EQ(routesDelta.mplsRoutesToDelete.at(0), 32011);
   EXPECT_EQ(routesDelta.mplsRoutesToUpdate.size(), 0);
 
-  staticRoutes = decision->getMplsStaticRoutes().get();
-  EXPECT_EQ(staticRoutes.size(), 1);
-  EXPECT_THAT(staticRoutes[32012], testing::UnorderedElementsAreArray({nh}));
+  mplsRoutes = *decision->getDecisionRouteDb("").get()->mplsRoutes_ref();
+  EXPECT_THAT(mplsRoutes, testing::SizeIs(mplsRouteCnt + 1));
+  EXPECT_THAT(
+      mplsRoutes,
+      testing::Contains(AllOf(
+          Truly([&](auto route) { return route.topLabel_ref() == 32012; }),
+          ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh)))));
 
   // test our consolidating logic, we first delete 32012 then update 32012
   // making sure only update for 32012 is emitted.
@@ -4922,10 +4941,13 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       routesDelta.mplsRoutesToUpdate.at(0).nexthops,
       testing::UnorderedElementsAre(nh, nh1));
 
-  staticRoutes = decision->getMplsStaticRoutes().get();
-  EXPECT_EQ(staticRoutes.size(), 1);
+  mplsRoutes = *decision->getDecisionRouteDb("").get()->mplsRoutes_ref();
+  EXPECT_THAT(mplsRoutes, testing::SizeIs(mplsRouteCnt + 1));
   EXPECT_THAT(
-      staticRoutes[32012], testing::UnorderedElementsAreArray({nh, nh1}));
+      mplsRoutes,
+      testing::Contains(AllOf(
+          Truly([&](auto route) { return route.topLabel_ref() == 32012; }),
+          ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh, nh1)))));
 
   routeDb = dumpRouteDb({"1"})["1"];
   bool foundLabelRoute{false};
@@ -4985,7 +5007,6 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   }
   sendStaticRoutesUpdate(staticRoutes);
 
-  //
   // Receive & verify all the expected updates
   auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());

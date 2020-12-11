@@ -218,9 +218,7 @@ class SpfSolver {
   // be defined in the .cpp
   //
 
-  void updateStaticRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
-
-  StaticMplsRoutes const& getStaticRoutes();
+  void updateStaticMplsRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
 
   // Build route database using given prefix and link states for a given
   // router, myNodeName
@@ -287,11 +285,6 @@ class Decision : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getDecisionRouteDb(
       std::string nodeName);
 
-  /**
-   * Retrieve static routes from Decision
-   */
-  folly::SemiFuture<StaticMplsRoutes> getMplsStaticRoutes();
-
   /*
    * Retrieve AdjacencyDatabase for all nodes in all areas
    */
@@ -330,7 +323,7 @@ class Decision : public OpenrEventBase {
   Decision& operator=(Decision const&) = delete;
 
   // process publication from KvStore
-  void processPublication(thrift::Publication const& thriftPub);
+  void processPublication(thrift::Publication&& thriftPub);
 
   // openr config
   std::shared_ptr<const Config> config_;
@@ -404,7 +397,7 @@ class Decision : public OpenrEventBase {
   // this node's name and the key markers
   const std::string myNodeName_;
 
-  // store rebuildROutes to-do status and perf events
+  // store rebuildRoutes to-do status and perf events
   detail::DecisionPendingUpdates pendingUpdates_;
 
   /**

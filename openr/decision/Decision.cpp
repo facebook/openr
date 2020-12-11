@@ -206,9 +206,7 @@ class SpfSolver::SpfSolverImpl {
   // mpls static route
   //
 
-  void updateStaticRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
-
-  StaticMplsRoutes const& getStaticRoutes();
+  void updateStaticMplsRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
 
   //
   // best path calculation
@@ -359,38 +357,36 @@ class SpfSolver::SpfSolverImpl {
 };
 
 void
-SpfSolver::SpfSolverImpl::updateStaticRoutes(
+SpfSolver::SpfSolverImpl::updateStaticMplsRoutes(
     thrift::RouteDatabaseDelta&& staticRoutesDelta) {
   // We don't support static routes for IP routes yet
   CHECK(staticRoutesDelta.unicastRoutesToUpdate_ref()->empty());
   CHECK(staticRoutesDelta.unicastRoutesToDelete_ref()->empty());
 
+  const auto& mplsRoutesToUpdate = *staticRoutesDelta.mplsRoutesToUpdate_ref();
+  const auto& mplsRoutesToDelete = *staticRoutesDelta.mplsRoutesToDelete_ref();
+
   // Process MPLS routes to add or update
-  LOG(INFO) << "Adding/Updating "
-            << staticRoutesDelta.mplsRoutesToUpdate_ref()->size()
-            << " static mpls routes";
-  for (auto& mplsRoute : *staticRoutesDelta.mplsRoutesToUpdate_ref()) {
+  LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
+            << " static mpls routes.";
+  for (const auto& mplsRoute : mplsRoutesToUpdate) {
     const auto topLabel = *mplsRoute.topLabel_ref();
+    staticMplsRoutes_.insert_or_assign(topLabel, *mplsRoute.nextHops_ref());
+
     VLOG(1) << "> " << std::to_string(topLabel)
             << ", NextHopsCount = " << mplsRoute.nextHops_ref()->size();
     for (auto const& nh : *mplsRoute.nextHops_ref()) {
       VLOG(2) << " via " << toString(nh);
     }
-    staticMplsRoutes_.insert_or_assign(
-        topLabel, std::move(*mplsRoute.nextHops_ref()));
   }
 
-  LOG(INFO) << "Deleting " << staticRoutesDelta.mplsRoutesToDelete_ref()->size()
-            << " static mpls routes";
-  for (const auto& topLabel : *staticRoutesDelta.mplsRoutesToDelete_ref()) {
+  LOG(INFO) << "Deleting " << mplsRoutesToDelete.size()
+            << " static mpls routes.";
+  for (const auto& topLabel : mplsRoutesToDelete) {
     staticMplsRoutes_.erase(topLabel);
+
     VLOG(1) << "> " << std::to_string(topLabel);
   }
-}
-
-StaticMplsRoutes const&
-SpfSolver::SpfSolverImpl::getStaticRoutes() {
-  return staticMplsRoutes_;
 }
 
 std::optional<RibUnicastEntry>
@@ -711,15 +707,13 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   }
 
   //
-  // Add static routes
+  // Add MPLS static routes
   //
   for (const auto& [topLabel, nhs] : staticMplsRoutes_) {
     routeDb.addMplsRoute(RibMplsEntry(
         topLabel,
         std::unordered_set<thrift::NextHopThrift>{nhs.begin(), nhs.end()}));
   }
-
-  // TODO: add support for originated routes
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
@@ -1334,13 +1328,9 @@ SpfSolver::SpfSolver(
 SpfSolver::~SpfSolver() {}
 
 void
-SpfSolver::updateStaticRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta) {
-  return impl_->updateStaticRoutes(std::move(staticRoutesDelta));
-}
-
-StaticMplsRoutes const&
-SpfSolver::getStaticRoutes() {
-  return impl_->getStaticRoutes();
+SpfSolver::updateStaticMplsRoutes(
+    thrift::RouteDatabaseDelta&& staticRoutesDelta) {
+  return impl_->updateStaticMplsRoutes(std::move(staticRoutesDelta));
 }
 
 std::optional<RibUnicastEntry>
@@ -1372,12 +1362,15 @@ SpfSolver::buildRouteDb(
 
 Decision::Decision(
     std::shared_ptr<const Config> config,
+    // TODO: migrate argument list flags to OpenrConfig
     bool computeLfaPaths,
     bool bgpDryRun,
     std::chrono::milliseconds debounceMinDur,
     std::chrono::milliseconds debounceMaxDur,
+    // consumer queue
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
+    // producer queue
     messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
     : config_(config),
       routeUpdatesQueue_(routeUpdatesQueue),
@@ -1387,12 +1380,11 @@ Decision::Decision(
           getEvb(), debounceMinDur, debounceMaxDur, [this]() noexcept {
             rebuildRoutes("DECISION_DEBOUNCE");
           }) {
-  auto tConfig = config->getConfig();
   spfSolver_ = std::make_unique<SpfSolver>(
-      *tConfig.node_name_ref(),
-      tConfig.enable_v4_ref().value_or(false),
+      config->getNodeName(),
+      config->isV4Enabled(),
       computeLfaPaths,
-      tConfig.enable_ordered_fib_programming_ref().value_or(false),
+      config->isOrderedFibProgrammingEnabled(),
       bgpDryRun,
       config->isBestRouteSelectionEnabled());
 
@@ -1413,7 +1405,7 @@ Decision::Decision(
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 
   // Schedule periodic timer to decremtOrderedFibHolds
-  if (tConfig.enable_ordered_fib_programming_ref().value_or(false)) {
+  if (config->isOrderedFibProgrammingEnabled()) {
     orderedFibTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
       LOG(INFO) << "Decrementing Holds";
       if (decrementOrderedFibHolds()) {
@@ -1436,7 +1428,7 @@ Decision::Decision(
         break;
       }
       try {
-        processPublication(maybeThriftPub.value());
+        processPublication(std::move(maybeThriftPub).value());
       } catch (const std::exception& e) {
 #if FOLLY_USE_SYMBOLIZER
         // collect stack strace then fail the process
@@ -1467,7 +1459,7 @@ Decision::Decision(
             break;
           }
           // Apply publication and update stored update status
-          spfSolver_->updateStaticRoutes(std::move(maybeThriftPub).value());
+          spfSolver_->updateStaticMplsRoutes(std::move(maybeThriftPub).value());
           pendingUpdates_.setNeedsFullRebuild(); // Mark for full DB rebuild
           rebuildRoutesDebounced_();
         }
@@ -1503,16 +1495,6 @@ Decision::getDecisionRouteDb(std::string nodeName) {
 
     *routeDb.thisNodeName_ref() = nodeName;
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
-  });
-  return sf;
-}
-
-folly::SemiFuture<StaticMplsRoutes>
-Decision::getMplsStaticRoutes() {
-  folly::Promise<StaticMplsRoutes> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([p = std::move(p), this]() mutable {
-    p.setValue(spfSolver_->getStaticRoutes());
   });
   return sf;
 }
@@ -1641,7 +1623,7 @@ Decision::getRibPolicy() {
 }
 
 void
-Decision::processPublication(thrift::Publication const& thriftPub) {
+Decision::processPublication(thrift::Publication&& thriftPub) {
   CHECK(not thriftPub.area_ref()->empty());
   auto const& area = *thriftPub.area_ref();
 
@@ -1676,8 +1658,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         adjacencyDb.area_ref() = area;
 
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
-        if (config_->getConfig().enable_ordered_fib_programming_ref().value_or(
-                false)) {
+        if (config_->isOrderedFibProgrammingEnabled()) {
           if (auto maybeHoldUpTtl =
                   areaLinkState.getHopsFromAToB(myNodeName_, nodeName)) {
             holdUpTtl = maybeHoldUpTtl.value();
@@ -1821,8 +1802,10 @@ Decision::rebuildRoutes(std::string const& event) {
           start,
           std::chrono::steady_clock::now());
     }
+    // update `DecisionRouteDb` cache and return delta as `update`
     update = routeDb_.calculateUpdate(std::move(db));
   } else {
+    // process prefixes update from `prefixState_`
     for (auto const& prefix : pendingUpdates_.updatedPrefixes()) {
       if (auto maybeRibEntry = spfSolver_->createRouteForPrefix(
               myNodeName_, areaLinkStates_, prefixState_, prefix)) {
@@ -1850,6 +1833,7 @@ Decision::rebuildRoutes(std::string const& event) {
   update.perfEvents = pendingUpdates_.moveOutEvents();
   pendingUpdates_.reset();
 
+  // send `DecisionRouteUpdate` to Fib/PrefixMgr
   routeUpdatesQueue_.push(std::move(update));
 }
 
