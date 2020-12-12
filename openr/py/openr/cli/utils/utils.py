@@ -1581,6 +1581,7 @@ def print_unicast_routes(
     element_prefix: str = ">",
     element_suffix: str = "",
     filter_exact_match: bool = False,
+    timestamp: bool = False,
 ) -> None:
     """
     Print unicast routes. Subset specified by prefixes will be printed if specified
@@ -1590,6 +1591,7 @@ def print_unicast_routes(
         :param element_prefix: Starting prefix for each item. (string)
         :param element_suffix: Ending/terminator for each item. (string)
         :param filter_exact_match: Indicate exact match or subnet match.
+        :param timestamp: Prints time for each item. (bool)
     """
 
     networks = None
@@ -1610,6 +1612,7 @@ def print_unicast_routes(
             caption=caption,
             element_prefix=element_prefix,
             element_suffix=element_suffix,
+            timestamp=timestamp,
         )
     )
 
@@ -1645,6 +1648,7 @@ def print_mpls_routes(
     labels: Optional[List[int]] = None,
     element_prefix: str = ">",
     element_suffix: str = "",
+    timestamp: bool = False,
 ) -> None:
     """
     List mpls routes. Subset specified by labels will be printed if specified
@@ -1653,6 +1657,7 @@ def print_mpls_routes(
         :param labels: Optional labels/filter to print.
         :param element_prefix: Starting prefix for each item. (string)
         :param element_suffix: Ending/terminator for each item. (string)
+        :param timestamp: Prints time for each item. (bool)
     """
 
     route_strs = []
@@ -1671,6 +1676,7 @@ def print_mpls_routes(
             caption=caption,
             element_prefix=element_prefix,
             element_suffix=element_suffix,
+            timestamp=timestamp,
         )
     )
 

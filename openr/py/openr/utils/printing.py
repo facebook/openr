@@ -8,6 +8,7 @@
 #
 
 
+import datetime
 from builtins import range
 from typing import Iterable
 
@@ -20,6 +21,12 @@ def caption_fmt(caption):
     if caption:
         return "\n== {}  ==\n".format(caption)
     return ""
+
+
+def get_timestamp() -> str:
+    return "Timestamp: {}\n".format(
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    )
 
 
 def sprint_bytes(bytes: int) -> str:
@@ -65,6 +72,7 @@ def render_vertical_table(
     caption: str = "",
     element_prefix: str = ">",
     element_suffix: str = "",
+    timestamp: bool = False,
 ):
     """Render tabular data with one column per line
 
@@ -75,23 +83,28 @@ def render_vertical_table(
     :param caption: Title of the table (a string).
     :param element_prefix: Starting prefix for each item. (string)
     :param element_suffix: Ending/terminator for each item. (string)
+    :param timestamp: Prints time for each item. (bool)
 
     :return: The rendered table (a string).
     """
 
     table_str = ""
     if caption:
-        table_str += "{}\n".format(caption_fmt(caption))
+        table_str += f"{caption_fmt(caption)}\n"
 
     for item in sorted(data, key=lambda x: x[0]):
         if not item:
             break
 
-        item_str = "{} {} {}\n".format(element_prefix, item[0], element_suffix)
+        item_str = ""
+        if timestamp:
+            item_str += get_timestamp()
+
+        item_str += f"{element_prefix} {item[0]} {element_suffix}\n"
         for idx in range(1, len(item)):
             if column_labels:
-                item_str += "{} ".format(column_labels[idx - 1])
-            item_str += "{}\n".format(item[idx])
-        table_str += "{}\n".format(item_str)
+                item_str += f"{column_labels[idx - 1]} "
+            item_str += f"{item[idx]}\n"
+        table_str += f"{item_str}\n"
 
-    return "{}".format(table_str)
+    return f"{table_str}"

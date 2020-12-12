@@ -70,7 +70,11 @@ class KvStoreCmdBase(OpenrCtrlCmd):
             self._run(client, *args, **kwargs)
 
     def print_publication_delta(
-        self, title: str, pub_update: List[str], sprint_db: str = ""
+        self,
+        title: str,
+        pub_update: List[str],
+        sprint_db: str = "",
+        timestamp=False,
     ) -> None:
         print(
             printing.render_vertical_table(
@@ -82,14 +86,8 @@ class KvStoreCmdBase(OpenrCtrlCmd):
                             "\n\n{}".format(sprint_db) if sprint_db else "",
                         )
                     ]
-                ]
-            )
-        )
-
-    def print_timestamp(self) -> None:
-        print(
-            "Timestamp: {}".format(
-                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                ],
+                timestamp=timestamp,
             )
         )
 
@@ -970,8 +968,7 @@ class SnoopCmd(KvStoreCmdBase):
                 else:
                     global_dbs.prefixes.pop(key.split(":")[1], None)
         if rows:
-            self.print_timestamp()
-            print(printing.render_vertical_table(rows))
+            print(printing.render_vertical_table(rows, timestamp=True))
 
     def print_delta(
         self, msg: kv_store_types.Publication, ttl: bool, delta: bool, global_dbs: Dict
@@ -979,11 +976,11 @@ class SnoopCmd(KvStoreCmdBase):
 
         for key, value in msg.keyVals.items():
             if value.value is None:
-                self.print_timestamp()
                 print("Traversal List: {}".format(msg.nodeIds))
                 self.print_publication_delta(
                     "Key: {}, ttl update".format(key),
                     "ttl: {}, ttlVersion: {}".format(value.ttl, value.ttlVersion),
+                    timestamp=True,
                 )
                 continue
 
@@ -999,11 +996,11 @@ class SnoopCmd(KvStoreCmdBase):
                 )
                 continue
 
-            self.print_timestamp()
             print("Traversal List: {}".format(msg.nodeIds))
             self.print_publication_delta(
                 "Key: {} update".format(key),
                 utils.sprint_pub_update(global_dbs.publications, key, value),
+                timestamp=True,
             )
 
     def print_prefix_delta(
@@ -1025,11 +1022,11 @@ class SnoopCmd(KvStoreCmdBase):
             lines = utils.sprint_prefixes_db_full(prefix_db)
 
         if lines:
-            self.print_timestamp()
             self.print_publication_delta(
                 "{}'s prefixes".format(prefix_db.thisNodeName),
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
+                timestamp=True,
             )
 
         utils.update_global_prefix_db(global_prefix_db, prefix_db, key)
@@ -1058,11 +1055,11 @@ class SnoopCmd(KvStoreCmdBase):
             lines = utils.sprint_adj_db_full(global_adj_db, new_adj_db, False)
 
         if lines:
-            self.print_timestamp()
             self.print_publication_delta(
                 "{}'s adjacencies".format(new_adj_db.thisNodeName),
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
+                timestamp=True,
             )
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)

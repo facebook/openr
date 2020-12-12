@@ -314,6 +314,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
                 prefix_strs,
                 element_prefix=element_prefix,
                 element_suffix=element_suffix,
+                timestamp=True,
             )
         )
 
@@ -331,7 +332,10 @@ class FibSnoopCmd(OpenrCtrlCmd):
 
         print(
             printing.render_vertical_table(
-                label_strs, element_prefix=element_prefix, element_suffix=element_suffix
+                label_strs,
+                element_prefix=element_prefix,
+                element_suffix=element_suffix,
+                timestamp=True,
             )
         )
 
@@ -349,6 +353,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
                 prefixes=prefixes,
                 element_prefix="+",
                 filter_exact_match=True,
+                timestamp=True,
             )
         if len(delta_db.unicastRoutesToDelete) != 0:
             self.print_ip_prefixes_filtered(
@@ -366,6 +371,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
                 mpls_routes=delta_db.mplsRoutesToUpdate,
                 element_prefix="+",
                 element_suffix="(MPLS)",
+                timestamp=True,
             )
         if len(delta_db.mplsRoutesToDelete) != 0:
             self.print_mpls_labels(
@@ -389,6 +395,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
                 prefixes=prefixes,
                 element_prefix="+",
                 filter_exact_match=True,
+                timestamp=True,
             )
         if (labels or not prefixes) and len(route_db.mplsRoutes) != 0:
             utils.print_mpls_routes(
@@ -397,6 +404,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
                 labels=labels,
                 element_prefix="+",
                 element_suffix="(MPLS)",
+                timestamp=True,
             )
 
     # @override
