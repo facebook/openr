@@ -256,14 +256,42 @@ $ breeze -H 2401:db00:2120:20ed:feed::1 kvstore snoop
 version:         -->  1
 originatorId:    -->  breeze
 
-
 > Key: test-key update
 version:  1  -->  2
-
 
 > Key: test-key got expired
 
 ...
+```
+
+Live snooping on KV-store updates in the network with filter specified.
+
+```console
+$ breeze kvstore snoop -r "adj:" -r "prefix" -c "node1" -c "node2" --match-all -r "test"
+
+Timestamp: 2020-09-10 09:08:01.734
+> node2's prefixes
++ da00:cafe:babe:29:5a1d::/80
+
+Timestamp: 2020-09-10 09:08:01.735
+> node1's prefixes
++ da00:cafe:babe:f6:f70b::/80
+
+Timestamp: 2020-09-10 09:08:01.736
+> node1's prefixes
++ fc00:cafe:babe::1/128
+
+Timestamp: 2020-09-10 09:08:01.737
+> node1's prefixes
++ 192.168.0.1/32
+
+Timestamp: 2020-09-10 09:08:01.737
+> node2's prefixes
++ fc00:cafe:babe::2/128
+
+Timestamp: 2020-09-10 09:08:01.738
+> node2's prefixes
++ 192.168.0.2/32
 ```
 
 #### Visualize topology
