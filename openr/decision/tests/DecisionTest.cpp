@@ -2327,7 +2327,9 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   thrift::RouteDatabaseDelta routesDelta;
   routesDelta.mplsRoutesToUpdate_ref() = {
       createMplsRoute(prependLabel, staticNextHops)};
-  spfSolver->updateStaticMplsRoutes(std::move(routesDelta));
+  spfSolver->updateStaticMplsRoutes(
+      *routesDelta.mplsRoutesToUpdate_ref(),
+      *routesDelta.mplsRoutesToDelete_ref());
 
   // Get and verify next-hops. Both node1 & node4 will report static next-hops
   // NOTE: PUSH action is removed.
@@ -2718,8 +2720,10 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   staticMplsRoute.topLabel_ref() = staticMplsRouteLabel;
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
-  *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
-  spfSolver->updateStaticMplsRoutes(std::move(routesDelta));
+  routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
+  spfSolver->updateStaticMplsRoutes(
+      *routesDelta.mplsRoutesToUpdate_ref(),
+      *routesDelta.mplsRoutesToDelete_ref());
 
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -2812,8 +2816,10 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   staticMplsRoute.topLabel_ref() = staticMplsRouteLabel;
   staticMplsRoute.nextHops_ref()->emplace_back(nh);
   thrift::RouteDatabaseDelta routesDelta;
-  *routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
-  spfSolver->updateStaticMplsRoutes(std::move(routesDelta));
+  routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
+  spfSolver->updateStaticMplsRoutes(
+      *routesDelta.mplsRoutesToUpdate_ref(),
+      *routesDelta.mplsRoutesToDelete_ref());
 
   auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -5014,6 +5020,283 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   EXPECT_EQ(4, routeDbDelta.mplsRoutesToUpdate.size());
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
+}
+
+/*
+ * Route Origination Test:
+ *  - Test 1:
+ *    - static prefixes advertised from `PrefixManager`
+ *    - expect `routesToUpdate` contains prefixes advertised;
+ *  - Test 2:
+ *    - advertise SAME prefix from `Decision`(i.e. prefix update in KvStore)
+ *    - expect `routesToUpdate` contains prefixes BUT NHs overridden
+ *      by `decision`;
+ *  - Test 3:
+ *    - withdraw static prefixes from `PrefixManager`
+ *    - expect `routesToUpdate` contains prefixes BUT NHs overridden
+ *      by `deicision`;
+ *  - Test 4:
+ *    - re-advertise static prefixes from `PrefixManager`
+ *    - expect `routesToUpdate` contains prefixes BUT NHs overridden
+ *      by `deicision`;
+ *  - Test 5:
+ *    - withdraw prefixes from `Decision`(i.e. prefix deleted in KvStore)
+ *    - expect `routesToUpdate` contains static prefixes from `PrefixManager`
+ *  - Test 6:
+ *    - withdraw static prefixes from `PrefixManager`
+ *    - expect `routesToDelete` contains static prefixes
+ */
+TEST_F(DecisionTestFixture, RouteOrigination) {
+  // eventbase to control the pace of tests
+  OpenrEventBase evb;
+
+  // prepare prefix/nexthops structure
+  const std::string prefixV4 = "10.0.0.1/24";
+  const std::string prefixV6 = "fe80::1/64";
+
+  thrift::NextHopThrift nhV4, nhV6;
+  nhV4.address_ref() =
+      toBinaryAddress(Constants::kLocalRouteNexthopV4.toString());
+  nhV6.address_ref() =
+      toBinaryAddress(Constants::kLocalRouteNexthopV6.toString());
+
+  const auto networkV4 = folly::IPAddress::createNetwork(prefixV4);
+  const auto networkV6 = folly::IPAddress::createNetwork(prefixV6);
+  auto routeV4 = createUnicastRoute(toIpPrefix(prefixV4), {nhV4});
+  auto routeV6 = createUnicastRoute(toIpPrefix(prefixV6), {nhV6});
+
+  // Send adj publication
+  // ATTN: to trigger `buildRouteDb()`. Must provide LinkState
+  //      info containing self-node id("1")
+  auto scheduleAt = std::chrono::milliseconds{0};
+  evb.scheduleTimeout(scheduleAt, [&]() noexcept {
+    sendKvPublication(createThriftPublication(
+        {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+         {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
+        {},
+        {},
+        {},
+        std::string("")));
+  });
+
+  //
+  // Test1: advertise prefixes from `PrefixManager`
+  //
+  evb.scheduleTimeout(scheduleAt += 3 * debounceTimeoutMax, [&]() noexcept {
+    // wait for initial cold-timer to fire
+    auto routeDbDelta = recvRouteUpdates();
+
+    LOG(INFO) << "Advertising static prefixes from PrefixManager";
+
+    thrift::RouteDatabaseDelta routeDb;
+    routeDb.unicastRoutesToUpdate_ref()->emplace_back(routeV4);
+    routeDb.unicastRoutesToUpdate_ref()->emplace_back(routeV6);
+    sendStaticRoutesUpdate(std::move(routeDb));
+  });
+
+  // wait for debouncer to fire
+  evb.scheduleTimeout(
+      scheduleAt += (debounceTimeoutMax + std::chrono::milliseconds(100)),
+      [&]() noexcept {
+        // Receive & verify all the expected updates
+        auto routeDbDelta = recvRouteUpdates();
+        EXPECT_THAT(routeDbDelta.unicastRoutesToUpdate, testing::SizeIs(2));
+        EXPECT_THAT(routeDbDelta.unicastRoutesToDelete, testing::SizeIs(0));
+
+        const auto& routeToUpdate = routeDbDelta.unicastRoutesToUpdate;
+        ASSERT_TRUE(routeToUpdate.count(networkV4));
+        ASSERT_TRUE(routeToUpdate.count(networkV6));
+
+        EXPECT_THAT(
+            routeToUpdate.at(networkV4), testing::Truly([&networkV4](auto i) {
+              return i.prefix == networkV4 and i.doNotInstall == false;
+            }));
+        EXPECT_THAT(
+            routeToUpdate.at(networkV6), testing::Truly([&networkV6](auto i) {
+              return i.prefix == networkV6 and i.doNotInstall == false;
+            }));
+        // NOTE: no SAME route from decision, program DROP route
+        EXPECT_THAT(
+            routeToUpdate.at(networkV4).nexthops,
+            testing::UnorderedElementsAre(nhV4));
+        EXPECT_THAT(
+            routeToUpdate.at(networkV6).nexthops,
+            testing::UnorderedElementsAre(nhV6));
+      });
+
+  //
+  // Test2: advertise SAME prefixes from `Decision`
+  //
+  evb.scheduleTimeout(
+      scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
+        LOG(INFO) << "Advertising SAME prefixes from Decision";
+
+        sendKvPublication(createThriftPublication(
+            {createPrefixKeyValue("2", 1, toIpPrefix(prefixV4)),
+             createPrefixKeyValue("2", 1, toIpPrefix(prefixV6))},
+            {},
+            {},
+            {},
+            std::string("")));
+
+        // Receive & verify all the expected updates
+        auto routeDbDelta = recvRouteUpdates();
+        EXPECT_THAT(routeDbDelta.unicastRoutesToUpdate, testing::SizeIs(2));
+        EXPECT_THAT(routeDbDelta.unicastRoutesToDelete, testing::SizeIs(0));
+
+        const auto& routeToUpdate = routeDbDelta.unicastRoutesToUpdate;
+        ASSERT_TRUE(routeToUpdate.count(networkV4));
+        ASSERT_TRUE(routeToUpdate.count(networkV6));
+
+        // NOTE: route from decision takes higher priority
+        EXPECT_THAT(
+            routeToUpdate.at(networkV4).nexthops,
+            Not(testing::UnorderedElementsAre(nhV4)));
+        EXPECT_THAT(
+            routeToUpdate.at(networkV6).nexthops,
+            Not(testing::UnorderedElementsAre(nhV6)));
+      });
+
+  //
+  // Test3: withdraw prefixes from `PrefixManager`
+  //
+  evb.scheduleTimeout(
+      scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
+        LOG(INFO) << "Withdrawing static prefixes from PrefixManager";
+
+        thrift::RouteDatabaseDelta routeDb;
+        routeDb.unicastRoutesToDelete_ref()->emplace_back(
+            toIpPrefix(networkV4));
+        routeDb.unicastRoutesToDelete_ref()->emplace_back(
+            toIpPrefix(networkV6));
+        sendStaticRoutesUpdate(std::move(routeDb));
+      });
+
+  // wait for debouncer to fire
+  evb.scheduleTimeout(
+      scheduleAt += (debounceTimeoutMax + std::chrono::milliseconds(100)),
+      [&]() noexcept {
+        // Receive & verify all the expected updates
+        auto routeDbDelta = recvRouteUpdates();
+        EXPECT_THAT(routeDbDelta.unicastRoutesToUpdate, testing::SizeIs(2));
+        EXPECT_THAT(routeDbDelta.unicastRoutesToDelete, testing::SizeIs(0));
+
+        const auto& routeToUpdate = routeDbDelta.unicastRoutesToUpdate;
+        ASSERT_TRUE(routeToUpdate.count(networkV4));
+        ASSERT_TRUE(routeToUpdate.count(networkV6));
+
+        // NOTE: route from Decision is the ONLY output
+        EXPECT_THAT(
+            routeToUpdate.at(networkV4).nexthops,
+            Not(testing::UnorderedElementsAre(nhV4)));
+        EXPECT_THAT(
+            routeToUpdate.at(networkV6).nexthops,
+            Not(testing::UnorderedElementsAre(nhV6)));
+      });
+
+  //
+  // Test4: re-advertise prefixes from `PrefixManager`
+  //
+  evb.scheduleTimeout(
+      scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
+        LOG(INFO) << "Re-advertising static prefixes from PrefixManager";
+
+        thrift::RouteDatabaseDelta routeDb;
+        routeDb.unicastRoutesToUpdate_ref()->emplace_back(routeV4);
+        routeDb.unicastRoutesToUpdate_ref()->emplace_back(routeV6);
+        sendStaticRoutesUpdate(std::move(routeDb));
+      });
+
+  // wait for debouncer to fire
+  evb.scheduleTimeout(
+      scheduleAt += (debounceTimeoutMax + std::chrono::milliseconds(100)),
+      [&]() noexcept {
+        // Receive & verify all the expected updates
+        auto routeDbDelta = recvRouteUpdates();
+        EXPECT_THAT(routeDbDelta.unicastRoutesToUpdate, testing::SizeIs(2));
+        EXPECT_THAT(routeDbDelta.unicastRoutesToDelete, testing::SizeIs(0));
+
+        const auto& routeToUpdate = routeDbDelta.unicastRoutesToUpdate;
+        ASSERT_TRUE(routeToUpdate.count(networkV4));
+        ASSERT_TRUE(routeToUpdate.count(networkV6));
+
+        // NOTE: route from decision takes higher priority
+        EXPECT_THAT(
+            routeToUpdate.at(networkV4).nexthops,
+            Not(testing::UnorderedElementsAre(nhV4)));
+        EXPECT_THAT(
+            routeToUpdate.at(networkV6).nexthops,
+            Not(testing::UnorderedElementsAre(nhV6)));
+      });
+
+  //
+  // Test5: withdraw prefixes from `Decision`
+  //
+  evb.scheduleTimeout(
+      scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
+        LOG(INFO) << "Withdrawing prefixes from Decision";
+
+        sendKvPublication(createThriftPublication(
+            {createPrefixKeyValue(
+                 "2", 1, toIpPrefix(prefixV4), kTestingAreaName, true),
+             createPrefixKeyValue(
+                 "2", 1, toIpPrefix(prefixV6), kTestingAreaName, true)},
+            {},
+            {},
+            {},
+            std::string("")));
+
+        // Receive & verify all the expected updates
+        auto routeDbDelta = recvRouteUpdates();
+        EXPECT_THAT(routeDbDelta.unicastRoutesToUpdate, testing::SizeIs(2));
+        EXPECT_THAT(routeDbDelta.unicastRoutesToDelete, testing::SizeIs(0));
+
+        const auto& routeToUpdate = routeDbDelta.unicastRoutesToUpdate;
+        ASSERT_TRUE(routeToUpdate.count(networkV4));
+        ASSERT_TRUE(routeToUpdate.count(networkV6));
+
+        // NOTE: no routes from decision. Program DROP routes.
+        EXPECT_THAT(
+            routeToUpdate.at(networkV4).nexthops,
+            testing::UnorderedElementsAre(nhV4));
+        EXPECT_THAT(
+            routeToUpdate.at(networkV6).nexthops,
+            testing::UnorderedElementsAre(nhV6));
+      });
+
+  //
+  // Test6: withdraw prefixes from `PrefixManager`
+  //
+  evb.scheduleTimeout(
+      scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
+        LOG(INFO) << "Withdrawing prefixes from PrefixManager";
+
+        thrift::RouteDatabaseDelta routeDb;
+        routeDb.unicastRoutesToDelete_ref()->emplace_back(
+            toIpPrefix(networkV4));
+        routeDb.unicastRoutesToDelete_ref()->emplace_back(
+            toIpPrefix(networkV6));
+        sendStaticRoutesUpdate(std::move(routeDb));
+      });
+
+  // wait for debouncer to fire
+  evb.scheduleTimeout(
+      scheduleAt += (debounceTimeoutMax + std::chrono::milliseconds(100)),
+      [&]() noexcept {
+        // Receive & verify all the expected updates
+        auto routeDbDelta = recvRouteUpdates();
+        EXPECT_THAT(routeDbDelta.unicastRoutesToUpdate, testing::SizeIs(0));
+        EXPECT_THAT(routeDbDelta.unicastRoutesToDelete, testing::SizeIs(2));
+
+        EXPECT_THAT(
+            routeDbDelta.unicastRoutesToDelete,
+            testing::UnorderedElementsAre(networkV4, networkV6));
+
+        evb.stop();
+      });
+
+  // magic happens
+  evb.run();
 }
 
 // The following topology is used:

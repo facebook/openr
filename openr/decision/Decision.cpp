@@ -29,11 +29,12 @@
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
 
-using namespace std;
-
 namespace fb303 = facebook::fb303;
 
 using apache::thrift::can_throw;
+using folly::gen::as;
+using folly::gen::from;
+using folly::gen::mapped;
 using Metric = openr::LinkStateMetric;
 using SpfResult = openr::LinkState::SpfResult;
 
@@ -203,10 +204,16 @@ class SpfSolver::SpfSolverImpl {
   ~SpfSolverImpl() = default;
 
   //
-  // mpls static route
+  // util function to update IP/MPLS static route
   //
 
-  void updateStaticMplsRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
+  void updateStaticUnicastRoutes(
+      const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+      const std::vector<thrift::IpPrefix>& unicastRoutesToDelete);
+
+  void updateStaticMplsRoutes(
+      const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
+      const std::vector<int32_t>& mplsRoutesToDelete);
 
   //
   // best path calculation
@@ -219,6 +226,12 @@ class SpfSolver::SpfSolverImpl {
       const std::string& myNodeName,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState);
+
+  std::optional<RibUnicastEntry> createRouteForPrefixOrGetStaticRoute(
+      const std::string& myNodeName,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      PrefixState const& prefixState,
+      thrift::IpPrefix const& prefix);
 
   std::optional<RibUnicastEntry> createRouteForPrefix(
       const std::string& myNodeName,
@@ -256,7 +269,7 @@ class SpfSolver::SpfSolverImpl {
 
   // Given prefixes and the nodes who announce it, get the kspf routes.
   std::optional<RibUnicastEntry> selectBestPathsKsp2(
-      const string& myNodeName,
+      const std::string& myNodeName,
       const thrift::IpPrefix& prefix,
       BestRouteSelectionResult const& bestRouteSelectionResult,
       PrefixEntries const& prefixEntries,
@@ -266,7 +279,7 @@ class SpfSolver::SpfSolverImpl {
       PrefixState const& prefixState);
 
   std::optional<RibUnicastEntry> addBestPaths(
-      const string& myNodeName,
+      const std::string& myNodeName,
       const thrift::IpPrefix& prefixThrift,
       const BestRouteSelectionResult& bestRouteSelectionResult,
       const PrefixEntries& prefixEntries,
@@ -333,7 +346,9 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixEntries const& prefixEntries = {}) const;
 
+  // Collection to store static IP/MPLS routes
   StaticMplsRoutes staticMplsRoutes_;
+  StaticUnicastRoutes staticUnicastRoutes_;
 
   // Cache of best route selection.
   // - Cleared when topology changes
@@ -357,36 +372,77 @@ class SpfSolver::SpfSolverImpl {
 };
 
 void
+SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
+    const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+    const std::vector<thrift::IpPrefix>& unicastRoutesToDelete) {
+  // Process IP routes to add or update
+  for (const auto& unicastRoute : unicastRoutesToUpdate) {
+    const auto prefix = *unicastRoute.dest_ref();
+    staticUnicastRoutes_.insert_or_assign(prefix, *unicastRoute.nextHops_ref());
+
+    VLOG(1)
+        << "[STATIC UNICAST ROUTE ADVERTISEMENT] Prefix = " << toString(prefix)
+        << ", NextHopsCount = " << unicastRoute.nextHops_ref()->size();
+    for (auto const& nh : *unicastRoute.nextHops_ref()) {
+      VLOG(2) << " via " << toString(nh);
+    }
+  }
+
+  for (const auto& prefix : unicastRoutesToDelete) {
+    // mark unicast entry to be deleted
+    staticUnicastRoutes_.erase(prefix);
+
+    VLOG(1) << "[STATIC UNICAST ROUTE WITHDRAW] Prefix = " << toString(prefix);
+  }
+}
+
+void
 SpfSolver::SpfSolverImpl::updateStaticMplsRoutes(
-    thrift::RouteDatabaseDelta&& staticRoutesDelta) {
-  // We don't support static routes for IP routes yet
-  CHECK(staticRoutesDelta.unicastRoutesToUpdate_ref()->empty());
-  CHECK(staticRoutesDelta.unicastRoutesToDelete_ref()->empty());
-
-  const auto& mplsRoutesToUpdate = *staticRoutesDelta.mplsRoutesToUpdate_ref();
-  const auto& mplsRoutesToDelete = *staticRoutesDelta.mplsRoutesToDelete_ref();
-
+    const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
+    const std::vector<int32_t>& mplsRoutesToDelete) {
   // Process MPLS routes to add or update
-  LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
-            << " static mpls routes.";
   for (const auto& mplsRoute : mplsRoutesToUpdate) {
     const auto topLabel = *mplsRoute.topLabel_ref();
     staticMplsRoutes_.insert_or_assign(topLabel, *mplsRoute.nextHops_ref());
 
-    VLOG(1) << "> " << std::to_string(topLabel)
+    VLOG(1) << "[STATIC MPLS ROUTE ADVERTISEMENT] Prefix = "
+            << std::to_string(topLabel)
             << ", NextHopsCount = " << mplsRoute.nextHops_ref()->size();
     for (auto const& nh : *mplsRoute.nextHops_ref()) {
       VLOG(2) << " via " << toString(nh);
     }
   }
 
-  LOG(INFO) << "Deleting " << mplsRoutesToDelete.size()
-            << " static mpls routes.";
   for (const auto& topLabel : mplsRoutesToDelete) {
     staticMplsRoutes_.erase(topLabel);
 
-    VLOG(1) << "> " << std::to_string(topLabel);
+    VLOG(1) << "[STATIC MPLS ROUTE WITHDRAW] Prefix = "
+            << std::to_string(topLabel);
   }
+}
+
+std::optional<RibUnicastEntry>
+SpfSolver::SpfSolverImpl::createRouteForPrefixOrGetStaticRoute(
+    const std::string& myNodeName,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates,
+    PrefixState const& prefixState,
+    thrift::IpPrefix const& prefix) {
+  // route output from `PrefixState` has higher priority over
+  // static unicast routes
+  if (auto maybeRoute = createRouteForPrefix(
+          myNodeName, areaLinkStates, prefixState, prefix)) {
+    return maybeRoute;
+  }
+
+  // check `staticUnicastRoutes_`
+  auto it = staticUnicastRoutes_.find(prefix);
+  if (it != staticUnicastRoutes_.end()) {
+    return RibUnicastEntry(
+        toIPNetwork(it->first),
+        std::unordered_set<thrift::NextHopThrift>{it->second.begin(),
+                                                  it->second.end()});
+  }
+  return std::nullopt;
 }
 
 std::optional<RibUnicastEntry>
@@ -582,7 +638,18 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
             myNodeName, areaLinkStates, prefixState, prefix)) {
       routeDb.addUnicastRoute(std::move(maybeRoute).value());
     }
-  } // for prefixState.prefixes()
+  }
+
+  // Create static unicast routes
+  for (const auto& [prefix, nhs] : staticUnicastRoutes_) {
+    if (routeDb.unicastRoutes.count(toIPNetwork(prefix))) {
+      // ignore prefixes as prefixState has higher priority
+      continue;
+    }
+    routeDb.addUnicastRoute(RibUnicastEntry(
+        toIPNetwork(prefix),
+        std::unordered_set<thrift::NextHopThrift>{nhs.begin(), nhs.end()}));
+  }
 
   //
   // Create MPLS routes for all nodeLabel
@@ -896,7 +963,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
 
 std::optional<RibUnicastEntry>
 SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
-    const string& myNodeName,
+    const std::string& myNodeName,
     const thrift::IpPrefix& prefix,
     BestRouteSelectionResult const& bestRouteSelectionResult,
     PrefixEntries const& prefixEntries,
@@ -1021,7 +1088,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
 
 std::optional<RibUnicastEntry>
 SpfSolver::SpfSolverImpl::addBestPaths(
-    const string& myNodeName,
+    const std::string& myNodeName,
     const thrift::IpPrefix& prefixThrift,
     const BestRouteSelectionResult& bestRouteSelectionResult,
     const PrefixEntries& prefixEntries,
@@ -1328,18 +1395,27 @@ SpfSolver::SpfSolver(
 SpfSolver::~SpfSolver() {}
 
 void
+SpfSolver::updateStaticUnicastRoutes(
+    const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+    const std::vector<thrift::IpPrefix>& unicastRoutesToDelete) {
+  return impl_->updateStaticUnicastRoutes(
+      unicastRoutesToUpdate, unicastRoutesToDelete);
+}
+
+void
 SpfSolver::updateStaticMplsRoutes(
-    thrift::RouteDatabaseDelta&& staticRoutesDelta) {
-  return impl_->updateStaticMplsRoutes(std::move(staticRoutesDelta));
+    const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
+    const std::vector<int32_t>& mplsRoutesToDelete) {
+  return impl_->updateStaticMplsRoutes(mplsRoutesToUpdate, mplsRoutesToDelete);
 }
 
 std::optional<RibUnicastEntry>
-SpfSolver::createRouteForPrefix(
+SpfSolver::createRouteForPrefixOrGetStaticRoute(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
     thrift::IpPrefix const& prefix) {
-  return impl_->createRouteForPrefix(
+  return impl_->createRouteForPrefixOrGetStaticRoute(
       myNodeName, areaLinkStates, prefixState, prefix);
 }
 
@@ -1458,10 +1534,7 @@ Decision::Decision(
             LOG(INFO) << "Terminating static routes update processing fiber";
             break;
           }
-          // Apply publication and update stored update status
-          spfSolver_->updateStaticMplsRoutes(std::move(maybeThriftPub).value());
-          pendingUpdates_.setNeedsFullRebuild(); // Mark for full DB rebuild
-          rebuildRoutesDebounced_();
+          processStaticRoutesUpdate(std::move(maybeThriftPub).value());
         }
       });
 
@@ -1767,6 +1840,40 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 }
 
 void
+Decision::processStaticRoutesUpdate(
+    thrift::RouteDatabaseDelta&& staticRoutesDelta) {
+  // update static unicast routes
+  if (staticRoutesDelta.unicastRoutesToUpdate_ref()->size() or
+      staticRoutesDelta.unicastRoutesToDelete_ref()->size()) {
+    const auto& toUpdate = *staticRoutesDelta.unicastRoutesToUpdate_ref();
+    const auto& toDelete = *staticRoutesDelta.unicastRoutesToDelete_ref();
+
+    spfSolver_->updateStaticUnicastRoutes(toUpdate, toDelete);
+
+    // combine add/update/delete prefixes into pending update
+    auto change = from(toUpdate) |
+        mapped([](const thrift::UnicastRoute& r) { return *r.dest_ref(); }) |
+        as<std::unordered_set<thrift::IpPrefix>>();
+    change.merge(
+        std::unordered_set<thrift::IpPrefix>(toDelete.begin(), toDelete.end()));
+
+    pendingUpdates_.applyPrefixStateChange(
+        std::move(change),
+        thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
+  }
+
+  // update static MPLS routes
+  if (staticRoutesDelta.mplsRoutesToUpdate_ref()->size() or
+      staticRoutesDelta.mplsRoutesToDelete_ref()->size()) {
+    spfSolver_->updateStaticMplsRoutes(
+        *staticRoutesDelta.mplsRoutesToUpdate_ref(),
+        *staticRoutesDelta.mplsRoutesToDelete_ref());
+    pendingUpdates_.setNeedsFullRebuild(); // Mark for full DB rebuild
+  }
+  rebuildRoutesDebounced_();
+}
+
+void
 Decision::rebuildRoutes(std::string const& event) {
   if (coldStartTimer_->isScheduled()) {
     return;
@@ -1807,7 +1914,7 @@ Decision::rebuildRoutes(std::string const& event) {
   } else {
     // process prefixes update from `prefixState_`
     for (auto const& prefix : pendingUpdates_.updatedPrefixes()) {
-      if (auto maybeRibEntry = spfSolver_->createRouteForPrefix(
+      if (auto maybeRibEntry = spfSolver_->createRouteForPrefixOrGetStaticRoute(
               myNodeName_, areaLinkStates_, prefixState_, prefix)) {
         update.addRouteToUpdate(std::move(maybeRibEntry).value());
       } else {

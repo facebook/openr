@@ -44,6 +44,8 @@ namespace openr {
 
 using StaticMplsRoutes =
     std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>;
+using StaticUnicastRoutes =
+    std::unordered_map<thrift::IpPrefix, std::vector<thrift::NextHopThrift>>;
 
 /**
  * Captures the best route selection result. Especially highlights
@@ -218,7 +220,13 @@ class SpfSolver {
   // be defined in the .cpp
   //
 
-  void updateStaticMplsRoutes(thrift::RouteDatabaseDelta&& staticRoutesDelta);
+  void updateStaticUnicastRoutes(
+      const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+      const std::vector<thrift::IpPrefix>& unicastRoutesToDelete);
+
+  void updateStaticMplsRoutes(
+      const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
+      const std::vector<int32_t>& mplsRoutesToDelete);
 
   // Build route database using given prefix and link states for a given
   // router, myNodeName
@@ -228,7 +236,7 @@ class SpfSolver {
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState);
 
-  std::optional<RibUnicastEntry> createRouteForPrefix(
+  std::optional<RibUnicastEntry> createRouteForPrefixOrGetStaticRoute(
       const std::string& myNodeName,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState,
@@ -324,6 +332,10 @@ class Decision : public OpenrEventBase {
 
   // process publication from KvStore
   void processPublication(thrift::Publication&& thriftPub);
+
+  // process publication from PrefixManager
+  void processStaticRoutesUpdate(
+      thrift::RouteDatabaseDelta&& staticRoutesDelta);
 
   // openr config
   std::shared_ptr<const Config> config_;
