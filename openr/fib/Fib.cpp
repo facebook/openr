@@ -551,6 +551,9 @@ Fib::syncRouteDb() {
   const auto& mplsRoutes =
       createMplsRoutesWithSelectedNextHopsMap(routeState_.mplsRoutes);
 
+  // update flat counters here as they depend on routeState_ and its change
+  updateGlobalCounters();
+
   // In dry run we just print the routes. No real action
   if (dryrun_) {
     LOG(INFO) << "Skipping programming of routes in dryrun ... ";
@@ -663,6 +666,10 @@ Fib::createFibClient(
 
 void
 Fib::updateGlobalCounters() {
+  if (not routeState_.hasRoutesFromDecision) {
+    return;
+  }
+
   // Set some flat counters
   fb303::fbData->setCounter(
       "fib.num_routes",
@@ -671,15 +678,6 @@ Fib::updateGlobalCounters() {
       "fib.num_unicast_routes", routeState_.unicastRoutes.size());
   fb303::fbData->setCounter(
       "fib.num_mpls_routes", routeState_.mplsRoutes.size());
-
-  // Count the number of bgp routes
-  int64_t bgpCounter = 0;
-  for (const auto& route : routeState_.unicastRoutes) {
-    if (route.second.data_ref().has_value()) {
-      bgpCounter++;
-    }
-  }
-  fb303::fbData->setCounter("fib.num_routes.BGP", bgpCounter);
 }
 
 void
