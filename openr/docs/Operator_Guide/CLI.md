@@ -1,64 +1,284 @@
 # Open/R CLI: `breeze`
 
----
-
-`breeze` is a `python-click` based CLI tool to peek into OpenR's state. It
-allows you to inspect:
+`breeze` is a [python click](https://pypi.org/project/click/) based CLI tool to
+query Open/R's state. It allows you to inspect many components of Open/R. This
+includes:
 
 - Link state database
 - Advertised prefix database
-- Links discovered by OpenR
+- Links discovered by Open/R
 - Neighbors
 - Computed routes along with Loop-Free Alternates
 - Programmed routes in FIB
 - Set/Unset overload bit for node and links or custom metrics on links
 - Add/Del/Modify keys in KvStore
 
-### How it Works
+## How it Works
 
 ---
 
-All OpenR modules expose various ZMQ APIs to access their internal state over
-TCP transport. OpenR has
+All Open/R modules expose various Thrift APIs to access their internal state
+over TCP transport. Open/R has
 [python based clients](https://github.com/facebook/openr/tree/master/openr/py/openr/clients)
-for each module which Breeze leverages to talk to OpenR, retrieve information,
+for each module which Breeze leverages to talk to Open/R, retrieve information,
 and display it
 
-### How to use it
+## How to use `breeze`
 
 ---
 
 Breeze is very intuitive to use. Just do `--help` at any stage to see options,
 arguments, and subcommands. Later sections cover about each command in detail.
 
+```console
+$ breeze --help
+...
+  bgp           Show BGP Information
+  config        CLI tool to peek into Config Store module.
+  decision      CLI tool to peek into Decision module.
+  fib           CLI tool to peek into Fib module.
+  kvstore       CLI tool to peek into KvStore module.
+  lm            CLI tool to peek into Link Monitor module.
+  monitor       CLI tool to peek into Monitor module.
+  openr         CLI tool to peek into Openr information.
+  perf          CLI tool to view latest perf log of each module.
+  prefixmgr     CLI tool to peek into Prefix Manager module.
+  spark         CLI tool to peek into Spark information.
+  tech-support  Extensive logging of Open/R's state for debugging
+```
+
+### Sub Commands
+
+Each of the above list of terms is a subcommand. You can get futher information
+about each by asking for help on that specific subcommand.
+
+```console
+$ breeze decision --help
+Usage: breeze decision [OPTIONS] COMMAND [ARGS]...
+
+  CLI tool to peek into Decision module.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  adj                   dump the link-state adjacencies from Decision module
+  path                  path from src to dst
+  prefixes              show the prefixes from Decision module
+  received-routes       Show routes this node is advertising.
+  rib-policy            Show currently configured RibPolicy
+  routes                Request the routing table from Decision module
+  routes-computed       Request the routing table from Decision module
+  routes-uninstallable  Request un installable routing table of the current...
+  validate              Check all prefix & adj dbs in Decision against that...
+```
+
+The submodule themselves then have subcommands to do different interactions with
+that Open/R module.
+
+Please refer to the [Protocol Guide](../Protocol_Guide/index.rst) for more
+information about each Open/R module.
+
+### Bash Autocompletion
+
 To get auto-completion in your bash shell, simply copy
 `eval "$(_BREEZE_COMPLETE=source breeze)"` to your `~/.bashrc`.
 
-````console
-$ breeze
-Usage: breeze [OPTIONS] COMMAND [ARGS]...
+### Remote Connecting
 
-  Command line tools for OpenR.
+`breeze` can remote connect to a device to run a command. This is due to thrift
+being a TCP/IP protocol and Open/R (by default) listening on all interfaces.
+Please note, firewalls etc. can block this from working.
 
-Options:
-  -H, --host TEXT               Host to connect to (default = localhost)
-  -t, --timeout INTEGER         Timeout for socket communication in ms
-  --help                        Show this message and exit.
+```console
+$ breeze -H rsw023.p008.f01.vll2.tfbnw.net decision adj
+> rsw023.p008.f01.vll2.tfbnw.net
+Neighbor                        Local Intf    Remote Intf      Metric    Label  NextHop-v4    NextHop-v6                 Uptime      Area
+fsw001.p008.f01.vll2.tfbnw.net  fboss4005     fboss2075             1        0  10.120.71.44  fe80::d8c4:97ff:fed0:58dd  20h32m         0
+fsw002.p008.f01.vll2.tfbnw.net  fboss4006     fboss2075             1        0  10.121.71.44  fe80::d8c4:97ff:fed0:5484  20h32m         0
+fsw003.p008.f01.vll2.tfbnw.net  fboss4007     fboss2075             1        0  10.122.71.44  fe80::d8c4:97ff:fece:357c  20h32m         0
+fsw004.p008.f01.vll2.tfbnw.net  fboss4008     fboss2075             1        0  10.123.71.44  fe80::d8c4:97ff:fece:3081  20h32m         0
+fsw005.p008.f01.vll2.tfbnw.net  fboss4001     fboss2075             1        0  10.204.71.44  fe80::d8c4:97ff:fed0:564c  20h32m         0
+fsw006.p008.f01.vll2.tfbnw.net  fboss4002     fboss2075             1        0  10.205.71.44  fe80::d8c4:97ff:fed0:5409  20h32m         0
+fsw007.p008.f01.vll2.tfbnw.net  fboss4003     fboss2075             1        0  10.206.71.44  fe80::d8c4:97ff:fece:326a  20h32m         0
+fsw008.p008.f01.vll2.tfbnw.net  fboss4004     fboss2075             1        0  10.207.71.44  fe80::d8c4:97ff:fece:3048  20h32m         0
+```
 
-Commands:
-  config         CLI tool to peek into Config Store module.
-  decision       CLI tool to peek into Decision module.
-  fib            CLI tool to peek into Fib module.
-  kvstore        CLI tool to peek into KvStore module.
-  lm             CLI tool to peek into Link Monitor module.
-  monitor        CLI tool to peek into Monitor module.
-  perf           CLI tool to view latest perf log of each...
-  prefixmgr      CLI tool to peek into Prefix Manager module.```
-````
+## Debugging Open/R with `breeze`
+
+`breeze` can be daunting as it has so many sub-commands. This section attempts
+to walk through debugging Open/R modules in an order that makes sesnse due to
+the dependencies on one another. For example, we can not have an Prefixes in the
+FIB if Decision's RIB has no learnt prefixes from neighbors to program.
+
+### Is Open/R alive and running?
+
+First thing's first, is Open/R running and ready to function? We can check this
+by seeing if the Open/R Thrift server is responding. To check this you can use:
+
+```console
+breeze -H rsw023.p008.f01.vll2.tfbnw.net openr version
+Build Information
+  Built by: twsvcscm
+  Built on: Wed Dec  9 03:25:18 2020
+  Built at: sandcastle362.atn3.facebook.com
+  Build path: /data/sandcastle/boxes/eden-trunk-hg-fbcode-fbsource/fbcode
+  Package Name: openr
+  Package Version: 0a3cbfb5470544c7ae4c6aedbcecba76
+  Package Release:
+  Build Revision: 33db95770f06b99200c4f76fc320a2bafe0adde5
+  Build Upstream Revision: 33db95770f06b99200c4f76fc320a2bafe0adde5
+  Build Platform: platform007
+  Build Rule: fbcode:openr:openr (cpp_binary, buck, opt)
+Open Source Version                   :  20200825
+Lowest Supported Open Source Version  :  20200604
+```
+
+### What interfaces is Open/R configured to perform neighbor discovery over?
+
+Lets see what interface(s) Open/R is _trying_ to form adjacencies on:
+
+```console
+breeze -H rsw023.p008.f01.vll2.tfbnw.net lm links
+Certificate will not expire
+
+== Node Overload: NO  ==
+
+Interface    Status    Metric Override    Addresses
+-----------  --------  -----------------  -----------------------
+fboss11      Up
+                                          fc00:0:0:1::16
+                                          fe80::90:fbff:fe68:fd07
+                                          10.254.113.22
+fboss4001    Up
+                                          fe80::90:fbff:fe68:fd07
+                                          2401:db00:e12e:2407::2d
+                                          10.204.71.45
+fboss4002    Up
+                                          2401:db00:e12e:2507::2d
+                                          fe80::90:fbff:fe68:fd07
+                                          10.205.71.45
+fboss4003    Up
+                                          10.206.71.45
+                                          2401:db00:e12e:2607::2d
+                                          fe80::90:fbff:fe68:fd07
+fboss4004    Up
+                                          2401:db00:e12e:2707::2d
+                                          fe80::90:fbff:fe68:fd07
+                                          10.207.71.45
+fboss4005    Up
+                                          10.120.71.45
+                                          2401:db00:e12e:2007::2d
+                                          fe80::90:fbff:fe68:fd07
+fboss4006    Up
+                                          2401:db00:e12e:2107::2d
+                                          fe80::90:fbff:fe68:fd07
+                                          10.121.71.45
+fboss4007    Up
+                                          fe80::90:fbff:fe68:fd07
+                                          2401:db00:e12e:2207::2d
+                                          10.122.71.45
+fboss4008    Up
+                                          2401:db00:e12e:2307::2d
+                                          fe80::90:fbff:fe68:fd07
+                                          10.123.71.45
+```
+
+### Who has Open/R formed adjacencies with?
+
+Lets see if we have an adjacency on each link we expect:
+
+```console
+$ breeze -H rsw023.p008.f01.vll2.tfbnw.net decision adj
+> rsw023.p008.f01.vll2.tfbnw.net
+Neighbor                        Local Intf    Remote Intf      Metric    Label  NextHop-v4    NextHop-v6                 Uptime      Area
+fsw001.p008.f01.vll2.tfbnw.net  fboss4005     fboss2075             1        0  10.120.71.44  fe80::d8c4:97ff:fed0:58dd  20h37m         0
+fsw002.p008.f01.vll2.tfbnw.net  fboss4006     fboss2075             1        0  10.121.71.44  fe80::d8c4:97ff:fed0:5484  20h37m         0
+fsw003.p008.f01.vll2.tfbnw.net  fboss4007     fboss2075             1        0  10.122.71.44  fe80::d8c4:97ff:fece:357c  20h37m         0
+fsw004.p008.f01.vll2.tfbnw.net  fboss4008     fboss2075             1        0  10.123.71.44  fe80::d8c4:97ff:fece:3081  20h37m         0
+fsw005.p008.f01.vll2.tfbnw.net  fboss4001     fboss2075             1        0  10.204.71.44  fe80::d8c4:97ff:fed0:564c  20h37m         0
+fsw006.p008.f01.vll2.tfbnw.net  fboss4002     fboss2075             1        0  10.205.71.44  fe80::d8c4:97ff:fed0:5409  20h37m         0
+fsw007.p008.f01.vll2.tfbnw.net  fboss4003     fboss2075             1        0  10.206.71.44  fe80::d8c4:97ff:fece:326a  20h37m         0
+fsw008.p008.f01.vll2.tfbnw.net  fboss4004     fboss2075             1        0  10.207.71.44  fe80::d8c4:97ff:fece:3048  20h37m         0
+```
+
+- _Please note:_ Forming an adjacency (adj) is a _neighbor_ adjacency in Open/R
+  - Similiar concept to BGP Peering
+
+### What routes do we have in our RIB?
+
+Open/R takes all routes from neigbors (after applying policy) and stores them in
+the RIB. If there is **no** routes in the RIB, the FIB can have no Open/R
+routes. So it makes sense to see if there is anythig in the RIB before looking
+at the FIB.
+
+```console
+$ breeze -H rsw023.p008.f01.vll2.tfbnw.net decision routes
+== Unicast Routes for rsw023.p008.f01.vll2.tfbnw.net  ==
+
+> 0.0.0.0/0
+  via 10.120.71.44%fboss4005 weight 1
+  via 10.207.71.44%fboss4004 weight 1
+  via 10.122.71.44%fboss4007 weight 1
+  via 10.205.71.44%fboss4002 weight 1
+  via 10.121.71.44%fboss4006 weight 1
+  via 10.206.71.44%fboss4003 weight 1
+  via 10.123.71.44%fboss4008 weight 1
+  via 10.204.71.44%fboss4001 weight 1
+
+> 10.110.161.11/32
+  via 10.120.71.44%fboss4005 weight 1
+  via 10.207.71.44%fboss4004 weight 1
+  via 10.122.71.44%fboss4007 weight 1
+  via 10.205.71.44%fboss4002 weight 1
+  via 10.121.71.44%fboss4006 weight 1
+  via 10.206.71.44%fboss4003 weight 1
+  via 10.123.71.44%fboss4008 weight 1
+  via 10.204.71.44%fboss4001 weight 1
+...
+```
+
+### What routes have made it to the FIB?
+
+After confirming we have route(s) in the RIB, lets see if what has made it to
+the FIB makes sense!
+
+```console
+== Unicast Routes for rsw023.p008.f01.vll2.tfbnw.net  ==
+
+> 0.0.0.0/0
+  via 10.120.71.44%fboss4005 weight 1
+  via 10.207.71.44%fboss4004 weight 1
+  via 10.122.71.44%fboss4007 weight 1
+  via 10.205.71.44%fboss4002 weight 1
+  via 10.121.71.44%fboss4006 weight 1
+  via 10.206.71.44%fboss4003 weight 1
+  via 10.123.71.44%fboss4008 weight 1
+  via 10.204.71.44%fboss4001 weight 1
+
+> 10.110.161.11/32
+  via 10.120.71.44%fboss4005 weight 1
+  via 10.207.71.44%fboss4004 weight 1
+  via 10.122.71.44%fboss4007 weight 1
+  via 10.205.71.44%fboss4002 weight 1
+  via 10.121.71.44%fboss4006 weight 1
+  via 10.206.71.44%fboss4003 weight 1
+  via 10.123.71.44%fboss4008 weight 1
+  via 10.204.71.44%fboss4001 weight 1
+...
+```
+
+By going through all these steps we have checked:
+
+- Open/R is running
+- Where it's trying to form adjacencies
+- Current Adjacencies
+- Current RIB entries
+- Current FIB entries
+
+## Module Specific `breeze` Examples
 
 ### KvStore Commands
-
----
 
 #### Nodes
 
@@ -195,7 +415,7 @@ $ breeze kvstore keyvals test-key
 
 - Erase key from KvStore. It is performed by setting TTL of the key to zero.
 
-> NOTE: You shouldn't try to erase keys originated by OpenR NOTE: Erase only
+> NOTE: You shouldn't try to erase keys originated by Open/R NOTE: Erase only
 > happens on all nodes reachable from the current node. Any node momentarily
 > disconnected from the network might bring back the key you just erased.
 
@@ -401,7 +621,7 @@ Decision is in sync with KvStore if nothing shows up
 
 #### links
 
-OpenR discovers local interfaces of a node (based on specified regular
+Open/R discovers local interfaces of a node (based on specified regular
 expressions) and monitors their status via asynchronous Netlink APIs. It also
 performs neighbor discovery on learned links.
 
@@ -628,7 +848,7 @@ Key stored
 
 #### counters
 
-Fetch and display OpenR counters. You can programmatically fetch these counters
+Fetch and display Open/R counters. You can programmatically fetch these counters
 periodically via Monitor client and export them for monitoring purposes.
 
 ```console
@@ -660,7 +880,7 @@ decision.spf_runs.count.600 : 0.0
 
 ---
 
-FIB is the only platform-specific part of OpenR. FibAgent runs as a separate
+FIB is the only platform-specific part of Open/R. FibAgent runs as a separate
 service on the node which is primarily responsible for managing the routing
 tables on the node. Breeze also exposes commands to interact with FibAgent.
 
@@ -756,7 +976,7 @@ $ breeze -H leb01.labdca1 fib list
 
 One can then use `linux` specific commands, the most useful being "validate"
 which validates if the system (kernel routing table) has all the routes that
-OpenR intended to program. In case of a mismatch, the discrepancies will be
+Open/R intended to program. In case of a mismatch, the discrepancies will be
 reported to aid debugging.
 
 ```console
