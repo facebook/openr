@@ -1,4 +1,4 @@
-# Runbook: The Configuration Guide for Open/R
+# Configuration Guide
 
 Good work on building and installing Open/R. Here are some ways you can run
 Open/R. You should have the `openr` C++ binary, `run_openr.sh` script, and

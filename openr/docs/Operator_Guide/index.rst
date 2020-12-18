@@ -8,8 +8,8 @@ Here we explain operating and managing Open Routing
    :caption: Contents:
 
    CLI
+   Configuration
    Control_Plane_IO
    Monitoring
    RouteRepresentation
-   Runbook
    Versions
