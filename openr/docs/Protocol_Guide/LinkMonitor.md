@@ -1,99 +1,155 @@
 # LinkMonitor
 
-This module is responsible for learning link information from the underlying
-system and managing neighbor sessions. At a high level it:
-
-- Discovers the links on the system and enables/disables neighbor discovery on
-  them
-- Maintains the local node's link-state in KvStore
-- Manages peering sessions of KvStore (one per neighbor)
-
-### APIs
+## Introduction
 
 ---
 
-For more information about message formats, check out
+`LinkMonitor` is the module interacts with the system to monitor link, aka,
+interface status and addresses. It learns and monitor the link information from
+Linux kernel through `Netlink Protocol`. Main functions of this module are:
 
-- [if/LinkMonitor.thrift](https://github.com/facebook/openr/blob/master/openr/if/LinkMonitor.thrift)
-- [if/Lsdb.thrift](https://github.com/facebook/openr/blob/master/openr/if/Lsdb.thrift)
+- Monitor system interface status & address;
+- Initiate neighbor discovery for newly added links;
+- Maintain KvStore peering with discovered neighbors;
+- Maintain `AdjacencyDatabase` of current node in KvStore by injecting
+  `adj:<node-name>`;
+
+## Inter Module Communication
+
+---
+
+<img src="https://user-images.githubusercontent.com/51382140/102449373-f75d9500-3fe8-11eb-8465-66e2fd1d0055.png" alt="LinkMonitor inside Open/R">
+
+- `[Producer] ReplicateQueue<thrift::InterfaceDatabase>`: react to `Netlink`
+  event update and asynchronously update interface database to inform `Spark` to
+  start/stop neighbor discovery on the updated interfaces.
+
+- `[Producer] ReplicateQueue<thrift::PrefixUpdateRequest>`: populate
+  redistributed interface information from `OpenrConfig` and inject interface
+  address information to `PrefixManager`, which is responsible for injecting
+  prefixes into `KvStore` for propagation.
+
+- `[Producer] ReplicateQueue<thrift::PeerUpdateRequest>`: populates **PEER
+  SPEC** information to `KvStore` for peer session establishment over TCP
+  connection.
+
+- `[Consumer] RQueue<thrift::SparkNeighborEvent>`: receive neighbor update sent
+  from `Spark` for adjacency updates. Events include neighbor
+  UP/DOWN/RESTART/RTT-CHANGE. This info will finally lead to **PEER SPEC**
+  propagation towards `KvStore`.
+
+- `[Consumer] RQueue<fbnl::NetlinkEvent>`: receive `Netlink` event from
+  underneath platform to add/delete/update interface information, which further
+  populates update to `Spark` and `PrefixManager`.
+
+- `[Consumer] RQueue<KvStoreSyncEvent>`: receive notification from `KvStore` to
+  indicate state of initial full-sync. This helps with the graceful-restart(GR)
+  case. See the later section for detail.
+
+## Operations
+
+---
+
+Typical workflow at a high level will be:
+
+- Link **UP**:
+
+  - `LinkMonitor` receives interface updates and expands the interface database.
+    It will update `Spark` for neighbor discovery work.
+  - `Spark` sends back UP adjacency if any, which leads to adjacency key-value
+    population towards `KvStore`.
+
+- Link **DOWN**:
+
+  - `LinkMonitor` receives interface update and shrinks interface database.
+    `Spark` will be updated and all established adjacency will be dropped.
+    Finally, the neighbor DOWN event will be reported back;
+
+> NOTE: `LinkMonitor` manages peering sessions of `KvStore` per peer. This means
+> there will be ONLY one TCP session towards one unique node even there are
+> parallel adjacencies between them.
+
+## Deep Dive
+
+---
 
 ### Link/Address Discovery
 
----
+`LinkMonitor` relies on `Netlink` to directly fetch LINK/ADDRESS information
+from Linux Kernel. See `Netlink.md` for detailed understanding. It leverages
+fiber task to monitor update via reader queue for event notification.
 
-LinkMonitor relies on the external `Platform` service to provide interface and
-address information. By default, OpenR comes with `NetlinkPlatform` which learns
-about interface and addresses via the `netlink` library and can be used on most
-platforms.
+### LinkState Management
 
-### PUB Channel
-
----
-
-Any link activity (address or status) learned via `netlink` is published to PUB
-channel which can be consumed in real-time by other applications. For now, FIB
-and Spark listen to these messages and take appropriate actions (e.g. shrinking
-ECMP group or start/stop neighbor discovery on link).
-
-### ROUTER Command Socket
-
----
-
-`LinkMonitor` accepts various commands for operation of the link-state protocol,
-an important one being overloading link/node commands to alter link-state in the
-network. The commands it accepts are:
+`LinkMonitor` provides public API to accept various commands for operation of
+the link-state protocol. For example, to overload link/node to alter link-state
+in the network. Sample APIs are:
 
 - `SET/UNSET OVERLOAD` => Toggles transit traffic through node
 - `SET/UNSET LINK_OVERLOAD` => Toggles transit traffic through a specific link
 - `SET/UNSET LINK_METRIC` => Customize metric value on a link for soft drains
 - `DUMP_LINKS` => Retrieves the link information of a node
+- `DUMP_ADJS` => Retrieves the adjacency information of a node
 
-### LinkState Management
+### Adjacency Event Throttling
 
----
+`LinkMonitor` listens to `Spark` events (described below) (e.g. `NEIGHBOR_UP`,
+`NEIGHBOR_DOWN`) and maintains the link-state of the local node. From there, it
+gathers any customized link metrics and `OVERLOAD` bits for the node or any
+link. Then it prepares the `AdjacencyDatabase` object for the node and keeps it
+up to date in `KvStore` to let everyone else in the network be aware of any
+link-state change.
 
-LinkMonitor listens to `Spark` events (described below) (e.g. `NEIGHBOR_UP`,
-`NEIGHBOR_DOWN`) and maintains the `link-state` of the local node. From there,
-it gathers any custom link metrics, and `overload` bits for the node or any link
-and prepares the `AdjacencyDatabse` object for the node and keeps it up to date
-in the `KvStore` (so that everyone else in the network can see this
-LinkDatabase).
-
-On link down, neighbor discovery is immediately stopped on the link, link state
-is updated and `KvStore` peering sessions are torn down.
-
-> NOTE that Link-Up has a backoff but Link-Down doesn't. This is because we want
-> to be as fast as possible to react to down events to avoid potential packet
-> drops.
+> NOTE: **NEIGHBOR UP** event goes through throttled fashion since we don't want
+> `KvStore` suffers from tremendous updates when a node is just started.
+> However, **NEIGHBOR DOWN** event doesn't do the same thing due to fast
+> convergence requirement to avoid potential packet loss.
 
 ### Link Events Dampening
 
----
+Interfaces on systems are usually expected to be stable either UP or DOWN.
+However for number of reasons the interface may go crazy and starts to flap e.g.
+bad-optics, wireless medium hindrance. In such cases, we would like to avoid
+control plane churn across the whole network, as nodes will try to route
+through/around when the link is up/down. To avoid such a scenario, `LinkMonitor`
+supports link-event dampening, which means exponential backoff is applied to the
+link if it flaps. As the name suggests, back-off time will be 2x the previous
+backoff period until it reaches `max_backoff_ms`. If the link shows stability
+within a period, it is enabled for neighbor discovery.
 
-Sometimes link status can flap badly. This can happen for various reasons,
-namely, bad optics, or poor wireless reach. In such cases, we would like to
-avoid control plane churn across the whole network, as nodes will try to route
-through/around when the link is up/down. To avoid such scenario we have added
-dampening support in LinkMonitor. If a link flaps, then back off is applied
-which gets doubled if the link flaps again within backoff period and so on. If
-the link shows itself stable within a period, it is enabled for neighbor
-discovery.
+You can configure backoffs for link event dampening with `LinkMonitorConfig`.
 
-You can configure backoffs for link event dampening with following flags
+```
+struct LinkMonitorConfig {
+  1: i32 linkflap_initial_backoff_ms = 1000 # 1s
+  2: i32 linkflap_max_backoff_ms = 8192 # 8.192s
+  ...
+}
+```
 
-- `--link_flap_initial_backoff_ms=1000` (default=1s)
-- `--link_flap_max_backoff_ms=60000` (default=60s)
+See
+[if/OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
 
 ### Link Metric
 
----
+`LinkMonitor` is responsible for computing the metric value for each adjacency
+to neighbors which are then used to compute the cost of a path in `Decision`'s
+SPF computation. For now, we support two kinds of metrics:
 
-LinkMonitor is responsible for computing the metric value for each Adjacency to
-neighbors which are then used to compute the cost of a path in Decision's SPF
-computation. For now, we support two kinds of metrics (configured via flags)
+- [by default] `hop_count` => Use `1` (constant) metric value for each Adjacency
+- [by config knob] `rtt_metric` => `rtt_us / 10` where `rtt_us` is measured rtt
+  in microseconds.
 
-- `hop_count` => Use `1` (constant) metric value for each Adjacency
-- `rtt_metric` => `rtt_us / 10` where `rtt_us` is measured rtt in microseconds
+> NOTE: `rtt` is measured dynamically by `Spark` as part of neighbor discovery
+> and keep-alive mechanisms. RTT changes are observed handled dynamically.
 
-OpenR is pretty flexible and using other parameters like `loss`, `jitter`,
-`signal strength` is potentially doable (via Platform abstraction)
+### Segment Routing Support
+
+To Support `Segment Routing`, `LinkMonitor` injects:
+
+- **Node Label** by leveraging `RangeAllocator` to assign a globally unique
+  label across the network(via `KvStore` to detect collision);
+- **Adjacency Label** by leveraging `Spark` to assign a unique label derived
+  from **ifIndex**;
+
+> NOTE: **Adjacency Label** is locally unique per node.
