@@ -37,10 +37,10 @@ can be specified. However, note that only first matching action will be applied.
 ---
 
 RIB Policy can be set via RPC API (aka thrift API). It is not supported to be
-set via configuration as of now. Following two APIs provide set and get of
-RibPolicy. It is important to note that policy have `ttl_secs` field which
-specifies the validity of policy, beyond which it is expired and effects of
-policy will be reverted.
+set via configuration as of now. Following three APIs provide set, and get of
+RibPolicy as well as clearing or resetting functionality of the same. It is
+important to note that policy have `ttl_secs` field which specifies the validity
+of policy, beyond which it is expired and effects of policy will be reverted.
 
 ```c++
 // Set policy API
@@ -48,6 +48,9 @@ void setRibPolicy(1: RibPolicy ribPolicy) throws (1: OpenrError error)
 
 // Get policy API
 RibPolicy getRibPolicy() throws (1: OpenrError error)
+
+// Clear policy API
+void clearRibPolicy() throws (1: OpenrError error)
 ```
 
 [SetRibPolicy](https://github.com/facebook/openr/blob/master/examples/SetRibPolicyExample.cpp)
@@ -61,11 +64,11 @@ For more details refer to `OpenrCtrl` service interface in
 
 ---
 
-Define and achieve policy driven weigted distribution of flows over multiple
-next-hops. This could be useful in context where correctness of forwarding state
-(aka routes) comes from the distributed protocols, but the operator wants to
-influence the traffic flows as per congesion in the network (e.g. send more to
-less congested part of network).
+Define and achieve policy driven weighted distribution of flows over multiple
+next-hops. This could be useful in context where the correctness of forwarding
+state (aka routes) comes from the distributed protocols, but the operator wants
+to influence the traffic flows as per congestion in the network (e.g. send more
+to less congested part of network).
 
 RIB Policy allows operators to customize the weight for computed next-hops. As
 of now the weights can be customized per `area` or per `neighbor` fields. The
@@ -74,9 +77,10 @@ of now the weights can be customized per `area` or per `neighbor` fields. The
 [`OpenrCtrl.thrift`](https://github.com/facebook/openr/blob/master/openr/if/OpenrCtrl.thrift)
 for more information.
 
-The next-hops that are processed through RIB Policy and gets assigned `weight=0`
-will be removed. If policed route have no next-hop then it will be removed from
-RIB. This won't be programmed as well won't get re-distributed across the areas.
+The next-hops that are processed through RIB Policy and get assigned `weight=0`
+will be removed. If policed routes have no next-hop, then they will be removed
+from RIB. This won't be programmed nor will they get re-distributed across the
+areas.
 
 ### Configuration Knob
 
