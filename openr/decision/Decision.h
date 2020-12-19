@@ -318,6 +318,12 @@ class Decision : public OpenrEventBase {
    */
   folly::SemiFuture<thrift::RibPolicy> getRibPolicy();
 
+  /*
+   * Clear the current RibPolicy instance. Throws exception if RibPolicy is not
+   * set yet.
+   */
+  folly::SemiFuture<folly::Unit> clearRibPolicy();
+
   // periodically called by counterUpdateTimer_, exposed publicly for testing
   void updateGlobalCounters() const;
 

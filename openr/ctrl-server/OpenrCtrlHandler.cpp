@@ -1018,4 +1018,9 @@ OpenrCtrlHandler::semifuture_getRibPolicy() {
   });
 }
 
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_clearRibPolicy() {
+  return decision_->clearRibPolicy();
+}
+
 } // namespace openr

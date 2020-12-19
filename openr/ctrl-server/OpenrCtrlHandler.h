@@ -326,6 +326,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::RibPolicy>>
   semifuture_getRibPolicy() override;
 
+  folly::SemiFuture<folly::Unit> semifuture_clearRibPolicy() override;
+
   //
   // APIs to expose state of private variables
   //

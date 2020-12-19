@@ -592,4 +592,11 @@ service OpenrCtrl extends fb303_core.BaseService {
    *         not set previously
    */
   RibPolicy getRibPolicy() throws (1: OpenrError error)
+
+  /**
+  * Clear RibPolicy.
+  * @throws OpenrError if rib-policy is not enabled via configuration or is
+  *         not set previously.
+  */
+  void clearRibPolicy() throws (1: OpenrError error)
 }

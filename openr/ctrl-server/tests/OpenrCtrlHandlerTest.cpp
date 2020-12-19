@@ -1883,6 +1883,23 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
     thrift::RibPolicy policy;
     EXPECT_NO_THROW(openrCtrlThriftClient_->sync_getRibPolicy(policy));
   }
+
+  // Clear API
+  {
+    // Clear Rib Policy and expect no error as rib policy exists
+    EXPECT_NO_THROW(openrCtrlThriftClient_->sync_clearRibPolicy());
+
+    // An attempt to clear non-existing rib policy will show a message.
+    EXPECT_THROW(
+        openrCtrlThriftClient_->sync_clearRibPolicy(), thrift::OpenrError);
+  }
+
+  // Using Get API after clearing rib policy will show a message.
+  {
+    thrift::RibPolicy policy;
+    EXPECT_THROW(
+        openrCtrlThriftClient_->sync_getRibPolicy(policy), thrift::OpenrError);
+  }
 }
 
 int

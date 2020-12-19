@@ -1628,6 +1628,33 @@ Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
 }
 
 folly::SemiFuture<folly::Unit>
+Decision::clearRibPolicy() {
+  auto [p, sf] = folly::makePromiseContract<folly::Unit>();
+  if (not config_->isRibPolicyEnabled()) {
+    thrift::OpenrError error;
+    *error.message_ref() = "RibPolicy feature is not enabled";
+    p.setException(error);
+    return std::move(sf);
+  }
+
+  runInEventBaseThread([this, p = std::move(p)]() mutable {
+    if (not ribPolicy_) {
+      thrift::OpenrError error;
+      *error.message_ref() = "No RIB policy configured";
+      p.setException(error);
+    } else {
+      ribPolicy_ = nullptr;
+      // Trigger route computation
+      pendingUpdates_.setNeedsFullRebuild();
+      rebuildRoutes("RIB_POLICY_CLEARED");
+      p.setValue();
+    }
+  });
+
+  return std::move(sf);
+}
+
+folly::SemiFuture<folly::Unit>
 Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();
   if (not config_->isRibPolicyEnabled()) {
@@ -1881,7 +1908,7 @@ Decision::rebuildRoutes(std::string const& event) {
 
   pendingUpdates_.addEvent(event);
   VLOG(2) << "Decision: processing " << pendingUpdates_.getCount()
-          << " accumulated updates.";
+          << " accumulated updates. " << event;
   if (pendingUpdates_.perfEvents()) {
     if (auto expectedDuration = getDurationBetweenPerfEvents(
             *pendingUpdates_.perfEvents(),

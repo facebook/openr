@@ -5662,6 +5662,83 @@ TEST_F(DecisionTestFixture, RibPolicyError) {
 }
 
 /**
+ * Verifies that a policy gets cleared
+ */
+TEST_F(DecisionTestFixture, RibPolicyClear) {
+  // Setup topology and prefixes. 1 unicast route will be computed
+  auto publication = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+       {"prefix:1", createPrefixValue("1", 1, {addr1})},
+       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+      {},
+      {},
+      {},
+      std::string(""));
+  sendKvPublication(publication);
+
+  // Expect route update.
+  {
+    auto updates = recvRouteUpdates();
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+    EXPECT_EQ(
+        0,
+        *updates.unicastRoutesToUpdate.begin()
+             ->second.nexthops.begin()
+             ->weight_ref());
+  }
+
+  // Get policy test. Expect failure
+  EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+
+  // Create rib policy
+  thrift::RibRouteActionWeight actionWeight;
+  actionWeight.neighbor_to_weight_ref()->emplace("2", 2);
+  actionWeight.neighbor_to_weight_ref()->emplace("1", 1);
+
+  thrift::RibPolicyStatement policyStatement;
+  policyStatement.matcher_ref()->prefixes_ref() =
+      std::vector<thrift::IpPrefix>({addr2});
+  policyStatement.action_ref()->set_weight_ref() = actionWeight;
+  thrift::RibPolicy policy;
+  policy.statements_ref()->emplace_back(policyStatement);
+  policy.ttl_secs_ref() = 1;
+
+  // Set rib policy
+  EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
+
+  // Get rib policy and verify
+  {
+    auto retrievedPolicy = decision->getRibPolicy().get();
+    EXPECT_EQ(*policy.statements_ref(), *retrievedPolicy.statements_ref());
+    EXPECT_GE(*policy.ttl_secs_ref(), *retrievedPolicy.ttl_secs_ref());
+  }
+
+  // Expect route update. Verify next-hop weight to be 2 (ECMP)
+  auto updates = recvRouteUpdates();
+  ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+  EXPECT_EQ(
+      2,
+      *updates.unicastRoutesToUpdate.begin()
+           ->second.nexthops.begin()
+           ->weight_ref());
+
+  // Clear rib policy and expect nexthop weight change
+  EXPECT_NO_THROW(decision->clearRibPolicy());
+
+  updates = recvRouteUpdates();
+  ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+  EXPECT_EQ(
+      0,
+      *updates.unicastRoutesToUpdate.begin()
+           ->second.nexthops.begin()
+           ->weight_ref());
+
+  // Verify that get rib policy throws no exception
+  EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+}
+
+/**
  * Verifies that set/get APIs throws exception if RibPolicy feature is not
  * enabled.
  */
