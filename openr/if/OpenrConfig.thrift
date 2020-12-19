@@ -23,29 +23,85 @@ struct KvstoreFloodRate {
 }
 
 struct KvstoreConfig {
-  # kvstore
-  1: i32 key_ttl_ms = 300000 # 5min 300*1000
+  /**
+   * Set the TTL (in ms) of a key in the KvStore. For larger networks where
+   * burst of updates can be high having high value makes sense. For smaller
+   * networks where burst of updates are low, having low value makes more sense.
+   */
+  1: i32 key_ttl_ms = 300000
   2: i32 sync_interval_s = 60
   3: i32 ttl_decrement_ms = 1
   4: optional KvstoreFloodRate flood_rate
 
+  /**
+   * Sometimes a node maybe a leaf node and have only one path in to network.
+   * This node does not require to keep track of the entire topology. In this
+   * case, it may be useful to optimize memory by reducing the amount of
+   * key/vals tracked by the node. Setting this flag enables key prefix filters
+   * defined by key_prefix_filters. A node only tracks keys in kvstore that
+   * matches one of the prefixes in key_prefix_filters.
+   */
   5: optional bool set_leaf_node
+  /**
+   * This comma separated string is used to set the key prefixes when key prefix
+   * filter is enabled (See set_leaf_node). It is also set when requesting KEY_DUMP
+   * from peer to request keys that match one of these prefixes.
+   */
   6: optional list<string> key_prefix_filters
   7: optional list<string> key_originator_id_filters
 
-  # flood optimization
+  /**
+   * Set this true to enable flooding-optimization, Open/R will start forming
+   * spanning tree and flood updates on formed SPT instead of physical topology.
+   * This will greatly reduce kvstore updates traffic, however, based on which
+   * node is picked as flood-root, control-plane propagation might increase.
+   * Before, propagation is determined by shortest path between two nodes. Now,
+   * it will be the path between two nodes in the formed SPT, which is not
+   * necessary to be the shortest path. (worst case: 2 x SPT-depth between two
+   * leaf nodes). data-plane traffic stays the same.
+   */
   8: optional bool enable_flood_optimization
+  /**
+   * Set this true to let this node declare itself as a flood-root. You can set
+   * multiple nodes as flood-roots in a network, in steady state, Open/R will
+   * pick optimal (smallest node-name) one as the SPT for flooding. If optimal
+   * root went away, Open/R will pick 2nd optimal one as SPT-root and so on so
+   * forth. If all root nodes went away, Open/R will fall back to naive flooding.
+   */
   9: optional bool is_flood_root
 }
 
 struct LinkMonitorConfig {
-  1: i32 linkflap_initial_backoff_ms = 60000 # 60s
-  2: i32 linkflap_max_backoff_ms = 300000 # 5min
+  /**
+   * When link goes down after being stable/up for long time, then the backoff
+   * is applied. If link goes up and down in backoff state then it’s backoff
+   * gets doubled (Exponential backoff). Backoff clear timer will start from
+   * latest down event. When backoff is cleared then actual status of link is
+   * used. If link is up, neighbor discovery is performed. Otherwise, Open/R
+   * will wait for the link to come up.
+   */
+  1: i32 linkflap_initial_backoff_ms = 60000
+  /**
+   * This serves two purposes. This is the maximum backoff a link gets penalized
+   * with by consecutive flaps. When the first backoff time has passed and the
+   * link is in UP state and the next time the link goes down within
+   * linkflap_max_backoff_ms, the new backoff becomes double of the previous
+   * value. If the link remains stable for linkflap_max_backoff_ms, all of its
+   * history is erased and link gets linkflap_initial_backoff_ms next time when
+   * it goes down.
+   */
+  2: i32 linkflap_max_backoff_ms = 300000
+  /**
+   * Compute and use RTT of a link as a metric value. If set to false, cost of
+   * a link is 1 and cost of a path is hop count.
+   */
   3: bool use_rtt_metric = true
 
-  // below fields are deprecated, prefer area config
+  /** Deprecated. Use area config. */
   4: list<string> include_interface_regexes = [] (deprecated)
+  /** Deprecated. Use area config. */
   5: list<string> exclude_interface_regexes = [] (deprecated)
+  /** Deprecated. Use area config. */
   6: list<string> redistribute_interface_regexes = [] (deprecated)
 }
 
@@ -59,12 +115,28 @@ struct StepDetectorConfig {
 
 struct SparkConfig {
   1: i32 neighbor_discovery_port = 6666
-
+  /** How often to send SparkHelloMsg to neighbors. */
   2: i32 hello_time_s = 20
+  /**
+   * When interface is detected UP, Open/R can perform fast initial neighbor
+   * discovery. Default value is 500 which means neighbor will be discovered
+   * within 1s on a link.
+   */
   3: i32 fastinit_hello_time_ms = 500
 
+  /**
+   * SparkHeartbeatMsg are used to detect if neighbor is up running when
+   * adjacency is established.
+   */
   4: i32 keepalive_time_s = 2
+  /**
+   * Expiration time if node does NOT receive ‘keepAlive’ info from neighbor node.
+   */
   5: i32 hold_time_s = 10
+  /**
+   * Max time in seconds to hold neighbor's adjacency after receiving neighbor
+   * restarting message
+   */
   6: i32 graceful_restart_time_s = 30
 
   7: StepDetectorConfig step_detector_conf
@@ -73,6 +145,12 @@ struct SparkConfig {
 struct WatchdogConfig {
   1: i32 interval_s = 20
   2: i32 thread_timeout_s = 300
+  /**
+   * Enforce upper limit on amount of memory in mega-bytes that Open/R process
+   * can use. Above this limit watchdog thread will trigger crash. Service can
+   * be auto-restarted via system or some kind of service manager. This is very
+   * useful to guarantee protocol doesn’t cause trouble to other services on
+   * device where it runs and takes care of slow memory leak kind of issues. */
   3: i32 max_memory_mb = 800
 }
 
@@ -82,73 +160,106 @@ struct MonitorConfig {
 }
 
 enum PrefixForwardingType {
+  /** IP nexthop is used for routing to the prefix. */
   IP = 0
+  /** MPLS label nexthop is used for routing to the prefix. */
   SR_MPLS = 1
 }
 
 enum PrefixForwardingAlgorithm {
+  /** Use Shortest path ECMP as prefix forwarding algorithm. */
   SP_ECMP = 0
+  /**
+   * Use 2-Shortest-Path Edge Disjoint ECMP as prefix forwarding algorithm. It
+   * computes edge disjoint second shortest ECMP paths for each destination
+   * prefix. MPLS SR based tunneling is used for forwarding traffic over
+   * non-shortest paths. This can be computationally expensive for networks
+   * exchanging large number of routes. As per current implementation it will
+   * incur one extra SPF run per destination prefix. SR_MPLS must be set if
+   * KSP2_ED_ECMP is set.
+   */
   KSP2_ED_ECMP = 1
 }
 
-/*
- * DYNAMIC_LEAF_NODE
- *   => looks for seed_prefix in kvstore and elects a subprefix
- * DYNAMIC_ROOT_NODE
- *   => elects subprefix from configured seed_prefix
- * STATIC
- *   => looks for static allocation key in kvstore and use the prefix
- */
 enum PrefixAllocationMode {
+  /** Looks for seed_prefix in kvstore and elects a subprefix */
   DYNAMIC_LEAF_NODE = 0
+  /** Elects subprefix from configured seed_prefix */
   DYNAMIC_ROOT_NODE = 1
+  /** Looks for static allocation key in kvstore and use the prefix */
   STATIC = 2
 }
 
 struct PrefixAllocationConfig {
+  /**
+   * Loopback address to which auto elected prefix will be assigned if enabled
+   */
   1: string loopback_interface = "lo"
+  /**
+   * If set to true along with enable_prefix_allocation, second valid IP address
+   * of the block will be assigned onto loopback_interface.
+   */
   2: bool set_loopback_addr = false
+  /**
+   * Whenever new address is elected for a node, before assigning it to
+   * interface all previously allocated prefixes or other global prefixes will
+   * be overridden with the new one. Use it with care!
+   */
   3: bool override_loopback_addr = false
 
-  // If prefixAllocationMode == DYNAMIC_ROOT_NODE
-  // seed_prefix and allocate_prefix_len needs to be filled.
+  /**
+   * If PrefixAllocationMode is DYNAMIC_ROOT_NODE, seed_prefix and
+   * allocate_prefix_len needs to be filled.
+   */
   4: PrefixAllocationMode prefix_allocation_mode
+  /**
+   * In order to elect a prefix for the node a super prefix to elect from is
+   * required. This is only applicable when enable_prefix_allocation is set to
+   * true. e.g. "face:b00c::/64"
+   */
   5: optional string seed_prefix
+  /**
+   * Block size of allocated prefix in terms of it’s prefix length. If this is
+   * set as 80, /80 prefix will be elected for a node. e.g. face:b00c:0:0:1234::/80
+   */
   6: optional i32 allocate_prefix_len
 }
 
-// describes prefixes for route origination purpose
 struct OriginatedPrefix {
   1: string prefix
 
-  // Default mode of forwarding for prefix is IP.
   2: PrefixForwardingType forwardingType = PrefixForwardingType.IP
 
-  # Default forwarding (route computation) algorithm is shortest path ECMP.
   3: PrefixForwardingAlgorithm forwardingAlgorithm =
     PrefixForwardingAlgorithm.SP_ECMP
 
-  // minimum # of supporting routes to advertise this prefix.
-  // Prefix will be advertised/withdrawn when # of supporting routes change.
+  /**
+   * Minimum number of supporting routes to advertise this prefix. Prefix will
+   * be advertised/withdrawn when the number of supporting routes change.
+   */
   4: i16 minimum_supporting_routes
 
-  // flag to indicate FIB programming
+  /** If set to true, program the prefix to FIB. */
   5: optional bool install_to_fib
 
   6: optional i32 source_preference
 
   7: optional i32 path_preference
 
-  // Set of tags associated with this route. This is meta-data and intends to be
-  // used by Policy. NOTE: There is no ordering on tags
+  /**
+   * Set of tags associated with this route. This is meta-data and intends to be
+   * used by Policy. NOTE: There is no ordering on tags.
+   */
   8: optional set<string> tags
 
-  // to interact with BGP, area prepending is needed
+  /** To interact with BGP, area prepending is needed. */
   9: optional list<string> area_stack
 
-  // If the # of nethops for this prefix is below certain threshold, Decision
-  // will not program/anounce the routes. If this parameter is not set, Decision
-  // will not do extra check # of nexthops.
+  /**
+   * If the number of nexthops for this prefix is below a certain threshold,
+   * Decision will not program/announce the routes. If this parameter is not
+   * set, Decision will not do extra check the number of nexthops.
+   */
   11: optional i64 minNexthop
 }
 
@@ -159,7 +270,7 @@ struct OriginatedPrefix {
  * 1) Config specifying patricular interface patterns and all neighbors. Will
  *    perform discovery on interfaces matching any include pattern and no
  *    exclude pattern and peer with any node in this area:
- *
+ * ```
  *  config = {
  *    area_id : "MyNetworkArea",
  *    neighbor_regexes : [".*"],
@@ -167,12 +278,12 @@ struct OriginatedPrefix {
  *    exclude_interface_regexes : ["loopback1"],
  *    redistribute_interface_regexes: ["loopback10"],
  *  }
- *
+ * ```
  *
  * 2) Config specifying particular neighbor patterns and all interfaces. Will
  *    perform discovery on all available interfaces and peer with nodes in
  *    this area matching any neighbor pattern:
- *
+ * ```
  *  config = {
  *    area_id : "MyNetworkArea",
  *    neighbor_regexes : ["node123", "fsw.*"],
@@ -180,12 +291,12 @@ struct OriginatedPrefix {
  *    exclude_interface_regexes : [],
  *    redistribute_interface_regexes: ["loopback10"],
  *  }
- *
+ * ```
  *
  * 3) Config specifying both. Will perform discovery on interfaces matching
  *    any include pattern and no exclude pattern and peer with nodes in this
  *    area matching any neighbor pattern:
- *
+ * ```
  *  config = {
  *    area_id : "MyNetworkArea",
  *    neighbor_regexes : ["node1.*"],
@@ -193,11 +304,11 @@ struct OriginatedPrefix {
  *    exclude_interface_regexes : ["loopback1"],
  *    redistribute_interface_regexes: ["loopback10"],
  *  }
- *
+ * ```
  *
  * 4) Config specifying neither. Will perform discovery on no interfaces and
  *    peer with no nodes:
- *
+ * ```
  *  config = {
  *    area_id : "MyNetworkArea",
  *    neighbor_regexes : [],
@@ -205,7 +316,7 @@ struct OriginatedPrefix {
  *    exclude_interface_regexes : [],
  *    redistribute_interface_regexes: ["loopback10"],
  *  }
- *
+ * ```
  *
  */
 struct AreaConfig {
@@ -214,19 +325,23 @@ struct AreaConfig {
   4: list<string> include_interface_regexes
   5: list<string> exclude_interface_regexes
 
-  // will advertise addresses on interfaces matching these patterns into
-  // this area
+  /**
+   * Comma-separated list of interface regexes whose addresses will be
+   * advertised to this area
+   */
   6: list<string> redistribute_interface_regexes
 }
 
 /**
- * Configuration to facilitate route translation between BGP <-> OpenR
+ * Configuration to facilitate route translation between BGP <-> Open/R
+ * ```
  * - BGP Communities <=> tags
  * - BGP AS Path <=> area_stack
  * - BGP Origin <=> metrics.path_preference (IGP=1000, EGP=900, INCOMPLETE=500)
  * - BGP Special Source AS => metrics.source_preference
  * - BGP AS Path Length => metrics.distance
  * - metrics.source_preference => BGP Local Preference
+ * ```
  */
 struct BgpRouteTranslationConfig {
   /**
@@ -259,9 +374,10 @@ struct BgpRouteTranslationConfig {
   6: set<i64> asns_to_ignore_for_distance;
 
   /**
-   * Knob to enable BGP -> Open/R translation incrementally
+   * Deprecated. Use enabled_bgp_to_openr instead.
+   * Knob to enable BGP -> Open/R translation incrementally.
    */
-  7: bool is_enabled = 0 (deprecated) // use 8: enable_bgp_to_openr
+  7: bool is_enabled = 0 (deprecated)
 
   /**
    * Knob to enable BGP -> Open/R translation incrementally
@@ -277,26 +393,43 @@ struct BgpRouteTranslationConfig {
 
 struct OpenrConfig {
   1: string node_name
-  # domain is deprecated, prefer area config
+  /** Deprecated. Use area config. */
   2: string domain (deprecated)
   3: list<AreaConfig> areas = []
 
-  # Thrift Server - Bind dddress and port
+  /** Thrift Server - Bind dddress */
   4: string listen_addr = "::"
+  /** Thrift Server - Port */
   5: i32 openr_ctrl_port = 2018
 
+  /** If set to true, Open/R will not try to program routes. */
   6: optional bool dryrun
+  /**
+   * Open/R supports v4 as well but it needs to be turned on explicitly. It is
+   * expected that each interface will have v4 address configured for link local
+   * transport and v4/v6 topologies are congruent.
+   */
   7: optional bool enable_v4
-  # do route programming through netlink
+  /**
+   * Knob to enable/disable default implementation of FibService that comes
+   * along with Open/R for Linux platform. If you want to run your own FIB
+   * service then disable this option.
+   */
   8: optional bool enable_netlink_fib_handler
 
-  # Hard wait time before decision start to compute routes
-  # if not set, first neighbor update will trigger route computation
+  /**
+   * Set time interval to wait for convergence before Decision starts to
+   * compute routes. If not set, first neighbor update will trigger route
+   * computation.
+   */
   10: optional i32 eor_time_s
 
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP
   12: PrefixForwardingAlgorithm prefix_forwarding_algorithm =
     PrefixForwardingAlgorithm.SP_ECMP
+  /**
+   * Enables segment routing feature. Currently, it only elects node/adjacency labels.
+   */
   13: optional bool enable_segment_routing
   14: optional i32 prefix_min_nexthop
 
@@ -309,66 +442,88 @@ struct OpenrConfig {
   18: optional bool enable_watchdog
   19: optional WatchdogConfig watchdog_config
 
-  # Prefix allocation
+  /**
+   * Enable prefix allocator to elect and assign a unique prefix for the node.
+   * You will need to specify other configuration parameters in
+   * prefix_allocation_config.
+   */
   20: optional bool enable_prefix_allocation
   21: optional PrefixAllocationConfig prefix_allocation_config
 
   # Fib
   22: optional bool enable_ordered_fib_programming
+  /** TCP port on which FibService will be listening. */
   23: i32 fib_port
 
-  # Enables `RibPolicy` for computed routes. This knob allows thrift APIs to
-  # set/get `RibPolicy` in Decision module. For more information refer to
-  # `struct RibPolicy` in OpenrCtrl.thrift
-  # Disabled by default
+  /**
+   * Enables `RibPolicy` for computed routes. This knob allows thrift APIs to
+   * set/get `RibPolicy` in Decision module. For more information refer to
+   * `struct RibPolicy` in OpenrCtrl.thrift.
+   */
   24: bool enable_rib_policy = 0
 
-  # Config for monitor module
+  /** Config for monitor module. */
   25: MonitorConfig monitor_config
 
-  # KvStore thrift migration flags
-  # TODO: the following flags serve as rolling-out purpose
+  /**
+   * KvStore thrift migration flags.
+   * TODO: It is temporary & will go away once migration is done.
+   */
   26: bool enable_kvstore_thrift = 1
   27: bool enable_periodic_sync = 1
 
-  # V4/V6 prefixes to be originated
+  /**
+   * V4/V6 prefixes to be originated.
+   */
   31: optional list<OriginatedPrefix> originated_prefixes
 
-  # Flag for enabling best route selection based on PrefixMetrics
-  # TODO: This is temporary & will go away once new prefix metrics is rolled out
+  /**
+   * Enable best route selection based on PrefixMetrics.
+   * TODO: It is temporary & will go away once new prefix metrics is rolled out
+   */
   51: bool enable_best_route_selection = 0
 
-  # Maximum hold time for synchronizing the prefixes in KvStore after service
-  # starts up. It is expected that all the sources inform PrefixManager about
-  # the routes to be advertised within the hold time window. PrefixManager
-  # can choose to synchronize routes as soon as it receives END marker from
-  # all the expected sources.
+  /**
+   * Maximum hold time for synchronizing the prefixes in KvStore after service
+   * starts up. It is expected that all the sources inform PrefixManager about
+   * the routes to be advertised within the hold time window. PrefixManager
+   * can choose to synchronize routes as soon as it receives END marker from
+   * all the expected sources.
+   */
   52: i32 prefix_hold_time_s = 15
 
-  # Delay in seconds for MPLS route deletes. The delay would allow the remote
-  # nodes to converge to new prepend-label associated with route advertisement.
-  # This will avoid packet drops because of label route lookup
-  # NOTE: Label route add or update will happen immediately
+  /**
+   * Delay in seconds for MPLS route deletes. The delay would allow the remote
+   * nodes to converge to new prepend-label associated with route advertisement.
+   * This will avoid packet drops because of label route lookup.
+   * NOTE: Label route add or update will happen immediately.
+   */
   53: i32 mpls_route_delete_delay_s = 10
 
-  # Feature gate for new graceful restart behavior
-  # New workflow is to promote adj up after kvstore reaches initial sync state
-  # This is a series of new changes in turn to address traffic loss during
-  # agent cold boot
+  /**
+   * Feature gate for new graceful restart behavior.
+   * New workflow is to promote adj up after kvstore reaches initial sync state
+   * This is a series of new changes in turn to address traffic loss during
+   * agent cold boot.
+   */
   54: bool enable_new_gr_behavior = 0
 
-  # Maximum hold time for synchronizing the adjacencies in KvStore after service
-  # starts up. We expect all the adjacencies to be fully established
-  # within hold time after Open/R starts LinkMonitor. LinkMonitor
-  # can choose to synchronize adjacencies as soon as it receives all expected
-  # established KvStore Peer Sync Events.
+  /**
+   * Maximum hold time for synchronizing the adjacencies in KvStore after
+   * service starts up. We expect all the adjacencies to be fully established
+   * within hold time after Open/R starts LinkMonitor. LinkMonitor
+   * can choose to synchronize adjacencies as soon as it receives all expected
+   * established KvStore Peer Sync Events.
+   */
   55: i32 adj_hold_time_s = 4
 
   # bgp
   100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
 
-  # Configuration to facilitate Open/R <-> BGP route conversions.
-  # NOTE: This must be specified if bgp_peering is enabled
+  /**
+   * Configuration to facilitate Open/R <-> BGP route conversions.
+   * NOTE: This must be specified if bgp_peering is enabled
+   */
   104: optional BgpRouteTranslationConfig bgp_translation_config
 }
