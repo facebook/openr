@@ -5606,7 +5606,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
     for (auto& nh :
          updates.unicastRoutesToUpdate.at(toIPNetwork(addr2)).nexthops) {
-      EXPECT_FALSE(nh.weight_ref().has_value());
+      EXPECT_FALSE(nh.weight_ref().is_set());
     }
     auto counters = fb303::fbData->getCounters();
     EXPECT_EQ(1, counters.at("decision.rib_policy.invalidated_routes.count"));
@@ -5632,7 +5632,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
     for (auto& nh :
          updates.unicastRoutesToUpdate.at(toIPNetwork(addr2)).nexthops) {
-      EXPECT_FALSE(nh.weight_ref().has_value());
+      EXPECT_FALSE(nh.weight_ref().is_set());
     }
     auto counters = fb303::fbData->getCounters();
     EXPECT_EQ(2, counters.at("decision.rib_policy.invalidated_routes.count"));

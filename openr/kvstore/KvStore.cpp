@@ -2134,7 +2134,7 @@ KvStoreDb::processRequestMsgHelper(
     std::vector<std::string> keyPrefixList;
     if (keyDumpParamsVal.keys_ref().has_value()) {
       keyPrefixList = *keyDumpParamsVal.keys_ref();
-    } else if (keyDumpParamsVal.prefix_ref().has_value()) {
+    } else if (keyDumpParamsVal.prefix_ref().is_set()) {
       folly::split(",", *keyDumpParamsVal.prefix_ref(), keyPrefixList, true);
     }
 
@@ -2149,7 +2149,7 @@ KvStoreDb::processRequestMsgHelper(
     thriftPub.floodRootId_ref().from_optional(DualNode::getSptRootId());
 
     if (keyDumpParamsVal.keyValHashes_ref() and
-        (not keyDumpParamsVal.prefix_ref().has_value() or
+        (not keyDumpParamsVal.prefix_ref().is_set() or
          (*keyDumpParamsVal.prefix_ref()).empty()) and
         (not keyDumpParamsVal.keys_ref().has_value() or
          (*keyDumpParamsVal.keys_ref()).empty())) {

@@ -31,7 +31,7 @@ KvStorePublisher::KvStorePublisher(
 
   if (filter.keys_ref().has_value()) {
     keyPrefix = std::move(*filter.keys_ref());
-  } else if (filter.prefix_ref().has_value()) {
+  } else if (filter.prefix_ref().is_set()) {
     folly::split(",", *filter.prefix_ref(), keyPrefix, true);
   }
 
@@ -59,7 +59,7 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
     return;
   }
   if ((not filter_.keys_ref().has_value() or (*filter_.keys_ref()).empty()) and
-      (not filter_.originatorIds_ref().has_value() or
+      (not filter_.originatorIds_ref().is_set() or
        (*filter_.originatorIds_ref()).empty()) and
       not*filter_.ignoreTtl_ref() and not*filter_.doNotPublishValue_ref()) {
     // No filtering criteria. Accept all updates as TTL updates are not be
@@ -72,7 +72,7 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   }
 
   thrift::Publication publication_filtered;
-  if (pub.expiredKeys_ref().has_value()) {
+  if (pub.expiredKeys_ref().is_set()) {
     publication_filtered.expiredKeys_ref() = *pub.expiredKeys_ref();
   }
 
@@ -88,7 +88,7 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
     publication_filtered.floodRootId_ref() = *pub.floodRootId_ref();
   }
 
-  if (pub.area_ref().has_value()) {
+  if (pub.area_ref().is_set()) {
     publication_filtered.area_ref() = *pub.area_ref();
   }
 
