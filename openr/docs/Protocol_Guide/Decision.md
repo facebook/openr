@@ -1,10 +1,30 @@
 # Decision
 
-Computes the routing table (IPv4, IPv6, MPLS). Uses Topology and Reachability
-information received from KvStore in the computation. Outputs RIB, aka
-`Routing Information Base`, which will get programmed and or redistributed.
+## Introduction
 
-### Flow Diagram (Modules)
+---
+
+`Decision` is the module that computes the routing table (IPv4, IPv6, MPLS). It
+uses Topology and Reachability information received from `KvStore` in the
+computation. Outputs RIB, aka `Routing Information Base`, which will get
+programmed and/or redistributed.
+
+## Inter Module Communication
+
+---
+
+- `[Consumer] ReplicateQueue<openr::thrift::Publication>`: read publications
+  (updates) from the `KvStore` to learn Topology and Reachability information
+
+- `[Consumer] ReplicateQueue<openr::thrift::RouteDatabaseDelta>`: static route
+  updates written by `PrefixManager`. The route delta will be applied to the RIB
+  output by `Decision` module
+
+- `[Producer] ReplicateQueue<DecisionRouteUpdate>`: the RIB delta consumed by
+  the `Fib` module for programming to the underlying platform and the
+  `PrefixManager` module for route redistribution
+
+## General Workflow
 
 ---
 
@@ -15,9 +35,11 @@ Below diagram describes two main things
 
 <img alt="openr-route-computation-flowchart" src="https://user-images.githubusercontent.com/1482609/89572763-70004980-d7de-11ea-8c07-a8b3e446ef40.png">
 
-### Storage
+## Deep Dive
 
 ---
+
+### Storage
 
 Decision models two major data-structures namely `PrefixState`, and `LinkState`.
 This facilitates the route computation with less code complexity.
@@ -47,8 +69,6 @@ from route computation code. e.g.
 - Dijkstra Implementation (aka Shortest Path Computation)
 
 ### Computing Routes
-
----
 
 Decision computes two types of routes, Unicast (aka IPv4 or IPv6), and MPLS.
 Below we describe the steps involved for both route types.
@@ -97,8 +117,6 @@ For more details refer to
 
 ### Route Notifications
 
----
-
 After the route computation step, Decision computes the route delta for both
 Unicast and MPLS routes. The route delta is then broadcasted to all listeners
 via `ReplicateQueue`.
@@ -109,8 +127,6 @@ create a `Reader` of the `ReplicateQueue` before decision module is started to
 ensure there is no loss of route update.
 
 ### Miscellaneous Features
-
----
 
 #### Loop Free Alternates
 
@@ -136,8 +152,6 @@ under heavy network churn.
 > consider pseudo-nodes to develop special flooding schemes for shared segments.
 
 ### More Reading
-
----
 
 - [Basic Specification for IP Fast Reroute: Loop-Free Alternates](https://tools.ietf.org/html/rfc5286)
 - [Segment Routing Architecture](https://tools.ietf.org/html/draft-ietf-spring-segment-routing-15)
