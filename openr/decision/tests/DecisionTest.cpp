@@ -417,11 +417,11 @@ getPrefixDbForNode(
     std::string const& name,
     std::string const& area = kTestingAreaName) {
   thrift::PrefixDatabase prefixDb;
-  prefixDb.set_thisNodeName(name);
-  prefixDb.set_area(area);
+  prefixDb.thisNodeName_ref() = name;
+  prefixDb.area_ref() = area;
   thrift::ReceivedRouteFilter filter;
-  filter.set_nodeName(name);
-  filter.set_areaName(area);
+  filter.nodeName_ref() = name;
+  filter.areaName_ref() = area;
   for (auto const& routeDetail : state.getReceivedRoutesFiltered(filter)) {
     prefixDb.prefixEntries_ref()->push_back(
         routeDetail.get_routes().at(0).get_route());
@@ -3856,7 +3856,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   for (auto entryIter = entriesVec.begin(); entryIter != entriesVec.end();
        ++entryIter) {
     if (entryIter->get_prefix() == addr1) {
-      entryIter->set_mv(mv1);
+      entryIter->mv_ref() = mv1;
       prefixDBTwo.prefixEntries_ref()->push_back(*entryIter);
       entriesVec.erase(entryIter);
       break;
@@ -6499,7 +6499,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
  */
 TEST_F(DecisionTestFixture, DecisionSubReliability) {
   thrift::Publication initialPub;
-  initialPub.set_area(kTestingAreaName);
+  initialPub.area_ref() = kTestingAreaName;
 
   // wait for the inital coldstart sync, expect it to be empty
   EXPECT_EQ(0, recvRouteUpdates().unicastRoutesToUpdate.size());
@@ -6552,7 +6552,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // is not going to cause any SPF computation
   //
   thrift::Publication duplicatePub;
-  duplicatePub.set_area(kTestingAreaName);
+  duplicatePub.area_ref() = kTestingAreaName;
   duplicatePub.keyVals_ref()[keyToDup] = initialPub.keyVals_ref()->at(keyToDup);
   int64_t totalSent = 0;
   auto start = std::chrono::steady_clock::now();
@@ -6580,10 +6580,10 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // updates).
   //
   thrift::Publication newPub;
-  newPub.set_area(kTestingAreaName);
+  newPub.area_ref() = kTestingAreaName;
 
   auto newAddr = toIpPrefix("face:b00c:babe::1/128");
-  newPub.set_keyVals({createPrefixKeyValue("1", 1, newAddr)});
+  newPub.keyVals_ref() = {createPrefixKeyValue("1", 1, newAddr)};
   LOG(INFO) << "Advertising prefix update";
   sendKvPublication(newPub);
   // Receive RouteDelta from Decision

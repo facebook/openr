@@ -44,9 +44,9 @@ class OpenrCtrlFixture : public ::testing::Test {
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : {kSpineAreaId, kPlaneAreaId, kPodAreaId}) {
       thrift::AreaConfig area;
-      area.set_area_id(id);
-      area.set_include_interface_regexes({"po.*"});
-      area.set_neighbor_regexes({".*"});
+      area.area_id_ref() = id;
+      area.include_interface_regexes_ref() = {"po.*"};
+      area.neighbor_regexes_ref() = {".*"};
       areaConfig.emplace_back(std::move(area));
     }
     // create config
@@ -1819,7 +1819,7 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   {
     std::vector<thrift::AdjacencyDatabase> adjDbs;
     thrift::AdjacenciesFilter filter;
-    filter.set_selectAreas({kSpineAreaId});
+    filter.selectAreas_ref() = {kSpineAreaId};
     openrCtrlThriftClient_->sync_getLinkMonitorAdjacenciesFiltered(
         adjDbs, filter);
     EXPECT_EQ(0, adjDbs.begin()->get_adjacencies().size());

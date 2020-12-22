@@ -60,14 +60,14 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
       nodeArea.first, toIPNetwork(entry.get_prefix()), nodeArea.second);
   EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
 
-  entry.set_type(thrift::PrefixType::BREEZE);
+  entry.type_ref() = thrift::PrefixType::BREEZE;
   EXPECT_THAT(
       state_.updatePrefix(key, entry),
       testing::UnorderedElementsAre(key.getIpPrefix()));
   EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
   EXPECT_EQ(state_.prefixes().at(entry.get_prefix()).at(nodeArea), entry);
 
-  entry.set_forwardingType(thrift::PrefixForwardingType::SR_MPLS);
+  entry.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_THAT(
       state_.updatePrefix(key, entry),
       testing::UnorderedElementsAre(key.getIpPrefix()));

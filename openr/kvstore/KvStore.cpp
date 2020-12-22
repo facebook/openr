@@ -1055,7 +1055,7 @@ KvStoreDb::KvStorePeer::KvStorePeer(
     const thrift::PeerSpec& ps,
     const ExponentialBackoff<std::chrono::milliseconds>& expBackoff)
     : nodeName(nodeName), peerSpec(ps), expBackoff(expBackoff) {
-  peerSpec.set_state(thrift::KvStorePeerState::IDLE);
+  peerSpec.state_ref() = thrift::KvStorePeerState::IDLE;
   CHECK(not this->nodeName.empty());
   CHECK(not this->peerSpec.peerAddr_ref()->empty());
   CHECK(
@@ -1445,8 +1445,8 @@ KvStoreDb::requestThriftPeerSync() {
 
     // state transition
     auto oldState = thriftPeer.peerSpec.get_state();
-    thriftPeer.peerSpec.set_state(
-        getNextState(oldState, KvStorePeerEvent::PEER_ADD));
+    thriftPeer.peerSpec.state_ref() =
+        getNextState(oldState, KvStorePeerEvent::PEER_ADD);
     logStateTransition(peerName, oldState, thriftPeer.peerSpec.get_state());
 
     // mark peer from IDLE -> SYNCING
@@ -1585,8 +1585,8 @@ KvStoreDb::processThriftSuccess(
 
   // State transition
   auto oldState = peer.peerSpec.get_state();
-  peer.peerSpec.set_state(
-      getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD));
+  peer.peerSpec.state_ref() =
+      getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
   logStateTransition(peerName, oldState, peer.peerSpec.get_state());
 
   kvParams_.kvStoreSyncEventsQueue.push(KvStoreSyncEvent(peerName, area_));
@@ -1639,8 +1639,8 @@ KvStoreDb::processThriftFailure(
 
   // state transition
   auto oldState = peer.peerSpec.get_state();
-  peer.peerSpec.set_state(
-      getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR));
+  peer.peerSpec.state_ref() =
+      getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR);
   logStateTransition(peerName, oldState, peer.peerSpec.get_state());
 
   // Schedule another round of `thriftSyncTimer_` in case it is
@@ -1678,8 +1678,8 @@ KvStoreDb::addThriftPeers(
           thrift::KvStorePeerState::IDLE);
 
       peerIter->second.peerSpec = newPeerSpec; // update peerSpec
-      peerIter->second.peerSpec.set_state(
-          thrift::KvStorePeerState::IDLE); // set IDLE initially
+      peerIter->second.peerSpec.state_ref() =
+          thrift::KvStorePeerState::IDLE; // set IDLE initially
       peerIter->second.keepAliveTimer->cancelTimeout(); // cancel timer
       peerIter->second.client.reset(); // destruct thriftClient
     } else {
@@ -2112,7 +2112,7 @@ KvStoreDb::processRequestMsgHelper(
     rcvdPublication.nodeIds_ref().move_from(ketSetParamsVal.nodeIds_ref());
     rcvdPublication.floodRootId_ref().move_from(
         ketSetParamsVal.floodRootId_ref());
-    rcvdPublication.set_area(area_);
+    rcvdPublication.area_ref() = area_;
     mergePublication(rcvdPublication);
 
     // respond to the client
@@ -2648,8 +2648,8 @@ KvStoreDb::cleanupTtlCountdownQueue() {
   //       via replicate-queue. KvStore will NOT flood publication
   //       with expired keys ONLY to external peers.
   thrift::Publication expiredKeysPub{};
-  expiredKeysPub.set_expiredKeys(std::move(expiredKeys));
-  expiredKeysPub.set_area(area_);
+  expiredKeysPub.expiredKeys_ref() = std::move(expiredKeys);
+  expiredKeysPub.area_ref() = area_;
   floodPublication(std::move(expiredKeysPub));
 }
 

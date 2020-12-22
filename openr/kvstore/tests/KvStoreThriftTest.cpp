@@ -259,8 +259,8 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         kTestingAreaName));
 
     // dump peers to make sure they are aware of each other
-    peerSpec1.set_state(thrift::KvStorePeerState::INITIALIZED);
-    peerSpec2.set_state(thrift::KvStorePeerState::INITIALIZED);
+    peerSpec1.state_ref() = thrift::KvStorePeerState::INITIALIZED;
+    peerSpec2.state_ref() = thrift::KvStorePeerState::INITIALIZED;
     std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
         {store2->getNodeId(), peerSpec1}};
     std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
@@ -319,7 +319,7 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         thrift::KvStorePeerState::INITIALIZED,
         kTestingAreaName));
 
-    newPeerSpec.set_state(thrift::KvStorePeerState::INITIALIZED);
+    newPeerSpec.state_ref() = thrift::KvStorePeerState::INITIALIZED;
     std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
         {store2->getNodeId(), newPeerSpec}};
     EXPECT_EQ(newExpPeer, store1->getPeers(kTestingAreaName));

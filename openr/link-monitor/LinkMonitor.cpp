@@ -750,11 +750,11 @@ LinkMonitor::advertiseRedistAddrs() {
   for (auto& [areaId, _] : areas_) {
     // Advertise via prefix manager client
     thrift::PrefixUpdateRequest request;
-    request.set_cmd(thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE);
-    request.set_type(openr::thrift::PrefixType::LOOPBACK);
+    request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+    request.type_ref() = openr::thrift::PrefixType::LOOPBACK;
     // default construct syncing empty set if we found nothing
-    request.set_prefixes(std::move(areaPrefixes[areaId]));
-    request.set_dstAreas({areaId});
+    request.prefixes_ref() = std::move(areaPrefixes[areaId]);
+    request.dstAreas_ref() = {areaId};
     // publish prefixes to prefix manager
     prefixUpdatesQueue_.push(std::move(request));
   }

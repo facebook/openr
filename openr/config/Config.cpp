@@ -124,8 +124,8 @@ Config::populateAreaConfig() {
   if (config_.get_areas().empty()) {
     // TODO remove once transition to areas is complete
     thrift::AreaConfig defaultArea;
-    defaultArea.set_area_id(thrift::KvStore_constants::kDefaultArea());
-    config_.set_areas({defaultArea});
+    defaultArea.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+    config_.areas_ref() = {defaultArea};
   }
 
   for (auto& areaConf : *config_.areas_ref()) {
@@ -133,19 +133,19 @@ Config::populateAreaConfig() {
     // TODO remove once transition to areas is complete
     auto const& lmConf = config_.get_link_monitor_config();
     if (areaConf.get_redistribute_interface_regexes().empty()) {
-      areaConf.set_redistribute_interface_regexes(
-          lmConf.get_redistribute_interface_regexes());
+      areaConf.redistribute_interface_regexes_ref() =
+          lmConf.get_redistribute_interface_regexes();
     }
     if (areaConf.get_include_interface_regexes().empty()) {
-      areaConf.set_include_interface_regexes(
-          lmConf.get_include_interface_regexes());
+      areaConf.include_interface_regexes_ref() =
+          lmConf.get_include_interface_regexes();
     }
     if (areaConf.get_exclude_interface_regexes().empty()) {
-      areaConf.set_exclude_interface_regexes(
-          lmConf.get_exclude_interface_regexes());
+      areaConf.exclude_interface_regexes_ref() =
+          lmConf.get_exclude_interface_regexes();
     }
     if (areaConf.get_neighbor_regexes().empty()) {
-      areaConf.set_neighbor_regexes({".*"});
+      areaConf.neighbor_regexes_ref() = {".*"};
     }
 
     addAreaConfig(areaConf);

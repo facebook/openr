@@ -534,7 +534,8 @@ OpenrCtrlHandler::semifuture_getRouteDbComputed(
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
 OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
   auto filter = std::make_unique<thrift::AdjacenciesFilter>();
-  filter->set_selectAreas({*getSingleAreaOrThrow("getDecisionAdjacencyDbs")});
+  filter->selectAreas_ref() = {
+      *getSingleAreaOrThrow("getDecisionAdjacencyDbs")};
   return semifuture_getDecisionAdjacenciesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
                          adjDbs) mutable {
@@ -557,7 +558,7 @@ OpenrCtrlHandler::semifuture_getDecisionAdjacenciesFiltered(
 folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
 OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   auto filter = std::make_unique<thrift::ReceivedRouteFilter>();
-  filter->set_areaName(*getSingleAreaOrThrow("getDecisionPrefixDbs"));
+  filter->areaName_ref() = *getSingleAreaOrThrow("getDecisionPrefixDbs");
   return semifuture_getReceivedRoutesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>&&
                          routes) mutable {
@@ -569,7 +570,7 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
           }
         }
         for (auto& [name, db] : *res) {
-          db.set_thisNodeName(name);
+          db.thisNodeName_ref() = name;
         }
         return res;
       });
@@ -952,7 +953,8 @@ folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
   CHECK(linkMonitor_);
   auto filter = std::make_unique<thrift::AdjacenciesFilter>();
-  filter->set_selectAreas({*getSingleAreaOrThrow("getLinkMonitorAdjacencies")});
+  filter->selectAreas_ref() = {
+      *getSingleAreaOrThrow("getLinkMonitorAdjacencies")};
   return semifuture_getLinkMonitorAdjacenciesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
                          dbs) mutable {

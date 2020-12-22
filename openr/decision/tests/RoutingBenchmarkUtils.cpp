@@ -79,7 +79,7 @@ sendRecvInitialUpdate(
   std::unordered_map<std::string, thrift::Value> keyVals;
   apache::thrift::CompactSerializer serializer;
   for (auto& [key, adjDb] : adjDbs) {
-    adjDb.set_perfEvents(perfEvents);
+    adjDb.perfEvents_ref() = perfEvents;
     keyVals.emplace(
         key,
         createThriftValue(
@@ -88,7 +88,7 @@ sendRecvInitialUpdate(
             writeThriftObjStr(std::move(adjDb), serializer)));
   }
   for (auto& [key, prefixDb] : prefixDbs) {
-    prefixDb.set_perfEvents(perfEvents);
+    prefixDb.perfEvents_ref() = perfEvents;
     keyVals.emplace(
         key,
         createThriftValue(
@@ -98,8 +98,8 @@ sendRecvInitialUpdate(
   }
 
   thrift::Publication pub;
-  pub.set_area(kTestingAreaName);
-  pub.set_keyVals(std::move(keyVals));
+  pub.area_ref() = kTestingAreaName;
+  pub.keyVals_ref() = std::move(keyVals);
   sendRecvUpdate(decisionWrapper, processTimes, pub);
 }
 
@@ -113,14 +113,14 @@ sendRecvAdjUpdate(
     bool overloadBit) {
   LOG(INFO) << "Advertising adj update";
   thrift::Publication pub;
-  pub.set_area(kTestingAreaName);
+  pub.area_ref() = kTestingAreaName;
   thrift::PerfEvents perfEvents;
   addPerfEvent(perfEvents, nodeName, "DECISION_ADJ_UPDATE");
 
-  pub.set_keyVals(
-      {{folly::sformat("adj:{}", nodeName),
-        decisionWrapper->createAdjValue(
-            nodeName, 2, adjs, std::move(perfEvents), overloadBit)}});
+  pub.keyVals_ref() = {
+      {folly::sformat("adj:{}", nodeName),
+       decisionWrapper->createAdjValue(
+           nodeName, 2, adjs, std::move(perfEvents), overloadBit)}};
   sendRecvUpdate(decisionWrapper, processTimes, pub);
 }
 
@@ -132,16 +132,16 @@ sendRecvPrefixUpdate(
     std::pair<PrefixKey, thrift::PrefixDatabase>&& keyDbPair) {
   thrift::PerfEvents perfEvents;
   addPerfEvent(perfEvents, nodeName, "DECISION_INIT_UPDATE");
-  keyDbPair.second.set_perfEvents(std::move(perfEvents));
+  keyDbPair.second.perfEvents_ref() = std::move(perfEvents);
   apache::thrift::CompactSerializer serializer;
   thrift::Publication pub;
-  pub.set_area(kTestingAreaName);
-  pub.set_keyVals(
-      {{keyDbPair.first.getPrefixKey(),
-        createThriftValue(
-            1,
-            nodeName,
-            writeThriftObjStr(std::move(keyDbPair.second), serializer))}});
+  pub.area_ref() = kTestingAreaName;
+  pub.keyVals_ref() = {
+      {keyDbPair.first.getPrefixKey(),
+       createThriftValue(
+           1,
+           nodeName,
+           writeThriftObjStr(std::move(keyDbPair.second), serializer))}};
   sendRecvUpdate(decisionWrapper, processTimes, pub);
 }
 
@@ -434,7 +434,7 @@ createFabric(
     const int numOfRswsPerPod) {
   LOG(INFO) << "Pods number: " << numOfPods;
   thrift::Publication initialPub;
-  initialPub.set_area(kTestingAreaName);
+  initialPub.area_ref() = kTestingAreaName;
 
   // ssw: each ssw connects to one fsw of each pod
   auto numOfPlanes = numOfFswsPerPod;

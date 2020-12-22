@@ -245,9 +245,9 @@ class MultipleAreaFixture : public MultipleStoreFixture {
           std::vector<openr::thrift::AreaConfig> areaConfig;
           for (const auto& id : areas) {
             thrift::AreaConfig a;
-            a.set_area_id(id);
-            a.set_include_interface_regexes({".*"});
-            a.set_neighbor_regexes({".*"});
+            a.area_id_ref() = id;
+            a.include_interface_regexes_ref() = {".*"};
+            a.neighbor_regexes_ref() = {".*"};
             areaConfig.emplace_back(std::move(a));
           }
           auto tConfig = getBasicOpenrConfig(nodeId, "domain", areaConfig);

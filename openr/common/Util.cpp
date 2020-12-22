@@ -619,7 +619,7 @@ createPrefixDb(
   *prefixDb.thisNodeName_ref() = nodeName;
   *prefixDb.prefixEntries_ref() = prefixEntries;
   prefixDb.area_ref() = area;
-  prefixDb.set_deletePrefix(withdraw);
+  prefixDb.deletePrefix_ref() = withdraw;
   return prefixDb;
 }
 

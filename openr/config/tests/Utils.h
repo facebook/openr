@@ -20,9 +20,9 @@ createAreaConfig(
     const std::vector<std::string>& neighborRegexes,
     const std::vector<std::string>& interfaceRegexes) {
   openr::thrift::AreaConfig areaConfig;
-  areaConfig.set_area_id(areaId);
-  areaConfig.set_neighbor_regexes(neighborRegexes);
-  areaConfig.set_include_interface_regexes(interfaceRegexes);
+  areaConfig.area_id_ref() = areaId;
+  areaConfig.neighbor_regexes_ref() = neighborRegexes;
+  areaConfig.include_interface_regexes_ref() = interfaceRegexes;
   return areaConfig;
 }
 
@@ -66,9 +66,9 @@ getBasicOpenrConfig(
   *config.enable_rib_policy_ref() = true;
 
   if (areaCfg.empty()) {
-    config.set_areas({createAreaConfig(kTestingAreaName, {".*"}, {".*"})});
+    config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};
   } else {
-    config.set_areas(areaCfg);
+    config.areas_ref() = areaCfg;
   }
 
   return config;

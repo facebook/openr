@@ -623,7 +623,7 @@ TEST(ConfigTest, LinkMonitorGetter) {
   const auto& lmConf = getTestLinkMonitorConfig();
   *tConfig.link_monitor_config_ref() = lmConf;
   // set empty area list to see doamin get converted to area
-  tConfig.set_areas({});
+  tConfig.areas_ref().emplace();
   auto config = Config(tConfig);
 
   // getLinkMonitorConfig
