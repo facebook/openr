@@ -16,4 +16,5 @@ Here we explain in detail all components and protocols used within Open Routing
    RangeAllocator
    PrefixAllocator
    PrefixManager
+   Monitor
    Miscellaneous
