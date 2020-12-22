@@ -6,16 +6,17 @@
 Open Routing
 ==================================
 
-Open Routing, Open/R, is Facebook's internally designed and developed routing protocol/platform.
-Open Routing in a component based Link State Interior Gateway Protocol that is very extendible
-and customizable. It is used in Facebook's Datacenters, Backbone and Wireless Mesh products.
+Open Routing, Open/R, is Facebook's internally designed and developed routing
+platform. It is built upon the concepts of Link State routing and supports
+routing use-cases of closed network. Its design, flexibility, and supported
+functionalities has led to its adoption in Facebook's Data Center, Express
+Backbone (WAN), and Terragraph (wireless) networks.
 
-> routing of the people, by the people, for the people, shall not perish from the network
-
+  routing of the people, by the people, for the people, shall not perish from the network
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Contents
 
    Introduction/Overview
    Protocol_Guide/index
