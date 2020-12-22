@@ -18,7 +18,7 @@ For example:
 
 ---
 
-<img alt="Platform Architecture" src="https://user-images.githubusercontent.com/51382140/90934844-e09a8f00-e3b6-11ea-9695-cb9836240118.png">
+![Platform Architecture](https://user-images.githubusercontent.com/51382140/90934844-e09a8f00-e3b6-11ea-9695-cb9836240118.png)
 
 ### Thrift APIs
 

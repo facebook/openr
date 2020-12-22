@@ -22,18 +22,18 @@ For more information about message formats, checkout
 
 There are three channels of information for managing route advertisements
 
-- `PrefixUpdateRequestQueue` -> Receives route advertise & withdraw commands.
-  Multiple sources within Open/R (LinkMonitor, PrefixAllocator, BgpRib) uses
-  this channel to manage their advertisements. Each source is assigned and
-  expected to use a unique type.
+- `[Producer] ReplicateQueue<thrift::RouteDatabaseDelta>`: receive route
+  advertise & withdraw commands. Multiple sources within Open/R (`LinkMonitor`,
+  `PrefixAllocator`, `BgpRib`) uses this channel to manage their advertisements.
+  Each source is assigned and expected to use a unique type.
 
-- `DecisionRouteUpdatesQueue` -> Received the computed (hence programmed)
-  routes. The programmed routes are candidates for advertisements to other areas
-  of which they're not part of. This is termed as route re-distribution across
-  the areas. Each RibRoute is converted into a route advertisement or withdraw
-  with a special type `RIB`.
+- `[Consumer] RQueue<DecisionRouteUpdate>`: receive the computed (hence
+  programmed) routes. The programmed routes are candidates for advertisements to
+  other areas of which they're not part of. This is termed as route
+  re-distribution across the areas. Each RibRoute is converted into a route
+  advertisement or withdraw with a special type `RIB`.
 
-- `originatedPrefixDb_` -> Routes read from `config.originated_prefixes`. These
+- `originatedPrefixDb_`: routes read from `config.originated_prefixes`. These
   routes supports route aggregation logic with `minimum_supporting_routes` knob.
   Each originated route maintain a count of its supporting routes.
 

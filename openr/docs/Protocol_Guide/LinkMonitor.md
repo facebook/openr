@@ -18,7 +18,7 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
 
 ---
 
-<img src="https://user-images.githubusercontent.com/51382140/102449373-f75d9500-3fe8-11eb-8465-66e2fd1d0055.png" alt="LinkMonitor inside Open/R">
+![LinkMonitor Intermodule Communication](https://user-images.githubusercontent.com/51382140/102449373-f75d9500-3fe8-11eb-8465-66e2fd1d0055.png)
 
 - `[Producer] ReplicateQueue<thrift::InterfaceDatabase>`: react to `Netlink`
   event update and asynchronously update interface database to inform `Spark` to

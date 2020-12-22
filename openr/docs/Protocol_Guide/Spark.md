@@ -13,14 +13,15 @@ fed into the system for KvStore database synchronization, and SPF Computation.
 
 ---
 
-<img src="https://user-images.githubusercontent.com/51382140/90570487-a33ec300-e164-11ea-84ca-98485a646157.png" alt="Spark inside Open/R">
+![Spark Intermodule Communication](https://user-images.githubusercontent.com/51382140/90570487-a33ec300-e164-11ea-84ca-98485a646157.png)
 
-- [Producer]: `Spark` sends out neighbor event via `NeighborUpdatesQueue` to
-  `LinkMonitor`, which includes: `UP`/`DOWN`/`RESTART`/`RTT-CHANGE` events.
+- `[Producer] ReplicateQueue<thrift::SparkNeighborEvent>`: sends out neighbor
+  event via `NeighborUpdatesQueue` to `LinkMonitor`, which includes:
+  `UP`/`DOWN`/`RESTART`/`RTT-CHANGE` events.
 
-- [Consumer]: `Spark` receives interface database update via
-  `InterfaceUpdatesQueue` from `LinkMonitor`. Neighbor discovery will be applied
-  on those interfaces ONLY.
+- `[Consumer] RQueue<thrift::InterfaceDatabase>`: receives interface database
+  update via `InterfaceUpdatesQueue` from `LinkMonitor`. Neighbor discovery will
+  be applied on those interfaces ONLY.
 
 ### Operations
 
@@ -74,7 +75,7 @@ High level speaking:
 
 #### Finite State Machine
 
-<img src="https://user-images.githubusercontent.com/51382140/90571412-899e7b00-e166-11ea-97bd-419b493846cf.png" alt="Spark Neighbor State Transition Diagram">
+![State Transition Diagram](https://user-images.githubusercontent.com/51382140/90571412-899e7b00-e166-11ea-97bd-419b493846cf.png)
 
 `Spark` leverages Finite State Machine (FSM) to formulate neighbor state and its
 transitions on event. FSM formulation ensures the correctness of state handling
@@ -102,17 +103,17 @@ SparkNeighEvent
 
 #### State Transition Map
 
-| EVENTs/STATEs | IDLE | WARM | NEGOTIATE | ESTABLISHED | RESTART |
-|-------|-------|-------|-------|-------|-------|
-| HELLO_RCVD_INFO | WARM | NEGOTIATE |  |  | ESTABLISHED |
-| HELLO_RCVD_NO_INFO | WARM |  |  | IDLE |  |
-| HELLO_RCVD_RESTART | |  |  | RESTART |  |
-| HEARTBEAT_RCVD |  |  |  | ESTABLISHED |  |
-| HANDSHAKE_RCVD |  |  | ESTABLISHED |  |  |
-| HEARTBEAT_TIMER_EXPIRE | |  |  | IDLE |  |
-| NEGOTIATE_TIMER_EXPIRE | |  | WARM |  | |
-| GR_TIMER_EXPIRE | |  |  |  | IDLE |
-| NEGOTIATION_FAILURE | | | WARM |  | |
+| EVENTs/STATEs          | IDLE | WARM      | NEGOTIATE   | ESTABLISHED | RESTART     |
+| ---------------------- | ---- | --------- | ----------- | ----------- | ----------- |
+| HELLO_RCVD_INFO        | WARM | NEGOTIATE |             |             | ESTABLISHED |
+| HELLO_RCVD_NO_INFO     | WARM |           |             | IDLE        |             |
+| HELLO_RCVD_RESTART     |      |           |             | RESTART     |             |
+| HEARTBEAT_RCVD         |      |           |             | ESTABLISHED |             |
+| HANDSHAKE_RCVD         |      |           | ESTABLISHED |             |             |
+| HEARTBEAT_TIMER_EXPIRE |      |           |             | IDLE        |             |
+| NEGOTIATE_TIMER_EXPIRE |      |           | WARM        |             |             |
+| GR_TIMER_EXPIRE        |      |           |             |             | IDLE        |
+| NEGOTIATION_FAILURE    |      |           | WARM        |             |             |
 
 #### SparkHelloMsg
 

@@ -13,6 +13,8 @@ programmed and/or redistributed.
 
 ---
 
+![Decision Intermodule Communication](https://user-images.githubusercontent.com/51382140/102831445-b70f6580-43a0-11eb-8a8e-190df6c13ec5.png)
+
 - `[Consumer] ReplicateQueue<openr::thrift::Publication>`: read publications
   (updates) from the `KvStore` to learn Topology and Reachability information
 
@@ -33,7 +35,7 @@ Below diagram describes two main things
 - The Flow of information in the context of Decision module and
 - Route computation flow-chart
 
-<img alt="openr-route-computation-flowchart" src="https://user-images.githubusercontent.com/1482609/89572763-70004980-d7de-11ea-8c07-a8b3e446ef40.png">
+![openr-route-computation-flow](https://user-images.githubusercontent.com/1482609/89572763-70004980-d7de-11ea-8c07-a8b3e446ef40.png)
 
 ## Deep Dive
 
