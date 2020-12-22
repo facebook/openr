@@ -1,4 +1,4 @@
-# PrefixAllocator
+# PrefixAllocator - Auto address allocation
 
 ### Introduction
 

@@ -1,4 +1,4 @@
-# Platform
+# Platform - Interactions with HW
 
 Open/R relies on `Platform` layer to provide the service to program routes( i.e.
 Unicast Routes/MPLS Routes) on actual underneath system. `Platform` must provide

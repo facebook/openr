@@ -1,4 +1,4 @@
-# LinkMonitor
+# LinkMonitor - Links Discovery
 
 ## Introduction
 

@@ -1,4 +1,4 @@
-# Spark
+# Spark - Neighbor Discovery
 
 ### Introduction
 
