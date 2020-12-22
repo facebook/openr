@@ -64,8 +64,7 @@ class RQueue {
  * Code in critical path is minimal and ensures that readers/writers will never
  * block each other because of lock.
  *
- * This is polymorphic queue which means, you can push any type of object. There
- * are various get (blocking and async) methods to retrieve typed object.
+ *There are various get (blocking and async) methods to retrieve typed object.
  *
  * After closing queue, all subsequent push are ignored and return false. All
  * subsequent reads return QUEUE_CLOSED error

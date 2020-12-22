@@ -7,14 +7,15 @@ Here we explain in detail all components and protocols used within Open Routing
    :maxdepth: 1
    :caption: Contents:
 
-   Spark
+   Decision
+   Fib
    KvStore
    LinkMonitor
-   Decision
+   Messaging
+   Miscellaneous
+   Monitor
    Platform
-   Fib
-   RangeAllocator
    PrefixAllocator
    PrefixManager
-   Monitor
-   Miscellaneous
+   RangeAllocator
+   Spark
