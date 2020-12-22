@@ -15,6 +15,7 @@ Here we explain in detail all components and protocols used within Open Routing
    Messaging
    Miscellaneous
    Monitor
+   Netlink
    Platform
    PrefixAllocator
    PrefixManager
