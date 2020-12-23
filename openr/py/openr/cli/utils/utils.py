@@ -17,13 +17,12 @@ import re
 import sys
 from builtins import chr, input, map
 from collections import defaultdict
-from functools import partial
+from functools import lru_cache, partial
 from itertools import product
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import bunch
 import click
-from libfb.py.decorators import memoize_forever
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.Fib import ttypes as fib_types
@@ -1840,8 +1839,8 @@ def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
     return area
 
 
-@memoize_forever
-def is_color_output_supported():
+@lru_cache(maxsize=1)
+def is_color_output_supported() -> bool:
     """
     Check if stdout is a terminal and supports colors
     """
