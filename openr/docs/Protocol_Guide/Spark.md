@@ -1,6 +1,6 @@
 # Spark - Neighbor Discovery
 
-### Introduction
+## Introduction
 
 ---
 
@@ -9,7 +9,7 @@ multicast via UDP socket to discover and maintain adjacencies, aka "Neighbor
 Relationships". The discovered neighbors, aka "Local Topology" of the node, is
 fed into the system for KvStore database synchronization, and SPF Computation.
 
-### Inter Module Communication
+## Inter Module Communication
 
 ---
 
@@ -23,7 +23,7 @@ fed into the system for KvStore database synchronization, and SPF Computation.
   update via `InterfaceUpdatesQueue` from `LinkMonitor`. Neighbor discovery will
   be applied on those interfaces ONLY.
 
-### Operations
+## Operations
 
 ---
 
@@ -36,11 +36,11 @@ corresponding interfaces will be modified inside database:
 - Interface DOWN: remove tracked neighbor over this interface and generate
   neighbor down notification;
 
-### Deep Dive
+## Deep Dive
 
 ---
 
-#### Spark Packet
+### Spark Packet
 
 `Spark` communicates to peer spark instance by broadcasting a UDP packet to
 link-local multicast address `ff02::1`. The packet is sent over every configured
@@ -73,7 +73,7 @@ High level speaking:
   includes version, timers, and area configuration that we'll discuss below.
 - `SparkHeartbeatMsg` => Send out peridodically for keep-alive purpose.
 
-#### Finite State Machine
+### Finite State Machine
 
 ![State Transition Diagram](https://user-images.githubusercontent.com/51382140/90571412-899e7b00-e166-11ea-97bd-419b493846cf.png)
 
@@ -101,7 +101,7 @@ SparkNeighEvent
 - NEGOTIATION_FAILURE       => negotiate procedure failed(e.g. area negotiation failure);
 ```
 
-#### State Transition Map
+### State Transition Map
 
 | EVENTs/STATEs          | IDLE | WARM      | NEGOTIATE   | ESTABLISHED | RESTART     |
 | ---------------------- | ---- | --------- | ----------- | ----------- | ----------- |
@@ -115,7 +115,7 @@ SparkNeighEvent
 | GR_TIMER_EXPIRE        |      |           |             |             | IDLE        |
 | NEGOTIATION_FAILURE    |      |           | WARM        |             |             |
 
-#### SparkHelloMsg
+### SparkHelloMsg
 
 - `SparkHelloMsg` contains node name, and the list of neighbors it has heard
   from on this interface. This allows ALL neighbors on a segment to agree on
@@ -126,7 +126,7 @@ SparkNeighEvent
   3. To notify for its own "RESTART" to neighbors;
 - `SparkHelloMsg` is sent per interface;
 
-#### SparkHandshakeMsg
+### SparkHandshakeMsg
 
 - `SparkHandshakeMsg` contains rest of necessary params to establish adjacency
   with neighbor besides what has been learned from `SparkHelloMsg`;
@@ -139,13 +139,13 @@ SparkNeighEvent
 > NOTE: `SparkHandshakeMsg` has destination node attribute. Neighbors on the
 > same interface will ignore this message if it is NOT destined to itself.
 
-#### SparkHeartbeatMsg
+### SparkHeartbeatMsg
 
 - `SparkHeartbeatMsg` contains node name, sequence number;
 - Functionality: notify its own aliveness
 - `SparkHeartbeatMsg` is sent per interface;
 
-#### Timers
+### Timers
 
 To maintain the state machine running smoothly, there are different kinds of
 timers used.
@@ -167,7 +167,7 @@ defined in
 
 - [if/OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
 
-#### Area Configuration
+### Area Configuration
 
 As area negotiation happens by default between spark instances, neighbor
 adjacency will ONLY be formed if they can reach agreement on area.
@@ -202,14 +202,14 @@ through.
 > `WARM` and stop sending `SparkHandshakeMsg`. See FSM transition part for
 > deatils.
 
-#### RTT Measurement
+### RTT Measurement
 
 With spark exchanging multicast packets for neighbor discovery we can easily
 deduce the RTT between neighbors (reflection time). To reduce noise in RTT
 measurements we use `Kernel Timestamps`. To avoid noisy `RTT_CHANGED` events we
 use `StepDetector` so that small changes in RTT measurements are ignored.
 
-#### Fast Neighbor Discovery
+### Fast Neighbor Discovery
 
 When a node starts or a new link comes up, we perform fast initial neighbor
 discovery by sending `SparkHelloMsg` with `solicitResponse` bit set. This is to

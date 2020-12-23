@@ -72,7 +72,7 @@ Above requests come from two places:
 
 ---
 
-#### Redistribute Prefix Workflow
+### Redistribute Prefix Workflow
 
 ![RouteRedistributeLogic](https://user-images.githubusercontent.com/5740745/90441634-250fed00-e08e-11ea-90b5-d29c7e94e558.png)
 
@@ -83,7 +83,7 @@ workflow is as follows:
 - append area1 to area_stack, this is considered as a route cross area boundary
 - run area2 ingress policy, if accepted => inject to area2.
 
-#### Selecting Unique Prefix Advertisement
+### Selecting Unique Prefix Advertisement
 
 ![RouteRedistributeLogicWithBgp](https://user-images.githubusercontent.com/5740745/90441674-3953ea00-e08e-11ea-99dc-5c0cc731dda8.png)
 

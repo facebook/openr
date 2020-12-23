@@ -1,6 +1,6 @@
 # Miscellaneous
 
-### OpenR and V4
+## OpenR and V4
 
 ---
 
@@ -20,7 +20,7 @@ Further, you can't run OpenR on a v4 only network. All communication between
 OpenR processes running on different machines and link discovery is done using
 IPv6 transport layer.
 
-### Traffic Class for Control Packets
+## Traffic Class for Control Packets
 
 ---
 
@@ -29,7 +29,7 @@ nodes are marked with the traffic class of `FLAGS_ip_tos`. This is so the
 underlying network can differentiate control plane traffic from normal traffic
 packets and give them higher priority.
 
-### OpenR Graceful Restart
+## OpenR Graceful Restart
 
 ---
 
@@ -50,7 +50,7 @@ disruptions during software upgrades or restarts.
 
 The operation of graceful restart can be described in two domains
 
-#### Restarting Node
+### Restarting Node
 
 Restart of a node can happen anytime (admin, crash or just software upgrade). GR
 is implemented to handle not-anticipated restart of neighbor. When a node
@@ -66,7 +66,7 @@ restarts, it does the following:
 It is assumed that network is not changing much when a node is restarting.
 However local link down events are taken into immediate effect.
 
-#### Node whose neighbor is restarting
+### Node whose neighbor is restarting
 
 Spark-hello packets are exchanged between neighbors as a keep-alive mechanism.
 Each hello packet has a sequence number which is monotonically increasing on
@@ -82,7 +82,7 @@ reset the **holdTimer** for the neighbor which has been detected as restarted
 and it doesn't do unless it sees itself in the subsequent neighbor's hello
 packets.
 
-#### Notes on Timers
+### Notes on Timers
 
 Restarting node has to form adjacencies with all of its neighbors within it's
 holdTime from its last hello message sent before restarting.
@@ -104,7 +104,7 @@ be complete. On my testing having 30s of holdTime and 2s keepAliveTime works
 great and we see no traffic disruptions even when two adjacent neighbors are
 restarting together.
 
-### Parallel link Support
+## Parallel link Support
 
 ---
 
@@ -115,7 +115,7 @@ creates one edge per Adjacency between nodes with appropriate metric value. When
 a node is selected as a nexthop then all interfaces over which the node has an
 adjacency will be used as the nexthop.
 
-### Persistent Store
+## Persistent Store
 
 ---
 
@@ -126,7 +126,7 @@ across restart/reboots OpenR comes back with the same state as before.
 - Link/Node overload bits of custom link metrics
 - Previously elected prefix for a node
 
-### Drain Support
+## Drain Support
 
 ---
 
@@ -135,24 +135,24 @@ maintenances. LinkMonitor modules provides a few ways and simpler APIs to
 perform these operations and the state information is reflected in the
 AdjacencyDatabase
 
-#### Set/Unset Node Overload
+### Set/Unset Node Overload
 
 If set, stops transit traffic going through the node. Though traffic originating
 and terminating at the node will continue to flow like before.
 
-#### Set/Unset Link Overload
+### Set/Unset Link Overload
 
 If set, stops transit traffic through the link. This is kind of hard draining
 the link. If all the links of a node have `overload` bit set then the node will
 become disconnected from the network (OpenR continues to work unaffected).
 
-#### Set/Unset Link Metric Overrides
+### Set/Unset Link Metric Overrides
 
 You can set custom metric values on a link (usually to a high number) in order
 to perform soft drain. Most traffic will be drained except traffic which doesn't
 have alternate paths.
 
-### Security Concerns
+## Security Concerns
 
 ---
 
@@ -168,7 +168,7 @@ We understand that this is a difficult problem with subtle pitfalls. Going
 forward we hope to move towards an approach built on top of widely deployed and
 well verified solutions such as OpenSSL.
 
-### Potential Extensions
+## Potential Extensions
 
 ---
 

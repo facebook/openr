@@ -1,12 +1,46 @@
-# Introduction
+# Monitor - Process telemetry and events
+
+## Introduction
+
+---
 
 `Monitor` is responsible for calculating and exporting the counters of the
 Open/R system metrics, as well as processing the Open/R event logs injected from
 other individual modules.
 
+## Inter Module Communication
+
 ---
 
-### Operations
+`LogSampleQueue` is the channel for event log collection. Each module logs the
+important event, packs it as a LogSample object and pushes it into the queue.
+
+- [Producer `KvStore`] events including:
+  - `KVSTORE_FULL_SYNC`
+  - `KEY_EXPIRE`
+- [Producer `Fib`]:
+  - `ROUTE_CONVERGENCE`
+- [Producer `LinkMonitor`]:
+  - `ADD_PEER`
+  - `DEL_PEER`
+  - All
+    [SparkNeighborEventType](https://github.com/facebook/openr/blob/master/openr/if/Spark.thrift):
+    - `NEIGHBOR_UP`
+    - `NEIGHBOR_DOWN`
+    - `NEIGHBOR_RESTARTED`
+    - `NEIGHBOR_RTT_CHANGE`
+    - `NEIGHBOR_RESTARTING`
+- [Producer `PrefixAllocator`]:
+  - `ALLOC_PARAMS_UPDATE`
+  - `PREFIX_ELECTED`
+  - `PREFIX_ELECTED`
+  - `PREFIX_LOST`
+- [Consumer `RQueue<LogSample>`]: Read `LogSample` object and process all event
+  logs.
+
+## Deep Dive
+
+---
 
 High-level speaking, the instance of
 [Monitor](https://github.com/facebook/openr/blob/master/openr/monitor/Monitor.cpp)
@@ -55,33 +89,3 @@ struct MonitorConfig {
   ...
 }
 ```
-
----
-
-### Inter Module Communication
-
-`LogSampleQueue` is the channel for event log collection. Each module logs the
-important event, packs it as a LogSample object and pushes it into the queue.
-
-- [Producer `KvStore`] events including:
-  - `KVSTORE_FULL_SYNC`
-  - `KEY_EXPIRE`
-- [Producer `Fib`]:
-  - `ROUTE_CONVERGENCE`
-- [Producer `LinkMonitor`]:
-  - `ADD_PEER`
-  - `DEL_PEER`
-  - All
-    [SparkNeighborEventType](https://github.com/facebook/openr/blob/master/openr/if/Spark.thrift):
-    - `NEIGHBOR_UP`
-    - `NEIGHBOR_DOWN`
-    - `NEIGHBOR_RESTARTED`
-    - `NEIGHBOR_RTT_CHANGE`
-    - `NEIGHBOR_RESTARTING`
-- [Producer `PrefixAllocator`]:
-  - `ALLOC_PARAMS_UPDATE`
-  - `PREFIX_ELECTED`
-  - `PREFIX_ELECTED`
-  - `PREFIX_LOST`
-- [Consumer `RQueue<LogSample>`]: Read `LogSample` object and process all event
-  logs.

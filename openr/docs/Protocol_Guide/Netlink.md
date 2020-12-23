@@ -1,55 +1,51 @@
 # Netlink C++ Interface
 
+## Introduction
+
+---
+
 This library provides C++ APIs to interact with kernel for networking state via
 netlink protocol. The functionality is intentionally kept minimal to the needs
 of Open/R, but it can be extended. Below we describe the organization of code in
 this directory. Refer to inline code documentation in header files for more
 information.
 
-## NetlinkTypes
+## Deep Dive
 
 ---
+
+### NetlinkTypes
 
 Defines C++ classes to represent various routing information e.g. Address, Link,
 Route etc. This serves as data representation between application code and
 netlink C++ library.
 
-## NetlinkMessage
-
----
+### NetlinkMessage
 
 Defines base class that facilitates serialization and de-serialization of
 message exchange with linux kernel.
 
 Reference: http://man7.org/linux/man-pages/man7/netlink.7.html
 
-## NetlinkRoute
-
----
+### NetlinkRoute
 
 Specialization of netlink message for `NETLINK_ROUTE` (aka rtnetlink) family. It
 implements Addresses, Link, Neighbor and Route (IP, IPv6 & MPLS).
 
 Reference: http://man7.org/linux/man-pages/man7/rtnetlink.7.html
 
-## NetlinkProtocolSocket
-
----
+### NetlinkProtocolSocket
 
 Implements send and receive netlink messages with the use of `AF_NETLINK` socket
 type. Also provides public APIs to get/add/del for Addresses, Link, Neighbor and
 Routes.
 
-## NetlinkSocket [DEPRECATED]
-
----
+### NetlinkSocket [DEPRECATED]
 
 Further wraps NetlinkProtocolSocket for backward compatibility with previous C++
 interface.
 
-## Unit Testing
-
----
+### Unit Testing
 
 Netlink code is exhaustively unit-tested. However to run unit-tests, you'll need
 to run with `sudo`. Temporary route, link, address and neighbor entries will be

@@ -1,6 +1,6 @@
 # PrefixAllocator - Auto address allocation
 
-### Introduction
+## Introduction
 
 ---
 
@@ -13,14 +13,14 @@ PrefixAllocator allocates the `I-th` prefix of length `M`.
 
 NOTE: This functionality is deprecated and will soon be removed from Open/R
 
-### Inter-Module Communication
+## Inter-Module Communication
 
 ---
 
 See
 [Range Allocator Inter-Module Communication](RangeAllocator.md#inter-module-cmmunication)
 
-### Configuration
+## Configuration
 
 ---
 
@@ -51,7 +51,7 @@ prefix_allocation_config.set_loopback_addr = True
 prefix_allocation_config.override_loopback_addr = True
 ```
 
-#### Seeded Allocation via flags
+### Seeded Allocation via `FLAGS`
 
 `seed_prefix` and `alloc_prefix_len` using command line parameters. All nodes
 must be initialized with same paramters for allocation to be effective.
@@ -67,7 +67,7 @@ prefix_allocation_config.seed_prefix = "face:b00c::/48"
 prefix_allocation_config.allocate_prefix_len = 64
 ```
 
-#### Seeded Allocation via KvStore
+### Seeded Allocation via `KvStore`
 
 More flexible way is to initialize PrefixAllocator via KvStore. You can set a
 special key `e2e-network-prefix` in KvStore with appropriate value which will be
@@ -105,7 +105,7 @@ breeze kvstore set-key e2e-network-prefix face:b00c:cafe::/48,64
 breeze kvstore set-key e2e-network-prefix face:baba:c00c::/56,64
 ```
 
-#### Static Allocation via KvStore
+### Static Allocation via `KvStore`
 
 In static allocation mode, you can control which address should be assigned to
 which nodes via `thrift::StaticAllocation` object set in KvStore as special key,

@@ -1,6 +1,6 @@
 # Range Allocator
 
-### Introduction
+## Introduction
 
 ---
 
@@ -18,7 +18,7 @@ This is an abstract module that supports two use-cases
 This is an abstract module that supports two specific application in Open/R -
 Node Segment Label Allocation and Prefix Allocation.
 
-### Inter Module Communication
+## Inter Module Communication
 
 ---
 
@@ -35,7 +35,7 @@ communication of RangeAllocator through KvStore.
 > NOTE: Only RangeAllocator instances of a particular `Area` interact with each
 > other. The uniqueness of the label is not guaranteed across areas.
 
-### Operations
+## Operations
 
 ---
 
