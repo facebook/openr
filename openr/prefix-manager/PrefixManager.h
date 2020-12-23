@@ -214,18 +214,13 @@ class PrefixManager final : public OpenrEventBase {
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
 
   // The current prefix db this node is advertising. In-case if multiple entries
-  // exists for a given prefix, lowest prefix-type is preferred. This is to
-  // bring deterministic behavior for advertising routes.
-  // IMP: Ordered
+  // exists for a given prefix, best-route-selection process would select the
+  // ones with the best metric. Lowest prefix-type is used as a tie-breaker for
+  // advertising the best selected routes to KvStore.
   std::unordered_map<
       thrift::IpPrefix,
       std::unordered_map<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
-  // TODO: tie break on attributes first, then choose the lowest prefix-type.
-  // Redistribute routes could come from remote node from area1, but showed as
-  // originated by me in area2. If I start to originate same prefix, I'll have
-  // to tie break first to choose which one I'd like to announce before it goes
-  // to Decision.
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
