@@ -390,6 +390,21 @@ Config::populateInternalDb() {
   }
 
   //
+  // BGP Translation Config
+  //
+  if (isBgpPeeringEnabled()) {
+    const auto& bgpTranslationConf = config_.bgp_translation_config_ref();
+    CHECK(bgpTranslationConf.has_value());
+    if (*bgpTranslationConf->disable_legacy_translation_ref() and
+        (not*bgpTranslationConf->enable_openr_to_bgp_ref() or
+         not*bgpTranslationConf->enable_bgp_to_openr_ref())) {
+      throw std::invalid_argument(
+          "Legacy translation can be disabled only when new translation is "
+          "enabled");
+    }
+  }
+
+  //
   // watchdog
   //
   if (isWatchdogEnabled() and not config_.watchdog_config_ref()) {

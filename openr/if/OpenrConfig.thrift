@@ -389,6 +389,12 @@ struct BgpRouteTranslationConfig {
    */
   9: bool enable_openr_to_bgp = 0
 
+  /**
+   * Knob to disable legacy BGP route translation. e.g. `data`, `mv`
+   * will no longer be populated. For this option to be enabled, both
+   * of the above route translation options must be enabled.
+   */
+  10: bool disable_legacy_translation = 0
 }
 
 struct OpenrConfig {

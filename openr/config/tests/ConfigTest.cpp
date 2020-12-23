@@ -254,6 +254,38 @@ TEST(ConfigTest, AreaConfiguration) {
   EXPECT_FALSE(areaConf.shouldRedistributeIface(""));
 }
 
+TEST(ConfigTest, BgpTranslationConfig) {
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.enable_bgp_peering_ref() = true;
+  tConfig.bgp_config_ref() = thrift::BgpConfig();
+  tConfig.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
+  auto& translationConfig = *tConfig.bgp_translation_config_ref();
+
+  // Legacy translation disabled - But new translation hasn't been
+  {
+    translationConfig.enable_bgp_to_openr_ref() = true;
+    translationConfig.enable_openr_to_bgp_ref() = false;
+    translationConfig.disable_legacy_translation_ref() = true;
+    EXPECT_THROW((Config(tConfig)), std::invalid_argument);
+  }
+
+  // Legacy translation disabled - But new translation hasn't been
+  {
+    translationConfig.enable_bgp_to_openr_ref() = false;
+    translationConfig.enable_openr_to_bgp_ref() = true;
+    translationConfig.disable_legacy_translation_ref() = true;
+    EXPECT_THROW((Config(tConfig)), std::invalid_argument);
+  }
+
+  // Legacy translation disabled and new translation enabled
+  {
+    translationConfig.enable_bgp_to_openr_ref() = true;
+    translationConfig.enable_openr_to_bgp_ref() = true;
+    translationConfig.disable_legacy_translation_ref() = true;
+    EXPECT_NO_THROW((Config(tConfig)));
+  }
+}
+
 TEST(ConfigTest, PopulateInternalDb) {
   // features
 
