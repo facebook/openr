@@ -36,9 +36,6 @@ namespace openr {
  * from Decision module and forward best paths to switch agent to program.
  * There is no state keeping being done apart from handling interface events.
  *
- * On interface event down event we find affected routes and either withdraw
- * them or reprogram with new nexthops.
- *
  * This RouteDatabase contains all Loop Free Alternate (LFAs) paths along with
  * best paths. So Fib module derives best paths (path with minimum cost) and
  * programs them.
