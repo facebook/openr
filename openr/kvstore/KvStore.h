@@ -680,7 +680,5 @@ class KvStore final : public OpenrEventBase {
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
-
-  std::unordered_set<std::string> const areaIds_;
 };
 } // namespace openr

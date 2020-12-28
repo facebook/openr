@@ -170,8 +170,7 @@ KvStore::KvStore(
               *config->getKvStoreConfig().ttl_decrement_ms_ref()),
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
               false),
-          config->getKvStoreConfig().is_flood_root_ref().value_or(false)),
-      areaIds_(config->getAreaIds()) {
+          config->getKvStoreConfig().is_flood_root_ref().value_or(false)) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& counter : getGlobalCounters()) {
@@ -227,7 +226,7 @@ KvStore::KvStore(
   });
 
   // create KvStoreDb instances
-  for (auto const& area : areaIds_) {
+  for (auto const& area : config->getAreaIds()) {
     kvStoreDb_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(area),
@@ -501,8 +500,8 @@ KvStore::getAreaDbOrThrow(
                << " requested but not configured for this node.";
     // TODO: migration workaround => if me/peer does is using default area,
     // always honor my config, ignore peer's config.
-    if (areaIds_.size() == 1 and
-        (areaIds_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
+    if (kvStoreDb_.size() == 1 and
+        (kvStoreDb_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
          areaId == openr::thrift::KvStore_constants::kDefaultArea())) {
       LOG(INFO) << "Falling back to my single area: "
                 << kvStoreDb_.begin()->first;
