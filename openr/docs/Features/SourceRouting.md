@@ -201,6 +201,6 @@ kernel.
 - [IPv6 Segment Routing Header (SRH)](https://tools.ietf.org/html/rfc8754)
 - [Segment Routing with the MPLS Data Plane](https://tools.ietf.org/html/rfc8660)
 - [Intro to Segment Routing](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/seg_routing/configuration/xe-3s/segrt-xe-3s-book/intro-seg-routing.pdf)
-- [Segment Routing in Linux Kernel](http://www.segment-routing.net/open-software/linux/)
+- [Segment Routing in Linux Kernel](https://www.segment-routing.net/open-software/linux/)
 - [MPLS Tutorial for Linux](https://netdevconf.info/1.1/proceedings/slides/prabhu-mpls-tutorial.pdf)
 - [MPLS in GRE Tunnel on Linux](https://jsteward.moe/mpls-in-gre-tunnel-linux.html)
