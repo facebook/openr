@@ -17,8 +17,7 @@ NOTE: This functionality is deprecated and will soon be removed from Open/R
 
 ---
 
-See
-[Range Allocator Inter-Module Communication](RangeAllocator.md) section
+See [Range Allocator Inter-Module Communication](RangeAllocator.md) section
 
 ## Configuration
 
