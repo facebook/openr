@@ -10,11 +10,11 @@ project(openr)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-noexcept-type")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+# Disable all warnings. Warnings can vary across toolchains. We rely on
+# internaly configured CI (lint and compile) to raise the warnings we find
+# useful
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 # Optionally build with LTO
 option(BUILD_WITH_LTO "BUILD_WITH_LTO" OFF)
@@ -62,6 +62,9 @@ set(FOLLY_EXCEPTION_TRACER)
 if (TARGET Folly::folly_exception_tracer)
   set(FOLLY_EXCEPTION_TRACER Folly::folly_exception_tracer)
 endif()
+
+
+add_compile_definitions(NO_FOLLY_EXCEPTION_TRACER)
 
 include_directories(
   ${Boost_INCLUDE_DIR}
@@ -277,6 +280,7 @@ add_library(openrlib
   openr/decision/LinkState.cpp
   openr/decision/PrefixState.cpp
   openr/decision/RibPolicy.cpp
+  openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/dual/Dual.cpp
   openr/fib/Fib.cpp
@@ -639,7 +643,6 @@ if(BUILD_TESTS)
   add_openr_test(LinkStateTest link_state_test
     SOURCES
       openr/decision/tests/LinkStateTest.cpp
-      openr/decision/tests/DecisionTestUtils.cpp
     DESTINATION sbin/tests/openr/decision
   )
 
@@ -830,6 +833,11 @@ if(BUILD_TESTS)
     openrlib
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST_BOTH_LIBRARIES}
+    ${GTEST_MAIN}
+    ${THRIFTCPP2}
     ${BENCHMARK}
   )
 

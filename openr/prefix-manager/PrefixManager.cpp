@@ -10,7 +10,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
-#if FOLLY_USE_SYMBOLIZER
+#ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
 
@@ -125,7 +125,7 @@ PrefixManager::PrefixManager(
             VLOG(2) << "Received RIB updates from Decision";
             processDecisionRouteUpdates(std::move(maybeThriftObj).value());
           } catch (const std::exception&) {
-#if FOLLY_USE_SYMBOLIZER
+#ifndef NO_FOLLY_EXCEPTION_TRACER
             // collect stack strace then fail the process
             for (auto& exInfo :
                  folly::exception_tracer::getCurrentExceptions()) {

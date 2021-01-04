@@ -19,7 +19,7 @@
 #include <folly/Optional.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
-#if FOLLY_USE_SYMBOLIZER
+#ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
 
@@ -1506,7 +1506,7 @@ Decision::Decision(
       try {
         processPublication(std::move(maybeThriftPub).value());
       } catch (const std::exception& e) {
-#if FOLLY_USE_SYMBOLIZER
+#ifndef NO_FOLLY_EXCEPTION_TRACER
         // collect stack strace then fail the process
         for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
           LOG(ERROR) << exInfo;

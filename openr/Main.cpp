@@ -58,7 +58,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/spark/Spark.h>
 #include <openr/watchdog/Watchdog.h>
 
-#if FOLLY_USE_SYMBOLIZER
+#ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
 
@@ -212,7 +212,7 @@ main(int argc, char** argv) {
       config = GflagConfig::createConfigFromGflag();
     }
   } catch (const thrift::ConfigError&) {
-#if FOLLY_USE_SYMBOLIZER
+#ifndef NO_FOLLY_EXCEPTION_TRACER
     // collect stack strace then fail the process
     for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
       LOG(ERROR) << exInfo;
