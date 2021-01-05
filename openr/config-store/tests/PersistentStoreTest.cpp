@@ -16,13 +16,16 @@
 
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config-store/PersistentStoreWrapper.h>
+#include <openr/if/gen-cpp2/Lsdb_types.h>
 
 namespace openr {
 
+using StoreDatabase = std::unordered_map<std::string, std::string>;
+
 // Load database from disk
-thrift::StoreDatabase
+StoreDatabase
 loadDatabaseFromDisk(const std::string& filePath) {
-  thrift::StoreDatabase newDatabase;
+  StoreDatabase newDatabase;
   std::string fileData("");
   if (not folly::readFile(filePath.c_str(), fileData)) {
     return newDatabase;
@@ -48,10 +51,10 @@ loadDatabaseFromDisk(const std::string& filePath) {
 
     // Add/Delete persistentObject to/from 'database'
     if (pObject.type == ActionType::ADD) {
-      newDatabase.keyVals_ref()[pObject.key] =
+      newDatabase[pObject.key] =
           pObject.data.has_value() ? pObject.data.value() : "";
     } else if (pObject.type == ActionType::DEL) {
-      newDatabase.keyVals_ref()->erase(pObject.key);
+      newDatabase.erase(pObject.key);
     }
   }
   return newDatabase;
@@ -60,16 +63,13 @@ loadDatabaseFromDisk(const std::string& filePath) {
 TEST(PersistentStoreTest, LoadStoreEraseTest) {
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
+  thrift::PrefixMetrics metrics;
+  metrics.path_preference_ref() = 100;
+  metrics.source_preference_ref() = 200;
+
   // Data types to store/load
   const std::pair<std::string, std::string> keyVal2{"key2", "8375"};
-  const std::pair<std::string, thrift::StoreDatabase> keyVal3{
-      "key3",
-      thrift::StoreDatabase(
-          apache::thrift::FRAGILE,
-          {
-              {"fb", "facebook"},
-              {"ig", "instagram"},
-          })};
+  const std::pair<std::string, thrift::PrefixMetrics> keyVal3{"key3", metrics};
   const std::string val2 = "5321";
 
   {
@@ -89,7 +89,7 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
     EXPECT_EQ(keyVal2.second, *responseLoadKey2);
 
     auto responseLoadKey3 =
-        store->loadThriftObj<thrift::StoreDatabase>(keyVal3.first).get();
+        store->loadThriftObj<thrift::PrefixMetrics>(keyVal3.first).get();
     EXPECT_TRUE(responseLoadKey3.hasValue());
     EXPECT_EQ(keyVal3.second, responseLoadKey3.value());
 
@@ -104,7 +104,7 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
     EXPECT_NE(keyVal2.second, *responseReloadKey2);
 
     // Try some wrong stuff
-    EXPECT_TRUE(store->loadThriftObj<thrift::StoreDatabase>("unknown_key1")
+    EXPECT_TRUE(store->loadThriftObj<thrift::PrefixMetrics>("unknown_key1")
                     .get()
                     .hasError());
     EXPECT_FALSE(store->load("unknown_key2").get());
@@ -183,7 +183,7 @@ TEST(PersistentStoreTest, EncodeDecodePersistentObject) {
 TEST(PersistentStoreTest, BulkStoreLoad) {
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
-  thrift::StoreDatabase database;
+  StoreDatabase database;
   std::string filePath;
   {
     PersistentStoreWrapper store(tid);
@@ -199,7 +199,7 @@ TEST(PersistentStoreTest, BulkStoreLoad) {
           folly::sformat("key-{}", index),
           folly::sformat("val-{}", folly::Random::rand32())};
 
-      database.keyVals_ref()[tmpKeyVal.first] = tmpKeyVal.second;
+      database[tmpKeyVal.first] = tmpKeyVal.second;
       auto responseStoreTmpKey =
           store->store(tmpKeyVal.first, tmpKeyVal.second).get();
       EXPECT_EQ(folly::Unit(), responseStoreTmpKey);

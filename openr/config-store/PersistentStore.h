@@ -24,7 +24,6 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/PersistentStore_types.h>
 
 namespace {
 constexpr folly::StringPiece kTlvFormatMarker{"TlvFormatMarker"};
@@ -123,10 +122,6 @@ class PersistentStore : public OpenrEventBase {
   bool saveDatabaseToDisk() noexcept;
   bool loadDatabaseFromDisk() noexcept;
 
-  // Load old format file from disk, this is for compatible with the old version
-  folly::Expected<folly::Unit, std::string> loadDatabaseOldFormat(
-      const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept;
-
   // Load TlvFormat from disk
   folly::Expected<folly::Unit, std::string> loadDatabaseTlvFormat(
       const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept;
@@ -165,7 +160,7 @@ class PersistentStore : public OpenrEventBase {
 
   // Database to store config data. It is synced up on a persistent storage
   // layer (disk) in a file.
-  thrift::StoreDatabase database_;
+  std::unordered_map<std::string, std::string> database_;
 
   // Serializer for encoding/decoding of thrift objects
   apache::thrift::CompactSerializer serializer_;

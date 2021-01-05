@@ -112,14 +112,6 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} network_cpp2)
 
 add_fbthrift_cpp_library(
-  persistent_store_cpp2
-  openr/if/PersistentStore.thrift
-  OPTIONS
-    json
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} persistent_store_cpp2)
-
-add_fbthrift_cpp_library(
   kv_store_cpp2
   openr/if/KvStore.thrift
   OPTIONS

@@ -14,7 +14,6 @@
 #include <folly/io/async/ssl/OpenSSLUtils.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 

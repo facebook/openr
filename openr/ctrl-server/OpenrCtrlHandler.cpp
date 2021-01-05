@@ -26,7 +26,6 @@ namespace fs = std::experimental::filesystem;
 #include <openr/config-store/PersistentStore.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
-#include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/monitor/LogSample.h>

@@ -73,7 +73,7 @@ PersistentStore::store(std::string key, std::string value) {
     SYSLOG(INFO) << "Store key: " << key << ", value: " << value
                  << " to config-store";
     // Override previous value if any
-    database_.keyVals_ref()[key] = value;
+    database_.insert_or_assign(key, value);
     auto pObject = toPersistentObject(ActionType::ADD, key, value);
     pObjects_.emplace_back(std::move(pObject));
     maybeSaveObjectToDisk();
@@ -89,7 +89,7 @@ PersistentStore::erase(std::string key) {
   runInEventBaseThread(
       [this, p = std::move(p), key = std::move(key)]() mutable noexcept {
         SYSLOG(INFO) << "Erase key: " << key << " from config-store";
-        if (database_.keyVals_ref()->erase(key) > 0) {
+        if (database_.erase(key) > 0) {
           auto pObject = toPersistentObject(ActionType::DEL, key, "");
           pObjects_.emplace_back(std::move(pObject));
           maybeSaveObjectToDisk();
@@ -108,8 +108,8 @@ PersistentStore::load(std::string key) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread(
       [this, p = std::move(p), key = std::move(key)]() mutable {
-        auto it = database_.keyVals_ref()->find(key);
-        if (it != database_.keyVals_ref()->end()) {
+        auto it = database_.find(key);
+        if (it != database_.end()) {
           p.setValue(it->second);
         } else {
           p.setValue(std::nullopt);
@@ -186,7 +186,7 @@ bool
 PersistentStore::saveDatabaseToDisk() noexcept {
   std::unique_ptr<folly::IOBuf> ioBuf;
   // If database is empty, write 'kTlvFormatMarker' to disk and return
-  if (database_.keyVals_ref()->size() == 0) {
+  if (database_.empty()) {
     ioBuf = folly::IOBuf::copyBuffer(
         kTlvFormatMarker.data(), kTlvFormatMarker.size());
   } else {
@@ -195,7 +195,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
     queue.append(kTlvFormatMarker.data(), kTlvFormatMarker.size());
 
     // Encode database_ and append to queue
-    for (auto& keyPair : *database_.keyVals_ref()) {
+    for (auto& keyPair : database_) {
       PersistentObject pObject;
       pObject =
           toPersistentObject(ActionType::ADD, keyPair.first, keyPair.second);
@@ -238,24 +238,8 @@ PersistentStore::loadDatabaseFromDisk() noexcept {
     return false;
   }
 
-  // Create IoBuf and cursor for loading data from disk
+  // Create IoBuf and cursor for loading data from disk (TlvFormat)
   auto ioBuf = folly::IOBuf::wrapBuffer(fileData.c_str(), fileData.size());
-  folly::io::Cursor cursor(ioBuf.get());
-
-  // Read 'kTlvFormatMarker' from ioBuf
-  if (not cursor.canAdvance(kTlvFormatMarker.size()) or
-      cursor.readFixedString(kTlvFormatMarker.size()) != kTlvFormatMarker) {
-    // Load old Format and write TlvFormat
-    auto oldSuccess = loadDatabaseOldFormat(ioBuf);
-    if (oldSuccess.hasError()) {
-      LOG(ERROR) << "Failed to read old-format file contents from '"
-                 << storageFilePath_
-                 << "'. Error: " << folly::exceptionStr(oldSuccess.error());
-      return false;
-    }
-    return true;
-  }
-  // Load TlvFormat
   auto tlvSuccess = loadDatabaseTlvFormat(ioBuf);
   if (tlvSuccess.hasError()) {
     LOG(ERROR) << "Failed to read Tlv-format file contents from '"
@@ -267,28 +251,11 @@ PersistentStore::loadDatabaseFromDisk() noexcept {
 }
 
 folly::Expected<folly::Unit, std::string>
-PersistentStore::loadDatabaseOldFormat(
-    const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept {
-  // Parse ioBuf into `database_`
-  try {
-    thrift::StoreDatabase newDatabase;
-    serializer_.deserialize(ioBuf.get(), newDatabase);
-    database_ = std::move(newDatabase);
-    // Write Tlv format to disk
-    saveDatabaseToDisk();
-  } catch (std::exception const& e) {
-    return folly::makeUnexpected<std::string>(
-        folly::exceptionStr(e).toStdString());
-  }
-  return folly::Unit();
-}
-
-folly::Expected<folly::Unit, std::string>
 PersistentStore::loadDatabaseTlvFormat(
     const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept {
   // Parse ioBuf to persistentObject and then to `database_`
   folly::io::Cursor cursor(ioBuf.get());
-  thrift::StoreDatabase newDatabase;
+  std::unordered_map<std::string, std::string> newDatabase;
   // Read 'kTlvFormatMarker'
   try {
     cursor.readFixedString(kTlvFormatMarker.size());
@@ -312,10 +279,10 @@ PersistentStore::loadDatabaseTlvFormat(
 
     // Add/Delete persistentObject to/from 'newDatabase'
     if (pObject.type == ActionType::ADD) {
-      newDatabase.keyVals_ref()[pObject.key] =
-          pObject.data.has_value() ? pObject.data.value() : "";
+      newDatabase.insert_or_assign(
+          pObject.key, pObject.data.has_value() ? pObject.data.value() : "");
     } else if (pObject.type == ActionType::DEL) {
-      newDatabase.keyVals_ref()->erase(pObject.key);
+      newDatabase.erase(pObject.key);
     }
   }
   database_ = std::move(newDatabase);
