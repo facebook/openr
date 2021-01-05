@@ -24,7 +24,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union
 import bunch
 import hexdump
 import openr.thrift.KvStore.types as _openr_thrift_KvStore_types
-from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
@@ -33,6 +32,7 @@ from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing, serializer
 from openr.utils.consts import Consts
 from thrift.py3.client import ClientType
@@ -1132,10 +1132,10 @@ class AllocationsSetCmd(SetKeyCmd):
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
-                resp.keyVals.get(key).value, alloc_types.StaticAllocation
+                resp.keyVals.get(key).value, openr_types.StaticAllocation
             )
         else:
-            allocs = alloc_types.StaticAllocation(nodePrefixes={})
+            allocs = openr_types.StaticAllocation(nodePrefixes={})
 
         # Return if there is no change
         prefix = ipnetwork.ip_str_to_prefix(prefix_str)
@@ -1170,10 +1170,10 @@ class AllocationsUnsetCmd(SetKeyCmd):
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
-                resp.keyVals.get(key).value, alloc_types.StaticAllocation
+                resp.keyVals.get(key).value, openr_types.StaticAllocation
             )
         else:
-            allocs = alloc_types.StaticAllocation(nodePrefixes={node_name: ""})
+            allocs = openr_types.StaticAllocation(nodePrefixes={node_name: ""})
 
         # Return if there need no change
         if node_name not in allocs.nodePrefixes:

@@ -180,14 +180,14 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} platform_cpp2)
 
 add_fbthrift_cpp_library(
-  alloc_prefix_cpp2
-  openr/if/AllocPrefix.thrift
+  types_cpp2
+  openr/if/Types.thrift
   OPTIONS
     json
   DEPENDS
     network_cpp2
 )
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} alloc_prefix_cpp2)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} types_cpp2)
 
 add_fbthrift_cpp_library(
   prefix_manager_cpp2

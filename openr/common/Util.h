@@ -27,7 +27,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/AllocPrefix_types.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
@@ -38,6 +37,7 @@
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/Spark_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 /**
  * Helper macro function to log execution time of function.

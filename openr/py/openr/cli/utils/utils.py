@@ -23,7 +23,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import bunch
 import click
-from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.Fib import ttypes as fib_types
 from openr.KvStore import ttypes as kv_store_types
@@ -32,6 +31,7 @@ from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as config_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Platform import FibService, ttypes as platform_types
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
@@ -1189,7 +1189,7 @@ def print_allocations_table(alloc_str):
     """ print static allocations """
 
     rows = []
-    allocations = deserialize_thrift_object(alloc_str, alloc_types.StaticAllocation)
+    allocations = deserialize_thrift_object(alloc_str, openr_types.StaticAllocation)
     for node, prefix in allocations.nodePrefixes.items():
         rows.append([node, ipnetwork.sprint_prefix(prefix)])
     print(printing.render_horizontal_table(rows, ["Node", "Prefix"]))

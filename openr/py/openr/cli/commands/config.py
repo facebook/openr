@@ -12,13 +12,13 @@ from typing import Tuple
 
 import click
 import jsondiff
-from openr.AllocPrefix import ttypes as ap_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import OpenrError
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
@@ -87,11 +87,11 @@ class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
             return
 
         prefix_alloc = deserialize_thrift_object(
-            prefix_alloc_blob, ap_types.AllocPrefix
+            prefix_alloc_blob, openr_types.AllocPrefix
         )
         self.print_config(prefix_alloc)
 
-    def print_config(self, prefix_alloc: ap_types.AllocPrefix) -> None:
+    def print_config(self, prefix_alloc: openr_types.AllocPrefix) -> None:
         seed_prefix = prefix_alloc.seedPrefix
         seed_prefix_addr = ipnetwork.sprint_addr(seed_prefix.prefixAddress.addr)
 
