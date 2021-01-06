@@ -555,20 +555,20 @@ Spark::parsePacket(
           << " from " << clientAddr.getAddressStr();
 
   // update counters for packets received, dropped and processed
-  fb303::fbData->addStatValue("spark.hello_packet_recv", 1, fb303::SUM);
+  fb303::fbData->addStatValue("spark.hello.packet_recv", 1, fb303::SUM);
 
   // update counters for total size of packets received
   fb303::fbData->addStatValue(
-      "spark.hello_packet_recv_size", bytesRead, fb303::SUM);
+      "spark.hello.packet_recv_size", bytesRead, fb303::SUM);
 
   if (!shouldProcessHelloPacket(ifName, clientAddr.getIPAddress())) {
     LOG(ERROR) << "Spark: dropping hello packet due to rate limiting on iface: "
                << ifName << " from addr: " << clientAddr.getAddressStr();
-    fb303::fbData->addStatValue("spark.hello_packet_dropped", 1, fb303::SUM);
+    fb303::fbData->addStatValue("spark.hello.packet_dropped", 1, fb303::SUM);
     return false;
   }
 
-  fb303::fbData->addStatValue("spark.hello_packet_processed", 1, fb303::SUM);
+  fb303::fbData->addStatValue("spark.hello.packet_processed", 1, fb303::SUM);
 
   if (bytesRead >= 0) {
     VLOG(4) << "Read a total of " << bytesRead << " bytes from fd " << mcastFd_;
@@ -800,7 +800,7 @@ Spark::sendHandshakeMsg(
   // update counters for number of pkts and total size of pkts sent
   fb303::fbData->addStatValue(
       "spark.handshake.bytes_sent", packet.size(), fb303::SUM);
-  fb303::fbData->addStatValue("spark.handshake.packets_sent", 1, fb303::SUM);
+  fb303::fbData->addStatValue("spark.handshake.packet_sent", 1, fb303::SUM);
 }
 
 void
@@ -860,7 +860,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   // update counters for number of pkts and total size of pkts sent
   fb303::fbData->addStatValue(
       "spark.heartbeat.bytes_sent", packet.size(), fb303::SUM);
-  fb303::fbData->addStatValue("spark.heartbeat.packets_sent", 1, fb303::SUM);
+  fb303::fbData->addStatValue("spark.heartbeat.packet_sent", 1, fb303::SUM);
 }
 
 void
@@ -1676,7 +1676,7 @@ Spark::sendHelloMsg(
   // update counters for number of pkts and total size of pkts sent
   fb303::fbData->addStatValue(
       "spark.hello.bytes_sent", packet.size(), fb303::SUM);
-  fb303::fbData->addStatValue("spark.hello.packets_sent", 1, fb303::SUM);
+  fb303::fbData->addStatValue("spark.hello.packet_sent", 1, fb303::SUM);
 
   VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
 }
