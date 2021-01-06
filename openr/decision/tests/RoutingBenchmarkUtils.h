@@ -81,7 +81,6 @@ class DecisionWrapper {
 
     decision = std::make_shared<Decision>(
         config,
-        true, /* computeLfaPaths */
         false, /* bgpDryRun */
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),

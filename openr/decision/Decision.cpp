@@ -166,13 +166,11 @@ class SpfSolver::SpfSolverImpl {
   SpfSolverImpl(
       const std::string& myNodeName,
       bool enableV4,
-      bool computeLfaPaths,
       bool enableOrderedFib,
       bool bgpDryRun,
       bool enableBestRouteSelection)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
-        computeLfaPaths_(computeLfaPaths),
         enableOrderedFib_(enableOrderedFib),
         bgpDryRun_(bgpDryRun),
         enableBestRouteSelection_(enableBestRouteSelection) {
@@ -317,7 +315,7 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 
   // Give source node-name and dstNodeNames, this function returns the set of
-  // nexthops (along with LFA if enabled) towards these set of dstNodeNames
+  // nexthops towards these set of dstNodeNames
   std::pair<
       Metric /* minimum metric to destination */,
       std::unordered_map<
@@ -330,7 +328,7 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
   // This function converts best nexthop nodes to best nexthop adjacencies
-  // which can then be passed to FIB for programming. It considers LFA and
+  // which can then be passed to FIB for programming. It considers and
   // parallel link logic (tested by our UT)
   // If swap label is provided then it will be used to associate SWAP or PHP
   // mpls action
@@ -361,8 +359,6 @@ class SpfSolver::SpfSolverImpl {
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
   // nexthops to Fib module for programming. Else it will just drop them.
   const bool enableV4_{false};
-
-  const bool computeLfaPaths_{false};
 
   const bool enableOrderedFib_{false};
 
@@ -1183,8 +1179,7 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
     const std::set<NodeAndArea>& dstNodeAreas,
     bool perDestination,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
-  // build up next hop nodes both nodes that are along a shortest path to the
-  // prefix and, if enabled, those with an LFA path to the prefix
+  // build up next hop nodes that are along a shortest path to the prefix
   std::unordered_map<
       std::pair<std::string /* nextHopNodeName */, std::string /* dstNode */>,
       Metric /* the distance from the nexthop to the dest */>
@@ -1221,43 +1216,6 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
         nextHopNodes[std::make_pair(nhName, dstNodeRef)] = shortestMetric -
             linkState.getMetricFromAToB(myNodeName, nhName).value();
       }
-    }
-
-    // add any other neighbors that have LFA paths to the prefix
-    if (computeLfaPaths_) {
-      for (auto link : linkState.linksFromNode(myNodeName)) {
-        if (!link->isUp()) {
-          continue;
-        }
-        const auto& neighborName = link->getOtherNodeName(myNodeName);
-        auto const& shortestPathsFromNeighbor =
-            linkState.getSpfResult(neighborName);
-
-        const auto neighborToHere =
-            shortestPathsFromNeighbor.at(myNodeName).metric();
-        for (const auto& [dstNode, dstArea] : dstNodeAreas) {
-          if (area != dstArea) {
-            continue;
-          }
-          auto shortestPathItr = shortestPathsFromNeighbor.find(dstNode);
-          if (shortestPathItr == shortestPathsFromNeighbor.end()) {
-            continue;
-          }
-          const auto distanceFromNeighbor = shortestPathItr->second.metric();
-
-          // This is the LFA condition per RFC 5286
-          if (distanceFromNeighbor < shortestMetric + neighborToHere) {
-            const auto nextHopKey =
-                std::make_pair(neighborName, perDestination ? dstNode : "");
-            auto nextHopItr = nextHopNodes.find(nextHopKey);
-            if (nextHopItr == nextHopNodes.end()) {
-              nextHopNodes.emplace(nextHopKey, distanceFromNeighbor);
-            } else if (nextHopItr->second > distanceFromNeighbor) {
-              nextHopItr->second = distanceFromNeighbor;
-            }
-          } // end if
-        } // end for dstNodeNames
-      } // end for linkState.linksFromNode(myNodeName)
     }
   }
 
@@ -1305,11 +1263,10 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
           continue;
         }
 
-        // Ignore nexthops that are not shortest if lfa is disabled. All links
-        // towards the nexthop on shortest path are LFA routes.
+        // Ignore nexthops that are not shortest
         Metric distOverLink =
             link->getMetricFromNode(myNodeName) + search->second;
-        if (not computeLfaPaths_ and distOverLink != minMetric) {
+        if (distOverLink != minMetric) {
           continue;
         }
 
@@ -1357,8 +1314,6 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
           }
         }
 
-        // if we are computing LFA paths, any nexthop to the node will do
-        // otherwise, we only want those nexthops along a shortest path
         nextHops.emplace(createNextHop(
             isV4 ? link->getNhV4FromNode(myNodeName)
                  : link->getNhV6FromNode(myNodeName),
@@ -1380,14 +1335,12 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
 SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
-    bool computeLfaPaths,
     bool enableOrderedFib,
     bool bgpDryRun,
     bool enableBestRouteSelection)
     : impl_(new SpfSolver::SpfSolverImpl(
           myNodeName,
           enableV4,
-          computeLfaPaths,
           enableOrderedFib,
           bgpDryRun,
           enableBestRouteSelection)) {}
@@ -1439,7 +1392,6 @@ SpfSolver::buildRouteDb(
 Decision::Decision(
     std::shared_ptr<const Config> config,
     // TODO: migrate argument list flags to OpenrConfig
-    bool computeLfaPaths,
     bool bgpDryRun,
     std::chrono::milliseconds debounceMinDur,
     std::chrono::milliseconds debounceMaxDur,
@@ -1459,7 +1411,6 @@ Decision::Decision(
   spfSolver_ = std::make_unique<SpfSolver>(
       config->getNodeName(),
       config->isV4Enabled(),
-      computeLfaPaths,
       config->isOrderedFibProgrammingEnabled(),
       bgpDryRun,
       config->isBestRouteSelectionEnabled());

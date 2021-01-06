@@ -209,7 +209,6 @@ class SpfSolver {
   SpfSolver(
       const std::string& myNodeName,
       bool enableV4,
-      bool computeLfaPaths,
       bool enableOrderedFib = false,
       bool bgpDryRun = false,
       bool enableBestRouteSelection = false);
@@ -276,7 +275,6 @@ class Decision : public OpenrEventBase {
  public:
   Decision(
       std::shared_ptr<const Config> config,
-      bool computeLfaPaths,
       bool bgpDryRun,
       std::chrono::milliseconds debounceMinDur,
       std::chrono::milliseconds debounceMaxDur,

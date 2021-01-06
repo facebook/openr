@@ -42,9 +42,6 @@ DECLARE_string(tls_ticket_seed_path);
 DECLARE_string(tls_ecc_curve_name);
 DECLARE_string(tls_acceptable_peers);
 
-// TODO: should we deprecate this? @striz
-DECLARE_bool(enable_lfa);
-
 // TODO: these should be const
 DECLARE_int32(decision_debounce_min_ms);
 DECLARE_int32(decision_debounce_max_ms);

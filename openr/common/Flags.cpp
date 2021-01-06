@@ -81,8 +81,6 @@ DEFINE_string(
     "A comma separated list of strings. Strings are x509 common names to "
     "accept SSL connections from. If an empty string is provided, the server "
     "will accept connections from any authenticated peer.");
-DEFINE_bool(
-    enable_lfa, false, "Enable LFA computation for quick reroute per RFC 5286");
 DEFINE_int32(
     decision_debounce_min_ms,
     10,

@@ -131,17 +131,6 @@ specification.
 
 ---
 
-### ENABLE_LFA
-
-With this option, additional Loop-Free Alternate (LFA) routes can be computed,
-per RFC 5286, for fast failure recovery. Under the failure of all primary
-nexthops for a prefix, because of link failure, next best precomputed LFA will
-be used without need of an SPF run.
-
-```shell
-ENABLE_LFA=false
-```
-
 ### MIN_LOG_LEVEL
 
 Log messages at or above this level. Again, the numbers of severity levels INFO,
