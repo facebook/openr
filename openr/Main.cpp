@@ -276,7 +276,7 @@ main(int argc, char** argv) {
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
-  ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
+  ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdateRequestQueue;
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;

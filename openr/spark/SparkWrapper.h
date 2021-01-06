@@ -58,11 +58,11 @@ class SparkWrapper {
       const std::vector<SparkInterfaceEntry>& interfaceEntries);
 
   // receive spark neighbor event
-  std::optional<thrift::SparkNeighborEvent> recvNeighborEvent(
+  std::optional<NeighborEvent> recvNeighborEvent(
       std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
-  std::optional<thrift::SparkNeighborEvent> waitForEvent(
-      const thrift::SparkNeighborEventType eventType,
+  std::optional<NeighborEvent> waitForEvent(
+      const NeighborEventType eventType,
       std::optional<std::chrono::milliseconds> rcvdTimeout = std::nullopt,
       std::optional<std::chrono::milliseconds> procTimeout =
           Constants::kPlatformRoutesProcTimeout) noexcept;
@@ -72,7 +72,7 @@ class SparkWrapper {
       std::string const& ifName, std::string const& neighborName);
 
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
-      const thrift::SparkNeighborEvent& event);
+      const NeighborEvent& event);
 
   // utility function to construct thrift::AreaConfig.SparkConfigs
   const openr::thrift::SparkConfig
@@ -92,8 +92,8 @@ class SparkWrapper {
   std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor
-  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
-  messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesReader_{
+  messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue_;
+  messaging::RQueue<NeighborEvent> neighborUpdatesReader_{
       neighborUpdatesQueue_.getReader()};
 
   // Queue to receive interface update from LinkMonitor

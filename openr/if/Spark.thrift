@@ -127,14 +127,6 @@ struct SparkHelloPacket {
   5: optional SparkHandshakeMsg handshakeMsg
 }
 
-enum SparkNeighborEventType {
-  NEIGHBOR_UP         = 1,
-  NEIGHBOR_DOWN       = 2,
-  NEIGHBOR_RESTARTED  = 3,
-  NEIGHBOR_RTT_CHANGE = 4,
-  NEIGHBOR_RESTARTING = 5,
-}
-
 //
 // Data structure to send with SparkNeighborEvent to convey
 // info for a single unique neighbor for upper module usage
@@ -168,17 +160,4 @@ struct SparkNeighbor {
 
   // derived based off of ifIndex (local per node)
   11: i32 label
-}
-
-//
-// SparkNeighborEvent wraps up info comsumed by
-// upper level module for neighbor event defined
-// in `SparkNeighborEventType`
-//
-struct SparkNeighborEvent {
-  // enum of neighbor event
-  1: SparkNeighborEventType eventType
-
-  // full snapshot of neighbor information
-  2: SparkNeighbor info
 }

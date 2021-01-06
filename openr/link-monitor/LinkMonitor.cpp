@@ -68,7 +68,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
-    messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
+    messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool assumeDrained,
@@ -283,8 +283,7 @@ LinkMonitor::stop() {
 }
 
 void
-LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& info = *event.info_ref();
+LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   const auto& neighborAddrV4 = *info.transportAddressV4_ref();
   const auto& neighborAddrV6 = *info.transportAddressV6_ref();
   const auto& localIfName = *info.localIfName_ref();
@@ -375,8 +374,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
 }
 
 void
-LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& info = *event.info_ref();
+LinkMonitor::neighborDownEvent(const thrift::SparkNeighbor& info) {
   const auto& remoteNodeName = *info.nodeName_ref();
   const auto& localIfName = *info.localIfName_ref();
   const auto& area = *info.area_ref();
@@ -404,8 +402,7 @@ LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
 }
 
 void
-LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& info = *event.info_ref();
+LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighbor& info) {
   const auto& remoteNodeName = *info.nodeName_ref();
   const auto& localIfName = *info.localIfName_ref();
   const auto& area = *info.area_ref();
@@ -431,8 +428,7 @@ LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
 }
 
 void
-LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighborEvent& event) {
-  const auto& info = *event.info_ref();
+LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighbor& info) {
   const auto& remoteNodeName = *info.nodeName_ref();
   const auto& localIfName = *info.localIfName_ref();
   const auto& rttUs = *info.rttUs_ref();
@@ -982,8 +978,8 @@ LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
 }
 
 void
-LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
-  const auto& info = *event.info_ref();
+LinkMonitor::processNeighborEvent(NeighborEvent&& event) {
+  const auto& info = event.info;
   const auto& neighborAddrV4 = *info.transportAddressV4_ref();
   const auto& neighborAddrV6 = *info.transportAddressV6_ref();
   const auto& localIfName = *info.localIfName_ref();
@@ -995,36 +991,35 @@ LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
           << remoteIfName << " at " << localIfName << " with addrs "
           << toString(neighborAddrV6) << " and "
           << (enableV4_ ? toString(neighborAddrV4) : "") << " Area:" << area
-          << " Event Type: "
-          << apache::thrift::util::enumNameSafe(*event.eventType_ref());
+          << " Event Type: " << toString(event.eventType);
 
-  switch (*event.eventType_ref()) {
-  case thrift::SparkNeighborEventType::NEIGHBOR_UP:
-  case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
+  switch (event.eventType) {
+  case NeighborEventType::NEIGHBOR_UP:
+  case NeighborEventType::NEIGHBOR_RESTARTED: {
     logNeighborEvent(event);
-    neighborUpEvent(event);
+    neighborUpEvent(info);
     break;
   }
-  case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
+  case NeighborEventType::NEIGHBOR_RESTARTING: {
     logNeighborEvent(event);
-    neighborRestartingEvent(event);
+    neighborRestartingEvent(info);
     break;
   }
-  case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
+  case NeighborEventType::NEIGHBOR_DOWN: {
     logNeighborEvent(event);
-    neighborDownEvent(event);
+    neighborDownEvent(info);
     break;
   }
-  case thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE: {
+  case NeighborEventType::NEIGHBOR_RTT_CHANGE: {
     if (!useRttMetric_) {
       break;
     }
     logNeighborEvent(event);
-    neighborRttChangeEvent(event);
+    neighborRttChangeEvent(info);
     break;
   }
   default:
-    LOG(ERROR) << "Unknown event type " << (int32_t)*event.eventType_ref();
+    LOG(ERROR) << "Unknown event type " << (int32_t)event.eventType;
   }
 }
 
@@ -1321,17 +1316,14 @@ LinkMonitor::getAllLinks() {
 }
 
 void
-LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
+LinkMonitor::logNeighborEvent(NeighborEvent const& event) {
   LogSample sample{};
-  sample.addString(
-      "event",
-      apache::thrift::TEnumTraits<thrift::SparkNeighborEventType>::findName(
-          *event.eventType_ref()));
-  sample.addString("neighbor", *(event.info_ref()->nodeName_ref()));
-  sample.addString("interface", *(event.info_ref()->localIfName_ref()));
-  sample.addString("remote_interface", *(event.info_ref()->remoteIfName_ref()));
-  sample.addString("area", *(event.info_ref()->area_ref()));
-  sample.addInt("rtt_us", *(event.info_ref()->rttUs_ref()));
+  sample.addString("event", toString(event.eventType));
+  sample.addString("neighbor", *event.info.nodeName_ref());
+  sample.addString("interface", *event.info.localIfName_ref());
+  sample.addString("remote_interface", *event.info.remoteIfName_ref());
+  sample.addString("area", *event.info.area_ref());
+  sample.addInt("rtt_us", *event.info.rttUs_ref());
 
   logSampleQueue_.push(std::move(sample));
 }

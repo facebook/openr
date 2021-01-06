@@ -84,6 +84,11 @@ std::string toString(thrift::PrefixMetrics const& metrics);
  */
 std::string toString(thrift::PrefixEntry const& entry, bool detailed = false);
 
+/*
+ * Convert NeighborEventType enum to string
+ */
+std::string toString(NeighborEventType const& type);
+
 /**
  * Setup thrift server for TLS
  */
@@ -273,9 +278,6 @@ thrift::SparkNeighbor createSparkNeighbor(
     const std::string& localIfName,
     const std::string& area = kTestingAreaName,
     const std::string& state = "IDLE");
-
-thrift::SparkNeighborEvent createSparkNeighborEvent(
-    thrift::SparkNeighborEventType event, const thrift::SparkNeighbor& info);
 
 thrift::Adjacency createAdjacency(
     const std::string& nodeName,

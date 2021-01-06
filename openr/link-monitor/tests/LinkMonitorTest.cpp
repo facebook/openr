@@ -557,7 +557,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
-  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue;
+  messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRouteUpdatesQueue;
@@ -793,8 +793,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // neighbor up
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Sent neighbor UP event.";
 
@@ -920,8 +919,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // 11. neighbor down
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
@@ -936,8 +934,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // Create new
   // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
-  neighborUpdatesQueue =
-      messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
+  neighborUpdatesQueue = messaging::ReplicateQueue<NeighborEvent>();
   kvStoreSyncEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
   peerUpdatesQueue = messaging::ReplicateQueue<thrift::PeerUpdateRequest>();
   nlSock->openQueue();
@@ -950,8 +947,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // 12. neighbor up
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     kvStoreSyncEventsQueue.push(
         KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
@@ -965,8 +961,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto cp = nb2;
     *cp.transportAddressV4_ref() = empty;
     *cp.transportAddressV6_ref() = empty;
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, cp);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event with empty address!";
     checkNextAdjPub("adj:node-1");
@@ -1024,13 +1019,11 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
   // neighbor up on nb2 and nb3
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb3);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1045,8 +1038,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
   // neighbor 3 down immediately
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb3);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
@@ -1106,8 +1098,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   nb2_if2.label_ref() = 2;
   // neighbor 2 up on iface_2_2
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2_if2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     LOG(INFO) << "Sent neighbor UP event.";
@@ -1126,8 +1117,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor 2 up on iface_2_1
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // KvStore Peer has reached to the initial sync state,
@@ -1140,8 +1130,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor 2 down on iface_2_2
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb2_if2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // only iface_2_1 in adj pub
@@ -1153,8 +1143,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor 2 down on iface_2_1
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // check node-1 adj is empty
@@ -1166,8 +1155,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor 2 up on iface_2_2
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2_if2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     LOG(INFO) << "Sent neighbor UP event.";
@@ -1186,16 +1174,14 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
   // neighbor 3: both adj up
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb3);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   {
     auto cp = nb3;
     cp.localIfName_ref() = if_3_2;
     cp.label_ref() = 2;
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   {
@@ -1240,8 +1226,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
 
   // neighbor 2 up on adj_2_1
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // no adj up before KvStore Peer finish initial sync
@@ -1266,8 +1251,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   nb2_if2.localIfName_ref() = if_2_2;
   nb2_if2.label_ref() = 2;
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2_if2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // check adj_2_2 is published
@@ -1282,14 +1266,14 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
 
   // neighbor restarting on iface_2_1 (GR)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, nb2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_RESTARTING, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // neighbor restarting iface_2_2 (GR)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, nb2_if2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_RESTARTING, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   {
@@ -1306,14 +1290,14 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
 
   // neighbor restarted on iface_2_1 (GR Success)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED, nb2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_RESTARTED, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // neighbor restarted on iface_2_2 (GR Success)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED, nb2_if2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_RESTARTED, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   {
@@ -1330,8 +1314,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   // not accidentally trigger adj withdrawn
   // send neighbor 3 up
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb3);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
@@ -1351,8 +1334,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   // send adj_2_1 rtt event
   // make sure adj_2_1 is still getting advertised
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE, nb2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_RTT_CHANGE, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // wait for this rtt change to propogate
@@ -1404,8 +1387,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
 
   // neighbor 2 up on adj_2_1
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // no adj up before KvStore Peer finish initial sync
@@ -1430,8 +1412,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   nb2_if2.localIfName_ref() = if_2_2;
   nb2_if2.label_ref() = 2;
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2_if2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // check adj_2_2 is published
@@ -1446,14 +1427,14 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
 
   // neighbor restarting on iface_2_1 (GR)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, nb2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_RESTARTING, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // neighbor restarting iface_2_2 (GR)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, nb2_if2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_RESTARTING, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   {
@@ -1472,8 +1453,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   // not accidentally trigger adj withdrawn
   // send neighbor 3 up
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb3);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb3);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
@@ -1492,8 +1472,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
 
   // neighbor down on iface_2_1 (GR Failure)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // adj_2_1 removed
@@ -1505,8 +1484,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
 
   // neighbor down on iface_2_2 (GR Failure)
   {
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, nb2_if2);
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, nb2_if2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
 
     // adj_2_2 removed
@@ -2238,8 +2217,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
         createAdjDatabase("node-1", {adj_2_1}, kNodeLabel, kTestingAreaName);
     expectedAdjDbs.push(std::move(adjDb));
     {
-      auto neighborEvent = createSparkNeighborEvent(
-          thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+      auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
       neighborUpdatesQueue.push(std::move(neighborEvent));
       kvStoreSyncEventsQueue.push(
           KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
@@ -2257,8 +2235,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     {
       auto cp = nb3;
       cp.area_ref() = "plane";
-      auto neighborEvent = createSparkNeighborEvent(
-          thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
+      auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
       neighborUpdatesQueue.push(std::move(neighborEvent));
       kvStoreSyncEventsQueue.push(
           KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
@@ -2271,8 +2248,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
   {
     auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, nb2);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     kvStoreSyncEventsQueue.push(
         KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
@@ -2288,8 +2264,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
 
     auto cp = nb3;
     cp.area_ref() = "plane";
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, cp);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     kvStoreSyncEventsQueue.push(
         KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
@@ -2304,8 +2279,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
 
     auto cp = nb3;
     cp.area_ref() = "plane";
-    auto neighborEvent = createSparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_DOWN, cp);
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, cp);
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1", "plane");

@@ -225,7 +225,7 @@ Spark::SparkNeighbor::SparkNeighbor(
 Spark::Spark(
     std::optional<int> maybeIpTos,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
-    messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue,
+    messaging::ReplicateQueue<NeighborEvent>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
     OpenrCtrlThriftPort openrCtrlThriftPort,
     std::shared_ptr<IoProvider> ioProvider,
@@ -317,7 +317,6 @@ Spark::Spark(
 // static util function to transform state into str
 std::string
 Spark::toStr(SparkNeighState state) {
-  std::string res = "UNKNOWN";
   switch (state) {
   case SparkNeighState::IDLE:
     return "IDLE";
@@ -330,9 +329,8 @@ Spark::toStr(SparkNeighState state) {
   case SparkNeighState::RESTART:
     return "RESTART";
   default:
-    LOG(ERROR) << "Unknown type";
+    return "UNKNOWN";
   }
-  return res;
 }
 
 void
@@ -661,8 +659,7 @@ Spark::processRttChange(
 
   sparkNeighbor.rtt = std::chrono::microseconds(newRtt);
   notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE,
-      sparkNeighbor.toThrift());
+      NeighborEventType::NEIGHBOR_RTT_CHANGE, sparkNeighbor.toThrift());
 }
 
 void
@@ -1017,8 +1014,7 @@ Spark::neighborUpWrapper(
   ifNameToActiveNeighbors_[ifName].emplace(neighborName);
 
   // notify LinkMonitor about neighbor UP state
-  notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
+  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
 }
 
 void
@@ -1028,7 +1024,7 @@ Spark::neighborDownWrapper(
     std::string const& neighborName) {
   // notify LinkMonitor about neighbor DOWN state
   notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_DOWN, neighbor.toThrift());
+      NeighborEventType::NEIGHBOR_DOWN, neighbor.toThrift());
 
   // remove neighborship on this interface
   if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
@@ -1044,11 +1040,8 @@ Spark::neighborDownWrapper(
 
 void
 Spark::notifySparkNeighborEvent(
-    thrift::SparkNeighborEventType eventType,
-    thrift::SparkNeighbor const& info) {
-  thrift::SparkNeighborEvent event;
-  event.eventType_ref() = eventType;
-  event.info_ref() = info;
+    NeighborEventType eventType, thrift::SparkNeighbor const& info) {
+  NeighborEvent event(eventType, info);
   neighborUpdatesQueue_.push(std::move(event));
 }
 
@@ -1139,7 +1132,7 @@ Spark::processGRMsg(
     SparkNeighbor& neighbor) {
   // notify link-monitor for RESTARTING event
   notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, neighbor.toThrift());
+      NeighborEventType::NEIGHBOR_RESTARTING, neighbor.toThrift());
 
   // start graceful-restart timer
   neighbor.gracefulRestartHoldTimer = folly::AsyncTimeout::make(
@@ -1383,8 +1376,7 @@ Spark::processHelloMsg(
     neighbor.seqNum = remoteSeqNum;
 
     notifySparkNeighborEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
-        neighbor.toThrift());
+        NeighborEventType::NEIGHBOR_RESTARTED, neighbor.toThrift());
 
     // start heartbeat timer again to make sure neighbor is alive
     neighbor.heartbeatHoldTimer = folly::AsyncTimeout::make(

@@ -112,7 +112,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // consumer queue
-      messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
+      messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
       messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will assume drained if no drain state is found in the
@@ -181,13 +181,13 @@ class LinkMonitor final : public OpenrEventBase {
    */
 
   // process neighbor event updates from Spark module
-  void processNeighborEvent(thrift::SparkNeighborEvent&& event);
+  void processNeighborEvent(NeighborEvent&& event);
 
   // individual neighbor event function
-  void neighborUpEvent(const thrift::SparkNeighborEvent& event);
-  void neighborRestartingEvent(const thrift::SparkNeighborEvent& event);
-  void neighborDownEvent(const thrift::SparkNeighborEvent& event);
-  void neighborRttChangeEvent(const thrift::SparkNeighborEvent& event);
+  void neighborUpEvent(const thrift::SparkNeighbor& info);
+  void neighborRestartingEvent(const thrift::SparkNeighbor& info);
+  void neighborDownEvent(const thrift::SparkNeighbor& info);
+  void neighborRttChangeEvent(const thrift::SparkNeighbor& info);
 
   /*
    * [KvStore] initial sync event
@@ -280,7 +280,7 @@ class LinkMonitor final : public OpenrEventBase {
   thrift::AdjacencyDatabase buildAdjacencyDatabase(const std::string& area);
 
   // submit events to monitor
-  void logNeighborEvent(thrift::SparkNeighborEvent const& event);
+  void logNeighborEvent(NeighborEvent const& event);
 
   // link events
   void logLinkEvent(

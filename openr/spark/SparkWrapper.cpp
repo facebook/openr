@@ -93,7 +93,7 @@ SparkWrapper::updateInterfaceDb(
   return true;
 }
 
-std::optional<thrift::SparkNeighborEvent>
+std::optional<NeighborEvent>
 SparkWrapper::recvNeighborEvent(
     std::optional<std::chrono::milliseconds> timeout) {
   auto startTime = std::chrono::steady_clock::now();
@@ -110,9 +110,9 @@ SparkWrapper::recvNeighborEvent(
   return neighborUpdatesReader_.get().value();
 }
 
-std::optional<thrift::SparkNeighborEvent>
+std::optional<NeighborEvent>
 SparkWrapper::waitForEvent(
-    const thrift::SparkNeighborEventType eventType,
+    const NeighborEventType eventType,
     std::optional<std::chrono::milliseconds> rcvdTimeout,
     std::optional<std::chrono::milliseconds> procTimeout) noexcept {
   auto startTime = std::chrono::steady_clock::now();
@@ -127,7 +127,7 @@ SparkWrapper::waitForEvent(
     }
     if (auto maybeEvent = recvNeighborEvent(rcvdTimeout)) {
       auto& event = maybeEvent.value();
-      if (eventType == event.eventType_ref()) {
+      if (eventType == event.eventType) {
         return event;
       }
     }
@@ -136,9 +136,9 @@ SparkWrapper::waitForEvent(
 }
 
 std::pair<folly::IPAddress, folly::IPAddress>
-SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
-  return {toIPAddress(*event.info_ref()->transportAddressV4_ref()),
-          toIPAddress(*event.info_ref()->transportAddressV6_ref())};
+SparkWrapper::getTransportAddrs(const NeighborEvent& event) {
+  return {toIPAddress(*event.info.transportAddressV4_ref()),
+          toIPAddress(*event.info.transportAddressV6_ref())};
 }
 
 std::optional<SparkNeighState>

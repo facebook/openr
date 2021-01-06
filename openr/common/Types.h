@@ -20,8 +20,8 @@
 #include <re2/set.h>
 
 #include <openr/common/Constants.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/Spark_types.h>
 
 namespace openr {
 
@@ -46,6 +46,34 @@ BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 
 BOOST_STRONG_TYPEDEF(std::string, AreaId);
+
+/**
+ * Structure defining neighbor event, which consists of:
+ *  - Type (ENUM)
+ *  - Info (Thrift struct)
+ *
+ * NeighborEvent is used uni-directionally from
+ * `Spark` -> `LinkMonitor` to indicate events like:
+ *  - adjacency change
+ *  - rtt change
+ *  - GR
+ */
+enum class NeighborEventType {
+  NEIGHBOR_UP = 1,
+  NEIGHBOR_DOWN = 2,
+  NEIGHBOR_RESTARTED = 3,
+  NEIGHBOR_RTT_CHANGE = 4,
+  NEIGHBOR_RESTARTING = 5,
+};
+
+struct NeighborEvent {
+  NeighborEventType eventType;
+  thrift::SparkNeighbor info;
+
+  NeighborEvent(
+      const NeighborEventType& eventType, const thrift::SparkNeighbor& info)
+      : eventType(eventType), info(info) {}
+};
 
 /**
  * Structure defining KvStore peer sync event, published to subscribers.

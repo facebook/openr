@@ -72,6 +72,24 @@ toString(thrift::PrefixEntry const& entry, bool detailed) {
   return ss.str();
 }
 
+std::string
+toString(NeighborEventType const& type) {
+  switch (type) {
+  case NeighborEventType::NEIGHBOR_UP:
+    return "NEIGHBOR_UP";
+  case NeighborEventType::NEIGHBOR_DOWN:
+    return "NEIGHBOR_DOWN";
+  case NeighborEventType::NEIGHBOR_RESTARTED:
+    return "NEIGHBOR_RESTARTED";
+  case NeighborEventType::NEIGHBOR_RTT_CHANGE:
+    return "NEIGHBOR_RTT_CHANGE";
+  case NeighborEventType::NEIGHBOR_RESTARTING:
+    return "NEIGHBOR_RESTARTING";
+  default:
+    return "UNKNOWN";
+  }
+}
+
 void
 setupThriftServerTls(
     apache::thrift::ThriftServer& thriftServer,
@@ -501,16 +519,6 @@ createPeerSpec(
   *peerSpec.peerAddr_ref() = peerAddr;
   peerSpec.ctrlPort_ref() = port;
   return peerSpec;
-}
-
-thrift::SparkNeighborEvent
-createSparkNeighborEvent(
-    thrift::SparkNeighborEventType eventType,
-    const thrift::SparkNeighbor& info) {
-  thrift::SparkNeighborEvent event;
-  event.eventType_ref() = eventType;
-  event.info_ref() = info;
-  return event;
 }
 
 thrift::SparkNeighbor

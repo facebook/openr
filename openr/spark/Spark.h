@@ -79,7 +79,7 @@ class Spark final : public OpenrEventBase {
   Spark(
       std::optional<int> ipTos,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
-      messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
+      messaging::ReplicateQueue<NeighborEvent>& nbrUpdatesQueue,
       KvStoreCmdPort kvStoreCmdPort,
       OpenrCtrlThriftPort openrCtrlThriftPort,
       std::shared_ptr<IoProvider> ioProvider,
@@ -409,7 +409,7 @@ class Spark final : public OpenrEventBase {
 
   // utility call to send SparkNeighborEvent
   void notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType type, thrift::SparkNeighbor const& info);
+      NeighborEventType type, thrift::SparkNeighbor const& info);
 
   // callback function for rtt change
   void processRttChange(
@@ -490,7 +490,7 @@ class Spark final : public OpenrEventBase {
       stateMap_;
 
   // Queue to publish neighbor events
-  messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue_;
+  messaging::ReplicateQueue<NeighborEvent>& neighborUpdatesQueue_;
 
   // this is used to inform peers about my kvstore tcp ports
   const uint16_t kKvStoreCmdPort_{0};
