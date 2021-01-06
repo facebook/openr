@@ -14,7 +14,7 @@
 
 #include <folly/Format.h>
 
-#include <openr/if/gen-cpp2/Dual_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 

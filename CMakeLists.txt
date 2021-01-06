@@ -96,14 +96,6 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_config_cpp2)
 
 add_fbthrift_cpp_library(
-  dual_cpp2
-  openr/if/Dual.thrift
-  OPTIONS
-    json
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} dual_cpp2)
-
-add_fbthrift_cpp_library(
   network_cpp2
   openr/if/Network.thrift
   OPTIONS
@@ -117,7 +109,7 @@ add_fbthrift_cpp_library(
   OPTIONS
     json
   DEPENDS
-    dual_cpp2
+    types_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} kv_store_cpp2)
 
@@ -221,7 +213,7 @@ add_fbthrift_cpp_library(
   DEPENDS
     openr_config_cpp2
     decision_cpp2
-    dual_cpp2
+    types_cpp2
     fib_cpp2
     kv_store_cpp2
     link_monitor_cpp2

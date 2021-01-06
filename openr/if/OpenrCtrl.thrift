@@ -16,7 +16,6 @@ namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
 include "fb303/thrift/fb303_core.thrift"
 include "Decision.thrift"
-include "Dual.thrift"
 include "Fib.thrift"
 include "KvStore.thrift"
 include "LinkMonitor.thrift"
@@ -24,6 +23,7 @@ include "Lsdb.thrift"
 include "Network.thrift"
 include "OpenrConfig.thrift"
 include "Spark.thrift"
+include "Types.thrift"
 
 exception OpenrError {
   1: string message
@@ -422,7 +422,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Send Dual message
    */
   void processKvStoreDualMessage(
-    1: Dual.DualMessages messages
+    1: Types.DualMessages messages
     2: string area
   ) throws (1: OpenrError error)
 

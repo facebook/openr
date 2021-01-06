@@ -14,7 +14,7 @@ namespace py3 openr.thrift
 namespace lua openr.KvStore
 namespace wiki Open_Routing.Thrift_APIs.KvStore
 
-include "Dual.thrift"
+include "Types.thrift"
 
 const string kDefaultArea = "0"
 
@@ -202,7 +202,7 @@ struct SptInfos {
   // map<root-id: SptInfo>
   1: SptInfoMap infos
   // all DUAL related counters
-  2: Dual.DualCounters counters
+  2: Types.DualCounters counters
   // current flood-root-id if any
   3: optional string floodRootId
   // current flooding peers
@@ -224,7 +224,7 @@ struct KvStoreRequest {
   2: optional KeySetParams keySetParams
   3: optional KeyGetParams keyGetParams
   6: optional KeyDumpParams keyDumpParams
-  9: optional Dual.DualMessages dualMessages
+  9: optional Types.DualMessages dualMessages
   10: optional FloodTopoSetParams floodTopoSetParams
 }
 
