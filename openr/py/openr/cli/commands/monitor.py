@@ -121,15 +121,15 @@ class StatisticsCmd(MonitorCmd):
                 ],
             },
             {
-                "title": "LinkMonitor Stats",
+                "title": "LinkMonitor/Spark Stats",
                 "counters": [
                     ("Adjacent Neighbors", "spark.num_adjacent_neighbors"),
                     ("Tracked Neighbors", "spark.num_tracked_neighbors"),
                 ],
                 "stats": [
                     ("Updates AdjDb", "link_monitor.advertise_adjacencies.sum"),
-                    ("Rcvd Hello Pkts", "spark.hello_packet_recv.sum"),
-                    ("Sent Hello Pkts", "spark.hello_packet_sent.sum"),
+                    ("Rcvd Hello Pkts", "spark.hello.packet_recv.sum"),
+                    ("Sent Hello Pkts", "spark.hello.packet_sent.sum"),
                 ],
             },
             {
@@ -139,7 +139,7 @@ class StatisticsCmd(MonitorCmd):
                     ("Updates AdjDbs", "decision.adj_db_update.count"),
                     ("Updates PrefixDbs", "decision.prefix_db_update.count"),
                     ("SPF Runs", "decision.spf_runs.count"),
-                    ("SPF Avg Duration (ms)", "decision.spf_duration.avg"),
+                    ("SPF Avg Duration (ms)", "decision.spf_ms.avg"),
                     ("Convergence Duration (ms)", "fib.convergence_time_ms.avg"),
                     ("Updates RouteDb", "fib.process_route_db.count"),
                     ("Full Route Sync", "fib.sync_fib_calls.count"),
@@ -155,24 +155,24 @@ class StatisticsCmd(MonitorCmd):
         Print in pretty format
         """
 
-        suffixes = ["60", "600", "3600", "0"]
+        suffixes = [".60", ".600", ".3600", ""]
 
         for template in stats_templates:
             counters_rows = []
             for title, key in template["counters"]:
                 val = counters.get(key, None)
-                counters_rows.append([title, "N/A" if not val else val])
+                counters_rows.append([title, "N/A" if not val and val != 0 else val])
 
             stats_cols = ["Stat", "1 min", "10 mins", "1 hour", "All Time"]
             stats_rows = []
             for title, key_prefix in template["stats"]:
                 row = [title]
-                for key in ["{}.{}".format(key_prefix, s) for s in suffixes]:
+                for key in ["{}{}".format(key_prefix, s) for s in suffixes]:
                     val = counters.get(key, None)
-                    row.append("N/A" if not val else val)
+                    row.append("N/A" if not val and val != 0 else val)
                 stats_rows.append(row)
 
-            print("> {} ".format(template["title"]))
+            print("\n> {} ".format(template["title"]))
             if counters_rows:
                 print()
                 print(
