@@ -8,7 +8,7 @@
 #pragma once
 
 #include <openr/if/gen-cpp2/FibService.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 

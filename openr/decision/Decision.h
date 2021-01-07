@@ -30,7 +30,6 @@
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
 #include <openr/decision/RouteUpdate.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>

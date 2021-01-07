@@ -21,9 +21,9 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/FibService.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/NeighborListenerClientForFibagent.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/nl/NetlinkTypes.h>
 

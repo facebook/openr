@@ -15,7 +15,6 @@ namespace lua openr.OpenrCtrl
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
 include "fb303/thrift/fb303_core.thrift"
-include "Fib.thrift"
 include "LinkMonitor.thrift"
 include "Lsdb.thrift"
 include "Network.thrift"
@@ -262,7 +261,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Get route database of the current node. It is retrieved from FIB module.
    */
-  Fib.RouteDatabase getRouteDb()
+  Types.RouteDatabase getRouteDb()
     throws (1: OpenrError error)
 
   /**
@@ -271,7 +270,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    *
    * NOTE: Current node's routes are returned if `nodeName` is empty.
    */
-  Fib.RouteDatabase getRouteDbComputed(1: string nodeName)
+  Types.RouteDatabase getRouteDbComputed(1: string nodeName)
     throws (1: OpenrError error)
 
   /**
@@ -312,7 +311,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * of Open/R.
    */
 
-  Fib.PerfDatabase getPerfDb()
+  Types.PerfDatabase getPerfDb()
     throws (1: OpenrError error)
 
   //

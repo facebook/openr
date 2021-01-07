@@ -24,7 +24,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import bunch
 import click
 from openr.clients.openr_client import get_openr_ctrl_client
-from openr.Fib import ttypes as fib_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as config_types
@@ -794,7 +793,7 @@ def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
     return thrift_to_dict(route, _update)
 
 
-def route_db_to_dict(route_db: fib_types.RouteDatabase) -> Dict[str, Any]:
+def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
     """
     Convert route from thrift instance into a dict in strings
     """
@@ -846,7 +845,7 @@ def print_routes_json(
 
 
 def print_route_db(
-    route_db: fib_types.RouteDatabase,
+    route_db: openr_types.RouteDatabase,
     prefixes: List[str] = None,
     labels: List[int] = None,
 ) -> None:
@@ -1717,7 +1716,7 @@ def get_routes_json(
 
 
 def get_routes(
-    route_db: fib_types.RouteDatabase,
+    route_db: openr_types.RouteDatabase,
 ) -> (List[network_types.UnicastRoute], List[network_types.MplsRoute]):
     """
     Find all routes for each prefix in routeDb

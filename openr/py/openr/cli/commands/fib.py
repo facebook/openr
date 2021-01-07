@@ -16,10 +16,10 @@ from typing import List, Optional
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
-from openr.Fib import ttypes as fib_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from thrift.py3.client import ClientType
 
@@ -341,7 +341,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
 
     def print_route_db_delta(
         self,
-        delta_db: fib_types.RouteDatabaseDelta,
+        delta_db: openr_types.RouteDatabaseDelta,
         prefixes: Optional[List[str]] = None,
     ) -> None:
         """ print the RouteDatabaseDelta from Fib module """
@@ -382,7 +382,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
 
     def print_route_db(
         self,
-        route_db: fib_types.RouteDatabase,
+        route_db: openr_types.RouteDatabase,
         prefixes: Optional[List[str]] = None,
         labels: Optional[List[int]] = None,
     ) -> None:

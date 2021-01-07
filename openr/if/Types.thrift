@@ -582,3 +582,79 @@ typedef map<string, Lsdb.AdjacencyDatabase>
 typedef map<string, Lsdb.PrefixDatabase>
   (cpp.type = "std::unordered_map<std::string, openr::thrift::PrefixDatabase>")
   PrefixDbs
+
+/**
+ * Represents complete route database that is or should be programmed in
+ * underlying platform.
+ */
+struct RouteDatabase {
+  /**
+   * Name of the node where these routes are to be programmed
+   * @deprecated - This is not useful field and should be removed
+   */
+  1: string thisNodeName
+
+  /**
+   * An ordered list of events that can be used to derive the convergence time
+   * @deprecated TODO - This should be removed in favor of perfEvents in
+   * RouteDatabaseDelta.
+   */
+  3: optional Lsdb.PerfEvents perfEvents;
+
+  /**
+   * IPv4 and IPv6 routes with forwarding information
+   */
+  4: list<Network.UnicastRoute> unicastRoutes
+
+  /**
+   * Label routes with forwarding information
+   */
+  5: list<Network.MplsRoute> mplsRoutes
+}
+
+/**
+ * Structure repesenting incremental changes to route database.
+ */
+struct RouteDatabaseDelta {
+  /**
+   * IPv4 or IPv6 routes to add or update
+   */
+  2: list<Network.UnicastRoute> unicastRoutesToUpdate
+
+  /**
+   * IPv4 or IPv6 routes to delete
+   */
+  3: list<Network.IpPrefix> unicastRoutesToDelete;
+
+  /**
+   * Label routes to add or update
+   */
+  4: list<Network.MplsRoute> mplsRoutesToUpdate
+
+  /**
+   * Label routes to delete
+   */
+  5: list<i32> mplsRoutesToDelete
+
+  /**
+   * An ordered list of events that leads to these route updates. It can be used
+   * to derive the convergence time
+   */
+  6: optional Lsdb.PerfEvents perfEvents;
+}
+
+/**
+ * Perf log buffer maintained by Fib
+ */
+struct PerfDatabase {
+  /**
+   * Name of local node.
+   * @deprecated TODO - This field is of no relevance
+   */
+  1: string thisNodeName
+
+  /**
+   * Ordered list of historical performance events in ascending order of time
+   */
+  2: list<Lsdb.PerfEvents> eventInfo
+}

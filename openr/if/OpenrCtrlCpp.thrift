@@ -9,7 +9,6 @@ namespace cpp2 openr.thrift
 namespace py3 openr.thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrlCpp
 
-include "openr/if/Fib.thrift"
 include "openr/if/OpenrCtrl.thrift"
 include "openr/if/Types.thrift"
 
@@ -47,5 +46,5 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
    * are also in snapshot.
    */
 
-  Fib.RouteDatabase, stream<Fib.RouteDatabaseDelta> subscribeAndGetFib()
+  Types.RouteDatabase, stream<Types.RouteDatabaseDelta> subscribeAndGetFib()
 }

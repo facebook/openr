@@ -13,9 +13,9 @@
 #include <thrift/lib/cpp2/Thrift.h>
 
 #include <openr/common/Constants.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace std {
 

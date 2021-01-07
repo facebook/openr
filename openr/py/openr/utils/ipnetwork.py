@@ -12,10 +12,10 @@ import ipaddress
 import socket
 from typing import List, Optional
 
-from openr.Fib import ttypes as fib_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types
+from openr.Types import ttypes as openr_types
 
 
 def sprint_addr(addr):
@@ -153,7 +153,7 @@ def routes_to_route_db(
     node: str,
     unicast_routes: Optional[List[network_types.UnicastRoute]] = None,
     mpls_routes: Optional[List[network_types.MplsRoute]] = None,
-) -> fib_types.RouteDatabase:
+) -> openr_types.RouteDatabase:
     """
     :param node: node name
     :param unicast_routes: list of unicast IP routes
@@ -162,7 +162,7 @@ def routes_to_route_db(
     unicast_routes = [] if unicast_routes is None else unicast_routes
     mpls_routes = [] if mpls_routes is None else mpls_routes
 
-    return fib_types.RouteDatabase(
+    return openr_types.RouteDatabase(
         thisNodeName=node, unicastRoutes=unicast_routes, mplsRoutes=mpls_routes
     )
 
