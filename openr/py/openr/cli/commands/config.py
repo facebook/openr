@@ -14,7 +14,6 @@ import click
 import jsondiff
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import OpenrError
@@ -122,10 +121,12 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        lm_config = deserialize_thrift_object(lm_config_blob, lm_types.LinkMonitorState)
+        lm_config = deserialize_thrift_object(
+            lm_config_blob, openr_types.LinkMonitorState
+        )
         self.print_config(lm_config)
 
-    def print_config(self, lm_config: lm_types.LinkMonitorState):
+    def print_config(self, lm_config: openr_types.LinkMonitorState):
         caption = "Link Monitor parameters stored"
         rows = []
         rows.append(

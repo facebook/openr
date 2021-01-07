@@ -338,7 +338,7 @@ class LinkMonitor final : public OpenrEventBase {
   // TODO: Get rid of mockMode_
   bool mockMode_{false};
 
-  // LinkMonitor config attributes (defined in LinkMonitor.thrift)
+  // LinkMonitor config attributes
   thrift::LinkMonitorState state_;
 
   // Queue to publish interface updates to fib/spark

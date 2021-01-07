@@ -658,3 +658,130 @@ struct PerfDatabase {
    */
   2: list<Lsdb.PerfEvents> eventInfo
 }
+
+/**
+ * Details about an interface in Open/R
+ */
+struct InterfaceDetails {
+  /**
+   * Interface information such as name and addresses
+   */
+  1: Lsdb.InterfaceInfo info
+
+  /**
+   * Overload or drain status of the interface
+   */
+  2: bool isOverloaded
+
+  /**
+   * All adjacencies over this interface will inherit this override metric if
+   * specified. Metric override is often used for soft draining of links.
+   * NOTE: This metric is directional. Override should ideally be also set on
+   * the other end of the interface.
+   */
+  3: optional i32 metricOverride
+
+  /**
+   * Backoff in milliseconds for this interface. Interface that flaps or goes
+   * crazy will get penalized with longer backoff. See link-backoff
+   * functionality in LinkMonitor documentation.
+   */
+  4: optional i64 linkFlapBackOffMs
+}
+
+/**
+ * Information of all links of this node
+ */
+struct DumpLinksReply {
+  /**
+   * @deprecated - Name of the node. This is no longer of any relevance.
+   */
+  1: string thisNodeName
+
+  /**
+   * Overload or drain status of the node.
+   */
+  3: bool isOverloaded
+
+  /**
+   * Details of all the interfaces on system.
+   */
+  6: map<string, InterfaceDetails>
+        (cpp.template = "std::unordered_map") interfaceDetails
+}
+
+/**
+ * Set of attributes to uniquely identify an adjacency. It is identified by
+ * (neighbor-node, local-interface) tuple.
+ * TODO: Move this to Types.cpp
+ */
+struct AdjKey {
+  /**
+   * Name of the neighbor node
+   */
+  1: string nodeName;
+
+  /**
+   * Name of local interface over which an adjacency is established
+   */
+  2: string ifName;
+}
+
+/**
+ * Struct to store internal override states for links (e.g. metric, overloaded
+ * state) etc. This is not currently exposed via any API
+ * TODO: Move this to Types.cpp
+ */
+struct LinkMonitorState {
+  /**
+   * Overload bit for Open-R. If set then this node is not available for
+   * transit traffic at all.
+   */
+  1: bool isOverloaded = 0;
+
+  /**
+   * Overloaded links. If set then no transit traffic will pass through the
+   * link and will be unreachable.
+   */
+  2: set<string> overloadedLinks;
+
+  /**
+   * Custom metric override for links. Can be leveraged to soft-drain interfaces
+   * with higher metric value.
+   */
+  3: map<string, i32> linkMetricOverrides;
+
+  /**
+   * Label allocated to node (via RangeAllocator). `0` indicates null value
+   */
+  4: i32 nodeLabel = 0;
+
+  /**
+   * Custom metric override for adjacency
+   */
+  5: map<AdjKey, i32> adjMetricOverrides;
+}
+
+/**
+ * Struct representing build information. Attributes are described in detail
+ * in `openr/common/BuildInfo.h`
+ */
+struct BuildInfo {
+  1: string buildUser;
+  2: string buildTime;
+  3: i64 buildTimeUnix;
+  4: string buildHost;
+  5: string buildPath;
+  6: string buildRevision;
+  7: i64 buildRevisionCommitTimeUnix;
+  8: string buildUpstreamRevision;
+  9: i64 buildUpstreamRevisionCommitTimeUnix;
+  10: string buildPackageName;
+  11: string buildPackageVersion;
+  12: string buildPackageRelease;
+  13: string buildPlatform;
+  14: string buildRule;
+  15: string buildType;
+  16: string buildTool;
+  17: string buildMode;
+}

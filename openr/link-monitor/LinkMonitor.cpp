@@ -13,8 +13,8 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/spark/Spark.h>
 

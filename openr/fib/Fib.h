@@ -19,7 +19,6 @@
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/FibService.h>
-#include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>

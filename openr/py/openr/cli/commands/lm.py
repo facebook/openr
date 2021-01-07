@@ -15,8 +15,8 @@ from typing import Any, Dict, List
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.LinkMonitor import ttypes as lm_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 
 
@@ -91,7 +91,7 @@ class LMCmdBase(OpenrCtrlCmd):
         print("Successfully {} for the interface.\n".format(action))
 
     def check_link_overriden(
-        self, links: lm_types.DumpLinksReply, interface: str, metric: int
+        self, links: openr_types.DumpLinksReply, interface: str, metric: int
     ) -> bool:
         """
         This function call will comapre the metricOverride in the following way:

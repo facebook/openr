@@ -15,7 +15,6 @@ namespace lua openr.OpenrCtrl
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
 include "fb303/thrift/fb303_core.thrift"
-include "LinkMonitor.thrift"
 include "Lsdb.thrift"
 include "Network.thrift"
 include "OpenrConfig.thrift"
@@ -496,7 +495,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Get the current link status information
    */
-  LinkMonitor.DumpLinksReply getInterfaces() throws (1: OpenrError error)
+  Types.DumpLinksReply getInterfaces() throws (1: OpenrError error)
 
   /**
    * Get the current adjacencies information, only works for nodes with one
@@ -523,7 +522,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Command to request build information
    * @deprecated - instead use getRegexExportedValues("build.*") API
    */
-  LinkMonitor.BuildInfo getBuildInfo() throws (1: OpenrError error)
+  Types.BuildInfo getBuildInfo() throws (1: OpenrError error)
 
   //
   // PersistentStore APIs (query / alter dynamic configuration)
