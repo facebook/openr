@@ -26,7 +26,6 @@
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/link-monitor/InterfaceEntry.h>

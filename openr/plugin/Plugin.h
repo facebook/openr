@@ -15,7 +15,6 @@
 #include <openr/common/Types.h>
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
-#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/messaging/Queue.h>
 #include <openr/messaging/ReplicateQueue.h>

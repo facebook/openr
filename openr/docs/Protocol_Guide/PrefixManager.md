@@ -9,7 +9,7 @@ the node and advertising them into the network via KvStore.
 
 For more information about message formats, checkout
 
-- [if/PrefixManager.thrift](https://github.com/facebook/openr/blob/master/openr/if/PrefixManager.thrift)
+- [if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
 - [if/Lsdb.thrift](https://github.com/facebook/openr/blob/master/openr/if/Lsdb.thrift)
 
 ## Inter Module Communication

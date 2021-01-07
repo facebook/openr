@@ -19,7 +19,7 @@
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
-#include <openr/if/gen-cpp2/PrefixManager_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/Queue.h>
 

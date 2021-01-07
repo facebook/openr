@@ -15,6 +15,7 @@ namespace wiki Open_Routing.Thrift_APIs.Types
 
 include "Network.thrift"
 include "Lsdb.thrift"
+include "OpenrConfig.thrift"
 
 /**
  * Default area constant. This is relevant only during the course of transition
@@ -784,4 +785,25 @@ struct BuildInfo {
   15: string buildType;
   16: string buildTool;
   17: string buildMode;
+}
+
+/**
+ * Struct to represent originated prefix from PrefixManager's view
+ */
+struct OriginatedPrefixEntry {
+  /**
+   * Originating prefix information from config
+   */
+  1: OpenrConfig.OriginatedPrefix prefix
+
+  /**
+   * List of supporting sub-prefixes for this route
+   */
+  2: list<string> supporting_prefixes = {}
+
+  /**
+   * Is this route installed in local FIB or not. Route is installed with the
+   * drop next-hops.
+   */
+  3: bool installed = 0
 }

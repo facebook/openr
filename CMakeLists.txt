@@ -146,20 +146,9 @@ add_fbthrift_cpp_library(
   DEPENDS
     lsdb_cpp2
     network_cpp2
+    openr_config_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} types_cpp2)
-
-add_fbthrift_cpp_library(
-  prefix_manager_cpp2
-  openr/if/PrefixManager.thrift
-  OPTIONS
-    json
-  DEPENDS
-    openr_config_cpp2
-    lsdb_cpp2
-    network_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} prefix_manager_cpp2)
 
 add_fbthrift_cpp_library(
   openr_ctrl_cpp2

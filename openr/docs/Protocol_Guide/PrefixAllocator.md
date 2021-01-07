@@ -27,7 +27,7 @@ There are three ways you can configure PrefixAllocator to achieve prefix
 allocation, assignment as well advertisement.
 
 Checkout `PrefixAllocationConfig` in
-[if/OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/PrefixManager.thrift)
+[if/OpenrConfig.thrift](https://github.com/facebook/openr/blob/master/openr/if/OpenrConfig.thrift)
 for more details on configuration.
 
 Common configuration options for enabling prefix allocator is as below
