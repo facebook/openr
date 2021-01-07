@@ -119,7 +119,8 @@ getOpenrCtrlSecureClient(
     const std::shared_ptr<folly::SSLContext> sslContext,
     const folly::IPAddress& addr,
     int32_t port = Constants::kOpenrCtrlPort,
-    std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
+    std::chrono::milliseconds connectTimeout =
+        Constants::kServiceConnSSLTimeout,
     std::chrono::milliseconds processingTimeout =
         Constants::kServiceProcTimeout,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),

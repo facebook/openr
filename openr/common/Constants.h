@@ -162,6 +162,7 @@ class Constants {
   static constexpr std::chrono::milliseconds kPlatformRoutesProcTimeout{20000};
   static constexpr std::chrono::milliseconds kPlatformIntfProcTimeout{1000};
   static constexpr std::chrono::milliseconds kServiceConnTimeout{500};
+  static constexpr std::chrono::milliseconds kServiceConnSSLTimeout{1000};
   static constexpr std::chrono::milliseconds kServiceProcTimeout{20000};
 
   // time interval to sync between Open/R and Platform

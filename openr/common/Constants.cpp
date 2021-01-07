@@ -67,6 +67,7 @@ constexpr std::chrono::milliseconds Constants::kPrefixMgrKvThrottleTimeout;
 constexpr std::chrono::milliseconds Constants::kRangeAllocTtl;
 constexpr std::chrono::milliseconds Constants::kReadTimeout;
 constexpr std::chrono::milliseconds Constants::kServiceConnTimeout;
+constexpr std::chrono::milliseconds Constants::kServiceConnSSLTimeout;
 constexpr std::chrono::milliseconds Constants::kServiceProcTimeout;
 constexpr std::chrono::milliseconds Constants::kTtlDecrement;
 constexpr std::chrono::milliseconds Constants::kTtlInfInterval;
