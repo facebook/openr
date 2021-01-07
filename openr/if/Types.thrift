@@ -14,6 +14,7 @@ namespace lua openr.Types
 namespace wiki Open_Routing.Thrift_APIs.Types
 
 include "Network.thrift"
+include "Lsdb.thrift"
 
 /**
  * Default area constant. This is relevant only during the course of transition
@@ -562,3 +563,22 @@ struct StaticAllocation {
    */
   1: map<string /* node-name */, Network.IpPrefix> nodePrefixes;
 }
+
+/**
+ * @deprecated - Map of node name to adjacency database. This is deprecated
+ * and should go away once area migration is complete.
+ */
+typedef map<string, Lsdb.AdjacencyDatabase>
+  (
+    cpp.type =
+    "std::unordered_map<std::string, openr::thrift::AdjacencyDatabase>"
+  ) AdjDbs
+
+/**
+ * @deprecated - Map of node name to adjacency database. This is deprecated
+ * in favor of `received-routes` and `advertised-routes` and should go away
+ * once area migration is complete.
+ */
+typedef map<string, Lsdb.PrefixDatabase>
+  (cpp.type = "std::unordered_map<std::string, openr::thrift::PrefixDatabase>")
+  PrefixDbs

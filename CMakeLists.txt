@@ -110,7 +110,6 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     openr_config_cpp2
-    types_cpp2
     network_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} lsdb_cpp2)
@@ -167,6 +166,7 @@ add_fbthrift_cpp_library(
   OPTIONS
     json
   DEPENDS
+    lsdb_cpp2
     network_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} types_cpp2)
@@ -184,16 +184,6 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} prefix_manager_cpp2)
 
 add_fbthrift_cpp_library(
-  decision_cpp2
-  openr/if/Decision.thrift
-  OPTIONS
-    json
-  DEPENDS
-    lsdb_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} decision_cpp2)
-
-add_fbthrift_cpp_library(
   openr_ctrl_cpp2
   openr/if/OpenrCtrl.thrift
   SERVICES
@@ -202,7 +192,6 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     openr_config_cpp2
-    decision_cpp2
     types_cpp2
     fib_cpp2
     link_monitor_cpp2

@@ -15,7 +15,6 @@ namespace lua openr.OpenrCtrl
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
 include "fb303/thrift/fb303_core.thrift"
-include "Decision.thrift"
 include "Fib.thrift"
 include "LinkMonitor.thrift"
 include "Lsdb.thrift"
@@ -327,7 +326,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * only selects default area adj DBs. Deprecated, perfer
    * getDecisionAdjacenciesFiltered()
    */
-  Decision.AdjDbs getDecisionAdjacencyDbs() throws (1: OpenrError error)
+  Types.AdjDbs getDecisionAdjacencyDbs() throws (1: OpenrError error)
 
 
   /**
@@ -346,7 +345,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    *
    * DEPRECATED. Prefer getReceivedRoutes APIs
    */
-  Decision.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error)
+  Types.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error)
 
 
   //
