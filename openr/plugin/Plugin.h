@@ -22,7 +22,7 @@
 
 namespace openr {
 struct PluginArgs {
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue;
+  messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue;
   messaging::ReplicateQueue<openr::thrift::RouteDatabaseDelta>&
       staticRoutesUpdateQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue;

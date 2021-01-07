@@ -34,7 +34,7 @@ class PrefixManager final : public OpenrEventBase {
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
           staticRoutesUpdateQueue,
       // consumer queue
-      messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
+      messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
       // config
       std::shared_ptr<const Config> config,
@@ -131,7 +131,7 @@ class PrefixManager final : public OpenrEventBase {
    *
    * Called upon:
    * - public write APIs
-   * - request from PrefixUpdateRequest
+   * - request from replicate queue
    *
    * modify prefix db and schedule syncKvStoreThrottled_ to update kvstore
    * @return true if the db is modified

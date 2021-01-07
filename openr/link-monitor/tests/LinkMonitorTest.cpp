@@ -559,7 +559,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{

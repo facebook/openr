@@ -468,10 +468,8 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::addPrefixEntries(
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  thrift::PrefixUpdateRequest request;
-  request.cmd_ref() = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-  *request.prefixes_ref() = prefixes;
-  prefixUpdatesQueue_.push(std::move(request));
+  PrefixEvent event(PrefixEventType::ADD_PREFIXES, std::nullopt, prefixes);
+  prefixUpdatesQueue_.push(std::move(event));
   return true;
 }
 
@@ -479,10 +477,8 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::withdrawPrefixEntries(
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  thrift::PrefixUpdateRequest request;
-  request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
-  *request.prefixes_ref() = prefixes;
-  prefixUpdatesQueue_.push(std::move(request));
+  PrefixEvent event(PrefixEventType::WITHDRAW_PREFIXES, std::nullopt, prefixes);
+  prefixUpdatesQueue_.push(std::move(event));
   return true;
 }
 

@@ -24,19 +24,18 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
   event update and asynchronously update interface database to inform `Spark` to
   start/stop neighbor discovery on the updated interfaces.
 
-- `[Producer] ReplicateQueue<thrift::PrefixUpdateRequest>`: populate
-  redistributed interface information from `OpenrConfig` and inject interface
-  address information to `PrefixManager`, which is responsible for injecting
-  prefixes into `KvStore` for propagation.
+- `[Producer] ReplicateQueue<PrefixEvent>`: populate redistributed interface
+  information from `OpenrConfig` and inject interface address information to
+  `PrefixManager`, which is responsible for injecting prefixes into `KvStore`
+  for propagation.
 
 - `[Producer] ReplicateQueue<thrift::PeerUpdateRequest>`: populates **PEER
   SPEC** information to `KvStore` for peer session establishment over TCP
   connection.
 
-- `[Consumer] RQueue<thrift::SparkNeighborEvent>`: receive neighbor update sent
-  from `Spark` for adjacency updates. Events include neighbor
-  UP/DOWN/RESTART/RTT-CHANGE. This info will finally lead to **PEER SPEC**
-  propagation towards `KvStore`.
+- `[Consumer] RQueue<NeighborEvent>`: receive neighbor update sent from `Spark`
+  for adjacency updates. Events include neighbor UP/DOWN/RESTART/RTT-CHANGE.
+  This info will finally lead to **PEER SPEC** propagation towards `KvStore`.
 
 - `[Consumer] RQueue<fbnl::NetlinkEvent>`: receive `Netlink` event from
   underneath platform to add/delete/update interface information, which further

@@ -28,7 +28,7 @@ PrefixAllocator::PrefixAllocator(
     fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
     PersistentStore* configStore,
-    messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
+    messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     std::chrono::milliseconds syncInterval)
     : myNodeName_(config->getNodeName()),
@@ -640,11 +640,11 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
     metrics.source_preference_ref() = Constants::kDefaultSourcePreference;
   }
 
-  thrift::PrefixUpdateRequest request;
-  request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-  request.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
-  *request.prefixes_ref() = {prefixEntry};
-  prefixUpdatesQueue_.push(std::move(request));
+  PrefixEvent event(
+      PrefixEventType::SYNC_PREFIXES_BY_TYPE,
+      thrift::PrefixType::PREFIX_ALLOCATOR,
+      {prefixEntry});
+  prefixUpdatesQueue_.push(std::move(event));
 
   // existing global prefixes
   std::vector<folly::CIDRNetwork> oldPrefixes{};
@@ -762,11 +762,11 @@ PrefixAllocator::withdrawMyPrefix() {
     }
   }
 
-  // withdraw prefix via prefixMgrClient
-  thrift::PrefixUpdateRequest request;
-  request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
-  request.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
-  prefixUpdatesQueue_.push(std::move(request));
+  // withdraw prefix via replicate queue
+  PrefixEvent event(
+      PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE,
+      thrift::PrefixType::PREFIX_ALLOCATOR);
+  prefixUpdatesQueue_.push(std::move(event));
 }
 
 folly::SemiFuture<folly::Unit>

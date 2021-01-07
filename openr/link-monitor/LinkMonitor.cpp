@@ -65,7 +65,7 @@ LinkMonitor::LinkMonitor(
     PersistentStore* configStore,
     bool enablePerfMeasurement,
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
-    messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
+    messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
@@ -744,15 +744,13 @@ LinkMonitor::advertiseRedistAddrs() {
   }
 
   for (auto& [areaId, _] : areas_) {
-    // Advertise via prefix manager client
-    thrift::PrefixUpdateRequest request;
-    request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-    request.type_ref() = openr::thrift::PrefixType::LOOPBACK;
-    // default construct syncing empty set if we found nothing
-    request.prefixes_ref() = std::move(areaPrefixes[areaId]);
-    request.dstAreas_ref() = {areaId};
+    PrefixEvent event(
+        PrefixEventType::SYNC_PREFIXES_BY_TYPE,
+        thrift::PrefixType::LOOPBACK,
+        std::move(areaPrefixes[areaId]),
+        {areaId});
     // publish prefixes to prefix manager
-    prefixUpdatesQueue_.push(std::move(request));
+    prefixUpdatesQueue_.push(std::move(event));
   }
 }
 

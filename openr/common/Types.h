@@ -50,7 +50,7 @@ BOOST_STRONG_TYPEDEF(std::string, AreaId);
 
 /**
  * Structure defining neighbor event, which consists of:
- *  - Type (ENUM)
+ *  - Event Type (ENUM)
  *  - Info (Thrift struct)
  *
  * NeighborEvent is used uni-directionally from
@@ -74,6 +74,37 @@ struct NeighborEvent {
   NeighborEvent(
       const NeighborEventType& eventType, const thrift::SparkNeighbor& info)
       : eventType(eventType), info(info) {}
+};
+
+/**
+ * Structure defining prefix update event, which consists of:
+ *  - Event Type (ENUM)
+ *  - Prefix Type (ENUM)
+ *  - prefixes: a vector of thrift::PrefixEntry
+ *  - dstAreas: a set of string indicating destination areas
+ */
+enum class PrefixEventType {
+  ADD_PREFIXES = 1,
+  WITHDRAW_PREFIXES = 2,
+  WITHDRAW_PREFIXES_BY_TYPE = 3,
+  SYNC_PREFIXES_BY_TYPE = 4,
+};
+
+struct PrefixEvent {
+  PrefixEventType eventType;
+  std::optional<thrift::PrefixType> type;
+  std::vector<thrift::PrefixEntry> prefixes;
+  std::unordered_set<std::string> dstAreas;
+
+  explicit PrefixEvent(
+      const PrefixEventType& eventType,
+      const std::optional<thrift::PrefixType>& type = std::nullopt,
+      const std::vector<thrift::PrefixEntry>& prefixes = {},
+      const std::unordered_set<std::string>& dstAreas = {})
+      : eventType(eventType),
+        type(type),
+        prefixes(prefixes),
+        dstAreas(dstAreas) {}
 };
 
 /**

@@ -25,7 +25,7 @@ namespace openr {
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
         staticRouteUpdatesQueue,
-    messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
+    messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
     KvStore* kvStore,
@@ -64,52 +64,46 @@ PrefixManager::PrefixManager(
       });
 
   // Schedule fiber to read prefix updates messages
-  addFiberTask(
-      [q = std::move(prefixUpdateRequestQueue), this]() mutable noexcept {
-        while (true) {
-          auto maybeUpdate = q.get(); // perform read
-          if (maybeUpdate.hasError()) {
-            LOG(INFO) << "Terminating prefix update request processing fiber";
-            break;
-          }
+  addFiberTask([q = std::move(prefixUpdatesQueue), this]() mutable noexcept {
+    while (true) {
+      auto maybeUpdate = q.get(); // perform read
+      if (maybeUpdate.hasError()) {
+        LOG(INFO) << "Terminating prefix update request processing fiber";
+        break;
+      }
+      auto& update = maybeUpdate.value();
 
-          auto& update = maybeUpdate.value();
-          VLOG(2) << "Received request from client "
-                  << toString(*update.type_ref());
-
-          // if no specified dstination areas, apply to all areas
-          std::unordered_set<std::string> dstAreas;
-          if (update.dstAreas_ref()->empty()) {
-            dstAreas = allAreas_;
-          } else {
-            for (const auto& area : *update.dstAreas_ref()) {
-              dstAreas.emplace(area);
-            }
-          }
-
-          switch (*update.cmd_ref()) {
-          case thrift::PrefixUpdateCommand::ADD_PREFIXES:
-            advertisePrefixesImpl(*update.prefixes_ref(), dstAreas);
-            break;
-          case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES:
-            withdrawPrefixesImpl(*update.prefixes_ref());
-            break;
-          case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE:
-            CHECK(update.type_ref().has_value());
-            withdrawPrefixesByTypeImpl(update.type_ref().value());
-            break;
-          case thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE:
-            CHECK(update.type_ref().has_value());
-            syncPrefixesByTypeImpl(
-                update.type_ref().value(), *update.prefixes_ref(), dstAreas);
-            break;
-          default:
-            LOG(FATAL) << "Unknown command received. "
-                       << static_cast<int>(*update.cmd_ref());
-            break;
-          }
+      // if no specified dstination areas, apply to all areas
+      std::unordered_set<std::string> dstAreas;
+      if (update.dstAreas.empty()) {
+        dstAreas = allAreas_;
+      } else {
+        for (const auto& area : update.dstAreas) {
+          dstAreas.emplace(area);
         }
-      });
+      }
+
+      switch (update.eventType) {
+      case PrefixEventType::ADD_PREFIXES:
+        advertisePrefixesImpl(update.prefixes, dstAreas);
+        break;
+      case PrefixEventType::WITHDRAW_PREFIXES:
+        withdrawPrefixesImpl(update.prefixes);
+        break;
+      case PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE:
+        CHECK(update.type.has_value());
+        withdrawPrefixesByTypeImpl(update.type.value());
+        break;
+      case PrefixEventType::SYNC_PREFIXES_BY_TYPE:
+        CHECK(update.type.has_value());
+        syncPrefixesByTypeImpl(update.type.value(), update.prefixes, dstAreas);
+        break;
+      default:
+        LOG(ERROR) << "Unknown command received. "
+                   << static_cast<int>(update.eventType);
+      }
+    }
+  });
 
   // Fiber to process route updates from Decision
   addFiberTask(

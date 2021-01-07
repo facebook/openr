@@ -277,7 +277,7 @@ main(int argc, char** argv) {
   ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
-  ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdateRequestQueue;
+  ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
@@ -414,7 +414,7 @@ main(int argc, char** argv) {
       "PrefixManager",
       std::make_unique<PrefixManager>(
           staticRoutesUpdateQueue,
-          prefixUpdateRequestQueue.getReader(),
+          prefixUpdatesQueue.getReader(),
           routeUpdatesQueue.getReader(),
           config,
           kvStore,
@@ -434,7 +434,7 @@ main(int argc, char** argv) {
             nlSock.get(),
             kvStore,
             configStore,
-            prefixUpdateRequestQueue,
+            prefixUpdatesQueue,
             logSampleQueue,
             Constants::kPrefixAllocatorSyncInterval));
   }
@@ -467,7 +467,7 @@ main(int argc, char** argv) {
           configStore,
           FLAGS_enable_perf_measurement,
           interfaceUpdatesQueue,
-          prefixUpdateRequestQueue,
+          prefixUpdatesQueue,
           peerUpdatesQueue,
           logSampleQueue,
           neighborUpdatesQueue.getReader(),
@@ -502,7 +502,7 @@ main(int argc, char** argv) {
 
   // Create bgp speaker module
   if (config->isBgpPeeringEnabled()) {
-    pluginStart(PluginArgs{prefixUpdateRequestQueue,
+    pluginStart(PluginArgs{prefixUpdatesQueue,
                            staticRoutesUpdateQueue,
                            routeUpdatesQueue.getReader(),
                            config,
@@ -622,7 +622,7 @@ main(int argc, char** argv) {
   peerUpdatesQueue.close();
   neighborUpdatesQueue.close();
   kvStoreSyncEventsQueue.close();
-  prefixUpdateRequestQueue.close();
+  prefixUpdatesQueue.close();
   kvStoreUpdatesQueue.close();
   staticRoutesUpdateQueue.close();
   fibUpdatesQueue.close();

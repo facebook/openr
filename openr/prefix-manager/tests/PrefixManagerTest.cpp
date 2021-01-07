@@ -151,7 +151,7 @@ class PrefixManagerTestFixture : public testing::Test {
   std::thread evlThread;
 
   // Queue for publishing entries to PrefixManager
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRouteUpdatesQueue;
 
@@ -939,10 +939,11 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // ADD_PREFIXES
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd_ref() = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-    *request.prefixes_ref() = {prefixEntry1, prefixEntry7};
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::ADD_PREFIXES,
+        std::nullopt,
+        {prefixEntry1, prefixEntry7});
+    prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
     recvPublication(2);
@@ -957,10 +958,9 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // WITHDRAW_PREFIXES_BY_TYPE
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
-    request.type_ref() = thrift::PrefixType::BGP;
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE, thrift::PrefixType::BGP);
+    prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
     recvPublication(1);
@@ -974,11 +974,11 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // SYNC_PREFIXES_BY_TYPE
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd_ref() = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-    request.type_ref() = thrift::PrefixType::DEFAULT;
-    *request.prefixes_ref() = {prefixEntry3};
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::SYNC_PREFIXES_BY_TYPE,
+        thrift::PrefixType::DEFAULT,
+        {prefixEntry3});
+    prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
     recvPublication(2);
@@ -992,10 +992,9 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // WITHDRAW_PREFIXES
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd_ref() = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
-    *request.prefixes_ref() = {prefixEntry3};
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES, std::nullopt, {prefixEntry3});
+    prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
     recvPublication(1);
@@ -1015,12 +1014,12 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
   //
   auto const prefix = toIpPrefix("10.0.0.0/8");
   {
-    thrift::PrefixUpdateRequest request;
-    request.cmd_ref() = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-    request.prefixes_ref() = std::vector<thrift::PrefixEntry>(
+    PrefixEvent event(
+        PrefixEventType::ADD_PREFIXES,
+        std::nullopt,
         {createPrefixEntry(prefix, thrift::PrefixType::DEFAULT),
          createPrefixEntry(prefix, thrift::PrefixType::LOOPBACK)});
-    prefixUpdatesQueue.push(std::move(request));
+    prefixUpdatesQueue.push(std::move(event));
   }
 
   //

@@ -15,8 +15,8 @@ fed into the system for KvStore database synchronization, and SPF Computation.
 
 ![Spark Intermodule Communication](https://user-images.githubusercontent.com/51382140/90570487-a33ec300-e164-11ea-84ca-98485a646157.png)
 
-- `[Producer] ReplicateQueue<thrift::SparkNeighborEvent>`: sends out neighbor
-  event via `NeighborUpdatesQueue` to `LinkMonitor`, which includes:
+- `[Producer] ReplicateQueue<NeighborEvent>`: sends out neighbor event via
+  `NeighborUpdatesQueue` to `LinkMonitor`, which includes:
   `UP`/`DOWN`/`RESTART`/`RTT-CHANGE` events.
 
 - `[Consumer] RQueue<thrift::InterfaceDatabase>`: receives interface database

@@ -42,7 +42,7 @@ class PrefixAllocator : public OpenrEventBase {
       KvStore* kvStore,
       PersistentStore* configStore,
       // producer queue
-      messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
+      messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQ,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       std::chrono::milliseconds syncInterval);
 
@@ -191,8 +191,8 @@ class PrefixAllocator : public OpenrEventBase {
   // RangAlloctor to get unique prefix index for this node
   std::unique_ptr<RangeAllocator<uint32_t>> rangeAllocator_;
 
-  // Queue to send prefix update request to PrefixManager
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue_;
+  // Queue to send prefix event to PrefixManager
+  messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue_;
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;

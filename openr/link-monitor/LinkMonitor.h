@@ -107,7 +107,7 @@ class LinkMonitor final : public OpenrEventBase {
       bool enablePerfMeasurement,
       // producer queue
       messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
-      messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
+      messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
       messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // consumer queue
@@ -345,7 +345,7 @@ class LinkMonitor final : public OpenrEventBase {
   messaging::ReplicateQueue<thrift::InterfaceDatabase>& interfaceUpdatesQueue_;
 
   // Queue to publish prefix updates to PrefixManager
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue_;
+  messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue_;
 
   // Queue to publish peer updates to KvStore
   messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue_;
