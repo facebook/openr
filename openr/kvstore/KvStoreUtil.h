@@ -11,8 +11,8 @@
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 namespace openr {

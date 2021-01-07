@@ -103,7 +103,7 @@ dumpKvStoreKeys(thrift::KeyDumpParams keyDumpParams,
 
 For more information about `KvStore` parameters, check out
 
-- [if/KvStore.thrift](https://github.com/facebook/openr/blob/master/openr/if/KvStore.thrift)
+- [if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
 
 ### KvStore Sync via Thrift
 

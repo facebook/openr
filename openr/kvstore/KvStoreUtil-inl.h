@@ -6,7 +6,7 @@
  */
 
 #include <openr/common/OpenrClient.h>
-#include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {

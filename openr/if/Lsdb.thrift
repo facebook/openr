@@ -15,7 +15,6 @@ namespace lua openr.Lsdb
 namespace wiki Open_Routing.Thrift_APIs.Lsdb
 
 include "Network.thrift"
-include "KvStore.thrift"
 include "OpenrConfig.thrift"
 
 //

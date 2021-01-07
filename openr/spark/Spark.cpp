@@ -24,7 +24,7 @@
 #include <openr/common/EventLogger.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/spark/Spark.h>
 
 #include <thrift/lib/cpp/protocol/TProtocolException.h>
@@ -1506,8 +1506,8 @@ Spark::processHandshakeMsg(
   if (neighbor.area != *handshakeMsg.area_ref() ||
       myDomainName_ != neighbor.domainName) {
     bool mismatch = true;
-    if (handshakeMsg.get_area() == thrift::KvStore_constants::kDefaultArea() ||
-        neighbor.area == thrift::KvStore_constants::kDefaultArea()) {
+    if (handshakeMsg.get_area() == thrift::Types_constants::kDefaultArea() ||
+        neighbor.area == thrift::Types_constants::kDefaultArea()) {
       fb303::fbData->addStatValue(
           "spark.hello.default_area_rcvd", 1, fb303::SUM);
       // for backward compatibility: if the peer is still advertising

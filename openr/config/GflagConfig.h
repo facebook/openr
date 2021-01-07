@@ -13,8 +13,8 @@
 #include <openr/common/Flags.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
 
 // RSW Confed AS base
 constexpr int32_t kRswConfedBase = 2000;

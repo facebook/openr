@@ -6,7 +6,7 @@
  */
 
 #include "openr/common/Flags.h"
-#include <openr/if/gen-cpp2/KvStore_constants.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
 
 DEFINE_string(
     config_store_filepath,
@@ -108,7 +108,7 @@ DEFINE_int32(
 DEFINE_bool(enable_plugin, false, "Enable plugin module");
 DEFINE_string(
     areas,
-    openr::thrift::KvStore_constants::kDefaultArea(),
+    openr::thrift::Types_constants::kDefaultArea(),
     "Comma separated list of areas name specified as string");
 DEFINE_int32(
     fib_handler_port,

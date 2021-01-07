@@ -46,7 +46,7 @@ main(int argc, char* argv[]) {
   thrift::RibRouteActionWeight actionWeight;
   actionWeight.default_weight_ref() = FLAGS_default_weight;
   actionWeight.area_to_weight_ref()->emplace(
-      thrift::KvStore_constants::kDefaultArea(), FLAGS_area0_weight);
+      thrift::Types_constants::kDefaultArea(), FLAGS_area0_weight);
   // Parse neighbor->weight map and insert into the policy statement
   std::vector<std::string> neighborWeights;
   folly::split(",", FLAGS_neighbor_weight, neighborWeights, true);

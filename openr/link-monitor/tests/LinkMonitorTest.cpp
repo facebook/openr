@@ -22,8 +22,8 @@
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/prefix-manager/PrefixManager.h>

@@ -32,11 +32,11 @@
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
-#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>
 

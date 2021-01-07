@@ -664,7 +664,7 @@ TEST(ConfigTest, LinkMonitorGetter) {
   // check to see the link monitor options got converted to an area config with
   // domainName
   auto const& domainNameArea =
-      config.getAreas().at(thrift::KvStore_constants::kDefaultArea());
+      config.getAreas().at(thrift::Types_constants::kDefaultArea());
   EXPECT_TRUE(domainNameArea.shouldDiscoverOnIface("fboss10"));
   EXPECT_FALSE(domainNameArea.shouldDiscoverOnIface("eth0"));
 

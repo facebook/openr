@@ -10,9 +10,9 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
-#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {

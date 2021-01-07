@@ -720,7 +720,7 @@ Fib::logPerfEvents(
           localDuration->count(),
           fb303::AVG);
       kvStoreClient_->persistKey(
-          AreaId{openr::thrift::KvStore_constants::kDefaultArea()},
+          AreaId{openr::thrift::Types_constants::kDefaultArea()},
           Constants::kFibTimeMarker.toString() + myNodeName_,
           std::to_string(fb303::fbData->getCounters().at(
               "fib.local_route_program_time_ms.avg.60")),

@@ -39,7 +39,7 @@ const int ifIndex3{3};
 const std::string area1{"area1"};
 const std::string area2{"area2"};
 const std::string area3{"area3"};
-const std::string defaultArea{thrift::KvStore_constants::kDefaultArea()};
+const std::string defaultArea{thrift::Types_constants::kDefaultArea()};
 
 const folly::CIDRNetwork ip1V4 =
     folly::IPAddress::createNetwork("192.168.0.1", 24, false /* apply mask */);
@@ -1473,7 +1473,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
       nodeName1,
       kDomainName,
       {createAreaConfig(
-          thrift::KvStore_constants::kDefaultArea(), {".*"}, {".*"})});
+          thrift::Types_constants::kDefaultArea(), {".*"}, {".*"})});
   auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);

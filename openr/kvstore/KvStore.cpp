@@ -501,8 +501,8 @@ KvStore::getAreaDbOrThrow(
     // TODO: migration workaround => if me/peer does is using default area,
     // always honor my config, ignore peer's config.
     if (kvStoreDb_.size() == 1 and
-        (kvStoreDb_.count(openr::thrift::KvStore_constants::kDefaultArea()) or
-         areaId == openr::thrift::KvStore_constants::kDefaultArea())) {
+        (kvStoreDb_.count(openr::thrift::Types_constants::kDefaultArea()) or
+         areaId == openr::thrift::Types_constants::kDefaultArea())) {
       LOG(INFO) << "Falling back to my single area: "
                 << kvStoreDb_.begin()->first;
       fb303::fbData->addStatValue(

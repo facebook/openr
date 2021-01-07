@@ -23,15 +23,14 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import bunch
 import hexdump
-import openr.thrift.KvStore.types as _openr_thrift_KvStore_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
-from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types import types as openr_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing, serializer
 from openr.utils.consts import Consts
@@ -102,7 +101,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         parse dumped publication
 
         @param: container - Any: container to store the generated data
-        @param: publication - kv_store_types.Publication: the publication for parsing
+        @param: publication - openr_types.Publication: the publication for parsing
         @param: nodes - set: the set of nodes for parsing
         @param: parse_func - function: the parsing function
         """
@@ -119,7 +118,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
         node_dict = {}
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
-        resp = kv_store_types.Publication()
+        resp = openr_types.Publication()
         if not self.area_feature:
             resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         else:
@@ -175,13 +174,13 @@ class KvPrefixesCmd(KvStoreCmdBase):
 
     def print_prefix(
         self,
-        resp: Dict[str, kv_store_types.Publication],
+        resp: Dict[str, openr_types.Publication],
         nodes: set,
         json: bool,
         prefix: str,
         client_type: str,
     ):
-        all_kv = kv_store_types.Publication()
+        all_kv = openr_types.Publication()
         all_kv.keyVals = {}
         for _, val in resp.items():
             all_kv.keyVals.update(val.keyVals)
@@ -231,7 +230,7 @@ class KvKeysCmd(KvStoreCmdBase):
         self.print_kvstore_keys({None: resp}, ttl, json)
 
     def print_kvstore_keys(
-        self, resp: Dict[str, kv_store_types.Publication], ttl: bool, json: bool
+        self, resp: Dict[str, openr_types.Publication], ttl: bool, json: bool
     ) -> None:
         """ print keys from raw publication from KvStore"""
 
@@ -337,7 +336,7 @@ class KvKeyValsCmd(KvStoreCmdBase):
             return None
 
     def print_kvstore_values(
-        self, resp: kv_store_types.Publication, area: str = None
+        self, resp: openr_types.Publication, area: str = None
     ) -> None:
         """ print values from raw publication from KvStore"""
 
@@ -398,7 +397,7 @@ class KvNodesCmd(KvStoreCmdBase):
         )
 
     def get_connected_nodes(
-        self, adj_keys: kv_store_types.Publication, node_id: str
+        self, adj_keys: openr_types.Publication, node_id: str
     ) -> Set[str]:
         """
         Build graph of adjacencies and return list of connected node from
@@ -424,7 +423,7 @@ class KvNodesCmd(KvStoreCmdBase):
     def print_kvstore_nodes(
         self,
         connected_nodes: Set[str],
-        prefix_keys: kv_store_types.Publication,
+        prefix_keys: openr_types.Publication,
         host_id: str,
         node_area: Dict[str, str] = None,
     ) -> None:
@@ -483,7 +482,7 @@ class NodesCmd(KvNodesCmd):
             super()._run(client)
             return
 
-        all_kv = kv_store_types.Publication()
+        all_kv = openr_types.Publication()
         all_kv.keyVals = {}
         node_area = {}
         nodes = set()
@@ -514,7 +513,7 @@ class KvAdjCmd(KvStoreCmdBase):
         self.print_adj({None: publication}, nodes, bidir, json)
 
     def print_adj(
-        self, publications: Dict[str, kv_store_types.Publication], nodes, bidir, json
+        self, publications: Dict[str, openr_types.Publication], nodes, bidir, json
     ):
         adjs_list = defaultdict(list)
         # get list of adjancencies from each area and add it to the final
@@ -612,7 +611,7 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
             return
 
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
-        resp = kv_store_types.Publication()
+        resp = openr_types.Publication()
         resp.keyVals = {}
         for area in self.areas:
             publication = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
@@ -792,9 +791,9 @@ class EraseKeyCmd(KvStoreCmdBase):
         print(keyVals)
 
         if area is None:
-            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals))
         else:
-            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals), area)
+            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
 
         print("Success: key {} will be erased soon from all KvStores.".format(key))
 
@@ -810,7 +809,7 @@ class SetKeyCmd(KvStoreCmdBase):
         ttl: int,
     ) -> None:
         area = self.get_area_id()
-        val = kv_store_types.Value()
+        val = openr_types.Value()
 
         if version is None:
             # Retrieve existing Value from KvStore
@@ -838,9 +837,9 @@ class SetKeyCmd(KvStoreCmdBase):
         # Advertise publication back to KvStore
         keyVals = {key: val}
         if area is None:
-            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals))
         else:
-            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals), area)
+            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
         print(
             "Success: Set key {} with version {} and ttl {} successfully"
             " in KvStore. This does not guarantee that value is updated"
@@ -904,13 +903,13 @@ class SnoopCmd(KvStoreCmdBase):
         # APIs to async
         # area = await self.get_area_id()
         area = None
-        kvDumpParams = _openr_thrift_KvStore_types.KeyDumpParams(
+        kvDumpParams = openr_types_py3.KeyDumpParams(
             ignoreTtl=not ttl,
             keys=regexes,
             originatorIds=originator_ids,
-            oper=_openr_thrift_KvStore_types.FilterOperator.AND
+            oper=openr_types_py3.FilterOperator.AND
             if match_all
-            else _openr_thrift_KvStore_types.FilterOperator.OR,
+            else openr_types_py3.FilterOperator.OR,
         )
 
         print("Retrieving and subcribing KvStore ... ")
@@ -940,7 +939,7 @@ class SnoopCmd(KvStoreCmdBase):
                 self.print_expired_keys(msg, global_dbs)
                 self.print_delta(msg, ttl, delta, global_dbs)
 
-    def print_expired_keys(self, msg: kv_store_types.Publication, global_dbs: Dict):
+    def print_expired_keys(self, msg: openr_types.Publication, global_dbs: Dict):
         rows = []
         if len(msg.expiredKeys):
             print("Traversal List: {}".format(msg.nodeIds))
@@ -971,7 +970,7 @@ class SnoopCmd(KvStoreCmdBase):
             print(printing.render_vertical_table(rows, timestamp=True))
 
     def print_delta(
-        self, msg: kv_store_types.Publication, ttl: bool, delta: bool, global_dbs: Dict
+        self, msg: openr_types.Publication, ttl: bool, delta: bool, global_dbs: Dict
     ):
 
         for key, value in msg.keyVals.items():
@@ -1006,7 +1005,7 @@ class SnoopCmd(KvStoreCmdBase):
     def print_prefix_delta(
         self,
         key: str,
-        value: kv_store_types.Publication,
+        value: openr_types.Publication,
         delta: bool,
         global_prefix_db: Dict,
         global_publication_db: Dict,
@@ -1034,7 +1033,7 @@ class SnoopCmd(KvStoreCmdBase):
     def print_adj_delta(
         self,
         key: str,
-        value: kv_store_types.Value,
+        value: openr_types.Value,
         delta: bool,
         global_adj_db: Dict,
         global_publication_db: Dict,
@@ -1064,12 +1063,12 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def process_snapshot(self, resp: kv_store_types.Publication, area: str) -> Dict:
+    def process_snapshot(self, resp: openr_types.Publication, area: str) -> Dict:
         global_dbs = bunch.Bunch(
             {
                 "prefixes": {},
                 "adjs": {},
-                "publications": {},  # map(key -> kv_store_types.Value)
+                "publications": {},  # map(key -> openr_types.Value)
             }
         )
 
@@ -1094,7 +1093,7 @@ class KvAllocationsListCmd(KvStoreCmdBase):
         self.print_allocations(key, resp.keyVals)
 
     def print_allocations(
-        self, key: str, keyVals: kv_store_types.KeyVals, area: str = None
+        self, key: str, keyVals: openr_types.KeyVals, area: str = None
     ) -> None:
         if key not in keyVals:
             print("Static allocation is not set in KvStore")

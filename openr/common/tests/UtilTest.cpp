@@ -110,7 +110,7 @@ struct PrefixKeyEntry {
   std::string pkey{};
   std::string node{};
   folly::CIDRNetwork ipaddr;
-  std::string area{thrift::KvStore_constants::kDefaultArea()};
+  std::string area{thrift::Types_constants::kDefaultArea()};
   thrift::IpPrefix ipPrefix;
   folly::IPAddress addr;
   int plen{0};

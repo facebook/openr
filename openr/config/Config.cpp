@@ -8,7 +8,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/FileUtil.h>
 #include <glog/logging.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -124,7 +124,7 @@ Config::populateAreaConfig() {
   if (config_.get_areas().empty()) {
     // TODO remove once transition to areas is complete
     thrift::AreaConfig defaultArea;
-    defaultArea.area_id_ref() = thrift::KvStore_constants::kDefaultArea();
+    defaultArea.area_id_ref() = thrift::Types_constants::kDefaultArea();
     config_.areas_ref() = {defaultArea};
   }
 

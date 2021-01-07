@@ -7,7 +7,7 @@
 
 #include <glog/logging.h>
 
-#include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/public_tld/examples/KvStoreAgent.h>
 
 namespace openr {

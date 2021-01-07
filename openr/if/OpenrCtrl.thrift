@@ -17,7 +17,6 @@ namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 include "fb303/thrift/fb303_core.thrift"
 include "Decision.thrift"
 include "Fib.thrift"
-include "KvStore.thrift"
 include "LinkMonitor.thrift"
 include "Lsdb.thrift"
 include "Network.thrift"
@@ -358,13 +357,13 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get specific key-values from KvStore. If `filterKeys` is empty then no
    * keys will be returned
    */
-  KvStore.Publication getKvStoreKeyVals(1: list<string> filterKeys)
+  Types.Publication getKvStoreKeyVals(1: list<string> filterKeys)
     throws (1: OpenrError error)
 
   /**
    * with area option
    */
-  KvStore.Publication getKvStoreKeyValsArea(
+  Types.Publication getKvStoreKeyValsArea(
     1: list<string> filterKeys,
     2: string area
   ) throws (1: OpenrError error)
@@ -372,29 +371,29 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Get raw key-values from KvStore with more control over filter
    */
-  KvStore.Publication getKvStoreKeyValsFiltered(1: KvStore.KeyDumpParams filter)
+  Types.Publication getKvStoreKeyValsFiltered(1: Types.KeyDumpParams filter)
     throws (1: OpenrError error)
 
   /**
    * Get raw key-values from KvStore with more control over filter with 'area'
    * option
    */
-  KvStore.Publication getKvStoreKeyValsFilteredArea(
-    1: KvStore.KeyDumpParams filter,
+  Types.Publication getKvStoreKeyValsFilteredArea(
+    1: Types.KeyDumpParams filter,
     2: string area
   ) throws (1: OpenrError error)
 
   /**
    * Get kvstore metadata (no values) with filter
    */
-  KvStore.Publication getKvStoreHashFiltered(1: KvStore.KeyDumpParams filter)
+  Types.Publication getKvStoreHashFiltered(1: Types.KeyDumpParams filter)
     throws (1: OpenrError error)
 
   /**
    * with area
    */
-  KvStore.Publication getKvStoreHashFilteredArea(
-    1: KvStore.KeyDumpParams filter,
+  Types.Publication getKvStoreHashFilteredArea(
+    1: Types.KeyDumpParams filter,
     2: string area
   ) throws (1: OpenrError error)
 
@@ -402,7 +401,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Set/Update key-values in KvStore.
    */
   void setKvStoreKeyVals(
-    1: KvStore.KeySetParams setParams,
+    1: Types.KeySetParams setParams,
     2: string area
   ) throws (1: OpenrError error)
 
@@ -410,12 +409,12 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Long poll API to get KvStore
    * Will return true/false with our own KeyVal snapshot provided
    */
-   bool longPollKvStoreAdjArea(1: string area, 2: KvStore.KeyVals snapshot)
+   bool longPollKvStoreAdjArea(1: string area, 2: Types.KeyVals snapshot)
     throws (1: OpenrError error)
 
   // Deprecated, prefer API sepcfying area
   // TODO, remove once EBB has transition away from this
-  bool longPollKvStoreAdj(1: KvStore.KeyVals snapshot)
+  bool longPollKvStoreAdj(1: Types.KeyVals snapshot)
     throws (1: OpenrError error)
 
   /**
@@ -430,23 +429,23 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Set flood-topology parameters. Called by neighbors
    */
   void updateFloodTopologyChild(
-    1: KvStore.FloodTopoSetParams params,
+    1: Types.FloodTopoSetParams params,
     2: string area
   ) throws (1: OpenrError error)
 
   /**
    * Get spanning tree information
    */
-  KvStore.SptInfos getSpanningTreeInfos(
+  Types.SptInfos getSpanningTreeInfos(
     1: string area
   ) throws (1: OpenrError error);
 
   /**
    * Get KvStore peers
    */
-  KvStore.PeersMap getKvStorePeers() throws (1: OpenrError error)
+  Types.PeersMap getKvStorePeers() throws (1: OpenrError error)
 
-  KvStore.PeersMap getKvStorePeersArea(
+  Types.PeersMap getKvStorePeersArea(
     1: string area
   ) throws (1: OpenrError error)
 
