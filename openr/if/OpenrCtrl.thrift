@@ -18,7 +18,6 @@ include "fb303/thrift/fb303_core.thrift"
 include "Lsdb.thrift"
 include "Network.thrift"
 include "OpenrConfig.thrift"
-include "Spark.thrift"
 include "Types.thrift"
 
 exception OpenrError {
@@ -516,7 +515,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Command to request OpenR version
    */
-  Spark.OpenrVersions getOpenrVersion() throws (1: OpenrError error)
+  Types.OpenrVersions getOpenrVersion() throws (1: OpenrError error)
 
   /**
    * Command to request build information
@@ -558,7 +557,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   /*
    * Get info for Spark neighors
    */
-  list<Spark.SparkNeighbor> getNeighbors() throws (1: OpenrError error)
+  list<Types.SparkNeighbor> getNeighbors() throws (1: OpenrError error)
 
   //
   //  Monitor APIs (get log events)

@@ -24,7 +24,7 @@ important event, packs it as a LogSample object and pushes it into the queue.
   - `ADD_PEER`
   - `DEL_PEER`
   - All
-    [SparkNeighborEventType](https://github.com/facebook/openr/blob/master/openr/if/Spark.thrift):
+    [SparkNeighborEventType](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift):
     - `NEIGHBOR_UP`
     - `NEIGHBOR_DOWN`
     - `NEIGHBOR_RESTARTED`

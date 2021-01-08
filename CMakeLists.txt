@@ -115,16 +115,6 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} lsdb_cpp2)
 
 add_fbthrift_cpp_library(
-  spark_cpp2
-  openr/if/Spark.thrift
-  OPTIONS
-    json
-  DEPENDS
-    network_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} spark_cpp2)
-
-add_fbthrift_cpp_library(
   platform_cpp2
   openr/if/Platform.thrift
   SERVICES
@@ -160,7 +150,6 @@ add_fbthrift_cpp_library(
   DEPENDS
     openr_config_cpp2
     types_cpp2
-    spark_cpp2
     lsdb_cpp2
     network_cpp2
     fb303::fb303_thrift_cpp

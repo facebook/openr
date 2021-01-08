@@ -416,13 +416,24 @@ typedef set<string>
  * @deprecated - single spanning tree information
  */
 struct SptInfo {
-  // passive state or not
+  /**
+   * passive state or not
+   */
   1: bool passive
-  // metric cost towards root
+
+  /**
+   * metric cost towards root
+   */
   2: i64 cost
-  // optional parent if any (aka nexthop)
+
+  /**
+   * optional parent if any (aka nexthop)
+   */
   3: optional string parent
-  // a set of spt children
+
+  /**
+   * a set of spt children
+   */
   4: PeerNames children
 }
 
@@ -806,4 +817,222 @@ struct OriginatedPrefixEntry {
    * drop next-hops.
    */
   3: bool installed = 0
+}
+
+/**
+ * Describe timestamp information about send/recv of hello packets. We use this
+ * to determine RTT of a node.
+ */
+struct ReflectedNeighborInfo {
+  /**
+   * Last sequence number we heard from neighbor
+   */
+  1: i64 seqNum = 0
+
+  /**
+   * Timestamp of last hello packet sent by sender to neighbor from which hello
+   * packet is received
+   */
+  2: i64 lastNbrMsgSentTsInUs = 0
+
+  /**
+   * Timestamp when the last packet was received by neighbor from which hello
+   * packet is received
+   */
+  3: i64 lastMyMsgRcvdTsInUs = 0
+}
+
+/**
+ * Type alias for OpenR version
+ */
+typedef i32 OpenrVersion
+
+/**
+ * Open/R versioning for backward compatibility
+ */
+struct OpenrVersions {
+  1: OpenrVersion version
+  2: OpenrVersion lowestSupportedVersion
+}
+
+/**
+ * Spark will define 3 types of msg and fit into SparkPacket thrift structure:
+ * 1. SparkHelloMsg;
+ *    - Functionality:
+ *      1) To advertise its own existence and basic neighbor information;
+ *      2) To ask for immediate response for quick adjacency establishment;
+ *      3) To notify for its own "RESTART" to neighbors;
+ *    - SparkHelloMsg will be sent per interface;
+ * 2. SparkHeartbeatMsg;
+ *    - Functionality:
+ *      To notify its own aliveness by advertising msg periodically;
+ *    - SparkHeartbeatMsg will be sent per interface;
+ * 3. SparkHandshakeMsg;
+ *    - Functionality:
+ *      To exchange param information to establish adjacency;
+ *    - SparkHandshakeMsg will be sent per (interface, neighbor)
+ */
+struct SparkHelloMsg {
+  1: string domainName
+  2: string nodeName
+  3: string ifName
+  4: i64 seqNum
+  5: map<string, ReflectedNeighborInfo> neighborInfos
+  6: OpenrVersion version
+  7: bool solicitResponse = 0
+  8: bool restarting = 0
+  9: i64 sentTsInUs;
+}
+
+/**
+ * TODO
+ */
+struct SparkHeartbeatMsg {
+  1: string nodeName
+  2: i64 seqNum
+}
+
+/**
+ * TODO
+ */
+struct SparkHandshakeMsg {
+  /**
+   * Name of the node originating this handshake message
+   */
+  1: string nodeName
+
+  /**
+   * Used as signal to keep/stop sending handshake msg
+   */
+  2: bool isAdjEstablished
+
+  /**
+   * Heartbeat expiration time
+   */
+  3: i64 holdTime
+
+  /**
+   * Graceful-restart expiration time
+   */
+  4: i64 gracefulRestartTime
+
+  /**
+   * Transport addresses of local interface. Open/R exchanges link-local
+   * addresses only for V6.
+   */
+  5: Network.BinaryAddress transportAddressV6
+  6: Network.BinaryAddress transportAddressV4
+
+  /**
+   * Neighbor's thrift server port
+   */
+  7: i32 openrCtrlThriftPort
+
+  /**
+   * @deprecated - Neighbor's kvstore global CMD port, for ZMQ communication.
+   */
+  9: i32 kvStoreCmdPort
+
+  /**
+   * Area identifier for establishing adjacency with neighbor.
+   */
+  10: string area
+
+  /**
+   * Recipient neighbor node for this handshake message.
+   * Other nodes will ignore. If not set, then this will
+   * be treated as a multicast and all nodes will process it.
+   *
+   * TODO: Remove optional qualifier after AREA negotiation
+   *       is fully in use
+   */
+  11: optional string neighborNodeName
+}
+
+/**
+ * TODO
+ */
+struct SparkHelloPacket {
+  /**
+   * - Msg to announce node's presence on link with its
+   *   own params;
+   * - Send out periodically and on receipt of hello msg
+   *   with solicitation flag set;
+   */
+  3: optional SparkHelloMsg helloMsg
+
+  /**
+   * - Msg to announce nodes's aliveness.
+   * - Send out periodically on intf where there is at
+   *   least one neighbor in ESTABLISHED state;
+   */
+  4: optional SparkHeartbeatMsg heartbeatMsg
+
+  /**
+   * - Msg to exchange params to establish adjacency
+   *   with neighbors;
+   * - Send out periodically and on receipt of handshake msg;
+   */
+  5: optional SparkHandshakeMsg handshakeMsg
+}
+
+/**
+ * Data structure to send with SparkNeighborEvent to convey
+ * info for a single unique neighbor for upper module usage
+ */
+struct SparkNeighbor {
+  /**
+   * Name of the node sending hello packets
+   */
+  1: string nodeName
+
+  /**
+   * neighbor state
+   */
+  2: string state
+
+  /**
+   * areaId to form adjacency
+   */
+  3: string area
+
+  /**
+   * Transport addresses of local interface. Open/R exchanges link-local
+   * addresses only for V6.
+   */
+  4: Network.BinaryAddress transportAddressV6
+  5: Network.BinaryAddress transportAddressV4
+
+  /**
+   * Neighbor's thrift server port
+   */
+  6: i32 openrCtrlThriftPort = 0
+
+  /**
+   * @deprecated - Neighbor's kvstore global CMD port, for ZMQ communication.
+   */
+  7: i32 kvStoreCmdPort = 0
+
+  /**
+   * Remote interface name
+   */
+  8: string remoteIfName
+
+  /**
+   * Local interface name
+   */
+  9: string localIfName
+
+  /**
+   * Round-trip-time of a packet over the physical link. It is deduced by
+   * exchanging hello packets between neighbor nodes.
+   */
+  10: i64 rttUs
+
+  /**
+   * Adjacency label for segment routing. It is derived from the ifIndex and
+   * ensured to be unique for each adjacency (neighbor, interface). See
+   * Source Routing documentation for more information.
+   */
+  11: i32 label
 }

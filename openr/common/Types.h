@@ -21,8 +21,8 @@
 
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
-#include <openr/if/gen-cpp2/Spark_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 

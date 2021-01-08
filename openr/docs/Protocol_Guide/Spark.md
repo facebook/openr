@@ -60,7 +60,7 @@ only one of them populated at a time to reduce control plane traffic.
 > good backward compatibility support as message structure evolves.
 
 Check out
-[if/Spark.thrift](https://github.com/facebook/openr/blob/master/openr/if/Spark.thrift)
+[if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
 for detailed message structure.
 
 High level speaking:
