@@ -18,7 +18,6 @@ Backbone (WAN), and Terragraph (wireless) networks.
    :maxdepth: 2
    :caption: Contents
 
-   Introduction/Overview
    Protocol_Guide/index
    Features/index
    Operator_Guide/index
