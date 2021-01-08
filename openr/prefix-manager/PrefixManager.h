@@ -17,7 +17,6 @@
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>

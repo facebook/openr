@@ -19,7 +19,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 extern "C" {
 #include <linux/rtnetlink.h>

@@ -11,10 +11,10 @@ from typing import List, Optional, Tuple
 
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.cli.utils.utils import print_route_details
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig.ttypes import PrefixForwardingType
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 
 
@@ -24,9 +24,9 @@ class PrefixMgrCmd(OpenrCtrlCmd):
         prefixes: List[str],
         prefix_type: network_types.PrefixType,
         forwarding_type: PrefixForwardingType = PrefixForwardingType.IP,
-    ) -> List[lsdb_types.PrefixEntry]:
+    ) -> List[openr_types.PrefixEntry]:
         return [
-            lsdb_types.PrefixEntry(
+            openr_types.PrefixEntry(
                 prefix=ipnetwork.ip_str_to_prefix(prefix),
                 type=prefix_type,
                 forwardingType=forwarding_type,

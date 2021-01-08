@@ -26,7 +26,6 @@ import hexdump
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
@@ -133,7 +132,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
         return node_dict
 
-    def get_node_ip(self, prefix_db: lsdb_types.PrefixDatabase) -> Any:
+    def get_node_ip(self, prefix_db: openr_types.PrefixDatabase) -> Any:
         """get routable IP address of node from it's prefix database"""
 
         # First look for LOOPBACK prefix
@@ -323,8 +322,8 @@ class KvKeyValsCmd(KvStoreCmdBase):
         """ classify kvstore prefix and return the corresponding deserialized obj """
 
         options = {
-            Consts.PREFIX_DB_MARKER: lsdb_types.PrefixDatabase,
-            Consts.ADJ_DB_MARKER: lsdb_types.AdjacencyDatabase,
+            Consts.PREFIX_DB_MARKER: openr_types.PrefixDatabase,
+            Consts.ADJ_DB_MARKER: openr_types.AdjacencyDatabase,
         }
 
         prefix_type = key.split(":")[0] + ":"
@@ -409,7 +408,7 @@ class KvNodesCmd(KvStoreCmdBase):
         graph = nx.Graph()
         for adj_value in adj_keys.keyVals.values():
             adj_db = serializer.deserialize_thrift_object(
-                adj_value.value, lsdb_types.AdjacencyDatabase
+                adj_value.value, openr_types.AdjacencyDatabase
             )
             graph.add_node(adj_db.thisNodeName)
             for adj in adj_db.adjacencies:
@@ -436,7 +435,7 @@ class KvNodesCmd(KvStoreCmdBase):
             v4_addrs = addrs["v4"]
             v6_addrs = addrs["v6"]
             prefix_db = serializer.deserialize_thrift_object(
-                value.value, lsdb_types.PrefixDatabase
+                value.value, openr_types.PrefixDatabase
             )
 
             for prefixEntry in prefix_db.prefixEntries:
@@ -685,10 +684,10 @@ class KvCompareCmd(KvStoreCmdBase):
 
         if key.startswith(Consts.PREFIX_DB_MARKER):
             prefix_db = serializer.deserialize_thrift_object(
-                value.value, lsdb_types.PrefixDatabase
+                value.value, openr_types.PrefixDatabase
             )
             other_prefix_db = serializer.deserialize_thrift_object(
-                other_val.value, lsdb_types.PrefixDatabase
+                other_val.value, openr_types.PrefixDatabase
             )
             other_prefix_set = {}
             utils.update_global_prefix_db(other_prefix_set, other_prefix_db)
@@ -696,10 +695,10 @@ class KvCompareCmd(KvStoreCmdBase):
 
         elif key.startswith(Consts.ADJ_DB_MARKER):
             adj_db = serializer.deserialize_thrift_object(
-                value.value, lsdb_types.AdjacencyDatabase
+                value.value, openr_types.AdjacencyDatabase
             )
             other_adj_db = serializer.deserialize_thrift_object(
-                value.value, lsdb_types.AdjacencyDatabase
+                value.value, openr_types.AdjacencyDatabase
             )
             lines = utils.sprint_adj_db_delta(adj_db, other_adj_db)
 
@@ -1011,7 +1010,7 @@ class SnoopCmd(KvStoreCmdBase):
         global_publication_db: Dict,
     ):
         prefix_db = serializer.deserialize_thrift_object(
-            value.value, lsdb_types.PrefixDatabase
+            value.value, openr_types.PrefixDatabase
         )
         if delta:
             lines = "\n".join(
@@ -1039,7 +1038,7 @@ class SnoopCmd(KvStoreCmdBase):
         global_publication_db: Dict,
     ):
         new_adj_db = serializer.deserialize_thrift_object(
-            value.value, lsdb_types.AdjacencyDatabase
+            value.value, openr_types.AdjacencyDatabase
         )
         if delta:
             old_adj_db = global_adj_db.get(new_adj_db.thisNodeName, None)

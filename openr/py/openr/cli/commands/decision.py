@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
@@ -119,7 +118,7 @@ class PathCmd(OpenrCtrlCmd):
             src = src or host_id
             dst = dst or host_id
 
-        self.prefix_dbs: Dict[str, lsdb_types.PrefixDatabase] = {}
+        self.prefix_dbs: Dict[str, openr_types.PrefixDatabase] = {}
         area = utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
 
@@ -517,7 +516,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         """ Returns status code. 0 = success, 1 = failure"""
 
         kvstore_adj_db = deserialize_thrift_object(
-            value.value, lsdb_types.AdjacencyDatabase
+            value.value, openr_types.AdjacencyDatabase
         )
         node_name = kvstore_adj_db.thisNodeName
         kvstore_adj_node_names.add(node_name)

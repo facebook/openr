@@ -27,7 +27,6 @@ this. All forwarding table entries are programmed via this thrift interface.
 For **Data Types and Format**, check out
 
 - [if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
-- [if/Lsdb.thrift](https://github.com/facebook/openr/blob/master/openr/if/Lsdb.thrift)
 
 For **Thrift Interface**, check out
 

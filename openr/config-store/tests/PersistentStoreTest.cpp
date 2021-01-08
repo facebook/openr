@@ -16,7 +16,7 @@
 
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config-store/PersistentStoreWrapper.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 

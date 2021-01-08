@@ -24,7 +24,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import bunch
 import click
 from openr.clients.openr_client import get_openr_ctrl_client
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as config_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
@@ -158,7 +157,7 @@ def sprint_prefixes_db_full(prefix_db, loopback_only=False):
     """given serialized prefixes output an array of lines
         representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
 
-    :prefix_db lsdb_types.PrefixDatabase: prefix database
+    :prefix_db openr_types.PrefixDatabase: prefix database
     :loopback_only : is only loopback address expected
 
     :return [str]: the array of prefix strings
@@ -215,7 +214,7 @@ def alloc_prefix_to_loopback_ip_str(prefix):
 def parse_prefix_database(
     prefix_filter: str,
     client_type_filter: str,
-    prefix_dbs: Dict[str, lsdb_types.PrefixDatabase],
+    prefix_dbs: Dict[str, openr_types.PrefixDatabase],
     prefix_db: Any,
 ):
     """
@@ -232,7 +231,7 @@ def parse_prefix_database(
 
     if isinstance(prefix_db, openr_types.Value):
         prefix_db = deserialize_thrift_object(
-            prefix_db.value, lsdb_types.PrefixDatabase
+            prefix_db.value, openr_types.PrefixDatabase
         )
 
     if prefix_db.deletePrefix:
@@ -241,7 +240,7 @@ def parse_prefix_database(
         return
 
     if prefix_db.thisNodeName not in prefix_dbs:
-        prefix_dbs[prefix_db.thisNodeName] = lsdb_types.PrefixDatabase(
+        prefix_dbs[prefix_db.thisNodeName] = openr_types.PrefixDatabase(
             f"{prefix_db.thisNodeName}", []
         )
 
@@ -297,7 +296,7 @@ def metric_vector_to_dict(metric_vector):
 
 def collate_prefix_keys(
     kvstore_keyvals: openr_types.KeyVals,
-) -> Dict[str, lsdb_types.PrefixDatabase]:
+) -> Dict[str, openr_types.PrefixDatabase]:
     """collate all the prefixes of node and return a map of
     nodename - PrefixDatabase
     """
@@ -308,12 +307,12 @@ def collate_prefix_keys(
 
             node_name = key.split(":")[1]
             prefix_db = deserialize_thrift_object(
-                value.value, lsdb_types.PrefixDatabase
+                value.value, openr_types.PrefixDatabase
             )
             if prefix_db.deletePrefix:
                 continue
             if node_name not in prefix_maps:
-                prefix_maps[node_name] = lsdb_types.PrefixDatabase(f"{node_name}", [])
+                prefix_maps[node_name] = openr_types.PrefixDatabase(f"{node_name}", [])
 
             for prefix_entry in prefix_db.prefixEntries:
                 prefix_maps[node_name].prefixEntries.append(prefix_entry)
@@ -349,7 +348,7 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
 
     if isinstance(prefix_db, openr_types.Value):
         prefix_db = deserialize_thrift_object(
-            prefix_db.value, lsdb_types.PrefixDatabase
+            prefix_db.value, openr_types.PrefixDatabase
         )
 
     def _update(prefix_db_dict, prefix_db):
@@ -377,11 +376,11 @@ def update_global_adj_db(global_adj_db, adj_db):
 
     :param global_adj_map map(node, AdjacencyDatabase)
         the map for all adjacencies in the network - to be updated
-    :param adj_db lsdb_types.AdjacencyDatabase: publication from single
+    :param adj_db openr_types.AdjacencyDatabase: publication from single
         node
     """
 
-    assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
+    assert isinstance(adj_db, openr_types.AdjacencyDatabase)
 
     global_adj_db[adj_db.thisNodeName] = adj_db
 
@@ -403,7 +402,7 @@ def build_global_adj_db(resp):
     for (key, value) in resp.keyVals.items():
         if not key.startswith(Consts.ADJ_DB_MARKER):
             continue
-        adj_db = deserialize_thrift_object(value.value, lsdb_types.AdjacencyDatabase)
+        adj_db = deserialize_thrift_object(value.value, openr_types.AdjacencyDatabase)
         update_global_adj_db(global_adj_db, adj_db)
 
     return global_adj_db
@@ -435,14 +434,14 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
 
     :param global_adj_db map(str, AdjacencyDatabase):
         map of node names to their adjacent node names
-    :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
+    :param adj_db openr_types.AdjacencyDatabase: latest from kv store
     :param bidir bool: only dump bidir adjacencies
 
     :return (nodeLabel, [adjacencies]): tuple of node label and list
         of adjacencies
     """
 
-    assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
+    assert isinstance(adj_db, openr_types.AdjacencyDatabase)
     this_node_name = adj_db.thisNodeName
     area = adj_db.area if adj_db.area is not None else "N/A"
 
@@ -522,7 +521,7 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
         if isinstance(adj_db, openr_types.Value):
             version = adj_db.version
             adj_db = deserialize_thrift_object(
-                adj_db.value, lsdb_types.AdjacencyDatabase
+                adj_db.value, openr_types.AdjacencyDatabase
             )
         adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version)
 
@@ -638,13 +637,13 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
 
     :param global_adj_db map(str, AdjacencyDatabase):
         map of node names to their adjacent node names
-    :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
+    :param adj_db openr_types.AdjacencyDatabase: latest from kv store
     :param bidir bool: only print bidir adjacencies
 
     :return [str]: list of string to be printed
     """
 
-    assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
+    assert isinstance(adj_db, openr_types.AdjacencyDatabase)
     this_node_name = adj_db.thisNodeName
 
     title_tokens = [this_node_name]
@@ -714,7 +713,7 @@ def interface_db_to_dict(value):
         )
 
     assert isinstance(value, openr_types.Value)
-    intf_db = deserialize_thrift_object(value.value, lsdb_types.InterfaceDatabase)
+    intf_db = deserialize_thrift_object(value.value, openr_types.InterfaceDatabase)
     return bunch.Bunch(
         **{
             "thisNodeName": intf_db.thisNodeName,
@@ -1047,11 +1046,11 @@ def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = 
 
     :param global_prefix_map map(node, set([str])): map of all prefixes
         in the network
-    :param prefix_db lsdb_types.PrefixDatabase: publication from single
+    :param prefix_db openr_types.PrefixDatabase: publication from single
         node
     """
 
-    assert isinstance(prefix_db, lsdb_types.PrefixDatabase)
+    assert isinstance(prefix_db, openr_types.PrefixDatabase)
 
     prefix_set = set()
     for prefix_entry in prefix_db.prefixEntries:
@@ -1076,8 +1075,8 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
     """given serialized adjacency database, print neighbors delta as
         compared to the supplied global state
 
-    :param new_adj_db lsdb_types.AdjacencyDatabase: latest from kv store
-    :param old_adj_db lsdb_types.AdjacencyDatabase: last one we had
+    :param new_adj_db openr_types.AdjacencyDatabase: latest from kv store
+    :param old_adj_db openr_types.AdjacencyDatabase: last one we had
 
     :return [str]: list of string to be printed
     """
@@ -1136,7 +1135,7 @@ def sprint_prefixes_db_delta(
     per prefix key: prefix:<node name>:<area>:<[IP addr/prefix len]
 
     :global_prefixes_db map(node, set([str])): global prefixes
-    :prefix_db lsdb_types.PrefixDatabase: latest from kv store
+    :prefix_db openr_types.PrefixDatabase: latest from kv store
 
     :return [str]: the array of prefix strings
     """

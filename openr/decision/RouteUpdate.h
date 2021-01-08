@@ -14,7 +14,7 @@
 #include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 

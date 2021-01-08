@@ -12,7 +12,7 @@
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/SocketAddress.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 

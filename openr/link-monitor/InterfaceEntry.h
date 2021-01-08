@@ -14,6 +14,7 @@
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 

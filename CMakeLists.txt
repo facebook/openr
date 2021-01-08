@@ -104,17 +104,6 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} network_cpp2)
 
 add_fbthrift_cpp_library(
-  lsdb_cpp2
-  openr/if/Lsdb.thrift
-  OPTIONS
-    json
-  DEPENDS
-    openr_config_cpp2
-    network_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} lsdb_cpp2)
-
-add_fbthrift_cpp_library(
   platform_cpp2
   openr/if/Platform.thrift
   SERVICES
@@ -125,6 +114,7 @@ add_fbthrift_cpp_library(
   DEPENDS
     fb303::fb303_thrift_cpp
     network_cpp2
+    types_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} platform_cpp2)
 
@@ -134,7 +124,6 @@ add_fbthrift_cpp_library(
   OPTIONS
     json
   DEPENDS
-    lsdb_cpp2
     network_cpp2
     openr_config_cpp2
 )
@@ -150,7 +139,6 @@ add_fbthrift_cpp_library(
   DEPENDS
     openr_config_cpp2
     types_cpp2
-    lsdb_cpp2
     network_cpp2
     fb303::fb303_thrift_cpp
 )

@@ -12,7 +12,6 @@ import ipaddress
 import socket
 from typing import List, Optional
 
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types
 from openr.Types import ttypes as openr_types

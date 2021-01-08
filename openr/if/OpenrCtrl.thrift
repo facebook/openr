@@ -15,7 +15,6 @@ namespace lua openr.OpenrCtrl
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
 include "fb303/thrift/fb303_core.thrift"
-include "Lsdb.thrift"
 include "Network.thrift"
 include "OpenrConfig.thrift"
 include "Types.thrift"
@@ -31,7 +30,7 @@ struct NodeAndArea {
 
 struct AdvertisedRoute {
   1: Network.PrefixType key;
-  2: Lsdb.PrefixEntry route;
+  2: Types.PrefixEntry route;
 }
 
 struct AdvertisedRouteDetail {
@@ -48,7 +47,7 @@ struct AdvertisedRouteFilter {
 
 struct ReceivedRoute {
   1: NodeAndArea key;
-  2: Lsdb.PrefixEntry route;
+  2: Types.PrefixEntry route;
 }
 
 struct ReceivedRouteDetail {
@@ -199,14 +198,14 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Advertise or Update prefixes
    */
-  void advertisePrefixes(1: list<Lsdb.PrefixEntry> prefixes)
+  void advertisePrefixes(1: list<Types.PrefixEntry> prefixes)
     throws (1: OpenrError error)
 
   /**
    * Withdraw previously advertised prefixes. Only relevant attributes for this
    * operation are `prefix` and `type`
    */
-  void withdrawPrefixes(1: list<Lsdb.PrefixEntry> prefixes)
+  void withdrawPrefixes(1: list<Types.PrefixEntry> prefixes)
     throws (1: OpenrError error)
 
   /**
@@ -222,18 +221,18 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   void syncPrefixesByType(
     1: Network.PrefixType prefixType,
-    2: list<Lsdb.PrefixEntry> prefixes) throws (1: OpenrError error)
+    2: list<Types.PrefixEntry> prefixes) throws (1: OpenrError error)
 
   /**
    * Get all prefixes being advertised
    * @deprecated - use getAdvertisedRoutes() instead
    */
-  list<Lsdb.PrefixEntry> getPrefixes() throws (1: OpenrError error)
+  list<Types.PrefixEntry> getPrefixes() throws (1: OpenrError error)
 
   /**
    * Get prefixes of specific types
    */
-  list<Lsdb.PrefixEntry> getPrefixesByType(1: Network.PrefixType prefixType)
+  list<Types.PrefixEntry> getPrefixesByType(1: Network.PrefixType prefixType)
     throws (1: OpenrError error)
 
   //
@@ -331,7 +330,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * than one AdjDb for a node (one per area)
    * (includes bi-directional check)
    */
-  list<Lsdb.AdjacencyDatabase> getDecisionAdjacenciesFiltered(
+  list<Types.AdjacencyDatabase> getDecisionAdjacenciesFiltered(
     1: AdjacenciesFilter filter
   ) throws (1: OpenrError error)
 
@@ -500,7 +499,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get the current adjacencies information, only works for nodes with one
    * configured area. DEPRECATED, prefer
    */
-  Lsdb.AdjacencyDatabase getLinkMonitorAdjacencies()
+  Types.AdjacencyDatabase getLinkMonitorAdjacencies()
     throws (1: OpenrError error)
 
   /**
@@ -508,7 +507,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * adjancecy databases for. Providing an empty set will return a DB for
    * all configured areas
    */
-  list<Lsdb.AdjacencyDatabase> getLinkMonitorAdjacenciesFiltered(
+  list<Types.AdjacencyDatabase> getLinkMonitorAdjacenciesFiltered(
     1: AdjacenciesFilter filter
   ) throws (1: OpenrError error)
 

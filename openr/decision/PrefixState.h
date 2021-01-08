@@ -13,7 +13,6 @@
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>

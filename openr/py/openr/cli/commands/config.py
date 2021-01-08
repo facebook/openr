@@ -14,7 +14,6 @@ import click
 import jsondiff
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.Lsdb import ttypes as lsdb_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import OpenrError
 from openr.Types import ttypes as openr_types
@@ -165,11 +164,11 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
             return
 
         prefix_mgr_config = deserialize_thrift_object(
-            prefix_mgr_config_blob, lsdb_types.PrefixDatabase
+            prefix_mgr_config_blob, openr_types.PrefixDatabase
         )
         self.print_config(prefix_mgr_config)
 
-    def print_config(self, prefix_mgr_config: lsdb_types.PrefixDatabase):
+    def print_config(self, prefix_mgr_config: openr_types.PrefixDatabase):
         print()
         print(utils.sprint_prefixes_db_full(prefix_mgr_config))
         print()

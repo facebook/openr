@@ -120,4 +120,4 @@ only compatible with forwarding type `SR_MPLS`
 ### Thrift Struct
 
 Refer to
-[struct PrefixEntry in openr/if/Lsdb.thrift](https://github.com/facebook/openr/blob/master/openr/if/Lsdb.thrift)
+[struct PrefixEntry in openr/if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
