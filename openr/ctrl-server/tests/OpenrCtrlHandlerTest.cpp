@@ -230,7 +230,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
  private:
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;

@@ -141,14 +141,4 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
   return prefixes;
 }
 
-thrift::InterfaceInfo
-InterfaceEntry::getInterfaceInfo() const {
-  std::vector<thrift::IpPrefix> networks;
-  for (const auto& network : networks_) {
-    networks.emplace_back(toIpPrefix(network));
-  }
-
-  return createThriftInterfaceInfo(isUp_, ifIndex_, networks);
-}
-
 } // namespace openr

@@ -77,14 +77,20 @@ class Spark final : public OpenrEventBase {
  public:
   Spark(
       std::optional<int> ipTos,
-      messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
+      // consumer Queue
+      messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
+      // producer Queue
       messaging::ReplicateQueue<NeighborEvent>& nbrUpdatesQueue,
+      // port for TCP connection
       KvStoreCmdPort kvStoreCmdPort,
       OpenrCtrlThriftPort openrCtrlThriftPort,
+      // raw ptr of modules
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<const Config> config,
+      // lowest supported version + current version
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
+      // rate limit
       std::optional<uint32_t> maybeMaxAllowedPps = Constants::kMaxAllowedPps);
 
   ~Spark() override = default;
@@ -190,7 +196,7 @@ class Spark final : public OpenrEventBase {
 
   // Function processes interface updates from LinkMonitor and appropriately
   // enable/disable neighbor discovery
-  void processInterfaceUpdates(thrift::InterfaceDatabase&& interfaceUpdates);
+  void processInterfaceUpdates(InterfaceDatabase&& interfaceUpdates);
 
   // util function to delete interface in spark
   void deleteInterfaceFromDb(const std::set<std::string>& toDel);

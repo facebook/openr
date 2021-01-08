@@ -20,6 +20,7 @@
 #include <re2/set.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
@@ -106,6 +107,65 @@ struct PrefixEvent {
         prefixes(prefixes),
         dstAreas(dstAreas) {}
 };
+
+/**
+ * Structure to represent interface information from the system, including
+ * link status/addresses/etc.
+ */
+struct InterfaceInfo {
+  /**
+   * Interface name
+   */
+  std::string ifName{""};
+
+  /**
+   * Link status
+   */
+  bool isUp{false};
+
+  /**
+   * Interface index
+   */
+  int64_t ifIndex{-1};
+
+  /**
+   * IPV4 + IPV6 addresses associated
+   */
+  std::unordered_set<folly::CIDRNetwork> networks{};
+
+  InterfaceInfo(
+      const std::string& ifName,
+      const bool isUp,
+      const int64_t ifIndex,
+      const std::unordered_set<folly::CIDRNetwork>& networks)
+      : ifName(ifName), isUp(isUp), ifIndex(ifIndex), networks(networks) {}
+
+  inline bool
+  operator==(const InterfaceInfo& other) const {
+    return (ifName == other.ifName) and (isUp == other.isUp) and
+        (ifIndex == other.ifIndex) and (networks == other.networks);
+  }
+
+  // TODO: deprecate thrift version of interfaceInfo
+  thrift::InterfaceInfo
+  toThrift() const {
+    std::vector<thrift::IpPrefix> prefixes;
+    for (const auto& network : networks) {
+      prefixes.emplace_back(toIpPrefix(network));
+    }
+
+    thrift::InterfaceInfo info;
+    info.isUp_ref() = isUp;
+    info.ifIndex_ref() = ifIndex;
+    info.networks_ref() = std::move(prefixes);
+    return info;
+  }
+};
+
+/**
+ * Structure of the entire interface snapshot in the system
+ */
+using InterfaceDatabase = std::vector<InterfaceInfo>;
 
 /**
  * Structure defining KvStore peer sync event, published to subscribers.

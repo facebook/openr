@@ -105,7 +105,7 @@ class LinkMonitor final : public OpenrEventBase {
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
       // producer queue
-      messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
+      messaging::ReplicateQueue<InterfaceDatabase>& intfUpdatesQueue,
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
       messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
@@ -341,7 +341,7 @@ class LinkMonitor final : public OpenrEventBase {
   thrift::LinkMonitorState state_;
 
   // Queue to publish interface updates to fib/spark
-  messaging::ReplicateQueue<thrift::InterfaceDatabase>& interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue_;
 
   // Queue to publish prefix updates to PrefixManager
   messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue_;

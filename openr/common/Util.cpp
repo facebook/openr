@@ -755,18 +755,6 @@ createThriftPublication(
   return pub;
 }
 
-thrift::InterfaceInfo
-createThriftInterfaceInfo(
-    const bool isUp,
-    const int ifIndex,
-    const std::vector<thrift::IpPrefix>& networks) {
-  thrift::InterfaceInfo interfaceInfo;
-  interfaceInfo.isUp_ref() = isUp;
-  interfaceInfo.ifIndex_ref() = ifIndex;
-  interfaceInfo.networks_ref() = networks;
-  return interfaceInfo;
-}
-
 thrift::OriginatedPrefixEntry
 createOriginatedPrefixEntry(
     const thrift::OriginatedPrefix& originatedPrefix,

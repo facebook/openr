@@ -275,7 +275,7 @@ main(int argc, char** argv) {
   // Queue for inter-module communication
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
-  ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;

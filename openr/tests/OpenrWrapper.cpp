@@ -439,18 +439,13 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
     const std::vector<SparkInterfaceEntry>& interfaceEntries) {
-  thrift::InterfaceDatabase ifDb(
-      apache::thrift::FRAGILE, nodeId_, {}, thrift::PerfEvents());
-  ifDb.perfEvents_ref().reset();
-
+  InterfaceDatabase ifDb;
   for (const auto& interface : interfaceEntries) {
-    ifDb.interfaces_ref()->emplace(
+    ifDb.emplace_back(InterfaceInfo(
         interface.ifName,
-        createThriftInterfaceInfo(
-            true,
-            interface.ifIndex,
-            {toIpPrefix(interface.v4Network),
-             toIpPrefix(interface.v6LinkLocalNetwork)}));
+        true,
+        interface.ifIndex,
+        {interface.v4Network, interface.v6LinkLocalNetwork}));
   }
 
   interfaceUpdatesQueue_.push(std::move(ifDb));

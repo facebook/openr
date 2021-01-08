@@ -32,7 +32,6 @@
 using namespace std;
 using namespace openr;
 
-using apache::thrift::FRAGILE;
 using ::testing::InSequence;
 
 // node-1 connects node-2 via interface iface_2_1 and iface_2_2, node-3 via
@@ -360,23 +359,23 @@ class LinkMonitorTestFixture : public ::testing::Test {
   recvAndReplyIfUpdate() {
     auto ifDb = interfaceUpdatesReader.get();
     ASSERT_TRUE(ifDb.hasValue());
-    sparkIfDb = std::move(*ifDb.value().interfaces_ref());
+    // ATTN: update class variable `sparkIfDb` for later verification
+    sparkIfDb = ifDb.value();
     LOG(INFO) << "----------- Interface Updates ----------";
-    for (const auto& [ifName, info] : sparkIfDb) {
-      LOG(INFO) << "  Name=" << ifName << ", Status=" << *info.isUp_ref()
-                << ", IfIndex=" << *info.ifIndex_ref()
-                << ", networks=" << info.networks_ref()->size();
+    for (const auto& info : sparkIfDb) {
+      LOG(INFO) << "  Name=" << info.ifName << ", Status=" << info.isUp
+                << ", IfIndex=" << info.ifIndex
+                << ", networks=" << info.networks.size();
     }
   }
 
-  // check the sparkIfDb has expected number of UP interfaces
+  // check the ifDb has expected number of UP interfaces
   bool
   checkExpectedUPCount(
-      const std::map<std::string, thrift::InterfaceInfo>& sparkIfDb,
-      int expectedUpCount) {
+      const std::vector<InterfaceInfo>& ifDb, int expectedUpCount) {
     int receiveUpCount = 0;
-    for (const auto& [_, info] : sparkIfDb) {
-      if (*info.isUp_ref()) {
+    for (const auto& info : ifDb) {
+      if (info.isUp) {
         receiveUpCount++;
       }
     }
@@ -395,22 +394,21 @@ class LinkMonitorTestFixture : public ::testing::Test {
   using CollatedIfUpdates = std::map<string, CollatedIfData>;
 
   CollatedIfUpdates
-  collateIfUpdates(
-      const std::map<std::string, thrift::InterfaceInfo>& interfaces) {
+  collateIfUpdates(const std::vector<InterfaceInfo>& interfaces) {
     CollatedIfUpdates res;
-    for (const auto& [ifName, info] : interfaces) {
-      if (*info.isUp_ref()) {
+    for (const auto& info : interfaces) {
+      const auto& ifName = info.ifName;
+      if (info.isUp) {
         res[ifName].isUpCount++;
       } else {
         res[ifName].isDownCount++;
       }
       int v4AddrsCount = 0;
       int v6LinkLocalAddrsCount = 0;
-      for (const auto& network : *info.networks_ref()) {
-        const auto& ipNetwork = toIPNetwork(network);
-        if (ipNetwork.first.isV4()) {
+      for (const auto& network : info.networks) {
+        if (network.first.isV4()) {
           v4AddrsCount++;
-        } else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
+        } else if (network.first.isV6() and network.first.isLinkLocal()) {
           v6LinkLocalAddrsCount++;
         }
       }
@@ -555,14 +553,14 @@ class LinkMonitorTestFixture : public ::testing::Test {
   folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 
-  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
+  messaging::RQueue<InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
@@ -584,7 +582,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   std::shared_ptr<NetlinkEventsInjector> nlEventsInjector;
 
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;
-  std::map<std::string, thrift::InterfaceInfo> sparkIfDb;
+  std::vector<InterfaceInfo> sparkIfDb;
 };
 
 // Start LinkMonitor and ensure empty adjacency database and prefixes are

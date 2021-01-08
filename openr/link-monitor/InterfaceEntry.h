@@ -7,15 +7,13 @@
 
 #pragma once
 
-#include <string>
-
 #include <folly/IPAddress.h>
 #include <folly/String.h>
 #include <folly/io/async/AsyncTimeout.h>
 
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/ExponentialBackoff.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/common/Types.h>
 
 namespace openr {
 
@@ -97,6 +95,12 @@ class InterfaceEntry final {
     return networks_;
   }
 
+  // create InterfaceInfo object for message passing
+  InterfaceInfo
+  getInterfaceInfo() const {
+    return InterfaceInfo(ifName_, isUp_, ifIndex_, networks_);
+  }
+
   // Utility function to retrieve v4 addresses
   std::unordered_set<folly::IPAddress> getV4Addrs() const;
 
@@ -106,9 +110,6 @@ class InterfaceEntry final {
   // Utility function to retrieve re-distribute addresses
   std::vector<thrift::PrefixEntry> getGlobalUnicastNetworks(
       bool enableV4) const;
-
-  // Create the Interface info for Interface request
-  thrift::InterfaceInfo getInterfaceInfo() const;
 
  private:
   // Attributes

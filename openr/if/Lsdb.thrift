@@ -36,6 +36,7 @@ struct PerfEvents {
 //
 
 //
+// [TO BE DEPRECATED]
 // InterfaceDb is the entire interface state
 // for this system providing link status and
 // Ipv4 / IPv6 LinkLocal addresses
@@ -49,18 +50,6 @@ struct InterfaceInfo {
   2: i64 ifIndex
   // ip prefixes of all v4 and v6 link local addresses
   5: list<Network.IpPrefix> networks
-}
-
-//
-// InterfaceDatabase is a map if interfaces
-// keyed by ifName as string
-//
-struct InterfaceDatabase {
-  1: string thisNodeName
-  2: map<string, InterfaceInfo> interfaces
-
-  // Optional attribute to measure convergence performance
-  3: optional PerfEvents perfEvents;
 }
 
 //

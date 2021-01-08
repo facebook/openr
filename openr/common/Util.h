@@ -367,11 +367,6 @@ thrift::Publication createThriftPublication(
     const std::optional<std::string>& floodRootId = std::nullopt,
     const std::string& area = kTestingAreaName);
 
-thrift::InterfaceInfo createThriftInterfaceInfo(
-    const bool isUp,
-    const int ifIndex,
-    const std::vector<thrift::IpPrefix>& networks);
-
 thrift::OriginatedPrefixEntry createOriginatedPrefixEntry(
     const thrift::OriginatedPrefix& originatedPrefix,
     const std::vector<std::string>& supportingPrefixes,

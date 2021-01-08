@@ -97,7 +97,7 @@ class SparkWrapper {
       neighborUpdatesQueue_.getReader()};
 
   // Queue to receive interface update from LinkMonitor
-  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
 
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};

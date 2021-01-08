@@ -224,7 +224,7 @@ Spark::SparkNeighbor::SparkNeighbor(
 
 Spark::Spark(
     std::optional<int> maybeIpTos,
-    messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
+    messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<NeighborEvent>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
     OpenrCtrlThriftPort openrCtrlThriftPort,
@@ -1682,12 +1682,8 @@ Spark::sendHelloMsg(
 }
 
 void
-Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
+Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
   decltype(interfaceDb_) newInterfaceDb{};
-
-  CHECK_EQ(*ifDb.thisNodeName_ref(), myNodeName_)
-      << "Node name in ifDb " << *ifDb.thisNodeName_ref()
-      << " does not match my node name " << myNodeName_;
 
   //
   // To be conisdered a valid interface for Spark to track, it must:
@@ -1695,20 +1691,22 @@ Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
   // - have a v6LinkLocal IP
   // - have an IPv4 addr when v4 is enabled
   //
-  for (const auto& [ifName, info] : *ifDb.interfaces_ref()) {
-    const auto& isUp = *info.isUp_ref();
-    const auto& ifIndex = *info.ifIndex_ref();
-    const auto& networks = *info.networks_ref();
+  for (const auto& info : ifDb) {
+    const auto& ifName = info.ifName;
+    const auto& isUp = info.isUp;
+    const auto& ifIndex = info.ifIndex;
+    const auto& networks = info.networks;
 
-    // Sort networks and use the lowest one (other node will do similar)
+    // ATTN: multiple networks can be associated with one ifName.
+    //  - Sort networks
+    //  - Use the lowest one (other node will do similar)
     std::set<folly::CIDRNetwork> v4Networks;
     std::set<folly::CIDRNetwork> v6LinkLocalNetworks;
-    for (const auto& ntwk : networks) {
-      const auto& ipNetwork = toIPNetwork(ntwk, false);
-      if (ipNetwork.first.isV4()) {
-        v4Networks.emplace(ipNetwork);
-      } else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
-        v6LinkLocalNetworks.emplace(ipNetwork);
+    for (const auto& network : networks) {
+      if (network.first.isV4()) {
+        v4Networks.emplace(network);
+      } else if (network.first.isV6() and network.first.isLinkLocal()) {
+        v6LinkLocalNetworks.emplace(network);
       }
     }
 
@@ -1719,7 +1717,7 @@ Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
       VLOG(2) << "IPv6 link local address not found";
       continue;
     }
-    if (enableV4_ && v4Networks.empty()) {
+    if (enableV4_ and v4Networks.empty()) {
       VLOG(2) << "IPv4 enabled but no IPv4 addresses are configured";
       continue;
     }

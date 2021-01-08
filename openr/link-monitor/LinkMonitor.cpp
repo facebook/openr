@@ -64,7 +64,7 @@ LinkMonitor::LinkMonitor(
     KvStore* kvStore,
     PersistentStore* configStore,
     bool enablePerfMeasurement,
-    messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
+    messaging::ReplicateQueue<InterfaceDatabase>& intfUpdatesQueue,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
@@ -677,20 +677,23 @@ LinkMonitor::advertiseInterfaces() {
   fb303::fbData->addStatValue("link_monitor.advertise_links", 1, fb303::SUM);
 
   // Create interface database
-  thrift::InterfaceDatabase ifDb;
-  *ifDb.thisNodeName_ref() = nodeId_;
-  for (auto& [ifName, interface] : interfaces_) {
+  InterfaceDatabase ifDb;
+  for (auto& [_, interface] : interfaces_) {
     // Perform regex match
-    if (not anyAreaShouldDiscoverOnIface(ifName)) {
+    if (not anyAreaShouldDiscoverOnIface(interface.getIfName())) {
       continue;
     }
-    // Get interface info and override active status
+    // Transform to `InterfaceInfo` object
     auto interfaceInfo = interface.getInterfaceInfo();
-    interfaceInfo.isUp_ref() = interface.isActive();
-    ifDb.interfaces_ref()->emplace(ifName, std::move(interfaceInfo));
+
+    // Override `UP` status
+    interfaceInfo.isUp = interface.isActive();
+
+    // Construct `InterfaceDatabase` object
+    ifDb.emplace_back(std::move(interfaceInfo));
   }
 
-  // publish new interface database to other modules (Fib & Spark)
+  // publish via replicate queue
   interfaceUpdatesQueue_.push(std::move(ifDb));
 }
 
@@ -1217,21 +1220,19 @@ LinkMonitor::getInterfaces() {
     reply.isOverloaded_ref() = *state_.isOverloaded_ref();
 
     // Fill interface details
-    for (auto& [ifName, interface] : interfaces_) {
-      auto ifDetails = thrift::InterfaceDetails(
-          apache::thrift::FRAGILE,
-          interface.getInterfaceInfo(),
-          state_.overloadedLinks_ref()->count(ifName) > 0,
-          0 /* custom metric value */,
-          0 /* link flap back off time */);
+    for (auto& [_, interface] : interfaces_) {
+      const auto& ifName = interface.getIfName();
+
+      thrift::InterfaceDetails ifDetails;
+      ifDetails.info_ref() = interface.getInterfaceInfo().toThrift();
+      ifDetails.isOverloaded_ref() =
+          state_.overloadedLinks_ref()->count(ifName) > 0;
 
       // Add metric override if any
-      folly::Optional<int32_t> maybeMetric;
       if (state_.linkMetricOverrides_ref()->count(ifName) > 0) {
-        maybeMetric.assign(state_.linkMetricOverrides_ref()->at(ifName));
+        ifDetails.metricOverride_ref() =
+            state_.linkMetricOverrides_ref()->at(ifName);
       }
-      apache::thrift::fromFollyOptional(
-          ifDetails.metricOverride_ref(), maybeMetric);
 
       // Add link-backoff
       auto backoffMs = interface.getBackoffDuration();
