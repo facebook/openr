@@ -50,26 +50,50 @@ BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 BOOST_STRONG_TYPEDEF(std::string, AreaId);
 
 /**
- * Structure defining neighbor event, which consists of:
- *  - Event Type (ENUM)
- *  - Info (Thrift struct)
- *
- * NeighborEvent is used uni-directionally from
- * `Spark` -> `LinkMonitor` to indicate events like:
- *  - adjacency change
- *  - rtt change
- *  - GR
+ * Enum indicating type of event to LinkMonitor. Only used for inter
+ * module (within a process) communication.
  */
 enum class NeighborEventType {
+  /**
+   * Neighbor UP event
+   */
   NEIGHBOR_UP = 1,
+
+  /**
+   * Neighbor DOWN event
+   */
   NEIGHBOR_DOWN = 2,
+
+  /**
+   * Neighbor comes back from graceful restart(GR) mode
+   */
   NEIGHBOR_RESTARTED = 3,
+
+  /**
+   * Round-Trip-Time(RTT) changed for neighbor
+   */
   NEIGHBOR_RTT_CHANGE = 4,
+
+  /**
+   * Neighbor goes into graceful restart(GR) mode
+   */
   NEIGHBOR_RESTARTING = 5,
 };
 
+/**
+ * Event for indicating neighbor UP/DOWN/RESTART to LinkMonitor, containing
+ * ENUM type with detailed neighbor information. Only used for inter module
+ * (within a process) communication.
+ */
 struct NeighborEvent {
+  /**
+   * ENUM type of event
+   */
   NeighborEventType eventType;
+
+  /**
+   * Detailed information about neighbor from Spark
+   */
   thrift::SparkNeighbor info;
 
   NeighborEvent(
@@ -78,24 +102,58 @@ struct NeighborEvent {
 };
 
 /**
- * Structure defining prefix update event, which consists of:
- *  - Event Type (ENUM)
- *  - Prefix Type (ENUM)
- *  - prefixes: a vector of thrift::PrefixEntry
- *  - dstAreas: a set of string indicating destination areas
+ * Enum indicating type of request to PrefixManager. Only used for inter
+ * module (within a process) communication.
  */
 enum class PrefixEventType {
+  /**
+   * Add listed prefixes for advertisement of specified type
+   */
   ADD_PREFIXES = 1,
+
+  /**
+   * Withdraw listed prefixes of specified type
+   */
   WITHDRAW_PREFIXES = 2,
+
+  /**
+   * Withdraw ALL existing prefixes of specified type
+   */
   WITHDRAW_PREFIXES_BY_TYPE = 3,
+
+  /**
+   * Replace existing prefixes with new list of prefixes of specified type. The
+   * PrefixManager will compute delta and gracefully apply it. e.g. specifying
+   * same list of prefixes twice for SYNC will result in no updates second time.
+   */
   SYNC_PREFIXES_BY_TYPE = 4,
 };
 
+/**
+ * Request for advertising, updating or withdrawing route advertisements to
+ * PrefixManager. Only used for inter module (within a process) communication.
+ */
 struct PrefixEvent {
+  /**
+   * ENUM type of event
+   */
   PrefixEventType eventType;
-  std::optional<thrift::PrefixType> type;
-  std::vector<thrift::PrefixEntry> prefixes;
-  std::unordered_set<std::string> dstAreas;
+
+  /**
+   * Source of prefix update request. Each source must use a unique type
+   */
+  std::optional<thrift::PrefixType> type = std::nullopt;
+
+  /**
+   * List of prefix-entries to advertise or withdraw
+   */
+  std::vector<thrift::PrefixEntry> prefixes{};
+
+  /**
+   * Destination areas to inject prefixes to
+   * ATTN: empty list = inject to all configured areas
+   */
+  std::unordered_set<std::string> dstAreas{};
 
   explicit PrefixEvent(
       const PrefixEventType& eventType,

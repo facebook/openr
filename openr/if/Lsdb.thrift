@@ -42,8 +42,6 @@ struct PerfEvents {
 // Ipv4 / IPv6 LinkLocal addresses
 // Spark uses this to initiate sessions with neighbors
 // and the addresses are used as nextHops
-// Fib uses interface state to update RouteDb and program
-// next best routes
 //
 struct InterfaceInfo {
   1: bool isUp

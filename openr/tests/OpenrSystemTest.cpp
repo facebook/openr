@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/Format.h>
