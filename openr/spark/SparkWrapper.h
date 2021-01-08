@@ -14,13 +14,6 @@
 
 namespace openr {
 
-struct SparkInterfaceEntry {
-  std::string ifName;
-  int ifIndex;
-  folly::CIDRNetwork v4Network;
-  folly::CIDRNetwork v6LinkLocalNetwork;
-};
-
 /**
  * A utility class to wrap and interact with Spark. It exposes the APIs to
  * send commands to and receive publications from Spark.
@@ -54,8 +47,7 @@ class SparkWrapper {
 
   // add interfaceDb for Spark to tracking
   // return true upon success and false otherwise
-  bool updateInterfaceDb(
-      const std::vector<SparkInterfaceEntry>& interfaceEntries);
+  void updateInterfaceDb(const InterfaceDatabase& ifDb);
 
   // receive spark neighbor event
   std::optional<NeighborEvent> recvNeighborEvent(

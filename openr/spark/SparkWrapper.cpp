@@ -72,20 +72,9 @@ SparkWrapper::stop() {
   thread_->join();
 }
 
-bool
-SparkWrapper::updateInterfaceDb(
-    const std::vector<SparkInterfaceEntry>& interfaceEntries) {
-  InterfaceDatabase ifDb;
-  for (const auto& interface : interfaceEntries) {
-    ifDb.emplace_back(InterfaceInfo(
-        interface.ifName,
-        true,
-        interface.ifIndex,
-        {interface.v4Network, interface.v6LinkLocalNetwork}));
-  }
-
-  interfaceUpdatesQueue_.push(std::move(ifDb));
-  return true;
+void
+SparkWrapper::updateInterfaceDb(const InterfaceDatabase& ifDb) {
+  interfaceUpdatesQueue_.push(ifDb);
 }
 
 std::optional<NeighborEvent>

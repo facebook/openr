@@ -132,10 +132,18 @@ class SimpleSparkFixture : public SparkFixture {
     node2 = createSpark("node-2", config2);
 
     // start tracking iface1
-    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+    node1->updateInterfaceDb({InterfaceInfo(
+        iface1 /* ifName */,
+        true /* isUp */,
+        ifIndex1 /* ifIndex */,
+        {ip1V4, ip1V6} /* networks */)});
 
     // start tracking iface2
-    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+    node2->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V4, ip2V6} /* networks */)});
 
     LOG(INFO) << "Start to receive messages from Spark";
 
@@ -355,7 +363,11 @@ TEST_F(SimpleSparkFixture, GRTest) {
 
   LOG(INFO) << "Adding iface2 to node-2 to let it start helloMsg adverstising";
 
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
   // with wrapped seqNum
@@ -472,7 +484,7 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
       *node1->getSparkConfig().graceful_restart_time_s_ref());
 
   // tell node1 to remove interface to mimick request from linkMonitor
-  EXPECT_TRUE(node1->updateInterfaceDb({}));
+  node1->updateInterfaceDb({});
 
   LOG(INFO) << "Waiting for node-1 to report loss of adj to node-2";
 
@@ -509,7 +521,11 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
   // Resume interface connection
   LOG(INFO) << "Bringing iface-1 back online";
 
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
   startTime = std::chrono::steady_clock::now();
 
   {
@@ -574,8 +590,16 @@ TEST_F(SparkFixture, VersionTest) {
   auto node2 = createSpark(nodeName2, config2);
 
   // start tracking interfaces
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
@@ -592,7 +616,11 @@ TEST_F(SparkFixture, VersionTest) {
           Constants::kOpenrSupportedVersion - 1));
 
   // start tracking interfaces
-  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+  node3->updateInterfaceDb({InterfaceInfo(
+      iface3 /* ifName */,
+      true /* isUp */,
+      ifIndex3 /* ifIndex */,
+      {ip3V4, ip3V6} /* networks */)});
 
   // node3 can't form adj with neither node1 nor node2
   {
@@ -646,8 +674,16 @@ TEST_F(SparkFixture, DomainTest) {
   auto node2 = createSpark(nodeStark, config2);
 
   // start tracking iface1 and iface2
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     const auto& restart_time_s1 = std::chrono::seconds(
@@ -722,11 +758,28 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   auto node2 = createSpark(nodeName2, config2);
   auto node3 = createSpark(nodeName3, config3);
 
-  EXPECT_TRUE(
-      node1->updateInterfaceDb({{iface1_2, ifIndex1_2, ip1V4_2, ip1V6_2},
-                                {iface1_3, ifIndex1_3, ip1V4_3, ip1V6_3}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
-  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+  node1->updateInterfaceDb({
+      InterfaceInfo(
+          iface1_2 /* ifName */,
+          true /* isUp */,
+          ifIndex1_2 /* ifIndex */,
+          {ip1V4_2, ip1V6_2} /* networks */),
+      InterfaceInfo(
+          iface1_3 /* ifName */,
+          true /* isUp */,
+          ifIndex1_3 /* ifIndex */,
+          {ip1V4_3, ip1V6_3} /* networks */),
+  });
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
+  node3->updateInterfaceDb({InterfaceInfo(
+      iface3 /* ifName */,
+      true /* isUp */,
+      ifIndex3 /* ifIndex */,
+      {ip3V4, ip3V6} /* networks */)});
 
   // node-1 should hear from node-2 and node-3 on diff interfaces respectively
   {
@@ -805,8 +858,16 @@ TEST_F(SparkFixture, FastInitTest) {
 
   {
     // start tracking interfaces
-    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+    node1->updateInterfaceDb({InterfaceInfo(
+        iface1 /* ifName */,
+        true /* isUp */,
+        ifIndex1 /* ifIndex */,
+        {ip1V4, ip1V6} /* networks */)});
+    node2->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V4, ip2V6} /* networks */)});
 
     // record current timestamp
     const auto startTime = std::chrono::steady_clock::now();
@@ -830,7 +891,11 @@ TEST_F(SparkFixture, FastInitTest) {
 
   {
     // start tracking interfaces
-    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+    node2->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V4, ip2V6} /* networks */)});
 
     // record current timestamp
     const auto startTime = std::chrono::steady_clock::now();
@@ -881,8 +946,16 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   auto node2 = createSpark(nodeName2, config2);
 
   // start tracking interfaces
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
@@ -896,7 +969,11 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   auto config3 = std::make_shared<Config>(tConfig3);
 
   auto node3 = createSpark(nodeName3, config3);
-  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+  node3->updateInterfaceDb({InterfaceInfo(
+      iface3 /* ifName */,
+      true /* isUp */,
+      ifIndex3 /* ifIndex */,
+      {ip3V4, ip3V6} /* networks */)});
 
   // node-1 and node-2 should hear from node-3
   {
@@ -1015,8 +1092,16 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
       *config1->getSparkConfig().graceful_restart_time_s_ref());
 
   // start tracking interfaces
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     EXPECT_FALSE(node1->recvNeighborEvent(waitTime * 2).has_value());
@@ -1061,7 +1146,11 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
   auto node1 = createSpark("node-1", config1);
 
   // start tracking iface1.
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
@@ -1113,13 +1202,17 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   const folly::CIDRNetwork ip2V4WithDiffSubnet =
       folly::IPAddress::createNetwork("192.168.0.4", 31);
 
-  // start tracking iface1
-  EXPECT_TRUE(
-      node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4WithSubnet, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(node2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4WithDiffSubnet, ip2V6}}));
+  // start tracking interfaces
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4WithSubnet, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4WithDiffSubnet, ip2V6} /* networks */)});
 
   // won't form adj as v4 validation should fail
   {
@@ -1142,17 +1235,23 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
 
   {
     // bring down interface of node1 to make sure no crash happened
-    EXPECT_TRUE(node1->updateInterfaceDb({}));
+    node1->updateInterfaceDb({});
 
     // bring up interface of node1 to make sure no crash happened
-    EXPECT_TRUE(
-        node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4WithSubnet, ip1V6}}));
+    node1->updateInterfaceDb({InterfaceInfo(
+        iface1 /* ifName */,
+        true /* isUp */,
+        ifIndex1 /* ifIndex */,
+        {ip1V4WithSubnet, ip1V6} /* networks */)});
   }
 
   {
     // bring up interface with SAME subnet and verify ADJ UP event
-    EXPECT_TRUE(node2->updateInterfaceDb(
-        {{iface2, ifIndex2, ip2V4WithSameSubnet, ip2V6}}));
+    node2->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V4WithSameSubnet, ip2V6} /* networks */)});
 
     EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
     EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
@@ -1199,10 +1298,16 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
       folly::IPAddress::createNetwork("192.168.0.4", 31);
 
   // start tracking iface1 and iface2
-  EXPECT_TRUE(
-      node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4WithSubnet, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4WithDiffSubnet, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4WithSubnet, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4WithDiffSubnet, ip2V6} /* networks */)});
 
   // won't form adj as v4 validation should fail
   {
@@ -1284,8 +1389,16 @@ TEST_F(SparkFixture, AreaMatch) {
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
   // start tracking iface1 and iface2
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   // RSW001 and FSW002 node should form adj in area 2 due to regex matching
   {
@@ -1348,8 +1461,16 @@ TEST_F(SparkFixture, NoAreaMatch) {
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
   // start tracking iface1 and iface2
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
@@ -1419,8 +1540,16 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
   // start tracking iface1 and iface2
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
@@ -1495,8 +1624,16 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
   // start tracking iface1 and iface2
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     auto event1 = node1->waitForEvent(NB_UP);
@@ -1568,8 +1705,16 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
   // start tracking interfaces
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
 
   {
     auto event1 = node1->waitForEvent(NB_UP);
@@ -1590,7 +1735,11 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   // add third instance
 
   auto node3 = createSpark(nodeName3, config3);
-  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+  node3->updateInterfaceDb({InterfaceInfo(
+      iface3 /* ifName */,
+      true /* isUp */,
+      ifIndex3 /* ifIndex */,
+      {ip3V4, ip3V6} /* networks */)});
 
   LOG(INFO) << nodeName3 << " being started...";
 

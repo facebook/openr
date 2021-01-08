@@ -77,8 +77,7 @@ class OpenrWrapper {
    * add interfaceDb for spark to tracking
    * return true upon success and fasle otherwise
    */
-  bool sparkUpdateInterfaceDb(
-      const std::vector<SparkInterfaceEntry>& interfaceEntries);
+  void updateInterfaceDb(const InterfaceDatabase& ifDb);
 
   /**
    * get route databse from fib

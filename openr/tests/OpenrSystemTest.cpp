@@ -299,24 +299,52 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   EXPECT_TRUE(openr4->getIpPrefix().has_value());
 
   // start tracking iface1
-  EXPECT_TRUE(
-      openr1->sparkUpdateInterfaceDb({{iface12, ifIndex12, ip1V4, ip1V6},
-                                      {iface13, ifIndex13, ip1V4, ip1V6}}));
+  openr1->updateInterfaceDb({InterfaceInfo(
+                                 iface12 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex12 /* ifIndex */,
+                                 {ip1V4, ip1V6} /* networks */),
+                             InterfaceInfo(
+                                 iface13 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex13 /* ifIndex */,
+                                 {ip1V4, ip1V6} /* networks */)});
 
   // start tracking iface2
-  EXPECT_TRUE(
-      openr2->sparkUpdateInterfaceDb({{iface21, ifIndex21, ip2V4, ip2V6},
-                                      {iface24, ifIndex24, ip2V4, ip2V6}}));
+  openr2->updateInterfaceDb({InterfaceInfo(
+                                 iface21 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex21 /* ifIndex */,
+                                 {ip2V4, ip2V6} /* networks */),
+                             InterfaceInfo(
+                                 iface24 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex24 /* ifIndex */,
+                                 {ip2V4, ip2V6} /* networks */)});
 
   // start tracking iface3
-  EXPECT_TRUE(
-      openr3->sparkUpdateInterfaceDb({{iface31, ifIndex31, ip3V4, ip3V6},
-                                      {iface34, ifIndex34, ip3V4, ip3V6}}));
+  openr3->updateInterfaceDb({InterfaceInfo(
+                                 iface31 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex31 /* ifIndex */,
+                                 {ip3V4, ip3V6} /* networks */),
+                             InterfaceInfo(
+                                 iface34 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex34 /* ifIndex */,
+                                 {ip3V4, ip3V6} /* networks */)});
 
   // start tracking iface4
-  EXPECT_TRUE(
-      openr4->sparkUpdateInterfaceDb({{iface42, ifIndex42, ip4V4, ip4V6},
-                                      {iface43, ifIndex43, ip4V4, ip4V6}}));
+  openr4->updateInterfaceDb({InterfaceInfo(
+                                 iface42 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex42 /* ifIndex */,
+                                 {ip4V4, ip4V6} /* networks */),
+                             InterfaceInfo(
+                                 iface43 /* ifName */,
+                                 true /* isUp */,
+                                 ifIndex43 /* ifIndex */,
+                                 {ip4V4, ip4V6} /* networks */)});
 
   /* sleep override */
   // wait until all aquamen got synced on kvstore
