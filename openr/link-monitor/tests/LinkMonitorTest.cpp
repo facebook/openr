@@ -2183,7 +2183,7 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
   ASSERT_EQ(1, link.networks.size());
   EXPECT_EQ(
       folly::IPAddress::createNetwork(v4Addr, -1, false /* apply mask */),
-      link.networks.at(0));
+      *link.networks.begin());
 }
 
 TEST_F(LinkMonitorTestFixture, AreaTest) {

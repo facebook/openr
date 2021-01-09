@@ -27,7 +27,7 @@ class NetlinkEventsInjector {
   NetlinkEventsInjector(const NetlinkEventsInjector&) = delete;
   NetlinkEventsInjector& operator=(const NetlinkEventsInjector&) = delete;
 
-  void getAllLinks(std::vector<LinkEntry>& linkDb);
+  void getAllLinks(InterfaceDatabase& ifDb);
 
   void sendLinkEvent(
       const std::string& ifName, const uint64_t ifIndex, const bool isUp);

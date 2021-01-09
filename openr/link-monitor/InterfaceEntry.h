@@ -114,6 +114,7 @@ class InterfaceEntry final {
 
  private:
   // Attributes
+  // TODO: simplify by using `InterfaceInfo` instead of redifining attributes
   std::string const ifName_;
   int ifIndex_{0};
   bool isUp_{false};

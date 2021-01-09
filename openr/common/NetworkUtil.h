@@ -62,34 +62,6 @@ struct hash<openr::thrift::UnicastRoute> {
 
 namespace openr {
 
-struct LinkEntry {
-  LinkEntry(
-      const std::string& ifName,
-      const int64_t ifIndex,
-      bool isUp,
-      std::vector<folly::CIDRNetwork> networks,
-      const int64_t weight = 1)
-      : ifName(ifName),
-        ifIndex(ifIndex),
-        isUp(isUp),
-        networks(networks),
-        weight(weight) {}
-  // interface name
-  const std::string ifName{""};
-
-  // interface index
-  const int64_t ifIndex{0};
-
-  // boolean flag indicating link UP/DOWN
-  bool isUp{false};
-
-  // list of networks associated with this interface
-  std::vector<folly::CIDRNetwork> networks{};
-
-  // weight for UCMP
-  int64_t weight{1};
-};
-
 template <class IPAddressVx>
 thrift::BinaryAddress
 toBinaryAddressImpl(const IPAddressVx& addr) {

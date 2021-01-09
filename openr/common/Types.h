@@ -186,7 +186,7 @@ struct InterfaceInfo {
   int64_t ifIndex{-1};
 
   /**
-   * IPV4 + IPV6 addresses associated
+   * List of networks associated with this interface
    */
   std::unordered_set<folly::CIDRNetwork> networks{};
 
@@ -203,7 +203,7 @@ struct InterfaceInfo {
         (ifIndex == other.ifIndex) and (networks == other.networks);
   }
 
-  // TODO: deprecate thrift version of interfaceInfo
+  // TODO: thrift::InterfaceInfo to be deprecated
   thrift::InterfaceInfo
   toThrift() const {
     std::vector<thrift::IpPrefix> prefixes;

@@ -117,6 +117,7 @@ class Spark final : public OpenrEventBase {
   //
   // Interface tracking
   //
+  // TODO: migrate to use `InterfaceInfo` struct directly
   class Interface {
    public:
     Interface(
