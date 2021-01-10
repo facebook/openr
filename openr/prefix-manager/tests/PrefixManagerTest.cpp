@@ -547,9 +547,8 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evl.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
-        prefixManager->advertisePrefixes({prefixEntry1});
-      });
+      std::chrono::milliseconds(waitDuration += 0),
+      [&]() noexcept { prefixManager->advertisePrefixes({prefixEntry1}); });
 
   evl.scheduleTimeout(
       std::chrono::milliseconds(
@@ -1466,8 +1465,8 @@ class RouteOriginationFixture : public PrefixManagerTestFixture {
     originatedPrefixV6.install_to_fib_ref() = false;
 
     auto tConfig = PrefixManagerTestFixture::createConfig();
-    tConfig.originated_prefixes_ref() = {originatedPrefixV4,
-                                         originatedPrefixV6};
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
     return tConfig;
   }
 

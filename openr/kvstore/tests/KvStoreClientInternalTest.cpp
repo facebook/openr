@@ -530,9 +530,8 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
   // set empty value on store1, check for empty value on other stores, and
   // key version is higher
   evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
-        client1->clearKey(kTestingAreaName, "k1", "", kTtl);
-      });
+      std::chrono::milliseconds(waitDuration += 10),
+      [&]() noexcept { client1->clearKey(kTestingAreaName, "k1", "", kTtl); });
 
   // check key has empty value on all stores and version is incremented
   evb.scheduleTimeout(
@@ -578,9 +577,8 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
 
   // set empty value on store1, and check for key expiry
   evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
-        client1->clearKey(kTestingAreaName, "k1", "", kTtl);
-      });
+      std::chrono::milliseconds(waitDuration += 10),
+      [&]() noexcept { client1->clearKey(kTestingAreaName, "k1", "", kTtl); });
 
   // after kTtl duration key must have been deleted due to ttl expiry
   evb.scheduleTimeout(
@@ -1123,14 +1121,14 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
     thrift::Value keyExpVal{
         apache::thrift::FRAGILE, 1, nodeId, "test_key_exp_val", 1, 500, 0};
 
-    client2->setKvCallback([&](
-        const std::string& key,
-        std::optional<thrift::Value> thriftVal) noexcept {
-      if (!thriftVal.has_value()) {
-        EXPECT_EQ("test_key_exp", key);
-        keyExpCbCnt++;
-      }
-    });
+    client2->setKvCallback(
+        [&](const std::string& key,
+            std::optional<thrift::Value> thriftVal) noexcept {
+          if (!thriftVal.has_value()) {
+            EXPECT_EQ("test_key_exp", key);
+            keyExpCbCnt++;
+          }
+        });
 
     client2->subscribeKey(
         kTestingAreaName,

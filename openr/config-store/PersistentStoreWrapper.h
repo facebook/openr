@@ -20,7 +20,8 @@ class PersistentStoreWrapper {
     stop();
   }
 
-  PersistentStore* operator->() {
+  PersistentStore*
+  operator->() {
     return store_.get();
   }
 

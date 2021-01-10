@@ -435,8 +435,8 @@ SpfSolver::SpfSolverImpl::createRouteForPrefixOrGetStaticRoute(
   if (it != staticUnicastRoutes_.end()) {
     return RibUnicastEntry(
         toIPNetwork(it->first),
-        std::unordered_set<thrift::NextHopThrift>{it->second.begin(),
-                                                  it->second.end()});
+        std::unordered_set<thrift::NextHopThrift>{
+            it->second.begin(), it->second.end()});
   }
   return std::nullopt;
 }

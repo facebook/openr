@@ -125,8 +125,9 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
           createClientName(i),
           "value:",
           clients[i].get(),
-          [callback,
-           i](std::optional<T> newVal) noexcept { callback(i, newVal); },
+          [callback, i](std::optional<T> newVal) noexcept {
+            callback(i, newVal);
+          },
           10ms /* min backoff */,
           100ms /* max backoff */,
           overrideOwner /* override allowed */,

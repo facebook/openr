@@ -117,29 +117,28 @@ Fib::Fib(
   // - The routes are only programmed and updated but not deleted
   // - Updates arriving before first Decision RIB update will be processed. The
   //   fiber will terminate after that.
-  addFiberTask(
-      [q = std::move(staticRoutesUpdateQueue), this]() mutable noexcept {
-        LOG(INFO) << "Starting static routes update processing fiber";
-        while (true) {
-          auto maybeThriftPub = q.get(); // perform read
+  addFiberTask([q = std::move(staticRoutesUpdateQueue),
+                this]() mutable noexcept {
+    LOG(INFO) << "Starting static routes update processing fiber";
+    while (true) {
+      auto maybeThriftPub = q.get(); // perform read
 
-          // Terminate if queue is closed or we've received RIB from Decision
-          if (maybeThriftPub.hasError() or routeState_.hasRoutesFromDecision) {
-            LOG(INFO) << "Terminating static routes update processing fiber";
-            break;
-          }
+      // Terminate if queue is closed or we've received RIB from Decision
+      if (maybeThriftPub.hasError() or routeState_.hasRoutesFromDecision) {
+        LOG(INFO) << "Terminating static routes update processing fiber";
+        break;
+      }
 
-          // NOTE: We only process the static MPLS routes to add or update
-          LOG(INFO) << "Received static routes update";
-          maybeThriftPub->unicastRoutesToUpdate_ref()->clear();
-          maybeThriftPub->unicastRoutesToDelete_ref()->clear();
-          maybeThriftPub->mplsRoutesToDelete_ref()->clear();
+      // NOTE: We only process the static MPLS routes to add or update
+      LOG(INFO) << "Received static routes update";
+      maybeThriftPub->unicastRoutesToUpdate_ref()->clear();
+      maybeThriftPub->unicastRoutesToDelete_ref()->clear();
+      maybeThriftPub->mplsRoutesToDelete_ref()->clear();
 
-          // Program received static route updates
-          updateRoutes(
-              std::move(maybeThriftPub).value(), true /* static routes */);
-        }
-      });
+      // Program received static route updates
+      updateRoutes(std::move(maybeThriftPub).value(), true /* static routes */);
+    }
+  });
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("fib.convergence_time_ms", fb303::AVG);

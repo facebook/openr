@@ -64,9 +64,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   ~MyNetlinkHandler() override = default;
 
   void
-  linkEventFunc(
-      const std::string&,
-      const openr::fbnl::Link& linkEntry) noexcept override {
+  linkEventFunc(const std::string&, const openr::fbnl::Link& linkEntry) noexcept
+      override {
     std::string ifName = linkEntry.getLinkName();
     LOG(INFO) << "**Link : " << ifName << (linkEntry.isUp() ? " UP" : " DOWN");
     LOG(INFO) << "============================================================";

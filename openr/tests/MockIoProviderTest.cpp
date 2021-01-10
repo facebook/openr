@@ -424,10 +424,11 @@ TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   });
   mockIoProvider->waitUntilRunning();
 
-  mockIoProvider->addIfNameIfIndex({{ifName1, ifIndex1},
-                                    {ifName2, ifIndex2},
-                                    {ifName3, ifIndex3},
-                                    {ifName4, ifIndex4}});
+  mockIoProvider->addIfNameIfIndex(
+      {{ifName1, ifIndex1},
+       {ifName2, ifIndex2},
+       {ifName3, ifIndex3},
+       {ifName4, ifIndex4}});
 
   // Bidirectional connectivity between 1 and 2, while 3 just an island.
   ConnectedIfPairs connectedPairs = {
@@ -654,10 +655,11 @@ TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
   });
   mockIoProvider->waitUntilRunning();
 
-  mockIoProvider->addIfNameIfIndex({{ifName1, ifIndex1},
-                                    {ifName2, ifIndex2},
-                                    {ifName3, ifIndex3},
-                                    {ifName4, ifIndex4}});
+  mockIoProvider->addIfNameIfIndex(
+      {{ifName1, ifIndex1},
+       {ifName2, ifIndex2},
+       {ifName3, ifIndex3},
+       {ifName4, ifIndex4}});
 
   // Bidirectional connectivity between 1 and 2, while 3 just an island.
   ConnectedIfPairs connectedPairs = {
@@ -878,10 +880,11 @@ TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
   });
   mockIoProvider->waitUntilRunning();
 
-  mockIoProvider->addIfNameIfIndex({{ifName1, ifIndex1},
-                                    {ifName2, ifIndex2},
-                                    {ifName3, ifIndex3},
-                                    {ifName4, ifIndex4}});
+  mockIoProvider->addIfNameIfIndex(
+      {{ifName1, ifIndex1},
+       {ifName2, ifIndex2},
+       {ifName3, ifIndex3},
+       {ifName4, ifIndex4}});
 
   // Bidirectional connectivity between 1 and 2, while 3 just an island.
   ConnectedIfPairs connectedPairs = {
@@ -1100,10 +1103,11 @@ TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
   });
   mockIoProvider->waitUntilRunning();
 
-  mockIoProvider->addIfNameIfIndex({{ifName1, ifIndex1},
-                                    {ifName2, ifIndex2},
-                                    {ifName3, ifIndex3},
-                                    {ifName4, ifIndex4}});
+  mockIoProvider->addIfNameIfIndex(
+      {{ifName1, ifIndex1},
+       {ifName2, ifIndex2},
+       {ifName3, ifIndex3},
+       {ifName4, ifIndex4}});
 
   // Bidirectional connectivity between 1 and 2, while 3 just an island.
   ConnectedIfPairs connectedPairs = {
@@ -1322,10 +1326,11 @@ TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
   });
   mockIoProvider->waitUntilRunning();
 
-  mockIoProvider->addIfNameIfIndex({{ifName1, ifIndex1},
-                                    {ifName2, ifIndex2},
-                                    {ifName3, ifIndex3},
-                                    {ifName4, ifIndex4}});
+  mockIoProvider->addIfNameIfIndex(
+      {{ifName1, ifIndex1},
+       {ifName2, ifIndex2},
+       {ifName3, ifIndex3},
+       {ifName4, ifIndex4}});
 
   // Bidirectional connectivity between 1 and 2, while 3 just an island.
   ConnectedIfPairs connectedPairs = {
@@ -1567,10 +1572,11 @@ TEST(MockIoProviderTestSetup, PartialMeshOfNodesTest) {
   });
   mockIoProvider->waitUntilRunning();
 
-  mockIoProvider->addIfNameIfIndex({{ifName1, ifIndex1},
-                                    {ifName2, ifIndex2},
-                                    {ifName3, ifIndex3},
-                                    {ifName4, ifIndex4}});
+  mockIoProvider->addIfNameIfIndex(
+      {{ifName1, ifIndex1},
+       {ifName2, ifIndex2},
+       {ifName3, ifIndex3},
+       {ifName4, ifIndex4}});
 
   // Bidirectional connectivity between 1 and 2, while 3 just an island.
   ConnectedIfPairs connectedPairs = {

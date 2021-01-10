@@ -293,8 +293,8 @@ TEST(UtilTest, getNthPrefix) {
   // v6 allocation parameters
   const uint32_t seedPrefixLen = 32;
   const uint32_t allocPrefixLen = seedPrefixLen + 5;
-  const folly::CIDRNetwork seedPrefix{folly::IPAddress{"face:b00c::1"},
-                                      seedPrefixLen};
+  const folly::CIDRNetwork seedPrefix{
+      folly::IPAddress{"face:b00c::1"}, seedPrefixLen};
 
   // v6
   EXPECT_EQ(

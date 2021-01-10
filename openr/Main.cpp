@@ -502,11 +502,12 @@ main(int argc, char** argv) {
 
   // Create bgp speaker module
   if (config->isBgpPeeringEnabled()) {
-    pluginStart(PluginArgs{prefixUpdatesQueue,
-                           staticRoutesUpdateQueue,
-                           routeUpdatesQueue.getReader(),
-                           config,
-                           sslContext});
+    pluginStart(PluginArgs{
+        prefixUpdatesQueue,
+        staticRoutesUpdateQueue,
+        routeUpdatesQueue.getReader(),
+        config,
+        sslContext});
   }
 
   // Wait for the above three modules to start and run before running

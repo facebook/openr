@@ -729,15 +729,17 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   auto ip1V6_3 = folly::IPAddress::createNetwork("fe80::13:1/128");
 
   // Define interface names for the test
-  mockIoProvider_->addIfNameIfIndex({{iface1_2, ifIndex1_2},
-                                     {iface1_3, ifIndex1_3},
-                                     {iface2, ifIndex2},
-                                     {iface3, ifIndex3}});
+  mockIoProvider_->addIfNameIfIndex(
+      {{iface1_2, ifIndex1_2},
+       {iface1_3, ifIndex1_3},
+       {iface2, ifIndex2},
+       {iface3, ifIndex3}});
 
-  ConnectedIfPairs connectedPairs = {{iface1_2, {{iface2, 10}}},
-                                     {iface1_3, {{iface3, 10}}},
-                                     {iface2, {{iface1_2, 10}}},
-                                     {iface3, {{iface1_3, 10}}}};
+  ConnectedIfPairs connectedPairs = {
+      {iface1_2, {{iface2, 10}}},
+      {iface1_3, {{iface3, 10}}},
+      {iface2, {{iface1_2, 10}}},
+      {iface3, {{iface1_3, 10}}}};
   mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances

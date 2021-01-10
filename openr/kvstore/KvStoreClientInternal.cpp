@@ -30,21 +30,20 @@ KvStoreClientInternal::KvStoreClientInternal(
   CHECK(kvStore_);
 
   // Fiber to process thrift::Publication from KvStore
-  taskFuture_ = eventBase_->addFiberTaskFuture([
-    q = std::move(kvStore_->getKvStoreUpdatesReader()),
-    this
-  ]() mutable noexcept {
-    LOG(INFO) << "Starting KvStore updates processing fiber";
-    while (true) {
-      auto maybePublication = q.get(); // perform read
-      VLOG(2) << "Received KvStore update";
-      if (maybePublication.hasError()) {
-        LOG(INFO) << "Terminating KvStore updates processing fiber";
-        break;
-      }
-      processPublication(maybePublication.value());
-    }
-  });
+  taskFuture_ = eventBase_->addFiberTaskFuture(
+      [q = std::move(kvStore_->getKvStoreUpdatesReader()),
+       this]() mutable noexcept {
+        LOG(INFO) << "Starting KvStore updates processing fiber";
+        while (true) {
+          auto maybePublication = q.get(); // perform read
+          VLOG(2) << "Received KvStore update";
+          if (maybePublication.hasError()) {
+            LOG(INFO) << "Terminating KvStore updates processing fiber";
+            break;
+          }
+          processPublication(maybePublication.value());
+        }
+      });
 
   // initialize timers
   initTimers();

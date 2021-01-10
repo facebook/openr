@@ -6,6 +6,7 @@
  */
 
 #include <openr/monitor/SystemMetrics.h>
+
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 

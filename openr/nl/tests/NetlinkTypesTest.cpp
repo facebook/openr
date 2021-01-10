@@ -6,6 +6,7 @@
  */
 
 #include <openr/nl/NetlinkTypes.h>
+
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 

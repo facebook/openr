@@ -74,8 +74,8 @@ toBinaryAddressImpl(const IPAddressVx& addr) {
 inline thrift::BinaryAddress
 toBinaryAddress(const folly::IPAddress& addr) {
   return addr.isV4() ? toBinaryAddressImpl(addr.asV4())
-                     : addr.isV6() ? toBinaryAddressImpl(addr.asV6())
-                                   : thrift::BinaryAddress();
+      : addr.isV6()  ? toBinaryAddressImpl(addr.asV6())
+                     : thrift::BinaryAddress();
 }
 
 inline thrift::BinaryAddress

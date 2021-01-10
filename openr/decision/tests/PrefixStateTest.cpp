@@ -49,8 +49,9 @@ class PrefixStateTestFixture : public ::testing::Test {
 
   virtual std::vector<std::pair<PrefixKey, thrift::PrefixEntry>>
   createPrefixDbForNode(std::string const& name, size_t prefixSeed) const {
-    return {createPrefixKeyAndEntry(name, getAddrFromSeed(prefixSeed, false)),
-            createPrefixKeyAndEntry(name, getAddrFromSeed(prefixSeed, true))};
+    return {
+        createPrefixKeyAndEntry(name, getAddrFromSeed(prefixSeed, false)),
+        createPrefixKeyAndEntry(name, getAddrFromSeed(prefixSeed, true))};
   }
 };
 

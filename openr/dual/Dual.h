@@ -204,8 +204,8 @@ class Dual {
   std::string getStatusString() const noexcept;
 
   // get map<root-id: DualPerRootCounters>
-  std::map<std::string, thrift::DualPerRootCounters> getCounters() const
-      noexcept;
+  std::map<std::string, thrift::DualPerRootCounters> getCounters()
+      const noexcept;
 
   // add a spt child
   void addChild(const std::string& child) noexcept;
@@ -364,8 +364,8 @@ class DualNode {
 
   // get route-info for a given root-id
   // return none if root-id is not discoveried yet
-  std::optional<Dual::RouteInfo> getInfo(const std::string& rootId) const
-      noexcept;
+  std::optional<Dual::RouteInfo> getInfo(
+      const std::string& rootId) const noexcept;
 
   // get all route-infos for all discovered roots
   std::unordered_map<std::string, Dual::RouteInfo> getInfos() const noexcept;

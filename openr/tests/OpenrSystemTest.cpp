@@ -134,8 +134,9 @@ using RouteMap = unordered_map<
 // disable V4 by default
 NextHop
 toNextHop(thrift::Adjacency adj, bool isV4 = false) {
-  return {*adj.ifName_ref(),
-          toIPAddress(isV4 ? *adj.nextHopV4_ref() : *adj.nextHopV6_ref())};
+  return {
+      *adj.ifName_ref(),
+      toIPAddress(isV4 ? *adj.nextHopV4_ref() : *adj.nextHopV6_ref())};
 }
 
 // Note: routeMap will be modified
@@ -253,14 +254,15 @@ INSTANTIATE_TEST_CASE_P(
 //
 TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   // define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface12, ifIndex12},
-                                    {iface13, ifIndex13},
-                                    {iface21, ifIndex21},
-                                    {iface24, ifIndex24},
-                                    {iface31, ifIndex31},
-                                    {iface34, ifIndex34},
-                                    {iface42, ifIndex42},
-                                    {iface43, ifIndex43}});
+  mockIoProvider->addIfNameIfIndex(
+      {{iface12, ifIndex12},
+       {iface13, ifIndex13},
+       {iface21, ifIndex21},
+       {iface24, ifIndex24},
+       {iface31, ifIndex31},
+       {iface34, ifIndex34},
+       {iface42, ifIndex42},
+       {iface43, ifIndex43}});
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface12, {{iface21, 100}}},
@@ -298,52 +300,56 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   EXPECT_TRUE(openr4->getIpPrefix().has_value());
 
   // start tracking iface1
-  openr1->updateInterfaceDb({InterfaceInfo(
-                                 iface12 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex12 /* ifIndex */,
-                                 {ip1V4, ip1V6} /* networks */),
-                             InterfaceInfo(
-                                 iface13 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex13 /* ifIndex */,
-                                 {ip1V4, ip1V6} /* networks */)});
+  openr1->updateInterfaceDb(
+      {InterfaceInfo(
+           iface12 /* ifName */,
+           true /* isUp */,
+           ifIndex12 /* ifIndex */,
+           {ip1V4, ip1V6} /* networks */),
+       InterfaceInfo(
+           iface13 /* ifName */,
+           true /* isUp */,
+           ifIndex13 /* ifIndex */,
+           {ip1V4, ip1V6} /* networks */)});
 
   // start tracking iface2
-  openr2->updateInterfaceDb({InterfaceInfo(
-                                 iface21 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex21 /* ifIndex */,
-                                 {ip2V4, ip2V6} /* networks */),
-                             InterfaceInfo(
-                                 iface24 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex24 /* ifIndex */,
-                                 {ip2V4, ip2V6} /* networks */)});
+  openr2->updateInterfaceDb(
+      {InterfaceInfo(
+           iface21 /* ifName */,
+           true /* isUp */,
+           ifIndex21 /* ifIndex */,
+           {ip2V4, ip2V6} /* networks */),
+       InterfaceInfo(
+           iface24 /* ifName */,
+           true /* isUp */,
+           ifIndex24 /* ifIndex */,
+           {ip2V4, ip2V6} /* networks */)});
 
   // start tracking iface3
-  openr3->updateInterfaceDb({InterfaceInfo(
-                                 iface31 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex31 /* ifIndex */,
-                                 {ip3V4, ip3V6} /* networks */),
-                             InterfaceInfo(
-                                 iface34 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex34 /* ifIndex */,
-                                 {ip3V4, ip3V6} /* networks */)});
+  openr3->updateInterfaceDb(
+      {InterfaceInfo(
+           iface31 /* ifName */,
+           true /* isUp */,
+           ifIndex31 /* ifIndex */,
+           {ip3V4, ip3V6} /* networks */),
+       InterfaceInfo(
+           iface34 /* ifName */,
+           true /* isUp */,
+           ifIndex34 /* ifIndex */,
+           {ip3V4, ip3V6} /* networks */)});
 
   // start tracking iface4
-  openr4->updateInterfaceDb({InterfaceInfo(
-                                 iface42 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex42 /* ifIndex */,
-                                 {ip4V4, ip4V6} /* networks */),
-                             InterfaceInfo(
-                                 iface43 /* ifName */,
-                                 true /* isUp */,
-                                 ifIndex43 /* ifIndex */,
-                                 {ip4V4, ip4V6} /* networks */)});
+  openr4->updateInterfaceDb(
+      {InterfaceInfo(
+           iface42 /* ifName */,
+           true /* isUp */,
+           ifIndex42 /* ifIndex */,
+           {ip4V4, ip4V6} /* networks */),
+       InterfaceInfo(
+           iface43 /* ifName */,
+           true /* isUp */,
+           ifIndex43 /* ifIndex */,
+           {ip4V4, ip4V6} /* networks */)});
 
   /* sleep override */
   // wait until all aquamen got synced on kvstore
@@ -414,8 +420,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHopsWithMetric({make_pair(toNextHop(adj12, v4Enabled), 2),
-                          make_pair(toNextHop(adj13, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj12, v4Enabled), 2),
+           make_pair(toNextHop(adj13, v4Enabled), 2)}));
 
   // validate router 2
 
@@ -429,8 +436,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHopsWithMetric({make_pair(toNextHop(adj21, v4Enabled), 2),
-                          make_pair(toNextHop(adj24, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj21, v4Enabled), 2),
+           make_pair(toNextHop(adj24, v4Enabled), 2)}));
 
   // validate router 3
 
@@ -444,8 +452,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHopsWithMetric({make_pair(toNextHop(adj31, v4Enabled), 2),
-                          make_pair(toNextHop(adj34, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj31, v4Enabled), 2),
+           make_pair(toNextHop(adj34, v4Enabled), 2)}));
 
   // validate router 4
 
@@ -459,8 +468,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHopsWithMetric({make_pair(toNextHop(adj42, v4Enabled), 2),
-                          make_pair(toNextHop(adj43, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj42, v4Enabled), 2),
+           make_pair(toNextHop(adj43, v4Enabled), 2)}));
 
   // test IP prefix add and withdraw. Add prefixes and withdraw prefixes
   // using prefix manager client, and verify the FIB route dump reflects

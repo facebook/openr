@@ -293,8 +293,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
     for (auto id : areas) {
       thrift::AreaConfig area;
       area.area_id_ref() = id;
-      area.include_interface_regexes_ref() = {kTestVethNamePrefix + ".*",
-                                              "iface.*"};
+      area.include_interface_regexes_ref() = {
+          kTestVethNamePrefix + ".*", "iface.*"};
       area.redistribute_interface_regexes_ref() = {"loopback"};
       areaConfig.emplace_back(std::move(area));
     }
@@ -307,8 +307,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
     lmConf.linkflap_initial_backoff_ms_ref() = flapInitalBackoff.count();
     lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
     lmConf.use_rtt_metric_ref() = false;
-    *lmConf.include_interface_regexes_ref() = {kTestVethNamePrefix + ".*",
-                                               "iface.*"};
+    *lmConf.include_interface_regexes_ref() = {
+        kTestVethNamePrefix + ".*", "iface.*"};
     *lmConf.redistribute_interface_regexes_ref() = {"loopback"};
 
     tConfig.enable_new_gr_behavior_ref() = true;

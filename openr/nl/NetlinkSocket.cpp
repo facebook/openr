@@ -6,6 +6,7 @@
  */
 
 #include <openr/nl/NetlinkSocket.h>
+
 #include <openr/if/gen-cpp2/Platform_constants.h>
 
 namespace openr::fbnl {
@@ -23,35 +24,35 @@ NetlinkSocket::NetlinkSocket(
   getAllReachableNeighbors().get();
 
   // Pass link and address callbacks to NetlinkProtocolSocket
-  nlSock_->setLinkEventCB([this](
-      openr::fbnl::Link link, bool runHandler) noexcept {
-    evl_->runImmediatelyOrInEventLoop([this,
-                                       link = std::move(link),
+  nlSock_->setLinkEventCB(
+      [this](openr::fbnl::Link link, bool runHandler) noexcept {
+        evl_->runImmediatelyOrInEventLoop([this,
+                                           link = std::move(link),
 
-                                       runHandler = runHandler]() mutable {
-      doHandleLinkEvent(link, runHandler);
-    });
-  });
+                                           runHandler = runHandler]() mutable {
+          doHandleLinkEvent(link, runHandler);
+        });
+      });
 
-  nlSock_->setAddrEventCB([this](
-      openr::fbnl::IfAddress ifAddr, bool runHandler) noexcept {
-    evl_->runImmediatelyOrInEventLoop([this,
-                                       ifAddr = std::move(ifAddr),
+  nlSock_->setAddrEventCB(
+      [this](openr::fbnl::IfAddress ifAddr, bool runHandler) noexcept {
+        evl_->runImmediatelyOrInEventLoop([this,
+                                           ifAddr = std::move(ifAddr),
 
-                                       runHandler = runHandler]() mutable {
-      doHandleAddrEvent(ifAddr, runHandler);
-    });
-  });
+                                           runHandler = runHandler]() mutable {
+          doHandleAddrEvent(ifAddr, runHandler);
+        });
+      });
 
-  nlSock_->setNeighborEventCB([this](
-      openr::fbnl::Neighbor neigh, bool runHandler) noexcept {
-    evl_->runImmediatelyOrInEventLoop([this,
-                                       neigh = std::move(neigh),
+  nlSock_->setNeighborEventCB(
+      [this](openr::fbnl::Neighbor neigh, bool runHandler) noexcept {
+        evl_->runImmediatelyOrInEventLoop([this,
+                                           neigh = std::move(neigh),
 
-                                       runHandler = runHandler]() mutable {
-      doHandleNeighborEvent(neigh, runHandler);
-    });
-  });
+                                           runHandler = runHandler]() mutable {
+          doHandleNeighborEvent(neigh, runHandler);
+        });
+      });
 
   // need to reload routes from kernel to avoid re-adding existing route
   // type of exception in NetlinkSocket

@@ -287,9 +287,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     folly::Synchronized<std::unordered_map<std::string, folly::CIDRNetwork>>
         nodeToPrefix_;
 
-    auto prefixDbCb = [&](
-        std::string const&,
-        std::optional<thrift::Value> value) mutable noexcept {
+    auto prefixDbCb = [&](std::string const&,
+                          std::optional<thrift::Value> value) mutable noexcept {
       // Parse PrefixDb
       ASSERT_TRUE(value.has_value());
       ASSERT_TRUE(value.value().value_ref().has_value());
@@ -412,9 +411,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       tempFileName = folly::sformat("/tmp/openr.{}.{}.{}", tid, round, i);
       tempFileNames_.emplace_back(tempFileName);
       auto tempConfigStore = std::make_unique<PersistentStore>(tempFileName);
-      threads.emplace_back([&tempConfigStore]() noexcept {
-        tempConfigStore->run();
-      });
+      threads.emplace_back(
+          [&tempConfigStore]() noexcept { tempConfigStore->run(); });
       tempConfigStore->waitUntilRunning();
 
       auto currTConfig = getBasicOpenrConfig(myNodeName);
@@ -442,9 +440,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           store->getKvStore(),
           false,
           std::chrono::seconds(0));
-      threads.emplace_back([&prefixManager]() noexcept {
-        prefixManager->run();
-      });
+      threads.emplace_back(
+          [&prefixManager]() noexcept { prefixManager->run(); });
       prefixManager->waitUntilRunning();
       prefixManagers.emplace_back(std::move(prefixManager));
 
@@ -575,8 +572,8 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   const uint8_t allocPrefixLen = 24;
 
   // Set callback
-  auto cb = [&](
-      const std::string&, std::optional<thrift::Value> value) mutable noexcept {
+  auto cb = [&](const std::string&,
+                std::optional<thrift::Value> value) mutable noexcept {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value_ref().has_value());
@@ -916,8 +913,8 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   std::atomic<bool> hasAllocPrefix{false};
 
   // Set callback
-  auto cb = [&](
-      const std::string&, std::optional<thrift::Value> value) mutable noexcept {
+  auto cb = [&](const std::string&,
+                std::optional<thrift::Value> value) mutable noexcept {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value_ref().has_value());
@@ -1126,8 +1123,8 @@ TEST_F(PrefixAllocatorFixture, SyncIfaceAddresses) {
 
   // Sync addr1 and addr2 for AF_INET family
   {
-    std::vector<folly::CIDRNetwork> networks{ifAddr1.getPrefix().value(),
-                                             ifAddr2.getPrefix().value()};
+    std::vector<folly::CIDRNetwork> networks{
+        ifAddr1.getPrefix().value(), ifAddr2.getPrefix().value()};
     auto retval = prefixAllocator_->semifuture_syncIfAddrs(
         "eth0", AF_INET, RT_SCOPE_UNIVERSE, std::move(networks));
     EXPECT_NO_THROW(std::move(retval).get());

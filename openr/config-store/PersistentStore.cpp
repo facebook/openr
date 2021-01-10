@@ -64,12 +64,10 @@ folly::SemiFuture<folly::Unit>
 PersistentStore::store(std::string key, std::string value) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([
-    this,
-    p = std::move(p),
-    key = std::move(key),
-    value = std::move(value)
-  ]() mutable noexcept {
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        key = std::move(key),
+                        value = std::move(value)]() mutable noexcept {
     SYSLOG(INFO) << "Store key: " << key << ", value: " << value
                  << " to config-store";
     // Override previous value if any

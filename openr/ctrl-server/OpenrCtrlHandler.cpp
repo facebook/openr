@@ -62,82 +62,82 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       config_(config) {
   // Add fiber task to receive publication from KvStore
   if (kvStore_) {
-    auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture([
-      q = std::move(kvStore_->getKvStoreUpdatesReader()),
-      this
-    ]() mutable noexcept {
-      LOG(INFO) << "Starting KvStore updates processing fiber";
-      while (true) {
-        auto maybePublication = q.get(); // perform read
-        VLOG(2) << "Received publication from KvStore";
-        if (maybePublication.hasError()) {
-          LOG(INFO) << "Terminating KvStore publications processing fiber";
-          break;
-        }
-
-        SYNCHRONIZED(kvStorePublishers_) {
-          for (auto& kv : kvStorePublishers_) {
-            kv.second->publish(maybePublication.value());
-          }
-        }
-
-        bool isAdjChanged = false;
-        // check if any of KeyVal has 'adj' update
-        for (auto& kv : *maybePublication.value().keyVals_ref()) {
-          auto& key = kv.first;
-          auto& val = kv.second;
-          // check if we have any value update.
-          // Ttl refreshing won't update any value.
-          if (!val.value_ref().has_value()) {
-            continue;
-          }
-
-          // "adj:*" key has changed. Update local collection
-          if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-            VLOG(3) << "Adj key: " << key << " change received";
-            isAdjChanged = true;
-            break;
-          }
-        }
-
-        if (isAdjChanged) {
-          // thrift::Publication contains "adj:*" key change.
-          // Clean ALL pending promises
-          longPollReqs_.withWLock([&](auto& longPollReqs) {
-            for (auto& kv : longPollReqs[maybePublication->get_area()]) {
-              auto& p = kv.second.first;
-              p.setValue(true);
+    auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(
+        [q = std::move(kvStore_->getKvStoreUpdatesReader()),
+         this]() mutable noexcept {
+          LOG(INFO) << "Starting KvStore updates processing fiber";
+          while (true) {
+            auto maybePublication = q.get(); // perform read
+            VLOG(2) << "Received publication from KvStore";
+            if (maybePublication.hasError()) {
+              LOG(INFO) << "Terminating KvStore publications processing fiber";
+              break;
             }
-            longPollReqs.clear();
-          });
-        } else {
-          longPollReqs_.withWLock([&](auto& longPollReqs) {
-            auto now = getUnixTimeStampMs();
-            std::vector<int64_t> reqsToClean;
-            for (auto& kv : longPollReqs[maybePublication->get_area()]) {
-              auto& clientId = kv.first;
-              auto& req = kv.second;
 
-              auto& p = req.first;
-              auto& timeStamp = req.second;
-              if (now - timeStamp >= Constants::kLongPollReqHoldTime.count()) {
-                LOG(INFO) << "Elapsed time: " << now - timeStamp
-                          << " is over hold limit: "
-                          << Constants::kLongPollReqHoldTime.count();
-                reqsToClean.emplace_back(clientId);
-                p.setValue(false);
+            SYNCHRONIZED(kvStorePublishers_) {
+              for (auto& kv : kvStorePublishers_) {
+                kv.second->publish(maybePublication.value());
               }
             }
 
-            // cleanup expired requests since no ADJ change observed
-            for (auto& clientId : reqsToClean) {
-              longPollReqs[maybePublication->get_area()].erase(clientId);
+            bool isAdjChanged = false;
+            // check if any of KeyVal has 'adj' update
+            for (auto& kv : *maybePublication.value().keyVals_ref()) {
+              auto& key = kv.first;
+              auto& val = kv.second;
+              // check if we have any value update.
+              // Ttl refreshing won't update any value.
+              if (!val.value_ref().has_value()) {
+                continue;
+              }
+
+              // "adj:*" key has changed. Update local collection
+              if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+                VLOG(3) << "Adj key: " << key << " change received";
+                isAdjChanged = true;
+                break;
+              }
             }
-          });
-        }
-      }
-      LOG(INFO) << "KvStore updates processing fiber stopped";
-    });
+
+            if (isAdjChanged) {
+              // thrift::Publication contains "adj:*" key change.
+              // Clean ALL pending promises
+              longPollReqs_.withWLock([&](auto& longPollReqs) {
+                for (auto& kv : longPollReqs[maybePublication->get_area()]) {
+                  auto& p = kv.second.first;
+                  p.setValue(true);
+                }
+                longPollReqs.clear();
+              });
+            } else {
+              longPollReqs_.withWLock([&](auto& longPollReqs) {
+                auto now = getUnixTimeStampMs();
+                std::vector<int64_t> reqsToClean;
+                for (auto& kv : longPollReqs[maybePublication->get_area()]) {
+                  auto& clientId = kv.first;
+                  auto& req = kv.second;
+
+                  auto& p = req.first;
+                  auto& timeStamp = req.second;
+                  if (now - timeStamp >=
+                      Constants::kLongPollReqHoldTime.count()) {
+                    LOG(INFO) << "Elapsed time: " << now - timeStamp
+                              << " is over hold limit: "
+                              << Constants::kLongPollReqHoldTime.count();
+                    reqsToClean.emplace_back(clientId);
+                    p.setValue(false);
+                  }
+                }
+
+                // cleanup expired requests since no ADJ change observed
+                for (auto& clientId : reqsToClean) {
+                  longPollReqs[maybePublication->get_area()].erase(clientId);
+                }
+              });
+            }
+          }
+          LOG(INFO) << "KvStore updates processing fiber stopped";
+        });
 
     workers_.push_back(std::move(taskFutureKvStore));
   }
@@ -875,8 +875,8 @@ OpenrCtrlHandler::semifuture_subscribeAndGetFib() {
         db.throwIfFailed();
         return apache::thrift::ResponseAndServerStream<
             thrift::RouteDatabase,
-            thrift::RouteDatabaseDelta>{std::move(*db.value()),
-                                        std::move(stream)};
+            thrift::RouteDatabaseDelta>{
+            std::move(*db.value()), std::move(stream)};
       });
 }
 

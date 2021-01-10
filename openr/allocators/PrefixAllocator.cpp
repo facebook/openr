@@ -533,7 +533,7 @@ PrefixAllocator::startAllocation(
       syncInterval_ + 1ms,
       // do not allow override
       false,
-      [this](uint32_t allocIndex) noexcept->bool {
+      [this](uint32_t allocIndex) noexcept -> bool {
         return checkE2eAllocIndex(allocIndex);
       },
       Constants::kRangeAllocTtl);

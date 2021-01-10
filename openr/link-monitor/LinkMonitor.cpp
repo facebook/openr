@@ -218,18 +218,17 @@ LinkMonitor::LinkMonitor(
   });
 
   // Add fiber to process KvStore Sync events
-  addFiberTask(
-      [q = std::move(kvStoreSyncEventsQueue), this]() mutable noexcept {
-        while (true) {
-          auto maybeEvent = q.get();
-          if (maybeEvent.hasError()) {
-            LOG(INFO)
-                << "Terminating kvstore peer sync events processing fiber";
-            break;
-          }
-          processKvStoreSyncEvent(std::move(maybeEvent).value());
-        }
-      });
+  addFiberTask([q = std::move(kvStoreSyncEventsQueue),
+                this]() mutable noexcept {
+    while (true) {
+      auto maybeEvent = q.get();
+      if (maybeEvent.hasError()) {
+        LOG(INFO) << "Terminating kvstore peer sync events processing fiber";
+        break;
+      }
+      processKvStoreSyncEvent(std::move(maybeEvent).value());
+    }
+  });
 
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
   interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {

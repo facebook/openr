@@ -6,6 +6,7 @@
  */
 
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
+
 #include <glog/logging.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/nl/NetlinkTypes.h>

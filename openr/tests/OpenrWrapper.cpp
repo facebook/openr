@@ -6,6 +6,7 @@
  */
 
 #include <openr/tests/OpenrWrapper.h>
+
 #include <openr/config/tests/Utils.h>
 
 namespace openr {

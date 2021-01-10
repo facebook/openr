@@ -6,6 +6,7 @@
  */
 
 #include <openr/tests/mocks/PrefixGenerator.h>
+
 #include <folly/Random.h>
 
 namespace openr {

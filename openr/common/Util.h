@@ -46,15 +46,17 @@
  *  V0402 16:35:54 ... UtilTest.cpp:970] Execution time for TestBody took 0ms.
  */
 
-#define LOG_FN_EXECUTION_TIME                                                \
-  auto FB_ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE) =                           \
-  ::folly::detail::ScopeGuardOnExit() +                                    \
-  [&, fn=__FUNCTION__, ts=std::chrono::steady_clock::now()] () noexcept { \
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(   \
-        std::chrono::steady_clock::now() - ts);                              \
-    VLOG(1) << "Execution time for " << fn << " took " << duration.count()   \
-            << "ms";                                                         \
-  }
+#define LOG_FN_EXECUTION_TIME                                                  \
+  auto FB_ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE) =                               \
+      ::folly::detail::ScopeGuardOnExit() +                                    \
+      [&,                                                                      \
+       fn = __FUNCTION__,                                                      \
+       ts = std::chrono::steady_clock::now()]() noexcept {                     \
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>( \
+            std::chrono::steady_clock::now() - ts);                            \
+        VLOG(1) << "Execution time for " << fn << " took " << duration.count() \
+                << "ms";                                                       \
+      }
 
 const openr::AreaId kTestingAreaName{"test_area_name"};
 

@@ -550,9 +550,10 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   //
   // Peers APIs
   //
-  const thrift::PeersMap peers{{"peer1", createPeerSpec("inproc://peer1-cmd")},
-                               {"peer2", createPeerSpec("inproc://peer2-cmd")},
-                               {"peer3", createPeerSpec("inproc://peer3-cmd")}};
+  const thrift::PeersMap peers{
+      {"peer1", createPeerSpec("inproc://peer1-cmd")},
+      {"peer2", createPeerSpec("inproc://peer2-cmd")},
+      {"peer3", createPeerSpec("inproc://peer3-cmd")}};
 
   // do the same with non-default area
   const thrift::PeersMap peersPod{

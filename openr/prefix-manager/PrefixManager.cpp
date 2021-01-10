@@ -106,30 +106,29 @@ PrefixManager::PrefixManager(
   });
 
   // Fiber to process route updates from Decision
-  addFiberTask(
-      [q = std::move(decisionRouteUpdatesQueue), this]() mutable noexcept {
-        while (true) {
-          auto maybeThriftObj = q.get(); // perform read
-          if (maybeThriftObj.hasError()) {
-            LOG(INFO) << "Terminating route delta processing fiber";
-            break;
-          }
+  addFiberTask([q = std::move(decisionRouteUpdatesQueue),
+                this]() mutable noexcept {
+    while (true) {
+      auto maybeThriftObj = q.get(); // perform read
+      if (maybeThriftObj.hasError()) {
+        LOG(INFO) << "Terminating route delta processing fiber";
+        break;
+      }
 
-          try {
-            VLOG(2) << "Received RIB updates from Decision";
-            processDecisionRouteUpdates(std::move(maybeThriftObj).value());
-          } catch (const std::exception&) {
+      try {
+        VLOG(2) << "Received RIB updates from Decision";
+        processDecisionRouteUpdates(std::move(maybeThriftObj).value());
+      } catch (const std::exception&) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
-            // collect stack strace then fail the process
-            for (auto& exInfo :
-                 folly::exception_tracer::getCurrentExceptions()) {
-              LOG(ERROR) << exInfo;
-            }
-#endif
-            throw;
-          }
+        // collect stack strace then fail the process
+        for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
+          LOG(ERROR) << exInfo;
         }
-      });
+#endif
+        throw;
+      }
+    }
+  });
 
   // register kvstore publication callback
   std::vector<std::string> const keyPrefixList = {
@@ -345,11 +344,9 @@ folly::SemiFuture<bool>
 PrefixManager::advertisePrefixes(std::vector<thrift::PrefixEntry> prefixes) {
   folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([
-    this,
-    p = std::move(p),
-    prefixes = std::move(prefixes)
-  ]() mutable noexcept {
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        prefixes = std::move(prefixes)]() mutable noexcept {
     p.setValue(advertisePrefixesImpl(prefixes, allAreas_));
   });
   return sf;
@@ -359,11 +356,11 @@ folly::SemiFuture<bool>
 PrefixManager::withdrawPrefixes(std::vector<thrift::PrefixEntry> prefixes) {
   folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([
-    this,
-    p = std::move(p),
-    prefixes = std::move(prefixes)
-  ]() mutable noexcept { p.setValue(withdrawPrefixesImpl(prefixes)); });
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        prefixes = std::move(prefixes)]() mutable noexcept {
+    p.setValue(withdrawPrefixesImpl(prefixes));
+  });
   return sf;
 }
 
@@ -371,11 +368,11 @@ folly::SemiFuture<bool>
 PrefixManager::withdrawPrefixesByType(thrift::PrefixType prefixType) {
   folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([
-    this,
-    p = std::move(p),
-    prefixType = std::move(prefixType)
-  ]() mutable noexcept { p.setValue(withdrawPrefixesByTypeImpl(prefixType)); });
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        prefixType = std::move(prefixType)]() mutable noexcept {
+    p.setValue(withdrawPrefixesByTypeImpl(prefixType));
+  });
   return sf;
 }
 
@@ -384,12 +381,10 @@ PrefixManager::syncPrefixesByType(
     thrift::PrefixType prefixType, std::vector<thrift::PrefixEntry> prefixes) {
   folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([
-    this,
-    p = std::move(p),
-    prefixType = std::move(prefixType),
-    prefixes = std::move(prefixes)
-  ]() mutable noexcept {
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        prefixType = std::move(prefixType),
+                        prefixes = std::move(prefixes)]() mutable noexcept {
     p.setValue(syncPrefixesByTypeImpl(prefixType, prefixes, allAreas_));
   });
   return sf;
@@ -416,11 +411,9 @@ folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
 PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
   folly::Promise<std::unique_ptr<std::vector<thrift::PrefixEntry>>> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([
-    this,
-    p = std::move(p),
-    prefixType = std::move(prefixType)
-  ]() mutable noexcept {
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        prefixType = std::move(prefixType)]() mutable noexcept {
     std::vector<thrift::PrefixEntry> prefixes;
     for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
       auto it = typeToPrefixes.find(prefixType);

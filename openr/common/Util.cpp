@@ -416,11 +416,11 @@ findDeltaRoutes(
   // Build routes to be programmed.
   thrift::RouteDatabaseDelta routeDbDelta;
   *routeDbDelta.unicastRoutesToUpdate_ref() = std::move(unicastRoutesToUpdate);
-  *routeDbDelta.unicastRoutesToDelete_ref() = {prefixesToRemove.begin(),
-                                               prefixesToRemove.end()};
+  *routeDbDelta.unicastRoutesToDelete_ref() = {
+      prefixesToRemove.begin(), prefixesToRemove.end()};
   *routeDbDelta.mplsRoutesToUpdate_ref() = std::move(mplsRoutesToUpdate);
-  *routeDbDelta.mplsRoutesToDelete_ref() = {labelsToRemove.begin(),
-                                            labelsToRemove.end()};
+  *routeDbDelta.mplsRoutesToDelete_ref() = {
+      labelsToRemove.begin(), labelsToRemove.end()};
 
   return routeDbDelta;
 }
@@ -457,8 +457,9 @@ getPrefixForwardingTypeAndAlgorithm(
   r.second = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
 
   if (prefixEntries.empty()) {
-    return {thrift::PrefixForwardingType::IP,
-            thrift::PrefixForwardingAlgorithm::SP_ECMP};
+    return {
+        thrift::PrefixForwardingType::IP,
+        thrift::PrefixForwardingAlgorithm::SP_ECMP};
   }
 
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
@@ -698,8 +699,9 @@ createPrefixKeyAndEntry(
     const std::string& nodeName,
     thrift::IpPrefix const& prefix,
     const std::string& area) {
-  return {PrefixKey(nodeName, toIPNetwork(prefix), area),
-          createPrefixEntry(prefix)};
+  return {
+      PrefixKey(nodeName, toIPNetwork(prefix), area),
+      createPrefixEntry(prefix)};
 }
 
 std::pair<PrefixKey, thrift::PrefixDatabase>
@@ -708,8 +710,9 @@ createPrefixKeyAndDb(
     const thrift::PrefixEntry& prefixEntry,
     const std::string& area,
     bool withdraw) {
-  return {PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix_ref()), area),
-          createPrefixDb(nodeName, {prefixEntry}, area, withdraw)};
+  return {
+      PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix_ref()), area),
+      createPrefixDb(nodeName, {prefixEntry}, area, withdraw)};
 }
 
 std::pair<std::string, thrift::Value>
@@ -721,9 +724,10 @@ createPrefixKeyValue(
     bool withdraw) {
   apache::thrift::CompactSerializer serializer;
   auto [key, db] = createPrefixKeyAndDb(nodeName, prefixEntry, area, withdraw);
-  return {key.getPrefixKey(),
-          createThriftValue(
-              version, nodeName, writeThriftObjStr(std::move(db), serializer))};
+  return {
+      key.getPrefixKey(),
+      createThriftValue(
+          version, nodeName, writeThriftObjStr(std::move(db), serializer))};
 }
 
 std::pair<std::string, thrift::Value>
@@ -927,7 +931,8 @@ createMetricEntity(
   return me;
 }
 
-CompareResult operator!(CompareResult mv) {
+CompareResult
+operator!(CompareResult mv) {
   switch (mv) {
   case CompareResult::WINNER: {
     return CompareResult::LOOSER;

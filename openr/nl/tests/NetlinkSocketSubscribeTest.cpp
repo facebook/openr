@@ -179,9 +179,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   }
 
   void
-  linkEventFunc(
-      const std::string&,
-      const openr::fbnl::Link& linkEntry) noexcept override {
+  linkEventFunc(const std::string&, const openr::fbnl::Link& linkEntry) noexcept
+      override {
     std::string ifName = linkEntry.getLinkName();
     VLOG(3) << "**Link : " << ifName << (linkEntry.isUp() ? " UP" : " DOWN");
     if (ifName.find(ifNamePrefix) == std::string::npos) {

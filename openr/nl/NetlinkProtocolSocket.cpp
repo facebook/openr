@@ -57,15 +57,16 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
   });
 
   // Create consumer for procesing netlink messages to be sent in an event loop
-  notifConsumer_ = folly::NotificationQueue<std::unique_ptr<NetlinkMessage>>::
-      Consumer::make([this](std::unique_ptr<NetlinkMessage> && nlmsg) noexcept {
-        msgQueue_.push(std::move(nlmsg));
-        // Invoke send messages API if socket is initialized and no in flight
-        // messages
-        if (nlSock_ >= 0 && !nlMessageTimer_->isScheduled()) {
-          sendNetlinkMessage();
-        }
-      });
+  notifConsumer_ =
+      folly::NotificationQueue<std::unique_ptr<NetlinkMessage>>::Consumer::make(
+          [this](std::unique_ptr<NetlinkMessage>&& nlmsg) noexcept {
+            msgQueue_.push(std::move(nlmsg));
+            // Invoke send messages API if socket is initialized and no in
+            // flight messages
+            if (nlSock_ >= 0 && !nlMessageTimer_->isScheduled()) {
+              sendNetlinkMessage();
+            }
+          });
 
   // Initialize the socket in an event loop
   nlInitTimer_ = folly::AsyncTimeout::schedule(
