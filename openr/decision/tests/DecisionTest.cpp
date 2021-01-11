@@ -2623,13 +2623,24 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   auto prefixDBOne = getPrefixDbForNode(prefixState, "1");
   auto prefixDBTwo = getPrefixDbForNode(prefixState, "2");
 
-  // set metric vector for two prefixes in two nodes to be same
-  prefixDBOne.prefixEntries_ref()->at(1).mv_ref() = mv1;
-  prefixDBTwo.prefixEntries_ref()->push_back(
-      prefixDBOne.prefixEntries_ref()->at(1));
+  // Set metric vector for addr1 prefixes in two nodes to be same
+  // for both, put this element at the back of the entries list
+  auto& entriesVec = *prefixDBOne.prefixEntries_ref();
+  for (auto entryIter = entriesVec.begin(); entryIter != entriesVec.end();
+       ++entryIter) {
+    if ((!v4Enabled && entryIter->get_prefix() == bgpAddr1) ||
+        (v4Enabled && entryIter->get_prefix() == bgpAddr1V4)) {
+      entryIter->mv_ref() = mv1;
+      prefixDBTwo.prefixEntries_ref()->push_back(*entryIter);
+      entriesVec.erase(entryIter);
+      break;
+    }
+  }
+  entriesVec.push_back(prefixDBTwo.prefixEntries_ref()->back());
+
   // only node 1 is announcing the prefix with prependLabel.
   // node 2 is announcing the prefix without prependLabel.
-  prefixDBOne.prefixEntries_ref()[1].prependLabel_ref() = 60000;
+  prefixDBOne.prefixEntries_ref()->back().prependLabel_ref() = 60000;
 
   updatePrefixDatabase(prefixState, prefixDBOne);
   updatePrefixDatabase(prefixState, prefixDBTwo);
@@ -2720,7 +2731,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       .isBestPathTieBreaker_ref() = true;
 
   prefixDBOne.prefixEntries_ref()
-      ->at(1)
+      ->back()
       .mv_ref()
       .value()
       .metrics_ref()
@@ -2808,11 +2819,24 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   auto prefixDBOne = getPrefixDbForNode(prefixState, "1");
   auto prefixDBTwo = getPrefixDbForNode(prefixState, "2");
 
-  // set metric vector for two prefixes in two nodes to be same
-  prefixDBOne.prefixEntries_ref()->at(1).mv_ref() = mv1;
-  prefixDBTwo.prefixEntries_ref()->push_back(
-      prefixDBOne.prefixEntries_ref()->at(1));
-  prefixDBOne.prefixEntries_ref()->at(1).prependLabel_ref() = 60000;
+  // Set metric vector for addr1 prefixes in two nodes to be same
+  // for both, put this element at the back of the entries list
+  auto& entriesVec = *prefixDBOne.prefixEntries_ref();
+  for (auto entryIter = entriesVec.begin(); entryIter != entriesVec.end();
+       ++entryIter) {
+    if ((!v4Enabled && entryIter->get_prefix() == bgpAddr1) ||
+        (v4Enabled && entryIter->get_prefix() == bgpAddr1V4)) {
+      entryIter->mv_ref() = mv1;
+      prefixDBTwo.prefixEntries_ref()->push_back(*entryIter);
+      entriesVec.erase(entryIter);
+      break;
+    }
+  }
+  entriesVec.push_back(prefixDBTwo.prefixEntries_ref()->back());
+
+  // only node 1 is announcing the prefix with prependLabel.
+  // node 2 is announcing the prefix without prependLabel.
+  prefixDBOne.prefixEntries_ref()->back().prependLabel_ref() = 60000;
 
   // increase mv for the second node by 2, now router 3 should point to 2
   prefixDBTwo.prefixEntries_ref()
@@ -2834,7 +2858,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
       .isBestPathTieBreaker_ref() = true;
 
   prefixDBOne.prefixEntries_ref()
-      ->at(1)
+      ->back()
       .mv_ref()
       .value()
       .metrics_ref()
