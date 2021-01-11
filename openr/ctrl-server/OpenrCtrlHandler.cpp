@@ -823,7 +823,7 @@ OpenrCtrlHandler::semifuture_subscribeAndGetAreaKvStores(
                   std::move(dumpParamsCopy), std::move(selectAreasCopy))](
                  folly::Try<std::unique_ptr<std::vector<thrift::Publication>>>&&
                      pubs) mutable {
-        pubs.throwIfFailed();
+        pubs.throwUnlessValue();
         for (auto& pub : *pubs.value()) {
           // Set the publication timestamp
           pub.timestamp_ms_ref() = getUnixTimeStampMs();
@@ -872,7 +872,7 @@ OpenrCtrlHandler::semifuture_subscribeAndGetFib() {
   return semifuture_getRouteDb().defer(
       [stream = std::move(stream)](
           folly::Try<std::unique_ptr<thrift::RouteDatabase>>&& db) mutable {
-        db.throwIfFailed();
+        db.throwUnlessValue();
         return apache::thrift::ResponseAndServerStream<
             thrift::RouteDatabase,
             thrift::RouteDatabaseDelta>{
