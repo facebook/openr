@@ -130,17 +130,6 @@ ensure there is no loss of route update.
 
 ### Miscellaneous Features
 
-#### Loop Free Alternates
-
-In addition to computing the routes reachable for the local system, the Decision
-module additionally runs SPF from the perspective of its direct neighbors. This
-way we can find the cost to reach the same prefix both from `this` node's
-perspective and the `neighbor` perspective. Given this information, the local
-node can determine the neighbors that guarantee loop-free alternate paths (LFA)
-to the same prefix other than the one the current node is using. These backup
-paths could be supplied along with the primary path, or they all could be used
-for load-sharing toward the prefix.
-
 #### Event Dampening
 
 We implemented simple event dampening - i.e. hold SPF runs on first received
