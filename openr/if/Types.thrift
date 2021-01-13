@@ -782,37 +782,6 @@ typedef map<string, PeerSpec>
   PeersMap
 
 /**
- * Parameters for KvStore peer addition
- * TODO: Use C++ struct instead
- */
-struct PeerAddParams {
-  /**
-   * Map from nodeName to peer spec; we expect to
-   * learn nodeName from HELLO packets, as it MUST
-   * match the name supplied with Publication message
-   */
-  1: PeersMap peers
-}
-
-/**
- * parameters for peers deletion
- * TODO: Use C++ struct instead
- */
-struct PeerDelParams {
-  1: list<string> peerNames
-}
-
-/**
- * KvStore peer update request
- * TODO: Use C++ struct instead
- */
-struct PeerUpdateRequest {
-  1: string area
-  2: optional PeerAddParams peerAddParams
-  3: optional PeerDelParams peerDelParams
-}
-
-/**
  * @deprecated - set/unset flood-topo child
  */
 struct FloodTopoSetParams {

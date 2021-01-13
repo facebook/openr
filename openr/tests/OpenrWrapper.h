@@ -161,14 +161,14 @@ class OpenrWrapper {
   const std::string kvStoreGlobalCmdUrl_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
+  messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue_;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesQueue_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue_;
-  messaging::ReplicateQueue<openr::LogSample> logSampleQueue_;
+  messaging::ReplicateQueue<LogSample> logSampleQueue_;
 };
 
 } // namespace openr

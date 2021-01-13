@@ -106,7 +106,7 @@ class LinkMonitor final : public OpenrEventBase {
       // producer queue
       messaging::ReplicateQueue<InterfaceDatabase>& intfUpdatesQueue,
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
-      messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
+      messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // consumer queue
       messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
@@ -346,7 +346,7 @@ class LinkMonitor final : public OpenrEventBase {
   messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue_;
 
   // Queue to publish peer updates to KvStore
-  messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue_;
+  messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue_;
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;

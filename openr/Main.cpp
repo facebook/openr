@@ -278,12 +278,12 @@ main(int argc, char** argv) {
   ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
-  ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
-  ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
-  ReplicateQueue<openr::thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
-  ReplicateQueue<openr::thrift::RouteDatabaseDelta> fibUpdatesQueue;
-  ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQueue;
-  ReplicateQueue<openr::LogSample> logSampleQueue;
+  ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
+  ReplicateQueue<PeerEvent> peerUpdatesQueue;
+  ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
+  ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
+  ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
+  ReplicateQueue<LogSample> logSampleQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;

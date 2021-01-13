@@ -548,7 +548,7 @@ class KvStore final : public OpenrEventBase {
       // Queue for publishing kvstore peer initial sync events
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
       // Queue for receiving peer updates
-      messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
+      messaging::RQueue<PeerEvent> peerUpdateQueue,
       // Queue for publishing the event log
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // the url to receive command from peer instances
@@ -607,10 +607,10 @@ class KvStore final : public OpenrEventBase {
       std::string area);
 
   folly::SemiFuture<folly::Unit> addUpdateKvStorePeers(
-      std::string area, thrift::PeerAddParams peerAddParams);
+      std::string area, thrift::PeersMap peersToAdd);
 
   folly::SemiFuture<folly::Unit> deleteKvStorePeers(
-      std::string area, thrift::PeerDelParams peerDelParams);
+      std::string area, std::vector<std::string> peersToDel);
 
   folly::SemiFuture<std::unique_ptr<thrift::SptInfos>> getSpanningTreeInfos(
       std::string area);
@@ -651,7 +651,7 @@ class KvStore final : public OpenrEventBase {
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       const std::string& requestId, fbzmq::Message&& msg);
 
-  void processPeerUpdates(thrift::PeerUpdateRequest&& req);
+  void processPeerUpdates(PeerEvent&& event);
 
   std::map<std::string, int64_t> getGlobalCounters() const;
 

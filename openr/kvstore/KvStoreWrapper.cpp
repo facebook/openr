@@ -24,8 +24,7 @@ namespace openr {
 KvStoreWrapper::KvStoreWrapper(
     fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
-    std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
-        peerUpdatesQueue,
+    std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     bool enableKvStoreThrift)
     : nodeId(config->getNodeName()),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
@@ -210,11 +209,11 @@ bool
 KvStoreWrapper::addPeer(
     AreaId const& area, std::string peerName, thrift::PeerSpec spec) {
   // Prepare peerAddParams
-  thrift::PeerAddParams params;
-  params.peers_ref()->emplace(peerName, spec);
+  thrift::PeersMap peersMap;
+  peersMap.emplace(peerName, spec);
 
   try {
-    kvStore_->addUpdateKvStorePeers(area, params).get();
+    kvStore_->addUpdateKvStorePeers(area, peersMap).get();
   } catch (std::exception const& e) {
     LOG(ERROR) << "Failed to add peers: " << folly::exceptionStr(e);
     return false;
@@ -224,12 +223,8 @@ KvStoreWrapper::addPeer(
 
 bool
 KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
-  // Prepare peerDelParams
-  thrift::PeerDelParams params;
-  params.peerNames_ref()->emplace_back(peerName);
-
   try {
-    kvStore_->deleteKvStorePeers(area, params).get();
+    kvStore_->deleteKvStorePeers(area, {peerName}).get();
   } catch (std::exception const& e) {
     LOG(ERROR) << "Failed to delete peers: " << folly::exceptionStr(e);
     return false;

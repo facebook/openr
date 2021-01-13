@@ -554,7 +554,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
-  messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
+  messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
@@ -934,7 +934,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
   neighborUpdatesQueue = messaging::ReplicateQueue<NeighborEvent>();
   kvStoreSyncEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
-  peerUpdatesQueue = messaging::ReplicateQueue<thrift::PeerUpdateRequest>();
+  peerUpdatesQueue = messaging::ReplicateQueue<PeerEvent>();
   nlSock->openQueue();
 
   // Recreate KvStore as previous kvStoreUpdatesQueue is closed

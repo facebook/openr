@@ -33,8 +33,8 @@ class KvStoreWrapper {
   KvStoreWrapper(
       fbzmq::Context& zmqContext,
       std::shared_ptr<const Config> config,
-      std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
-          peerUpdatesQueue = std::nullopt,
+      std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
+          std::nullopt,
       bool enableKvStoreThrift = false);
 
   ~KvStoreWrapper() {
@@ -208,7 +208,7 @@ class KvStoreWrapper {
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
   // Queue for streaming peer updates from LM
-  messaging::ReplicateQueue<thrift::PeerUpdateRequest> dummyPeerUpdatesQueue_;
+  messaging::ReplicateQueue<PeerEvent> dummyPeerUpdatesQueue_;
 
   // KvStore owned by this wrapper.
   std::unique_ptr<KvStore> kvStore_;

@@ -139,7 +139,7 @@ KvStore::KvStore(
     fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
-    messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
+    messaging::RQueue<PeerEvent> peerUpdateQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
     std::shared_ptr<const Config> config,
@@ -584,15 +584,14 @@ KvStore::getKvStoreUpdatesReader() {
 }
 
 void
-KvStore::processPeerUpdates(thrift::PeerUpdateRequest&& req) {
-  CHECK(not req.get_area().empty());
-  // Req can contain peerAdd/peerDel simultaneously
-  if (req.peerAddParams_ref().has_value()) {
-    addUpdateKvStorePeers(*req.area_ref(), req.peerAddParams_ref().value())
-        .get();
+KvStore::processPeerUpdates(PeerEvent&& event) {
+  CHECK(not event.area.empty());
+  // Event can contain peerAdd/peerDel simultaneously
+  if (not event.peersToAdd.empty()) {
+    addUpdateKvStorePeers(event.area, event.peersToAdd).get();
   }
-  if (req.peerDelParams_ref().has_value()) {
-    deleteKvStorePeers(*req.area_ref(), req.peerDelParams_ref().value()).get();
+  if (not event.peersToDel.empty()) {
+    deleteKvStorePeers(event.area, event.peersToDel).get();
   }
 }
 
@@ -807,27 +806,26 @@ KvStore::getKvStorePeers(std::string area) {
 }
 
 folly::SemiFuture<folly::Unit>
-KvStore::addUpdateKvStorePeers(
-    std::string area, thrift::PeerAddParams peerAddParams) {
+KvStore::addUpdateKvStorePeers(std::string area, thrift::PeersMap peersToAdd) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
                         p = std::move(p),
-                        peerAddParams = std::move(peerAddParams),
+                        peersToAdd = std::move(peersToAdd),
                         area]() mutable {
     try {
-      auto peersToAdd = folly::gen::from(*peerAddParams.peers_ref()) |
-          folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
+      auto str = folly::gen::from(peersToAdd) | folly::gen::get<0>() |
+          folly::gen::as<std::vector<std::string>>();
 
-      LOG(INFO) << "Peer addition for: [" << folly::join(",", peersToAdd)
+      LOG(INFO) << "Peer addition for: [" << folly::join(",", str)
                 << "] in area: " << area;
       auto& kvStoreDb = getAreaDbOrThrow(area, "addUpdateKvStorePeers");
-      if (peerAddParams.peers_ref()->empty()) {
+      if (peersToAdd.empty()) {
         p.setException(thrift::OpenrError(
             "Empty peerNames from peer-add request, ignoring"));
       } else {
         fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
-        kvStoreDb.addPeers(*peerAddParams.peers_ref());
+        kvStoreDb.addPeers(peersToAdd);
         p.setValue();
       }
     } catch (thrift::OpenrError const& e) {
@@ -839,24 +837,23 @@ KvStore::addUpdateKvStorePeers(
 
 folly::SemiFuture<folly::Unit>
 KvStore::deleteKvStorePeers(
-    std::string area, thrift::PeerDelParams peerDelParams) {
+    std::string area, std::vector<std::string> peersToDel) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
                         p = std::move(p),
-                        peerDelParams = std::move(peerDelParams),
+                        peersToDel = std::move(peersToDel),
                         area]() mutable {
-    LOG(INFO) << "Peer deletion for: ["
-              << folly::join(",", *peerDelParams.peerNames_ref())
+    LOG(INFO) << "Peer deletion for: [" << folly::join(",", peersToDel)
               << "] in area: " << area;
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "deleteKvStorePeers");
-      if (peerDelParams.peerNames_ref()->empty()) {
+      if (peersToDel.empty()) {
         p.setException(thrift::OpenrError(
             "Empty peerNames from peer-del request, ignoring"));
       } else {
         fb303::fbData->addStatValue("kvstore.cmd_per_del", 1, fb303::COUNT);
-        kvStoreDb.delPeers(*peerDelParams.peerNames_ref());
+        kvStoreDb.delPeers(peersToDel);
         p.setValue();
       }
     } catch (thrift::OpenrError const& e) {

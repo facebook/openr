@@ -66,7 +66,7 @@ LinkMonitor::LinkMonitor(
     bool enablePerfMeasurement,
     messaging::ReplicateQueue<InterfaceDatabase>& intfUpdatesQueue,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
-    messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
+    messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
@@ -517,15 +517,14 @@ LinkMonitor::updateKvStorePeerNeighborUp(
   areaPeers->second.emplace(
       remoteNodeName,
       KvStorePeerValue(adjVal.peerSpec, initialSynced, {adjId}));
+
   // Advertise KvStore peers immediately
-  thrift::PeerAddParams params;
-  params.peers_ref()->emplace(remoteNodeName, adjVal.peerSpec);
+  thrift::PeersMap peersToAdd;
+  peersToAdd.emplace(remoteNodeName, adjVal.peerSpec);
   logPeerEvent("ADD_PEER", remoteNodeName, adjVal.peerSpec);
 
-  thrift::PeerUpdateRequest req;
-  *req.area_ref() = area;
-  req.peerAddParams_ref() = std::move(params);
-  peerUpdatesQueue_.push(std::move(req));
+  PeerEvent event(area, peersToAdd, {});
+  peerUpdatesQueue_.push(std::move(event));
 }
 
 void
@@ -561,18 +560,15 @@ LinkMonitor::updateKvStorePeerNeighborDown(
 
   // send peer delete request if all spark session is down for this neighbor
   if (peer.establishedSparkNeighbors.empty()) {
-    thrift::PeerDelParams params;
-    *params.peerNames_ref() = {remoteNodeName};
     logPeerEvent("DEL_PEER", remoteNodeName, peer.tPeerSpec);
 
-    thrift::PeerUpdateRequest req;
-    *req.area_ref() = area;
-    req.peerDelParams_ref() = std::move(params);
-    peerUpdatesQueue_.push(std::move(req));
+    // send peer del event
+    std::vector<std::string> peersToDel{remoteNodeName};
+    PeerEvent event(area, {} /* peersToAdd */, peersToDel);
+    peerUpdatesQueue_.push(std::move(event));
 
     // remove kvstore peer from internal store.
     areaPeers->second.erase(remoteNodeName);
-
     return;
   }
 
@@ -589,15 +585,13 @@ LinkMonitor::updateKvStorePeerNeighborDown(
   peer.tPeerSpec =
       adjacencies_.at(*peer.establishedSparkNeighbors.begin()).peerSpec;
 
-  // peer spec change, send peer add request
-  thrift::PeerAddParams params;
-  params.peers_ref()->emplace(remoteNodeName, peer.tPeerSpec);
+  // peer spec change, send peer add event
   logPeerEvent("ADD_PEER", remoteNodeName, peer.tPeerSpec);
 
-  thrift::PeerUpdateRequest req;
-  *req.area_ref() = area;
-  req.peerAddParams_ref() = std::move(params);
-  peerUpdatesQueue_.push(std::move(req));
+  thrift::PeersMap peersToAdd;
+  peersToAdd.emplace(remoteNodeName, peer.tPeerSpec);
+  PeerEvent event(area, peersToAdd, {});
+  peerUpdatesQueue_.push(std::move(event));
 }
 
 void
