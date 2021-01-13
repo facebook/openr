@@ -11,13 +11,13 @@
 #include <string>
 #include <unordered_map>
 
-#include <fbzmq/service/monitor/SystemMetrics.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/config/Config.h>
+#include <openr/monitor/SystemMetrics.h>
 
 namespace openr {
 
@@ -65,7 +65,7 @@ class Watchdog final : public OpenrEventBase {
   std::optional<std::chrono::steady_clock::time_point> memExceedTime_;
 
   // Get the system metrics for resource usage counters
-  fbzmq::SystemMetrics systemMetrics_{};
+  SystemMetrics systemMetrics_{};
 };
 
 } // namespace openr
