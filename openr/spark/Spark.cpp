@@ -1692,25 +1692,13 @@ Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
   // - have an IPv4 addr when v4 is enabled
   //
   for (const auto& info : ifDb) {
-    const auto& ifName = info.ifName;
-    const auto& isUp = info.isUp;
-    const auto& ifIndex = info.ifIndex;
-    const auto& networks = info.networks;
-
     // ATTN: multiple networks can be associated with one ifName.
-    //  - Sort networks
+    //  - Retrieve networks in sorted order;
     //  - Use the lowest one (other node will do similar)
-    std::set<folly::CIDRNetwork> v4Networks;
-    std::set<folly::CIDRNetwork> v6LinkLocalNetworks;
-    for (const auto& network : networks) {
-      if (network.first.isV4()) {
-        v4Networks.emplace(network);
-      } else if (network.first.isV6() and network.first.isLinkLocal()) {
-        v6LinkLocalNetworks.emplace(network);
-      }
-    }
+    const auto v4Networks = info.getSortedV4Addrs();
+    const auto v6LinkLocalNetworks = info.getSortedV6LinkLocalAddrs();
 
-    if (!isUp) {
+    if (not info.isUp) {
       continue;
     }
     if (v6LinkLocalNetworks.empty()) {
@@ -1722,19 +1710,16 @@ Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
       continue;
     }
 
-    // We have a valid entry
-    // Obtain v4 address if enabled, else default
-    folly::CIDRNetwork v4Network{folly::IPAddress("0.0.0.0"), 32};
-    if (enableV4_) {
-      CHECK(v4Networks.size());
-      v4Network = *v4Networks.begin();
-    }
+    folly::CIDRNetwork v4Network = enableV4_
+        ? *v4Networks.begin()
+        : folly::IPAddress::createNetwork("0.0.0.0/32");
     folly::CIDRNetwork v6LinkLocalNetwork = *v6LinkLocalNetworks.begin();
 
     newInterfaceDb.emplace(
-        ifName, Interface(ifIndex, v4Network, v6LinkLocalNetwork));
+        info.ifName, Interface(info.ifIndex, v4Network, v6LinkLocalNetwork));
   }
 
+  // TODO: enhance interface comparison without set_difference
   auto newIfaces = folly::gen::from(newInterfaceDb) | folly::gen::get<0>() |
       folly::gen::as<std::set<std::string>>();
 

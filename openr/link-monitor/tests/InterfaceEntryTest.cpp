@@ -47,25 +47,17 @@ TEST(InterfaceEntry, GetSetTest) {
 
   EXPECT_EQ("iface1", interface.getIfName());
 
-  // 1. Update attributes
-  EXPECT_TRUE(interface.updateAttrs(1, true, 1));
+  // Update attributes
+  EXPECT_TRUE(interface.updateAttrs(1, true));
   EXPECT_EQ(1, interface.getIfIndex());
   EXPECT_TRUE(interface.isUp());
-  EXPECT_EQ(1, interface.getWeight());
   EXPECT_TRUE(interface.isActive());
   EXPECT_EQ(std::chrono::milliseconds(0), interface.getBackoffDuration());
   EXPECT_TRUE(throttle.isActive());
   EXPECT_FALSE(timeout->isScheduled());
   throttle.cancel();
 
-  // 2. Update more attributes
-  EXPECT_TRUE(interface.updateAttrs(1, true, 5));
-  EXPECT_EQ(5, interface.getWeight());
-  EXPECT_TRUE(throttle.isActive());
-  EXPECT_FALSE(timeout->isScheduled());
-  throttle.cancel();
-
-  // 3. Add and validate addresses
+  // Add and validate addresses
   std::unordered_set<folly::CIDRNetwork> addresses = {
       folly::IPAddress::createNetwork(
           "169.254.0.1/16", -1, false), // link-local
@@ -83,18 +75,20 @@ TEST(InterfaceEntry, GetSetTest) {
   throttle.cancel();
 
   // Validate v4 addresses
-  std::unordered_set<folly::IPAddress> v4Addrs = {
-      folly::IPAddress("169.254.0.1"), // link-local
-      folly::IPAddress("1.2.3.4"),
-      folly::IPAddress("232.0.0.1"), // multicast
+  std::set<folly::CIDRNetwork> v4Addrs = {
+      folly::IPAddress::createNetwork("169.254.0.1", 16, false), // link-local
+      folly::IPAddress::createNetwork("1.2.3.4", 24, false),
+      folly::IPAddress::createNetwork("232.0.0.1", 8, false), // multicast
   };
-  EXPECT_EQ(v4Addrs, interface.getV4Addrs());
+  EXPECT_EQ(v4Addrs, interface.getInterfaceInfo().getSortedV4Addrs());
 
   // Validate v6 link-local addresses
-  std::unordered_set<folly::IPAddress> v6LinkLocalAddrs = {
-      folly::IPAddress("fe80::1"), // link-local
+  std::set<folly::CIDRNetwork> v6LinkLocalAddrs = {
+      folly::IPAddress::createNetwork("fe80::1", 64, false), // link-local
   };
-  EXPECT_EQ(v6LinkLocalAddrs, interface.getV6LinkLocalAddrs());
+  EXPECT_EQ(
+      v6LinkLocalAddrs,
+      interface.getInterfaceInfo().getSortedV6LinkLocalAddrs());
 
   // Validate redistriubte prefixes (link-local and multicast addrs will
   // be ignored)
@@ -127,7 +121,7 @@ TEST(InterfaceEntry, BackoffTest) {
   std::chrono::milliseconds backoff{0};
 
   // 1. Set interface to UP
-  EXPECT_TRUE(interface.updateAttrs(1, true, 1));
+  EXPECT_TRUE(interface.updateAttrs(1, true));
   EXPECT_TRUE(interface.isUp());
   EXPECT_TRUE(interface.isActive());
   EXPECT_EQ(std::chrono::milliseconds(0), interface.getBackoffDuration());
@@ -137,7 +131,7 @@ TEST(InterfaceEntry, BackoffTest) {
 
   // 2. Set interface to DOWN (backoff = 8ms)
   // NOTE: Ensure timeout gets scheduled
-  EXPECT_TRUE(interface.updateAttrs(1, false, 1));
+  EXPECT_TRUE(interface.updateAttrs(1, false));
   EXPECT_FALSE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
   backoff = interface.getBackoffDuration();
@@ -149,7 +143,7 @@ TEST(InterfaceEntry, BackoffTest) {
   timeout->cancelTimeout();
 
   // 3. Set interface to up
-  EXPECT_TRUE(interface.updateAttrs(1, true, 1));
+  EXPECT_TRUE(interface.updateAttrs(1, true));
   EXPECT_TRUE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
 
@@ -166,7 +160,7 @@ TEST(InterfaceEntry, BackoffTest) {
 
   // 5. Bring down interface again (backoff = 16ms)
   // NOTE: Ensure timeout gets scheduled
-  EXPECT_TRUE(interface.updateAttrs(1, false, 1));
+  EXPECT_TRUE(interface.updateAttrs(1, false));
   EXPECT_FALSE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
   backoff = interface.getBackoffDuration();
@@ -178,7 +172,7 @@ TEST(InterfaceEntry, BackoffTest) {
   timeout->cancelTimeout();
 
   // 6. Set interface to up but it remains inactive
-  EXPECT_TRUE(interface.updateAttrs(1, true, 1));
+  EXPECT_TRUE(interface.updateAttrs(1, true));
   EXPECT_TRUE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
 
@@ -194,12 +188,12 @@ TEST(InterfaceEntry, BackoffTest) {
   throttle.cancel();
 
   // 8. Bring down interface 3 times and see backoff becomes 128ms
-  EXPECT_TRUE(interface.updateAttrs(1, false, 1));
-  EXPECT_TRUE(interface.updateAttrs(1, true, 1));
-  EXPECT_TRUE(interface.updateAttrs(1, false, 1));
-  EXPECT_TRUE(interface.updateAttrs(1, true, 1));
-  EXPECT_TRUE(interface.updateAttrs(1, false, 1));
-  EXPECT_TRUE(interface.updateAttrs(1, true, 1));
+  EXPECT_TRUE(interface.updateAttrs(1, false));
+  EXPECT_TRUE(interface.updateAttrs(1, true));
+  EXPECT_TRUE(interface.updateAttrs(1, false));
+  EXPECT_TRUE(interface.updateAttrs(1, true));
+  EXPECT_TRUE(interface.updateAttrs(1, false));
+  EXPECT_TRUE(interface.updateAttrs(1, true));
   EXPECT_TRUE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
   backoff = interface.getBackoffDuration();
@@ -219,7 +213,7 @@ TEST(InterfaceEntry, BackoffTest) {
   EXPECT_EQ(std::chrono::milliseconds(0), backoff);
 
   // 10. Trigger down event and ensure backoff=8ms (starts fresh)
-  EXPECT_TRUE(interface.updateAttrs(1, false, 1));
+  EXPECT_TRUE(interface.updateAttrs(1, false));
   EXPECT_FALSE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
   backoff = interface.getBackoffDuration();

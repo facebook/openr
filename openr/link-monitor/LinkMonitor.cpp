@@ -299,11 +299,6 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
       std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
           .count();
 
-  int64_t weight = 1;
-  if (interfaces_.count(localIfName)) {
-    weight = interfaces_.at(localIfName).getWeight();
-  }
-
   thrift::Adjacency newAdj = createThriftAdjacency(
       remoteNodeName /* neighbor node name */,
       localIfName /* local ifName neighbor discovered on */,
@@ -314,7 +309,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
       false /* overload bit */,
       useRttMetric_ ? rttUs : 0 /* rtt */,
       timestamp,
-      weight,
+      1 /* weight */,
       remoteIfName);
 
   SYSLOG(INFO)
@@ -898,14 +893,15 @@ LinkMonitor::syncInterfaces() {
       continue;
     }
 
-    const std::unordered_set<folly::CIDRNetwork> oldNetworks =
+    const auto oldNetworks =
         interfaceEntry->getNetworks(); // NOTE: Copy intended
-    const std::unordered_set<folly::CIDRNetwork> newNetworks(info.networks);
+    const auto& newNetworks = info.networks;
 
     // Update link attributes
     const bool wasUp = interfaceEntry->isUp();
-    interfaceEntry->updateAttrs(
-        info.ifIndex, info.isUp, Constants::kDefaultAdjWeight);
+    interfaceEntry->updateAttrs(info.ifIndex, info.isUp);
+
+    // Event logging
     logLinkEvent(
         interfaceEntry->getIfName(),
         wasUp,
@@ -946,7 +942,7 @@ LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
     auto interfaceEntry = getOrCreateInterfaceEntry(ifName);
     if (interfaceEntry) {
       const bool wasUp = interfaceEntry->isUp();
-      interfaceEntry->updateAttrs(ifIndex, isUp, Constants::kDefaultAdjWeight);
+      interfaceEntry->updateAttrs(ifIndex, isUp);
       logLinkEvent(
           interfaceEntry->getIfName(),
           wasUp,

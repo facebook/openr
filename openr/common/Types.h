@@ -190,6 +190,8 @@ struct InterfaceInfo {
    */
   std::unordered_set<folly::CIDRNetwork> networks{};
 
+  InterfaceInfo() {}
+
   InterfaceInfo(
       const std::string& ifName,
       const bool isUp,
@@ -201,6 +203,30 @@ struct InterfaceInfo {
   operator==(const InterfaceInfo& other) const {
     return (ifName == other.ifName) and (isUp == other.isUp) and
         (ifIndex == other.ifIndex) and (networks == other.networks);
+  }
+
+  // Utility function to retrieve v4 addresses
+  inline std::set<folly::CIDRNetwork>
+  getSortedV4Addrs() const {
+    std::set<folly::CIDRNetwork> v4Addrs;
+    for (auto const& ntwk : networks) {
+      if (ntwk.first.isV4()) {
+        v4Addrs.insert(ntwk);
+      }
+    }
+    return v4Addrs;
+  }
+
+  // Utility function to retrieve v6 link local addresses
+  inline std::set<folly::CIDRNetwork>
+  getSortedV6LinkLocalAddrs() const {
+    std::set<folly::CIDRNetwork> v6Addrs;
+    for (auto const& ntwk : networks) {
+      if (ntwk.first.isV6() and ntwk.first.isLinkLocal()) {
+        v6Addrs.insert(ntwk);
+      }
+    }
+    return v6Addrs;
   }
 
   // TODO: thrift::InterfaceInfo to be deprecated
