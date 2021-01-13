@@ -464,21 +464,6 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
     return (adj_db.nodeLabel, adj_db.isOverloaded, adjacencies, area)
 
 
-def adj_to_dict(adj):
-    """ convert adjacency from thrift instance into a dict in strings """
-
-    def _update(adj_dict, adj):
-        # Only addrs need string conversion so we udpate them
-        adj_dict.update(
-            {
-                "nextHopV6": ipnetwork.sprint_addr(adj.nextHopV6.addr),
-                "nextHopV4": ipnetwork.sprint_addr(adj.nextHopV4.addr),
-            }
-        )
-
-    return thrift_to_dict(adj, _update)
-
-
 def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
     """ convert adj db to dict """
 
@@ -488,6 +473,21 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
 
     if not adjacencies:
         return
+
+    def adj_to_dict(adj):
+        """ convert adjacency from thrift instance into a dict in strings """
+
+        def _update(adj_dict, adj):
+            # Only addrs need string conversion so we udpate them
+            adj_dict.update(
+                {
+                    "nextHopV6": ipnetwork.sprint_addr(adj.nextHopV6.addr),
+                    "nextHopV4": ipnetwork.sprint_addr(adj.nextHopV4.addr),
+                    "area": area,
+                }
+            )
+
+        return thrift_to_dict(adj, _update)
 
     adjacencies = list(map(adj_to_dict, adjacencies))
 
@@ -528,6 +528,49 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
     adjs_map = {}
     iter_func(adjs_map, resp, nodes, _parse_adj)
     return adjs_map
+
+
+def adj_dbs_to_area_dict(
+    resp: List[openr_types.AdjacencyDatabase],
+    nodes: Set[str],
+    bidir: bool,
+):
+    """get parsed adjacency db for all areas as a two level mapping:
+    {area: {node: adjDb}}
+
+    :param resp: resp from server of type decision_types.adjDbs
+    :param nodes set: the set of the nodes to print prefixes for
+    :param bidir bool: only dump bidirectional adjacencies
+
+    :return map(area, map(node, map(adjacency_keys, (adjacency_values))):
+        the parsed adjacency DB in a map with keys and values in strings
+    """
+    adj_dbs = resp
+    version = None
+
+    adj_dbs_dict_all_areas = {}
+
+    # run through the adjDb List, and create a two level dict:
+    # {area: {node: adjDb}}
+    for db in adj_dbs:
+        if db.area not in adj_dbs_dict_all_areas:
+            adj_dbs_dict_all_areas[db.area] = {}
+        adj_dbs_dict_all_areas[db.area][db.thisNodeName] = db
+
+    # run through each area, filter on node, and run each
+    # per-node adjDb through adj_db_to_dict()
+    for area, adj_dbs_dict_per_area in sorted(adj_dbs_dict_all_areas.items()):
+        adjs_map = {}
+        for node, adj_db_per_node in sorted(adj_dbs_dict_per_area.items()):
+            if "all" not in nodes and node not in nodes:
+                continue
+            adj_db_to_dict(
+                adjs_map, adj_dbs_dict_per_area, adj_db_per_node, bidir, version
+            )
+        adj_dbs_dict_all_areas[area] = adjs_map
+
+    # return the two level dict back
+    return adj_dbs_dict_all_areas
 
 
 def print_json(map, file=sys.stdout):

@@ -153,14 +153,23 @@ class DecisionAdjCli(object):
         help="Dump adjacencies for a list of nodes. Default will dump "
         "host's adjs. Dump adjs for all nodes if 'all' is given",
     )
+    @click.option(
+        "--areas",
+        "-a",
+        multiple=True,
+        default=[],
+        help="Dump adjacencies for the given list of areas. Default will dump "
+        "adjs for all areas. Multiple areas can be provided by repeatedly using "
+        "either of the two valid flags: -a or --areas",
+    )
     @click.option("--bidir/--no-bidir", default=True, help="Only bidir adjacencies")
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
-    def adj(cli_opts, nodes, bidir, json):  # noqa: B902
+    def adj(cli_opts, nodes, areas, bidir, json):  # noqa: B902
         """ dump the link-state adjacencies from Decision module """
 
         nodes = parse_nodes(cli_opts, nodes)
-        decision.DecisionAdjCmd(cli_opts).run(nodes, bidir, json)
+        decision.DecisionAdjCmd(cli_opts).run(nodes, set(areas), bidir, json)
 
 
 class DecisionValidateCli(object):

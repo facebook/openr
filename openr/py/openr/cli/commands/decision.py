@@ -96,17 +96,23 @@ class DecisionRoutesUnInstallableCmd(OpenrCtrlCmd):
 
 class DecisionAdjCmd(OpenrCtrlCmd):
     def _run(
-        self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
+        self, client: OpenrCtrl.Client, nodes: set, areas: set, bidir: bool, json: bool
     ) -> None:
-        adj_dbs = client.getDecisionAdjacencyDbs()
-        adjs_map = utils.adj_dbs_to_dict(adj_dbs, nodes, bidir, self.iter_dbs)
-        for _, val in adjs_map.items():
-            for adj_entry in val["adjacencies"]:
-                adj_entry["area"] = val.get("area", "N/A")
+
+        adj_dbs = client.getDecisionAdjacenciesFiltered(
+            ctrl_types.AdjacenciesFilter(selectAreas=areas)
+        )
+
+        # convert list<adjDb> from server to a two level map: {area: {node: adjDb}}
+        adjs_map_all_areas = utils.adj_dbs_to_area_dict(adj_dbs, nodes, bidir)
+
         if json:
-            utils.print_json(adjs_map)
+            utils.print_json(adjs_map_all_areas)
         else:
-            utils.print_adjs_table(adjs_map, None, None)
+            # print per-node adjDb tables on a per-area basis
+            for area, adjs_map in sorted(adjs_map_all_areas.items()):
+                print("\n== Area:", area, "==\n")
+                utils.print_adjs_table(adjs_map, None, None)
 
 
 class PathCmd(OpenrCtrlCmd):
