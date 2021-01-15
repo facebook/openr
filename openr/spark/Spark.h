@@ -128,11 +128,9 @@ class Spark final : public OpenrEventBase {
           v6LinkLocalNetwork(v6LinkLocalNetwork) {}
 
     bool
-    operator==(const Interface& interface) const {
-      return (
-          (ifIndex == interface.ifIndex) &&
-          (v4Network == interface.v4Network) &&
-          (v6LinkLocalNetwork == interface.v6LinkLocalNetwork));
+    operator!=(const Interface& interface) const {
+      return ifIndex != interface.ifIndex or v4Network != interface.v4Network or
+          v6LinkLocalNetwork != interface.v6LinkLocalNetwork;
     }
 
     int ifIndex{0};
@@ -199,16 +197,16 @@ class Spark final : public OpenrEventBase {
   void processInterfaceUpdates(InterfaceDatabase&& interfaceUpdates);
 
   // util function to delete interface in spark
-  void deleteInterfaceFromDb(const std::set<std::string>& toDel);
+  void deleteInterface(const std::vector<std::string>& toDel);
 
   // util function to add interface in spark
-  void addInterfaceToDb(
-      const std::set<std::string>& toAdd,
+  void addInterface(
+      const std::vector<std::string>& toAdd,
       const std::unordered_map<std::string, Interface>& newInterfaceDb);
 
   // util function to update interface in spark
-  void updateInterfaceInDb(
-      const std::set<std::string>& toUpdate,
+  void updateInterface(
+      const std::vector<std::string>& toUpdate,
       const std::unordered_map<std::string, Interface>& newInterfaceDb);
 
   // find an interface name in the interfaceDb given an ifIndex

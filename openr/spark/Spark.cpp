@@ -1719,51 +1719,46 @@ Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
         info.ifName, Interface(info.ifIndex, v4Network, v6LinkLocalNetwork));
   }
 
-  // TODO: enhance interface comparison without set_difference
-  auto newIfaces = folly::gen::from(newInterfaceDb) | folly::gen::get<0>() |
-      folly::gen::as<std::set<std::string>>();
+  std::vector<std::string> toAdd{};
+  std::vector<std::string> toDel{};
+  std::vector<std::string> toUpdate{};
 
-  auto existingIfaces = folly::gen::from(interfaceDb_) | folly::gen::get<0>() |
-      folly::gen::as<std::set<std::string>>();
+  // iterate old and new interfaceDb to catch difference
+  for (const auto& [oldIfName, oldInterface] : interfaceDb_) {
+    auto it = newInterfaceDb.find(oldIfName);
+    if (it != newInterfaceDb.end()) {
+      if (it->second != oldInterface) {
+        // interface info has changed!
+        toUpdate.emplace_back(oldIfName);
+      }
+    } else {
+      // interface being removed!
+      toDel.emplace_back(oldIfName);
+    }
+  }
 
-  std::set<std::string> toAdd;
-  std::set<std::string> toDel;
-  std::set<std::string> toUpdate;
-
-  std::set_difference(
-      newIfaces.begin(),
-      newIfaces.end(),
-      existingIfaces.begin(),
-      existingIfaces.end(),
-      std::inserter(toAdd, toAdd.begin()));
-
-  std::set_difference(
-      existingIfaces.begin(),
-      existingIfaces.end(),
-      newIfaces.begin(),
-      newIfaces.end(),
-      std::inserter(toDel, toDel.begin()));
-
-  std::set_intersection(
-      newIfaces.begin(),
-      newIfaces.end(),
-      existingIfaces.begin(),
-      existingIfaces.end(),
-      std::inserter(toUpdate, toUpdate.begin()));
+  for (const auto& [newIfName, _] : newInterfaceDb) {
+    auto it = interfaceDb_.find(newIfName);
+    if (it == interfaceDb_.end()) {
+      // interface being added!
+      toAdd.emplace_back(newIfName);
+    }
+    // ATTN: intersection part has been processed already
+  }
 
   // remove the interfaces no longer in newdb
-  deleteInterfaceFromDb(toDel);
+  deleteInterface(toDel);
 
   // Adding interfaces
-  addInterfaceToDb(toAdd, newInterfaceDb);
+  addInterface(toAdd, newInterfaceDb);
 
   // Updating interface. If ifindex changes, we need to unsubscribe old ifindex
   // from mcast and subscribe new one
-  updateInterfaceInDb(toUpdate, newInterfaceDb);
+  updateInterface(toUpdate, newInterfaceDb);
 }
 
 void
-Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
+Spark::deleteInterface(const std::vector<std::string>& toDel) {
   for (const auto& ifName : toDel) {
     LOG(INFO) << "Removing " << ifName << " from Spark. "
               << "It is down, declaring all neighbors down";
@@ -1806,8 +1801,8 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
 }
 
 void
-Spark::addInterfaceToDb(
-    const std::set<std::string>& toAdd,
+Spark::addInterface(
+    const std::vector<std::string>& toAdd,
     const std::unordered_map<std::string, Interface>& newInterfaceDb) {
   for (const auto& ifName : toAdd) {
     auto newInterface = newInterfaceDb.at(ifName);
@@ -1901,17 +1896,12 @@ Spark::addInterfaceToDb(
 }
 
 void
-Spark::updateInterfaceInDb(
-    const std::set<std::string>& toUpdate,
+Spark::updateInterface(
+    const std::vector<std::string>& toUpdate,
     const std::unordered_map<std::string, Interface>& newInterfaceDb) {
   for (const auto& ifName : toUpdate) {
     auto& interface = interfaceDb_.at(ifName);
     auto& newInterface = newInterfaceDb.at(ifName);
-
-    if (interface == newInterface) {
-      VLOG(3) << "No update to iface " << ifName << " in spark tracking";
-      continue;
-    }
 
     // in case ifindex changes w/o interface down event followed by up event
     // this can occur if platform/netlink agent is down

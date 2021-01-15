@@ -473,6 +473,31 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
 
 //
 // Start 2 Spark instances and wait them forming adj. Then
+// update interface from one instance's perspective. Due to same
+// interface, there should be no interface removal/adding.
+//
+TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
+
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+
+  // since the removal of intf happens instantly. down event should
+  // be reported ASAP.
+  auto waitTime = std::chrono::seconds(
+      *node1->getSparkConfig().graceful_restart_time_s_ref());
+
+  EXPECT_FALSE(
+      node1->waitForEvent(NB_DOWN, waitTime, waitTime * 2).has_value());
+  EXPECT_FALSE(node1->waitForEvent(NB_UP, waitTime, waitTime * 2).has_value());
+}
+
+//
+// Start 2 Spark instances and wait them forming adj. Then
 // remove/add interface from one instance's perspective
 //
 TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
