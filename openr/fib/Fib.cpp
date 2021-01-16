@@ -460,65 +460,72 @@ Fib::updateRoutes(
     return;
   }
 
+  uint32_t numUnicastRoutesToDelete =
+      routeDbDelta.unicastRoutesToDelete_ref()->size();
+  uint32_t numUnicastRoutesToUpdate = unicastRoutesToUpdate.size();
+  uint32_t numMplsRoutesToDelete =
+      routeDbDelta.mplsRoutesToDelete_ref()->size();
+  uint32_t numMplsRoutesToUpdate = mplsRoutesToUpdate.size();
+  uint32_t numOfRouteUpdates = numUnicastRoutesToDelete +
+      numUnicastRoutesToUpdate + numMplsRoutesToDelete + numMplsRoutesToUpdate;
+
+  if (numOfRouteUpdates == 0) {
+    return;
+  }
+
   // Make thrift calls to do real programming
   try {
     LOG(INFO) << "Updating routes in FIB";
     const auto startTime = std::chrono::steady_clock::now();
-    uint32_t numOfRouteUpdates = 0;
 
     // Create FIB client if doesn't exists
     createFibClient(evb_, socket_, client_, thriftPort_);
 
     // Delete unicast routes
-    if (routeDbDelta.unicastRoutesToDelete_ref()->size()) {
-      LOG(INFO) << "Deleting "
-                << routeDbDelta.unicastRoutesToDelete_ref()->size()
+    if (numUnicastRoutesToDelete) {
+      LOG(INFO) << "Deleting " << numUnicastRoutesToDelete
                 << " unicast routes in FIB";
 
       for (auto const& prefix : *routeDbDelta.unicastRoutesToDelete_ref()) {
         VLOG(1) << "> " << toString(prefix);
       }
 
-      numOfRouteUpdates += routeDbDelta.unicastRoutesToDelete_ref()->size();
       client_->sync_deleteUnicastRoutes(
           kFibId_, *routeDbDelta.unicastRoutesToDelete_ref());
     }
 
     // Add unicast routes
-    if (unicastRoutesToUpdate.size()) {
-      LOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
+    if (numUnicastRoutesToUpdate) {
+      LOG(INFO) << "Adding/Updating " << numUnicastRoutesToUpdate
                 << " unicast routes in FIB";
 
       printUnicastRoutesAddUpdate(unicastRoutesToUpdate);
 
-      numOfRouteUpdates += unicastRoutesToUpdate.size();
       client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
     }
 
-    // Delete mpls routes
-    if (enableSegmentRouting_ &&
-        routeDbDelta.mplsRoutesToDelete_ref()->size()) {
-      LOG(INFO) << "Deleting " << routeDbDelta.mplsRoutesToDelete_ref()->size()
-                << " mpls routes in FIB";
+    if (enableSegmentRouting_) {
+      // Delete mpls routes
+      if (numMplsRoutesToDelete) {
+        LOG(INFO) << "Deleting " << numMplsRoutesToDelete
+                  << " mpls routes in FIB";
 
-      for (auto const& topLabel : *routeDbDelta.mplsRoutesToDelete_ref()) {
-        VLOG(1) << "> " << std::to_string(topLabel);
+        for (auto const& topLabel : *routeDbDelta.mplsRoutesToDelete_ref()) {
+          VLOG(1) << "> " << std::to_string(topLabel);
+        }
+
+        client_->sync_deleteMplsRoutes(
+            kFibId_, *routeDbDelta.mplsRoutesToDelete_ref());
       }
 
-      numOfRouteUpdates += routeDbDelta.mplsRoutesToDelete_ref()->size();
-      client_->sync_deleteMplsRoutes(
-          kFibId_, *routeDbDelta.mplsRoutesToDelete_ref());
-    }
+      // Add mpls routes
+      if (numMplsRoutesToUpdate) {
+        LOG(INFO) << "Adding/Updating " << numMplsRoutesToUpdate
+                  << " mpls routes in FIB";
 
-    // Add mpls routes
-    if (enableSegmentRouting_ && mplsRoutesToUpdate.size()) {
-      numOfRouteUpdates += mplsRoutesToUpdate.size();
-      LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
-                << " mpls routes in FIB";
-
-      printMplsRoutesAddUpdate(mplsRoutesToUpdate);
-
-      client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
+        printMplsRoutesAddUpdate(mplsRoutesToUpdate);
+        client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
+      }
     }
 
     const auto elapsedTime =
