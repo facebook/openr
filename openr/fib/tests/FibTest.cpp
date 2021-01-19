@@ -98,19 +98,19 @@ checkEqualUnicastRoutes(
   if (lhs.size() != rhs.size()) {
     return false;
   }
-  std::unordered_map<thrift::IpPrefix, std::set<thrift::NextHopThrift>>
+  std::unordered_map<folly::CIDRNetwork, std::set<thrift::NextHopThrift>>
       lhsRoutes;
-  std::unordered_map<thrift::IpPrefix, std::set<thrift::NextHopThrift>>
+  std::unordered_map<folly::CIDRNetwork, std::set<thrift::NextHopThrift>>
       rhsRoutes;
   for (auto const& route : lhs) {
     lhsRoutes.emplace(
-        *route.dest_ref(),
+        toIPNetwork(*route.dest_ref()),
         std::set<thrift::NextHopThrift>(
             route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
   }
   for (auto const& route : rhs) {
     rhsRoutes.emplace(
-        *route.dest_ref(),
+        toIPNetwork(*route.dest_ref()),
         std::set<thrift::NextHopThrift>(
             route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
   }
@@ -1019,17 +1019,24 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
 }
 
 TEST_F(FibTestFixture, longestPrefixMatchTest) {
-  std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
+  std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute> unicastRoutes;
   const auto& defaultRoute = toIpPrefix("::/0");
   const auto& dbPrefix1 = toIpPrefix("192.168.0.0/16");
   const auto& dbPrefix2 = toIpPrefix("192.168.0.0/20");
   const auto& dbPrefix3 = toIpPrefix("192.168.0.0/24");
   const auto& dbPrefix4 = toIpPrefix("192.168.20.16/28");
-  unicastRoutes[defaultRoute] = createUnicastRoute(defaultRoute, {});
-  unicastRoutes[dbPrefix1] = createUnicastRoute(dbPrefix1, {});
-  unicastRoutes[dbPrefix2] = createUnicastRoute(dbPrefix2, {});
-  unicastRoutes[dbPrefix3] = createUnicastRoute(dbPrefix3, {});
-  unicastRoutes[dbPrefix4] = createUnicastRoute(dbPrefix4, {});
+
+  const auto defaultRouteCidr = toIPNetwork(defaultRoute);
+  const auto dbPrefix1Cidr = toIPNetwork(dbPrefix1);
+  const auto dbPrefix2Cidr = toIPNetwork(dbPrefix2);
+  const auto dbPrefix3Cidr = toIPNetwork(dbPrefix3);
+  const auto dbPrefix4Cidr = toIPNetwork(dbPrefix4);
+
+  unicastRoutes[defaultRouteCidr] = createUnicastRoute(defaultRoute, {});
+  unicastRoutes[dbPrefix1Cidr] = createUnicastRoute(dbPrefix1, {});
+  unicastRoutes[dbPrefix2Cidr] = createUnicastRoute(dbPrefix2, {});
+  unicastRoutes[dbPrefix3Cidr] = createUnicastRoute(dbPrefix3, {});
+  unicastRoutes[dbPrefix4Cidr] = createUnicastRoute(dbPrefix4, {});
 
   const auto inputdefaultRoute =
       folly::IPAddress::tryCreateNetwork("::/0").value();
@@ -1052,22 +1059,23 @@ TEST_F(FibTestFixture, longestPrefixMatchTest) {
   const auto& result =
       Fib::longestPrefixMatch(inputdefaultRoute, unicastRoutes);
   EXPECT_TRUE(result.has_value());
-  EXPECT_EQ(result.value(), defaultRoute);
+  EXPECT_EQ(result.value(), defaultRouteCidr);
 
   // input 192.168.20.19 matched 192.168.20.16/28
   const auto& result1 = Fib::longestPrefixMatch(inputPrefix1, unicastRoutes);
   EXPECT_TRUE(result1.has_value());
-  EXPECT_EQ(result1.value(), dbPrefix4);
+  EXPECT_EQ(result1.value(), dbPrefix4Cidr);
 
   // input 192.168.20.16/28 matched 192.168.20.16/28
   const auto& result2 = Fib::longestPrefixMatch(inputPrefix2, unicastRoutes);
   EXPECT_TRUE(result2.has_value());
-  EXPECT_EQ(result2.value(), dbPrefix4);
+  EXPECT_EQ(result2.value(), dbPrefix4Cidr);
 
   // input 192.168.0.0 matched 192.168.0.0/24
   const auto& result3 = Fib::longestPrefixMatch(inputPrefix3, unicastRoutes);
   EXPECT_TRUE(result3.has_value());
-  EXPECT_EQ(result3.value(), dbPrefix3);
+  EXPECT_EQ(result3.value(), dbPrefix3Cidr);
+
   //
   // input 192.168.0.0/14 has no match
   const auto& result4 = Fib::longestPrefixMatch(inputPrefix4, unicastRoutes);
@@ -1076,17 +1084,17 @@ TEST_F(FibTestFixture, longestPrefixMatchTest) {
   // input 192.168.0.0/18 matched 192.168.0.0/16
   const auto& result5 = Fib::longestPrefixMatch(inputPrefix5, unicastRoutes);
   EXPECT_TRUE(result5.has_value());
-  EXPECT_EQ(result5.value(), dbPrefix1);
+  EXPECT_EQ(result5.value(), dbPrefix1Cidr);
 
   // input 192.168.0.0/22 matched 192.168.0.0/20
   const auto& result6 = Fib::longestPrefixMatch(inputPrefix6, unicastRoutes);
   EXPECT_TRUE(result6.has_value());
-  EXPECT_EQ(result6.value(), dbPrefix2);
+  EXPECT_EQ(result6.value(), dbPrefix2Cidr);
 
   // input 192.168.0.0/26 matched 192.168.0.0/24
   const auto& result7 = Fib::longestPrefixMatch(inputPrefix7, unicastRoutes);
   EXPECT_TRUE(result7.has_value());
-  EXPECT_EQ(result7.value(), dbPrefix3);
+  EXPECT_EQ(result7.value(), dbPrefix3Cidr);
 }
 
 TEST_F(FibTestFixture, doNotInstall) {

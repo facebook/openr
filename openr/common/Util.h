@@ -395,7 +395,7 @@ thrift::MplsRoute createMplsRoute(
     int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops);
 
 std::vector<thrift::UnicastRoute> createUnicastRoutesFromMap(
-    const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
         unicastRoutes);
 
 /**

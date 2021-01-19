@@ -167,20 +167,20 @@ Fib::stop() {
   OpenrEventBase::stop();
 }
 
-std::optional<thrift::IpPrefix>
+std::optional<folly::CIDRNetwork>
 Fib::longestPrefixMatch(
     const folly::CIDRNetwork& inputPrefix,
-    const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
         unicastRoutes) {
-  std::optional<thrift::IpPrefix> matchedPrefix;
+  std::optional<folly::CIDRNetwork> matchedPrefix;
   int maxMask = -1;
   const auto& inputIP = inputPrefix.first;
   const auto& inputMask = inputPrefix.second;
 
   // longest prefix matching
   for (const auto& route : unicastRoutes) {
-    const auto& dbIP = toIPAddress(*route.first.prefixAddress_ref());
-    const auto& dbMask = *route.first.prefixLength_ref();
+    const auto& dbIP = route.first.first;
+    const auto& dbMask = route.first.second;
 
     if (maxMask < dbMask && inputMask >= dbMask &&
         inputIP.mask(dbMask) == dbIP) {
@@ -248,7 +248,7 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
   // return and send the vector<thrift::UnicastRoute>
   std::vector<thrift::UnicastRoute> retRouteVec;
   // the matched prefix after longest prefix matching and avoid duplicates
-  std::set<thrift::IpPrefix> matchPrefixSet;
+  std::set<folly::CIDRNetwork> matchPrefixSet;
 
   // if the params is empty, return all routes
   if (prefixes.empty()) {
@@ -343,7 +343,8 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
 
   // Add/Update unicast routes to update
   for (const auto& route : *routeDelta.unicastRoutesToUpdate_ref()) {
-    routeState_.unicastRoutes[*route.dest_ref()] = route;
+    auto cidrNetwork = toIPNetwork(*route.dest_ref());
+    routeState_.unicastRoutes[cidrNetwork] = route;
   }
 
   // Add mpls routes to update
@@ -353,7 +354,8 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
 
   // Delete unicast routes
   for (const auto& dest : *routeDelta.unicastRoutesToDelete_ref()) {
-    routeState_.unicastRoutes.erase(dest);
+    auto cidrNetwork = toIPNetwork(dest);
+    routeState_.unicastRoutes.erase(cidrNetwork);
   }
 
   // Delete mpls routes

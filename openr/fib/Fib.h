@@ -76,11 +76,11 @@ class Fib final : public OpenrEventBase {
    * @param inputPrefix - a prefix that need to be matched
    * @param unicastRoutes - current unicast routes in RouteDatabase
    *
-   * @return the matched IpPrefix if prefix matching succeed.
+   * @return the matched CIDRNetwork if prefix matching succeed.
    */
-  static std::optional<thrift::IpPrefix> longestPrefixMatch(
+  static std::optional<folly::CIDRNetwork> longestPrefixMatch(
       const folly::CIDRNetwork& inputPrefix,
-      const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+      const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
           unicastRoutes);
 
   /**
@@ -189,7 +189,7 @@ class Fib final : public OpenrEventBase {
   // received route-db if provided.
   struct RouteState {
     // Non modified copy of Unicast and MPLS routes received from Decision
-    std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
+    std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute> unicastRoutes;
     std::unordered_map<uint32_t, thrift::MplsRoute> mplsRoutes;
 
     // indicates we've received a decision route publication and therefore have

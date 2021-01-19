@@ -851,7 +851,7 @@ createMplsRoutesWithSelectedNextHops(
 
 std::vector<thrift::UnicastRoute>
 createUnicastRoutesFromMap(
-    const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
         unicastRoutes) {
   // Build routes to be programmed
   std::vector<thrift::UnicastRoute> newRoutes;
