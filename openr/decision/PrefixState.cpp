@@ -13,13 +13,13 @@ using apache::thrift::can_throw;
 
 namespace openr {
 
-std::unordered_set<thrift::IpPrefix>
+std::unordered_set<folly::CIDRNetwork>
 PrefixState::updatePrefix(
     PrefixKey const& key, thrift::PrefixEntry const& entry) {
-  std::unordered_set<thrift::IpPrefix> changed;
+  std::unordered_set<folly::CIDRNetwork> changed;
 
-  auto [it, inserted] =
-      prefixes_[key.getIpPrefix()].emplace(key.getNodeAndArea(), entry);
+  auto [it, inserted] = prefixes_[toIPNetwork(key.getIpPrefix())].emplace(
+      key.getNodeAndArea(), entry);
 
   // Skip rest of code, if prefix exists and has no change
   if (not inserted && it->second == entry) {
@@ -29,7 +29,7 @@ PrefixState::updatePrefix(
   if (not inserted) {
     it->second = entry;
   }
-  changed.insert(key.getIpPrefix());
+  changed.insert(toIPNetwork(key.getIpPrefix()));
 
   VLOG(1) << "[ROUTE ADVERTISEMENT] "
           << "Area: " << key.getPrefixArea() << ", Node: " << key.getNodeName()
@@ -37,12 +37,12 @@ PrefixState::updatePrefix(
   return changed;
 }
 
-std::unordered_set<thrift::IpPrefix>
+std::unordered_set<folly::CIDRNetwork>
 PrefixState::deletePrefix(PrefixKey const& key) {
-  std::unordered_set<thrift::IpPrefix> changed;
-  auto search = prefixes_.find(key.getIpPrefix());
+  std::unordered_set<folly::CIDRNetwork> changed;
+  auto search = prefixes_.find(toIPNetwork(key.getIpPrefix()));
   if (search != prefixes_.end() && search->second.erase(key.getNodeAndArea())) {
-    changed.insert(key.getIpPrefix());
+    changed.insert(toIPNetwork(key.getIpPrefix()));
     VLOG(1) << "[ROUTE WITHDRAW] "
             << "Area: " << key.getPrefixArea()
             << ", Node: " << key.getNodeName() << ", "
@@ -61,7 +61,7 @@ PrefixState::getReceivedRoutesFiltered(
   std::vector<thrift::ReceivedRouteDetail> routes;
   if (filter.prefixes_ref()) {
     for (auto& prefix : filter.prefixes_ref().value()) {
-      auto it = prefixes_.find(prefix);
+      auto it = prefixes_.find(toIPNetwork(prefix));
       if (it == prefixes_.end()) {
         continue;
       }
@@ -90,7 +90,7 @@ PrefixState::filterAndAddReceivedRoute(
     std::vector<thrift::ReceivedRouteDetail>& routes,
     apache::thrift::optional_field_ref<const std::string&> const& nodeFilter,
     apache::thrift::optional_field_ref<const std::string&> const& areaFilter,
-    thrift::IpPrefix const& prefix,
+    folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries) {
   // Return immediately if no prefix-entry
   if (prefixEntries.empty()) {
@@ -98,7 +98,7 @@ PrefixState::filterAndAddReceivedRoute(
   }
 
   thrift::ReceivedRouteDetail routeDetail;
-  routeDetail.prefix_ref() = prefix;
+  routeDetail.prefix_ref() = toIpPrefix(prefix);
 
   // Add prefix entries and honor the filter
   for (auto& [nodeAndArea, prefixEntry] : prefixEntries) {

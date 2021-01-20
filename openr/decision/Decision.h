@@ -41,7 +41,7 @@ namespace openr {
 using StaticMplsRoutes =
     std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>;
 using StaticUnicastRoutes =
-    std::unordered_map<thrift::IpPrefix, std::vector<thrift::NextHopThrift>>;
+    std::unordered_map<folly::CIDRNetwork, std::vector<thrift::NextHopThrift>>;
 
 /**
  * Captures the best route selection result. Especially highlights
@@ -145,7 +145,7 @@ class DecisionPendingUpdates {
     return needsFullRebuild() || !updatedPrefixes_.empty();
   }
 
-  std::unordered_set<thrift::IpPrefix> const&
+  std::unordered_set<folly::CIDRNetwork> const&
   updatedPrefixes() const {
     return updatedPrefixes_;
   }
@@ -156,7 +156,7 @@ class DecisionPendingUpdates {
       apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents);
 
   void applyPrefixStateChange(
-      std::unordered_set<thrift::IpPrefix>&& change,
+      std::unordered_set<folly::CIDRNetwork>&& change,
       apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents);
 
   void reset();
@@ -189,7 +189,7 @@ class DecisionPendingUpdates {
   bool needsFullRebuild_{false};
 
   // track prefixes that have changed in this batch
-  std::unordered_set<thrift::IpPrefix> updatedPrefixes_;
+  std::unordered_set<folly::CIDRNetwork> updatedPrefixes_;
 
   // local node name to determine action on linkAttributes change
   std::string myNodeName_;
@@ -217,7 +217,7 @@ class SpfSolver {
 
   void updateStaticUnicastRoutes(
       const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
-      const std::vector<thrift::IpPrefix>& unicastRoutesToDelete);
+      const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
 
   void updateStaticMplsRoutes(
       const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
@@ -235,9 +235,9 @@ class SpfSolver {
       const std::string& myNodeName,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState,
-      thrift::IpPrefix const& prefix);
+      folly::CIDRNetwork const& prefix);
 
-  std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult> const&
+  std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult> const&
   getBestRoutesCache() const;
 
  private:

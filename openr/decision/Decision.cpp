@@ -57,7 +57,7 @@ DecisionPendingUpdates::applyLinkStateChange(
 
 void
 DecisionPendingUpdates::applyPrefixStateChange(
-    std::unordered_set<thrift::IpPrefix>&& change,
+    std::unordered_set<folly::CIDRNetwork>&& change,
     apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents) {
   updatedPrefixes_.merge(std::move(change));
   addUpdate(perfEvents);
@@ -207,7 +207,7 @@ class SpfSolver::SpfSolverImpl {
 
   void updateStaticUnicastRoutes(
       const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
-      const std::vector<thrift::IpPrefix>& unicastRoutesToDelete);
+      const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
 
   void updateStaticMplsRoutes(
       const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
@@ -229,15 +229,15 @@ class SpfSolver::SpfSolverImpl {
       const std::string& myNodeName,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState,
-      thrift::IpPrefix const& prefix);
+      folly::CIDRNetwork const& prefix);
 
   std::optional<RibUnicastEntry> createRouteForPrefix(
       const std::string& myNodeName,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState,
-      thrift::IpPrefix const& prefix);
+      folly::CIDRNetwork const& prefix);
 
-  std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult> const&
+  std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult> const&
   getBestRoutesCache() const {
     return bestRoutesCache_;
   }
@@ -257,7 +257,7 @@ class SpfSolver::SpfSolverImpl {
   // Given prefixes and the nodes who announce it, get the ecmp routes.
   std::optional<RibUnicastEntry> selectBestPathsSpf(
       std::string const& myNodeName,
-      thrift::IpPrefix const& prefix,
+      folly::CIDRNetwork const& prefix,
       BestRouteSelectionResult const& bestRouteSelectionResult,
       PrefixEntries const& prefixEntries,
       bool const isBgp,
@@ -268,7 +268,7 @@ class SpfSolver::SpfSolverImpl {
   // Given prefixes and the nodes who announce it, get the kspf routes.
   std::optional<RibUnicastEntry> selectBestPathsKsp2(
       const std::string& myNodeName,
-      const thrift::IpPrefix& prefix,
+      const folly::CIDRNetwork& prefix,
       BestRouteSelectionResult const& bestRouteSelectionResult,
       PrefixEntries const& prefixEntries,
       bool isBgp,
@@ -278,7 +278,7 @@ class SpfSolver::SpfSolverImpl {
 
   std::optional<RibUnicastEntry> addBestPaths(
       const std::string& myNodeName,
-      const thrift::IpPrefix& prefixThrift,
+      const folly::CIDRNetwork& prefixThrift,
       const BestRouteSelectionResult& bestRouteSelectionResult,
       const PrefixEntries& prefixEntries,
       const PrefixState& prefixState,
@@ -288,7 +288,7 @@ class SpfSolver::SpfSolverImpl {
   // helper function to find the nodes for the nexthop for bgp route
   BestRouteSelectionResult runBestPathSelectionBgp(
       std::string const& myNodeName,
-      thrift::IpPrefix const& prefix,
+      folly::CIDRNetwork const& prefix,
       PrefixEntries const& prefixEntries,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
@@ -297,7 +297,7 @@ class SpfSolver::SpfSolverImpl {
    */
   BestRouteSelectionResult selectBestRoutes(
       std::string const& myNodeName,
-      thrift::IpPrefix const& prefix,
+      folly::CIDRNetwork const& prefix,
       PrefixEntries const& prefixEntries,
       bool const hasBgp,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
@@ -351,7 +351,7 @@ class SpfSolver::SpfSolverImpl {
   // Cache of best route selection.
   // - Cleared when topology changes
   // - Updated for the prefix whenever a route is created for it
-  std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult>
+  std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult>
       bestRoutesCache_;
 
   const std::string myNodeName_;
@@ -370,15 +370,15 @@ class SpfSolver::SpfSolverImpl {
 void
 SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
     const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
-    const std::vector<thrift::IpPrefix>& unicastRoutesToDelete) {
+    const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
   for (const auto& unicastRoute : unicastRoutesToUpdate) {
-    const auto prefix = *unicastRoute.dest_ref();
+    const auto prefix = toIPNetwork(*unicastRoute.dest_ref());
     staticUnicastRoutes_.insert_or_assign(prefix, *unicastRoute.nextHops_ref());
 
-    VLOG(1)
-        << "[STATIC UNICAST ROUTE ADVERTISEMENT] Prefix = " << toString(prefix)
-        << ", NextHopsCount = " << unicastRoute.nextHops_ref()->size();
+    VLOG(1) << "[STATIC UNICAST ROUTE ADVERTISEMENT] Prefix = "
+            << folly::IPAddress::networkToString(prefix)
+            << ", NextHopsCount = " << unicastRoute.nextHops_ref()->size();
     for (auto const& nh : *unicastRoute.nextHops_ref()) {
       VLOG(2) << " via " << toString(nh);
     }
@@ -388,7 +388,8 @@ SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
     // mark unicast entry to be deleted
     staticUnicastRoutes_.erase(prefix);
 
-    VLOG(1) << "[STATIC UNICAST ROUTE WITHDRAW] Prefix = " << toString(prefix);
+    VLOG(1) << "[STATIC UNICAST ROUTE WITHDRAW] Prefix = "
+            << folly::IPAddress::networkToString(prefix);
   }
 }
 
@@ -422,7 +423,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefixOrGetStaticRoute(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
-    thrift::IpPrefix const& prefix) {
+    folly::CIDRNetwork const& prefix) {
   // route output from `PrefixState` has higher priority over
   // static unicast routes
   if (auto maybeRoute = createRouteForPrefix(
@@ -434,7 +435,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefixOrGetStaticRoute(
   auto it = staticUnicastRoutes_.find(prefix);
   if (it != staticUnicastRoutes_.end()) {
     return RibUnicastEntry(
-        toIPNetwork(it->first),
+        it->first,
         std::unordered_set<thrift::NextHopThrift>{
             it->second.begin(), it->second.end()});
   }
@@ -446,7 +447,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
-    thrift::IpPrefix const& prefix) {
+    folly::CIDRNetwork const& prefix) {
   fb303::fbData->addStatValue("decision.get_route_for_prefix", 1, fb303::COUNT);
 
   auto search = prefixState.prefixes().find(prefix);
@@ -480,17 +481,17 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
 
   // Skip if no valid prefixes
   if (prefixEntries.empty()) {
-    VLOG(3) << "Skipping route to " << toString(prefix)
+    VLOG(3) << "Skipping route to " << folly::IPAddress::networkToString(prefix)
             << " with no reachable node.";
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
 
   // Sanity check for V4 prefixes
-  const bool isV4Prefix = prefix.prefixAddress_ref()->addr_ref()->size() ==
-      folly::IPAddressV4::byteCount();
+  const bool isV4Prefix = prefix.first.isV4();
   if (isV4Prefix && !enableV4_) {
-    LOG(WARNING) << "Received v4 prefix " << toString(prefix)
+    LOG(WARNING) << "Received v4 prefix "
+                 << folly::IPAddress::networkToString(prefix)
                  << " while v4 is not enabled.";
     fb303::fbData->addStatValue(
         "decision.skipped_unicast_route", 1, fb303::COUNT);
@@ -514,7 +515,8 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     }
     if (isBGP and not prefixEntry.mv_ref().has_value()) {
       missingMv = true;
-      LOG(ERROR) << "Prefix entry for prefix " << toString(prefix)
+      LOG(ERROR) << "Prefix entry for prefix "
+                 << folly::IPAddress::networkToString(prefix)
                  << " advertised by " << nodeAndArea.first << ", area "
                  << nodeAndArea.second
                  << " is of type BGP and missing the metric vector.";
@@ -526,14 +528,16 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   // skip adding route for BGP prefixes that have issues
   if (hasBGP) {
     if (hasNonBGP and not enableBestRouteSelection_) {
-      LOG(ERROR) << "Skipping route for " << toString(prefix)
+      LOG(ERROR) << "Skipping route for "
+                 << folly::IPAddress::networkToString(prefix)
                  << " which is advertised with BGP and non-BGP type.";
       fb303::fbData->addStatValue(
           "decision.skipped_unicast_route", 1, fb303::COUNT);
       return std::nullopt;
     }
     if (missingMv) {
-      LOG(ERROR) << "Skipping route for " << toString(prefix)
+      LOG(ERROR) << "Skipping route for "
+                 << folly::IPAddress::networkToString(prefix)
                  << " at least one advertiser is missing its metric vector.";
       fb303::fbData->addStatValue(
           "decision.skipped_unicast_route", 1, fb303::COUNT);
@@ -548,7 +552,8 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     return std::nullopt;
   }
   if (bestRouteSelectionResult.allNodeAreas.empty()) {
-    LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
+    LOG(WARNING) << "No route to BGP prefix "
+                 << folly::IPAddress::networkToString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
@@ -602,7 +607,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   default:
     LOG(ERROR) << "Unknown prefix algorithm type "
                << apache::thrift::util::enumNameSafe(forwardingAlgo)
-               << " for prefix " << toString(prefix);
+               << " for prefix " << folly::IPAddress::networkToString(prefix);
     return std::nullopt;
   }
 }
@@ -638,12 +643,12 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
 
   // Create static unicast routes
   for (const auto& [prefix, nhs] : staticUnicastRoutes_) {
-    if (routeDb.unicastRoutes.count(toIPNetwork(prefix))) {
+    if (routeDb.unicastRoutes.count(prefix)) {
       // ignore prefixes as prefixState has higher priority
       continue;
     }
     routeDb.addUnicastRoute(RibUnicastEntry(
-        toIPNetwork(prefix),
+        prefix,
         std::unordered_set<thrift::NextHopThrift>{nhs.begin(), nhs.end()}));
   }
 
@@ -789,7 +794,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
 BestRouteSelectionResult
 SpfSolver::SpfSolverImpl::selectBestRoutes(
     std::string const& myNodeName,
-    thrift::IpPrefix const& prefix,
+    folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries,
     bool const isBgp,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
@@ -859,7 +864,7 @@ SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
 BestRouteSelectionResult
 SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     std::string const& myNodeName,
-    thrift::IpPrefix const& prefix,
+    folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   BestRouteSelectionResult ret;
@@ -882,11 +887,11 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
       break;
     case MetricVectorUtils::CompareResult::TIE:
       LOG(ERROR) << "Tie ordering prefix entries. Skipping route for "
-                 << toString(prefix);
+                 << folly::IPAddress::networkToString(prefix);
       return ret;
     case MetricVectorUtils::CompareResult::ERROR:
       LOG(ERROR) << "Error ordering prefix entries. Skipping route for "
-                 << toString(prefix);
+                 << folly::IPAddress::networkToString(prefix);
       return ret;
     default:
       break;
@@ -899,15 +904,14 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
 std::optional<RibUnicastEntry>
 SpfSolver::SpfSolverImpl::selectBestPathsSpf(
     std::string const& myNodeName,
-    thrift::IpPrefix const& prefix,
+    folly::CIDRNetwork const& prefix,
     BestRouteSelectionResult const& bestRouteSelectionResult,
     PrefixEntries const& prefixEntries,
     bool const isBgp,
     thrift::PrefixForwardingType const& forwardingType,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState) {
-  const bool isV4Prefix = prefix.prefixAddress_ref()->addr_ref()->size() ==
-      folly::IPAddressV4::byteCount();
+  const bool isV4Prefix = prefix.first.isV4();
   const bool perDestination =
       forwardingType == thrift::PrefixForwardingType::SR_MPLS;
 
@@ -933,7 +937,8 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
   const auto nextHopsWithMetric = getNextHopsWithMetric(
       myNodeName, filteredBestNodeAreas, perDestination, areaLinkStates);
   if (nextHopsWithMetric.second.empty()) {
-    VLOG(3) << "No route to prefix " << toString(prefix);
+    VLOG(3) << "No route to prefix "
+            << folly::IPAddress::networkToString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
@@ -960,7 +965,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
 std::optional<RibUnicastEntry>
 SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
     const std::string& myNodeName,
-    const thrift::IpPrefix& prefix,
+    const folly::CIDRNetwork& prefix,
     BestRouteSelectionResult const& bestRouteSelectionResult,
     PrefixEntries const& prefixEntries,
     bool isBgp,
@@ -971,7 +976,8 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
   if (forwardingType != thrift::PrefixForwardingType::SR_MPLS) {
     LOG(ERROR) << "Incompatible forwarding type "
                << apache ::thrift::util::enumNameSafe(forwardingType)
-               << " for algorithm KSPF2_ED_ECMP of " << toString(prefix);
+               << " for algorithm KSPF2_ED_ECMP of "
+               << folly::IPAddress::networkToString(prefix);
 
     fb303::fbData->addStatValue(
         "decision.incompatible_forwarding_type", 1, fb303::COUNT);
@@ -1058,9 +1064,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
             thrift::MplsActionCode::PUSH, std::nullopt, std::move(labelVec));
       }
 
-      auto const& prefixStr = *prefix.prefixAddress_ref()->addr_ref();
-      bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
-
+      bool isV4Prefix = prefix.first.isV4();
       nextHops.emplace(createNextHop(
           isV4Prefix ? firstLink->getNhV4FromNode(myNodeName)
                      : firstLink->getNhV6FromNode(myNodeName),
@@ -1085,20 +1089,21 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
 std::optional<RibUnicastEntry>
 SpfSolver::SpfSolverImpl::addBestPaths(
     const std::string& myNodeName,
-    const thrift::IpPrefix& prefixThrift,
+    const folly::CIDRNetwork& prefixThrift,
     const BestRouteSelectionResult& bestRouteSelectionResult,
     const PrefixEntries& prefixEntries,
     const PrefixState& prefixState,
     const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops) {
-  const auto prefix = toIPNetwork(prefixThrift);
+  const auto prefix = prefixThrift;
 
   // Apply min-nexthop requirements. Ignore the route from programming if
   // min-nexthop requirement is not met.
   auto minNextHop =
       getMinNextHopThreshold(bestRouteSelectionResult, prefixEntries);
   if (minNextHop.has_value() && minNextHop.value() > nextHops.size()) {
-    LOG(WARNING) << "Dropping route to " << toString(prefixThrift)
+    LOG(WARNING) << "Dropping route to "
+                 << folly::IPAddress::networkToString(prefixThrift)
                  << " because of min-nexthop requirement. "
                  << "Minimum required " << minNextHop.value() << ", got "
                  << nextHops.size();
@@ -1350,7 +1355,7 @@ SpfSolver::~SpfSolver() {}
 void
 SpfSolver::updateStaticUnicastRoutes(
     const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
-    const std::vector<thrift::IpPrefix>& unicastRoutesToDelete) {
+    const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   return impl_->updateStaticUnicastRoutes(
       unicastRoutesToUpdate, unicastRoutesToDelete);
 }
@@ -1367,12 +1372,12 @@ SpfSolver::createRouteForPrefixOrGetStaticRoute(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
-    thrift::IpPrefix const& prefix) {
+    folly::CIDRNetwork const& prefix) {
   return impl_->createRouteForPrefixOrGetStaticRoute(
       myNodeName, areaLinkStates, prefixState, prefix);
 }
 
-std::unordered_map<thrift::IpPrefix, BestRouteSelectionResult> const&
+std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult> const&
 SpfSolver::getBestRoutesCache() const {
   return impl_->getBestRoutesCache();
 }
@@ -1555,7 +1560,8 @@ Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
         // Add best path result to this
         auto const& bestRoutesCache = spfSolver_->getBestRoutesCache();
         for (auto& route : routes) {
-          auto const& bestRoutesIt = bestRoutesCache.find(*route.prefix_ref());
+          auto const& bestRoutesIt =
+              bestRoutesCache.find(toIPNetwork(*route.prefix_ref()));
           if (bestRoutesIt != bestRoutesCache.end()) {
             auto const& bestRoutes = bestRoutesIt->second;
             // Set all selected node-area
@@ -1826,14 +1832,19 @@ Decision::processStaticRoutesUpdate(
     const auto& toUpdate = *staticRoutesDelta.unicastRoutesToUpdate_ref();
     const auto& toDelete = *staticRoutesDelta.unicastRoutesToDelete_ref();
 
-    spfSolver_->updateStaticUnicastRoutes(toUpdate, toDelete);
+    auto routesDeltaToDelete = from(toDelete) |
+        mapped([](const thrift::IpPrefix& r) { return toIPNetwork(r); }) |
+        as<std::vector<folly::CIDRNetwork>>();
+
+    spfSolver_->updateStaticUnicastRoutes(toUpdate, routesDeltaToDelete);
 
     // combine add/update/delete prefixes into pending update
-    auto change = from(toUpdate) |
-        mapped([](const thrift::UnicastRoute& r) { return *r.dest_ref(); }) |
-        as<std::unordered_set<thrift::IpPrefix>>();
-    change.merge(
-        std::unordered_set<thrift::IpPrefix>(toDelete.begin(), toDelete.end()));
+    auto change = from(toUpdate) | mapped([](const thrift::UnicastRoute& r) {
+                    return toIPNetwork(*r.dest_ref());
+                  }) |
+        as<std::unordered_set<folly::CIDRNetwork>>();
+    change.merge(std::unordered_set<folly::CIDRNetwork>(
+        routesDeltaToDelete.begin(), routesDeltaToDelete.end()));
 
     pendingUpdates_.applyPrefixStateChange(
         std::move(change),
@@ -1896,7 +1907,7 @@ Decision::rebuildRoutes(std::string const& event) {
               myNodeName_, areaLinkStates_, prefixState_, prefix)) {
         update.addRouteToUpdate(std::move(maybeRibEntry).value());
       } else {
-        update.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix));
+        update.unicastRoutesToDelete.emplace_back(prefix);
       }
     }
     if (ribPolicy_) {
@@ -1986,7 +1997,8 @@ Decision::updateGlobalCounters() const {
     if (not PrefixState::hasConflictingForwardingInfo(prefixEntries)) {
       continue;
     }
-    LOG(WARNING) << "Prefix " << toString(prefix) << " has conflicting "
+    LOG(WARNING) << "Prefix " << folly::IPAddress::networkToString(prefix)
+                 << " has conflicting "
                  << "forwarding algorithm or type.";
     numConflictingPrefixes += 1;
   }

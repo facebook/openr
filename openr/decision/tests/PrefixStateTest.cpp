@@ -24,7 +24,7 @@ class PrefixStateTestFixture : public ::testing::Test {
   }
 
   PrefixState state_;
-  std::unordered_map<thrift::IpPrefix, PrefixEntries> initialEntries_;
+  std::unordered_map<folly::CIDRNetwork, PrefixEntries> initialEntries_;
 
   void
   SetUp() override {
@@ -33,7 +33,7 @@ class PrefixStateTestFixture : public ::testing::Test {
       std::string nodeName = std::to_string(i);
       for (auto const& [key, entry] : createPrefixDbForNode(nodeName, i)) {
         EXPECT_FALSE(state_.updatePrefix(key, entry).empty());
-        initialEntries_[key.getIpPrefix()].emplace(
+        initialEntries_[toIPNetwork(key.getIpPrefix())].emplace(
             std::piecewise_construct,
             std::forward_as_tuple(key.getNodeName(), key.getPrefixArea()),
             std::forward_as_tuple(entry));
@@ -64,16 +64,20 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
   entry.type_ref() = thrift::PrefixType::BREEZE;
   EXPECT_THAT(
       state_.updatePrefix(key, entry),
-      testing::UnorderedElementsAre(key.getIpPrefix()));
+      testing::UnorderedElementsAre(toIPNetwork(key.getIpPrefix())));
   EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
-  EXPECT_EQ(state_.prefixes().at(entry.get_prefix()).at(nodeArea), entry);
+  EXPECT_EQ(
+      state_.prefixes().at(toIPNetwork(entry.get_prefix())).at(nodeArea),
+      entry);
 
   entry.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_THAT(
       state_.updatePrefix(key, entry),
-      testing::UnorderedElementsAre(key.getIpPrefix()));
+      testing::UnorderedElementsAre(toIPNetwork(key.getIpPrefix())));
   EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
-  EXPECT_EQ(state_.prefixes().at(entry.get_prefix()).at(nodeArea), entry);
+  EXPECT_EQ(
+      state_.prefixes().at(toIPNetwork(entry.get_prefix())).at(nodeArea),
+      entry);
 }
 
 /**
@@ -222,7 +226,7 @@ TEST(PrefixState, FilterReceivedRoutes) {
       routes,
       filter.nodeName_ref(),
       filter.areaName_ref(),
-      thrift::IpPrefix(),
+      folly::CIDRNetwork(),
       prefixEntries);
   EXPECT_TRUE(routes.empty());
 }

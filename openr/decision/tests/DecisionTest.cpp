@@ -95,6 +95,10 @@ const auto addr2V4 = toIpPrefix("10.2.2.2/32");
 const auto addr3V4 = toIpPrefix("10.3.3.3/32");
 const auto addr4V4 = toIpPrefix("10.4.4.4/32");
 
+const auto addr1Cidr = toIPNetwork(addr1);
+const auto addr2Cidr = toIPNetwork(addr2);
+const auto addr2V4Cidr = toIPNetwork(addr2V4);
+
 const auto bgpAddr1 = toIpPrefix("2401:1::10.1.1.1/32");
 const auto bgpAddr2 = toIpPrefix("2401:2::10.2.2.2/32");
 const auto bgpAddr3 = toIpPrefix("2401:3::10.3.3.3/32");
@@ -429,7 +433,7 @@ getPrefixDbForNode(
   return prefixDb;
 }
 
-std::unordered_set<thrift::IpPrefix>
+std::unordered_set<folly::CIDRNetwork>
 updatePrefixDatabase(
     PrefixState& state, thrift::PrefixDatabase const& prefixDb) {
   auto const& nodeName = prefixDb.get_thisNodeName();
@@ -441,7 +445,7 @@ updatePrefixDatabase(
   for (auto const& entry : oldDb.get_prefixEntries()) {
     oldKeys.emplace(nodeName, toIPNetwork(entry.get_prefix()), area);
   }
-  std::unordered_set<thrift::IpPrefix> changed;
+  std::unordered_set<folly::CIDRNetwork> changed;
 
   for (auto const& entry : prefixDb.get_prefixEntries()) {
     PrefixKey key(nodeName, toIPNetwork(entry.get_prefix()), area);
@@ -1200,8 +1204,8 @@ TEST(Decision, BestRouteSelection) {
   //
   {
     auto bestRoutesCache = spfSolver.getBestRoutesCache();
-    ASSERT_EQ(1, bestRoutesCache.count(addr1));
-    auto& bestRoutes = bestRoutesCache.at(addr1);
+    ASSERT_EQ(1, bestRoutesCache.count(toIPNetwork(addr1)));
+    auto& bestRoutes = bestRoutesCache.at(toIPNetwork(addr1));
     EXPECT_EQ(2, bestRoutes.allNodeAreas.size());
     EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", kTestingAreaName}));
     EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"3", kTestingAreaName}));
@@ -1234,8 +1238,8 @@ TEST(Decision, BestRouteSelection) {
   //
   {
     auto bestRoutesCache = spfSolver.getBestRoutesCache();
-    ASSERT_EQ(1, bestRoutesCache.count(addr1));
-    auto& bestRoutes = bestRoutesCache.at(addr1);
+    ASSERT_EQ(1, bestRoutesCache.count(toIPNetwork(addr1)));
+    auto& bestRoutes = bestRoutesCache.at(toIPNetwork(addr1));
     EXPECT_EQ(1, bestRoutes.allNodeAreas.size());
     EXPECT_EQ(1, bestRoutes.allNodeAreas.count({"2", kTestingAreaName}));
     EXPECT_EQ("2", bestRoutes.bestNodeArea.first);
@@ -6805,17 +6809,19 @@ TEST(DecisionPendingUpdates, updatedPrefixes) {
   EXPECT_FALSE(updates.needsFullRebuild());
   EXPECT_TRUE(updates.updatedPrefixes().empty());
 
-  updates.applyPrefixStateChange({addr1, addr2V4}, kEmptyPerfEventRef);
-  EXPECT_TRUE(updates.needsRouteUpdate());
-  EXPECT_FALSE(updates.needsFullRebuild());
-  EXPECT_THAT(
-      updates.updatedPrefixes(), testing::UnorderedElementsAre(addr1, addr2V4));
-  updates.applyPrefixStateChange({addr2}, kEmptyPerfEventRef);
+  updates.applyPrefixStateChange(
+      {addr1Cidr, toIPNetwork(addr2V4)}, kEmptyPerfEventRef);
   EXPECT_TRUE(updates.needsRouteUpdate());
   EXPECT_FALSE(updates.needsFullRebuild());
   EXPECT_THAT(
       updates.updatedPrefixes(),
-      testing::UnorderedElementsAre(addr1, addr2V4, addr2));
+      testing::UnorderedElementsAre(addr1Cidr, addr2V4Cidr));
+  updates.applyPrefixStateChange({addr2Cidr}, kEmptyPerfEventRef);
+  EXPECT_TRUE(updates.needsRouteUpdate());
+  EXPECT_FALSE(updates.needsFullRebuild());
+  EXPECT_THAT(
+      updates.updatedPrefixes(),
+      testing::UnorderedElementsAre(addr1Cidr, addr2V4Cidr, addr2Cidr));
 
   updates.reset();
   EXPECT_FALSE(updates.needsRouteUpdate());

@@ -21,19 +21,19 @@ namespace openr {
 
 class PrefixState {
  public:
-  std::unordered_map<thrift::IpPrefix, PrefixEntries> const&
+  std::unordered_map<folly::CIDRNetwork, PrefixEntries> const&
   prefixes() const {
     return prefixes_;
   }
 
   // returns set of changed prefixes (i.e. a node started advertising or any
   // attributes changed)
-  std::unordered_set<thrift::IpPrefix> updatePrefix(
+  std::unordered_set<folly::CIDRNetwork> updatePrefix(
       PrefixKey const& key, thrift::PrefixEntry const& entry);
 
   // returns set of changed prefixes (i.e. a node withdrew a prefix) will be
   // empty if node/area did not previosuly advertise
-  std::unordered_set<thrift::IpPrefix> deletePrefix(PrefixKey const& key);
+  std::unordered_set<folly::CIDRNetwork> deletePrefix(PrefixKey const& key);
 
   std::vector<thrift::ReceivedRouteDetail> getReceivedRoutesFiltered(
       thrift::ReceivedRouteFilter const& filter) const;
@@ -45,7 +45,7 @@ class PrefixState {
       std::vector<thrift::ReceivedRouteDetail>& routes,
       apache::thrift::optional_field_ref<const std::string&> const& nodeFilter,
       apache::thrift::optional_field_ref<const std::string&> const& areaFilter,
-      thrift::IpPrefix const& prefix,
+      folly::CIDRNetwork const& prefix,
       PrefixEntries const& prefixEntries);
 
   /**
@@ -66,6 +66,6 @@ class PrefixState {
 
   // Data structure to maintain mapping from:
   //  IpPrefix -> collection of originator(i.e. [node, area] combination)
-  std::unordered_map<thrift::IpPrefix, PrefixEntries> prefixes_;
+  std::unordered_map<folly::CIDRNetwork, PrefixEntries> prefixes_;
 };
 } // namespace openr
