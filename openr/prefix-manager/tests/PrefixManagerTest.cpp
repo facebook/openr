@@ -1115,7 +1115,7 @@ TEST(PrefixManager, FilterAdvertisedRoutes) {
   std::unordered_map<thrift::PrefixType, PrefixManager::PrefixEntry> entries;
   thrift::AdvertisedRouteFilter filter;
   PrefixManager::filterAndAddAdvertisedRoute(
-      routes, filter.prefixType_ref(), thrift::IpPrefix(), entries);
+      routes, filter.prefixType_ref(), folly::CIDRNetwork(), entries);
   EXPECT_TRUE(routes.empty());
 }
 

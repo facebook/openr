@@ -255,7 +255,8 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
 
     if (enablePerfMeasurement_) {
       prefixDb.perfEvents_ref() =
-          addingEvents_[*prefixEntry.type_ref()][*prefixEntry.prefix_ref()];
+          addingEvents_[*prefixEntry.type_ref()]
+                       [toIPNetwork(*prefixEntry.prefix_ref())];
     }
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
@@ -446,7 +447,7 @@ PrefixManager::getAdvertisedRoutesFiltered(
         if (filter.prefixes_ref()) {
           // Explicitly lookup the requested prefixes
           for (auto& prefix : filter.prefixes_ref().value()) {
-            auto it = prefixMap_.find(prefix);
+            auto it = prefixMap_.find(toIPNetwork(prefix));
             if (it == prefixMap_.end()) {
               continue;
             }
@@ -497,7 +498,7 @@ void
 PrefixManager::filterAndAddAdvertisedRoute(
     std::vector<thrift::AdvertisedRouteDetail>& routes,
     apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
-    thrift::IpPrefix const& prefix,
+    folly::CIDRNetwork const& prefix,
     std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries) {
   // Return immediately if no prefix-entry
   if (prefixEntries.empty()) {
@@ -505,7 +506,7 @@ PrefixManager::filterAndAddAdvertisedRoute(
   }
 
   thrift::AdvertisedRouteDetail routeDetail;
-  routeDetail.prefix_ref() = prefix;
+  routeDetail.prefix_ref() = toIpPrefix(prefix);
 
   // Add best route selection data
   for (auto& prefixType : selectBestPrefixMetrics(prefixEntries)) {
@@ -550,7 +551,7 @@ PrefixManager::advertisePrefixesImpl(
 
   for (const auto& entry : prefixeInfos) {
     const auto& type = *entry.tPrefixEntry.type_ref();
-    const auto& prefix = *entry.tPrefixEntry.prefix_ref();
+    const auto& prefix = toIPNetwork(*entry.tPrefixEntry.prefix_ref());
 
     auto& prefixes = prefixMap_[prefix];
     auto prefixIt = prefixes.find(type);
@@ -582,7 +583,7 @@ PrefixManager::withdrawPrefixesImpl(
     const std::vector<thrift::PrefixEntry>& prefixes) {
   // verify prefixes exists
   for (const auto& prefix : prefixes) {
-    auto typeIt = prefixMap_.find(*prefix.prefix_ref());
+    auto typeIt = prefixMap_.find(toIPNetwork(*prefix.prefix_ref()));
     if (typeIt == prefixMap_.end()) {
       return false;
     }
@@ -596,10 +597,11 @@ PrefixManager::withdrawPrefixesImpl(
   }
 
   for (const auto& prefix : prefixes) {
-    prefixMap_.at(*prefix.prefix_ref()).erase(*prefix.type_ref());
-    addingEvents_.at(*prefix.type_ref()).erase(*prefix.prefix_ref());
-    if (prefixMap_.at(*prefix.prefix_ref()).empty()) {
-      prefixMap_.erase(*prefix.prefix_ref());
+    const auto& prefixCidr = toIPNetwork(*prefix.prefix_ref());
+    prefixMap_.at(prefixCidr).erase(*prefix.type_ref());
+    addingEvents_.at(*prefix.type_ref()).erase(prefixCidr);
+    if (prefixMap_.at(prefixCidr).empty()) {
+      prefixMap_.erase(prefixCidr);
     }
     if (addingEvents_[*prefix.type_ref()].empty()) {
       addingEvents_.erase(*prefix.type_ref());
@@ -621,7 +623,7 @@ PrefixManager::syncPrefixesByTypeImpl(
   LOG(INFO) << "Syncing prefixes of type " << toString(type);
   // building these lists so we can call add and remove and get detailed logging
   std::vector<thrift::PrefixEntry> toAddOrUpdate, toRemove;
-  std::unordered_set<thrift::IpPrefix> toRemoveSet;
+  std::unordered_set<folly::CIDRNetwork> toRemoveSet;
   for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
     if (typeToPrefixes.count(type)) {
       toRemoveSet.emplace(prefix);
@@ -629,7 +631,7 @@ PrefixManager::syncPrefixesByTypeImpl(
   }
   for (auto const& entry : prefixEntries) {
     CHECK(type == *entry.type_ref());
-    toRemoveSet.erase(*entry.prefix_ref());
+    toRemoveSet.erase(toIPNetwork(*entry.prefix_ref()));
     toAddOrUpdate.emplace_back(entry);
   }
   for (auto const& prefix : toRemoveSet) {

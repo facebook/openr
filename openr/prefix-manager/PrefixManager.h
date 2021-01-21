@@ -98,7 +98,7 @@ class PrefixManager final : public OpenrEventBase {
   static void filterAndAddAdvertisedRoute(
       std::vector<thrift::AdvertisedRouteDetail>& routes,
       apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
-      thrift::IpPrefix const& prefix,
+      folly::CIDRNetwork const& prefix,
       std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries);
 
   // prefix entry with their destination areas
@@ -216,7 +216,7 @@ class PrefixManager final : public OpenrEventBase {
   // ones with the best metric. Lowest prefix-type is used as a tie-breaker for
   // advertising the best selected routes to KvStore.
   std::unordered_map<
-      thrift::IpPrefix,
+      folly::CIDRNetwork,
       std::unordered_map<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
 
@@ -231,7 +231,7 @@ class PrefixManager final : public OpenrEventBase {
   // perfEvents related to a given prefixEntry
   std::unordered_map<
       thrift::PrefixType,
-      std::unordered_map<thrift::IpPrefix, thrift::PerfEvents>>
+      std::unordered_map<folly::CIDRNetwork, thrift::PerfEvents>>
       addingEvents_;
 
   // area Id
