@@ -175,10 +175,9 @@ class PrefixManager final : public OpenrEventBase {
    */
   void aggregatesToWithdraw(const folly::CIDRNetwork& prefix);
 
-  // add entry.tPrefixEntry in entry.dstAreas kvstore, return a set of per
-  // prefix key name for successful injected areas
-  std::unordered_set<std::string> updateKvStorePrefixEntry(
-      PrefixEntry const& entry);
+  // Inject `PrefixEntry` into dstAreas.
+  // Return list of prefixes for each injected area.
+  std::vector<std::string> updateKvStorePrefixEntry(PrefixEntry const& entry);
 
   // process decision route update, inject routes to different areas
   void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
@@ -224,8 +223,9 @@ class PrefixManager final : public OpenrEventBase {
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
-  // track any prefix keys for this node that we see to make sure we withdraw
-  // anything we no longer wish to advertise
+  // collection to track prefixes to be withdrawn.
+  // ATTN: this collection is maintained to easily find the prefix delta
+  //       between current/previous advertisement.
   std::unordered_set<std::string> keysToClear_;
 
   // perfEvents related to a given prefixEntry

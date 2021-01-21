@@ -233,20 +233,22 @@ PrefixManager::buildOriginatedPrefixDb(
   }
 }
 
-std::unordered_set<std::string>
+std::vector<std::string>
 PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
-  std::unordered_set<std::string> prefixKeys;
-
-  auto dstAreas = entry.dstAreas; // intended copy
+  std::vector<std::string> prefixKeys;
   auto& prefixEntry = entry.tPrefixEntry;
-  // prevent area_stack loop
-  // ATTN: for local-originated prefixes, `area_stack` is explicitly
-  //       set to empty.
-  for (const auto fromArea : *prefixEntry.area_stack_ref()) {
-    dstAreas.erase(fromArea);
-  }
+  std::unordered_set<std::string> areaStack{
+      prefixEntry.area_stack_ref()->begin(),
+      prefixEntry.area_stack_ref()->end()};
 
-  for (const auto& toArea : dstAreas) {
+  for (const auto& toArea : entry.dstAreas) {
+    // prevent area_stack loop
+    // ATTN: for local-originated prefixes, `area_stack` is explicitly
+    //       set to empty.
+    if (areaStack.count(toArea)) {
+      continue;
+    }
+
     // TODO: run ingress policy
     auto [prefixKey, prefixDb] =
         createPrefixKeyAndDb(nodeId_, prefixEntry, toArea);
@@ -268,33 +270,44 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
                         << "Area: " << toArea << ", "
                         << "Type: " << toString(*prefixEntry.type_ref()) << ", "
                         << toString(prefixEntry, VLOG_IS_ON(2));
-    prefixKeys.insert(prefixKey.getPrefixKey());
+    prefixKeys.emplace_back(prefixKey.getPrefixKey());
   }
   return prefixKeys;
 }
 
 void
 PrefixManager::syncKvStore() {
-  std::vector<std::pair<std::string, std::string>> keyVals;
-  std::unordered_set<std::string> nowAdvertisingKeys;
+  std::unordered_set<std::string> advertisedKeys{};
 
   LOG(INFO) << "Syncing " << prefixMap_.size()
             << " route advertisements in KvStore";
 
+  // Advertise prefixes to KvStore
   for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
     CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
+
+    // select the best entry/entries by comparing metric_ref() field
     auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
     auto& bestEntry = typeToPrefixes.at(bestType);
     addPerfEventIfNotExist(
         addingEvents_[bestType][prefix], "UPDATE_KVSTORE_THROTTLED");
+
+    // advertise best-entry for this prefix to KvStore
     for (const auto& key : updateKvStorePrefixEntry(bestEntry)) {
-      nowAdvertisingKeys.emplace(key);
+      // cache the successfully advertised prefixes
+      advertisedKeys.emplace(key);
+
+      // ATTN: This collection holds "advertised" prefixes in previous
+      //       round of syncing. By removing prefixes in current run,
+      //       whatever left inside `keysToClear_` will be the delta to
+      //       be removed.
       keysToClear_.erase(key);
     }
   }
 
+  // Withdraw prefixes from KvStore
   thrift::PrefixDatabase deletedPrefixDb;
-  *deletedPrefixDb.thisNodeName_ref() = nodeId_;
+  deletedPrefixDb.thisNodeName_ref() = nodeId_;
   deletedPrefixDb.deletePrefix_ref() = true;
   if (enablePerfMeasurement_) {
     deletedPrefixDb.perfEvents_ref() = thrift::PerfEvents{};
@@ -303,23 +316,17 @@ PrefixManager::syncKvStore() {
   }
   for (auto const& key : keysToClear_) {
     auto prefixKey = PrefixKey::fromStr(key);
-    if (prefixKey.hasValue()) {
-      // Needed for backward compatibility
-      thrift::PrefixEntry entry;
-      entry.prefix_ref() = prefixKey.value().getIpPrefix();
-      *deletedPrefixDb.prefixEntries_ref() = {entry};
-      VLOG(1) << "[ROUTE WITHDRAW] "
-              << "Area: " << prefixKey->getPrefixArea() << ", "
-              << toString(*entry.prefix_ref());
-      fb303::fbData->addStatValue(
-          "prefix_manager.route_withdraws", 1, fb303::SUM);
-    } else {
-      LOG(ERROR) << "[ROUTE WITHDRAW] Removing old key " << key
-                 << " from KvStore";
-    }
+    CHECK(prefixKey.hasValue());
 
-    // one last key set with empty DB and deletePrefix set signifies withdraw
-    // then the key should ttl out
+    thrift::PrefixEntry entry;
+    entry.prefix_ref() = prefixKey.value().getIpPrefix();
+    deletedPrefixDb.prefixEntries_ref() = {entry};
+    VLOG(1) << "[ROUTE WITHDRAW] "
+            << "Area: " << prefixKey->getPrefixArea() << ", "
+            << toString(*entry.prefix_ref());
+    fb303::fbData->addStatValue(
+        "prefix_manager.route_withdraws", 1, fb303::SUM);
+
     kvStoreClient_->clearKey(
         AreaId{prefixKey->getPrefixArea()},
         key,
@@ -327,13 +334,13 @@ PrefixManager::syncKvStore() {
         ttlKeyInKvStore_);
   }
 
-  // anything we don't advertise next time, we need to clear
-  keysToClear_ = std::move(nowAdvertisingKeys);
+  // Override `keysToClear_` collection for next-round syncing comparison
+  keysToClear_ = std::move(advertisedKeys);
 
   // Update flat counters
   size_t num_prefixes = 0;
-  for (auto const& kv : prefixMap_) {
-    num_prefixes += kv.second.size();
+  for (auto const& [_, typeToPrefixes] : prefixMap_) {
+    num_prefixes += typeToPrefixes.size();
   }
   fb303::fbData->setCounter("prefix_manager.received_prefixes", num_prefixes);
   fb303::fbData->setCounter(
