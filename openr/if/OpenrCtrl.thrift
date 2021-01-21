@@ -83,8 +83,7 @@ struct RibRouteMatcher {
   1: optional list<Network.IpPrefix> prefixes;
 
   // Select route based on the tag. Specifying multiple tag match on any
-  // TODO: Enable this when `PrefixEntry` have tag information available
-  // 2: optoinal list<string> tags;
+  2: optional list<string> tags;
 }
 
 /**

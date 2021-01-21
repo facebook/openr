@@ -27,16 +27,24 @@ RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
   }
 
   // Verify that at-least one match criteria must be specified
-  if (not stmt.matcher_ref()->prefixes_ref()) {
+  if (not stmt.matcher_ref()->prefixes_ref() &&
+      not stmt.matcher_ref()->tags_ref()) {
     thrift::OpenrError error;
     *error.message_ref() =
-        "Missing policy_statement.matcher.prefixes attribute";
+        "Missing policy_statement.matcher.prefixes or policy_statement.matcher.tags attribute";
     throw error;
   }
 
   // Populate the match fields
-  for (const auto& tPrefix : *stmt.matcher_ref()->prefixes_ref()) {
-    prefixSet_.insert(toIPNetwork(tPrefix));
+  if (stmt.matcher_ref()->prefixes_ref()) {
+    for (const auto& tPrefix : *stmt.matcher_ref()->prefixes_ref()) {
+      prefixSet_.insert(toIPNetwork(tPrefix));
+    }
+  }
+  if (stmt.matcher_ref()->tags_ref()) {
+    for (const auto& tTag : *stmt.matcher_ref()->tags_ref()) {
+      tagSet_.insert(tTag);
+    }
   }
 }
 
@@ -45,16 +53,55 @@ RibPolicyStatement::toThrift() const {
   thrift::RibPolicyStatement stmt;
   *stmt.name_ref() = name_;
   *stmt.action_ref() = action_;
-  stmt.matcher_ref()->prefixes_ref() = std::vector<thrift::IpPrefix>();
-  for (auto const& prefix : prefixSet_) {
-    stmt.matcher_ref()->prefixes_ref()->emplace_back(toIpPrefix(prefix));
+  if (!prefixSet_.empty()) {
+    stmt.matcher_ref()->prefixes_ref() = std::vector<thrift::IpPrefix>();
+    for (auto const& prefix : prefixSet_) {
+      stmt.matcher_ref()->prefixes_ref()->emplace_back(toIpPrefix(prefix));
+    }
   }
+  if (!tagSet_.empty()) {
+    stmt.matcher_ref()->tags_ref() = std::vector<std::string>();
+    for (auto const& tag : tagSet_) {
+      stmt.matcher_ref()->tags_ref()->emplace_back(tag);
+    }
+  }
+
   return stmt;
-}
+} // namespace openr
 
 bool
 RibPolicyStatement::match(const RibUnicastEntry& route) const {
-  return prefixSet_.count(route.prefix) > 0;
+  if (tagSet_.empty() && prefixSet_.empty()) {
+    return false;
+  }
+
+  // Attempt to match the route on tags if populated in the RibPolicy statement
+  bool tagMatch{false};
+  if (tagSet_.empty()) {
+    tagMatch = true;
+  } else {
+    for (const auto& tag : tagSet_) {
+      // Find a match with at least one tag in the RibPolicyStatement
+      const auto tagFoundIt = route.bestPrefixEntry.tags_ref()->find(tag);
+      if (tagFoundIt != route.bestPrefixEntry.tags_ref()->end()) {
+        tagMatch = true;
+        break;
+      }
+    }
+  }
+
+  // Attempt to match the route on prefix if populated in the RibPolicy
+  // statement
+  bool prefixMatch{false};
+  if (prefixSet_.empty()) {
+    prefixMatch = true;
+  } else {
+    // Find a match with at least one prefix in the RibPolicyStatement
+    prefixMatch = prefixSet_.count(route.prefix) > 0;
+  }
+
+  // Verify both tag and prefix matchers are successful
+  return tagMatch && prefixMatch;
 }
 
 bool

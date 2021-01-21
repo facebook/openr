@@ -21,13 +21,15 @@ namespace {
 
 thrift::RibPolicyStatement
 createPolicyStatement(
-    std::vector<thrift::IpPrefix> const& prefixes,
+    std::optional<std::vector<thrift::IpPrefix>> const& prefixes,
+    std::optional<std::vector<std::string>> const& tags,
     int32_t defaultWeight,
     std::map<std::string, int32_t> areaToWeight,
     std::map<std::string, int32_t> nbrToWeight = {}) {
   thrift::RibPolicyStatement p;
   *p.name_ref() = "TestPolicyStatement";
-  p.matcher_ref()->prefixes_ref() = prefixes;
+  p.matcher_ref()->prefixes_ref().from_optional(prefixes);
+  p.matcher_ref()->tags_ref().from_optional(tags);
   p.action_ref()->set_weight_ref() = thrift::RibRouteActionWeight{};
   p.action_ref()->set_weight_ref()->default_weight_ref() = defaultWeight;
   *p.action_ref()->set_weight_ref()->area_to_weight_ref() = areaToWeight;
@@ -71,8 +73,9 @@ TEST(RibPolicy, Error) {
 }
 
 TEST(RibPolicyStatement, ApplyAction) {
+  std::vector<thrift::IpPrefix> prefixes{toIpPrefix("fc00::/64")};
   const auto thriftPolicyStatement = createPolicyStatement(
-      {toIpPrefix("fc00::/64")}, 1, {{"area1", 0}, {"area2", 2}});
+      prefixes, std::nullopt, 1, {{"area1", 0}, {"area2", 2}});
   auto policyStatement = RibPolicyStatement(thriftPolicyStatement);
 
   const auto nhDefault =
@@ -116,9 +119,95 @@ TEST(RibPolicyStatement, ApplyAction) {
   }
 }
 
+TEST(RibPolicyStatement, Match) {
+  // Statement with only prefix matcher
+  {
+    std::vector<thrift::IpPrefix> prefixes{toIpPrefix("10.0.0.0/8")};
+    auto thriftStatement =
+        createPolicyStatement(prefixes, std::nullopt, 1, {{"test-area", 2}});
+    auto policyStatement = RibPolicyStatement(thriftStatement);
+
+    // Verify match
+    RibUnicastEntry match(folly::IPAddress::createNetwork("10.0.0.0/8"));
+    match.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    EXPECT_TRUE(policyStatement.match(match));
+
+    // Verify no match
+    RibUnicastEntry noMatch(folly::IPAddress::createNetwork("11.0.0.0/8"));
+    noMatch.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    EXPECT_FALSE(policyStatement.match(noMatch));
+  }
+
+  // Statement with only tag matcher
+  {
+    std::vector<std::string> tags{"COMMODITY:EGRESS"};
+    auto thriftStatement =
+        createPolicyStatement(std::nullopt, tags, 1, {{"test-area", 2}});
+    auto policyStatement = RibPolicyStatement(thriftStatement);
+
+    // Verify match
+    RibUnicastEntry match(folly::IPAddress::createNetwork("11.0.0.0/8"));
+    match.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    EXPECT_TRUE(policyStatement.match(match));
+
+    // Verify no match
+    RibUnicastEntry noMatch(folly::IPAddress::createNetwork("11.0.0.0/8"));
+    noMatch.bestPrefixEntry.tags_ref()->insert("COMMODITY:INGRESS:pod1");
+    EXPECT_FALSE(policyStatement.match(noMatch));
+  }
+
+  // Statement with both prefix and tag matchers
+  {
+    std::vector<thrift::IpPrefix> prefixes{toIpPrefix("10.0.0.0/8")};
+    std::vector<std::string> tags{"COMMODITY:EGRESS"};
+    auto thriftStatement =
+        createPolicyStatement(prefixes, tags, 1, {{"test-area", 2}});
+    auto policyStatement = RibPolicyStatement(thriftStatement);
+
+    // Verify match
+    RibUnicastEntry match(folly::IPAddress::createNetwork("10.0.0.0/8"));
+    match.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    EXPECT_TRUE(policyStatement.match(match));
+
+    // Verify prefix doesn't match
+    RibUnicastEntry noMatchPrefix(
+        folly::IPAddress::createNetwork("11.0.0.0/8"));
+    noMatchPrefix.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    EXPECT_FALSE(policyStatement.match(noMatchPrefix));
+
+    // Verify tag doesn't match
+    RibUnicastEntry noMatchTag(folly::IPAddress::createNetwork("10.0.0.0/8"));
+    noMatchTag.bestPrefixEntry.tags_ref()->insert("COMMODITY:INGRESS:pod1");
+    EXPECT_FALSE(policyStatement.match(noMatchTag));
+
+    // Verify tag doesn't match
+    RibUnicastEntry noMatchPrefixTag(
+        folly::IPAddress::createNetwork("11.0.0.0/8"));
+    noMatchPrefixTag.bestPrefixEntry.tags_ref()->insert(
+        "COMMODITY:INGRES:pod1");
+    EXPECT_FALSE(policyStatement.match(noMatchPrefixTag));
+  }
+
+  // Statement no prefix or tag matchers
+  {
+    std::vector<thrift::IpPrefix> prefixes{};
+    std::vector<std::string> tags{};
+    auto thriftStatement =
+        createPolicyStatement(prefixes, tags, 1, {{"test-area", 2}});
+    auto policyStatement = RibPolicyStatement(thriftStatement);
+
+    // Statement will not match with anything
+    RibUnicastEntry noMatch(folly::IPAddress::createNetwork("10.0.0.0/8"));
+    noMatch.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    EXPECT_FALSE(policyStatement.match(noMatch));
+  }
+}
+
 TEST(RibPolicy, ApiTest) {
+  std::vector<thrift::IpPrefix> prefixes{toIpPrefix("10.0.0.0/8")};
+  std::vector<std::string> tags{"TAG1"};
   const auto policyStatement =
-      createPolicyStatement({toIpPrefix("10.0.0.0/8")}, 1, {{"test-area", 2}});
+      createPolicyStatement(prefixes, tags, 1, {{"test-area", 2}});
   const auto thriftPolicy = createPolicy({policyStatement}, 3);
   auto policy = RibPolicy(thriftPolicy);
 
@@ -145,18 +234,21 @@ TEST(RibPolicy, ApiTest) {
   // Verify match
   {
     RibUnicastEntry matchEntry(folly::IPAddress::createNetwork("10.0.0.0/8"));
+    matchEntry.bestPrefixEntry.tags_ref()->insert("TAG1");
     EXPECT_TRUE(policy.match(matchEntry));
 
     RibUnicastEntry nonMatchEntry(
         folly::IPAddress::createNetwork("99.0.0.0/8"));
+    nonMatchEntry.bestPrefixEntry.tags_ref()->insert("TAG1");
     EXPECT_FALSE(policy.match(nonMatchEntry));
   }
 }
 
 TEST(RibPolicy, IsActive) {
   // Create policy with validity = 1 second
+  std::vector<thrift::IpPrefix> prefixes{toIpPrefix("10.0.0.0/8")};
   const auto policyStatement =
-      createPolicyStatement({toIpPrefix("10.0.0.0/8")}, 1, {});
+      createPolicyStatement(prefixes, std::nullopt, 1, {});
   const auto thriftPolicy = createPolicy({policyStatement}, 1);
   auto policy = RibPolicy(thriftPolicy);
 
@@ -174,10 +266,13 @@ TEST(RibPolicy, IsActive) {
  * transformation is applied.
  */
 TEST(RibPolicy, ApplyAction) {
+  std::vector<thrift::IpPrefix> prefixes1{toIpPrefix("fc01::/64")};
   const auto stmt1 =
-      createPolicyStatement({toIpPrefix("fc01::/64")}, 1, {{"area1", 99}});
-  const auto stmt2 = createPolicyStatement(
-      {toIpPrefix("fc00::/64"), toIpPrefix("fc02::/64")}, 1, {{"area2", 99}});
+      createPolicyStatement(prefixes1, std::nullopt, 1, {{"area1", 99}});
+  std::vector<thrift::IpPrefix> prefixes2{
+      toIpPrefix("fc00::/64"), toIpPrefix("fc02::/64")};
+  const auto stmt2 =
+      createPolicyStatement(prefixes2, std::nullopt, 1, {{"area2", 99}});
   auto policy = RibPolicy(createPolicy({stmt1, stmt2}, 1));
 
   const auto nh1 = createNextHop(
@@ -234,10 +329,13 @@ TEST(RibPolicy, ApplyAction) {
 }
 
 TEST(RibPolicy, ApplyPolicy) {
+  std::vector<thrift::IpPrefix> prefixes1{toIpPrefix("fc01::/64")};
   const auto stmt1 = createPolicyStatement(
-      {toIpPrefix("fc01::/64")}, 1, {{"area1", 99}}, {{"nbr3", 98}});
-  const auto stmt2 = createPolicyStatement(
-      {toIpPrefix("fc00::/64"), toIpPrefix("fc02::/64")}, 1, {{"area2", 0}});
+      prefixes1, std::nullopt, 1, {{"area1", 99}}, {{"nbr3", 98}});
+  std::vector<thrift::IpPrefix> prefixes2{
+      toIpPrefix("fc00::/64"), toIpPrefix("fc02::/64")};
+  const auto stmt2 =
+      createPolicyStatement(prefixes2, std::nullopt, 1, {{"area2", 0}});
   auto policy = RibPolicy(createPolicy({stmt1, stmt2}, 1));
 
   const auto nh1 = createNextHop(

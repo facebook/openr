@@ -24,6 +24,7 @@ DEFINE_string(
     "",
     "Comma separated list of neighborName:weight (ex: fsw001.p001.f01.atn6:10)");
 DEFINE_string(prefixes, "", "Comma separated list of prefixes to apply policy");
+DEFINE_string(tags, "", "Comma separated list of tags to apply policy");
 
 using namespace openr;
 
@@ -41,6 +42,10 @@ main(int argc, char* argv[]) {
     LOG(INFO) << "Prefix - " << prefixStr;
     prefixes.emplace_back(toIpPrefix(prefixStr));
   }
+
+  // Create list of tags for match
+  std::vector<std::string> tags;
+  folly::split(",", FLAGS_tags, tags, true);
 
   // Action weight
   thrift::RibRouteActionWeight actionWeight;
@@ -71,6 +76,7 @@ main(int argc, char* argv[]) {
   // Create PolicyStatement
   thrift::RibPolicyStatement policyStatement;
   policyStatement.matcher_ref()->prefixes_ref() = prefixes;
+  policyStatement.matcher_ref()->tags_ref() = tags;
   policyStatement.action_ref()->set_weight_ref() = actionWeight;
 
   // Create RibPolicy

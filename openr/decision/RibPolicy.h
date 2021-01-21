@@ -50,6 +50,9 @@ class RibPolicyStatement {
   // qualified)
   std::unordered_set<folly::CIDRNetwork> prefixSet_;
 
+  // Tag set. Unordered set for efficient lookup.
+  std::unordered_set<std::string> tagSet_;
+
   // PolicyAction operation
   const thrift::RibRouteAction action_;
 };
