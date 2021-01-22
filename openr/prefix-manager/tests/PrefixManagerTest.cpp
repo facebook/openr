@@ -245,34 +245,6 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry8}).get());
 }
 
-TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
-  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
-  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry2}).get());
-
-  // Verify that prefix type has to match for withdrawing prefix
-  auto prefixEntryError = prefixEntry1;
-  prefixEntryError.type_ref() = thrift::PrefixType::PREFIX_ALLOCATOR;
-
-  auto resp1 =
-      prefixManager->withdrawPrefixes({prefixEntryError, prefixEntry2}).get();
-  EXPECT_FALSE(resp1);
-
-  // Verify that all prefixes are still present
-  auto resp2 = prefixManager->getPrefixes().get();
-  EXPECT_TRUE(resp2);
-  EXPECT_EQ(2, resp2->size());
-
-  // Verify withdrawing of multiple prefixes
-  auto resp3 =
-      prefixManager->withdrawPrefixes({prefixEntry1, prefixEntry2}).get();
-  EXPECT_TRUE(resp3);
-
-  // Verify that there are no prefixes
-  auto resp4 = prefixManager->getPrefixes().get();
-  EXPECT_TRUE(resp4);
-  EXPECT_EQ(0, resp4->size());
-}
-
 TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   folly::Baton waitBaton;
   auto scheduleAt = std::chrono::milliseconds{0}.count();

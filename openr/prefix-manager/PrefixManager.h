@@ -126,7 +126,7 @@ class PrefixManager final : public OpenrEventBase {
 
  private:
   /*
-   * Private helpers to update prefixMap_ and send prefixes to KvStore
+   * Private helpers to update `prefixMap_`
    *
    * Called upon:
    * - public write APIs
@@ -136,17 +136,22 @@ class PrefixManager final : public OpenrEventBase {
    * @return true if the db is modified
    */
   bool advertisePrefixesImpl(
-      const std::vector<thrift::PrefixEntry>& prefixes,
+      const std::vector<thrift::PrefixEntry>& tPrefixEntries,
       const std::unordered_set<std::string>& dstAreas);
-  bool advertisePrefixesImpl(const std::vector<PrefixEntry>& prefixes);
-  bool withdrawPrefixesImpl(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool advertisePrefixesImpl(const std::vector<PrefixEntry>& prefixEntries);
+  bool withdrawPrefixesImpl(
+      const std::vector<thrift::PrefixEntry>& tPrefixEntries);
   bool withdrawPrefixesByTypeImpl(thrift::PrefixType type);
   bool syncPrefixesByTypeImpl(
       thrift::PrefixType type,
-      const std::vector<thrift::PrefixEntry>& prefixes,
+      const std::vector<thrift::PrefixEntry>& tPrefixEntries,
       const std::unordered_set<std::string>& dstAreas);
 
-  // Util function to interact KvStore to inject/withdraw keys
+  /*
+   * Util function to interact with KvStore to advertise/withdraw prefixes
+   * ATTN: syncKvStore() has throttled version `syncKvStoreThrottled_` to
+   *       batch processing updates
+   */
   void syncKvStore();
 
   /*

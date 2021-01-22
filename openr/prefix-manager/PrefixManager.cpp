@@ -531,94 +531,99 @@ PrefixManager::filterAndAddAdvertisedRoute(
   }
 }
 
-// helpers for modifying our Prefix Db
 bool
 PrefixManager::advertisePrefixesImpl(
-    const std::vector<thrift::PrefixEntry>& prefixes,
+    const std::vector<thrift::PrefixEntry>& tPrefixEntries,
     const std::unordered_set<std::string>& dstAreas) {
   std::vector<PrefixEntry> toAddOrUpdate;
-  for (const auto& prefix : prefixes) {
-    toAddOrUpdate.emplace_back(prefix, dstAreas);
+  for (const auto& tPrefixEntry : tPrefixEntries) {
+    toAddOrUpdate.emplace_back(tPrefixEntry, dstAreas);
   }
   return advertisePrefixesImpl(toAddOrUpdate);
 }
 
-// helpers for modifying our Prefix Db
 bool
 PrefixManager::advertisePrefixesImpl(
-    const std::vector<PrefixEntry>& prefixeInfos) {
-  bool updated{false};
+    const std::vector<PrefixEntry>& prefixEntries) {
+  std::unordered_set<folly::CIDRNetwork> changed{};
 
-  for (const auto& entry : prefixeInfos) {
+  for (const auto& entry : prefixEntries) {
     const auto& type = *entry.tPrefixEntry.type_ref();
-    const auto& prefix = toIPNetwork(*entry.tPrefixEntry.prefix_ref());
+    const auto& prefixCidr = toIPNetwork(*entry.tPrefixEntry.prefix_ref());
 
-    auto& prefixes = prefixMap_[prefix];
-    auto prefixIt = prefixes.find(type);
+    // ATTN: create new folly::CIDRNetwork -> typeToPrefixes
+    //       mapping if it is new prefix. `[]` operator is
+    //       used intentionally.
+    auto [it, inserted] = prefixMap_[prefixCidr].emplace(type, entry);
 
-    // received same prefix entry, ignore
-    if (prefixIt != prefixes.end() and prefixIt->second == entry) {
+    // Case 1: ignore SAME `PrefixEntry`
+    if ((not inserted) and it->second == entry) {
       continue;
     }
 
-    if (prefixIt == prefixes.end()) {
-      prefixes.emplace(type, entry);
-      addPerfEventIfNotExist(addingEvents_[type][prefix], "ADD_PREFIX");
+    if (inserted) {
+      // Case 2: create new prefix entry
+      addPerfEventIfNotExist(addingEvents_[type][prefixCidr], "ADD_PREFIX");
     } else {
-      prefixIt->second = entry;
-      addPerfEventIfNotExist(addingEvents_[type][prefix], "UPDATE_PREFIX");
+      // Case 3: update existing `PrefixEntry`
+      it->second = entry;
+      addPerfEventIfNotExist(addingEvents_[type][prefixCidr], "UPDATE_PREFIX");
     }
-    updated = true;
+    changed.insert(prefixCidr);
   }
 
-  if (updated) {
+  if (not changed.empty()) {
+    // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
+    // TODO: apply changes to pending state for processing
+    //       incremental change ONLY
   }
 
-  return updated;
+  return not changed.empty();
 }
 
 bool
 PrefixManager::withdrawPrefixesImpl(
-    const std::vector<thrift::PrefixEntry>& prefixes) {
-  // verify prefixes exists
-  for (const auto& prefix : prefixes) {
-    auto typeIt = prefixMap_.find(toIPNetwork(*prefix.prefix_ref()));
-    if (typeIt == prefixMap_.end()) {
-      return false;
-    }
-    auto it = typeIt->second.find(*prefix.type_ref());
-    if (it == typeIt->second.end()) {
-      LOG(ERROR) << "Cannot withdraw non-existent prefix "
-                 << toString(*prefix.prefix_ref())
-                 << ", client: " << toString(*prefix.type_ref());
-      return false;
+    const std::vector<thrift::PrefixEntry>& tPrefixEntries) {
+  std::unordered_set<folly::CIDRNetwork> changed{};
+
+  for (const auto& prefixEntry : tPrefixEntries) {
+    const auto& type = *prefixEntry.type_ref();
+    const auto& prefixCidr = toIPNetwork(*prefixEntry.prefix_ref());
+
+    // iterator usage to avoid multiple times of map access
+    auto typeIt = prefixMap_.find(prefixCidr);
+    auto eventIt = addingEvents_.find(type);
+
+    // ONLY populate changed collection when successfully erased key
+    if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
+      eventIt->second.erase(prefixCidr);
+      changed.insert(prefixCidr);
+
+      // clean up data structure
+      if (typeIt->second.empty()) {
+        prefixMap_.erase(prefixCidr);
+      }
+      if (eventIt->second.empty()) {
+        addingEvents_.erase(type);
+      }
     }
   }
 
-  for (const auto& prefix : prefixes) {
-    const auto& prefixCidr = toIPNetwork(*prefix.prefix_ref());
-    prefixMap_.at(prefixCidr).erase(*prefix.type_ref());
-    addingEvents_.at(*prefix.type_ref()).erase(prefixCidr);
-    if (prefixMap_.at(prefixCidr).empty()) {
-      prefixMap_.erase(prefixCidr);
-    }
-    if (addingEvents_[*prefix.type_ref()].empty()) {
-      addingEvents_.erase(*prefix.type_ref());
-    }
-  }
-
-  if (!prefixes.empty()) {
+  if (not changed.empty()) {
+    // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
+    // TODO: apply changes to pending state for processing
+    //       incremental change ONLY
   }
 
-  return !prefixes.empty();
+  return not changed.empty();
 }
 
 bool
 PrefixManager::syncPrefixesByTypeImpl(
     thrift::PrefixType type,
-    const std::vector<thrift::PrefixEntry>& prefixEntries,
+    const std::vector<thrift::PrefixEntry>& tPrefixEntries,
     const std::unordered_set<std::string>& dstAreas) {
   LOG(INFO) << "Syncing prefixes of type " << toString(type);
   // building these lists so we can call add and remove and get detailed logging
@@ -629,7 +634,7 @@ PrefixManager::syncPrefixesByTypeImpl(
       toRemoveSet.emplace(prefix);
     }
   }
-  for (auto const& entry : prefixEntries) {
+  for (auto const& entry : tPrefixEntries) {
     CHECK(type == *entry.type_ref());
     toRemoveSet.erase(toIPNetwork(*entry.prefix_ref()));
     toAddOrUpdate.emplace_back(entry);
@@ -638,8 +643,8 @@ PrefixManager::syncPrefixesByTypeImpl(
     toRemove.emplace_back(prefixMap_.at(prefix).at(type).tPrefixEntry);
   }
   bool updated = false;
-  updated |= advertisePrefixesImpl(toAddOrUpdate, dstAreas);
-  updated |= withdrawPrefixesImpl(toRemove);
+  updated |= ((advertisePrefixesImpl(toAddOrUpdate, dstAreas)) ? 1 : 0);
+  updated |= ((withdrawPrefixesImpl(toRemove)) ? 1 : 0);
   return updated;
 }
 
