@@ -34,7 +34,8 @@ getBasicOpenrConfig(
     bool enableV4 = true,
     bool enableSegmentRouting = false,
     bool orderedFibProgramming = false,
-    bool dryrun = true) {
+    bool dryrun = true,
+    bool enableV4OverV6Nexthop = false) {
   openr::thrift::LinkMonitorConfig linkMonitorConfig;
   *linkMonitorConfig.include_interface_regexes_ref() =
       std::vector<std::string>{".*"};
@@ -55,6 +56,7 @@ getBasicOpenrConfig(
   *config.node_name_ref() = nodeName;
   *config.domain_ref() = domainName;
   config.enable_v4_ref() = enableV4;
+  config.v4_over_v6_nexthop_ref() = enableV4OverV6Nexthop;
   config.enable_segment_routing_ref() = enableSegmentRouting;
   config.enable_ordered_fib_programming_ref() = orderedFibProgramming;
   config.dryrun_ref() = dryrun;

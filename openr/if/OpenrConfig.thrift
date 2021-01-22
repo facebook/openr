@@ -479,6 +479,11 @@ struct OpenrConfig {
   27: bool enable_periodic_sync = 1
 
   /**
+   * RFC5549 -- IPv4 reachability over IPv6 nexthop
+   */
+  28: optional bool v4_over_v6_nexthop
+
+  /**
    * V4/V6 prefixes to be originated.
    */
   31: optional list<OriginatedPrefix> originated_prefixes

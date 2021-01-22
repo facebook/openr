@@ -600,9 +600,28 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isFloodOptimizationEnabled());
     // enable_best_route_selection
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
+    // enable_v4_over_v6_nexthop
+    EXPECT_FALSE(config.isV4OverV6NexthopEnabled());
 
     // getSparkConfig
     EXPECT_EQ(*tConfig.spark_config_ref(), config.getSparkConfig());
+  }
+
+  // config without bgp peering and only for v4_over_v6_nexthop
+  {
+    auto tConfig = getBasicOpenrConfig(
+        "node-1",
+        "domain",
+        {} /* area config */,
+        true /* enable v4 */,
+        false /* enableSegmentRouting */,
+        false /* orderedFibProgramming */,
+        true /* dryrun */,
+        true /* enableV4OverV6Nexthop */);
+    auto config = Config(tConfig);
+
+    // enable_v4_over_v6_nexthop
+    EXPECT_TRUE(config.isV4OverV6NexthopEnabled());
   }
 
   // config with bgp peering

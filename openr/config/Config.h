@@ -146,6 +146,11 @@ class Config {
     return *getMonitorConfig().enable_event_log_submission_ref();
   }
 
+  bool
+  isV4OverV6NexthopEnabled() const {
+    return config_.v4_over_v6_nexthop_ref().value_or(false);
+  }
+
   //
   // area
   //
