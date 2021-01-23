@@ -50,8 +50,8 @@ class Fib final : public OpenrEventBase {
       int32_t thriftPort,
       std::chrono::seconds coldStartDuration,
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-      messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
-      messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
+      messaging::RQueue<DecisionRouteUpdate> staticRoutesUpdateQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       KvStore* kvStore);
 
@@ -80,7 +80,7 @@ class Fib final : public OpenrEventBase {
    */
   static std::optional<folly::CIDRNetwork> longestPrefixMatch(
       const folly::CIDRNetwork& inputPrefix,
-      const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
+      const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
           unicastRoutes);
 
   /**
@@ -99,6 +99,9 @@ class Fib final : public OpenrEventBase {
    * NOTE: DEPRECATED! Use getUnicastRoutes or getMplsRoutes.
    */
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getRouteDb();
+
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabaseDetail>>
+  getRouteDetailDb();
 
   /**
    * Retrieve unicast routes for specified prefixes or IP. Returns all if
@@ -122,7 +125,7 @@ class Fib final : public OpenrEventBase {
   /**
    * API to get reader for fibUpdatesQueue
    */
-  messaging::RQueue<thrift::RouteDatabaseDelta> getFibUpdatesReader();
+  messaging::RQueue<DecisionRouteUpdate> getFibUpdatesReader();
 
  private:
   // No-copy
@@ -149,15 +152,14 @@ class Fib final : public OpenrEventBase {
   /**
    * Process new route updates received from Decision module
    */
-  void processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta);
+  void processRouteUpdates(DecisionRouteUpdate&& routeUpdate);
 
   /**
    * Trigger add/del routes thrift calls
    * on success no action needed
    * on failure invokes syncRouteDbDebounced
    */
-  void updateRoutes(
-      thrift::RouteDatabaseDelta&& routeDbDelta, bool isStaticRoutes);
+  void updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes);
 
   /**
    * Sync the current routeDb_ with the switch agent.
@@ -182,15 +184,15 @@ class Fib final : public OpenrEventBase {
   void updateGlobalCounters();
 
   // log perf events
-  void logPerfEvents(
-      apache::thrift::optional_field_ref<thrift::PerfEvents&> perfEvents);
+  void logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents);
 
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
   struct RouteState {
     // Non modified copy of Unicast and MPLS routes received from Decision
-    std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute> unicastRoutes;
-    std::unordered_map<uint32_t, thrift::MplsRoute> mplsRoutes;
+    std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>
+        unicastRoutes;
+    std::unordered_map<uint32_t, thrift::MplsRouteDetail> mplsRoutes;
 
     // indicates we've received a decision route publication and therefore have
     // routes to sync. will not synce routes with system until this is set
@@ -245,8 +247,8 @@ class Fib final : public OpenrEventBase {
   KvStore* kvStore_{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 
-  // Queue to publish fib updates (Fib streaming)
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue_;
+  // Queues to publish fib updates (Fib streaming)
+  messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue_;
 
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.

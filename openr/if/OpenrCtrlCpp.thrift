@@ -47,4 +47,6 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
    */
 
   Types.RouteDatabase, stream<Types.RouteDatabaseDelta> subscribeAndGetFib()
+  OpenrCtrl.RouteDatabaseDetail, stream<OpenrCtrl.RouteDatabaseDeltaDetail> subscribeAndGetFibDetail()
+
 }

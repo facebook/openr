@@ -1402,7 +1402,7 @@ Decision::Decision(
     std::chrono::milliseconds debounceMaxDur,
     // consumer queue
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
-    messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
+    messaging::RQueue<DecisionRouteUpdate> staticRoutesUpdateQueue,
     // producer queue
     messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
     : config_(config),
@@ -1480,19 +1480,19 @@ Decision::Decision(
   });
 
   // Add reader to process static routes publication from prefix-manager
-  addFiberTask(
-      [q = std::move(staticRoutesUpdateQueue), this]() mutable noexcept {
-        LOG(INFO) << "Starting static routes update processing fiber";
-        while (true) {
-          auto maybeThriftPub = q.get(); // perform read
-          VLOG(2) << "Received static routes update";
-          if (maybeThriftPub.hasError()) {
-            LOG(INFO) << "Terminating static routes update processing fiber";
-            break;
-          }
-          processStaticRoutesUpdate(std::move(maybeThriftPub).value());
-        }
-      });
+  addFiberTask([q = std::move(staticRoutesUpdateQueue),
+                this]() mutable noexcept {
+    LOG(INFO) << "Starting static routes update processing fiber";
+    while (true) {
+      auto maybeThriftPub = q.get(); // perform read
+      VLOG(2) << "Received static routes update";
+      if (maybeThriftPub.hasError()) {
+        LOG(INFO) << "Terminating static routes update processing fiber";
+        break;
+      }
+      processStaticRoutesUpdate(std::move(maybeThriftPub).value().toThrift());
+    }
+  });
 
   // Create RibPolicy timer to process routes on policy expiry
   ribPolicyTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {

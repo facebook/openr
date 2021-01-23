@@ -171,7 +171,7 @@ class DecisionWrapper {
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
 

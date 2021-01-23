@@ -61,6 +61,28 @@ struct DecisionRouteUpdate {
 
     return delta;
   }
+
+  thrift::RouteDatabaseDeltaDetail
+  toThriftDetail() {
+    thrift::RouteDatabaseDeltaDetail deltaDetail;
+
+    // unicast
+    for (const auto& [_, route] : unicastRoutesToUpdate) {
+      deltaDetail.unicastRoutesToUpdate_ref()->emplace_back(
+          route.toThriftDetail());
+    }
+    for (const auto& route : unicastRoutesToDelete) {
+      deltaDetail.unicastRoutesToDelete_ref()->emplace_back(toIpPrefix(route));
+    }
+    // mpls
+    for (const auto& route : mplsRoutesToUpdate) {
+      deltaDetail.mplsRoutesToUpdate_ref()->emplace_back(
+          route.toThriftDetail());
+    }
+    *deltaDetail.mplsRoutesToDelete_ref() = mplsRoutesToDelete;
+
+    return deltaDetail;
+  }
 };
 
 } // namespace openr

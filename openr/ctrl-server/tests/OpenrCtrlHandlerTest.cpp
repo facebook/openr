@@ -234,9 +234,8 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
-      staticRoutesUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue_;
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 

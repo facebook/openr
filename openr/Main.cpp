@@ -280,8 +280,8 @@ main(int argc, char** argv) {
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
-  ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
-  ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
+  ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+  ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
 

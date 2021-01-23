@@ -186,8 +186,8 @@ class FibWrapper {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> fibUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
   messaging::ReplicateQueue<LogSample> logSampleQueue;
 
   // ctrlEvb for openrCtrlHandler instantiation

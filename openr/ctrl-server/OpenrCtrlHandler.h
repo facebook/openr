@@ -116,6 +116,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
   semifuture_getRouteDb() override;
 
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabaseDetail>>
+  semifuture_getRouteDetailDb() override;
+
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
   semifuture_getUnicastRoutesFiltered(
       std::unique_ptr<std::vector<::std::string>> prefixes) override;
@@ -231,6 +234,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   apache::thrift::ServerStream<thrift::RouteDatabaseDelta> subscribeFib();
 
+  apache::thrift::ServerStream<thrift::RouteDatabaseDeltaDetail>
+  subscribeFibDetail();
+
   folly::SemiFuture<apache::thrift::ResponseAndServerStream<
       thrift::Publication,
       thrift::Publication>>
@@ -253,6 +259,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       thrift::RouteDatabase,
       thrift::RouteDatabaseDelta>>
   semifuture_subscribeAndGetFib() override;
+
+  folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+      thrift::RouteDatabaseDetail,
+      thrift::RouteDatabaseDeltaDetail>>
+  semifuture_subscribeAndGetFibDetail() override;
 
   // Long poll support
   folly::SemiFuture<bool> semifuture_longPollKvStoreAdj(
@@ -347,6 +358,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
     return fibPublishers_.wlock()->size();
   }
 
+  inline size_t
+  getNumFibDetailPublishers() {
+    return fibDetailPublishers_.wlock()->size();
+  }
+
   //
   // API to cleanup private variables
   //
@@ -391,6 +407,12 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       int64_t,
       apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDelta>>>
       fibPublishers_;
+
+  // Active Fib Detail streaming publishers
+  folly::Synchronized<std::unordered_map<
+      int64_t,
+      apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDeltaDetail>>>
+      fibDetailPublishers_;
 
   // pending longPoll requests from clients, which consists of
   // 1). promise; 2). timestamp when req received on server

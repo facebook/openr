@@ -186,8 +186,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   std::vector<std::thread> threads_;
 
   // Queue for publishing prefix-updates to PrefixManager
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
-      staticRoutesUpdateQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
 
@@ -278,8 +277,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>> routeQueues{
         numAllocators};
     messaging::ReplicateQueue<LogSample> logSampleQueue;
-    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
-        staticRoutesUpdateQueue;
+    messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
     std::vector<std::unique_ptr<PrefixAllocator>> allocators;
     std::vector<std::thread> threads;
 

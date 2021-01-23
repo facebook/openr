@@ -14,6 +14,7 @@
 #include <folly/IPAddress.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrl.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
@@ -87,6 +88,14 @@ struct RibUnicastEntry : RibEntry {
     }
     return tUnicast;
   }
+
+  thrift::UnicastRouteDetail
+  toThriftDetail() const {
+    thrift::UnicastRouteDetail tUnicastDetail;
+    tUnicastDetail.unicastRoute_ref() = toThrift();
+    tUnicastDetail.bestRoute_ref() = bestPrefixEntry;
+    return tUnicastDetail;
+  }
 };
 
 struct RibMplsEntry : RibEntry {
@@ -124,6 +133,13 @@ struct RibMplsEntry : RibEntry {
     tMpls.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
     return tMpls;
+  }
+
+  thrift::MplsRouteDetail
+  toThriftDetail() const {
+    thrift::MplsRouteDetail tMplsDetail;
+    tMplsDetail.mplsRoute_ref() = toThrift();
+    return tMplsDetail;
   }
 };
 } // namespace openr

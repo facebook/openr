@@ -29,6 +29,7 @@
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrl.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
@@ -391,11 +392,16 @@ thrift::PrefixEntry createBgpWithdrawEntry(const thrift::IpPrefix& prefix);
 thrift::UnicastRoute createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops);
 
+thrift::UnicastRouteDetail createUnicastRouteDetail(
+    thrift::IpPrefix dest,
+    std::vector<thrift::NextHopThrift> nextHops,
+    std::optional<thrift::PrefixEntry> maybeBestRoute = std::nullopt);
+
 thrift::MplsRoute createMplsRoute(
     int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops);
 
 std::vector<thrift::UnicastRoute> createUnicastRoutesFromMap(
-    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
+    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
         unicastRoutes);
 
 /**
@@ -410,7 +416,7 @@ std::vector<thrift::NextHopThrift> selectMplsNextHops(
 std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHops(
     const std::vector<thrift::MplsRoute>& routes);
 std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHopsMap(
-    const std::unordered_map<uint32_t, thrift::MplsRoute>& mplsRoutes);
+    const std::unordered_map<uint32_t, thrift::MplsRouteDetail>& mplsRoutes);
 
 std::string getNodeNameFromKey(const std::string& key);
 

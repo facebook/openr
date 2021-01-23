@@ -820,6 +820,17 @@ createUnicastRoute(
   return unicastRoute;
 }
 
+thrift::UnicastRouteDetail
+createUnicastRouteDetail(
+    thrift::IpPrefix dest,
+    std::vector<thrift::NextHopThrift> nextHops,
+    std::optional<thrift::PrefixEntry> maybeBestRoute) {
+  thrift::UnicastRouteDetail unicastRouteDetail;
+  unicastRouteDetail.unicastRoute_ref() = createUnicastRoute(dest, nextHops);
+  unicastRouteDetail.bestRoute_ref().from_optional(maybeBestRoute);
+  return unicastRouteDetail;
+}
+
 thrift::MplsRoute
 createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
   // Sanity checks
@@ -851,13 +862,13 @@ createMplsRoutesWithSelectedNextHops(
 
 std::vector<thrift::UnicastRoute>
 createUnicastRoutesFromMap(
-    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
+    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
         unicastRoutes) {
   // Build routes to be programmed
   std::vector<thrift::UnicastRoute> newRoutes;
 
   for (auto const& [_, route] : unicastRoutes) {
-    newRoutes.emplace_back(route);
+    newRoutes.emplace_back(*route.unicastRoute_ref());
   }
 
   return newRoutes;
@@ -865,7 +876,7 @@ createUnicastRoutesFromMap(
 
 std::vector<thrift::MplsRoute>
 createMplsRoutesWithSelectedNextHopsMap(
-    const std::unordered_map<uint32_t, thrift::MplsRoute>& mplsRoutes) {
+    const std::unordered_map<uint32_t, thrift::MplsRouteDetail>& mplsRoutes) {
   // Build routes to be programmed
   std::vector<thrift::MplsRoute> newRoutes;
 

@@ -159,6 +159,44 @@ struct RibPolicy {
   2: i32 ttl_secs;
 }
 
+/*
+ * UnicastRouteDetail includes additional information from UnicastRoute which
+ * is not downloaded to FibService
+ */
+struct UnicastRouteDetail {
+  1: Network.UnicastRoute unicastRoute (cpp.mixin)
+  2: optional Types.PrefixEntry bestRoute
+}
+
+/*
+ * MplsRouteDetail includes additional information from MplsRoute which
+ * is not downloaded to FibService
+ */
+struct MplsRouteDetail {
+  1: Network.MplsRoute mplsRoute (cpp.mixin)
+}
+
+/*
+ * RouteDatabaseDetail includes additional information from RouteDatabase which
+ * is not downloaded to FibService
+ */
+struct RouteDatabaseDetail {
+  1: string thisNodeName
+  2: list<UnicastRouteDetail> unicastRoutes
+  3: list<MplsRouteDetail> mplsRoutes
+}
+
+/*
+ * RouteDatabaseDeltaDetail includes additional information from
+ * RouteDatabaseDelta which is not downloaded to FibService
+ */
+struct RouteDatabaseDeltaDetail {
+  1: list<UnicastRouteDetail> unicastRoutesToUpdate
+  2: list<Network.IpPrefix> unicastRoutesToDelete;
+  3: list<MplsRouteDetail> mplsRoutesToUpdate
+  4: list<i32> mplsRoutesToDelete
+}
+
 /**
  * Thrift service - exposes RPC APIs for interaction with all of Open/R's
  * modules.
@@ -258,6 +296,12 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get route database of the current node. It is retrieved from FIB module.
    */
   Types.RouteDatabase getRouteDb()
+    throws (1: OpenrError error)
+
+  /**
+   * Get route detailed database of the current node. It is retrieved from FIB module.
+   */
+  OpenrCtrl.RouteDatabaseDetail getRouteDetailDb()
     throws (1: OpenrError error)
 
   /**

@@ -4633,7 +4633,27 @@ class DecisionTestFixture : public ::testing::Test {
 
   void
   sendStaticRoutesUpdate(const thrift::RouteDatabaseDelta& publication) {
-    staticRoutesUpdateQueue.push(publication);
+    DecisionRouteUpdate routeUpdate;
+    for (const auto& unicastRoute : *publication.unicastRoutesToUpdate_ref()) {
+      auto nhs = std::unordered_set<thrift::NextHopThrift>(
+          unicastRoute.nextHops_ref()->begin(),
+          unicastRoute.nextHops_ref()->end());
+      routeUpdate.addRouteToUpdate(RibUnicastEntry(
+          toIPNetwork(*unicastRoute.dest_ref()), std::move(nhs)));
+    }
+    for (const auto& prefix : *publication.unicastRoutesToDelete_ref()) {
+      routeUpdate.unicastRoutesToDelete.push_back(toIPNetwork(prefix));
+    }
+    for (const auto& mplsRoute : *publication.mplsRoutesToUpdate_ref()) {
+      auto nhs = std::unordered_set<thrift::NextHopThrift>(
+          mplsRoute.nextHops_ref()->begin(), mplsRoute.nextHops_ref()->end());
+      routeUpdate.mplsRoutesToUpdate.push_back(
+          RibMplsEntry(*mplsRoute.topLabel_ref(), std::move(nhs)));
+    }
+    for (const auto& label : *publication.mplsRoutesToDelete_ref()) {
+      routeUpdate.mplsRoutesToDelete.push_back(label);
+    }
+    staticRoutesUpdateQueue.push(routeUpdate);
   }
 
   // helper function
@@ -4743,7 +4763,7 @@ class DecisionTestFixture : public ::testing::Test {
 
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
@@ -5838,7 +5858,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   auto decision = std::make_unique<Decision>(
       config,

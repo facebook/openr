@@ -30,8 +30,7 @@ class PrefixManager final : public OpenrEventBase {
 
   PrefixManager(
       // producer queue
-      messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
-          staticRoutesUpdateQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>& staticRoutesUpdateQueue,
       // consumer queue
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
@@ -196,8 +195,7 @@ class PrefixManager final : public OpenrEventBase {
   const std::string nodeId_;
 
   // queue to publish originated route updates to decision
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
-      staticRouteUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue_;
 
   // module ptr to interact with KvStore
   KvStore* kvStore_{nullptr};

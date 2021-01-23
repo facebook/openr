@@ -275,7 +275,7 @@ class Decision : public OpenrEventBase {
       std::chrono::milliseconds debounceMinDur,
       std::chrono::milliseconds debounceMaxDur,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
-      messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
+      messaging::RQueue<DecisionRouteUpdate> staticRoutesUpdateQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
 
   virtual ~Decision() = default;

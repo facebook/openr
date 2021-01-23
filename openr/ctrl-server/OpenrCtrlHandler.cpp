@@ -149,7 +149,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
           LOG(INFO) << "Starting Fib updates processing fiber";
           while (true) {
             auto maybeUpdate = q.get(); // perform read
-            VLOG(2) << "Received RouteDatabaseDelta from Fib";
+            VLOG(2) << "Received DecisionRouteUpdate from Fib";
             if (maybeUpdate.hasError()) {
               LOG(INFO)
                   << "Terminating Fib RouteDatabaseDelta processing fiber";
@@ -159,7 +159,14 @@ OpenrCtrlHandler::OpenrCtrlHandler(
             // Publish the update to all active streams
             fibPublishers_.withWLock([&maybeUpdate](auto& fibPublishers) {
               for (auto& fibPublisher : fibPublishers) {
-                fibPublisher.second.next(maybeUpdate.value());
+                fibPublisher.second.next(maybeUpdate.value().toThrift());
+              }
+            });
+
+            // Publish the detailed update to all active streams
+            fibDetailPublishers_.withWLock([&maybeUpdate](auto& fibPublishers) {
+              for (auto& fibPublisher : fibPublishers) {
+                fibPublisher.second.next(maybeUpdate.value().toThriftDetail());
               }
             });
           }
@@ -453,6 +460,12 @@ folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDb() {
   CHECK(fib_);
   return fib_->getRouteDb();
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::RouteDatabaseDetail>>
+OpenrCtrlHandler::semifuture_getRouteDetailDb() {
+  CHECK(fib_);
+  return fib_->getRouteDetailDb();
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
@@ -876,6 +889,54 @@ OpenrCtrlHandler::semifuture_subscribeAndGetFib() {
         return apache::thrift::ResponseAndServerStream<
             thrift::RouteDatabase,
             thrift::RouteDatabaseDelta>{
+            std::move(*db.value()), std::move(stream)};
+      });
+}
+
+apache::thrift::ServerStream<thrift::RouteDatabaseDeltaDetail>
+OpenrCtrlHandler::subscribeFibDetail() {
+  // Get new client-ID (monotonically increasing)
+  auto clientToken = publisherToken_++;
+
+  auto streamAndPublisher = apache::thrift::ServerStream<
+      thrift::RouteDatabaseDeltaDetail>::createPublisher([this, clientToken]() {
+    fibDetailPublishers_.withWLock([&clientToken](auto& fibDetailPublishers) {
+      if (fibDetailPublishers.erase(clientToken)) {
+        LOG(INFO) << "Fib detail snoop stream-" << clientToken << " ended.";
+      } else {
+        LOG(ERROR) << "Can't remove unknown Fib detail snoop stream-"
+                   << clientToken;
+      }
+      fb303::fbData->setCounter(
+          "subscribers.fibDetail", fibDetailPublishers.size());
+    });
+  });
+
+  fibDetailPublishers_.withWLock(
+      [&clientToken, &streamAndPublisher](auto& fibDetailPublishers) {
+        assert(fibDetailPublishers.count(clientToken) == 0);
+        LOG(INFO) << "Fib detail snoop stream-" << clientToken << " started.";
+        fibDetailPublishers.emplace(
+            clientToken, std::move(streamAndPublisher.second));
+        fb303::fbData->setCounter(
+            "subscribers.fibDetail", fibDetailPublishers.size());
+      });
+  return std::move(streamAndPublisher.first);
+}
+
+folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+    thrift::RouteDatabaseDetail,
+    thrift::RouteDatabaseDeltaDetail>>
+OpenrCtrlHandler::semifuture_subscribeAndGetFibDetail() {
+  auto stream = subscribeFibDetail();
+  return semifuture_getRouteDetailDb().defer(
+      [stream = std::move(stream)](
+          folly::Try<std::unique_ptr<thrift::RouteDatabaseDetail>>&&
+              db) mutable {
+        db.throwIfFailed();
+        return apache::thrift::ResponseAndServerStream<
+            thrift::RouteDatabaseDetail,
+            thrift::RouteDatabaseDeltaDetail>{
             std::move(*db.value()), std::move(stream)};
       });
 }

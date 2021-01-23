@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/IPAddress.h>
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
@@ -24,8 +25,8 @@ Fib::Fib(
     int32_t thriftPort,
     std::chrono::seconds coldStartDuration,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-    messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
-    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& fibUpdatesQueue,
+    messaging::RQueue<DecisionRouteUpdate> staticRoutesUpdateQueue,
+    messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStore* kvStore)
     : myNodeName_(*config->getConfig().node_name_ref()),
@@ -109,7 +110,7 @@ Fib::Fib(
         break;
       }
 
-      processRouteUpdates(std::move(maybeThriftObj).value().toThrift());
+      processRouteUpdates(std::move(maybeThriftObj).value());
     }
   });
 
@@ -131,9 +132,9 @@ Fib::Fib(
 
       // NOTE: We only process the static MPLS routes to add or update
       LOG(INFO) << "Received static routes update";
-      maybeThriftPub->unicastRoutesToUpdate_ref()->clear();
-      maybeThriftPub->unicastRoutesToDelete_ref()->clear();
-      maybeThriftPub->mplsRoutesToDelete_ref()->clear();
+      maybeThriftPub->unicastRoutesToUpdate.clear();
+      maybeThriftPub->unicastRoutesToDelete.clear();
+      maybeThriftPub->mplsRoutesToDelete.clear();
 
       // Program received static route updates
       updateRoutes(std::move(maybeThriftPub).value(), true /* static routes */);
@@ -170,7 +171,7 @@ Fib::stop() {
 std::optional<folly::CIDRNetwork>
 Fib::longestPrefixMatch(
     const folly::CIDRNetwork& inputPrefix,
-    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRoute>&
+    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
         unicastRoutes) {
   std::optional<folly::CIDRNetwork> matchedPrefix;
   int maxMask = -1;
@@ -199,12 +200,32 @@ Fib::getRouteDb() {
     thrift::RouteDatabase routeDb;
     *routeDb.thisNodeName_ref() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
-      routeDb.unicastRoutes_ref()->emplace_back(route.second);
+      routeDb.unicastRoutes_ref()->emplace_back(
+          *route.second.unicastRoute_ref());
     }
     for (const auto& route : routeState_.mplsRoutes) {
-      routeDb.mplsRoutes_ref()->emplace_back(route.second);
+      routeDb.mplsRoutes_ref()->emplace_back(*route.second.mplsRoute_ref());
     }
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
+  });
+  return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::RouteDatabaseDetail>>
+Fib::getRouteDetailDb() {
+  folly::Promise<std::unique_ptr<thrift::RouteDatabaseDetail>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([p = std::move(p), this]() mutable {
+    thrift::RouteDatabaseDetail routeDetailDb;
+    *routeDetailDb.thisNodeName_ref() = myNodeName_;
+    for (const auto& route : routeState_.unicastRoutes) {
+      routeDetailDb.unicastRoutes_ref()->emplace_back(route.second);
+    }
+    for (const auto& route : routeState_.mplsRoutes) {
+      routeDetailDb.mplsRoutes_ref()->emplace_back(route.second);
+    }
+    p.setValue(std::make_unique<thrift::RouteDatabaseDetail>(
+        std::move(routeDetailDb)));
   });
   return sf;
 }
@@ -253,7 +274,7 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
   // if the params is empty, return all routes
   if (prefixes.empty()) {
     for (const auto& routes : routeState_.unicastRoutes) {
-      retRouteVec.emplace_back(routes.second);
+      retRouteVec.emplace_back(*routes.second.unicastRoute_ref());
     }
     return retRouteVec;
   }
@@ -279,7 +300,8 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
 
   // get the routes from the prefix set
   for (const auto& prefix : matchPrefixSet) {
-    retRouteVec.emplace_back(routeState_.unicastRoutes.at(prefix));
+    retRouteVec.emplace_back(
+        *routeState_.unicastRoutes.at(prefix).unicastRoute_ref());
   }
 
   return retRouteVec;
@@ -293,7 +315,7 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
   // if the params is empty, return all MPLS routes
   if (labels.empty()) {
     for (const auto& routes : routeState_.mplsRoutes) {
-      retRouteVec.emplace_back(routes.second);
+      retRouteVec.emplace_back(*routes.second.mplsRoute_ref());
     }
     return retRouteVec;
   }
@@ -307,66 +329,64 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
   // get the filtered MPLS routes and avoid duplicates
   for (const auto& routes : routeState_.mplsRoutes) {
     if (labelFilterSet.find(routes.first) != labelFilterSet.end()) {
-      retRouteVec.emplace_back(routes.second);
+      retRouteVec.emplace_back(*routes.second.mplsRoute_ref());
     }
   }
 
   return retRouteVec;
 }
 
-messaging::RQueue<thrift::RouteDatabaseDelta>
+messaging::RQueue<DecisionRouteUpdate>
 Fib::getFibUpdatesReader() {
   return fibUpdatesQueue_.getReader();
 }
 
 void
-Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
+Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
   routeState_.hasRoutesFromDecision = true;
   // Update perfEvents_ .. We replace existing perf events with new one as
   // convergence is going to be based on new data, not the old.
-  if (routeDelta.perfEvents_ref()) {
+  if (routeUpdate.perfEvents.has_value()) {
     addPerfEvent(
-        *routeDelta.perfEvents_ref(), myNodeName_, "FIB_ROUTE_DB_RECVD");
+        routeUpdate.perfEvents.value(), myNodeName_, "FIB_ROUTE_DB_RECVD");
   }
 
   // Before anything, get rid of doNotInstall routes
-  auto i = routeDelta.unicastRoutesToUpdate_ref()->begin();
-  while (i != routeDelta.unicastRoutesToUpdate_ref()->end()) {
-    if (*i->doNotInstall_ref()) {
+  auto i = routeUpdate.unicastRoutesToUpdate.begin();
+  while (i != routeUpdate.unicastRoutesToUpdate.end()) {
+    if (i->second.doNotInstall) {
       LOG(INFO) << "Not installing route for prefix "
-                << toString(*i->dest_ref());
-      i = routeDelta.unicastRoutesToUpdate_ref()->erase(i);
+                << folly::IPAddress::networkToString(i->first);
+      i = routeUpdate.unicastRoutesToUpdate.erase(i);
     } else {
       ++i;
     }
   }
 
   // Add/Update unicast routes to update
-  for (const auto& route : *routeDelta.unicastRoutesToUpdate_ref()) {
-    auto cidrNetwork = toIPNetwork(*route.dest_ref());
-    routeState_.unicastRoutes[cidrNetwork] = route;
+  for (const auto& [prefix, route] : routeUpdate.unicastRoutesToUpdate) {
+    routeState_.unicastRoutes[prefix] = route.toThriftDetail();
   }
 
   // Add mpls routes to update
-  for (const auto& route : *routeDelta.mplsRoutesToUpdate_ref()) {
-    routeState_.mplsRoutes[*route.topLabel_ref()] = route;
+  for (const auto& route : routeUpdate.mplsRoutesToUpdate) {
+    routeState_.mplsRoutes[route.label] = route.toThriftDetail();
   }
 
   // Delete unicast routes
-  for (const auto& dest : *routeDelta.unicastRoutesToDelete_ref()) {
-    auto cidrNetwork = toIPNetwork(dest);
-    routeState_.unicastRoutes.erase(cidrNetwork);
+  for (const auto& dest : routeUpdate.unicastRoutesToDelete) {
+    routeState_.unicastRoutes.erase(dest);
   }
 
   // Delete mpls routes
-  for (const auto& topLabel : *routeDelta.mplsRoutesToDelete_ref()) {
+  for (const auto& topLabel : routeUpdate.mplsRoutesToDelete) {
     routeState_.mplsRoutes.erase(topLabel);
   }
 
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
   // Send request to agent
-  updateRoutes(std::move(routeDelta), false /* static routes */);
+  updateRoutes(std::move(routeUpdate), false /* static routes */);
 }
 
 thrift::PerfDatabase
@@ -412,8 +432,7 @@ Fib::printMplsRoutesAddUpdate(
 }
 
 void
-Fib::updateRoutes(
-    thrift::RouteDatabaseDelta&& routeDbDelta, bool isStaticRoutes) {
+Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
@@ -422,27 +441,22 @@ Fib::updateRoutes(
   // update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
 
-  // Only for backward compatibility
-  auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
-  auto const& mplsRoutesToUpdate = createMplsRoutesWithSelectedNextHops(
-      *routeDbDelta.mplsRoutesToUpdate_ref());
-
   if (dryrun_) {
     // Do not program routes in case of dryrun
     LOG(INFO) << "Skipping programming of routes in dryrun ... ";
-    logPerfEvents(routeDbDelta.perfEvents_ref());
+    logPerfEvents(routeUpdate.perfEvents);
     return;
   }
 
   // Publish the fib streaming routes after considering donotinstall
   // and dryrun logic.
-  if (not(*routeDbDelta.unicastRoutesToUpdate_ref()).empty() ||
-      not(*routeDbDelta.unicastRoutesToDelete_ref()).empty() ||
-      not(*routeDbDelta.mplsRoutesToUpdate_ref()).empty() ||
-      not(*routeDbDelta.mplsRoutesToDelete_ref()).empty()) {
+  if (not routeUpdate.unicastRoutesToUpdate.empty() ||
+      not routeUpdate.unicastRoutesToDelete.empty() ||
+      not routeUpdate.mplsRoutesToUpdate.empty() ||
+      not routeUpdate.mplsRoutesToDelete.empty()) {
     // Due to donotinstall logic it's possible to have empty change,
     // no need to publish empty updates.
-    fibUpdatesQueue_.push(routeDbDelta);
+    fibUpdatesQueue_.push(routeUpdate);
   }
 
   // For static routes we always update the provided routes immediately
@@ -461,6 +475,13 @@ Fib::updateRoutes(
     syncRouteDbDebounced();
     return;
   }
+
+  // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
+  // and MplsRoute with the FibService client APIs
+  auto routeDbDelta = routeUpdate.toThrift();
+  auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
+  auto const& mplsRoutesToUpdate = createMplsRoutesWithSelectedNextHops(
+      *routeDbDelta.mplsRoutesToUpdate_ref());
 
   uint32_t numUnicastRoutesToDelete =
       routeDbDelta.unicastRoutesToDelete_ref()->size();
@@ -689,8 +710,7 @@ Fib::updateGlobalCounters() {
 }
 
 void
-Fib::logPerfEvents(
-    apache::thrift::optional_field_ref<thrift::PerfEvents&> perfEvents) {
+Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
   if (not perfEvents.has_value() or not perfEvents->events_ref()->size()) {
     return;
   }

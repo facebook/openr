@@ -153,7 +153,7 @@ class PrefixManagerTestFixture : public testing::Test {
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRouteUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
 
   // Create the serializer for write/read
   CompactSerializer serializer;
@@ -1462,7 +1462,7 @@ class RouteOriginationFixture : public PrefixManagerTestFixture {
 
   std::optional<thrift::RouteDatabaseDelta>
   waitForRouteUpdate(
-      messaging::RQueue<thrift::RouteDatabaseDelta>& reader,
+      messaging::RQueue<DecisionRouteUpdate>& reader,
       std::chrono::milliseconds timeout) {
     auto startTime = std::chrono::steady_clock::now();
     while (not reader.size()) {
@@ -1474,7 +1474,7 @@ class RouteOriginationFixture : public PrefixManagerTestFixture {
       // Yield the thread
       std::this_thread::yield();
     }
-    return reader.get().value();
+    return reader.get().value().toThrift();
   }
 
  protected:

@@ -23,8 +23,7 @@ namespace fb303 = facebook::fb303;
 namespace openr {
 
 PrefixManager::PrefixManager(
-    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>&
-        staticRouteUpdatesQueue,
+    messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
@@ -722,7 +721,7 @@ PrefixManager::processDecisionRouteUpdates(
     DecisionRouteUpdate&& decisionRouteUpdate) {
   std::vector<PrefixEntry> advertisePrefixes{};
   std::vector<thrift::PrefixEntry> withdrawPrefixes{};
-  thrift::RouteDatabaseDelta routeUpdates;
+  DecisionRouteUpdate routeUpdatesOut;
 
   // Add/Update unicast routes to update
   // Self originated (include routes imported from local BGP)
@@ -781,8 +780,7 @@ PrefixManager::processDecisionRouteUpdates(
         route.supportingRoutes.size() >= minSupportingCnt) {
       // skip processing if originatedPrefix is marked as `doNotInstall`
       route.isAdvertised = true; // mark as advertised
-      routeUpdates.unicastRoutesToUpdate_ref()->emplace_back(
-          route.unicastEntry.toThrift());
+      routeUpdatesOut.addRouteToUpdate(route.unicastEntry);
 
       SYSLOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
                    << folly::IPAddress::networkToString(network);
@@ -791,8 +789,7 @@ PrefixManager::processDecisionRouteUpdates(
     if (route.isAdvertised and
         route.supportingRoutes.size() < minSupportingCnt) {
       route.isAdvertised = false; // mark as withdrawn
-      routeUpdates.unicastRoutesToDelete_ref()->emplace_back(
-          toIpPrefix(network));
+      routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
 
       SYSLOG(INFO) << "[ROUTE ORIGINATION] Withdrawing originated route "
                    << folly::IPAddress::networkToString(network);
@@ -800,11 +797,11 @@ PrefixManager::processDecisionRouteUpdates(
   }
 
   // push originatedRoutes update via replicate queue
-  if (routeUpdates.unicastRoutesToUpdate_ref()->size() or
-      routeUpdates.unicastRoutesToDelete_ref()->size()) {
-    CHECK(routeUpdates.mplsRoutesToUpdate_ref()->empty());
-    CHECK(routeUpdates.mplsRoutesToDelete_ref()->empty());
-    staticRouteUpdatesQueue_.push(std::move(routeUpdates));
+  if (routeUpdatesOut.unicastRoutesToUpdate.size() or
+      routeUpdatesOut.unicastRoutesToDelete.size()) {
+    CHECK(routeUpdatesOut.mplsRoutesToUpdate.empty());
+    CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
+    staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
   }
 
   // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
