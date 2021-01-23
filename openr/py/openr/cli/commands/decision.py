@@ -700,9 +700,13 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
         print(f"  Validity: {policy.ttl_secs}s")
         for stmt in policy.statements:
             prefixes = stmt.matcher.prefixes or []
+            tags = stmt.matcher.tags or []
             action = stmt.action.set_weight or ctrl_types.RibRouteActionWeight()
             print(f"  Statement: {stmt.name}")
-            print(f"    Prefix Match List: {', '.join(prefixes)}")
+            if prefixes:
+                print(f"    Prefix Match List: {', '.join(prefixes)}")
+            if tags:
+                print(f"    Tags Match List: {', '.join(tags)}")
             print("    Action Set Weight:")
             print(f"      Default: {action.default_weight}")
             print("      Area:")
