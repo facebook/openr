@@ -677,6 +677,9 @@ main(int argc, char** argv) {
     t.join();
   }
 
+  // some of these manage threads that we need to join before exiting
+  folly::SingletonVault::singleton()->destroyInstances();
+
   // Close syslog connection (this is optional)
   SYSLOG(INFO) << "Stopping OpenR daemon.";
   closelog();
