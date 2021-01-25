@@ -301,7 +301,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Get route detailed database of the current node. It is retrieved from FIB module.
    */
-  OpenrCtrl.RouteDatabaseDetail getRouteDetailDb()
+  RouteDatabaseDetail getRouteDetailDb()
     throws (1: OpenrError error)
 
   /**
