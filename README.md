@@ -94,9 +94,8 @@ see the script for those instances and the required versions.
 ### Build Steps
 
 ```console
-# Install dependencies and openr
-cd build
-bash ./build_openr.sh
+# Install dependencies and build openr
+bash ./build/build_openr.sh
 
 # To Run tests (some tests requires sudo privileges)
 python3 build/fbcode_builder/getdeps.py test \
