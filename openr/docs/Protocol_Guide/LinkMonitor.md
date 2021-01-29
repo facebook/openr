@@ -136,7 +136,7 @@ to neighbors which are then used to compute the cost of a path in `Decision`'s
 SPF computation. For now, we support two kinds of metrics:
 
 - [by default] `hop_count` => Use `1` (constant) metric value for each Adjacency
-- [by config knob] `rtt_metric` => `rtt_us / 10` where `rtt_us` is measured rtt
+- [by config knob] `rtt_metric` => `rtt_us / 100` where `rtt_us` is measured rtt
   in microseconds.
 
 > NOTE: `rtt` is measured dynamically by `Spark` as part of neighbor discovery
