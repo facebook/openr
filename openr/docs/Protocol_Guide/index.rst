@@ -8,6 +8,7 @@ Here we explain in detail all components and protocols used within Open Routing
    :caption: Contents:
 
    Architecture
+   Config
    Decision
    Fib
    KvStore

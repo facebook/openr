@@ -7,5 +7,7 @@ Here we explain in detail all the features of Open/R.
    :maxdepth: 1
    :caption: Contents:
 
+   Area
+   BgpSpeaker
    RibPolicy
    SourceRouting
