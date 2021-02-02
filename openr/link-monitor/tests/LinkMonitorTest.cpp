@@ -2045,8 +2045,8 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
  * - set link to down state and verify that it removes all associated addresses
  */
 TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
-  SetUp({});
-
+  const AreaId area1{"area1"};
+  const AreaId area2{"area2"};
   const std::string nodeName = "node-1";
   const std::string linkLocalAddr1 = "fe80::1/128";
   const std::string linkLocalAddr2 = "fe80::2/64";
@@ -2056,13 +2056,14 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   const std::string loopbackAddrV6_2 = "2803:6080:4958:b403::1/128";
   const std::string loopbackAddrV6Subnet = "2803:6080:4958:b403::1/64";
 
+  SetUp({area1, area2});
+
   //
   // Verify that initial DB has empty prefix entries
   //
 
-  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes{};
-  prefixes = getNextPrefixDb(nodeName);
-  EXPECT_EQ(0, prefixes.size());
+  EXPECT_EQ(0, getNextPrefixDb(nodeName, area1).size());
+  EXPECT_EQ(0, getNextPrefixDb(nodeName, area2).size());
 
   //
   // Send link UP event(i.e. mixed with VALID and INVALID loopback address)
@@ -2088,16 +2089,24 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
 
   LOG(INFO) << "Testing address advertisements";
 
-  while (prefixes.size() != 5) {
-    prefixes = getNextPrefixDb(nodeName);
-  }
+  {
+    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixesArea1,
+        prefixesArea2;
+    do {
+      prefixesArea1 = getNextPrefixDb(nodeName, area1);
+      prefixesArea2 = getNextPrefixDb(nodeName, area2);
+    } while (prefixesArea1.size() != 5 or prefixesArea2.size() != 5);
 
-  // verify prefixes with VALID prefixes has been advertised
-  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV4)));
-  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV4Subnet)));
-  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6_1)));
-  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6_2)));
-  EXPECT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6Subnet)));
+    // verify prefixes with VALID prefixes has been advertised
+    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV4)));
+    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV4Subnet)));
+    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6_1)));
+    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6_2)));
+    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6Subnet)));
+
+    // Both area should report the same set of prefixes
+    EXPECT_EQ(prefixesArea1, prefixesArea2);
+  }
 
   //
   // Withdraw prefix and see it is being withdrawn
@@ -2120,23 +2129,30 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   EXPECT_LT(elapsed.count(), 3);
 
   LOG(INFO) << "Testing address withdraws";
+  {
+    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixesArea1,
+        prefixesArea2;
+    do {
+      prefixesArea1 = getNextPrefixDb(nodeName, area1);
+      prefixesArea2 = getNextPrefixDb(nodeName, area2);
+    } while (prefixesArea1.size() != 1 or prefixesArea2.size() != 1);
 
-  while (prefixes.size() != 1) {
-    prefixes = getNextPrefixDb(nodeName);
+    ASSERT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6_2)));
+    auto& prefixEntry = prefixesArea1.at(toIpPrefix(loopbackAddrV6_2));
+    EXPECT_EQ(
+        Constants::kDefaultPathPreference,
+        prefixEntry.metrics_ref()->path_preference_ref());
+    EXPECT_EQ(
+        Constants::kDefaultSourcePreference,
+        prefixEntry.metrics_ref()->source_preference_ref());
+    EXPECT_EQ(
+        std::set<std::string>(
+            {"INTERFACE_SUBNET", folly::sformat("{}:loopback", nodeName)}),
+        prefixEntry.tags_ref());
+
+    // Both area should report the same set of prefixes
+    EXPECT_EQ(prefixesArea1, prefixesArea2);
   }
-
-  ASSERT_EQ(1, prefixes.count(toIpPrefix(loopbackAddrV6_2)));
-  auto& prefixEntry = prefixes.at(toIpPrefix(loopbackAddrV6_2));
-  EXPECT_EQ(
-      Constants::kDefaultPathPreference,
-      prefixEntry.metrics_ref()->path_preference_ref());
-  EXPECT_EQ(
-      Constants::kDefaultSourcePreference,
-      prefixEntry.metrics_ref()->source_preference_ref());
-  EXPECT_EQ(
-      std::set<std::string>(
-          {"INTERFACE_SUBNET", folly::sformat("{}:loopback", nodeName)}),
-      prefixEntry.tags_ref());
 
   //
   // Send link down event
@@ -2146,8 +2162,13 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   recvAndReplyIfUpdate();
 
   // Verify all addresses are withdrawn on link down event
-  while (prefixes.size() != 0) {
-    prefixes = getNextPrefixDb(nodeName);
+  {
+    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixesArea1,
+        prefixesArea2;
+    do {
+      prefixesArea1 = getNextPrefixDb(nodeName, area1);
+      prefixesArea2 = getNextPrefixDb(nodeName, area2);
+    } while (prefixesArea1.size() != 0 or prefixesArea2.size() != 0);
   }
 
   LOG(INFO) << "All prefixes get withdrawn.";

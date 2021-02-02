@@ -157,12 +157,12 @@ struct PrefixEvent {
   explicit PrefixEvent(
       const PrefixEventType& eventType,
       const std::optional<thrift::PrefixType>& type = std::nullopt,
-      const std::vector<thrift::PrefixEntry>& prefixes = {},
-      const std::unordered_set<std::string>& dstAreas = {})
+      std::vector<thrift::PrefixEntry> prefixes = {},
+      std::unordered_set<std::string> dstAreas = {})
       : eventType(eventType),
         type(type),
-        prefixes(prefixes),
-        dstAreas(dstAreas) {}
+        prefixes(std::move(prefixes)),
+        dstAreas(std::move(dstAreas)) {}
 };
 
 /**

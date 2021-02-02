@@ -690,8 +690,9 @@ LinkMonitor::advertiseRedistAddrs() {
   if (adjHoldTimer_->isScheduled()) {
     return;
   }
-  std::unordered_map<std::string, std::vector<thrift::PrefixEntry>>
-      areaPrefixes;
+
+  std::map<thrift::IpPrefix, std::vector<std::string>> prefixesToAdvertise;
+  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixMap;
 
   // Add redistribute addresses
   for (auto& [_, interface] : interfaces_) {
@@ -700,49 +701,86 @@ LinkMonitor::advertiseRedistAddrs() {
       continue;
     }
 
-    std::vector<thrift::PrefixEntry> ifacePrefixes;
+    // Derive list of area to advertise (NOTE: areas are ordered persistently)
+    std::vector<std::string> dstAreas;
+    for (auto const& [areaId, areaConf] : areas_) {
+      if (areaConf.shouldRedistributeIface(interface.getIfName())) {
+        dstAreas.emplace_back(areaId);
+      }
+    }
+
+    // Do not advertise interface addresses if no destination area qualifies
+    if (dstAreas.empty()) {
+      continue;
+    }
+
     // Add all prefixes of this interface
-    for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
-      prefix.forwardingType_ref() = prefixForwardingType_;
-      prefix.forwardingAlgorithm_ref() = prefixForwardingAlgorithm_;
+    for (auto& prefixEntry : interface.getGlobalUnicastNetworks(enableV4_)) {
+      const auto prefix = prefixEntry.prefix_ref().value();
+      // Add prefix in the cache
+      prefixesToAdvertise.emplace(prefix, dstAreas);
+
+      // Forwarding information
+      prefixEntry.forwardingType_ref() = prefixForwardingType_;
+      prefixEntry.forwardingAlgorithm_ref() = prefixForwardingAlgorithm_;
+
       // Tags
       {
-        auto& tags = prefix.tags_ref().value();
+        auto& tags = prefixEntry.tags_ref().value();
         tags.emplace("INTERFACE_SUBNET");
         tags.emplace(folly::sformat("{}:{}", nodeId_, interface.getIfName()));
       }
       // Metrics
       {
-        auto& metrics = prefix.metrics_ref().value();
+        auto& metrics = prefixEntry.metrics_ref().value();
         metrics.path_preference_ref() = Constants::kDefaultPathPreference;
         metrics.source_preference_ref() = Constants::kDefaultSourcePreference;
       }
-      ifacePrefixes.emplace_back(std::move(prefix));
-    }
 
-    for (auto const& [areaId, areaConf] : areas_) {
-      if (areaConf.shouldRedistributeIface(interface.getIfName())) {
-        auto& prefixList = areaPrefixes[areaId];
-        prefixList.insert(
-            prefixList.end(), ifacePrefixes.begin(), ifacePrefixes.end());
-      }
+      prefixMap.emplace(prefix, std::move(prefixEntry));
     }
   }
 
-  for (auto const& [areaId, _] : areas_) {
-    LOG_IF(INFO, !areaPrefixes.count(areaId) || areaPrefixes.at(areaId).empty())
-        << "Advertising empty LOOPBACK addresses for area: " << areaId;
+  // Find prefixes to advertise or update
+  std::map<std::vector<std::string>, std::vector<thrift::PrefixEntry>>
+      toAdvertise;
+  for (auto const& [prefix, areas] : prefixesToAdvertise) {
+    toAdvertise[areas].emplace_back(std::move(prefixMap.at(prefix)));
   }
 
-  for (auto& [areaId, _] : areas_) {
+  // Find prefixes to withdraw
+  std::vector<thrift::PrefixEntry> toWithdraw;
+  for (auto const& [prefix, _] : advertisedPrefixes_) {
+    if (prefixesToAdvertise.count(prefix)) {
+      continue; // Do not mark for withdraw
+    }
+    thrift::PrefixEntry prefixEntry;
+    prefixEntry.type_ref() = thrift::PrefixType::LOOPBACK;
+    prefixEntry.prefix_ref() = prefix;
+    toWithdraw.emplace_back(std::move(prefixEntry));
+  }
+
+  // Advertise prefixes (one for each area)
+  for (auto& [areas, prefixEntries] : toAdvertise) {
     PrefixEvent event(
-        PrefixEventType::SYNC_PREFIXES_BY_TYPE,
+        PrefixEventType::ADD_PREFIXES,
         thrift::PrefixType::LOOPBACK,
-        std::move(areaPrefixes[areaId]),
-        {areaId});
-    // publish prefixes to prefix manager
+        std::move(prefixEntries),
+        std::unordered_set<std::string>(areas.begin(), areas.end()));
     prefixUpdatesQueue_.push(std::move(event));
   }
+
+  // Withdraw prefixes
+  {
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES,
+        thrift::PrefixType::LOOPBACK,
+        std::move(toWithdraw));
+    prefixUpdatesQueue_.push(std::move(event));
+  }
+
+  // Store advertised prefixes locally
+  advertisedPrefixes_.swap(prefixesToAdvertise);
 }
 
 std::chrono::milliseconds

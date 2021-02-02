@@ -370,6 +370,9 @@ class LinkMonitor final : public OpenrEventBase {
   // Keyed by interface Name
   std::unordered_map<std::string, InterfaceEntry> interfaces_;
 
+  // Container storing map of advertised prefixes - Map<prefix, list<area>>
+  std::map<thrift::IpPrefix, std::vector<std::string>> advertisedPrefixes_;
+
   // Cache of interface index to name. Used for resolving ifIndex
   // on address events
   std::unordered_map<int64_t, std::string> ifIndexToName_;
