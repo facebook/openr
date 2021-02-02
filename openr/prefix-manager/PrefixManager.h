@@ -285,6 +285,29 @@ class PrefixManager final : public OpenrEventBase {
         : originatedPrefix(originatedPrefix),
           unicastEntry(unicastEntry),
           supportingRoutes(supportingRoutes) {}
+
+    /*
+     * Util function for route-agg check
+     */
+    bool
+    shouldInstall() const {
+      return originatedPrefix.install_to_fib_ref().value_or(true);
+    }
+
+    bool
+    shouldAdvertise() const {
+      const auto& minSupportingRouteCnt =
+          *originatedPrefix.minimum_supporting_routes_ref();
+      return (not isAdvertised) and
+          (supportingRoutes.size() >= minSupportingRouteCnt);
+    }
+
+    bool
+    shouldWithdraw() const {
+      const auto& minSupportingRouteCnt =
+          *originatedPrefix.minimum_supporting_routes_ref();
+      return isAdvertised and (supportingRoutes.size() < minSupportingRouteCnt);
+    }
   };
 
   /*

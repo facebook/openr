@@ -763,36 +763,28 @@ PrefixManager::processDecisionRouteUpdates(
     aggregatesToWithdraw(prefix);
   }
 
+  // Maybe advertise/withdrawn for local originated routes
   for (auto& [network, route] : originatedPrefixDb_) {
-    bool installToFib = route.originatedPrefix.install_to_fib_ref().has_value()
-        ? *route.originatedPrefix.install_to_fib_ref()
-        : true;
-    if (not installToFib) {
-      VLOG(2) << "Skip originated prefix: "
-              << folly::IPAddress::networkToString(network)
-              << " since route is marked as NO-installation";
-      continue;
-    }
-
-    const auto& minSupportingCnt =
-        *route.originatedPrefix.minimum_supporting_routes_ref();
-    if ((not route.isAdvertised) and
-        route.supportingRoutes.size() >= minSupportingCnt) {
-      // skip processing if originatedPrefix is marked as `doNotInstall`
+    if (route.shouldAdvertise()) {
       route.isAdvertised = true; // mark as advertised
-      routeUpdatesOut.addRouteToUpdate(route.unicastEntry);
 
-      SYSLOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
-                   << folly::IPAddress::networkToString(network);
+      // propogate route update to `KvStore` and `Decision`(if necessary)
+      if (route.shouldInstall()) {
+        routeUpdatesOut.addRouteToUpdate(route.unicastEntry);
+      }
+      LOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
+                << folly::IPAddress::networkToString(network);
     }
 
-    if (route.isAdvertised and
-        route.supportingRoutes.size() < minSupportingCnt) {
+    if (route.shouldWithdraw()) {
       route.isAdvertised = false; // mark as withdrawn
-      routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
 
-      SYSLOG(INFO) << "[ROUTE ORIGINATION] Withdrawing originated route "
-                   << folly::IPAddress::networkToString(network);
+      // propogate route deletion to `KvStore` and `Decision`(if necessary)
+      if (route.shouldInstall()) {
+        routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
+      }
+      LOG(INFO) << "[ROUTE ORIGINATION] Withdrawing originated route "
+                << folly::IPAddress::networkToString(network);
     }
   }
 

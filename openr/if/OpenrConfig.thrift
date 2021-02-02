@@ -237,7 +237,7 @@ struct OriginatedPrefix {
    * Minimum number of supporting routes to advertise this prefix. Prefix will
    * be advertised/withdrawn when the number of supporting routes change.
    */
-  4: i16 minimum_supporting_routes
+  4: i16 minimum_supporting_routes = 0
 
   /** If set to true, program the prefix to FIB. */
   5: optional bool install_to_fib
