@@ -1,3 +1,5 @@
+# Copyright (c) 2014-present, Facebook, Inc.
+#
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
