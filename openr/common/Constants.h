@@ -245,7 +245,7 @@ class Constants {
   //
 
   // the time we hold on to announce to KvStore
-  static constexpr std::chrono::milliseconds kPrefixMgrKvThrottleTimeout{250};
+  static constexpr std::chrono::milliseconds kPrefixMgrKvThrottleTimeout{100};
 
   // Default metrics (path and source preference) for Open/R originated routes
   // (loopback address & interface subnets).

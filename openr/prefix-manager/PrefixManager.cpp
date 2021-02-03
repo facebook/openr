@@ -183,6 +183,7 @@ void
 PrefixManager::stop() {
   // Stop KvStoreClient first
   kvStoreClient_->stop();
+  LOG(INFO) << "KvStoreClient successfully stopped.";
 
   // Invoke stop method of super class
   OpenrEventBase::stop();

@@ -68,7 +68,6 @@ KvStoreClientInternal::stop() {
   // wait for fiber to be closed before destroy KvStoreClientInternal
   taskFuture_.cancel();
   taskFuture_.wait();
-  LOG(INFO) << "Fiber task closed...";
 }
 
 void
@@ -438,7 +437,7 @@ KvStoreClientInternal::getKey(AreaId const& area, std::string const& key) {
 
   auto it = pub.keyVals_ref()->find(key);
   if (it == pub.keyVals_ref()->end()) {
-    LOG(ERROR) << "Key: " << key << " NOT found in kvstore. Area: " << area.t;
+    VLOG(2) << "Key: " << key << " NOT found in kvstore. Area: " << area.t;
     return std::nullopt;
   }
   return it->second;

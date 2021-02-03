@@ -162,6 +162,7 @@ Fib::stop() {
   // Stop KvStoreClient first
   if (kvStoreClient_) {
     kvStoreClient_->stop();
+    LOG(INFO) << "KvStoreClient successfully stopped.";
   }
 
   // Invoke stop method of super class
