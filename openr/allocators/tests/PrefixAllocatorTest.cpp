@@ -716,7 +716,7 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
  * The following test allocates a prefix based on the allocParams, then
  * static allocation key is inserted with the prefix that's allocated.
  * When the static allocation key is received, prefix allocator should
- * detect a collion and reallocate a new prefix.
+ * detect a collision and reallocate a new prefix.
  */
 TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
   SetUp(thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE);

@@ -24,6 +24,32 @@
 
 namespace openr {
 
+namespace detail {
+
+class PrefixManagerPendingUpdates {
+ public:
+  explicit PrefixManagerPendingUpdates() : changedPrefixes_{} {}
+
+  std::unordered_set<folly::CIDRNetwork> const&
+  getChangedPrefixes() const {
+    return changedPrefixes_;
+  }
+
+  void reset();
+
+  void applyPrefixChange(std::unordered_set<folly::CIDRNetwork>&& change);
+
+ private:
+  // track prefixes that have changed within this batch
+  // ATTN: this collection contains:
+  //  - newly added prefixes
+  //  - updated prefixes
+  //  - prefixes being withdrawn
+  std::unordered_set<folly::CIDRNetwork> changedPrefixes_{};
+};
+
+} // namespace detail
+
 class PrefixManager final : public OpenrEventBase {
  public:
   struct PrefixEntry; // Forward declaration
@@ -180,8 +206,11 @@ class PrefixManager final : public OpenrEventBase {
   void aggregatesToWithdraw(const folly::CIDRNetwork& prefix);
 
   // Inject `PrefixEntry` into dstAreas.
-  // Return list of prefixes for each injected area.
-  std::vector<std::string> updateKvStorePrefixEntry(PrefixEntry const& entry);
+  std::unordered_set<std::string> updateKvStoreKeyHelper(
+      const PrefixEntry& entry);
+
+  void deleteKvStoreKeyHelper(
+      const std::unordered_set<std::string>& deletedKeys);
 
   // process decision route update, inject routes to different areas
   void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
@@ -191,8 +220,21 @@ class PrefixManager final : public OpenrEventBase {
   void addPerfEventIfNotExist(
       thrift::PerfEvents& perfEvents, std::string const& updateEvent);
 
+  /*
+   * Private variables/Structures
+   */
+
   // this node name
   const std::string nodeId_;
+
+  // area Id
+  const std::unordered_set<std::string> allAreas_{};
+
+  // enable convergence performance measurement for Adjacencies update
+  const bool enablePerfMeasurement_{false};
+
+  // TTL for a key in the key value store
+  const std::chrono::milliseconds ttlKeyInKvStore_{0};
 
   // queue to publish originated route updates to decision
   messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue_;
@@ -200,16 +242,10 @@ class PrefixManager final : public OpenrEventBase {
   // module ptr to interact with KvStore
   KvStore* kvStore_{nullptr};
 
-  // enable convergence performance measurement for Adjacencies update
-  const bool enablePerfMeasurement_{false};
-
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
   std::unique_ptr<AsyncThrottle> syncKvStoreThrottled_;
   std::unique_ptr<folly::AsyncTimeout> initialSyncKvStoreTimer_;
-
-  // TTL for a key in the key value store
-  const std::chrono::milliseconds ttlKeyInKvStore_;
 
   // kvStoreClient for persisting our prefix db
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
@@ -226,10 +262,12 @@ class PrefixManager final : public OpenrEventBase {
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
-  // collection to track prefixes to be withdrawn.
-  // ATTN: this collection is maintained to easily find the prefix delta
-  //       between current/previous advertisement.
-  std::unordered_set<std::string> keysToClear_;
+  // This collection serves for easy clean up when certain prefix is withdrawn.
+  // `PrefixManager` will advertise prefixes based on best-route-selection
+  // process. With multi-area support, one prefixes will map to multiple
+  // key-advertisement in `KvStore`.
+  std::unordered_map<folly::CIDRNetwork, std::unordered_set<std::string>>
+      advertisedKeys_{};
 
   // perfEvents related to a given prefixEntry
   std::unordered_map<
@@ -237,8 +275,8 @@ class PrefixManager final : public OpenrEventBase {
       std::unordered_map<folly::CIDRNetwork, thrift::PerfEvents>>
       addingEvents_;
 
-  // area Id
-  const std::unordered_set<std::string> allAreas_{};
+  // store pending updates from advertise/withdraw operation
+  detail::PrefixManagerPendingUpdates pendingUpdates_;
 
   // TODO:
   //   struct AreaInfo {

@@ -22,6 +22,21 @@ namespace fb303 = facebook::fb303;
 
 namespace openr {
 
+namespace detail {
+
+void
+PrefixManagerPendingUpdates::reset() {
+  changedPrefixes_.clear();
+}
+
+void
+PrefixManagerPendingUpdates::applyPrefixChange(
+    std::unordered_set<folly::CIDRNetwork>&& change) {
+  changedPrefixes_.merge(std::move(change));
+}
+
+} // namespace detail
+
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
@@ -31,12 +46,12 @@ PrefixManager::PrefixManager(
     bool enablePerfMeasurement,
     const std::chrono::seconds& initialDumpTime)
     : nodeId_(config->getNodeName()),
-      staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
-      kvStore_(kvStore),
+      allAreas_{config->getAreaIds()},
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
-      allAreas_{config->getAreaIds()} {
+      staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
+      kvStore_(kvStore) {
   CHECK(kvStore_);
   CHECK(config);
 
@@ -56,6 +71,7 @@ PrefixManager::PrefixManager(
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
+        // No write to KvStore before initial KvStore sync
         if (initialSyncKvStoreTimer_->isScheduled()) {
           return;
         }
@@ -130,41 +146,70 @@ PrefixManager::PrefixManager(
   });
 
   // register kvstore publication callback
-  std::vector<std::string> const keyPrefixList = {
-      Constants::kPrefixDbMarker.toString() + nodeId_};
+  // ATTN: in case of receiving update from `KvStore` for keys we didn't
+  // persist, subscribe update to delete this key.
+  const std::string keyPrefix = Constants::kPrefixDbMarker.toString() + nodeId_;
   kvStoreClient_->subscribeKeyFilter(
-      KvStoreFilters(keyPrefixList, {} /* originatorIds */),
+      // TODO: by default keyMatch option is OR. Change to leverage originatorId
+      // for subscription instead of checking nodeId internally
+      KvStoreFilters({keyPrefix}, {} /* originatorIds */),
       [this](
-          const std::string& key, std::optional<thrift::Value> value) noexcept {
-        // we're not currently persisting this key, it may be that we no longer
-        // want it advertised
-        if (value.has_value() and value.value().value_ref().has_value()) {
-          const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-              value.value().value_ref().value(), serializer_);
-          if (not(*prefixDb.deletePrefix_ref()) &&
-              nodeId_ == *prefixDb.thisNodeName_ref()) {
-            VLOG(2) << "Learning previously announce route, key: " << key;
-            keysToClear_.emplace(key);
-            syncKvStoreThrottled_->operator()();
-          }
+          const std::string& key, std::optional<thrift::Value> val) noexcept {
+        // Ignore update if:
+        //  1) val is std::nullopt;
+        //  2) val has no value field inside `thrift::Value`(e.g. ttl update)
+        if ((not val.has_value()) or (not val.value().value_ref())) {
+          return;
+        }
+
+        // Ignore update if key is NOT with per-prefix-key format
+        auto prefixKey = PrefixKey::fromStr(key);
+        CHECK(prefixKey.hasValue());
+
+        const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+            *val.value().value_ref(), serializer_);
+        const auto& network = prefixKey->getCIDRNetwork();
+        if ((not *prefixDb.deletePrefix_ref()) and
+            nodeId_ == *prefixDb.thisNodeName_ref()) {
+          VLOG(2) << "Learning previously announced prefix: " << key;
+
+          // populate advertisedKeys_ collection to make sure we can find
+          // key when clear key from `KvStore`
+          advertisedKeys_[network].emplace(key);
+
+          // Populate pendingState to check keys
+          pendingUpdates_.applyPrefixChange({network});
+          syncKvStoreThrottled_->operator()();
         }
       });
 
-  // get initial dump of keys related to us
+  // get initial dump of keys related to `myNodeId_`.
+  // ATTN: when Open/R restarts, newly started prefixManager will need to
+  // understand what it has previously advertised.
   for (const auto& area : allAreas_) {
-    auto result =
-        kvStoreClient_->dumpAllWithPrefix(AreaId{area}, keyPrefixList.front());
-    if (!result.has_value()) {
-      LOG(ERROR) << "Failed dumping keys with prefix " << keyPrefixList.front()
-                 << " from area " << area;
+    auto result = kvStoreClient_->dumpAllWithPrefix(AreaId{area}, keyPrefix);
+    if (not result.has_value()) {
+      LOG(ERROR) << "Failed dumping prefix " << keyPrefix << " from area "
+                 << area;
       continue;
     }
-    for (auto const& kv : result.value()) {
-      keysToClear_.emplace(kv.first);
+    for (auto const& [prefixStr, _] : result.value()) {
+      auto prefixKey = PrefixKey::fromStr(prefixStr);
+      CHECK(prefixKey.hasValue());
+
+      // populate advertisedKeys_ collection to make sure we can find
+      // key when clear key from `KvStore`
+      auto& network = prefixKey->getCIDRNetwork();
+      advertisedKeys_[network].emplace(prefixStr);
+
+      // Populate pendingState to check keys
+      std::unordered_set<folly::CIDRNetwork> changed{network};
+      pendingUpdates_.applyPrefixChange(std::move(changed));
+      syncKvStoreThrottled_->operator()();
     }
   }
 
-  // initialDumpTime zero is used during testing to do inline without delay
+  // schedule one-time initial dump
   initialSyncKvStoreTimer_->scheduleTimeout(initialDumpTime);
 }
 
@@ -172,7 +217,6 @@ PrefixManager::~PrefixManager() {
   // - If EventBase is stopped or it is within the evb thread, run immediately;
   // - Otherwise, will wait the EventBase to run;
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
-    // destory timers
     initialSyncKvStoreTimer_.reset();
     syncKvStoreThrottled_.reset();
   });
@@ -233,13 +277,15 @@ PrefixManager::buildOriginatedPrefixDb(
   }
 }
 
-std::vector<std::string>
-PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
-  std::vector<std::string> prefixKeys;
-  auto& prefixEntry = entry.tPrefixEntry;
-  std::unordered_set<std::string> areaStack{
-      prefixEntry.area_stack_ref()->begin(),
-      prefixEntry.area_stack_ref()->end()};
+std::unordered_set<std::string>
+PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
+  std::unordered_set<std::string> prefixKeys;
+  const auto& tPrefixEntry = entry.tPrefixEntry;
+  const auto& type = *tPrefixEntry.type_ref();
+  const auto& network = toIPNetwork(*tPrefixEntry.prefix_ref());
+  const std::unordered_set<std::string> areaStack{
+      tPrefixEntry.area_stack_ref()->begin(),
+      tPrefixEntry.area_stack_ref()->end()};
 
   for (const auto& toArea : entry.dstAreas) {
     // prevent area_stack loop
@@ -251,15 +297,13 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
 
     // TODO: run ingress policy
     auto [prefixKey, prefixDb] =
-        createPrefixKeyAndDb(nodeId_, prefixEntry, toArea);
+        createPrefixKeyAndDb(nodeId_, tPrefixEntry, toArea);
 
     if (enablePerfMeasurement_) {
-      prefixDb.perfEvents_ref() =
-          addingEvents_[*prefixEntry.type_ref()]
-                       [toIPNetwork(*prefixEntry.prefix_ref())];
+      prefixDb.perfEvents_ref() = addingEvents_[type][network];
     }
-    auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
+    auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
     bool changed = kvStoreClient_->persistKey(
         AreaId{toArea},
         prefixKey.getPrefixKey(),
@@ -269,44 +313,17 @@ PrefixManager::updateKvStorePrefixEntry(PrefixEntry const& entry) {
         "prefix_manager.route_advertisements", 1, fb303::SUM);
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
                         << "Area: " << toArea << ", "
-                        << "Type: " << toString(*prefixEntry.type_ref()) << ", "
-                        << toString(prefixEntry, VLOG_IS_ON(2));
-    prefixKeys.emplace_back(prefixKey.getPrefixKey());
+                        << "Type: " << toString(type) << ", "
+                        << toString(tPrefixEntry, VLOG_IS_ON(2));
+    prefixKeys.emplace(prefixKey.getPrefixKey());
   }
   return prefixKeys;
 }
 
 void
-PrefixManager::syncKvStore() {
-  std::unordered_set<std::string> advertisedKeys{};
-
-  LOG(INFO) << "Syncing " << prefixMap_.size()
-            << " route advertisements in KvStore";
-
-  // Advertise prefixes to KvStore
-  for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
-    CHECK(not typeToPrefixes.empty()) << "Unexpected empty entry";
-
-    // select the best entry/entries by comparing metric_ref() field
-    auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
-    auto& bestEntry = typeToPrefixes.at(bestType);
-    addPerfEventIfNotExist(
-        addingEvents_[bestType][prefix], "UPDATE_KVSTORE_THROTTLED");
-
-    // advertise best-entry for this prefix to KvStore
-    for (const auto& key : updateKvStorePrefixEntry(bestEntry)) {
-      // cache the successfully advertised prefixes
-      advertisedKeys.emplace(key);
-
-      // ATTN: This collection holds "advertised" prefixes in previous
-      //       round of syncing. By removing prefixes in current run,
-      //       whatever left inside `keysToClear_` will be the delta to
-      //       be removed.
-      keysToClear_.erase(key);
-    }
-  }
-
-  // Withdraw prefixes from KvStore
+PrefixManager::deleteKvStoreKeyHelper(
+    const std::unordered_set<std::string>& deletedKeys) {
+  // Prepare thrift::PrefixDatabase object for deletion
   thrift::PrefixDatabase deletedPrefixDb;
   deletedPrefixDb.thisNodeName_ref() = nodeId_;
   deletedPrefixDb.deletePrefix_ref() = true;
@@ -315,8 +332,10 @@ PrefixManager::syncKvStore() {
     addPerfEventIfNotExist(
         deletedPrefixDb.perfEvents_ref().value(), "WITHDRAW_THROTTLED");
   }
-  for (auto const& key : keysToClear_) {
-    auto prefixKey = PrefixKey::fromStr(key);
+
+  // TODO: see if we can avoid encoding/decoding of string
+  for (const auto& prefixStr : deletedKeys) {
+    auto prefixKey = PrefixKey::fromStr(prefixStr);
     CHECK(prefixKey.hasValue());
 
     thrift::PrefixEntry entry;
@@ -330,13 +349,79 @@ PrefixManager::syncKvStore() {
 
     kvStoreClient_->clearKey(
         AreaId{prefixKey->getPrefixArea()},
-        key,
+        prefixStr,
         writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
         ttlKeyInKvStore_);
   }
+}
 
-  // Override `keysToClear_` collection for next-round syncing comparison
-  keysToClear_ = std::move(advertisedKeys);
+void
+PrefixManager::syncKvStore() {
+  LOG(INFO)
+      << "[KvStore Sync] Syncing "
+      << pendingUpdates_.getChangedPrefixes().size()
+      << " changed prefixes. Total prefixes advertised: " << prefixMap_.size();
+
+  // iterate over `pendingUpdates_` to advertise/withdraw incremental changes
+  for (auto const& network : pendingUpdates_.getChangedPrefixes()) {
+    auto it = prefixMap_.find(network);
+    if (it == prefixMap_.end()) {
+      // delete actual keys being advertised in the cache
+      //
+      // Sample format:
+      //  prefix    :    node1    :    0    :    0.0.0.0/32
+      //    |              |           |             |
+      //  marker        nodeId      areaId        prefixStr
+      if (advertisedKeys_.count(network)) {
+        deleteKvStoreKeyHelper(advertisedKeys_.at(network));
+        advertisedKeys_.erase(network);
+      }
+    } else {
+      // add/update keys in `KvStore`
+      const auto& typeToPrefixes = it->second;
+
+      // select the best entry/entries by comparing metric_ref() field
+      auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
+      auto& bestEntry = typeToPrefixes.at(bestType);
+
+      // populate perf event collection
+      if (enablePerfMeasurement_) {
+        addPerfEventIfNotExist(
+            addingEvents_[bestType][network], "UPDATE_KVSTORE_THROTTLED");
+      }
+
+      // advertise best-entry for this prefix to `KvStore`
+      auto newKeys = updateKvStoreKeyHelper(bestEntry);
+
+      auto keysIt = advertisedKeys_.find(network);
+      if (keysIt != advertisedKeys_.end()) {
+        // ATTN: This collection holds "advertised" prefixes in previous
+        // round of syncing. By removing prefixes in current run,
+        // whatever left in `advertisedKeys_` will be the delta to
+        // be removed.
+        for (const auto& key : newKeys) {
+          keysIt->second.erase(key);
+        }
+
+        // remove keys which are no longer advertised
+        // e.g.
+        // t0: prefix_1 => {area_1, area_2}
+        // t1: prefix_1 => {area_1, area_3}
+        //     (prefix_1, area_2) will be removed
+        deleteKvStoreKeyHelper(keysIt->second);
+      }
+
+      // override `advertisedKeys_` for next-round syncing
+      advertisedKeys_[network] = std::move(newKeys);
+    }
+  }
+
+  LOG(INFO) << "[KvStore Sync] Done syncing: "
+            << pendingUpdates_.getChangedPrefixes().size()
+            << " changed prefixes.";
+
+  // clean up
+  pendingUpdates_.reset();
 
   // Update flat counters
   size_t num_prefixes = 0;
@@ -572,14 +657,16 @@ PrefixManager::advertisePrefixesImpl(
     changed.insert(prefixCidr);
   }
 
-  if (not changed.empty()) {
+  bool updated = (not changed.empty()) ? true : false;
+  if (updated) {
+    // store pendingUpdate for batch processing
+    pendingUpdates_.applyPrefixChange(std::move(changed));
+
     // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
-    // TODO: apply changes to pending state for processing
-    //       incremental change ONLY
   }
 
-  return not changed.empty();
+  return updated;
 }
 
 bool
@@ -610,14 +697,16 @@ PrefixManager::withdrawPrefixesImpl(
     }
   }
 
-  if (not changed.empty()) {
+  bool updated = (not changed.empty()) ? true : false;
+  if (updated) {
+    // store pendingUpdate for batch processing
+    pendingUpdates_.applyPrefixChange(std::move(changed));
+
     // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
-    // TODO: apply changes to pending state for processing
-    //       incremental change ONLY
   }
 
-  return not changed.empty();
+  return updated;
 }
 
 bool

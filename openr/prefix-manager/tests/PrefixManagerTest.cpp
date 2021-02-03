@@ -596,25 +596,23 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
 }
 
 /**
- * Test prefix key subscription callback from Kvstore client.
+ * Test prefix key subscription callback from `KvstoreClientInternal`.
  * The test verifies the callback takes the action that reflects the current
- * state of prefix in the prefix manager (either exists or does not exist) and
- * appropriately udpates Kvstore
+ * state of prefix(existence/disappearance) in the `PrefixManager` and
+ * appropriately updates `KvStore`.
  */
-TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
+TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   int waitDuration{0};
   int keyVersion{0};
   folly::Baton waitBaton;
 
-  std::string prefixKeyStr{"prefix:node-1"};
   const auto prefixEntry =
       createPrefixEntry(toIpPrefix("5001::/64"), thrift::PrefixType::DEFAULT);
   auto prefixKey = PrefixKey(
-      "node-1",
-      folly::IPAddress::createNetwork(toString(*prefixEntry.prefix_ref())),
-      kTestingAreaName);
-  prefixKeyStr = prefixKey.getPrefixKey();
+      "node-1", toIPNetwork(*prefixEntry.prefix_ref()), kTestingAreaName);
+  auto prefixKeyStr = prefixKey.getPrefixKey();
 
+  // Create client for prefix subscription
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
       &evl, "node-1", kvStoreWrapper->getKvStore());
 
@@ -1763,6 +1761,29 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
 
     EXPECT_TRUE(toIpPrefix(v4Prefix_) == deletedRoutes.back());
   }
+}
+
+TEST(PrefixManagerPendingUpdates, updatePrefixes) {
+  detail::PrefixManagerPendingUpdates updates;
+
+  // verify initial state
+  EXPECT_TRUE(updates.getChangedPrefixes().empty());
+
+  // empty update will ONLY change counter
+  updates.applyPrefixChange({});
+  EXPECT_TRUE(updates.getChangedPrefixes().empty());
+
+  // non-empty change
+  auto network1 = toIPNetwork(addr1);
+  auto network2 = toIPNetwork(addr2);
+  updates.applyPrefixChange({network1, network2});
+  EXPECT_THAT(
+      updates.getChangedPrefixes(),
+      testing::UnorderedElementsAre(network1, network2));
+
+  // cleanup
+  updates.reset();
+  EXPECT_TRUE(updates.getChangedPrefixes().empty());
 }
 
 int
