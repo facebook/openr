@@ -585,8 +585,10 @@ TEST_F(SimpleKvStoreThriftTestFixture, BasicFloodingOverThrift) {
   auto thriftVal3 =
       createThriftValue(3, store2->getNodeId(), std::string("value3"));
   EXPECT_TRUE(store2->setKey(kTestingAreaName, key3, thriftVal3));
-  EXPECT_TRUE(
-      verifyKvStoreKeyVal(store1.get(), key3, thriftVal3, kTestingAreaName));
+  while (not verifyKvStoreKeyVal(
+      store1.get(), key3, thriftVal3, kTestingAreaName)) {
+    std::this_thread::yield();
+  }
 
   // 3 keys from both stores
   EXPECT_EQ(3, store1->dumpAll(kTestingAreaName).size());

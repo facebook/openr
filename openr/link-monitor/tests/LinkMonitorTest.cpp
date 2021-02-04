@@ -511,10 +511,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
     EXPECT_EQ(*peers.at(nodeName).ctrlPort_ref(), *peerSpec.ctrlPort_ref());
   }
 
-  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>
+  std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry>
   getNextPrefixDb(
       std::string const& originatorId, AreaId const& area = kTestingAreaName) {
-    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixes;
+    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixes;
 
     // Leverage KvStoreFilter to get `prefix:*` change
     std::optional<KvStoreFilters> kvFilters{KvStoreFilters(
@@ -529,7 +529,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
           continue;
         }
         for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
-          prefixes.emplace(*prefixEntry.prefix_ref(), prefixEntry);
+          prefixes.emplace(toIPNetwork(*prefixEntry.prefix_ref()), prefixEntry);
         }
       }
     }
@@ -2090,7 +2090,7 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   LOG(INFO) << "Testing address advertisements";
 
   {
-    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixesArea1,
+    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1);
@@ -2098,11 +2098,23 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
     } while (prefixesArea1.size() != 5 or prefixesArea2.size() != 5);
 
     // verify prefixes with VALID prefixes has been advertised
-    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV4)));
-    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV4Subnet)));
-    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6_1)));
-    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6_2)));
-    EXPECT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6Subnet)));
+    EXPECT_EQ(
+        1,
+        prefixesArea1.count(folly::IPAddress::createNetwork(loopbackAddrV4)));
+    EXPECT_EQ(
+        1,
+        prefixesArea1.count(
+            folly::IPAddress::createNetwork(loopbackAddrV4Subnet)));
+    EXPECT_EQ(
+        1,
+        prefixesArea1.count(folly::IPAddress::createNetwork(loopbackAddrV6_1)));
+    EXPECT_EQ(
+        1,
+        prefixesArea1.count(folly::IPAddress::createNetwork(loopbackAddrV6_2)));
+    EXPECT_EQ(
+        1,
+        prefixesArea1.count(
+            folly::IPAddress::createNetwork(loopbackAddrV6Subnet)));
 
     // Both area should report the same set of prefixes
     EXPECT_EQ(prefixesArea1, prefixesArea2);
@@ -2130,15 +2142,18 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
 
   LOG(INFO) << "Testing address withdraws";
   {
-    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixesArea1,
+    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1);
       prefixesArea2 = getNextPrefixDb(nodeName, area2);
     } while (prefixesArea1.size() != 1 or prefixesArea2.size() != 1);
 
-    ASSERT_EQ(1, prefixesArea1.count(toIpPrefix(loopbackAddrV6_2)));
-    auto& prefixEntry = prefixesArea1.at(toIpPrefix(loopbackAddrV6_2));
+    ASSERT_EQ(
+        1,
+        prefixesArea1.count(folly::IPAddress::createNetwork(loopbackAddrV6_2)));
+    auto& prefixEntry =
+        prefixesArea1.at(folly::IPAddress::createNetwork(loopbackAddrV6_2));
     EXPECT_EQ(
         Constants::kDefaultPathPreference,
         prefixEntry.metrics_ref()->path_preference_ref());
@@ -2163,7 +2178,7 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
 
   // Verify all addresses are withdrawn on link down event
   {
-    std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixesArea1,
+    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1);
