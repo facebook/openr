@@ -99,7 +99,6 @@ TimeoutStopSec=10
 LimitNOFILE=10000000
 LimitCORE=32G
 SyslogIdentifier=openr
-StandardOutput=syslog
 
 [Install]
 WantedBy=multi-user.target
