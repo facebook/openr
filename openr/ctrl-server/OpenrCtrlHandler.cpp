@@ -158,15 +158,22 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 
             // Publish the update to all active streams
             fibPublishers_.withWLock([&maybeUpdate](auto& fibPublishers) {
-              for (auto& fibPublisher : fibPublishers) {
-                fibPublisher.second.next(maybeUpdate.value().toThrift());
+              if (fibPublishers.size()) {
+                const auto fibUpdate = maybeUpdate.value().toThrift();
+                for (auto& fibPublisher : fibPublishers) {
+                  fibPublisher.second.next(fibUpdate);
+                }
               }
             });
 
             // Publish the detailed update to all active streams
             fibDetailPublishers_.withWLock([&maybeUpdate](auto& fibPublishers) {
-              for (auto& fibPublisher : fibPublishers) {
-                fibPublisher.second.next(maybeUpdate.value().toThriftDetail());
+              if (fibPublishers.size()) {
+                const auto fibUpdateDetail =
+                    maybeUpdate.value().toThriftDetail();
+                for (auto& fibPublisher : fibPublishers) {
+                  fibPublisher.second.next(fibUpdateDetail);
+                }
               }
             });
           }
