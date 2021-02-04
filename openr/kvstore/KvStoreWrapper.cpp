@@ -24,11 +24,10 @@ namespace openr {
 KvStoreWrapper::KvStoreWrapper(
     fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
-    std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
-    bool enableKvStoreThrift)
+    std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue)
     : nodeId(config->getNodeName()),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
-      enableKvStoreThrift_(enableKvStoreThrift) {
+      config_(config) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
@@ -38,10 +37,25 @@ KvStoreWrapper::KvStoreWrapper(
                                    : dummyPeerUpdatesQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{globalCmdUrl},
-      config,
+      config_,
       std::nullopt /* ip-tos */,
       Constants::kHighWaterMark,
-      enableKvStoreThrift_);
+      true /* enableKvStoreThrift */);
+
+  // we need to spin up a thrift server for KvStore clients to connect to. See
+  // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update
+  // for info on data flow
+  thriftServer_ = std::make_unique<OpenrThriftServerWrapper>(
+      nodeId,
+      nullptr, // Decision
+      nullptr, // Fib
+      kvStore_.get(),
+      nullptr, // LinkMonitor
+      nullptr, // Monitor
+      nullptr, // PersistentStore
+      nullptr, // PrefixManager
+      nullptr, // Spark
+      config);
 }
 
 void
@@ -53,6 +67,8 @@ KvStoreWrapper::run() noexcept {
     VLOG(1) << "KvStore " << nodeId << " stopped.";
   });
   kvStore_->waitUntilRunning();
+
+  thriftServer_->run();
 }
 
 void
@@ -67,6 +83,8 @@ KvStoreWrapper::stop() {
   kvStoreSyncEventsQueue_.close();
   dummyPeerUpdatesQueue_.close();
   logSampleQueue_.close();
+
+  thriftServer_->stop();
 
   // Stop kvstore
   kvStore_->stop();

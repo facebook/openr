@@ -847,9 +847,13 @@ TEST(KvStoreClientInternal, ApiTest) {
   // Schedule callback to add/del peer via client-1 (will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
     EXPECT_TRUE(store->addPeer(
-        kTestingAreaName, "peer1", createPeerSpec("inproc://fake_cmd_url_1")));
+        kTestingAreaName,
+        "peer1",
+        createPeerSpec("inproc://fake_cmd_url_1", "fake_thrift_url_1")));
     EXPECT_TRUE(store->addPeer(
-        kTestingAreaName, "peer2", createPeerSpec("inproc://fake_cmd_url_2")));
+        kTestingAreaName,
+        "peer2",
+        createPeerSpec("inproc://fake_cmd_url_2", "fake_thrift_url_1")));
     EXPECT_TRUE(store->delPeer(kTestingAreaName, "peer1"));
   });
 
@@ -1317,17 +1321,25 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // test addPeers
-        auto maybePeers = store1->getPeers(planeArea);
-        EXPECT_EQ(maybePeers, peers1);
+        for (auto& [_, spec] : peers1) {
+          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+        }
+        EXPECT_EQ(store1->getPeers(planeArea), peers1);
 
-        auto maybePeers2 = store2->getPeers(planeArea);
-        EXPECT_EQ(maybePeers2, peers2PlaneArea);
+        for (auto& [_, spec] : peers2PlaneArea) {
+          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+        }
+        EXPECT_EQ(store2->getPeers(planeArea), peers2PlaneArea);
 
-        auto maybePeers3 = store2->getPeers(podArea);
-        EXPECT_EQ(maybePeers3, peers2PodArea);
+        for (auto& [_, spec] : peers2PodArea) {
+          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+        }
+        EXPECT_EQ(store2->getPeers(podArea), peers2PodArea);
 
-        auto maybePeers4 = store3->getPeers(podArea);
-        EXPECT_EQ(maybePeers4, peers3);
+        for (auto& [_, spec] : peers3) {
+          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+        }
+        EXPECT_EQ(store3->getPeers(podArea), peers3);
       });
 
   // test for key set, get and key flood within area
@@ -1430,7 +1442,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
 
   // check if key is flooding as expected by checking in node2
   evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
+      std::chrono::milliseconds(scheduleAt += 70), [&]() noexcept {
         // plane key must be present in node2 (plane area) and not in node3
         EXPECT_TRUE(
             client2->getKey(planeArea, "test_ttl_key_plane").has_value());

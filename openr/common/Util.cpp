@@ -514,11 +514,13 @@ thrift::PeerSpec
 createPeerSpec(
     const std::string& cmdUrl,
     const std::string& peerAddr,
-    const int32_t port) {
+    const int32_t port,
+    const thrift::KvStorePeerState state) {
   thrift::PeerSpec peerSpec;
-  *peerSpec.cmdUrl_ref() = cmdUrl;
-  *peerSpec.peerAddr_ref() = peerAddr;
-  peerSpec.ctrlPort_ref() = port;
+  peerSpec.set_cmdUrl(cmdUrl);
+  peerSpec.set_peerAddr(peerAddr);
+  peerSpec.set_ctrlPort(port);
+  peerSpec.set_state(state);
   return peerSpec;
 }
 

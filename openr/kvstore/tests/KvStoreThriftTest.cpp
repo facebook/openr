@@ -58,10 +58,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
   createKvStore(const std::string& nodeId) {
     auto tConfig = getBasicOpenrConfig(nodeId);
     stores_.emplace_back(std::make_shared<KvStoreWrapper>(
-        context_,
-        std::make_shared<Config>(tConfig),
-        std::nullopt,
-        true /* enable_kvstore_thrift */));
+        context_, std::make_shared<Config>(tConfig), std::nullopt));
     stores_.back()->run();
   }
 

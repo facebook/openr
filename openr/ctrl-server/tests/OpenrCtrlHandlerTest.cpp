@@ -204,13 +204,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     openrThriftServerWrapper_.reset();
   }
 
-  thrift::PeerSpec
-  createPeerSpec(const std::string& cmdUrl) {
-    thrift::PeerSpec peerSpec;
-    *peerSpec.cmdUrl_ref() = cmdUrl;
-    return peerSpec;
-  }
-
   thrift::PrefixEntry
   createPrefixEntry(const std::string& prefix, thrift::PrefixType prefixType) {
     thrift::PrefixEntry prefixEntry;
@@ -549,14 +542,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // Peers APIs
   //
   const thrift::PeersMap peers{
-      {"peer1", createPeerSpec("inproc://peer1-cmd")},
-      {"peer2", createPeerSpec("inproc://peer2-cmd")},
-      {"peer3", createPeerSpec("inproc://peer3-cmd")}};
+      {"peer1", createPeerSpec("inproc://peer1-cmd", "::1")},
+      {"peer2", createPeerSpec("inproc://peer2-cmd", "::1")},
+      {"peer3", createPeerSpec("inproc://peer3-cmd", "::1")}};
 
   // do the same with non-default area
   const thrift::PeersMap peersPod{
-      {"peer11", createPeerSpec("inproc://peer11-cmd")},
-      {"peer21", createPeerSpec("inproc://peer21-cmd")},
+      {"peer11", createPeerSpec("inproc://peer11-cmd", "::1")},
+      {"peer21", createPeerSpec("inproc://peer21-cmd", "::1")},
   };
 
   {
@@ -571,9 +564,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kSpineAreaId);
 
     EXPECT_EQ(3, ret.size());
-    EXPECT_EQ(peers.at("peer1"), ret.at("peer1"));
-    EXPECT_EQ(peers.at("peer2"), ret.at("peer2"));
-    EXPECT_EQ(peers.at("peer3"), ret.at("peer3"));
+    EXPECT_TRUE(ret.count("peer1"));
+    EXPECT_TRUE(ret.count("peer2"));
+    EXPECT_TRUE(ret.count("peer3"));
   }
 
   {
@@ -582,8 +575,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     thrift::PeersMap ret;
     openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kSpineAreaId);
     EXPECT_EQ(2, ret.size());
-    EXPECT_EQ(peers.at("peer1"), ret.at("peer1"));
-    EXPECT_EQ(peers.at("peer3"), ret.at("peer3"));
+    EXPECT_TRUE(ret.count("peer1"));
+    EXPECT_TRUE(ret.count("peer3"));
   }
 
   {
@@ -591,8 +584,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kPodAreaId);
 
     EXPECT_EQ(2, ret.size());
-    EXPECT_EQ(peersPod.at("peer11"), ret.at("peer11"));
-    EXPECT_EQ(peersPod.at("peer21"), ret.at("peer21"));
+    EXPECT_TRUE(ret.count("peer11"));
+    EXPECT_TRUE(ret.count("peer21"));
   }
 
   {
@@ -601,8 +594,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     thrift::PeersMap ret;
     openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kPodAreaId);
     EXPECT_EQ(1, ret.size());
-    EXPECT_EQ(peersPod.at("peer11"), ret.at("peer11"));
-    EXPECT_EQ(ret.count("peer21"), 0);
+    EXPECT_TRUE(ret.count("peer11"));
   }
 
   // Not using params.prefix. Instead using keys. params.prefix will be

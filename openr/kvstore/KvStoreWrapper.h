@@ -18,6 +18,7 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 
 namespace openr {
 
@@ -34,8 +35,7 @@ class KvStoreWrapper {
       fbzmq::Context& zmqContext,
       std::shared_ptr<const Config> config,
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
-          std::nullopt,
-      bool enableKvStoreThrift = false);
+          std::nullopt);
 
   ~KvStoreWrapper() {
     stop();
@@ -162,8 +162,9 @@ class KvStoreWrapper {
   getPeerSpec() const {
     return createPeerSpec(
         globalCmdUrl, /* cmdUrl for ZMQ */
-        "", /* peerAddr for thrift */
-        0 /* port for thrift */);
+        "::1", /* peerAddr for thrift */
+        thriftServer_->getOpenrCtrlThriftPort(),
+        thrift::KvStorePeerState::INITIALIZED);
   }
 
   /**
@@ -184,11 +185,18 @@ class KvStoreWrapper {
     return this->nodeId;
   }
 
+  std::unordered_set<std::string>
+  getAreaIds() {
+    return config_->getAreaIds();
+  }
+
  private:
   const std::string nodeId;
 
   // Global URLs could be created outside of kvstore, mainly for testing
   const std::string globalCmdUrl;
+
+  std::shared_ptr<const Config> config_;
 
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
@@ -213,11 +221,11 @@ class KvStoreWrapper {
   // KvStore owned by this wrapper.
   std::unique_ptr<KvStore> kvStore_;
 
+  // Thrift Server owned by this warpper;
+  std::unique_ptr<OpenrThriftServerWrapper> thriftServer_;
+
   // Thread in which KvStore will be running.
   std::thread kvStoreThread_;
-
-  // enable kvStore over thrift or not
-  const bool enableKvStoreThrift_{false};
 };
 
 } // namespace openr

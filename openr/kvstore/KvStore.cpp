@@ -2708,7 +2708,7 @@ KvStoreDb::floodBufferedUpdates() {
 
 void
 KvStoreDb::finalizeFullSync(
-    const std::vector<std::string>& keys, const std::string& senderId) {
+    const std::unordered_set<std::string>& keys, const std::string& senderId) {
   // build keyval to be sent
   thrift::Publication updates;
   for (const auto& key : keys) {
@@ -2733,6 +2733,7 @@ KvStoreDb::finalizeFullSync(
   // I'm the initiator, set flood-root-id
   params.floodRootId_ref().from_optional(DualNode::getSptRootId());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
+  params.set_nodeIds({kvParams_.nodeId});
 
   updateRequest.cmd_ref() = thrift::Command::KEY_SET;
   updateRequest.keySetParams_ref() = params;
@@ -2945,6 +2946,10 @@ KvStoreDb::floodPublication(
           (not thriftPeer.client)) {
         // Skip flooding to those peers if peer has NOT finished
         // initial sync(i.e. promoted to `INITIALIZED`)
+        // store key for flooding after intialized
+        for (auto const& [key, _] : params.get_keyVals()) {
+          thriftPeer.pendingKeysDuringInitialization.insert(key);
+        }
         continue;
       }
 
@@ -3032,9 +3037,19 @@ KvStoreDb::mergePublication(
       rcvdPublication.keyVals_ref()->size(),
       fb303::SUM);
 
-  const bool needFinalizeFullSync = senderId.has_value() and
-      rcvdPublication.tobeUpdatedKeys_ref().has_value() and
-      not rcvdPublication.tobeUpdatedKeys_ref()->empty();
+  std::unordered_set<std::string> keysTobeUpdated;
+  for (auto const& key : rcvdPublication.tobeUpdatedKeys_ref().value_or({})) {
+    keysTobeUpdated.insert(key);
+  }
+  if (senderId.has_value()) {
+    auto peerIt = thriftPeers_.find(senderId.value());
+    if (peerIt != thriftPeers_.end()) {
+      keysTobeUpdated.merge(peerIt->second.pendingKeysDuringInitialization);
+      peerIt->second.pendingKeysDuringInitialization.clear();
+    }
+  }
+  const bool needFinalizeFullSync =
+      senderId.has_value() and not keysTobeUpdated.empty();
 
   // This can happen when KvStore is emitting expired-key updates
   if (rcvdPublication.keyVals_ref()->empty() and not needFinalizeFullSync) {
@@ -3082,7 +3097,7 @@ KvStoreDb::mergePublication(
   // response to senderId with tobeUpdatedKeys + Vals
   // (last step in 3-way full-sync)
   if (needFinalizeFullSync) {
-    finalizeFullSync(*rcvdPublication.tobeUpdatedKeys_ref(), *senderId);
+    finalizeFullSync(keysTobeUpdated, *senderId);
   }
 
   return kvUpdateCnt;

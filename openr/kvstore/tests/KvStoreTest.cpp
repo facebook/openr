@@ -6,6 +6,7 @@
  */
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <thread>
 #include <tuple>
@@ -19,6 +20,7 @@
 #include <folly/Memory.h>
 #include <folly/Random.h>
 #include <folly/gen/Base.h>
+#include <folly/init/Init.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -118,6 +120,29 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   std::string
   getNodeId(const std::string& prefix, const int index) const {
     return folly::sformat("{}{}", prefix, index);
+  }
+
+  void
+  waitForAllPeersInitialized(
+      std::chrono::milliseconds timeout = std::chrono::milliseconds(50)) const {
+    bool allInitialized = false;
+    auto const start = std::chrono::steady_clock::now();
+    while (not allInitialized &&
+           std::chrono::steady_clock::now() - start < timeout) {
+      std::this_thread::yield();
+      allInitialized = true;
+      for (auto const& store : stores_) {
+        for (auto const& area : store->getAreaIds()) {
+          for (auto const& [_, spec] : store->getPeers(AreaId{area})) {
+            allInitialized &=
+                ((spec.get_state() == thrift::KvStorePeerState::INITIALIZED)
+                     ? 1
+                     : 0);
+          }
+        }
+      }
+    }
+    ASSERT_TRUE(allInitialized);
   }
 
   // Public member variables
@@ -993,6 +1018,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   EXPECT_TRUE(store0->addPeer(
       kTestingAreaName, store2->getNodeId(), store2->getPeerSpec()));
 
+  waitForAllPeersInitialized();
   // map of peers we expect and dump peers to expect the results.
   std::unordered_map<std::string, thrift::PeerSpec> expectedPeers = {
       {store1->getNodeId(), store1->getPeerSpec()},
@@ -1049,6 +1075,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   // Update store1 with same peer spec
   EXPECT_TRUE(store0->addPeer(
       kTestingAreaName, store1->getNodeId(), store1->getPeerSpec()));
+  waitForAllPeersInitialized();
   EXPECT_EQ(expectedPeers, store0->getPeers(kTestingAreaName));
 
   // Update key
@@ -1851,13 +1878,12 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   EXPECT_EQ(
       oldCounters["kvstore.updated_key_vals.sum"] + 17,
       newCounters["kvstore.updated_key_vals.sum"]);
-  int sentOffset = 16;
-  EXPECT_EQ(
-      oldCounters["kvstore.sent_publications.count"] + sentOffset,
-      newCounters["kvstore.sent_publications.count"]);
-  EXPECT_EQ(
-      oldCounters["kvstore.sent_key_vals.sum"] + sentOffset,
-      newCounters["kvstore.sent_key_vals.sum"]);
+  EXPECT_LE(
+      oldCounters["kvstore.thrift.num_flood_pub.count"] + 16,
+      newCounters["kvstore.thrift.num_flood_pub.count"]);
+  EXPECT_LE(
+      oldCounters["kvstore.thrift.num_flood_key_vals.sum"] + 16,
+      newCounters["kvstore.thrift.num_flood_key_vals.sum"]);
 }
 
 /**
@@ -1904,6 +1930,9 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
           kTestingAreaName, peerStore->getNodeId(), peerStore->getPeerSpec()));
     }
   }
+
+  // need to wait on this for the list of nodeIds to be as expected.
+  waitForAllPeersInitialized();
 
   //
   // Submit same key in store 0 and store N-1, use same version
@@ -2368,6 +2397,10 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   auto kv0 = store0->dumpAll(kTestingAreaName);
   auto kv1 = store1->dumpAll(kTestingAreaName);
   auto kv2 = store2->dumpAll(kTestingAreaName);
+
+  EXPECT_TRUE(kv0.count("key10"));
+  EXPECT_TRUE(kv1.count("key10"));
+  EXPECT_TRUE(kv2.count("key10"));
   EXPECT_EQ(expectNumKeys, kv0.size());
   EXPECT_EQ(expectNumKeys, kv1.size());
   EXPECT_EQ(expectNumKeys, kv2.size());
@@ -2427,7 +2460,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
   auto s0PubSent1 =
-      fb303::fbData->getCounters()["kvstore.sent_publications.count"];
+      fb303::fbData->getCounters()["kvstore.thrift.num_flood_pub.count"];
 
   // check number of sent publications should be at least number of keys set
   EXPECT_GE(s0PubSent1 - i1, 0);
@@ -2474,7 +2507,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   EXPECT_EQ(i2, *getRes->ttlVersion_ref());
 
   auto allCounters = fb303::fbData->getCounters();
-  auto s1PubSent2 = allCounters["kvstore.sent_publications.count"];
+  auto s1PubSent2 = allCounters["kvstore.thrift.num_flood_pub.count"];
   auto s0KeyNum2 = store0->dumpAll(kTestingAreaName).size();
 
   // number of messages sent must be around duration * messageRate
@@ -2517,7 +2550,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   std::this_thread::sleep_for(std::chrono::seconds(wait));
 
   allCounters = fb303::fbData->getCounters();
-  auto s1PubSent3 = allCounters["kvstore.sent_publications.count"];
+  auto s1PubSent3 = allCounters["kvstore.thrift.num_flood_pub.count"];
   auto s1Supressed3 = allCounters["kvstore.rate_limit_suppress.count"];
 
   // number of messages sent must be around duration * messageRate
@@ -2689,6 +2722,59 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
 
+  const std::string k0{"pod-area-0"};
+  const std::string k1{"pod-area-1"};
+  const std::string k2{"plane-area-0"};
+  const std::string k3{"plane-area-1"};
+
+  thrift::Value thriftVal0 = createThriftValue(
+      1 /* version */,
+      "storeA" /* originatorId */,
+      std::string("valueA") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal0.hash_ref() = generateHash(
+      *thriftVal0.version_ref(),
+      *thriftVal0.originatorId_ref(),
+      thriftVal0.value_ref());
+
+  thrift::Value thriftVal1 = createThriftValue(
+      1 /* version */,
+      "storeB" /* originatorId */,
+      std::string("valueB") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal1.hash_ref() = generateHash(
+      *thriftVal1.version_ref(),
+      *thriftVal1.originatorId_ref(),
+      thriftVal1.value_ref());
+
+  thrift::Value thriftVal2 = createThriftValue(
+      1 /* version */,
+      "storeC" /* originatorId */,
+      std::string("valueC") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal2.hash_ref() = generateHash(
+      *thriftVal2.version_ref(),
+      *thriftVal2.originatorId_ref(),
+      thriftVal2.value_ref());
+
+  thrift::Value thriftVal3 = createThriftValue(
+      1 /* version */,
+      "storeC" /* originatorId */,
+      std::string("valueC") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal3.hash_ref() = generateHash(
+      *thriftVal3.version_ref(),
+      *thriftVal3.originatorId_ref(),
+      thriftVal3.value_ref());
+
   evb.scheduleAt(
       [&]() noexcept {
         storeA->run();
@@ -2710,63 +2796,13 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
             {storeC->getNodeId(), storeC->getPeerSpec()},
         };
+
+        waitForAllPeersInitialized();
+
         EXPECT_EQ(
             expectedPeersPod, storeB->getPeers(AreaId{*pod.area_id_ref()}));
         EXPECT_EQ(
             expectedPeersPlane, storeB->getPeers(AreaId{*plane.area_id_ref()}));
-
-        const std::string k0{"pod-area-0"};
-        const std::string k1{"pod-area-1"};
-        const std::string k2{"plane-area-0"};
-        const std::string k3{"plane-area-1"};
-
-        thrift::Value thriftVal0 = createThriftValue(
-            1 /* version */,
-            "storeA" /* originatorId */,
-            std::string("valueA") /* value */,
-            Constants::kTtlInfinity /* ttl */,
-            0 /* ttl version */,
-            0 /* hash */);
-        thriftVal0.hash_ref() = generateHash(
-            *thriftVal0.version_ref(),
-            *thriftVal0.originatorId_ref(),
-            thriftVal0.value_ref());
-
-        thrift::Value thriftVal1 = createThriftValue(
-            1 /* version */,
-            "storeB" /* originatorId */,
-            std::string("valueB") /* value */,
-            Constants::kTtlInfinity /* ttl */,
-            0 /* ttl version */,
-            0 /* hash */);
-        thriftVal1.hash_ref() = generateHash(
-            *thriftVal1.version_ref(),
-            *thriftVal1.originatorId_ref(),
-            thriftVal1.value_ref());
-
-        thrift::Value thriftVal2 = createThriftValue(
-            1 /* version */,
-            "storeC" /* originatorId */,
-            std::string("valueC") /* value */,
-            Constants::kTtlInfinity /* ttl */,
-            0 /* ttl version */,
-            0 /* hash */);
-        thriftVal2.hash_ref() = generateHash(
-            *thriftVal2.version_ref(),
-            *thriftVal2.originatorId_ref(),
-            thriftVal2.value_ref());
-
-        thrift::Value thriftVal3 = createThriftValue(
-            1 /* version */,
-            "storeC" /* originatorId */,
-            std::string("valueC") /* value */,
-            Constants::kTtlInfinity /* ttl */,
-            0 /* ttl version */,
-            0 /* hash */);
-        thriftVal3.hash_ref() = generateHash(
-            *thriftVal3.version_ref(),
-            *thriftVal3.originatorId_ref(),
-            thriftVal3.value_ref());
 
         // set key in default area, but storeA does not have default area, this
         // should fail
@@ -2777,6 +2813,11 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         EXPECT_FALSE(storeA->getKey(kTestingAreaName, k0).has_value());
         // store A should have the key in pod-area
         EXPECT_TRUE(storeA->getKey(AreaId{pod.get_area_id()}, k0).has_value());
+      },
+      scheduleTimePoint);
+
+  evb.scheduleAt(
+      [&]() noexcept {
         // store B should have the key in pod-area
         EXPECT_TRUE(storeB->getKey(AreaId{pod.get_area_id()}, k0).has_value());
         // store B should NOT have the key in plane-area
@@ -2788,6 +2829,11 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         // correct area
         EXPECT_TRUE(
             storeC->setKey(AreaId{plane.get_area_id()}, k2, thriftVal2));
+      },
+      scheduleTimePoint + std::chrono::milliseconds(100));
+
+  evb.scheduleAt(
+      [&]() noexcept {
         // store B should have the key in plane.area_id
         EXPECT_TRUE(
             storeB->getKey(AreaId{plane.get_area_id()}, k2).has_value());
@@ -2809,7 +2855,7 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         EXPECT_TRUE(
             storeC->setKey(AreaId{plane.get_area_id()}, k3, thriftVal3));
       },
-      scheduleTimePoint);
+      scheduleTimePoint + std::chrono::milliseconds(300));
 
   evb.scheduleAt(
       [&]() noexcept {
@@ -2832,280 +2878,20 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         EXPECT_EQ(2, storeB->dumpAll(AreaId{pod.get_area_id()}).size());
         EXPECT_EQ(2, storeB->dumpAll(AreaId{plane.get_area_id()}).size());
       },
-      scheduleTimePoint + std::chrono::milliseconds(200));
+      scheduleTimePoint + std::chrono::milliseconds(400));
 
   evb.scheduleAt(
       [&]() noexcept { evb.terminateLoopSoon(); },
-      scheduleTimePoint + std::chrono::milliseconds(201));
+      scheduleTimePoint + std::chrono::milliseconds(401));
 
   evb.loop();
-}
-
-/**
- * Verify correctness of initial full sync rate limiting.
- *
- * - Create KvStore store0.
- * - Create kNumPeers sockets. Add peers to store0
- * - Verify exponential increase in full-sync requests from store0 with every
- *   reply. Starting with 2 requests.
- */
-class KvStoreRateLimitTestFixture : public testing::TestWithParam<size_t> {
- public:
-  fbzmq::Context context;
-  CompactSerializer serializer;
-
-  // Number of peers
-  const size_t kNumPeers = GetParam();
-};
-
-TEST_P(KvStoreRateLimitTestFixture, InitialSync) {
-  const thrift::Publication emptyResponse;
-
-  //
-  // Create and start store0.
-  // NOTE: Set db-sync-interval to 60s (high value) to avoid periodic full sync
-  // in this test
-  //
-  auto config = std::make_shared<Config>(getBasicOpenrConfig("store0"));
-  auto store0 = std::make_unique<KvStoreWrapper>(context, config);
-  store0->run();
-
-  //
-  // Create peer sockets & add each peer to KvStore
-  //
-  std::vector<fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>> peerSockets;
-  std::vector<fbzmq::PollItem> pollItems;
-  for (size_t i = 0; i < kNumPeers; ++i) {
-    const std::string nodeName = folly::sformat("test-peer-{}", i);
-
-    // Create peer spec based on peer-index
-    // NOTE: We explicitly disable flood optimization to avoid conflict of
-    // dual messages with full sync requests.
-    thrift::PeerSpec peerSpec;
-    *peerSpec.cmdUrl_ref() = folly::sformat("inproc://{}", nodeName);
-
-    // Create peer socket.
-    // NOTE: make it non-blocking and we're not setting identity string
-    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSock(
-        context,
-        folly::none /* identity string */,
-        folly::none,
-        fbzmq::NonblockingFlag{true});
-    peerSock.bind(fbzmq::SocketUrl(*peerSpec.cmdUrl_ref())).value();
-
-    // Add socket to poll item and peer-sockets list
-    pollItems.push_back({reinterpret_cast<void*>(*peerSock), 0, ZMQ_POLLIN, 0});
-    peerSockets.emplace_back(std::move(peerSock));
-
-    // Add peer to KvStore
-    store0->addPeer(kTestingAreaName, nodeName, peerSpec);
-  }
-
-  //
-  // Verify sync request rate-limiting
-  // 1) Every peer-add will initiate the full sync request. All request will
-  //   be bufferred but not sent
-  // 2) parallelSyncLimit=2 will be sent out initially
-  // 3) We read all the requests but only respond to one request at a time
-  //    until we reach max limit. Subsequently we send response to all requests.
-  // 4) On receipt of a successful sync response `parallelSyncLimit` will double
-  //   and more requests will be sent by store0
-  // 5) repeat from (3) until all (kNumPeers) requests/responses are done
-  //
-
-  size_t parallelSyncLimit{2}; // Doubles on every response we send
-  size_t numReceivedRequests{0}; // Number of requests received
-  std::map<int, std::string /* peer-id */> outstandingResponses;
-
-  while (numReceivedRequests < kNumPeers) {
-    // Poll ZMQ sockets until timeout is encountered - no more request is sent
-    // from store0
-    while (true) {
-      auto ret = fbzmq::poll(pollItems, std::chrono::milliseconds(1000));
-      ASSERT_TRUE(ret.hasValue());
-      if (ret.value() == 0) { // Unsuccessful poll
-        break;
-      }
-
-      // We've received event on at-least one socket. Read the request
-      for (size_t i = 0; i < kNumPeers; ++i) {
-        if (pollItems.at(i).revents != ZMQ_POLLIN) {
-          continue; // No read event
-        }
-
-        // Read and validate request
-        auto msgs = peerSockets.at(i).recvMultiple();
-        ASSERT_TRUE(msgs.hasValue());
-        EXPECT_EQ(3, msgs->size());
-        EXPECT_TRUE(msgs->at(1).empty()); // Empty identifier
-        auto request = msgs->at(2)
-                           .readThriftObj<thrift::KvStoreRequest>(serializer)
-                           .value();
-        EXPECT_EQ(thrift::Command::KEY_DUMP, *request.cmd_ref());
-        ASSERT_TRUE(request.keyDumpParams_ref());
-        EXPECT_TRUE(request.keyDumpParams_ref()->keyValHashes_ref());
-        // We must not have received the request before
-        EXPECT_EQ(0, outstandingResponses.count(i));
-
-        // Update test state variables
-        ++numReceivedRequests;
-        outstandingResponses.emplace(
-            i, msgs->at(0).read<std::string>().value());
-      } // end for
-    } // end while(true)
-
-    // Verify that expected requests are received
-    if (numReceivedRequests < kNumPeers) {
-      EXPECT_EQ(parallelSyncLimit, outstandingResponses.size());
-    }
-
-    // Respond to only one request if we haven't reached the full limit yet
-    const bool limitReached =
-        parallelSyncLimit == Constants::kMaxFullSyncPendingCountThreshold;
-    ASSERT_LT(0, outstandingResponses.size()); // Ensure at-least one request
-    for (auto it = outstandingResponses.begin();
-         it != outstandingResponses.end();) {
-      auto ret = peerSockets.at(it->first).sendMultiple(
-          fbzmq::Message::from(it->second).value(),
-          fbzmq::Message(),
-          fbzmq::Message::fromThriftObj(emptyResponse, serializer).value());
-      EXPECT_TRUE(ret.hasValue());
-      // Remove, we have responded to the request
-      it = outstandingResponses.erase(it);
-
-      if (not limitReached) {
-        break; // We only respond to one message until limit is reached.
-      }
-    }
-
-    // Bump up the limit
-    parallelSyncLimit = std::min(
-        2 * parallelSyncLimit, Constants::kMaxFullSyncPendingCountThreshold);
-  }
-
-  //
-  // Ensure we received and responded to all the request only ONCE
-  //
-  EXPECT_EQ(kNumPeers, numReceivedRequests);
-  if (kNumPeers > Constants::kMaxFullSyncPendingCountThreshold) {
-    EXPECT_EQ(0, outstandingResponses.size());
-  }
-
-  //
-  // Done
-  //
-  store0->stop();
-}
-
-INSTANTIATE_TEST_CASE_P(
-    KvStoreTestInstance,
-    KvStoreRateLimitTestFixture,
-    ::testing::Values(2, 4, 8, 16, 32, 64, 128));
-
-/**
- * Verifies expectation of full-sync across peer-add update and remove
- * 1. Add peer (validate receipt of full-sync request)
- * 2. Add peer with same spec (validate receipt of new full-sync request)
- * 3. Add peer with updated spec (validate expiry of old sync-request & receipt
- *    of new full-sync request on new socket)
- * 4. Del peer (verify that full-sync request is erased)
- */
-TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
-  // Lambda function to validate full-sync request
-  auto validateFullSyncRequest = [](std::vector<fbzmq::Message> const& msgs) {
-    CompactSerializer serializer;
-    EXPECT_EQ(3, msgs.size());
-    EXPECT_TRUE(msgs.at(1).empty()); // Empty identifier
-    auto request =
-        msgs.at(2).readThriftObj<thrift::KvStoreRequest>(serializer).value();
-    EXPECT_EQ(thrift::Command::KEY_DUMP, *request.cmd_ref());
-    ASSERT_TRUE(request.keyDumpParams_ref());
-    EXPECT_TRUE(request.keyDumpParams_ref()->keyValHashes_ref());
-  };
-
-  //
-  // Create test store
-  // NOTE: Set db-sync-interval to 60s (high value) to avoid periodic full sync
-  // in this test
-  //
-  auto store0 = createKvStore("store0");
-  store0->run();
-
-  // Verify initial expectations
-  EXPECT_EQ(0, store0->getPeers(kTestingAreaName).size());
-
-  //
-  // Create peer socket
-  //
-  thrift::PeerSpec peerSpec;
-  *peerSpec.cmdUrl_ref() = "inproc://test-peer-iface0";
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSock(
-      context,
-      folly::none /* identity string */,
-      folly::none,
-      fbzmq::NonblockingFlag{false});
-  peerSock.bind(fbzmq::SocketUrl(*peerSpec.cmdUrl_ref())).value();
-
-  //
-  // Add peer to KvStore
-  // Expect full-sync request
-  //
-  store0->addPeer(kTestingAreaName, "test-peer", peerSpec);
-  EXPECT_EQ(1, store0->getPeers(kTestingAreaName).size());
-  {
-    auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
-    ASSERT_TRUE(msgs.hasValue()) << msgs.error(); // No timeout
-    validateFullSyncRequest(msgs.value());
-  }
-
-  //
-  // Update peer to KvStore
-  // Expect full-sync request
-  //
-  store0->addPeer(kTestingAreaName, "test-peer", peerSpec);
-  EXPECT_EQ(1, store0->getPeers(kTestingAreaName).size());
-  {
-    auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
-    ASSERT_TRUE(msgs.hasValue()) << msgs.error(); // No timeout
-    validateFullSyncRequest(msgs.value());
-  }
-
-  //
-  // Update peer with new cmd url
-  // Expect full-sync request on new peer socket
-  //
-  *peerSpec.cmdUrl_ref() = "inproc://test-peer-iface1";
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSockNew(
-      context,
-      folly::none /* identity string */,
-      folly::none,
-      fbzmq::NonblockingFlag{true});
-  peerSockNew.bind(fbzmq::SocketUrl(*peerSpec.cmdUrl_ref())).value();
-  store0->addPeer(kTestingAreaName, "test-peer", peerSpec);
-  EXPECT_EQ(1, store0->getPeers(kTestingAreaName).size());
-  {
-    auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
-    EXPECT_TRUE(msgs.hasError()) << msgs.error();
-
-    auto msgsNew = peerSockNew.recvMultiple(std::chrono::milliseconds(1000));
-    ASSERT_TRUE(msgsNew.hasValue()) << msgsNew.error();
-    validateFullSyncRequest(msgsNew.value());
-  }
-
-  //
-  // Delete peer
-  //
-  store0->delPeer(kTestingAreaName, "test-peer");
-  EXPECT_EQ(0, store0->getPeers(kTestingAreaName).size());
 }
 
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
+  folly::init(&argc, &argv);
 
   // init sodium security library
   if (::sodium_init() == -1) {

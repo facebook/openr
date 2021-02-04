@@ -378,7 +378,7 @@ class KvStoreDb : public DualNode {
   // full-sync initiator sends back key-val to senderId (where we made
   // full-sync request to) who need to update those keys
   void finalizeFullSync(
-      const std::vector<std::string>& keys, const std::string& senderId);
+      const std::unordered_set<std::string>& keys, const std::string& senderId);
 
   // process received KV_DUMP from one of our neighbor
   void processSyncResponse(
@@ -447,6 +447,11 @@ class KvStoreDb : public DualNode {
     // ATTN: this mechanism serves the purpose of avoiding channel being
     //       closed from thrift server due to IDLE timeout(i.e. 60s by default)
     std::unique_ptr<folly::AsyncTimeout> keepAliveTimer{nullptr};
+
+    // Stores set of keys that may have changed during initialization of this
+    // peer. Will flood to them in finalizeFullSync(), the last step of initial
+    // sync.
+    std::unordered_set<std::string> pendingKeysDuringInitialization;
   };
 
   // set of peers with all info over thrift channel

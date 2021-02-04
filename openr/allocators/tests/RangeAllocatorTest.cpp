@@ -13,6 +13,7 @@
 
 #include <folly/gen/Base.h>
 #include <folly/gen/String.h>
+#include <folly/init/Init.h>
 #include <gtest/gtest.h>
 #include <sodium.h>
 
@@ -420,8 +421,7 @@ int
 main(int argc, char** argv) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
+  folly::init(&argc, &argv);
   google::InstallFailureSignalHandler();
   FLAGS_logtostderr = true;
 
