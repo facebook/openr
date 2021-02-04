@@ -64,8 +64,6 @@ class PrefixManager final : public OpenrEventBase {
       std::shared_ptr<const Config> config,
       // raw ptr for modules
       KvStore* kvStore,
-      // enable convergence performance measurement for Adjacencies update
-      bool enablePerfMeasurement,
       const std::chrono::seconds& initialDumpTime);
 
   ~PrefixManager();
@@ -268,12 +266,6 @@ class PrefixManager final : public OpenrEventBase {
   // key-advertisement in `KvStore`.
   std::unordered_map<folly::CIDRNetwork, std::unordered_set<std::string>>
       advertisedKeys_{};
-
-  // perfEvents related to a given prefixEntry
-  std::unordered_map<
-      thrift::PrefixType,
-      std::unordered_map<folly::CIDRNetwork, thrift::PerfEvents>>
-      addingEvents_;
 
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;

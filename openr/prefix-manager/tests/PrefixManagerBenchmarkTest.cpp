@@ -42,7 +42,6 @@ class PrefixManagerBenchmarkTestFixture {
         routeUpdatesQueue_.getReader(),
         config_,
         kvStoreWrapper_->getKvStore(),
-        false, /* no perf measurment */
         std::chrono::seconds{0} /* no delay for initial dump */);
 
     prefixManagerThread_ =

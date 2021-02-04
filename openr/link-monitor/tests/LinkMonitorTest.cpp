@@ -220,7 +220,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         routeUpdatesQueue.getReader(),
         config,
         kvStoreWrapper->getKvStore(),
-        false,
         std::chrono::seconds(0));
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";

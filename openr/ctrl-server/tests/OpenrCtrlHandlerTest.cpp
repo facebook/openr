@@ -111,7 +111,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         config,
         kvStoreWrapper_->getKvStore(),
-        false,
         std::chrono::seconds(0));
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 

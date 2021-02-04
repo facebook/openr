@@ -200,7 +200,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       routeUpdatesQueue_.getReader(),
       config_,
       kvStore_.get(),
-      false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0));
 
   //

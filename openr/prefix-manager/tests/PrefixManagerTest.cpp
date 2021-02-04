@@ -71,7 +71,6 @@ class PrefixManagerTestFixture : public testing::Test {
         routeUpdatesQueue.getReader(),
         config,
         kvStoreWrapper->getKvStore(),
-        true /* prefix-mananger perf measurement */,
         std::chrono::seconds{0});
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
@@ -272,15 +271,6 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
             maybeValue.value().value_ref().value(), serializer);
         EXPECT_EQ(*db.thisNodeName_ref(), "node-1");
         EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
-
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
-          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
-          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
-        }
 
         prefixManager->withdrawPrefixes({prefixEntry1}).get();
         prefixManager->advertisePrefixes({prefixEntry2}).get();
@@ -303,14 +293,6 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
             maybeValue1.value().value_ref().value(), serializer);
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 1);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
-          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
-          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
-        }
       });
 
   evl.scheduleTimeout(
@@ -324,14 +306,6 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
             maybeValue2.value().value_ref().value(), serializer);
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 7);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
-          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
-          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
-        }
         // now make a change and check again
         prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT)
             .get();
@@ -348,14 +322,6 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
             maybeValue3.value().value_ref().value(), serializer);
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 5);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events_ref()->empty());
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events_ref()->back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", *perfEvent.eventDescr_ref());
-          EXPECT_EQ("node-1", *perfEvent.nodeName_ref());
-          EXPECT_LT(0, *perfEvent.unixTs_ref()); // Non zero timestamp
-        }
 
         // Synchronization primitive
         waitBaton.post();
@@ -763,7 +729,6 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       routeUpdatesQueue.getReader(),
       config,
       kvStoreWrapper->getKvStore(),
-      false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0));
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {

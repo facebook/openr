@@ -418,7 +418,6 @@ main(int argc, char** argv) {
           routeUpdatesQueue.getReader(),
           config,
           kvStore,
-          FLAGS_enable_perf_measurement,
           initialPrefixHoldTime));
 
   // Prefix Allocator to automatically allocate prefixes for nodes

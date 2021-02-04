@@ -43,11 +43,9 @@ PrefixManager::PrefixManager(
     messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
     KvStore* kvStore,
-    bool enablePerfMeasurement,
     const std::chrono::seconds& initialDumpTime)
     : nodeId_(config->getNodeName()),
       allAreas_{config->getAreaIds()},
-      enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
@@ -163,6 +161,7 @@ PrefixManager::PrefixManager(
         }
 
         // Ignore update if key is NOT with per-prefix-key format
+        // TODO: avoid decoding keys
         auto prefixKey = PrefixKey::fromStr(key);
         CHECK(prefixKey.hasValue());
 
@@ -193,6 +192,8 @@ PrefixManager::PrefixManager(
                  << area;
       continue;
     }
+
+    std::vector<folly::CIDRNetwork> changed;
     for (auto const& [prefixStr, _] : result.value()) {
       auto prefixKey = PrefixKey::fromStr(prefixStr);
       CHECK(prefixKey.hasValue());
@@ -203,10 +204,13 @@ PrefixManager::PrefixManager(
       advertisedKeys_[network].emplace(prefixStr);
 
       // Populate pendingState to check keys
-      std::unordered_set<folly::CIDRNetwork> changed{network};
-      pendingUpdates_.applyPrefixChange(std::move(changed));
-      syncKvStoreThrottled_->operator()();
+      changed.emplace_back(network);
     }
+
+    // populate pending update in one shot
+    pendingUpdates_.applyPrefixChange(
+        std::unordered_set<folly::CIDRNetwork>{changed.begin(), changed.end()});
+    syncKvStoreThrottled_->operator()();
   }
 
   // schedule one-time initial dump
@@ -299,10 +303,6 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
     auto [prefixKey, prefixDb] =
         createPrefixKeyAndDb(nodeId_, tPrefixEntry, toArea);
 
-    if (enablePerfMeasurement_) {
-      prefixDb.perfEvents_ref() = addingEvents_[type][network];
-    }
-
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
     bool changed = kvStoreClient_->persistKey(
         AreaId{toArea},
@@ -327,11 +327,6 @@ PrefixManager::deleteKvStoreKeyHelper(
   thrift::PrefixDatabase deletedPrefixDb;
   deletedPrefixDb.thisNodeName_ref() = nodeId_;
   deletedPrefixDb.deletePrefix_ref() = true;
-  if (enablePerfMeasurement_) {
-    deletedPrefixDb.perfEvents_ref() = thrift::PerfEvents{};
-    addPerfEventIfNotExist(
-        deletedPrefixDb.perfEvents_ref().value(), "WITHDRAW_THROTTLED");
-  }
 
   // TODO: see if we can avoid encoding/decoding of string
   for (const auto& prefixStr : deletedKeys) {
@@ -372,9 +367,10 @@ PrefixManager::syncKvStore() {
       //  prefix    :    node1    :    0    :    0.0.0.0/32
       //    |              |           |             |
       //  marker        nodeId      areaId        prefixStr
-      if (advertisedKeys_.count(network)) {
-        deleteKvStoreKeyHelper(advertisedKeys_.at(network));
-        advertisedKeys_.erase(network);
+      auto keysIt = advertisedKeys_.find(network);
+      if (keysIt != advertisedKeys_.end()) {
+        deleteKvStoreKeyHelper(keysIt->second);
+        advertisedKeys_.erase(keysIt);
       }
     } else {
       // add/update keys in `KvStore`
@@ -383,12 +379,6 @@ PrefixManager::syncKvStore() {
       // select the best entry/entries by comparing metric_ref() field
       auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
       auto& bestEntry = typeToPrefixes.at(bestType);
-
-      // populate perf event collection
-      if (enablePerfMeasurement_) {
-        addPerfEventIfNotExist(
-            addingEvents_[bestType][network], "UPDATE_KVSTORE_THROTTLED");
-      }
 
       // advertise best-entry for this prefix to `KvStore`
       auto newKeys = updateKvStoreKeyHelper(bestEntry);
@@ -641,19 +631,15 @@ PrefixManager::advertisePrefixesImpl(
     //       used intentionally.
     auto [it, inserted] = prefixMap_[prefixCidr].emplace(type, entry);
 
-    // Case 1: ignore SAME `PrefixEntry`
-    if ((not inserted) and it->second == entry) {
-      continue;
-    }
-
-    if (inserted) {
-      // Case 2: create new prefix entry
-      addPerfEventIfNotExist(addingEvents_[type][prefixCidr], "ADD_PREFIX");
-    } else {
-      // Case 3: update existing `PrefixEntry`
+    if (not inserted) {
+      if (it->second == entry) {
+        // Case 1: ignore SAME `PrefixEntry`
+        continue;
+      }
+      // Case 2: update existing `PrefixEntry`
       it->second = entry;
-      addPerfEventIfNotExist(addingEvents_[type][prefixCidr], "UPDATE_PREFIX");
     }
+    // Case 3: create new `PrefixEntry`
     changed.insert(prefixCidr);
   }
 
@@ -680,19 +666,14 @@ PrefixManager::withdrawPrefixesImpl(
 
     // iterator usage to avoid multiple times of map access
     auto typeIt = prefixMap_.find(prefixCidr);
-    auto eventIt = addingEvents_.find(type);
 
     // ONLY populate changed collection when successfully erased key
     if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
-      eventIt->second.erase(prefixCidr);
       changed.insert(prefixCidr);
 
       // clean up data structure
       if (typeIt->second.empty()) {
         prefixMap_.erase(prefixCidr);
-      }
-      if (eventIt->second.empty()) {
-        addingEvents_.erase(type);
       }
     }
   }
