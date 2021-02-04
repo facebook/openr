@@ -87,8 +87,7 @@ class InterfaceEntry final {
   }
 
   // Utility function to retrieve re-distribute addresses
-  std::vector<thrift::PrefixEntry> getGlobalUnicastNetworks(
-      bool enableV4) const;
+  std::vector<folly::CIDRNetwork> getGlobalUnicastNetworks(bool enableV4) const;
 
  private:
   // Backoff variables

@@ -20,12 +20,9 @@
 namespace openr {
 
 std::unordered_set<folly::CIDRNetwork>
-toCIDRNetworkSet(std::vector<thrift::PrefixEntry> const& prefixes) {
-  std::unordered_set<folly::CIDRNetwork> networks;
-  for (auto const& prefix : prefixes) {
-    networks.emplace(toIPNetwork(*prefix.prefix_ref(), false));
-  }
-  return networks;
+toCIDRNetworkSet(std::vector<folly::CIDRNetwork> const& prefixes) {
+  return std::unordered_set<folly::CIDRNetwork>{
+      prefixes.begin(), prefixes.end()};
 }
 
 /**

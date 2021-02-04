@@ -96,12 +96,11 @@ InterfaceEntry::updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid) {
   return isUpdated;
 }
 
-std::vector<thrift::PrefixEntry>
+std::vector<folly::CIDRNetwork>
 InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
-  std::vector<thrift::PrefixEntry> prefixes;
-  for (auto const& ntwk : info_.networks) {
-    auto const& ip = ntwk.first;
-    // Ignore irrelevant ip addresses.
+  std::vector<folly::CIDRNetwork> prefixes;
+  for (auto const& [ip, mask] : info_.networks) {
+    // Ignore irrelevant link addresses
     if (ip.isLoopback() || ip.isLinkLocal() || ip.isMulticast()) {
       continue;
     }
@@ -111,12 +110,8 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
       continue;
     }
 
-    auto prefixEntry = openr::thrift::PrefixEntry();
-    *prefixEntry.prefix_ref() =
-        toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second));
-    prefixEntry.type_ref() = thrift::PrefixType::LOOPBACK;
-    prefixEntry.forwardingType_ref() = thrift::PrefixForwardingType::IP;
-    prefixes.push_back(prefixEntry);
+    // Mask and add subnet for advertisement
+    prefixes.emplace_back(ip.mask(mask), mask);
   }
 
   return prefixes;

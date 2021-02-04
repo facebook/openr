@@ -692,8 +692,8 @@ LinkMonitor::advertiseRedistAddrs() {
     return;
   }
 
-  std::map<thrift::IpPrefix, std::vector<std::string>> prefixesToAdvertise;
-  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixMap;
+  std::map<folly::CIDRNetwork, std::vector<std::string>> prefixesToAdvertise;
+  std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixMap;
 
   // Add redistribute addresses
   for (auto& [_, interface] : interfaces_) {
@@ -716,10 +716,14 @@ LinkMonitor::advertiseRedistAddrs() {
     }
 
     // Add all prefixes of this interface
-    for (auto& prefixEntry : interface.getGlobalUnicastNetworks(enableV4_)) {
-      const auto prefix = prefixEntry.prefix_ref().value();
+    for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
       // Add prefix in the cache
       prefixesToAdvertise.emplace(prefix, dstAreas);
+
+      // Create prefix entry and populate the
+      thrift::PrefixEntry prefixEntry;
+      prefixEntry.prefix_ref() = toIpPrefix(prefix);
+      prefixEntry.type_ref() = thrift::PrefixType::LOOPBACK;
 
       // Forwarding information
       prefixEntry.forwardingType_ref() = prefixForwardingType_;
@@ -756,8 +760,8 @@ LinkMonitor::advertiseRedistAddrs() {
       continue; // Do not mark for withdraw
     }
     thrift::PrefixEntry prefixEntry;
+    prefixEntry.prefix_ref() = toIpPrefix(prefix);
     prefixEntry.type_ref() = thrift::PrefixType::LOOPBACK;
-    prefixEntry.prefix_ref() = prefix;
     toWithdraw.emplace_back(std::move(prefixEntry));
   }
 
