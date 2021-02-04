@@ -384,10 +384,6 @@ printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
       LOG(INFO) << "ad_dis: "
                 << static_cast<int>(ucRoute.adminDistance_ref().value());
     }
-    if (ucRoute.prefixType_ref().has_value()) {
-      LOG(INFO) << "prefix_type: "
-                << static_cast<int>(ucRoute.prefixType_ref().value());
-    }
 
     LOG(INFO) << "doNotInstall: " << *ucRoute.doNotInstall_ref();
 
@@ -837,8 +833,6 @@ TEST(BGPRedistribution, BasicOperation) {
   auto routeDb = decisionRouteDb.toThrift();
   auto route1 = createUnicastRoute(
       bgpPrefix1, {createNextHopFromAdj(adj21, false, *adj21.metric_ref())});
-  route1.prefixType_ref() = thrift::PrefixType::BGP;
-  route1.data_ref() = data1;
   route1.doNotInstall_ref() = false;
 
   EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(2));
@@ -889,8 +883,6 @@ TEST(BGPRedistribution, BasicOperation) {
 
   auto route2 = createUnicastRoute(
       bgpPrefix1, {createNextHopFromAdj(adj12, false, *adj12.metric_ref())});
-  route2.prefixType_ref() = thrift::PrefixType::BGP;
-  route2.data_ref() = data2;
   route2.doNotInstall_ref() = false;
 
   decisionRouteDb = *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
@@ -930,9 +922,7 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Truly([&data2, &bgpPrefix1](auto i) {
-            return i.dest_ref() == bgpPrefix1 and i.data_ref() == data2;
-          }),
+          Truly([&bgpPrefix1](auto i) { return i.dest_ref() == bgpPrefix1; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1046,9 +1036,8 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Truly([&data1, &expectedAddr](auto i) {
-            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
-          }),
+          Truly(
+              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1066,9 +1055,8 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Truly([&data1, &expectedAddr](auto i) {
-            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
-          }),
+          Truly(
+              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1087,9 +1075,8 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Truly([&data1, &expectedAddr](auto i) {
-            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
-          }),
+          Truly(
+              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1107,9 +1094,8 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Truly([&data1, &expectedAddr](auto i) {
-            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
-          }),
+          Truly(
+              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1126,9 +1112,8 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes_ref(),
       testing::Contains(AllOf(
-          Truly([&data1, &expectedAddr](auto i) {
-            return i.data_ref() == data1 and i.dest_ref() == expectedAddr;
-          }),
+          Truly(
+              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -2760,8 +2745,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       {"3"},
       areaLinkStates,
       prefixState)[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
-
-  EXPECT_EQ(route.prefixType_ref(), thrift::PrefixType::BGP);
 
   // verify on node 1. From node 1 point of view, both node 1 and node 2 are
   // are annoucing the prefix. So it will program 3 nexthops.

@@ -80,12 +80,6 @@ struct RibUnicastEntry : RibEntry {
     tUnicast.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
     tUnicast.doNotInstall_ref() = doNotInstall;
-    if (*bestPrefixEntry.type_ref() == thrift::PrefixType::BGP) {
-      tUnicast.prefixType_ref() = thrift::PrefixType::BGP;
-      if (bestPrefixEntry.data_ref()) {
-        tUnicast.data_ref() = *bestPrefixEntry.data_ref();
-      }
-    }
     return tUnicast;
   }
 

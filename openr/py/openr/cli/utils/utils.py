@@ -815,7 +815,6 @@ def unicast_route_to_dict(route):
             {
                 "dest": ipnetwork.sprint_prefix(route.dest),
                 "nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops],
-                "data": str(route.data),
             }
         )
 
