@@ -676,7 +676,7 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   });
   configStore_->erase("prefix-allocator-config").get();
   // wait long enough for key to expire
-  // @lint-ignore HOWTOEVEN1
+  // @lint-ignore CLANGTIDY
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   hasAllocPrefix.store(true, std::memory_order_relaxed);
@@ -1011,7 +1011,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   });
   configStore_->erase("prefix-allocator-config").get();
   // wait long enough for key to expire
-  // @lint-ignore HOWTOEVEN1
+  // @lint-ignore CLANGTIDY
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   hasAllocPrefix.store(true, std::memory_order_relaxed);
