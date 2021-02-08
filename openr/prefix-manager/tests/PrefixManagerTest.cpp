@@ -1493,7 +1493,6 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     const auto& route = updatedRoutes.back();
     const auto& nhs = *route.nextHops_ref();
     EXPECT_EQ(toIpPrefix(v4Prefix_), *route.dest_ref());
-    EXPECT_EQ(false, *route.doNotInstall_ref());
     EXPECT_EQ(1, nhs.size());
     EXPECT_EQ(
         toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()),

@@ -137,9 +137,6 @@ struct UnicastRoute {
   1: IpPrefix dest
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
-
-  // fields used for route redistribution
-  7: bool doNotInstall = false
 }
 
 // For mimicing FBOSS agent thrift interfaces

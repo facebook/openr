@@ -78,22 +78,6 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
         return nodes
 
 
-class DecisionRoutesUnInstallableCmd(OpenrCtrlCmd):
-    def _run(
-        self, client: OpenrCtrl.Client, prefixes: Any, labels: Any, json: bool
-    ) -> None:
-        route_db = client.getRouteDbComputed("")
-        # Filter out all MPLS routes
-        route_db.mplsRoutes = []
-        # Filter unicast routes on `doNotInstall` attribute
-        route_db.unicastRoutes = [r for r in route_db.unicastRoutes if r.doNotInstall]
-        if json:
-            route_db_dict = {route_db.thisNodeName: utils.route_db_to_dict(route_db)}
-            utils.print_routes_json(route_db_dict, prefixes, labels)
-        else:
-            utils.print_route_db(route_db, prefixes, labels)
-
-
 class DecisionAdjCmd(OpenrCtrlCmd):
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, areas: set, bidir: bool, json: bool

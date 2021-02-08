@@ -79,7 +79,6 @@ struct RibUnicastEntry : RibEntry {
     tUnicast.dest_ref() = toIpPrefix(prefix);
     tUnicast.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
-    tUnicast.doNotInstall_ref() = doNotInstall;
     return tUnicast;
   }
 

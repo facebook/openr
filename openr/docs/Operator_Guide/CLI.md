@@ -69,7 +69,6 @@ Commands:
   rib-policy            Show currently configured RibPolicy
   routes                Request the routing table from Decision module
   routes-computed       Request the routing table from Decision module
-  routes-uninstallable  Request un installable routing table of the current...
   validate              Check all prefix & adj dbs in Decision against that...
 ```
 

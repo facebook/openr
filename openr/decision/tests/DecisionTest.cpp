@@ -385,8 +385,6 @@ printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
                 << static_cast<int>(ucRoute.adminDistance_ref().value());
     }
 
-    LOG(INFO) << "doNotInstall: " << *ucRoute.doNotInstall_ref();
-
     for (const auto nh : *ucRoute.nextHops_ref()) {
       LOG(INFO) << "nexthops: " << toString(nh);
     }
@@ -833,7 +831,6 @@ TEST(BGPRedistribution, BasicOperation) {
   auto routeDb = decisionRouteDb.toThrift();
   auto route1 = createUnicastRoute(
       bgpPrefix1, {createNextHopFromAdj(adj21, false, *adj21.metric_ref())});
-  route1.doNotInstall_ref() = false;
 
   EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::SizeIs(2));
   EXPECT_THAT(*routeDb.unicastRoutes_ref(), testing::Contains(route1));
@@ -883,7 +880,6 @@ TEST(BGPRedistribution, BasicOperation) {
 
   auto route2 = createUnicastRoute(
       bgpPrefix1, {createNextHopFromAdj(adj12, false, *adj12.metric_ref())});
-  route2.doNotInstall_ref() = false;
 
   decisionRouteDb = *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   routeDb = decisionRouteDb.toThrift();
