@@ -68,7 +68,7 @@ PrefixManager::PrefixManager(
 
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
-      getEvb(), Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
+      getEvb(), Constants::kKvStoreSyncThrottleTimeout, [this]() noexcept {
         // No write to KvStore before initial KvStore sync
         if (initialSyncKvStoreTimer_->isScheduled()) {
           return;
@@ -308,7 +308,8 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
         AreaId{toArea},
         prefixKey.getPrefixKey(),
         prefixDbStr,
-        ttlKeyInKvStore_);
+        ttlKeyInKvStore_,
+        true /* useThrottle */);
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
@@ -876,15 +877,6 @@ PrefixManager::processDecisionRouteUpdates(
   }
 
   // ignore mpls updates
-} // namespace openr
-
-void
-PrefixManager::addPerfEventIfNotExist(
-    thrift::PerfEvents& perfEvents, std::string const& updateEvent) {
-  if (perfEvents.events_ref()->empty() or
-      *perfEvents.events_ref()->back().eventDescr_ref() != updateEvent) {
-    addPerfEvent(perfEvents, nodeId_, updateEvent);
-  }
 }
 
 } // namespace openr

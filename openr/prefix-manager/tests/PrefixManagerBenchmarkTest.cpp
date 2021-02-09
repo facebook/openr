@@ -78,14 +78,9 @@ class PrefixManagerBenchmarkTestFixture {
     while (true) {
       auto res = kvStoreWrapper_->dumpHashes(
           kTestingAreaName, Constants::kPrefixDbMarker.toString());
-
-      LOG_EVERY_N(INFO, 1000)
-          << "Num of prefixes: [Actual/Expected]: " << res.size() << "/" << num;
-
       if (res.size() >= num) {
         break;
       }
-
       // wait until all keys are populated
       std::this_thread::yield();
     }

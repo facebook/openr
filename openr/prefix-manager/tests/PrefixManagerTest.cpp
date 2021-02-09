@@ -251,15 +251,18 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   auto keyStr = prefixKey.getPrefixKey();
   auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
 
-  // Schedule callbacks to run at scheduled timestamp
+  // Schedule callbacks to run sequentially
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
         prefixManager->advertisePrefixes({prefixEntry1}).get();
       });
 
+  // Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistKey()` inside `KvStoreClientInternal`
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
         auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
@@ -281,7 +284,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += Constants::kPrefixMgrKvThrottleTimeout.count() / 2),
+          scheduleAt += Constants::kKvStoreSyncThrottleTimeout.count() / 2),
       [&]() {
         // Verify that before throttle expires, we don't see any update
         auto maybeValue1 = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
@@ -293,7 +296,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
         auto maybeValue2 = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
@@ -308,7 +311,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
         auto maybeValue3 = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
@@ -464,15 +467,18 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
       folly::IPAddress::createNetwork(toString(*prefixEntry2.prefix_ref())),
       kTestingAreaName);
 
-  // Schedule callback to set keys from client1 (this will be executed first)
+  // Schedule callbacks to run at fixes timestamp
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
         prefixManager->advertisePrefixes({prefixEntry1}).get();
       });
 
+  // Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistKey()` inside `KvStoreClientInternal`
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue =
@@ -487,7 +493,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
   // version of first key should still be 1
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 4 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 4 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue =
@@ -508,7 +514,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
   // version of prefixEntry1 should still be 1
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue =
@@ -558,7 +564,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   // Wait for throttled update to announce to kvstore
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
@@ -590,7 +596,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   // Wait for throttled update to announce to kvstore
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
@@ -607,13 +613,13 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   // store and update kvstore with empty prefix entry list
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept { prefixManager->withdrawPrefixes({prefixEntry}).get(); });
 
   // verify key is withdrawn from kvstore
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
@@ -631,7 +637,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   // with higher key version.
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixDb = createPrefixDb(nodeId_, {prefixEntry});
         kvStoreWrapper->setKey(
@@ -648,7 +654,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   // version and empty prefix DB
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
@@ -703,7 +709,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   // check both prefixes are in kvstore
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue =
@@ -726,7 +732,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt +=
-          2 * Constants::kPrefixMgrKvThrottleTimeout.count() + ttl.count()),
+          2 * Constants::kKvStoreSyncThrottleTimeout.count() + ttl.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue =
@@ -796,16 +802,6 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
 }
 
 TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
-  // Helper function to receive expected number of updates from KvStore
-  auto recvPublication = [this](int num) {
-    for (int i = 0; i < num; ++i) {
-      EXPECT_NO_THROW(kvStoreWrapper->recvPublication());
-    }
-  };
-
-  // Receive initial empty prefix database from KvStore when per-prefix key is
-  recvPublication(0);
-
   // ADD_PREFIXES
   {
     // Send update request in queue
@@ -815,8 +811,10 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
         {prefixEntry1, prefixEntry7});
     prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(2);
+    // Wait for update in KvStore
+    // ATTN: both prefixes should be updated via throttle
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(2, pub.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
@@ -832,8 +830,10 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
         PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE, thrift::PrefixType::BGP);
     prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(1);
+    // Wait for update in KvStore
+    // ATTN: ONLY `prefixEntry7` will be removed as its type is BGP
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
@@ -850,8 +850,15 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
         {prefixEntry3});
     prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(2);
+    // Wait for update in KvStore
+    // ATTN: 1st pub is withdrawn notification of existing `prefixEntry1`
+    //       `KvStoreClientInternal` won't throttle the change
+    auto pub1 = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub1.keyVals_ref()->size());
+
+    // ATTN: 2nd pub is advertisement notification of `prefixEntry3`
+    auto pub2 = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub2.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
@@ -867,7 +874,8 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(1);
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();

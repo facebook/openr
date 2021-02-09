@@ -15,6 +15,7 @@
 #include <folly/Optional.h>
 #include <folly/SocketAddress.h>
 
+#include <openr/common/AsyncThrottle.h>
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrClient.h>
@@ -76,7 +77,8 @@ class KvStoreClientInternal {
       AreaId const& area,
       std::string const& key,
       std::string const& value,
-      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval);
+      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval,
+      bool useThrottle = false);
 
   /**
    * Advertise the key-value into KvStore with specified version. If version is
@@ -199,7 +201,9 @@ class KvStoreClientInternal {
    * backoff with one more than the latest version to KvStore. It also
    * schedules the timeout.
    */
-  void advertisePendingKeys();
+  void advertisePendingKeys(
+      std::optional<std::unordered_map<AreaId, std::unordered_set<std::string>>>
+          pendingKeysToAdvertise = std::nullopt);
 
   /**
    * Helper function to schedule TTL update advertisement
@@ -241,8 +245,11 @@ class KvStoreClientInternal {
   // periodic timer to check existence of persist key in kv store
   std::optional<std::chrono::milliseconds> checkPersistKeyPeriod_{std::nullopt};
 
-  // check persiste key timer event
+  // check persist key timer event
   std::unique_ptr<folly::AsyncTimeout> checkPersistKeyTimer_;
+
+  // throttled version of `advertisePendingKeys`
+  std::unique_ptr<AsyncThrottle> advertisePendingKeysThrottled_;
 
   //
   // Mutable state

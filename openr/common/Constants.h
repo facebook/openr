@@ -193,6 +193,9 @@ class Constants {
   // KvStore specific
   //
 
+  // the time we hold on to announce to KvStore
+  static constexpr std::chrono::milliseconds kKvStoreSyncThrottleTimeout{100};
+
   // Kvstore timer for flooding pending publication
   static constexpr std::chrono::milliseconds kFloodPendingPublication{100};
 
@@ -243,9 +246,6 @@ class Constants {
   //
   // Prefix manager specific
   //
-
-  // the time we hold on to announce to KvStore
-  static constexpr std::chrono::milliseconds kPrefixMgrKvThrottleTimeout{100};
 
   // Default metrics (path and source preference) for Open/R originated routes
   // (loopback address & interface subnets).

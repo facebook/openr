@@ -45,6 +45,12 @@ KvStoreClientInternal::KvStoreClientInternal(
         }
       });
 
+  // create throttled fashion of pending keys advertisement
+  advertisePendingKeysThrottled_ = std::make_unique<AsyncThrottle>(
+      eventBase_->getEvb(),
+      Constants::kKvStoreSyncThrottleTimeout,
+      [this]() noexcept { advertisePendingKeys(); });
+
   // initialize timers
   initTimers();
 }
@@ -53,7 +59,6 @@ KvStoreClientInternal::~KvStoreClientInternal() {
   // - If EventBase is stopped or it is within the evb thread, run immediately;
   // - Otherwise, will wait the EventBase to run;
   eventBase_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
-    // destory your timers
     advertiseKeyValsTimer_.reset();
     ttlTimer_.reset();
     checkPersistKeyTimer_.reset();
@@ -162,15 +167,21 @@ KvStoreClientInternal::persistKey(
     AreaId const& area,
     std::string const& key,
     std::string const& value,
-    std::chrono::milliseconds const ttl /* = Constants::kTtlInfInterval */) {
+    std::chrono::milliseconds const ttl,
+    bool useThrottle) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
   VLOG(3) << "KvStoreClientInternal: persistKey called for key:" << key
           << " area:" << area.t;
 
+  // local variable to hold pending keys
+  std::unordered_map<AreaId, std::unordered_set<std::string>>
+      pendingKeysToAdvertise{};
+
   auto& persistedKeyVals = persistedKeyVals_[area];
   const auto& keyTtlBackoffs = keyTtlBackoffs_[area];
-  auto& keysToAdvertise = keysToAdvertise_[area];
+  auto& keysToAdvertise =
+      useThrottle ? keysToAdvertise_[area] : pendingKeysToAdvertise[area];
   auto& callbacks = keyCallbacks_[area];
 
   // Look it up in the existing
@@ -247,8 +258,13 @@ KvStoreClientInternal::persistKey(
     keysToAdvertise.insert(key);
   }
 
-  // Best effort to advertise pending keys
-  advertisePendingKeys();
+  if (useThrottle) {
+    // Throttled fashion to advertise pending keys
+    advertisePendingKeysThrottled_->operator()();
+  } else {
+    // ONLY advertise this key. Will NOT advertise any throttled keys
+    advertisePendingKeys(pendingKeysToAdvertise);
+  }
 
   scheduleTtlUpdates(
       area,
@@ -678,22 +694,29 @@ KvStoreClientInternal::processPublication(
 }
 
 void
-KvStoreClientInternal::advertisePendingKeys() {
+KvStoreClientInternal::advertisePendingKeys(
+    std::optional<std::unordered_map<AreaId, std::unordered_set<std::string>>>
+        pendingKeysToAdvertise) {
   std::chrono::milliseconds timeout = Constants::kMaxBackoff;
 
+  // Use passed in `pendingKeysToAdvertise` if there is.
+  // Otherwise, loop through internal data-structure `keysToAdvertise_`
+  auto& keysToAdvertiseArea = pendingKeysToAdvertise.has_value()
+      ? pendingKeysToAdvertise.value()
+      : keysToAdvertise_;
+
   // advertise pending key for each area
-  for (auto& keysToAdvertiseEntry : keysToAdvertise_) {
-    auto& keysToAdvertise = keysToAdvertiseEntry.second;
-    auto& area = keysToAdvertiseEntry.first;
+  for (auto& [area, keysToAdvertise] : keysToAdvertiseArea) {
     // Return immediately if there is nothing to advertise
     if (keysToAdvertise.empty()) {
       continue;
     }
-    auto& persistedKeyVals = persistedKeyVals_[keysToAdvertiseEntry.first];
+    auto& persistedKeyVals = persistedKeyVals_[area];
 
     // Build set of keys to advertise
     std::unordered_map<std::string, thrift::Value> keyVals;
     std::vector<std::string> keys;
+
     for (auto const& key : keysToAdvertise) {
       const auto& thriftValue = persistedKeyVals.at(key);
 
@@ -703,7 +726,7 @@ KvStoreClientInternal::advertisePendingKeys() {
       VLOG(2) << eventType
               << " (key, version, originatorId, ttlVersion, ttl, area) "
               << folly::sformat(
-                     "({}, {}, {}, {}, {})",
+                     "({}, {}, {}, {}, {}, {})",
                      key,
                      *thriftValue.version_ref(),
                      *thriftValue.originatorId_ref(),
@@ -725,7 +748,7 @@ KvStoreClientInternal::advertisePendingKeys() {
       // Set in keyVals which is going to be advertise to the kvStore.
       DCHECK(thriftValue.value_ref());
       keyVals.emplace(key, thriftValue);
-      keys.push_back(key);
+      keys.emplace_back(key);
     }
 
     // Advertise to KvStore

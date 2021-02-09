@@ -213,11 +213,6 @@ class PrefixManager final : public OpenrEventBase {
   // process decision route update, inject routes to different areas
   void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
 
-  // add event named updateEvent to perfEvents if it has value and the last
-  // element is not already updateEvent
-  void addPerfEventIfNotExist(
-      thrift::PerfEvents& perfEvents, std::string const& updateEvent);
-
   /*
    * Private variables/Structures
    */
