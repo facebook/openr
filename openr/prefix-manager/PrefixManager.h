@@ -37,7 +37,7 @@ class PrefixManagerPendingUpdates {
 
   void reset();
 
-  void applyPrefixChange(std::unordered_set<folly::CIDRNetwork>&& change);
+  void applyPrefixChange(const folly::small_vector<folly::CIDRNetwork>& change);
 
  private:
   // track prefixes that have changed within this batch

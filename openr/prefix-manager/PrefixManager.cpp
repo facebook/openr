@@ -31,8 +31,10 @@ PrefixManagerPendingUpdates::reset() {
 
 void
 PrefixManagerPendingUpdates::applyPrefixChange(
-    std::unordered_set<folly::CIDRNetwork>&& change) {
-  changedPrefixes_.merge(std::move(change));
+    const folly::small_vector<folly::CIDRNetwork>& change) {
+  for (const auto& network : change) {
+    changedPrefixes_.insert(network);
+  }
 }
 
 } // namespace detail
@@ -177,7 +179,8 @@ PrefixManager::PrefixManager(
           advertisedKeys_[network].emplace(key);
 
           // Populate pendingState to check keys
-          pendingUpdates_.applyPrefixChange({network});
+          folly::small_vector<folly::CIDRNetwork> changed{network};
+          pendingUpdates_.applyPrefixChange(changed);
           syncKvStoreThrottled_->operator()();
         }
       });
@@ -193,7 +196,7 @@ PrefixManager::PrefixManager(
       continue;
     }
 
-    std::vector<folly::CIDRNetwork> changed;
+    folly::small_vector<folly::CIDRNetwork> changed;
     for (auto const& [prefixStr, _] : result.value()) {
       auto prefixKey = PrefixKey::fromStr(prefixStr);
       CHECK(prefixKey.hasValue());
@@ -208,8 +211,7 @@ PrefixManager::PrefixManager(
     }
 
     // populate pending update in one shot
-    pendingUpdates_.applyPrefixChange(
-        std::unordered_set<folly::CIDRNetwork>{changed.begin(), changed.end()});
+    pendingUpdates_.applyPrefixChange(changed);
     syncKvStoreThrottled_->operator()();
   }
 
@@ -621,7 +623,7 @@ PrefixManager::advertisePrefixesImpl(
 bool
 PrefixManager::advertisePrefixesImpl(
     const std::vector<PrefixEntry>& prefixEntries) {
-  std::unordered_set<folly::CIDRNetwork> changed{};
+  folly::small_vector<folly::CIDRNetwork> changed{};
 
   for (const auto& entry : prefixEntries) {
     const auto& type = *entry.tPrefixEntry.type_ref();
@@ -641,13 +643,13 @@ PrefixManager::advertisePrefixesImpl(
       it->second = entry;
     }
     // Case 3: create new `PrefixEntry`
-    changed.insert(prefixCidr);
+    changed.emplace_back(prefixCidr);
   }
 
   bool updated = (not changed.empty()) ? true : false;
   if (updated) {
     // store pendingUpdate for batch processing
-    pendingUpdates_.applyPrefixChange(std::move(changed));
+    pendingUpdates_.applyPrefixChange(changed);
 
     // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
@@ -659,7 +661,7 @@ PrefixManager::advertisePrefixesImpl(
 bool
 PrefixManager::withdrawPrefixesImpl(
     const std::vector<thrift::PrefixEntry>& tPrefixEntries) {
-  std::unordered_set<folly::CIDRNetwork> changed{};
+  folly::small_vector<folly::CIDRNetwork> changed{};
 
   for (const auto& prefixEntry : tPrefixEntries) {
     const auto& type = *prefixEntry.type_ref();
@@ -670,7 +672,7 @@ PrefixManager::withdrawPrefixesImpl(
 
     // ONLY populate changed collection when successfully erased key
     if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
-      changed.insert(prefixCidr);
+      changed.emplace_back(prefixCidr);
 
       // clean up data structure
       if (typeIt->second.empty()) {
@@ -682,7 +684,7 @@ PrefixManager::withdrawPrefixesImpl(
   bool updated = (not changed.empty()) ? true : false;
   if (updated) {
     // store pendingUpdate for batch processing
-    pendingUpdates_.applyPrefixChange(std::move(changed));
+    pendingUpdates_.applyPrefixChange(changed);
 
     // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
