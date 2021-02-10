@@ -19,14 +19,16 @@ KvStoreClientInternal::KvStoreClientInternal(
     OpenrEventBase* eventBase,
     std::string const& nodeId,
     KvStore* kvStore,
+    bool useThrottle,
     std::optional<std::chrono::milliseconds> checkPersistKeyPeriod)
     : nodeId_(nodeId),
+      useThrottle_(useThrottle),
       eventBase_(eventBase),
       kvStore_(kvStore),
       checkPersistKeyPeriod_(checkPersistKeyPeriod) {
   // sanity check
   CHECK_NE(eventBase_, static_cast<void*>(nullptr));
-  CHECK(!nodeId.empty());
+  CHECK(not nodeId.empty());
   CHECK(kvStore_);
 
   // Fiber to process thrift::Publication from KvStore
@@ -166,78 +168,82 @@ bool
 KvStoreClientInternal::persistKey(
     AreaId const& area,
     std::string const& key,
-    std::string const& value,
-    std::chrono::milliseconds const ttl,
-    bool useThrottle) {
+    std::string const& val,
+    std::chrono::milliseconds const ttl) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
   VLOG(3) << "KvStoreClientInternal: persistKey called for key:" << key
           << " area:" << area.t;
 
-  // local variable to hold pending keys
+  // local variable to hold pending keys to advertise
   std::unordered_map<AreaId, std::unordered_set<std::string>>
       pendingKeysToAdvertise{};
 
   auto& persistedKeyVals = persistedKeyVals_[area];
-  const auto& keyTtlBackoffs = keyTtlBackoffs_[area];
   auto& keysToAdvertise =
-      useThrottle ? keysToAdvertise_[area] : pendingKeysToAdvertise[area];
+      useThrottle_ ? keysToAdvertise_[area] : pendingKeysToAdvertise[area];
   auto& callbacks = keyCallbacks_[area];
 
-  // Look it up in the existing
+  // Look it up in local cached storage
   auto keyIt = persistedKeyVals.find(key);
 
-  // Default thrift value to use with invalid version=0
-  thrift::Value thriftValue = createThriftValue(
-      0,
-      nodeId_,
-      value,
-      ttl.count(),
-      0 /* ttl version */,
-      std::nullopt /* hash */);
+  // Decide if we need to advertise key to kv-store
+  bool shouldAdvertise = false;
+
+  // Default thrift value to use with invalid version(0)
+  thrift::Value thriftValue = createThriftValue(0, nodeId_, val, ttl.count());
   CHECK(thriftValue.value_ref());
 
-  // Retrieve the existing value for the key. If key is persisted before then
-  // it is the one we have cached locally else we need to fetch it from KvStore
+  // Two cases for this particular (k, v) pair:
+  //  1) Key has been persisted before:
+  //     Retrieve it from local cached storage;
+  //  2) Key is first-time persisted:
+  //     Retrieve it from `KvStore` via `getKey()` API;
+  //      <1> Key is found in `KvStore`, use it;
+  //      <2> Key is NOT found in `KvStore` (ATTN:
+  //          new key advertisement)
   if (keyIt == persistedKeyVals.end()) {
     // Get latest value from KvStore
-    auto maybeValue = getKey(area, key);
-    if (maybeValue.has_value()) {
+    if (auto maybeValue = getKey(area, key)) {
       thriftValue = maybeValue.value();
       // TTL update pub is never saved in kvstore
       DCHECK(thriftValue.value_ref());
+    } else {
+      thriftValue.version_ref() = 1;
+      shouldAdvertise = true;
     }
   } else {
     thriftValue = keyIt->second;
-    if (thriftValue.value_ref().value() == value and
+    if (*thriftValue.value_ref() == val and
         *thriftValue.ttl_ref() == ttl.count()) {
       // this is a no op, return early and change no state
       return false;
     }
+
+    const auto& keyTtlBackoffs = keyTtlBackoffs_[area];
     auto ttlIt = keyTtlBackoffs.find(key);
     if (ttlIt != keyTtlBackoffs.end()) {
+      // override the default ttl version(0)
       thriftValue.ttlVersion_ref() = *ttlIt->second.first.ttlVersion_ref();
     }
   }
 
-  // Decide if we need to re-advertise the key back to kv-store
-  bool valueChange = false;
-  if (!(*thriftValue.version_ref())) {
-    thriftValue.version_ref() = 1;
-    valueChange = true;
-  } else if (
-      *thriftValue.originatorId_ref() != nodeId_ ||
-      *thriftValue.value_ref() != value) {
+  // Override `thrift::Value` if we detect:
+  //  1) Someone else is advertising the SAME key;
+  //  2) Value field has changed;
+  if (*thriftValue.originatorId_ref() != nodeId_ or
+      *thriftValue.value_ref() != val) {
     (*thriftValue.version_ref())++;
     thriftValue.ttlVersion_ref() = 0;
-    thriftValue.value_ref() = value;
-    *thriftValue.originatorId_ref() = nodeId_;
-    valueChange = true;
+    thriftValue.value_ref() = val;
+    thriftValue.originatorId_ref() = nodeId_;
+    shouldAdvertise = true;
   }
 
   // We must update ttl value to new one. When ttl changes but value doesn't
   // then we should advertise ttl immediately so that new ttl is in effect
-  const bool hasTtlChanged = ttl.count() != *thriftValue.ttl_ref();
+  const bool hasTtlChanged =
+      (ttl.count() != *thriftValue.ttl_ref()) ? true : false;
   thriftValue.ttl_ref() = ttl.count();
 
   // Cache it in persistedKeyVals_. Override the existing one
@@ -249,16 +255,16 @@ KvStoreClientInternal::persistKey(
 
   // Invoke callback with updated value
   auto cb = callbacks.find(key);
-  if (cb != callbacks.end() && valueChange) {
+  if (cb != callbacks.end() and shouldAdvertise) {
     (cb->second)(key, thriftValue);
   }
 
   // Add keys to list of pending keys
-  if (valueChange) {
+  if (shouldAdvertise) {
     keysToAdvertise.insert(key);
   }
 
-  if (useThrottle) {
+  if (useThrottle_) {
     // Throttled fashion to advertise pending keys
     advertisePendingKeysThrottled_->operator()();
   } else {
@@ -346,7 +352,6 @@ KvStoreClientInternal::scheduleTtlUpdates(
     int64_t ttl,
     bool advertiseImmediately) {
   // infinite TTL does not need update
-
   auto& keyTtlBackoffs = keyTtlBackoffs_[area];
   if (ttl == Constants::kTtlInfinity) {
     // in case ttl is finite before
@@ -358,11 +363,9 @@ KvStoreClientInternal::scheduleTtlUpdates(
   thrift::Value ttlThriftValue = createThriftValue(
       version,
       nodeId_,
-      std::string("") /* value */,
-      ttl,
-      ttlVersion /* ttl version */,
-      0 /* hash */);
-  ttlThriftValue.value_ref().reset();
+      std::nullopt, /* value */
+      ttl, /* ttl */
+      ttlVersion /* ttl version */);
   CHECK(not ttlThriftValue.value_ref().has_value());
 
   // renew before Ttl expires about every ttl/3, i.e., try twice

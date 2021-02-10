@@ -56,8 +56,8 @@ PrefixManager::PrefixManager(
   CHECK(config);
 
   // Create KvStore client
-  kvStoreClient_ =
-      std::make_unique<KvStoreClientInternal>(this, nodeId_, kvStore_);
+  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
+      this, nodeId_, kvStore_, true /* useThrottle */);
 
   // Load openrConfig for local-originated routes
   if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
@@ -310,8 +310,7 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
         AreaId{toArea},
         prefixKey.getPrefixKey(),
         prefixDbStr,
-        ttlKeyInKvStore_,
-        true /* useThrottle */);
+        ttlKeyInKvStore_);
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "

@@ -52,6 +52,7 @@ class KvStoreClientInternal {
       OpenrEventBase* eventBase,
       std::string const& nodeId,
       KvStore* kvStore,
+      bool useThrottle = false,
       std::optional<std::chrono::milliseconds> checkPersistKeyPeriod = 60000ms);
 
   ~KvStoreClientInternal();
@@ -77,8 +78,7 @@ class KvStoreClientInternal {
       AreaId const& area,
       std::string const& key,
       std::string const& value,
-      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval,
-      bool useThrottle = false);
+      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval);
 
   /**
    * Advertise the key-value into KvStore with specified version. If version is
@@ -233,7 +233,10 @@ class KvStoreClientInternal {
   //
 
   // Our local node identifier
-  const std::string nodeId_;
+  const std::string nodeId_{};
+
+  // Knob to enable batched processing of keys
+  const bool useThrottle_{false};
 
   // OpenrEventBase pointer for scheduling async events and socket callback
   // registration
