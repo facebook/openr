@@ -159,7 +159,7 @@ service FibService extends fb303_core.BaseService {
   throws (1: PlatformError error)
 
   list<Network.RouteDetails> getRouteTableDetails()
-  throws (1: Platform.PlatformError error)
+  throws (1: PlatformError error)
 }
 
 service NeighborListenerClientForFibagent {
