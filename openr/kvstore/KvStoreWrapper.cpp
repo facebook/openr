@@ -261,4 +261,9 @@ KvStoreWrapper::getPeers(AreaId const& area) {
   return peers;
 }
 
+std::vector<thrift::KvStoreAreaSummary>
+KvStoreWrapper::getSummary(std::set<std::string> selectAreas) {
+  return *(kvStore_->getKvStoreAreaSummaryInternal(selectAreas).get());
+}
+
 } // namespace openr

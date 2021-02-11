@@ -941,6 +941,34 @@ struct Publication {
   8: optional i64 timestamp_ms
 }
 
+
+/**
+ * Struct summarizing KvStoreDB for a given area. This is currently used for
+ * sending responses to 'breeze kvstore summary'
+ */
+
+struct KvStoreAreaSummary {
+  /**
+   * KvStore area for this summary
+   */
+  1: string area
+
+  /**
+   * Map of peer Names to peerSpec for all peers in this area
+   */
+  2: PeersMap peersMap
+
+  /**
+   * Total # of Key Value pairs in KvStoreDB in this area
+   */
+  3: i32 keyValsCount
+
+  /**
+   * Total size in bytes of KvStoreDB for this area
+   */
+  4: i32 keyValsBytes
+}
+
 /**
  * @deprecated - Allocated prefix information. This is stored in the persistent
  * store and can be read via config get thrift API.

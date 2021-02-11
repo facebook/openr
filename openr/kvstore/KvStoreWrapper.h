@@ -156,6 +156,12 @@ class KvStoreWrapper {
       AreaId const& area);
 
   /**
+   * API to get summary of each KvStore area provided as input.
+   */
+  std::vector<thrift::KvStoreAreaSummary> getSummary(
+      std::set<std::string> selectAreas);
+
+  /**
    * Utility function to get peer-spec for owned KvStore
    */
   thrift::PeerSpec

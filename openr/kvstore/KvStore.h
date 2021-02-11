@@ -211,6 +211,9 @@ class KvStoreDb : public DualNode {
   // Extracts the counters
   std::map<std::string, int64_t> getCounters() const;
 
+  // Calculate size of KvStoreDB (just the key/val pairs)
+  size_t getKeyValsSize() const;
+
   // get multiple keys at once
   thrift::Publication getKeyVals(std::vector<std::string> const& keys);
 
@@ -610,6 +613,9 @@ class KvStore final : public OpenrEventBase {
 
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>> getKvStorePeers(
       std::string area);
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+  getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
 
   folly::SemiFuture<folly::Unit> addUpdateKvStorePeers(
       std::string area, thrift::PeersMap peersToAdd);

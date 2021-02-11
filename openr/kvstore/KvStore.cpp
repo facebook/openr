@@ -805,6 +805,36 @@ KvStore::getKvStorePeers(std::string area) {
   return sf;
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+KvStore::getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas) {
+  folly::Promise<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        selectAreas = std::move(selectAreas)]() mutable {
+    LOG(INFO)
+        << "KvStore Summary requested for "
+        << (selectAreas.empty()
+                ? "all areas."
+                : folly::sformat("areas: {}.", folly::join(", ", selectAreas)));
+
+    auto result = std::make_unique<std::vector<thrift::KvStoreAreaSummary>>();
+    for (auto& [area, kvStoreDb] : kvStoreDb_) {
+      thrift::KvStoreAreaSummary areaSummary;
+
+      areaSummary.area_ref() = area;
+      auto kvDbCounters = kvStoreDb.getCounters();
+      areaSummary.keyValsCount_ref() = kvDbCounters["kvstore.num_keys"];
+      areaSummary.peersMap_ref() = kvStoreDb.dumpPeers();
+      areaSummary.keyValsBytes_ref() = kvStoreDb.getKeyValsSize();
+
+      result->emplace_back(std::move(areaSummary));
+    }
+    p.setValue(std::move(result));
+  });
+  return sf;
+}
+
 folly::SemiFuture<folly::Unit>
 KvStore::addUpdateKvStorePeers(std::string area, thrift::PeersMap peersToAdd) {
   folly::Promise<folly::Unit> p;
@@ -1239,6 +1269,27 @@ KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
       ttlCountdownQueue_.push(std::move(queueEntry));
     }
   }
+}
+
+// loop through all key/vals and count the size of KvStoreDB (per area)
+size_t
+KvStoreDb::getKeyValsSize() const {
+  size_t size = 0;
+  if (kvStore_.empty()) {
+    return size;
+  }
+  // calculate total of struct members with fixed size once at the beginning
+  size_t fixed_size =
+      kvStore_.size() * (sizeof(std::string) + sizeof(thrift::Value));
+
+  // loop through all key/vals and add size of each KV entry
+  for (auto const& [key, value] : kvStore_) {
+    size += key.size() + value.originatorId_ref()->size() +
+        value.value_ref()->size();
+  }
+  size += fixed_size;
+
+  return size;
 }
 
 // build publication out of the requested keys (per request)

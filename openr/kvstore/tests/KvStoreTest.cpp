@@ -2722,10 +2722,16 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
 
+  size_t keyVal0Size, keyVal1Size, keyVal2Size, keyVal3Size;
+
   const std::string k0{"pod-area-0"};
   const std::string k1{"pod-area-1"};
   const std::string k2{"plane-area-0"};
   const std::string k3{"plane-area-1"};
+
+  // to aid in keyVal sizes below, calculate total of struct members with
+  // fixed size once at the beginning
+  size_t fixed_size = (sizeof(std::string) + sizeof(thrift::Value));
 
   thrift::Value thriftVal0 = createThriftValue(
       1 /* version */,
@@ -2739,6 +2745,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
       *thriftVal0.originatorId_ref(),
       thriftVal0.value_ref());
 
+  keyVal0Size = k0.size() + thriftVal0.originatorId_ref()->size() +
+      thriftVal0.value_ref()->size() + fixed_size;
+
   thrift::Value thriftVal1 = createThriftValue(
       1 /* version */,
       "storeB" /* originatorId */,
@@ -2750,6 +2759,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
       *thriftVal1.version_ref(),
       *thriftVal1.originatorId_ref(),
       thriftVal1.value_ref());
+
+  keyVal1Size = k1.size() + thriftVal1.originatorId_ref()->size() +
+      thriftVal1.value_ref()->size() + fixed_size;
 
   thrift::Value thriftVal2 = createThriftValue(
       1 /* version */,
@@ -2763,6 +2775,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
       *thriftVal2.originatorId_ref(),
       thriftVal2.value_ref());
 
+  keyVal2Size = k2.size() + thriftVal2.originatorId_ref()->size() +
+      thriftVal2.value_ref()->size() + fixed_size;
+
   thrift::Value thriftVal3 = createThriftValue(
       1 /* version */,
       "storeC" /* originatorId */,
@@ -2774,6 +2789,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
       *thriftVal3.version_ref(),
       *thriftVal3.originatorId_ref(),
       thriftVal3.value_ref());
+
+  keyVal3Size = k3.size() + thriftVal3.originatorId_ref()->size() +
+      thriftVal3.value_ref()->size() + fixed_size;
 
   evb.scheduleAt(
       [&]() noexcept {
@@ -2877,6 +2895,58 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         // one from each area
         EXPECT_EQ(2, storeB->dumpAll(AreaId{pod.get_area_id()}).size());
         EXPECT_EQ(2, storeB->dumpAll(AreaId{plane.get_area_id()}).size());
+
+        std::set<std::string> areaSetAll{
+            pod.get_area_id(), plane.get_area_id(), kTestingAreaName};
+        std::set<std::string> areaSetEmpty{};
+        std::map<std::string, int> storeBTest{};
+
+        // based on above config, with 3 kvstore nodes spanning two areas,
+        // storeA and storeC will send back areaSummary vector with 1 entry
+        // and storeB, which has two areas, will send back vector with 2
+        // entries. each entry in the areaSummary vector will have 2 keys (per
+        // above)
+        auto summary = storeA->getSummary(areaSetAll);
+        EXPECT_EQ(1, summary.size());
+        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+        EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
+        EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
+
+        summary = storeA->getSummary(areaSetEmpty);
+        EXPECT_EQ(1, summary.size());
+        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+        EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
+        EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
+
+        summary = storeB->getSummary(areaSetAll);
+        EXPECT_EQ(2, summary.size());
+        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+        EXPECT_EQ(2, summary.at(1).get_keyValsCount());
+        // for storeB, spanning 2 areas, check that kv count for all areas add
+        // up individually
+        storeBTest[summary.at(0).get_area()] = summary.at(0).get_keyValsBytes();
+        storeBTest[summary.at(1).get_area()] = summary.at(1).get_keyValsBytes();
+        EXPECT_EQ(1, storeBTest.count(plane.get_area_id()));
+        EXPECT_EQ(keyVal2Size + keyVal3Size, storeBTest[plane.get_area_id()]);
+        EXPECT_EQ(1, storeBTest.count(pod.get_area_id()));
+        EXPECT_EQ(keyVal0Size + keyVal1Size, storeBTest[pod.get_area_id()]);
+
+        summary = storeB->getSummary(areaSetEmpty);
+        EXPECT_EQ(2, summary.size());
+        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+        EXPECT_EQ(2, summary.at(1).get_keyValsCount());
+
+        summary = storeC->getSummary(areaSetAll);
+        EXPECT_EQ(1, summary.size());
+        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+        EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
+        EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
+
+        summary = storeC->getSummary(areaSetEmpty);
+        EXPECT_EQ(1, summary.size());
+        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+        EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
+        EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
       },
       scheduleTimePoint + std::chrono::milliseconds(400));
 
