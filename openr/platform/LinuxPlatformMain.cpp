@@ -53,8 +53,8 @@ main(int argc, char** argv) {
   // start FibService thread
   auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
     folly::setThreadName("FibService");
-    linuxFibAgentServer.setNWorkerThreads(1);
-    linuxFibAgentServer.setNPoolThreads(1);
+    linuxFibAgentServer.setNumIOWorkerThreads(1);
+    linuxFibAgentServer.setNumCPUWorkerThreads(1);
     linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
     linuxFibAgentServer.setInterface(fibHandler);
     linuxFibAgentServer.setDuplex(true);
