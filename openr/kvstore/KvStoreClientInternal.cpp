@@ -47,11 +47,19 @@ KvStoreClientInternal::KvStoreClientInternal(
         }
       });
 
-  // create throttled fashion of pending keys advertisement
-  advertisePendingKeysThrottled_ = std::make_unique<AsyncThrottle>(
-      eventBase_->getEvb(),
-      Constants::kKvStoreSyncThrottleTimeout,
-      [this]() noexcept { advertisePendingKeys(); });
+  if (useThrottle_) {
+    // create throttled fashion of pending keys advertisement
+    advertisePendingKeysThrottled_ = std::make_unique<AsyncThrottle>(
+        eventBase_->getEvb(),
+        Constants::kKvStoreSyncThrottleTimeout,
+        [this]() noexcept { advertisePendingKeys(); });
+
+    // create throttled fashion of ttl update
+    advertiseTtlUpdatesThrottled_ = std::make_unique<AsyncThrottle>(
+        eventBase_->getEvb(),
+        Constants::kKvStoreSyncThrottleTimeout,
+        [this]() noexcept { advertiseTtlUpdates(); });
+  }
 
   // initialize timers
   initTimers();
@@ -115,18 +123,15 @@ KvStoreClientInternal::checkPersistKeyInStore() {
   std::chrono::milliseconds timeout{checkPersistKeyPeriod_.value()};
 
   // go through persisted keys map for each area
-  for (const auto& persistKeyValsEntry : persistedKeyVals_) {
-    const auto& area = persistKeyValsEntry.first;
-    auto& persistedKeyVals = persistKeyValsEntry.second;
-
+  for (const auto& [area, persistedKeyVals] : persistedKeyVals_) {
     if (persistedKeyVals.empty()) {
       continue;
     }
 
     thrift::KeyGetParams params;
     thrift::Publication pub;
-    for (auto const& key : persistedKeyVals) {
-      params.keys_ref()->emplace_back(key.first);
+    for (auto const& [key, _] : persistedKeyVals) {
+      params.keys_ref()->emplace_back(key);
     }
 
     // Get KvStore response
@@ -143,10 +148,10 @@ KvStoreClientInternal::checkPersistKeyInStore() {
 
     // Find expired keys from latest KvStore
     std::unordered_map<std::string, thrift::Value> keyVals;
-    for (auto const& key : persistedKeyVals) {
-      auto rxkey = pub.keyVals_ref()->find(key.first);
+    for (auto const& [key, _] : persistedKeyVals) {
+      auto rxkey = pub.keyVals_ref()->find(key);
       if (rxkey == pub.keyVals_ref()->end()) {
-        keyVals.emplace(key.first, persistedKeyVals.at(key.first));
+        keyVals.emplace(key, persistedKeyVals.at(key));
       }
     }
 
@@ -382,7 +387,11 @@ KvStoreClientInternal::scheduleTtlUpdates(
     keyTtlBackoffs.at(key).second.reportError();
   }
 
-  advertiseTtlUpdates();
+  if (useThrottle_) {
+    advertiseTtlUpdatesThrottled_->operator()();
+  } else {
+    advertiseTtlUpdates();
+  }
 }
 
 void
@@ -776,16 +785,13 @@ KvStoreClientInternal::advertiseTtlUpdates() {
   auto timeout = Constants::kMaxTtlUpdateInterval;
 
   // advertise TTL updates for each area
-  for (auto& keyTtlBackoffsEntry : keyTtlBackoffs_) {
-    auto& keyTtlBackoffs = keyTtlBackoffsEntry.second;
-    auto& persistedKeyVals = persistedKeyVals_[keyTtlBackoffsEntry.first];
-    auto& area = keyTtlBackoffsEntry.first;
-
+  for (auto& [area, keyTtlBackoffs] : keyTtlBackoffs_) {
     std::unordered_map<std::string, thrift::Value> keyVals;
+    auto& persistedKeyVals = persistedKeyVals_[area];
 
-    for (auto& kv : keyTtlBackoffs) {
-      const auto& key = kv.first;
-      auto& backoff = kv.second.second;
+    for (auto& [key, val] : keyTtlBackoffs) {
+      auto& thriftValue = val.first;
+      auto& backoff = val.second;
       if (not backoff.canTryNow()) {
         VLOG(2) << "Skipping key: " << key << ", area: " << area.t;
         timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
@@ -796,7 +802,6 @@ KvStoreClientInternal::advertiseTtlUpdates() {
       backoff.reportError();
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
-      auto& thriftValue = kv.second.first;
       const auto it = persistedKeyVals.find(key);
       if (it != persistedKeyVals.end()) {
         // we may have got a newer vesion for persisted key

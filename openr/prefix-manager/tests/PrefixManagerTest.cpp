@@ -1318,14 +1318,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
-    readPublication(pub1, got, gotDeleted);
-
-    auto pub2 = kvStoreUpdatesQueue.get().value();
-    readPublication(pub2, got, gotDeleted);
+    while (gotDeleted.size() < 2) {
+      auto pub = kvStoreUpdatesQueue.get().value();
+      readPublication(pub, got, gotDeleted);
+    }
 
     EXPECT_EQ(0, got.size());
-
     EXPECT_EQ(2, gotDeleted.size());
     EXPECT_EQ(addr1, *gotDeleted.at(keyStrA).prefix_ref());
     EXPECT_EQ(addr1, *gotDeleted.at(keyStrC).prefix_ref());

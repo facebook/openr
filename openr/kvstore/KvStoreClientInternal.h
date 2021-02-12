@@ -254,6 +254,9 @@ class KvStoreClientInternal {
   // throttled version of `advertisePendingKeys`
   std::unique_ptr<AsyncThrottle> advertisePendingKeysThrottled_;
 
+  // throttled version of `advertisedTtlUpdates`
+  std::unique_ptr<AsyncThrottle> advertiseTtlUpdatesThrottled_;
+
   //
   // Mutable state
   //
