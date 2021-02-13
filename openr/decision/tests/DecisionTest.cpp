@@ -3727,8 +3727,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   // becasue we use edge disjoint algorithm, we should expect adj12_2 and
   // adj13_1 as nexthop
   prefixDBFour.prefixEntries_ref()->pop_back();
-  apache::thrift::fromFollyOptional(
-      newPrefix.minNexthop_ref(), folly::make_optional<int64_t>(2));
+  newPrefix.minNexthop_ref() = 2;
   prefixDBFour.prefixEntries_ref()->push_back(newPrefix);
   updatePrefixDatabase(prefixState, prefixDBFour);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
@@ -3748,8 +3747,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   // and adj13_1 shortest to node 3. The second shortes are all eliminated
   // becasue of purging logic we have for any cast ip.
   auto prefixDBThr = getPrefixDbForNode(prefixState, "3");
-  apache::thrift::fromFollyOptional(
-      newPrefix.minNexthop_ref(), folly::make_optional<int64_t>(4));
+  newPrefix.minNexthop_ref() = 4;
   prefixDBThr.prefixEntries_ref()->push_back(newPrefix);
   updatePrefixDatabase(prefixState, prefixDBThr);
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
