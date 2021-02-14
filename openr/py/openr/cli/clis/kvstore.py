@@ -36,6 +36,7 @@ class KvStoreCli(object):
         self.kvstore.add_command(AllocationsCli().set, name="alloc-set")
         self.kvstore.add_command(AllocationsCli().unset, name="alloc-unset")
         self.kvstore.add_command(AreasCli().areas, name="areas")
+        self.kvstore.add_command(SummaryCli().summary)
 
     @click.group()
     @breeze_option("--area", type=str, help="area identifier")
@@ -291,3 +292,21 @@ class AllocationsCli(object):
         """ Unset prefix allocation for a certain node """
 
         kvstore.AllocationsUnsetCmd(cli_opts).run(node)
+
+
+class SummaryCli(object):
+    @click.command()
+    @click.option(
+        "--area",
+        "-a",
+        multiple=True,
+        default=[],
+        help="Dump summaries for the given list of areas. Default will dump "
+        "summaries for all areas. Multiple areas can be provided by repeatedly using "
+        "either of the two valid flags: -a or --areas",
+    )
+    @click.pass_obj
+    def summary(cli_opts, area: List[str]) -> None:  # noqa: B902
+        """ show the KV store summary for each area """
+
+        kvstore.SummaryCmd(cli_opts).run(set(area))

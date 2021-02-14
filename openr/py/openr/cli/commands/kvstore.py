@@ -1185,3 +1185,100 @@ class AllocationsUnsetCmd(SetKeyCmd):
         super(AllocationsUnsetCmd, self)._run(
             client, key, value, "breeze", None, Consts.CONST_TTL_INF
         )
+
+
+class SummaryCmd(KvStoreCmdBase):
+    _summary_stats_template = [
+        {
+            "title": "Global Summary Stats",
+            "counters": [],
+            "stats": [
+                ("  Sent Publications", "kvstore.sent_publications.count"),
+                ("  Sent KeyVals", "kvstore.sent_key_vals.sum"),
+                ("  Rcvd Publications", "kvstore.received_publications.count"),
+                ("  Rcvd KeyVals", "kvstore.received_key_vals.sum"),
+                ("  Updates KeyVals", "kvstore.updated_key_vals.sum"),
+            ],
+        },
+    ]
+
+    def _get_area_str(self) -> str:
+        s = "s" if len(self.areas) != 1 else ""
+        return f", {str(len(self.areas))} configured area{s}"
+
+    def _get_bytes_str(self, bytes_count: int) -> str:
+        if bytes_count < 1024:
+            return "{} Bytes".format(bytes_count)
+        elif bytes_count < 1024 * 1024:
+            return "{:.2f}KB".format(bytes_count / 1024)
+        else:
+            return "{:.2f}MB".format(bytes_count / 1024 / 1024)
+
+    def _get_peer_state_output(self, peersMap: openr_types.PeersMap) -> str:
+        # form a list of peer state value for easy counting, for display
+        states = [peer.state for peer in peersMap.values()]
+        return (
+            f" {states.count(openr_types.KvStorePeerState.INITIALIZED)} Initialized,"
+            f" {states.count(openr_types.KvStorePeerState.SYNCING)} Syncing,"
+            f" {states.count(openr_types.KvStorePeerState.IDLE)} Idle"
+        )
+
+    def _get_area_summary(
+        self, area: str, peers: int, peer_states: str, kv_count: int, kv_bytes: int
+    ) -> str:
+        return (
+            f"\n"
+            f"Area - {area}\n"
+            f"  Peers: {peers} Total {peer_states}\n"
+            f"  Database: {kv_count} KVs, {self._get_bytes_str(kv_bytes)}\n"
+        )
+
+    def _get_summarized_output(
+        self,
+        summaries: List[openr_types.KvStoreAreaSummary],
+        areas: Set[str],
+    ) -> str:
+        output = ""
+        global_output = ""
+        allFlag: bool = False
+        if len(areas) == 0:
+            areas = set(self.areas)
+            allFlag = True
+
+        # build a list of per-area (filtered) summaries first
+        for s in (s for s in summaries if s.area in areas):
+            output += self._get_area_summary(
+                s.area,
+                len(s.peersMap),
+                "-" + self._get_peer_state_output(s.peersMap),
+                s.keyValsCount,
+                s.keyValsBytes,
+            )
+
+        # include global summary, if no input area given (as area filter)
+        if allFlag:
+            # find out unique total peers for this node
+            peers_set = {peer for s in summaries for peer in s.peersMap.keys()}
+            # count total key/value pairs across all areas
+            key_val_count = sum(s.keyValsCount for s in summaries)
+            # count total size (in bytes) of KvStoreDB across all areas
+            key_val_bytes = sum(s.keyValsBytes for s in summaries)
+            # prepend global summary to the per-area summary list
+            global_output = self._get_area_summary(
+                "ALL" + self._get_area_str(),
+                len(peers_set),
+                "",
+                key_val_count,
+                key_val_bytes,
+            )
+        return global_output + output
+
+    def _run(self, client: OpenrCtrl.Client, input_areas: Set[str]) -> None:
+        areaSet = set(self.areas)
+        # get per-area Summary list from KvStore for all areas
+        summaries = client.getKvStoreAreaSummary(areaSet)
+        # build summarized output from (filtered) summaries, and print it
+        print(self._get_summarized_output(summaries, input_areas))
+        # print global stats at the end
+        self.print_stats(self._summary_stats_template, client.getCounters())
+        print()

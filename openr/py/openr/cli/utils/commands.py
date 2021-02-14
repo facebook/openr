@@ -14,6 +14,7 @@ import bunch
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.OpenrCtrl import OpenrCtrl
 from openr.Types import ttypes as openr_types
+from openr.utils import printing
 from openr.utils.consts import Consts
 
 
@@ -64,6 +65,46 @@ class OpenrCtrlCmd(object):
             if "all" not in nodes and node not in nodes:
                 continue
             parse_func(container, db)
+
+    def print_stats(self, stats_templates, counters):
+        """
+        Print in pretty format
+        """
+
+        suffixes = [".60", ".600", ".3600", ""]
+
+        for template in stats_templates:
+            counters_rows = []
+            for title, key in template["counters"]:
+                val = counters.get(key, None)
+                counters_rows.append([title, "N/A" if not val and val != 0 else val])
+
+            stats_cols = ["Stat", "1 min", "10 mins", "1 hour", "All Time"]
+            stats_rows = []
+            for title, key_prefix in template["stats"]:
+                row = [title]
+                for key in ["{}{}".format(key_prefix, s) for s in suffixes]:
+                    val = counters.get(key, None)
+                    row.append("N/A" if not val and val != 0 else val)
+                stats_rows.append(row)
+
+            if "title" in template:
+                print("\n> {} ".format(template["title"]))
+
+            if counters_rows:
+                print()
+                print(
+                    printing.render_horizontal_table(
+                        counters_rows, tablefmt="plain"
+                    ).strip("\n")
+                )
+            if stats_rows:
+                print()
+                print(
+                    printing.render_horizontal_table(
+                        stats_rows, column_labels=stats_cols, tablefmt="simple"
+                    ).strip("\n")
+                )
 
     # common function used by decision, kvstore mnodule
     def buildKvStoreKeyDumpParams(
