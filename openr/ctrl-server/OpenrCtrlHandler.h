@@ -225,6 +225,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeersArea(std::unique_ptr<std::string> area) override;
 
+  folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
+  semifuture_getKvStoreAreaSummary(
+      std::unique_ptr<std::set<std::string>> selectAreas) override;
+
   // Stream API's
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler

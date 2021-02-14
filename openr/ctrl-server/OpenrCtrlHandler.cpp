@@ -765,6 +765,13 @@ OpenrCtrlHandler::semifuture_getKvStorePeersArea(
   return kvStore_->getKvStorePeers(std::move(*area));
 }
 
+folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
+OpenrCtrlHandler::semifuture_getKvStoreAreaSummary(
+    std::unique_ptr<std::set<std::string>> selectAreas) {
+  CHECK(kvStore_);
+  return kvStore_->getKvStoreAreaSummaryInternal(std::move(*selectAreas));
+}
+
 apache::thrift::ServerStream<thrift::Publication>
 OpenrCtrlHandler::subscribeKvStoreFilter(
     std::unique_ptr<thrift::KeyDumpParams> filter,

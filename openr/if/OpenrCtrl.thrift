@@ -487,6 +487,15 @@ service OpenrCtrl extends fb303_core.BaseService {
     1: string area
   ) throws (1: OpenrError error)
 
+  /**
+   * Get KvStore Summary for each configured area (provided as the filter set).
+   * The resp is a list of Summary structs, one for each area
+   */
+  list<Types.KvStoreAreaSummary> getKvStoreAreaSummary(
+    1: set<string> selectAreas
+  ) throws (1: OpenrError error)
+
+
   //
   // LinkMonitor APIs
   //
