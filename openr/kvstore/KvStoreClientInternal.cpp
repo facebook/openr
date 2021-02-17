@@ -53,13 +53,13 @@ KvStoreClientInternal::KvStoreClientInternal(
         eventBase_->getEvb(),
         Constants::kKvStoreSyncThrottleTimeout,
         [this]() noexcept { advertisePendingKeys(); });
-
-    // create throttled fashion of ttl update
-    advertiseTtlUpdatesThrottled_ = std::make_unique<AsyncThrottle>(
-        eventBase_->getEvb(),
-        Constants::kKvStoreSyncThrottleTimeout,
-        [this]() noexcept { advertiseTtlUpdates(); });
   }
+
+  // create throttled fashion of ttl update
+  advertiseTtlUpdatesThrottled_ = std::make_unique<AsyncThrottle>(
+      eventBase_->getEvb(),
+      Constants::kKvStoreSyncThrottleTimeout,
+      [this]() noexcept { advertiseTtlUpdates(); });
 
   // initialize timers
   initTimers();
@@ -72,6 +72,8 @@ KvStoreClientInternal::~KvStoreClientInternal() {
     advertiseKeyValsTimer_.reset();
     ttlTimer_.reset();
     checkPersistKeyTimer_.reset();
+    advertiseTtlUpdatesThrottled_.reset();
+    advertisePendingKeysThrottled_.reset();
   });
 
   // Stop kvstore internal if not stopped yet
@@ -387,11 +389,8 @@ KvStoreClientInternal::scheduleTtlUpdates(
     keyTtlBackoffs.at(key).second.reportError();
   }
 
-  if (useThrottle_) {
-    advertiseTtlUpdatesThrottled_->operator()();
-  } else {
-    advertiseTtlUpdates();
-  }
+  // ATTN: always use throttled fashion for ttl update
+  advertiseTtlUpdatesThrottled_->operator()();
 }
 
 void

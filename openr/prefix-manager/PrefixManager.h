@@ -129,12 +129,15 @@ class PrefixManager final : public OpenrEventBase {
   struct PrefixEntry {
     thrift::PrefixEntry tPrefixEntry;
     std::unordered_set<std::string> dstAreas;
+    folly::CIDRNetwork network;
 
     PrefixEntry() = default;
     template <typename TPrefixEntry, typename AreaSet>
     PrefixEntry(TPrefixEntry&& tPrefixEntry, AreaSet&& dstAreas)
         : tPrefixEntry(std::forward<TPrefixEntry>(tPrefixEntry)),
-          dstAreas(std::forward<AreaSet>(dstAreas)) {}
+          dstAreas(std::forward<AreaSet>(dstAreas)) {
+      network = toIPNetwork(*tPrefixEntry.prefix_ref());
+    }
 
     apache::thrift::field_ref<const thrift::PrefixMetrics&>
     metrics_ref() const& {

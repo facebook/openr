@@ -288,7 +288,6 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
   std::unordered_set<std::string> prefixKeys;
   const auto& tPrefixEntry = entry.tPrefixEntry;
   const auto& type = *tPrefixEntry.type_ref();
-  const auto& network = toIPNetwork(*tPrefixEntry.prefix_ref());
   const std::unordered_set<std::string> areaStack{
       tPrefixEntry.area_stack_ref()->begin(),
       tPrefixEntry.area_stack_ref()->end()};
@@ -302,22 +301,21 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
     }
 
     // TODO: run ingress policy
-    auto [prefixKey, prefixDb] =
-        createPrefixKeyAndDb(nodeId_, tPrefixEntry, toArea);
-
+    const auto prefixKey =
+        PrefixKey(nodeId_, entry.network, toArea).getPrefixKey();
+    auto prefixDb = createPrefixDb(nodeId_, {tPrefixEntry}, toArea);
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
+
+    // advertise key to `KvStore`
     bool changed = kvStoreClient_->persistKey(
-        AreaId{toArea},
-        prefixKey.getPrefixKey(),
-        prefixDbStr,
-        ttlKeyInKvStore_);
+        AreaId{toArea}, prefixKey, prefixDbStr, ttlKeyInKvStore_);
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
                         << "Area: " << toArea << ", "
                         << "Type: " << toString(type) << ", "
                         << toString(tPrefixEntry, VLOG_IS_ON(2));
-    prefixKeys.emplace(prefixKey.getPrefixKey());
+    prefixKeys.emplace(prefixKey);
   }
   return prefixKeys;
 }
@@ -626,7 +624,7 @@ PrefixManager::advertisePrefixesImpl(
 
   for (const auto& entry : prefixEntries) {
     const auto& type = *entry.tPrefixEntry.type_ref();
-    const auto& prefixCidr = toIPNetwork(*entry.tPrefixEntry.prefix_ref());
+    const auto& prefixCidr = entry.network;
 
     // ATTN: create new folly::CIDRNetwork -> typeToPrefixes
     //       mapping if it is new prefix. `[]` operator is
