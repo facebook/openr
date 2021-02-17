@@ -165,12 +165,12 @@ class KvStoreWrapper {
    * Utility function to get peer-spec for owned KvStore
    */
   thrift::PeerSpec
-  getPeerSpec() const {
+  getPeerSpec(thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE) {
     return createPeerSpec(
         globalCmdUrl, /* cmdUrl for ZMQ */
-        "::1", /* peerAddr for thrift */
-        thriftServer_->getOpenrCtrlThriftPort(),
-        thrift::KvStorePeerState::INITIALIZED);
+        Constants::kPlatformHost.toString(), /* peerAddr for thrift */
+        getThriftPort(),
+        state);
   }
 
   /**
@@ -184,6 +184,11 @@ class KvStoreWrapper {
   KvStore*
   getKvStore() {
     return kvStore_.get();
+  }
+
+  uint16_t
+  getThriftPort() {
+    return thriftServer_->getOpenrCtrlThriftPort();
   }
 
   const std::string

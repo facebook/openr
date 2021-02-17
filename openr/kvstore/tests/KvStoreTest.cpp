@@ -1021,8 +1021,10 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   waitForAllPeersInitialized();
   // map of peers we expect and dump peers to expect the results.
   std::unordered_map<std::string, thrift::PeerSpec> expectedPeers = {
-      {store1->getNodeId(), store1->getPeerSpec()},
-      {store2->getNodeId(), store2->getPeerSpec()},
+      {store1->getNodeId(),
+       store1->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
+      {store2->getNodeId(),
+       store2->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
   };
   EXPECT_EQ(expectedPeers, store0->getPeers(kTestingAreaName));
 
@@ -1105,7 +1107,8 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   LOG(INFO) << "Deleting the peers for store0...";
   store0->delPeer(kTestingAreaName, "store1");
   expectedPeers.clear();
-  expectedPeers[store2->getNodeId()] = store2->getPeerSpec();
+  expectedPeers[store2->getNodeId()] =
+      store2->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
   EXPECT_EQ(expectedPeers, store0->getPeers(kTestingAreaName));
 
   // Remove store2 and verify that there are no more peers
@@ -2696,15 +2699,19 @@ TEST_F(KvStoreTestFixture, FullSync) {
   EXPECT_EQ(v4->value_ref().value(), "b");
 }
 
-/* Kvstore tests related to area */
-
-/* Verify flooding is containted within an area. Add a key in one area and
-   verify that key is not flooded into another area
-
-   Topology:
-
-   StoreA (pod-area)  --- (pod area) StoreB (plane area) -- (plane area) StoreC
-*/
+/*
+ * Verify kvStore flooding is containted within an area.
+ * Add a key in one area and verify that key is not flooded into the other.
+ *
+ * Topology:
+ *
+ * StoreA (pod-area)  StoreC (plane-area)
+ *        \                /
+ *         \              /
+ *          \            /
+ *           \         /
+ *  (pod-area) StoreB (plane-area)
+ */
 TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   folly::EventBase evb;
   auto scheduleTimePoint = std::chrono::steady_clock::now();
@@ -2736,10 +2743,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   thrift::Value thriftVal0 = createThriftValue(
       1 /* version */,
       "storeA" /* originatorId */,
-      std::string("valueA") /* value */,
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      0 /* hash */);
+      "valueA" /* value */,
+      Constants::kTtlInfinity /* ttl */);
   thriftVal0.hash_ref() = generateHash(
       *thriftVal0.version_ref(),
       *thriftVal0.originatorId_ref(),
@@ -2751,10 +2756,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   thrift::Value thriftVal1 = createThriftValue(
       1 /* version */,
       "storeB" /* originatorId */,
-      std::string("valueB") /* value */,
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      0 /* hash */);
+      "valueB" /* value */,
+      Constants::kTtlInfinity /* ttl */);
   thriftVal1.hash_ref() = generateHash(
       *thriftVal1.version_ref(),
       *thriftVal1.originatorId_ref(),
@@ -2781,10 +2784,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   thrift::Value thriftVal3 = createThriftValue(
       1 /* version */,
       "storeC" /* originatorId */,
-      std::string("valueC") /* value */,
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      0 /* hash */);
+      "valueC" /* value */,
+      Constants::kTtlInfinity /* ttl */);
   thriftVal3.hash_ref() = generateHash(
       *thriftVal3.version_ref(),
       *thriftVal3.originatorId_ref(),
@@ -2809,10 +2810,12 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             AreaId{plane.get_area_id()}, "storeB", storeB->getPeerSpec());
         // verify get peers command
         std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
-            {storeA->getNodeId(), storeA->getPeerSpec()},
+            {storeA->getNodeId(),
+             storeA->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
         };
         std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
-            {storeC->getNodeId(), storeC->getPeerSpec()},
+            {storeC->getNodeId(),
+             storeC->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
         };
 
         waitForAllPeersInitialized();
