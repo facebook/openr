@@ -370,8 +370,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   // check the ifDb has expected number of UP interfaces
   bool
-  checkExpectedUPCount(
-      const std::vector<InterfaceInfo>& ifDb, int expectedUpCount) {
+  checkExpectedUPCount(const InterfaceDatabase& ifDb, int expectedUpCount) {
     int receiveUpCount = 0;
     for (const auto& info : ifDb) {
       if (info.isUp) {
@@ -393,7 +392,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   using CollatedIfUpdates = std::map<string, CollatedIfData>;
 
   CollatedIfUpdates
-  collateIfUpdates(const std::vector<InterfaceInfo>& interfaces) {
+  collateIfUpdates(const InterfaceDatabase& interfaces) {
     CollatedIfUpdates res;
     for (const auto& info : interfaces) {
       const auto& ifName = info.ifName;
@@ -581,7 +580,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   std::shared_ptr<NetlinkEventsInjector> nlEventsInjector;
 
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;
-  std::vector<InterfaceInfo> sparkIfDb;
+  InterfaceDatabase sparkIfDb;
 };
 
 // Start LinkMonitor and ensure empty adjacency database and prefixes are

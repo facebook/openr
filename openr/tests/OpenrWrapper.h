@@ -21,6 +21,7 @@
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <openr/watchdog/Watchdog.h>
 
@@ -155,6 +156,9 @@ class OpenrWrapper {
   std::unique_ptr<Fib> fib_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
   std::unique_ptr<PrefixManager> prefixManager_;
+
+  // thrift server for inter-node communication
+  std::unique_ptr<OpenrThriftServerWrapper> thriftServer_;
 
   // sub module communication zmq urls and ports
   int kvStoreGlobalCmdPort_{0};

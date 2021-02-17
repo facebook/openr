@@ -1340,7 +1340,7 @@ LinkMonitor::getAllLinks() {
             }
 
             // Convert to list and return
-            std::vector<InterfaceInfo> result{};
+            InterfaceDatabase result{};
             for (auto& [_, link] : links) {
               result.emplace_back(std::move(link));
             }
