@@ -134,7 +134,7 @@ struct Adjacency {
    * established.
    */
   11: string otherIfName = ""
-}
+} (cpp.minimize_padding)
 
 /**
  * Link-State (LS) of a node for a particular area. It is collection of all
@@ -173,7 +173,7 @@ struct AdjacencyDatabase {
    * Area to which this adjacency database belongs.
    */
   6: string area
-}
+} (cpp.minimize_padding)
 
 /**
  * @deprecated
@@ -264,7 +264,7 @@ struct MetricEntity {
    * List of int64's. Always > win's. -ve numbers will represent < wins
    */
   5: list<i64> metric
-}
+} (cpp.minimize_padding)
 
 /**
  * Expected to be sorted on priority
@@ -342,7 +342,7 @@ struct PrefixMetrics {
    * the node. Every node will have different behavior for forwarding algorithm
    * based on topology. And hence we're not include `igp_cost` metric in here
    */
-}
+} (cpp.minimize_padding)
 
 /**
  * PrefixEntry, a structure that represents an advertised route in the KvStore
@@ -422,7 +422,7 @@ struct PrefixEntry {
    * set to empty on origination
    */
   12: list<string> area_stack
-}
+} (cpp.minimize_padding)
 
 /**
  * Route advertisement object in KvStore. All prefixes that are bound to a given
@@ -453,7 +453,7 @@ struct PrefixDatabase {
    * Openr area in which prefix is advertised
    */
   7: string area
-}
+} (cpp.minimize_padding)
 
 /**
  * @deprecated - DUAL message type
@@ -602,7 +602,7 @@ struct Value {
    * operation.
    */
   6: optional i64 hash;
-}
+} (cpp.minimize_padding)
 
 /**
  * Map of key to value. This is a representation of KvStore data-base. Using
@@ -675,7 +675,7 @@ struct KeySetParams {
    * system timestamp in milliseconds since epoch
    */
   7: optional i64 timestamp_ms
-}
+} (cpp.minimize_padding)
 
 /**
  * Request object for retrieving specific keys from KvStore
@@ -733,7 +733,7 @@ struct KeyDumpParams {
    * getting "adj:.*" keys from open/r domain.
    */
   5: optional list<string> keys;
-}
+} (cpp.minimize_padding)
 
 /**
  * Define KvStorePeerState to maintain peer's state transition
@@ -805,7 +805,7 @@ struct FloodTopoSetParams {
    * if true, rootId will be ignored and action will be applied to all roots
    */
   4: optional bool allRoots
-}
+} (cpp.minimize_padding)
 
 /**
  * @deprecated
@@ -939,7 +939,7 @@ struct Publication {
    * in milliseconds since epoch
    */
   8: optional i64 timestamp_ms
-}
+} (cpp.minimize_padding)
 
 
 /**
@@ -967,7 +967,7 @@ struct KvStoreAreaSummary {
    * Total size in bytes of KvStoreDB for this area
    */
   4: i32 keyValsBytes
-}
+} (cpp.minimize_padding)
 
 /**
  * @deprecated - Allocated prefix information. This is stored in the persistent
@@ -1201,7 +1201,7 @@ struct LinkMonitorState {
    * Custom metric override for adjacency
    */
   5: map<AdjKey, i32> adjMetricOverrides;
-}
+} (cpp.minimize_padding)
 
 /**
  * Struct representing build information. Attributes are described in detail
@@ -1225,7 +1225,7 @@ struct BuildInfo {
   15: string buildType;
   16: string buildTool;
   17: string buildMode;
-}
+} (cpp.minimize_padding)
 
 /**
  * Struct to represent originated prefix from PrefixManager's view
@@ -1311,7 +1311,7 @@ struct SparkHelloMsg {
   7: bool solicitResponse = 0
   8: bool restarting = 0
   9: i64 sentTsInUs;
-}
+} (cpp.minimize_padding)
 
 /**
  * TODO
@@ -1376,7 +1376,7 @@ struct SparkHandshakeMsg {
    *       is fully in use
    */
   11: optional string neighborNodeName
-}
+} (cpp.minimize_padding)
 
 /**
  * TODO
@@ -1464,4 +1464,4 @@ struct SparkNeighbor {
    * Source Routing documentation for more information.
    */
   11: i32 label
-}
+} (cpp.minimize_padding)
