@@ -340,7 +340,8 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
     // use inproc address
     repUrl = folly::sformat("inproc://{}-kvstore-cmd-global", remoteNodeName);
     // TODO: address value of peerAddr under system test environment
-    peerAddr = folly::sformat("::1%{}", localIfName);
+    peerAddr = folly::sformat(
+        "{}%{}", Constants::kPlatformHost.toString(), localIfName);
   }
 
   CHECK(not repUrl.empty()) << "Got empty repUrl";

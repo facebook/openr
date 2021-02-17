@@ -50,7 +50,7 @@ class LongPollFixture : public ::testing::Test {
     // initialize openrCtrlClient talking to server
     client1_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
         evb_,
-        folly::IPAddress("::1"),
+        folly::IPAddress(Constants::kPlatformHost.toString()),
         openrThriftServerWrapper_->getOpenrCtrlThriftPort());
 
     // Create client to have client-side timeout longer than OpenrCtrlServer
@@ -58,7 +58,7 @@ class LongPollFixture : public ::testing::Test {
     // indicating no changes.
     client2_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
         evb_,
-        folly::IPAddress("::1"),
+        folly::IPAddress(Constants::kPlatformHost.toString()),
         openrThriftServerWrapper_->getOpenrCtrlThriftPort(),
         Constants::kServiceConnTimeout,
         Constants::kLongPollReqHoldTime + std::chrono::milliseconds(10000));

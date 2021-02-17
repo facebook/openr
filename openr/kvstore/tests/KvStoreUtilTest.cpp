@@ -41,48 +41,16 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
       return std::make_shared<KvStoreWrapper>(context_, config_);
     };
 
-    auto makeThriftServerWrapper =
-        [this](std::string nodeId, std::shared_ptr<KvStoreWrapper> store) {
-          return std::make_shared<OpenrThriftServerWrapper>(
-              nodeId,
-              nullptr /* decision */,
-              nullptr /* fib */,
-              store->getKvStore() /* kvStore */,
-              nullptr /* linkMonitor */,
-              nullptr /* monitor */,
-              nullptr /* configStore */,
-              nullptr /* prefixManager */,
-              nullptr /* spark */,
-              nullptr /* config */
-          );
-        };
-
     // spin up kvStore through kvStoreWrapper
     kvStoreWrapper1_ = makeStoreWrapper(nodeId1_);
     kvStoreWrapper2_ = makeStoreWrapper(nodeId2_);
 
     kvStoreWrapper1_->run();
     kvStoreWrapper2_->run();
-
-    // spin up OpenrThriftServerWrapper
-    thriftServer1_ = makeThriftServerWrapper(nodeId1_, kvStoreWrapper1_);
-    thriftServer2_ = makeThriftServerWrapper(nodeId2_, kvStoreWrapper2_);
-
-    thriftServer1_->run();
-    thriftServer2_->run();
   }
 
   void
   TearDown() override {
-    if (thriftServer1_) {
-      thriftServer1_->stop();
-      thriftServer1_.reset();
-    }
-    if (thriftServer2_) {
-      thriftServer2_->stop();
-      thriftServer2_.reset();
-    }
-
     // ATTN: kvStoreUpdatesQueue must be closed before destructing
     //       KvStoreClientInternal as fiber future is depending on RQueue
     kvStoreWrapper1_->stop();
@@ -103,7 +71,6 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   // var used to conmmunicate to kvStore through openrCtrl thrift server
   const std::string nodeId1_{"test_1"};
   const std::string nodeId2_{"test_2"};
-  const std::string localhost_{"::1"};
 
   fbzmq::Context context_{};
   apache::thrift::CompactSerializer serializer;
@@ -111,12 +78,9 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   OpenrEventBase evb;
   std::thread evbThread;
 
-  std::shared_ptr<Config> config_{nullptr};
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_{nullptr},
-      kvStoreWrapper2_{nullptr};
-  std::shared_ptr<OpenrThriftServerWrapper> thriftServer1_{nullptr},
-      thriftServer2_{nullptr};
-  std::shared_ptr<KvStoreClientInternal> client1{nullptr}, client2{nullptr};
+  std::shared_ptr<Config> config_;
+  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_, kvStoreWrapper2_;
+  std::shared_ptr<KvStoreClientInternal> client1, client2;
 };
 
 //
@@ -355,12 +319,14 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
   const std::string prefix = "";
-  const uint16_t port1 = thriftServer1_->getOpenrCtrlThriftPort();
-  const uint16_t port2 = thriftServer2_->getOpenrCtrlThriftPort();
+  const uint16_t port1 = kvStoreWrapper1_->getThriftPort();
+  const uint16_t port2 = kvStoreWrapper2_->getThriftPort();
 
   std::vector<folly::SocketAddress> sockAddrs;
-  sockAddrs.push_back(folly::SocketAddress{localhost_, port1});
-  sockAddrs.push_back(folly::SocketAddress{localhost_, port2});
+  sockAddrs.push_back(
+      folly::SocketAddress{Constants::kPlatformHost.toString(), port1});
+  sockAddrs.push_back(
+      folly::SocketAddress{Constants::kPlatformHost.toString(), port2});
 
   // Step1: verify there is NOTHING inside kvStore instances
   auto preDb =
@@ -416,18 +382,15 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     EXPECT_EQ("test_value2", pub[key2].value_ref());
   }
 
-  // Step6: shutdown both thriftSevers and verify
+  // Step6: shutdown thriftSevers and verify
   // dumpAllWithThriftClientFromMultiple() will get nothing.
   {
     // ATTN: kvStoreUpdatesQueue must be closed before destructing
     //       KvStoreClientInternal as fiber future is depending on RQueue
     kvStoreWrapper1_->closeQueue();
     kvStoreWrapper2_->closeQueue();
-
-    thriftServer1_->stop();
-    thriftServer1_.reset();
-    thriftServer2_->stop();
-    thriftServer2_.reset();
+    kvStoreWrapper1_->stopThriftServer();
+    kvStoreWrapper2_->stopThriftServer();
 
     auto db = dumpAllWithThriftClientFromMultiple(
         kTestingAreaName, sockAddrs, prefix);

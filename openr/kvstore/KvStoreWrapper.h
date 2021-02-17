@@ -79,6 +79,12 @@ class KvStoreWrapper {
     kvStoreSyncEventsQueue_.close();
   }
 
+  void
+  stopThriftServer() {
+    thriftServer_->stop();
+    thriftServer_.reset();
+  }
+
   /**
    * APIs to set key-value into the KvStore. Returns true on success else
    * returns false.

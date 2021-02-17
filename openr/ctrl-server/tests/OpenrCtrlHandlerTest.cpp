@@ -161,7 +161,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     openrCtrlThriftClient_ =
         getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
             evb_,
-            folly::IPAddress("::1"),
+            folly::IPAddress(Constants::kPlatformHost.toString()),
             openrThriftServerWrapper_->getOpenrCtrlThriftPort());
   }
 
@@ -565,14 +565,24 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // Peers APIs
   //
   const thrift::PeersMap peers{
-      {"peer1", createPeerSpec("inproc://peer1-cmd", "::1")},
-      {"peer2", createPeerSpec("inproc://peer2-cmd", "::1")},
-      {"peer3", createPeerSpec("inproc://peer3-cmd", "::1")}};
+      {"peer1",
+       createPeerSpec(
+           "inproc://peer1-cmd", Constants::kPlatformHost.toString())},
+      {"peer2",
+       createPeerSpec(
+           "inproc://peer2-cmd", Constants::kPlatformHost.toString())},
+      {"peer3",
+       createPeerSpec(
+           "inproc://peer3-cmd", Constants::kPlatformHost.toString())}};
 
   // do the same with non-default area
   const thrift::PeersMap peersPod{
-      {"peer11", createPeerSpec("inproc://peer11-cmd", "::1")},
-      {"peer21", createPeerSpec("inproc://peer21-cmd", "::1")},
+      {"peer11",
+       createPeerSpec(
+           "inproc://peer11-cmd", Constants::kPlatformHost.toString())},
+      {"peer21",
+       createPeerSpec(
+           "inproc://peer21-cmd", Constants::kPlatformHost.toString())},
   };
 
   {

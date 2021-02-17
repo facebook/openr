@@ -56,9 +56,6 @@ class MultipleStoreFixture : public ::testing::Test {
     // intialize kvstore instances
     initKvStores();
 
-    // intialize thriftWrapper instances
-    initThriftWrappers();
-
     // initialize kvstoreClient instances
     initKvStoreClientInternal();
   }
@@ -75,13 +72,6 @@ class MultipleStoreFixture : public ::testing::Test {
     store1->closeQueue();
     store2->closeQueue();
     store3->closeQueue();
-
-    thriftWrapper1_->stop();
-    thriftWrapper1_.reset();
-    thriftWrapper2_->stop();
-    thriftWrapper2_.reset();
-    thriftWrapper3_->stop();
-    thriftWrapper3_.reset();
 
     // ATTN:
     //  - Destroy client before destroy evb. Otherwise, destructor will
@@ -123,41 +113,11 @@ class MultipleStoreFixture : public ::testing::Test {
   }
 
   void
-  initThriftWrappers() {
-    // wrapper to spin up an OpenrThriftServerWrapper for thrift connection
-    auto makeThriftServerWrapper =
-        [this](std::string nodeId, std::shared_ptr<KvStoreWrapper> store) {
-          return std::make_shared<OpenrThriftServerWrapper>(
-              nodeId,
-              nullptr /* decision */,
-              nullptr /* fib */,
-              store->getKvStore() /* kvStore */,
-              nullptr /* linkMonitor */,
-              nullptr /* monitor */,
-              nullptr /* configStore */,
-              nullptr /* prefixManager */,
-              nullptr /* spark */,
-              nullptr /* config */
-          );
-        };
-
-    // spin up OpenrThriftServerWrapper for thrift connectivity
-    thriftWrapper1_ = makeThriftServerWrapper(node1, store1);
-    thriftWrapper1_->run();
-
-    thriftWrapper2_ = makeThriftServerWrapper(node2, store2);
-    thriftWrapper2_->run();
-
-    thriftWrapper3_ = makeThriftServerWrapper(node3, store3);
-    thriftWrapper3_->run();
-  }
-
-  void
   initKvStoreClientInternal() {
     // Create and initialize kvstore-clients
-    auto port1 = thriftWrapper1_->getOpenrCtrlThriftPort();
-    auto port2 = thriftWrapper2_->getOpenrCtrlThriftPort();
-    auto port3 = thriftWrapper3_->getOpenrCtrlThriftPort();
+    auto port1 = store1->getThriftPort();
+    auto port2 = store2->getThriftPort();
+    auto port3 = store3->getThriftPort();
     client1 = std::make_shared<KvStoreClientInternal>(
         &evb, node1, store1->getKvStore());
 
@@ -171,9 +131,12 @@ class MultipleStoreFixture : public ::testing::Test {
     client3 = std::make_shared<KvStoreClientInternal>(
         &evb, node3, store3->getKvStore());
 
-    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port1});
-    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port2});
-    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port3});
+    sockAddrs_.emplace_back(
+        folly::SocketAddress{Constants::kPlatformHost.toString(), port1});
+    sockAddrs_.emplace_back(
+        folly::SocketAddress{Constants::kPlatformHost.toString(), port2});
+    sockAddrs_.emplace_back(
+        folly::SocketAddress{Constants::kPlatformHost.toString(), port3});
   }
 
   OpenrEventBase evb;
@@ -181,16 +144,11 @@ class MultipleStoreFixture : public ::testing::Test {
   apache::thrift::CompactSerializer serializer;
   fbzmq::Context context;
 
-  std::shared_ptr<Config> config{nullptr};
-  std::shared_ptr<KvStoreWrapper> store1{nullptr}, store2{nullptr},
-      store3{nullptr};
-  std::shared_ptr<OpenrThriftServerWrapper> thriftWrapper1_{nullptr},
-      thriftWrapper2_{nullptr}, thriftWrapper3_{nullptr};
-  std::shared_ptr<KvStoreClientInternal> client1{nullptr}, client2{nullptr},
-      client3{nullptr};
+  std::shared_ptr<Config> config;
+  std::shared_ptr<KvStoreWrapper> store1, store2, store3;
+  std::shared_ptr<KvStoreClientInternal> client1, client2, client3;
 
   const std::chrono::milliseconds persistKeyTimer{100};
-  const std::string localhost_{"::1"};
   const std::string node1{"node1"}, node2{"node2"}, node3{"node3"};
 
   std::vector<folly::SocketAddress> sockAddrs_;
@@ -208,9 +166,6 @@ class MultipleAreaFixture : public MultipleStoreFixture {
   SetUp() override {
     // intialize kvstore instances
     initKvStores();
-
-    // intialize thriftWrapper instances
-    initThriftWrappers();
 
     // initialize kvstoreClient instances
     initKvStoreClientInternal();

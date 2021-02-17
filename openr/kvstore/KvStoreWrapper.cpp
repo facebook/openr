@@ -84,7 +84,10 @@ KvStoreWrapper::stop() {
   dummyPeerUpdatesQueue_.close();
   logSampleQueue_.close();
 
-  thriftServer_->stop();
+  if (thriftServer_) {
+    thriftServer_->stop();
+    thriftServer_.reset();
+  }
 
   // Stop kvstore
   kvStore_->stop();
