@@ -1223,54 +1223,57 @@ class SummaryCmd(KvStoreCmdBase):
             f" {states.count(openr_types.KvStorePeerState.IDLE)} Idle"
         )
 
-    def _get_area_summary(
-        self, area: str, peers: int, peer_states: str, kv_count: int, kv_bytes: int
-    ) -> str:
+    def _get_area_summary(self, s: openr_types.KvStoreAreaSummary) -> str:
         return (
             f"\n"
-            f"Area - {area}\n"
-            f"  Peers: {peers} Total {peer_states}\n"
-            f"  Database: {kv_count} KVs, {self._get_bytes_str(kv_bytes)}\n"
+            f"Area - {s.area}\n"
+            f"  Peers: {len(s.peersMap)} Total - {self._get_peer_state_output(s.peersMap)}\n"
+            f"  Database: {s.keyValsCount} KVs, {self._get_bytes_str(s.keyValsBytes)}\n"
         )
+
+    def _get_global_summary(
+        self, summaries: List[openr_types.KvStoreAreaSummary]
+    ) -> openr_types.KvStoreAreaSummary:
+        global_summary = openr_types.KvStoreAreaSummary()
+        global_summary.area = "ALL" + self._get_area_str()
+        global_summary.peersMap: Dict[str, openr_types.peerSpec] = {}
+        # create a map of unique total peers for this node
+        for s in summaries:
+            for peer, peerSpec in s.peersMap.items():
+                # if the same peer appears in multiple areas, and in a different state, then replace with lower state
+                if (
+                    peer not in global_summary.peersMap
+                    or global_summary.peersMap[peer].state > peerSpec.state
+                ):
+                    global_summary.peersMap[peer] = peerSpec
+
+        # count total key/value pairs across all areas
+        global_summary.keyValsCount = sum(s.keyValsCount for s in summaries)
+        # count total size (in bytes) of KvStoreDB across all areas
+        global_summary.keyValsBytes = sum(s.keyValsBytes for s in summaries)
+        return global_summary
 
     def _get_summarized_output(
         self,
         summaries: List[openr_types.KvStoreAreaSummary],
-        areas: Set[str],
+        input_areas: Set[str],
     ) -> str:
-        output = ""
-        global_output = ""
+        output: str = ""
+        global_output: str = ""
         allFlag: bool = False
-        if len(areas) == 0:
-            areas = set(self.areas)
+        # if no area(s) filter specified in CLI, then get all configured areas
+        if len(input_areas) == 0:
+            input_areas = set(self.areas)
             allFlag = True
 
         # build a list of per-area (filtered) summaries first
-        for s in (s for s in summaries if s.area in areas):
-            output += self._get_area_summary(
-                s.area,
-                len(s.peersMap),
-                "-" + self._get_peer_state_output(s.peersMap),
-                s.keyValsCount,
-                s.keyValsBytes,
-            )
+        for s in (s for s in summaries if s.area in input_areas):
+            output += self._get_area_summary(s)
 
-        # include global summary, if no input area given (as area filter)
+        # include global summary, if no area(s) filter specified in CLI
         if allFlag:
-            # find out unique total peers for this node
-            peers_set = {peer for s in summaries for peer in s.peersMap.keys()}
-            # count total key/value pairs across all areas
-            key_val_count = sum(s.keyValsCount for s in summaries)
-            # count total size (in bytes) of KvStoreDB across all areas
-            key_val_bytes = sum(s.keyValsBytes for s in summaries)
-            # prepend global summary to the per-area summary list
-            global_output = self._get_area_summary(
-                "ALL" + self._get_area_str(),
-                len(peers_set),
-                "",
-                key_val_count,
-                key_val_bytes,
-            )
+            global_output = self._get_area_summary(self._get_global_summary(summaries))
+
         return global_output + output
 
     def _run(self, client: OpenrCtrl.Client, input_areas: Set[str]) -> None:
