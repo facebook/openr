@@ -24,26 +24,12 @@
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace std;
 using namespace openr;
 
 namespace {
-
-// the size of the value string
-const uint32_t kValueStrSize = 64;
-// max packet inter-arrival time (can't be chrono)
-const uint32_t kReqTimeoutMs = 4000;
-// interval for periodic syncs
-const std::chrono::seconds kSyncInterval(1);
-// maximum timeout for single request for sync
-const std::chrono::milliseconds kSyncReqTimeout(1000);
-// maximum timeout waiting for all peers to respond to sync request
-const std::chrono::milliseconds kSyncMaxWaitTime(1000);
-
 const std::chrono::milliseconds kTtl{1000};
-
 } // namespace
 
 //

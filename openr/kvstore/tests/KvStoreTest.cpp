@@ -38,13 +38,13 @@ using namespace std::chrono;
 namespace fb303 = facebook::fb303;
 
 namespace {
-
 // the size of the value string
 const uint32_t kValueStrSize = 64;
 
 // interval for periodic syncs
 const std::chrono::seconds kDbSyncInterval(1);
-const std::chrono::seconds kCounterSubmitInterval(1);
+
+// wait time before checking counter
 const std::chrono::milliseconds counterUpdateWaitTime(5500);
 
 // TTL in ms
@@ -2259,8 +2259,6 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
  * and is not synced if remaining TTL is < TTL decrement value provided
  */
 TEST_F(KvStoreTestFixture, TtlDecrementValue) {
-  fbzmq::Context context;
-
   auto store0 = createKvStore("store0");
   auto store1Conf = getTestKvConf();
   store1Conf.ttl_decrement_ms_ref() = 300;
@@ -2336,8 +2334,6 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
  * Make sure all stores have same amount of keys at the end
  */
 TEST_F(KvStoreTestFixture, RateLimiterFlood) {
-  fbzmq::Context context;
-
   // use prod syncInterval 60s
   thrift::KvstoreConfig prodConf, rateLimitConf;
   const size_t messageRate{10}, burstSize{50};
@@ -2410,7 +2406,6 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
 }
 
 TEST_F(KvStoreTestFixture, RateLimiter) {
-  fbzmq::Context context;
   fb303::fbData->resetAllData();
 
   const size_t messageRate{10}, burstSize{50};
