@@ -141,7 +141,7 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
       auto buf = encodePersistentObject(pObject);
       if (buf.hasError()) {
         LOG(ERROR) << "Failed to encode PersistentObject to ioBuf. Error: "
-                   << folly::exceptionStr(buf.error());
+                   << buf.error();
         return false;
       }
       queue.append(std::move(**buf));
@@ -152,8 +152,7 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
     auto success = writeIoBufToDisk(ioBuf, WriteType::APPEND);
     if (success.hasError()) {
       LOG(ERROR) << "Failed to write PersistentObject to file '"
-                 << storageFilePath_
-                 << "'. Error: " << folly::exceptionStr(success.error());
+                 << storageFilePath_ << "'. Error: " << success.error();
       return false;
     }
 
@@ -201,7 +200,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
       auto buf = encodePersistentObject(pObject);
       if (buf.hasError()) {
         LOG(ERROR) << "Failed to encode PersistentObject to ioBuf. Error:  "
-                   << folly::exceptionStr(buf.error());
+                   << buf.error();
         return false;
       }
       queue.append(std::move(*buf));
@@ -213,7 +212,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
   auto success = writeIoBufToDisk(ioBuf, WriteType::WRITE);
   if (success.hasError()) {
     LOG(ERROR) << "Failed to write database to file '" << storageFilePath_
-               << "'. Error: " << folly::exceptionStr(success.error());
+               << "'. Error: " << success.error();
     return false;
   }
   return true;
@@ -241,8 +240,7 @@ PersistentStore::loadDatabaseFromDisk() noexcept {
   auto tlvSuccess = loadDatabaseTlvFormat(ioBuf);
   if (tlvSuccess.hasError()) {
     LOG(ERROR) << "Failed to read Tlv-format file contents from '"
-               << storageFilePath_
-               << "'. Error: " << folly::exceptionStr(tlvSuccess.error());
+               << storageFilePath_ << "'. Error: " << tlvSuccess.error();
     return false;
   }
   return true;
