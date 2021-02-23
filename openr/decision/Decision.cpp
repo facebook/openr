@@ -535,7 +535,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
           "decision.skipped_unicast_route", 1, fb303::COUNT);
       return std::nullopt;
     }
-    if (missingMv) {
+    if (missingMv and not enableBestRouteSelection_) {
       LOG(ERROR) << "Skipping route for "
                  << folly::IPAddress::networkToString(prefix)
                  << " at least one advertiser is missing its metric vector.";

@@ -1145,11 +1145,13 @@ TEST(Decision, BestRouteSelection) {
 
   //
   // Setup prefixes. node2 and node3 announces the same prefix with same metrics
+  // and different types. The type shouldn't have any effect on best route
+  // selection.
   //
   const auto node2Prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
   const auto node3Prefix = createPrefixEntryWithMetrics(
-      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
+      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
   EXPECT_FALSE(
       updatePrefixDatabase(prefixState, createPrefixDb("2", {node2Prefix}))
           .empty());
