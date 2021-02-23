@@ -163,3 +163,17 @@ struct PortInfoThrift {
   11: PortCounters input,
   12: string name
 }
+
+// For mimicing FBOSS agent thrift interface
+struct PortStatus {
+  1: bool enabled,
+  2: bool up,
+  5: i64 speedMbps,
+  // NOTE: Some fields are omitted intentionally as it is not supported
+  // in Emulation!
+}
+
+// For mimicing FBOSS agent thrift interface
+struct AggregatePortThrift {
+  // NOTE: Left empty as we're not exposing any data
+}
