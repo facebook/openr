@@ -159,10 +159,7 @@ KvStoreClientInternal::checkPersistKeyInStore() {
 
     // Advertise to KvStore
     if (not keyVals.empty()) {
-      const auto ret = setKeysHelper(area, std::move(keyVals));
-      if (!ret.has_value()) {
-        LOG(ERROR) << "Error sending SET_KEY request to KvStore.";
-      }
+      setKeysHelper(area, std::move(keyVals));
     }
     processPublication(pub);
   }
@@ -425,7 +422,7 @@ KvStoreClientInternal::clearKey(
   if (!maybeValue.has_value()) {
     return;
   }
-  // overwrite all values, increment version, reset value to empty
+  // overwrite all values, increment version
   auto& thriftValue = maybeValue.value();
   *thriftValue.originatorId_ref() = nodeId_;
   (*thriftValue.version_ref())++;
@@ -435,17 +432,13 @@ KvStoreClientInternal::clearKey(
 
   std::unordered_map<std::string, thrift::Value> keyVals;
   keyVals.emplace(key, std::move(thriftValue));
-  // Advertise to KvStore
-  const auto ret = setKeysHelper(area, std::move(keyVals));
-  if (!ret.has_value()) {
-    LOG(ERROR) << "Error sending SET_KEY request to KvStore";
-  }
+  // Send updates to KvStore
+  setKeysHelper(area, std::move(keyVals));
 }
 
 std::optional<thrift::Value>
 KvStoreClientInternal::getKey(AreaId const& area, std::string const& key) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
-  CHECK(kvStore_);
 
   VLOG(3) << "KvStoreClientInternal: getKey called for key " << key << ", area "
           << area.t;
@@ -474,7 +467,6 @@ std::optional<std::unordered_map<std::string, thrift::Value>>
 KvStoreClientInternal::dumpAllWithPrefix(
     AreaId const& area, const std::string& prefix /* = "" */) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
-  CHECK(kvStore_);
 
   thrift::Publication pub;
   try {
@@ -576,9 +568,7 @@ KvStoreClientInternal::processPublication(
   auto& keysToAdvertise = keysToAdvertise_[area];
   auto& callbacks = keyCallbacks_[area];
 
-  for (auto const& kv : *publication.keyVals_ref()) {
-    auto const& key = kv.first;
-    auto const& rcvdValue = kv.second;
+  for (auto const& [key, rcvdValue] : *publication.keyVals_ref()) {
     if (not rcvdValue.value_ref()) {
       // ignore TTL update
       continue;
@@ -718,7 +708,6 @@ KvStoreClientInternal::advertisePendingKeys(
 
   // advertise pending key for each area
   for (auto& [area, keysToAdvertise] : keysToAdvertiseArea) {
-    // Return immediately if there is nothing to advertise
     if (keysToAdvertise.empty()) {
       continue;
     }
@@ -768,8 +757,6 @@ KvStoreClientInternal::advertisePendingKeys(
       for (auto const& key : keys) {
         keysToAdvertise.erase(key);
       }
-    } else {
-      LOG(ERROR) << "Error sending SET_KEY request to KvStore.";
     }
   }
 
@@ -828,10 +815,7 @@ KvStoreClientInternal::advertiseTtlUpdates() {
 
     // Advertise to KvStore
     if (not keyVals.empty()) {
-      const auto ret = setKeysHelper(area, std::move(keyVals));
-      if (!ret.has_value()) {
-        LOG(ERROR) << "Error sending SET_KEY request to KvStore.";
-      }
+      setKeysHelper(area, std::move(keyVals));
     }
   }
 
@@ -844,25 +828,21 @@ std::optional<folly::Unit>
 KvStoreClientInternal::setKeysHelper(
     AreaId const& area,
     std::unordered_map<std::string, thrift::Value> keyVals) {
-  CHECK(kvStore_);
-
   // Return if nothing to advertise.
   if (keyVals.empty()) {
     return folly::Unit();
   }
 
   // Debugging purpose print-out
-  for (auto const& kv : keyVals) {
-    VLOG(3) << "Advertising key: " << kv.first
-            << ", version: " << *kv.second.version_ref()
-            << ", originatorId: " << *kv.second.originatorId_ref()
-            << ", ttlVersion: " << *kv.second.ttlVersion_ref() << ", val: "
-            << (kv.second.value_ref().has_value() ? "valid" : "null")
-            << ", area: " << area.t;
-    if (not kv.second.value_ref().has_value()) {
-      // avoid empty optinal exception
-      continue;
-    }
+  for (auto const& [key, thriftValue] : keyVals) {
+    VLOG(3) << "Send update (key, version, originatorId, ttlVersion, area)"
+            << folly::sformat(
+                   " ({}, {}, {}, {}, {})",
+                   key,
+                   *thriftValue.version_ref(),
+                   *thriftValue.originatorId_ref(),
+                   *thriftValue.ttlVersion_ref(),
+                   area.t);
   }
 
   thrift::KeySetParams params;
