@@ -389,8 +389,8 @@ struct PrefixEntry {
   6: optional MetricVector mv (deprecated)
 
   /**
-   * If the number of nethops for this prefix is below certain threshold,
-   * Decision will not program/anounce the routes. If this parameter is not set,
+   * If the number of nexthops for this prefix is below certain threshold,
+   * Decision will not program/announce the routes. If this parameter is not set,
    * Decision will not do extra check # of nexthops.
    */
   8: optional i64 minNexthop
