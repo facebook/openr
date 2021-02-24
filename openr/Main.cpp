@@ -495,7 +495,7 @@ main(int argc, char** argv) {
         **apache::thrift::ThriftServer::defaultNextProtocols());
     // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
     sslContext->clientVerification =
-        folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
+        folly::SSLContext::VerifyClientCertificate::IF_PRESENTED;
     sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
   }
 
