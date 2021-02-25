@@ -569,6 +569,8 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   // prefix-entry with the prepend label. Once we support multi-area routing,
   // we can deprecate the check of hasSelfPrependLabel
   if (bestRouteSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
+    VLOG(3) << "Skip adding route for prefixes advertised by " << myNodeName
+            << " " << folly::IPAddress::networkToString(prefix);
     return std::nullopt;
   }
 
