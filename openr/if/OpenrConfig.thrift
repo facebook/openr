@@ -110,6 +110,11 @@ struct LinkMonitorConfig {
   5: list<string> exclude_interface_regexes = [] (deprecated)
   /** Deprecated. Use area config. */
   6: list<string> redistribute_interface_regexes = [] (deprecated)
+
+  /**
+  * Enable convergence performance measurement for adjacency updates.
+  */
+  7: bool enable_perf_measurement = true
 }
 
 struct StepDetectorConfig {
@@ -458,6 +463,11 @@ struct OpenrConfig {
    * service then disable this option.
    */
   8: optional bool enable_netlink_fib_handler
+  /**
+   * Knob to enable/disable waiting for the FIB service to be ready
+   * before initialize Open/R.
+   */
+  9: bool enable_fib_service_waiting = true
 
   /**
    * Set time interval to wait for convergence before Decision starts to
@@ -523,6 +533,12 @@ struct OpenrConfig {
    * Config for `decision` module
    */
   29: DecisionConfig decision_config
+
+  /**
+   * Mark control plane traffic with specified IP-TOS value.
+   * Valid range (0, 256)
+   */
+  30: optional i32 ip_tos
 
   /**
    * V4/V6 prefixes to be originated.
