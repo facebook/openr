@@ -71,6 +71,13 @@ struct KvstoreConfig {
   9: optional bool is_flood_root
 }
 
+struct DecisionConfig {
+  1: i32 debounce_min_ms = 10;
+  2: i32 debounce_max_ms = 250;
+
+  101: bool enable_bgp_dryrun = false;
+}
+
 struct LinkMonitorConfig {
   /**
    * When link goes down after being stable/up for long time, then the backoff
@@ -157,6 +164,35 @@ struct WatchdogConfig {
 struct MonitorConfig {
   1: i32 max_event_log = 100
   2: bool enable_event_log_submission  = true
+}
+
+struct ThriftServerConfig {
+  1: string listen_addr = "::";
+  2: i32 openr_ctrl_port = 2018;
+  3: bool enable_secure_thrift_server = false;
+  4: optional string x509_ca_path;
+  5: optional string x509_cert_path;
+  6: optional string x509_key_path;
+  7: optional SSLVerifyPeerType ssl_verify_type;
+  8: optional string ecc_curve_name;
+}
+
+struct ThriftClientConfig {
+  1: bool enable_secure_thrift_client = false;
+  2: SSLVerifyPeerType ssl_verify_type;
+}
+
+enum SSLVerifyPeerType {
+  /**
+  For server side - request a client certificate and verify the
+  certificate if it is sent.  Does not fail if the client does not present certificate.
+  For client side - validates the server certificate or fails. */
+  VERIFY = 1,
+  /** For server side - same as VERIFY but will fail if no certificate is sent.
+  For client side - same as VERIFY. */
+  VERIFY_REQ_CLIENT_CERT = 2,
+  /** No verification is done for both server and client side. */
+  NO_VERIFY = 3,
 }
 
 enum PrefixForwardingType {
@@ -484,9 +520,25 @@ struct OpenrConfig {
   28: optional bool v4_over_v6_nexthop
 
   /**
+   * Config for `decision` module
+   */
+  29: DecisionConfig decision_config
+
+  /**
    * V4/V6 prefixes to be originated.
    */
   31: optional list<OriginatedPrefix> originated_prefixes
+
+  /**
+   * Config for thrift server
+   */
+  32: ThriftServerConfig thrift_server_config;
+
+  /**
+   * Config for thrift client. If no config provided,
+   * go with non-secure client connenction.
+   */
+  33: optional ThriftClientConfig thrift_client_config;
 
   /**
    * Enable best route selection based on PrefixMetrics.
