@@ -50,6 +50,7 @@ constexpr std::chrono::milliseconds Constants::kFloodPendingPublication;
 constexpr std::chrono::milliseconds Constants::kInitialBackoff;
 constexpr std::chrono::milliseconds Constants::kKeepAliveCheckInterval;
 constexpr std::chrono::milliseconds Constants::kKvStoreDbTtl;
+constexpr std::chrono::milliseconds Constants::kKvStoreClearThrottleTimeout;
 constexpr std::chrono::milliseconds Constants::kKvStoreSyncThrottleTimeout;
 constexpr std::chrono::milliseconds Constants::kLinkImmediateTimeout;
 constexpr std::chrono::milliseconds Constants::kLinkThrottleTimeout;

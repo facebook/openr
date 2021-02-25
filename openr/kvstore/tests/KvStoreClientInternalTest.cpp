@@ -415,6 +415,103 @@ TEST_F(
   }
 }
 
+TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
+  OpenrEventBase evb;
+  fbzmq::Context context;
+  folly::Baton waitBaton;
+
+  int scheduleAt{0};
+  const std::string key{"k1"};
+  const std::string val{"v1"};
+  const std::string emptyVal{""};
+
+  // start kvstore for interaction
+  auto config = std::make_shared<Config>(getBasicOpenrConfig("node1"));
+  auto store = std::make_unique<KvStoreWrapper>(context, config);
+  store->run();
+
+  auto client = std::make_shared<KvStoreClientInternal>(
+      &evb,
+      store->getNodeId(),
+      store->getKvStore(),
+      true, /* use throttle */
+      100s /* NOTE: explicitly set big number */);
+
+  //
+  // Test1: - persist key X;
+  //        - clear key X;
+  //        - expect key X is NOT received by `KvStore` at all
+  //
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // persistKey will throttle the request and hold for 100ms
+        client->persistKey(kTestingAreaName, key, val, kTtl);
+
+        // immediately clear this key with empty value to mimick race condition
+        client->clearKey(kTestingAreaName, key, emptyVal, kTtl);
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // No key-val injected after throttled time
+        auto maybeThriftVal = store->getKey(kTestingAreaName, key);
+        ASSERT_FALSE(maybeThriftVal.has_value());
+      });
+
+  //
+  // Test2: - persist key X and wait for throttle to kick in;
+  //        - clear key X;
+  //        - persist key X again before `clearKey()` throttle kicks in;
+  //        - expect key X is presented in `KvStore` as persistKey() operation
+  //          happens chronologically later;
+  //
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 100),
+      [&]() noexcept { client->persistKey(kTestingAreaName, key, val, kTtl); });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // Verify k1 has been populated to KvStore
+        auto maybeThriftVal = store->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(maybeThriftVal.has_value());
+        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
+
+        // clearKey() call with throttled fashion
+        client->clearKey(kTestingAreaName, key, emptyVal, kTtl);
+
+        // immediately persist this key again to mimick race condition
+        client->persistKey(kTestingAreaName, key, val, kTtl);
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // Verify k1 is still populated to KvStore
+        // without corrupted by clearKey() call
+        auto maybeThriftVal = store->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(maybeThriftVal.has_value());
+        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
+
+        // Synchronization primitive
+        waitBaton.post();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evbThread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
+
+  // Stop store
+  LOG(INFO) << "Stopping stores";
+  store->stop();
+  client.reset();
+
+  evb.stop();
+  evb.waitUntilStopped();
+  evbThread.join();
+}
+
 TEST(KvStoreClientInternal, EmptyValueKey) {
   fbzmq::Context context;
   folly::Baton waitBaton;

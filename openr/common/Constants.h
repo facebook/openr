@@ -193,6 +193,9 @@ class Constants {
   // KvStore specific
   //
 
+  // the time we hold on to clear keys from KvStore
+  static constexpr std::chrono::milliseconds kKvStoreClearThrottleTimeout{10};
+
   // the time we hold on to announce to KvStore
   static constexpr std::chrono::milliseconds kKvStoreSyncThrottleTimeout{100};
 

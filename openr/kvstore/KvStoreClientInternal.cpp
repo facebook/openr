@@ -53,6 +53,11 @@ KvStoreClientInternal::KvStoreClientInternal(
         eventBase_->getEvb(),
         Constants::kKvStoreSyncThrottleTimeout,
         [this]() noexcept { advertisePendingKeys(); });
+
+    clearPendingKeysThrottled_ = std::make_unique<AsyncThrottle>(
+        eventBase_->getEvb(),
+        Constants::kKvStoreClearThrottleTimeout,
+        [this]() noexcept { clearPendingKeys(); });
   }
 
   // create throttled fashion of ttl update
@@ -74,6 +79,7 @@ KvStoreClientInternal::~KvStoreClientInternal() {
     checkPersistKeyTimer_.reset();
     advertiseTtlUpdatesThrottled_.reset();
     advertisePendingKeysThrottled_.reset();
+    clearPendingKeysThrottled_.reset();
   });
 
   // Stop kvstore internal if not stopped yet
@@ -430,10 +436,74 @@ KvStoreClientInternal::clearKey(
   thriftValue.ttlVersion_ref() = 0;
   thriftValue.value_ref() = std::move(keyValue);
 
-  std::unordered_map<std::string, thrift::Value> keyVals;
-  keyVals.emplace(key, std::move(thriftValue));
-  // Send updates to KvStore
-  setKeysHelper(area, std::move(keyVals));
+  if (useThrottle_) {
+    clearedKeyVals_[area].emplace(key, std::move(thriftValue));
+    // Wait for batch processing
+    clearPendingKeysThrottled_->operator()();
+  } else {
+    std::unordered_map<std::string, thrift::Value> keyVals;
+    keyVals.emplace(key, std::move(thriftValue));
+    // Send updates to KvStore
+    setKeysHelper(area, std::move(keyVals));
+  }
+}
+
+void
+KvStoreClientInternal::clearPendingKeys() {
+  for (auto& [area, clearedKeyVals] : clearedKeyVals_) {
+    if (clearedKeyVals.empty()) {
+      continue;
+    }
+
+    auto& persistedKeyVals = persistedKeyVals_[area];
+
+    // Build set of keys to update KvStore
+    std::unordered_map<std::string, thrift::Value> keyVals;
+    // Build keys to be cleaned from local storage
+    std::vector<std::string> keysToClear;
+
+    for (auto const& [key, thriftVal] : clearedKeyVals) {
+      if (persistedKeyVals.count(key)) {
+        // ATTN: consider corner case of key X being:
+        //  1) first persisted then cleared before throttling triggers
+        //    X will NOT be persisted at all
+        //
+        //  2) first cleared then persisted before throttling kicks in
+        //    X will NOT be cleared since it is inside `persistedKeyVals_`
+        //
+        //  Source of truth will be `persistedKeyVals_` as `clearKey()`
+        //  will do `unsetKey()`, which wipes out its existence.
+        keysToClear.emplace_back(key);
+        continue;
+      }
+      DCHECK(thriftVal.value_ref());
+
+      VLOG(2) << "Clearing (key, version, originatorId, ttlVersion, ttl, area)"
+              << folly::sformat(
+                     "({}, {}, {}, {}, {}, {})",
+                     key,
+                     *thriftVal.version_ref(),
+                     *thriftVal.originatorId_ref(),
+                     *thriftVal.ttlVersion_ref(),
+                     *thriftVal.ttl_ref(),
+                     area.t);
+      VLOG(2) << "With value: "
+              << folly::humanify(thriftVal.value_ref().value());
+
+      keyVals.emplace(key, thriftVal);
+      keysToClear.emplace_back(key);
+    }
+
+    // Send updates to KvStore
+    const auto ret = setKeysHelper(area, std::move(keyVals));
+    if (ret.has_value()) {
+      // ATTN: only wipe out throttled to be cleared keys when we
+      // successfully send update to KvStore
+      for (auto const& key : keysToClear) {
+        clearedKeyVals.erase(key);
+      }
+    }
+  }
 }
 
 std::optional<thrift::Value>
@@ -715,7 +785,8 @@ KvStoreClientInternal::advertisePendingKeys(
 
     // Build set of keys to advertise
     std::unordered_map<std::string, thrift::Value> keyVals;
-    std::vector<std::string> keys;
+    // Build keys to be cleaned from local storage
+    std::vector<std::string> keysToClear;
 
     for (auto const& key : keysToAdvertise) {
       const auto& thriftValue = persistedKeyVals.at(key);
@@ -748,13 +819,13 @@ KvStoreClientInternal::advertisePendingKeys(
       // Set in keyVals which is going to be advertise to the kvStore.
       DCHECK(thriftValue.value_ref());
       keyVals.emplace(key, thriftValue);
-      keys.emplace_back(key);
+      keysToClear.emplace_back(key);
     }
 
     // Advertise to KvStore
     const auto ret = setKeysHelper(area, std::move(keyVals));
     if (ret.has_value()) {
-      for (auto const& key : keys) {
+      for (auto const& key : keysToClear) {
         keysToAdvertise.erase(key);
       }
     }

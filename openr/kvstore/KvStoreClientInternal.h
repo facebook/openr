@@ -206,6 +206,12 @@ class KvStoreClientInternal {
           pendingKeysToAdvertise = std::nullopt);
 
   /**
+   * Helper function to clear keys with throttled fashion
+   * ATTN: should ONLY be triggered by `AsyncThrottle`
+   */
+  void clearPendingKeys();
+
+  /**
    * Helper function to schedule TTL update advertisement
    */
   void scheduleTtlUpdates(
@@ -257,6 +263,9 @@ class KvStoreClientInternal {
   // throttled version of `advertisedTtlUpdates`
   std::unique_ptr<AsyncThrottle> advertiseTtlUpdatesThrottled_;
 
+  // throttled version of `clearKey`
+  std::unique_ptr<AsyncThrottle> clearPendingKeysThrottled_;
+
   //
   // Mutable state
   //
@@ -266,6 +275,12 @@ class KvStoreClientInternal {
       AreaId,
       std::unordered_map<std::string /* key */, thrift::Value>>
       persistedKeyVals_;
+
+  // Locally withdrawn key-vals using `clearKey`
+  std::unordered_map<
+      AreaId,
+      std::unordered_map<std::string /* key */, thrift::Value>>
+      clearedKeyVals_;
 
   // Subscribed keys to their callback functions
   std::unordered_map<
