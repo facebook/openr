@@ -17,7 +17,6 @@
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace openr;
 
@@ -32,26 +31,11 @@ class LongPollFixture : public ::testing::Test {
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config_);
     kvStoreWrapper_->run();
 
-    // spin up an openrThriftServer
-    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
-        nodeName_,
-        nullptr /* decision */,
-        nullptr /* fib */,
-        kvStoreWrapper_->getKvStore() /* kvStore */,
-        nullptr /* linkMonitor */,
-        nullptr /* monitor */,
-        nullptr /* configStore */,
-        nullptr /* prefixManager */,
-        nullptr /* spark */,
-        nullptr /* config */
-    );
-    openrThriftServerWrapper_->run();
-
     // initialize openrCtrlClient talking to server
     client1_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
         evb_,
         folly::IPAddress(Constants::kPlatformHost.toString()),
-        openrThriftServerWrapper_->getOpenrCtrlThriftPort());
+        kvStoreWrapper_->getThriftPort());
 
     // Create client to have client-side timeout longer than OpenrCtrlServer
     // side default. This mimick we are NOT timeout but receive "false"
@@ -59,7 +43,7 @@ class LongPollFixture : public ::testing::Test {
     client2_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
         evb_,
         folly::IPAddress(Constants::kPlatformHost.toString()),
-        openrThriftServerWrapper_->getOpenrCtrlThriftPort(),
+        kvStoreWrapper_->getThriftPort(),
         Constants::kServiceConnTimeout,
         Constants::kLongPollReqHoldTime + std::chrono::milliseconds(10000));
   }
@@ -69,8 +53,6 @@ class LongPollFixture : public ::testing::Test {
     kvStoreWrapper_->closeQueue();
     client1_.reset();
     client2_.reset();
-    openrThriftServerWrapper_->stop();
-    openrThriftServerWrapper_.reset();
     kvStoreWrapper_->stop();
     kvStoreWrapper_.reset();
   }
@@ -87,7 +69,6 @@ class LongPollFixture : public ::testing::Test {
   openr::OpenrEventBase testEvb_;
   std::shared_ptr<Config> config_{nullptr};
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
   std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client1_{nullptr};
   std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client2_{nullptr};
 };
@@ -186,8 +167,7 @@ TEST_F(LongPollFixture, LongPollTimeout) {
   ASSERT_FALSE(isAdjChanged);
 
   // Explicitly cleanup pending longPollReq
-  openrThriftServerWrapper_->getOpenrCtrlHandler()
-      ->cleanupPendingLongPollReqs();
+  kvStoreWrapper_->getThriftServerCtrlHandler()->cleanupPendingLongPollReqs();
 
   // wait for evl before cleanup
   testEvb_.waitUntilStopped();

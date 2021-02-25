@@ -14,13 +14,11 @@
 #include <folly/Random.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
-#include <memory>
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 

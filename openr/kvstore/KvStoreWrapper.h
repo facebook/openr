@@ -192,7 +192,12 @@ class KvStoreWrapper {
     return kvStore_.get();
   }
 
-  uint16_t
+  inline std::shared_ptr<OpenrCtrlHandler>&
+  getThriftServerCtrlHandler() {
+    return thriftServer_->getOpenrCtrlHandler();
+  }
+
+  inline uint16_t
   getThriftPort() {
     return thriftServer_->getOpenrCtrlThriftPort();
   }
