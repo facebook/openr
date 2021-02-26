@@ -334,8 +334,7 @@ class Decision : public OpenrEventBase {
   void processPublication(thrift::Publication&& thriftPub);
 
   // process publication from PrefixManager
-  void processStaticRoutesUpdate(
-      thrift::RouteDatabaseDelta&& staticRoutesDelta);
+  void processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate);
 
   // openr config
   std::shared_ptr<const Config> config_;

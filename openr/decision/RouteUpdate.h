@@ -41,6 +41,7 @@ struct DecisionRouteUpdate {
     unicastRoutesToUpdate.emplace(std::move(prefix), std::move(route));
   }
 
+  // TODO: rename this func
   thrift::RouteDatabaseDelta
   toThrift() {
     thrift::RouteDatabaseDelta delta;
@@ -62,6 +63,7 @@ struct DecisionRouteUpdate {
     return delta;
   }
 
+  // TODO: rename this func
   thrift::RouteDatabaseDeltaDetail
   toThriftDetail() {
     thrift::RouteDatabaseDeltaDetail deltaDetail;

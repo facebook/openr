@@ -73,6 +73,7 @@ struct RibUnicastEntry : RibEntry {
     return !(*this == other);
   }
 
+  // TODO: rename this func
   thrift::UnicastRoute
   toThrift() const {
     thrift::UnicastRoute tUnicast;
@@ -82,6 +83,7 @@ struct RibUnicastEntry : RibEntry {
     return tUnicast;
   }
 
+  // TODO: rename this func
   thrift::UnicastRouteDetail
   toThriftDetail() const {
     thrift::UnicastRouteDetail tUnicastDetail;

@@ -1482,19 +1482,19 @@ Decision::Decision(
   });
 
   // Add reader to process static routes publication from prefix-manager
-  addFiberTask([q = std::move(staticRoutesUpdateQueue),
-                this]() mutable noexcept {
-    LOG(INFO) << "Starting static routes update processing fiber";
-    while (true) {
-      auto maybeThriftPub = q.get(); // perform read
-      VLOG(2) << "Received static routes update";
-      if (maybeThriftPub.hasError()) {
-        LOG(INFO) << "Terminating static routes update processing fiber";
-        break;
-      }
-      processStaticRoutesUpdate(std::move(maybeThriftPub).value().toThrift());
-    }
-  });
+  addFiberTask(
+      [q = std::move(staticRoutesUpdateQueue), this]() mutable noexcept {
+        LOG(INFO) << "Starting static routes update processing fiber";
+        while (true) {
+          auto maybeThriftPub = q.get(); // perform read
+          VLOG(2) << "Received static routes update";
+          if (maybeThriftPub.hasError()) {
+            LOG(INFO) << "Terminating static routes update processing fiber";
+            break;
+          }
+          processStaticRoutesUpdate(std::move(maybeThriftPub).value());
+        }
+      });
 
   // Create RibPolicy timer to process routes on policy expiry
   ribPolicyTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -1826,39 +1826,42 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 }
 
 void
-Decision::processStaticRoutesUpdate(
-    thrift::RouteDatabaseDelta&& staticRoutesDelta) {
+Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
   // update static unicast routes
-  if (staticRoutesDelta.unicastRoutesToUpdate_ref()->size() or
-      staticRoutesDelta.unicastRoutesToDelete_ref()->size()) {
-    const auto& toUpdate = *staticRoutesDelta.unicastRoutesToUpdate_ref();
-    const auto& toDelete = *staticRoutesDelta.unicastRoutesToDelete_ref();
+  if (routeUpdate.unicastRoutesToUpdate.size() or
+      routeUpdate.unicastRoutesToDelete.size()) {
+    std::vector<thrift::UnicastRoute> unicastRoutesToUpdate{};
+    std::unordered_set<folly::CIDRNetwork> addedPrefixes{};
+    for (const auto& [prefix, ribUnicastEntry] :
+         routeUpdate.unicastRoutesToUpdate) {
+      unicastRoutesToUpdate.emplace_back(ribUnicastEntry.toThrift());
+      addedPrefixes.emplace(prefix);
+    }
 
-    auto routesDeltaToDelete = from(toDelete) |
-        mapped([](const thrift::IpPrefix& r) { return toIPNetwork(r); }) |
-        as<std::vector<folly::CIDRNetwork>>();
+    // store as local storage
+    spfSolver_->updateStaticUnicastRoutes(
+        unicastRoutesToUpdate, routeUpdate.unicastRoutesToDelete);
 
-    spfSolver_->updateStaticUnicastRoutes(toUpdate, routesDeltaToDelete);
-
-    // combine add/update/delete prefixes into pending update
-    auto change = from(toUpdate) | mapped([](const thrift::UnicastRoute& r) {
-                    return toIPNetwork(*r.dest_ref());
-                  }) |
-        as<std::unordered_set<folly::CIDRNetwork>>();
-    change.merge(std::unordered_set<folly::CIDRNetwork>(
-        routesDeltaToDelete.begin(), routesDeltaToDelete.end()));
-
+    // only apply prefix updates, no full DB rebuild
+    // TODO: remove std::unordered_set usage
     pendingUpdates_.applyPrefixStateChange(
-        std::move(change),
-        thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
+        std::move(addedPrefixes), thrift::PrefixDatabase().perfEvents_ref());
+    pendingUpdates_.applyPrefixStateChange(
+        std::unordered_set<folly::CIDRNetwork>{
+            routeUpdate.unicastRoutesToDelete.begin(),
+            routeUpdate.unicastRoutesToDelete.end()},
+        thrift::PrefixDatabase().perfEvents_ref());
   }
 
   // update static MPLS routes
-  if (staticRoutesDelta.mplsRoutesToUpdate_ref()->size() or
-      staticRoutesDelta.mplsRoutesToDelete_ref()->size()) {
+  if (routeUpdate.mplsRoutesToUpdate.size() or
+      routeUpdate.mplsRoutesToDelete.size()) {
+    std::vector<thrift::MplsRoute> mplsRoutesToUpdate{};
+    for (const auto& ribMplsEntry : routeUpdate.mplsRoutesToUpdate) {
+      mplsRoutesToUpdate.emplace_back(ribMplsEntry.toThrift());
+    }
     spfSolver_->updateStaticMplsRoutes(
-        *staticRoutesDelta.mplsRoutesToUpdate_ref(),
-        *staticRoutesDelta.mplsRoutesToDelete_ref());
+        mplsRoutesToUpdate, routeUpdate.mplsRoutesToDelete);
     pendingUpdates_.setNeedsFullRebuild(); // Mark for full DB rebuild
   }
   rebuildRoutesDebounced_();
