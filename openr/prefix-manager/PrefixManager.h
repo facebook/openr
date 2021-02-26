@@ -226,9 +226,6 @@ class PrefixManager final : public OpenrEventBase {
   // area Id
   const std::unordered_set<std::string> allAreas_{};
 
-  // enable convergence performance measurement for Adjacencies update
-  const bool enablePerfMeasurement_{false};
-
   // TTL for a key in the key value store
   const std::chrono::milliseconds ttlKeyInKvStore_{0};
 
