@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/Format.h>
 #include <string>
 
 namespace openr {
