@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCpp.h>

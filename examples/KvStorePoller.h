@@ -24,12 +24,12 @@ class KvStorePoller {
 
   std::pair<
       std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
-      std::vector<fbzmq::SocketUrl> /* unreached url */>
+      std::vector<folly::SocketAddress> /* unreachable url */>
   getAdjacencyDatabases(std::chrono::milliseconds pollTimeout);
 
   std::pair<
       std::optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
-      std::vector<fbzmq::SocketUrl> /* unreached url */>
+      std::vector<folly::SocketAddress> /* unreachable url */>
   getPrefixDatabases(std::chrono::milliseconds pollTimeout);
 
  private:

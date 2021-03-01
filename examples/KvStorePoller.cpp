@@ -5,10 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStorePoller.h"
-
 #include <openr/common/Constants.h>
 #include <openr/kvstore/KvStoreUtil.h>
+#include <openr/public_tld/examples/KvStorePoller.h>
 
 namespace openr {
 
@@ -17,7 +16,7 @@ KvStorePoller::KvStorePoller(std::vector<folly::SocketAddress>& sockAddrs)
 
 std::pair<
     std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreached url */>
 KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<thrift::AdjacencyDatabase>(
       AreaId{"my_area_name"},
@@ -29,7 +28,7 @@ KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
 
 std::pair<
     std::optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreached url */>
 KvStorePoller::getPrefixDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<thrift::PrefixDatabase>(
       AreaId{"my_area_name"},

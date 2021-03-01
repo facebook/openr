@@ -21,7 +21,7 @@ parseThriftValue(thrift::Value const& value) {
 
   auto buf = folly::IOBuf::wrapBufferAsValue(
       value.value_ref()->data(), value.value_ref()->size());
-  return fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
+  return readThriftObj<ThriftType>(buf, serializer);
 }
 
 // static
@@ -30,12 +30,9 @@ std::unordered_map<std::string, ThriftType>
 parseThriftValues(
     std::unordered_map<std::string, thrift::Value> const& keyVals) {
   std::unordered_map<std::string, ThriftType> result;
-
-  for (auto const& kv : keyVals) {
-    // Here: kv.first is the key string, kv.second is thrift::Value
-    result.emplace(kv.first, parseThriftValue<ThriftType>(kv.second));
-  } // for
-
+  for (auto const& [key, val] : keyVals) {
+    result.emplace(key, parseThriftValue<ThriftType>(val));
+  }
   return result;
 }
 
@@ -43,7 +40,7 @@ parseThriftValues(
 template <typename ThriftType>
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreached url */>
 dumpAllWithPrefixMultipleAndParse(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
@@ -72,7 +69,7 @@ dumpAllWithPrefixMultipleAndParse(
 // static method to dump KvStore key-val over multiple instances
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreachable url */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
@@ -86,7 +83,7 @@ dumpAllWithThriftClientFromMultiple(
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   std::unordered_map<std::string, thrift::Value> merged;
-  std::vector<fbzmq::SocketUrl> unreachedUrls;
+  std::vector<folly::SocketAddress> unreachableUrls;
 
   thrift::KeyDumpParams params;
   *params.prefix_ref() = keyPrefix;
@@ -151,7 +148,7 @@ dumpAllWithThriftClientFromMultiple(
 
     // Cannot connect to Open/R via either plain-text client or secured client
     if (!client) {
-      unreachedUrls.push_back(fbzmq::SocketUrl{sockAddr.getAddressStr()});
+      unreachableUrls.emplace_back(sockAddr);
       continue;
     }
 
@@ -165,7 +162,7 @@ dumpAllWithThriftClientFromMultiple(
 
   // can't connect to ANY single Open/R instance
   if (calls.empty()) {
-    return std::make_pair(std::nullopt, unreachedUrls);
+    return std::make_pair(std::nullopt, unreachableUrls);
   }
 
   folly::collectAll(calls).via(&evb).thenValue(
@@ -203,7 +200,7 @@ dumpAllWithThriftClientFromMultiple(
 
   LOG(INFO) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
 
-  return std::make_pair(merged, unreachedUrls);
+  return std::make_pair(merged, unreachableUrls);
 }
 
 } // namespace openr

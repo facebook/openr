@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
@@ -39,20 +38,22 @@ static std::unordered_map<std::string, ThriftType> parseThriftValues(
  *
  * @param sockAddrs - (address, port) to connect OpenR instance to
  * @param prefix - the key prefix used for key dumping. Dump all if empty
- * @param connectTimeout - timeout value set on connecting
- * @param processTimeout - timeout value set on porcessing
+ * @param connectTimeout - timeout value set on connecting server
+ * @param processTimeout - timeout value set on porcessing request
+ * @param sslContext - context to use for SSL connection
+ * @param maybeIpTos - IP_TOS value for control plane if passed in
  * @param bindAddr - source addr for binding purpose. Default will be ANY
  *
- * @return first member of the pair is key-value map obtained by merging data
- * from all stores. Null value if failed connecting and obtaining snapshot
- * from ALL stores. If at least one store responds this will be non-empty.
- * Second member is a list of unreached kvstore urls
- *
+ * @return
+ *  - First member of the pair is key-value map obtained by merging data
+ *    from all stores. Null value if failed connecting and obtaining snapshot
+ *    from ALL stores. If at least one store responds this will be non-empty.
+ *  - Second member of the pair is a list of unreachable addresses
  */
 template <typename ThriftType>
 static std::pair<
     std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreachable url */>
 dumpAllWithPrefixMultipleAndParse(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
@@ -70,19 +71,21 @@ dumpAllWithPrefixMultipleAndParse(
  *
  * @param sockAddrs - (address, port) to connect OpenR instance to
  * @param prefix - the key prefix used for key dumping. Dump all if empty
- * @param connectTimeout - timeout value set on connecting
- * @param processTimeout - timeout value set on porcessing
+ * @param connectTimeout - timeout value set on connecting server
+ * @param processTimeout - timeout value set on porcessing request
+ * @param sslContext - context to use for SSL connection
+ * @param maybeIpTos - IP_TOS value for control plane if passed in
  * @param bindAddr - source addr for binding purpose. Default will be ANY
  *
- * @return first member of the pair is key-value map obtained by merging data
- * from all stores. Null value if failed connecting and obtaining snapshot
- * from ALL stores. If at least one store responds this will be non-empty.
- * Second member is a list of unreached kvstore urls
- *
+ * @return
+ *  - First member of the pair is key-value map obtained by merging data
+ *    from all stores. Null value if failed connecting and obtaining snapshot
+ *    from ALL stores. If at least one store responds this will be non-empty.
+ *  - Second member of the pair is a list of unreachable addresses
  */
 static std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreachable url */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
