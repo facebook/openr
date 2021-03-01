@@ -12,6 +12,7 @@ namespace py3 openr.thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
 
 include "BgpConfig.thrift"
+include "configerator/structs/neteng/config/routing_policy.thrift"
 
 exception ConfigError {
   1: string message
@@ -342,6 +343,7 @@ struct AreaConfig {
    * advertised to this area
    */
   6: list<string> redistribute_interface_regexes
+  7: optional string ingress_policy
 }
 
 /**
@@ -515,6 +517,11 @@ struct OpenrConfig {
    * V4/V6 prefixes to be originated.
    */
   31: optional list<OriginatedPrefix> originated_prefixes
+
+  /**
+   * area policy definitions
+   */
+  32: optional routing_policy.PolicyConfig area_policies
 
   /**
    * Enable best route selection based on PrefixMetrics.

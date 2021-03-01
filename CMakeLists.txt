@@ -86,12 +86,21 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} bgp_config_cpp2)
 
 add_fbthrift_cpp_library(
+  routing_policy_cpp2
+  configerator/structs/neteng/config/routing_policy.thrift
+  OPTIONS
+    json
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} routing_policy_cpp2)
+
+add_fbthrift_cpp_library(
   openr_config_cpp2
   openr/if/OpenrConfig.thrift
   OPTIONS
     json
   DEPENDS
     bgp_config_cpp2
+    routing_policy_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_config_cpp2)
 
