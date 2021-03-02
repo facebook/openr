@@ -1,5 +1,8 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 #
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 # Adds generation of build info as library to the project.
 # The library name is supplied as argument. After the library is linked with,
 # the code can use variables defined in `openr/commom/CMakeBuildInfo.h`.
@@ -7,6 +10,7 @@
 # and add execution of `cmake -P <binary dir>/GenBuildInfo.txt` during build
 # which will produce and compile C++ source code with build info and link it
 # into static library.
+
 function(add_build_info LIB_NAME)
   set(cmake_file "${CMAKE_BINARY_DIR}/build_info/GenBuildInfo.txt")
   set(cpp_file "${CMAKE_BINARY_DIR}/build_info/CMakeBuildInfo.cpp")
