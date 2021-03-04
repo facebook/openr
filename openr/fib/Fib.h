@@ -17,6 +17,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/decision/RibEntry.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
@@ -80,7 +81,7 @@ class Fib final : public OpenrEventBase {
    */
   static std::optional<folly::CIDRNetwork> longestPrefixMatch(
       const folly::CIDRNetwork& inputPrefix,
-      const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
+      const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutes);
 
   /**
@@ -190,9 +191,8 @@ class Fib final : public OpenrEventBase {
   // received route-db if provided.
   struct RouteState {
     // Non modified copy of Unicast and MPLS routes received from Decision
-    std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>
-        unicastRoutes;
-    std::unordered_map<uint32_t, thrift::MplsRouteDetail> mplsRoutes;
+    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
+    std::unordered_map<uint32_t, RibMplsEntry> mplsRoutes;
 
     // indicates we've received a decision route publication and therefore have
     // routes to sync. will not synce routes with system until this is set

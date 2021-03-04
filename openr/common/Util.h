@@ -27,6 +27,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
+#include <openr/decision/RibEntry.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl.h>
@@ -402,7 +403,7 @@ thrift::MplsRoute createMplsRoute(
     int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops);
 
 std::vector<thrift::UnicastRoute> createUnicastRoutesFromMap(
-    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
+    const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes);
 
 /**
@@ -417,7 +418,7 @@ std::vector<thrift::NextHopThrift> selectMplsNextHops(
 std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHops(
     const std::vector<thrift::MplsRoute>& routes);
 std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHopsMap(
-    const std::unordered_map<uint32_t, thrift::MplsRouteDetail>& mplsRoutes);
+    const std::unordered_map<uint32_t, RibMplsEntry>& mplsRoutes);
 
 std::string getNodeNameFromKey(const std::string& key);
 

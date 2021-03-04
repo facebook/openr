@@ -864,13 +864,13 @@ createMplsRoutesWithSelectedNextHops(
 
 std::vector<thrift::UnicastRoute>
 createUnicastRoutesFromMap(
-    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
+    const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes) {
   // Build routes to be programmed
   std::vector<thrift::UnicastRoute> newRoutes;
 
   for (auto const& [_, route] : unicastRoutes) {
-    newRoutes.emplace_back(*route.unicastRoute_ref());
+    newRoutes.emplace_back(route.toThrift());
   }
 
   return newRoutes;
@@ -878,13 +878,14 @@ createUnicastRoutesFromMap(
 
 std::vector<thrift::MplsRoute>
 createMplsRoutesWithSelectedNextHopsMap(
-    const std::unordered_map<uint32_t, thrift::MplsRouteDetail>& mplsRoutes) {
+    const std::unordered_map<uint32_t, RibMplsEntry>& mplsRoutes) {
   // Build routes to be programmed
   std::vector<thrift::MplsRoute> newRoutes;
 
   for (auto const& route : mplsRoutes) {
     newRoutes.emplace_back(createMplsRoute(
-        route.first, selectMplsNextHops(*route.second.nextHops_ref())));
+        route.first,
+        selectMplsNextHops(*route.second.toThrift().nextHops_ref())));
   }
 
   return newRoutes;

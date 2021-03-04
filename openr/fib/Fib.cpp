@@ -172,7 +172,7 @@ Fib::stop() {
 std::optional<folly::CIDRNetwork>
 Fib::longestPrefixMatch(
     const folly::CIDRNetwork& inputPrefix,
-    const std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>&
+    const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes) {
   std::optional<folly::CIDRNetwork> matchedPrefix;
   int maxMask = -1;
@@ -201,11 +201,10 @@ Fib::getRouteDb() {
     thrift::RouteDatabase routeDb;
     *routeDb.thisNodeName_ref() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
-      routeDb.unicastRoutes_ref()->emplace_back(
-          *route.second.unicastRoute_ref());
+      routeDb.unicastRoutes_ref()->emplace_back(route.second.toThrift());
     }
     for (const auto& route : routeState_.mplsRoutes) {
-      routeDb.mplsRoutes_ref()->emplace_back(*route.second.mplsRoute_ref());
+      routeDb.mplsRoutes_ref()->emplace_back(route.second.toThrift());
     }
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
   });
@@ -220,10 +219,12 @@ Fib::getRouteDetailDb() {
     thrift::RouteDatabaseDetail routeDetailDb;
     *routeDetailDb.thisNodeName_ref() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
-      routeDetailDb.unicastRoutes_ref()->emplace_back(route.second);
+      routeDetailDb.unicastRoutes_ref()->emplace_back(
+          route.second.toThriftDetail());
     }
     for (const auto& route : routeState_.mplsRoutes) {
-      routeDetailDb.mplsRoutes_ref()->emplace_back(route.second);
+      routeDetailDb.mplsRoutes_ref()->emplace_back(
+          route.second.toThriftDetail());
     }
     p.setValue(std::make_unique<thrift::RouteDatabaseDetail>(
         std::move(routeDetailDb)));
@@ -275,7 +276,7 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
   // if the params is empty, return all routes
   if (prefixes.empty()) {
     for (const auto& routes : routeState_.unicastRoutes) {
-      retRouteVec.emplace_back(*routes.second.unicastRoute_ref());
+      retRouteVec.emplace_back(routes.second.toThrift());
     }
     return retRouteVec;
   }
@@ -301,8 +302,7 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
 
   // get the routes from the prefix set
   for (const auto& prefix : matchPrefixSet) {
-    retRouteVec.emplace_back(
-        *routeState_.unicastRoutes.at(prefix).unicastRoute_ref());
+    retRouteVec.emplace_back(routeState_.unicastRoutes.at(prefix).toThrift());
   }
 
   return retRouteVec;
@@ -316,7 +316,7 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
   // if the params is empty, return all MPLS routes
   if (labels.empty()) {
     for (const auto& routes : routeState_.mplsRoutes) {
-      retRouteVec.emplace_back(*routes.second.mplsRoute_ref());
+      retRouteVec.emplace_back(routes.second.toThrift());
     }
     return retRouteVec;
   }
@@ -330,7 +330,7 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
   // get the filtered MPLS routes and avoid duplicates
   for (const auto& routes : routeState_.mplsRoutes) {
     if (labelFilterSet.find(routes.first) != labelFilterSet.end()) {
-      retRouteVec.emplace_back(*routes.second.mplsRoute_ref());
+      retRouteVec.emplace_back(routes.second.toThrift());
     }
   }
 
@@ -366,12 +366,22 @@ Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
 
   // Add/Update unicast routes to update
   for (const auto& [prefix, route] : routeUpdate.unicastRoutesToUpdate) {
-    routeState_.unicastRoutes[prefix] = route.toThriftDetail();
+    auto it = routeState_.unicastRoutes.find(prefix);
+    if (it != routeState_.unicastRoutes.end()) {
+      it->second = route;
+    } else {
+      routeState_.unicastRoutes.emplace(prefix, route);
+    }
   }
 
   // Add mpls routes to update
   for (const auto& route : routeUpdate.mplsRoutesToUpdate) {
-    routeState_.mplsRoutes[route.label] = route.toThriftDetail();
+    auto it = routeState_.mplsRoutes.find(route.label);
+    if (it != routeState_.mplsRoutes.end()) {
+      it->second = route;
+    } else {
+      routeState_.mplsRoutes.emplace(route.label, route);
+    }
   }
 
   // Delete unicast routes

@@ -1239,8 +1239,7 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
 }
 
 TEST_F(FibTestFixture, longestPrefixMatchTest) {
-  std::unordered_map<folly::CIDRNetwork, thrift::UnicastRouteDetail>
-      unicastRoutes;
+  std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
   const auto& defaultRoute = toIpPrefix("::/0");
   const auto& dbPrefix1 = toIpPrefix("192.168.0.0/16");
   const auto& dbPrefix2 = toIpPrefix("192.168.0.0/20");
@@ -1253,11 +1252,12 @@ TEST_F(FibTestFixture, longestPrefixMatchTest) {
   const auto dbPrefix3Cidr = toIPNetwork(dbPrefix3);
   const auto dbPrefix4Cidr = toIPNetwork(dbPrefix4);
 
-  unicastRoutes[defaultRouteCidr] = createUnicastRouteDetail(defaultRoute, {});
-  unicastRoutes[dbPrefix1Cidr] = createUnicastRouteDetail(dbPrefix1, {});
-  unicastRoutes[dbPrefix2Cidr] = createUnicastRouteDetail(dbPrefix2, {});
-  unicastRoutes[dbPrefix3Cidr] = createUnicastRouteDetail(dbPrefix3, {});
-  unicastRoutes[dbPrefix4Cidr] = createUnicastRouteDetail(dbPrefix4, {});
+  unicastRoutes.emplace(
+      defaultRouteCidr, RibUnicastEntry(defaultRouteCidr, {}));
+  unicastRoutes.emplace(dbPrefix1Cidr, RibUnicastEntry(dbPrefix1Cidr, {}));
+  unicastRoutes.emplace(dbPrefix2Cidr, RibUnicastEntry(dbPrefix2Cidr, {}));
+  unicastRoutes.emplace(dbPrefix3Cidr, RibUnicastEntry(dbPrefix3Cidr, {}));
+  unicastRoutes.emplace(dbPrefix4Cidr, RibUnicastEntry(dbPrefix4Cidr, {}));
 
   const auto inputdefaultRoute =
       folly::IPAddress::tryCreateNetwork("::/0").value();
