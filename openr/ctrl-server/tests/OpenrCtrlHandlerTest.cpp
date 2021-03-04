@@ -158,11 +158,10 @@ class OpenrCtrlFixture : public ::testing::Test {
     openrThriftServerWrapper_->run();
 
     // initialize openrCtrlClient talking to server
-    openrCtrlThriftClient_ =
-        getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
-            evb_,
-            folly::IPAddress(Constants::kPlatformHost.toString()),
-            openrThriftServerWrapper_->getOpenrCtrlThriftPort());
+    client_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
+        evb_,
+        folly::IPAddress(Constants::kPlatformHost.toString()),
+        openrThriftServerWrapper_->getOpenrCtrlThriftPort());
   }
 
   void
@@ -178,7 +177,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
 
-    openrCtrlThriftClient_.reset();
+    client_.reset();
 
     linkMonitor->stop();
     linkMonitorThread_.join();
@@ -217,7 +216,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     thrift::KeySetParams setParams;
     setParams.keyVals_ref() = keyVals;
 
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParams, area);
+    client_->sync_setKvStoreKeyVals(setParams, area);
   }
 
  private:
@@ -253,13 +252,12 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_{nullptr};
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
-  std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient>
-      openrCtrlThriftClient_{nullptr};
+  std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client_{nullptr};
 };
 
 TEST_F(OpenrCtrlFixture, getMyNodeName) {
   std::string res = "";
-  openrCtrlThriftClient_->sync_getMyNodeName(res);
+  client_->sync_getMyNodeName(res);
   EXPECT_EQ(nodeName_, res);
 }
 
@@ -271,7 +269,7 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
         createPrefixEntry("20.0.0.0/8", thrift::PrefixType::BGP),
         createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
     };
-    openrCtrlThriftClient_->sync_advertisePrefixes(
+    client_->sync_advertisePrefixes(
         std::vector<thrift::PrefixEntry>{std::move(prefixes)});
   }
 
@@ -279,17 +277,16 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
     std::vector<thrift::PrefixEntry> prefixes{
         createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
     };
-    openrCtrlThriftClient_->sync_withdrawPrefixes(
+    client_->sync_withdrawPrefixes(
         std::vector<thrift::PrefixEntry>{std::move(prefixes)});
-    openrCtrlThriftClient_->sync_withdrawPrefixesByType(
-        thrift::PrefixType::LOOPBACK);
+    client_->sync_withdrawPrefixesByType(thrift::PrefixType::LOOPBACK);
   }
 
   {
     std::vector<thrift::PrefixEntry> prefixes{
         createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
     };
-    openrCtrlThriftClient_->sync_syncPrefixesByType(
+    client_->sync_syncPrefixesByType(
         thrift::PrefixType::BGP,
         std::vector<thrift::PrefixEntry>{std::move(prefixes)});
   }
@@ -299,20 +296,19 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
         createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
     };
     std::vector<thrift::PrefixEntry> res;
-    openrCtrlThriftClient_->sync_getPrefixes(res);
+    client_->sync_getPrefixes(res);
     EXPECT_EQ(prefixes, res);
   }
 
   {
     std::vector<thrift::PrefixEntry> res;
-    openrCtrlThriftClient_->sync_getPrefixesByType(
-        res, thrift::PrefixType::LOOPBACK);
+    client_->sync_getPrefixesByType(res, thrift::PrefixType::LOOPBACK);
     EXPECT_EQ(0, res.size());
   }
 
   {
     std::vector<thrift::AdvertisedRouteDetail> routes;
-    openrCtrlThriftClient_->sync_getAdvertisedRoutes(routes);
+    client_->sync_getAdvertisedRoutes(routes);
     EXPECT_EQ(1, routes.size());
   }
 }
@@ -320,7 +316,7 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
 TEST_F(OpenrCtrlFixture, RouteApis) {
   {
     thrift::RouteDatabase db;
-    openrCtrlThriftClient_->sync_getRouteDb(db);
+    client_->sync_getRouteDb(db);
     EXPECT_EQ(nodeName_, db.thisNodeName_ref());
     EXPECT_EQ(0, db.unicastRoutes_ref()->size());
     EXPECT_EQ(0, db.mplsRoutes_ref()->size());
@@ -328,7 +324,7 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
 
   {
     thrift::RouteDatabase db;
-    openrCtrlThriftClient_->sync_getRouteDbComputed(db, nodeName_);
+    client_->sync_getRouteDbComputed(db, nodeName_);
     EXPECT_EQ(nodeName_, db.thisNodeName_ref());
     EXPECT_EQ(0, db.unicastRoutes_ref()->size());
     EXPECT_EQ(0, db.mplsRoutes_ref()->size());
@@ -337,7 +333,7 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
   {
     const std::string testNode("avengers@universe");
     thrift::RouteDatabase db;
-    openrCtrlThriftClient_->sync_getRouteDbComputed(db, testNode);
+    client_->sync_getRouteDbComputed(db, testNode);
     EXPECT_EQ(testNode, *db.thisNodeName_ref());
     EXPECT_EQ(0, db.unicastRoutes_ref()->size());
     EXPECT_EQ(0, db.mplsRoutes_ref()->size());
@@ -346,45 +342,72 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
   {
     std::vector<thrift::UnicastRoute> filterRet;
     std::vector<std::string> prefixes{"10.46.2.0", "10.46.2.0/24"};
-    openrCtrlThriftClient_->sync_getUnicastRoutesFiltered(filterRet, prefixes);
+    client_->sync_getUnicastRoutesFiltered(filterRet, prefixes);
     EXPECT_EQ(0, filterRet.size());
   }
 
   {
     std::vector<thrift::UnicastRoute> allRouteRet;
-    openrCtrlThriftClient_->sync_getUnicastRoutes(allRouteRet);
+    client_->sync_getUnicastRoutes(allRouteRet);
     EXPECT_EQ(0, allRouteRet.size());
   }
   {
     std::vector<thrift::MplsRoute> filterRet;
     std::vector<std::int32_t> labels{1, 2};
-    openrCtrlThriftClient_->sync_getMplsRoutesFiltered(filterRet, labels);
+    client_->sync_getMplsRoutesFiltered(filterRet, labels);
     EXPECT_EQ(0, filterRet.size());
   }
   {
     std::vector<thrift::MplsRoute> allRouteRet;
-    openrCtrlThriftClient_->sync_getMplsRoutes(allRouteRet);
+    client_->sync_getMplsRoutes(allRouteRet);
     EXPECT_EQ(0, allRouteRet.size());
   }
 }
 
 TEST_F(OpenrCtrlFixture, PerfApis) {
   thrift::PerfDatabase db;
-  openrCtrlThriftClient_->sync_getPerfDb(db);
+  client_->sync_getPerfDb(db);
   EXPECT_EQ(nodeName_, db.thisNodeName_ref());
 }
 
 TEST_F(OpenrCtrlFixture, DecisionApis) {
   {
     std::vector<thrift::AdjacencyDatabase> dbs;
-    openrCtrlThriftClient_->sync_getDecisionAdjacenciesFiltered(dbs, {});
+    client_->sync_getDecisionAdjacenciesFiltered(dbs, {});
     EXPECT_EQ(0, dbs.size());
   }
 
   {
     std::vector<thrift::ReceivedRouteDetail> routes;
-    openrCtrlThriftClient_->sync_getReceivedRoutes(routes);
+    client_->sync_getReceivedRoutes(routes);
     EXPECT_EQ(0, routes.size());
+  }
+
+  {
+    // Positive Test
+    std::vector<thrift::ReceivedRouteDetail> routes;
+    client_->sync_getReceivedRoutesFiltered(routes, {});
+    EXPECT_EQ(0, routes.size());
+
+    // Nevative Test
+    thrift::ReceivedRouteFilter filter;
+    folly::IPAddress v4Addr = folly::IPAddress("11.0.0.1");
+    folly::IPAddress v6Addr = folly::IPAddress("fe80::1");
+    thrift::IpPrefix v4Prefix, v6Prefix;
+    v4Prefix.prefixAddress_ref() = toBinaryAddress(v4Addr);
+    v4Prefix.prefixLength_ref() = 36; // ATTN: max mask length is 32 for IPV4
+    v6Prefix.prefixAddress_ref() = toBinaryAddress(v6Addr);
+    v6Prefix.prefixLength_ref() = 130; // ATTN: max mask length is 32 for IPV4
+
+    filter.prefixes_ref() = {v4Prefix};
+    EXPECT_THROW(
+        client_->sync_getReceivedRoutesFiltered(routes, filter),
+        thrift::OpenrError);
+
+    filter.prefixes_ref() = {v6Prefix};
+    EXPECT_THROW(
+        client_->sync_getReceivedRoutesFiltered(routes, filter),
+        thrift::OpenrError);
   }
 }
 
@@ -417,7 +440,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   //
   {
     thrift::OpenrConfig config;
-    openrCtrlThriftClient_->sync_getRunningConfigThrift(config);
+    client_->sync_getRunningConfigThrift(config);
     std::unordered_set<std::string> areas;
     for (auto const& area : config.get_areas()) {
       areas.insert(area.get_area_id());
@@ -438,8 +461,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   {
     std::vector<std::string> filterKeys{"key11", "key2"};
     thrift::Publication pub;
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsArea(
-        pub, filterKeys, kSpineAreaId);
+    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kSpineAreaId);
     EXPECT_EQ(2, (*pub.keyVals_ref()).size());
     EXPECT_EQ(keyVals.at("key2"), pub.keyVals_ref()["key2"]);
     EXPECT_EQ(keyVals.at("key11"), pub.keyVals_ref()["key11"]);
@@ -449,8 +471,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   {
     std::vector<std::string> filterKeys{"keyPod1"};
     thrift::Publication pub;
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsArea(
-        pub, filterKeys, kPodAreaId);
+    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kPodAreaId);
     EXPECT_EQ(1, (*pub.keyVals_ref()).size());
     EXPECT_EQ(keyValsPod.at("keyPod1"), pub.keyVals_ref()["keyPod1"]);
   }
@@ -462,8 +483,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
-        pub, params, kSpineAreaId);
+    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kSpineAreaId);
     EXPECT_EQ(3, (*pub.keyVals_ref()).size());
     EXPECT_EQ(keyVals.at("key3"), pub.keyVals_ref()["key3"]);
     EXPECT_EQ(keyVals.at("key33"), pub.keyVals_ref()["key33"]);
@@ -478,8 +498,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds_ref()->insert("node1");
     params.keys_ref() = {"keyP"};
 
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
-        pub, params, kPlaneAreaId);
+    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kPlaneAreaId);
     EXPECT_EQ(2, (*pub.keyVals_ref()).size());
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), pub.keyVals_ref()["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), pub.keyVals_ref()["keyPlane2"]);
@@ -492,8 +511,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
-    openrCtrlThriftClient_->sync_getKvStoreHashFilteredArea(
-        pub, params, kSpineAreaId);
+    client_->sync_getKvStoreHashFilteredArea(pub, params, kSpineAreaId);
     EXPECT_EQ(3, (*pub.keyVals_ref()).size());
     auto value3 = keyVals.at("key3");
     value3.value_ref().reset();
@@ -517,7 +535,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
     // get summary from KvStore for all configured areas (one extra
     // non-existent area is provided)
-    openrCtrlThriftClient_->sync_getKvStoreAreaSummary(summary, areaSetAll);
+    client_->sync_getKvStoreAreaSummary(summary, areaSetAll);
     EXPECT_THAT(summary, testing::SizeIs(3));
     // map each area to the # of keyVals in each area
     areaKVCountMap[summary.at(0).get_area()] = summary.at(0).get_keyValsCount();
@@ -534,19 +552,18 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   //
   {
     thrift::DualMessages messages;
-    openrCtrlThriftClient_->sync_processKvStoreDualMessage(
-        messages, kSpineAreaId);
+    client_->sync_processKvStoreDualMessage(messages, kSpineAreaId);
   }
 
   {
     thrift::FloodTopoSetParams params;
     params.rootId_ref() = nodeName_;
-    openrCtrlThriftClient_->sync_updateFloodTopologyChild(params, kSpineAreaId);
+    client_->sync_updateFloodTopologyChild(params, kSpineAreaId);
   }
 
   {
     thrift::SptInfos ret;
-    openrCtrlThriftClient_->sync_getSpanningTreeInfos(ret, kSpineAreaId);
+    client_->sync_getSpanningTreeInfos(ret, kSpineAreaId);
     EXPECT_EQ(1, ret.infos_ref()->size());
     ASSERT_NE(ret.infos_ref()->end(), ret.infos_ref()->find(nodeName_));
     EXPECT_EQ(0, ret.counters_ref()->neighborCounters_ref()->size());
@@ -594,7 +611,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     }
 
     thrift::PeersMap ret;
-    openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kSpineAreaId);
+    client_->sync_getKvStorePeersArea(ret, kSpineAreaId);
 
     EXPECT_EQ(3, ret.size());
     EXPECT_TRUE(ret.count("peer1"));
@@ -606,7 +623,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     kvStoreWrapper_->delPeer(kSpineAreaId, "peer2");
 
     thrift::PeersMap ret;
-    openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kSpineAreaId);
+    client_->sync_getKvStorePeersArea(ret, kSpineAreaId);
     EXPECT_EQ(2, ret.size());
     EXPECT_TRUE(ret.count("peer1"));
     EXPECT_TRUE(ret.count("peer3"));
@@ -614,7 +631,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::PeersMap ret;
-    openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kPodAreaId);
+    client_->sync_getKvStorePeersArea(ret, kPodAreaId);
 
     EXPECT_EQ(2, ret.size());
     EXPECT_TRUE(ret.count("peer11"));
@@ -625,7 +642,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     kvStoreWrapper_->delPeer(kPodAreaId, "peer21");
 
     thrift::PeersMap ret;
-    openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, kPodAreaId);
+    client_->sync_getKvStorePeersArea(ret, kPodAreaId);
     EXPECT_EQ(1, ret.size());
     EXPECT_TRUE(ret.count("peer11"));
   }
@@ -643,8 +660,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
-        pub, params, kSpineAreaId);
+    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kSpineAreaId);
     EXPECT_EQ(3, (*pub.keyVals_ref()).size());
     EXPECT_EQ(keyVals.at("key3"), (*pub.keyVals_ref())["key3"]);
     EXPECT_EQ(keyVals.at("key33"), (*pub.keyVals_ref())["key33"]);
@@ -652,8 +668,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
     params33.originatorIds_ref() = {"node33"};
     params33.keys_ref() = {"key33"};
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
-        pub33, params33, kSpineAreaId);
+    client_->sync_getKvStoreKeyValsFilteredArea(pub33, params33, kSpineAreaId);
     EXPECT_EQ(2, (*pub33.keyVals_ref()).size());
     EXPECT_EQ(keyVals.at("key33"), (*pub33.keyVals_ref())["key33"]);
     EXPECT_EQ(keyVals.at("key333"), (*pub33.keyVals_ref())["key333"]);
@@ -662,7 +677,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     // key33 and key333 are same.
     params333.originatorIds_ref() = {"node33"};
     params333.keys_ref() = {"key333"};
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
+    client_->sync_getKvStoreKeyValsFilteredArea(
         pub333, params333, kSpineAreaId);
     EXPECT_EQ(2, (*pub333.keyVals_ref()).size());
     EXPECT_EQ(keyVals.at("key33"), (*pub33.keyVals_ref())["key33"]);
@@ -677,8 +692,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds_ref()->insert("node1");
     params.keys_ref() = {"keyP", "keyPl"};
 
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
-        pub, params, kPlaneAreaId);
+    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kPlaneAreaId);
     EXPECT_EQ(2, (*pub.keyVals_ref()).size());
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), (*pub.keyVals_ref())["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), (*pub.keyVals_ref())["keyPlane2"]);
@@ -692,8 +706,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds_ref() = {"node3"};
     params.keys_ref() = {"key3"};
 
-    openrCtrlThriftClient_->sync_getKvStoreHashFilteredArea(
-        pub, params, kSpineAreaId);
+    client_->sync_getKvStoreHashFilteredArea(pub, params, kSpineAreaId);
     EXPECT_EQ(3, (*pub.keyVals_ref()).size());
     auto value3 = keyVals.at("key3");
     value3.value_ref().reset();
@@ -756,8 +769,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     std::vector<std::string> filterKeys{key};
     thrift::Publication pub;
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsArea(
-        pub, filterKeys, kSpineAreaId);
+    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kSpineAreaId);
     EXPECT_EQ(1, (*pub.keyVals_ref()).size());
     EXPECT_EQ(3, *((*pub.keyVals_ref()).at(key).version_ref()));
     EXPECT_EQ("value1", (*pub.keyVals_ref()).at(key).value_ref().value());
@@ -1677,8 +1689,7 @@ TEST_F(
     /* Check that the TTL version is updated */
     std::vector<std::string> filterKeys{key};
     thrift::Publication pub;
-    openrCtrlThriftClient_->sync_getKvStoreKeyValsArea(
-        pub, filterKeys, kSpineAreaId);
+    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kSpineAreaId);
     EXPECT_EQ(1, (*pub.keyVals_ref()).size());
     EXPECT_EQ(1, *((*pub.keyVals_ref()).at(key).version_ref()));
     EXPECT_EQ(true, (*pub.keyVals_ref()).at(key).value_ref().has_value());
@@ -1800,28 +1811,28 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   const std::string adjName = "night@king";
 
   {
-    openrCtrlThriftClient_->sync_setNodeOverload();
-    openrCtrlThriftClient_->sync_unsetNodeOverload();
+    client_->sync_setNodeOverload();
+    client_->sync_unsetNodeOverload();
   }
 
   {
-    openrCtrlThriftClient_->sync_setInterfaceOverload(ifName);
-    openrCtrlThriftClient_->sync_unsetInterfaceOverload(ifName);
+    client_->sync_setInterfaceOverload(ifName);
+    client_->sync_unsetInterfaceOverload(ifName);
   }
 
   {
-    openrCtrlThriftClient_->sync_setInterfaceMetric(ifName, 110);
-    openrCtrlThriftClient_->sync_unsetInterfaceMetric(ifName);
+    client_->sync_setInterfaceMetric(ifName, 110);
+    client_->sync_unsetInterfaceMetric(ifName);
   }
 
   {
-    openrCtrlThriftClient_->sync_setAdjacencyMetric(ifName, adjName, 110);
-    openrCtrlThriftClient_->sync_unsetAdjacencyMetric(ifName, adjName);
+    client_->sync_setAdjacencyMetric(ifName, adjName, 110);
+    client_->sync_unsetAdjacencyMetric(ifName, adjName);
   }
 
   {
     thrift::DumpLinksReply reply;
-    openrCtrlThriftClient_->sync_getInterfaces(reply);
+    client_->sync_getInterfaces(reply);
     EXPECT_EQ(nodeName_, reply.thisNodeName_ref());
     EXPECT_FALSE(*reply.isOverloaded_ref());
     EXPECT_EQ(1, reply.interfaceDetails_ref()->size());
@@ -1829,13 +1840,13 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
 
   {
     thrift::OpenrVersions ret;
-    openrCtrlThriftClient_->sync_getOpenrVersion(ret);
+    client_->sync_getOpenrVersion(ret);
     EXPECT_LE(*ret.lowestSupportedVersion_ref(), *ret.version_ref());
   }
 
   {
     thrift::BuildInfo info;
-    openrCtrlThriftClient_->sync_getBuildInfo(info);
+    client_->sync_getBuildInfo(info);
     EXPECT_NE("", *info.buildMode_ref());
   }
 
@@ -1843,8 +1854,7 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
     std::vector<thrift::AdjacencyDatabase> adjDbs;
     thrift::AdjacenciesFilter filter;
     filter.selectAreas_ref() = {kSpineAreaId};
-    openrCtrlThriftClient_->sync_getLinkMonitorAdjacenciesFiltered(
-        adjDbs, filter);
+    client_->sync_getLinkMonitorAdjacenciesFiltered(adjDbs, filter);
     EXPECT_EQ(0, adjDbs.begin()->get_adjacencies().size());
   }
 }
@@ -1853,33 +1863,31 @@ TEST_F(OpenrCtrlFixture, PersistentStoreApis) {
   {
     const std::string key = "key1";
     const std::string value = "value1";
-    openrCtrlThriftClient_->sync_setConfigKey(key, value);
+    client_->sync_setConfigKey(key, value);
   }
 
   {
     const std::string key = "key2";
     const std::string value = "value2";
-    openrCtrlThriftClient_->sync_setConfigKey(key, value);
+    client_->sync_setConfigKey(key, value);
   }
 
   {
     const std::string key = "key1";
-    openrCtrlThriftClient_->sync_eraseConfigKey(key);
+    client_->sync_eraseConfigKey(key);
   }
 
   {
     const std::string key = "key2";
     std::string ret = "";
-    openrCtrlThriftClient_->sync_getConfigKey(ret, key);
+    client_->sync_getConfigKey(ret, key);
     EXPECT_EQ("value2", ret);
   }
 
   {
     const std::string key = "key1";
     std::string ret = "";
-    EXPECT_THROW(
-        openrCtrlThriftClient_->sync_getConfigKey(ret, key),
-        thrift::OpenrError);
+    EXPECT_THROW(client_->sync_getConfigKey(ret, key), thrift::OpenrError);
   }
 }
 
@@ -1898,30 +1906,28 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
     policy.statements_ref()->emplace_back(policyStatement);
     policy.ttl_secs_ref() = 1;
 
-    EXPECT_NO_THROW(openrCtrlThriftClient_->sync_setRibPolicy(policy));
+    EXPECT_NO_THROW(client_->sync_setRibPolicy(policy));
   }
 
   // Get API
   {
     thrift::RibPolicy policy;
-    EXPECT_NO_THROW(openrCtrlThriftClient_->sync_getRibPolicy(policy));
+    EXPECT_NO_THROW(client_->sync_getRibPolicy(policy));
   }
 
   // Clear API
   {
     // Clear Rib Policy and expect no error as rib policy exists
-    EXPECT_NO_THROW(openrCtrlThriftClient_->sync_clearRibPolicy());
+    EXPECT_NO_THROW(client_->sync_clearRibPolicy());
 
     // An attempt to clear non-existing rib policy will show a message.
-    EXPECT_THROW(
-        openrCtrlThriftClient_->sync_clearRibPolicy(), thrift::OpenrError);
+    EXPECT_THROW(client_->sync_clearRibPolicy(), thrift::OpenrError);
   }
 
   // Using Get API after clearing rib policy will show a message.
   {
     thrift::RibPolicy policy;
-    EXPECT_THROW(
-        openrCtrlThriftClient_->sync_getRibPolicy(policy), thrift::OpenrError);
+    EXPECT_THROW(client_->sync_getRibPolicy(policy), thrift::OpenrError);
   }
 }
 

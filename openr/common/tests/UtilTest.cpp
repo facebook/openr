@@ -117,14 +117,62 @@ struct PrefixKeyEntry {
 };
 
 TEST(UtilTest, NetworkUtilTest) {
-  folly::IPAddress v4{"192.168.0.2"};
-  folly::IPAddress v6{"fe80::2"};
+  //
+  // Test for: toString()
+  //
+  {
+    folly::IPAddress v4{"192.168.0.2"};
+    folly::IPAddress v6{"fe80::2"};
 
-  EXPECT_EQ(v4.str(), toString(toBinaryAddress(v4)));
-  EXPECT_EQ(v6.str(), toString(toBinaryAddress(v6)));
+    EXPECT_EQ(v4.str(), toString(toBinaryAddress(v4)));
+    EXPECT_EQ(v6.str(), toString(toBinaryAddress(v6)));
 
-  thrift::BinaryAddress empty;
-  EXPECT_EQ("", toString(empty));
+    thrift::BinaryAddress empty;
+    EXPECT_EQ("", toString(empty));
+  }
+
+  //
+  // Test for: toIpPrefix()
+  //
+  {
+    // Positive test for valid ip addrs(V4 + V6)
+    const std::string v4Addr{"10.1.1.1/32"};
+    const std::string v6Addr{"2620::1/128"};
+    thrift::IpPrefix prefixV4 = toIpPrefix(v4Addr);
+    thrift::IpPrefix prefixV6 = toIpPrefix(v6Addr);
+
+    EXPECT_EQ("10.1.1.1", toString(*prefixV4.prefixAddress_ref()));
+    EXPECT_EQ(32, *prefixV4.prefixLength_ref());
+    EXPECT_EQ("2620::1", toString(*prefixV6.prefixAddress_ref()));
+    EXPECT_EQ(128, *prefixV6.prefixLength_ref());
+
+    // Negative test for invalid ip addr length(V4 + V6)
+    const std::string invalidV4Addr{"10.1.1.1/36"};
+    const std::string invalidV6Addr{"2620::1/130"};
+
+    EXPECT_THROW(toIpPrefix(invalidV4Addr), thrift::OpenrError);
+    EXPECT_THROW(toIpPrefix(invalidV6Addr), thrift::OpenrError);
+  }
+
+  //
+  // Test for: toIPNetwork()
+  //
+  {
+    // Negative test for invalid ip addr length(V4 + V6)
+    folly::IPAddress v4Addr = folly::IPAddress("10.1.1.1");
+    folly::IPAddress v6Addr = folly::IPAddress("2620::1");
+    const uint16_t invalidV4Len = 36; // ATTN: max mask length is 32 for IPV4
+    const uint16_t invalidV6Len = 130; // ATTN: max mask length is 128 for IPV6
+
+    thrift::IpPrefix v4Prefix, v6Prefix;
+    v4Prefix.prefixAddress_ref() = toBinaryAddress(v4Addr);
+    v4Prefix.prefixLength_ref() = invalidV4Len;
+    v6Prefix.prefixAddress_ref() = toBinaryAddress(v6Addr);
+    v6Prefix.prefixLength_ref() = invalidV6Len;
+
+    EXPECT_THROW(toIPNetwork(v4Prefix), thrift::OpenrError);
+    EXPECT_THROW(toIPNetwork(v6Prefix), thrift::OpenrError);
+  }
 }
 
 TEST(UtilTest, PrefixKeyTest) {

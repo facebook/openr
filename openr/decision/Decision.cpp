@@ -1556,32 +1556,36 @@ Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
       std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>();
   runInEventBaseThread(
       [this, p = std::move(p), filter = std::move(filter)]() mutable noexcept {
-        // Get route details
-        auto routes = prefixState_.getReceivedRoutesFiltered(filter);
+        try {
+          // Get route details
+          auto routes = prefixState_.getReceivedRoutesFiltered(filter);
 
-        // Add best path result to this
-        auto const& bestRoutesCache = spfSolver_->getBestRoutesCache();
-        for (auto& route : routes) {
-          auto const& bestRoutesIt =
-              bestRoutesCache.find(toIPNetwork(*route.prefix_ref()));
-          if (bestRoutesIt != bestRoutesCache.end()) {
-            auto const& bestRoutes = bestRoutesIt->second;
-            // Set all selected node-area
-            for (auto const& [node, area] : bestRoutes.allNodeAreas) {
-              route.bestKeys_ref()->emplace_back();
-              auto& key = route.bestKeys_ref()->back();
-              key.node_ref() = node;
-              key.area_ref() = area;
+          // Add best path result to this
+          auto const& bestRoutesCache = spfSolver_->getBestRoutesCache();
+          for (auto& route : routes) {
+            auto const& bestRoutesIt =
+                bestRoutesCache.find(toIPNetwork(*route.prefix_ref()));
+            if (bestRoutesIt != bestRoutesCache.end()) {
+              auto const& bestRoutes = bestRoutesIt->second;
+              // Set all selected node-area
+              for (auto const& [node, area] : bestRoutes.allNodeAreas) {
+                route.bestKeys_ref()->emplace_back();
+                auto& key = route.bestKeys_ref()->back();
+                key.node_ref() = node;
+                key.area_ref() = area;
+              }
+              // Set best node-area
+              route.bestKey_ref()->node_ref() = bestRoutes.bestNodeArea.first;
+              route.bestKey_ref()->area_ref() = bestRoutes.bestNodeArea.second;
             }
-            // Set best node-area
-            route.bestKey_ref()->node_ref() = bestRoutes.bestNodeArea.first;
-            route.bestKey_ref()->area_ref() = bestRoutes.bestNodeArea.second;
           }
-        }
 
-        // Set the promise
-        p.setValue(std::make_unique<std::vector<thrift::ReceivedRouteDetail>>(
-            std::move(routes)));
+          // Set the promise
+          p.setValue(std::make_unique<std::vector<thrift::ReceivedRouteDetail>>(
+              std::move(routes)));
+        } catch (const thrift::OpenrError& e) {
+          p.setException(e);
+        }
       });
   return std::move(sf);
 }

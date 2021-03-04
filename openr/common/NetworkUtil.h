@@ -14,6 +14,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
 namespace std {
@@ -104,14 +105,6 @@ toIPAddress(const thrift::BinaryAddress& addr) {
       addr.addr_ref()->size()));
 }
 
-inline folly::CIDRNetwork
-toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
-  return folly::IPAddress::createNetwork(
-      toIPAddress(*prefix.prefixAddress_ref()).str(),
-      *prefix.prefixLength_ref(),
-      applyMask);
-}
-
 inline thrift::IpPrefix
 toIpPrefix(const folly::CIDRNetwork& network) {
   return thrift::IpPrefix(
@@ -120,7 +113,14 @@ toIpPrefix(const folly::CIDRNetwork& network) {
 
 inline thrift::IpPrefix
 toIpPrefix(const std::string& prefix) {
-  return toIpPrefix(folly::IPAddress::createNetwork(prefix));
+  thrift::IpPrefix ipPrefix;
+  try {
+    ipPrefix = toIpPrefix(folly::IPAddress::createNetwork(prefix));
+  } catch (const folly::IPAddressFormatException& e) {
+    throw thrift::OpenrError(folly::sformat(
+        "Invalid IPAddress: {}, exception: {}", prefix, e.what()));
+  }
+  return ipPrefix;
 }
 
 inline std::string
@@ -181,6 +181,21 @@ toString(const thrift::MplsRoute& route) {
     lines.emplace_back("  " + toString(nh));
   }
   return folly::join("\n", lines);
+}
+
+inline folly::CIDRNetwork
+toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
+  folly::CIDRNetwork network;
+  try {
+    network = folly::IPAddress::createNetwork(
+        toIPAddress(*prefix.prefixAddress_ref()).str(),
+        *prefix.prefixLength_ref(),
+        applyMask);
+  } catch (const folly::IPAddressFormatException& e) {
+    throw thrift::OpenrError(folly::sformat(
+        "Invalid IPAddress: {}, exception: {}", toString(prefix), e.what()));
+  }
+  return network;
 }
 
 } // namespace openr
