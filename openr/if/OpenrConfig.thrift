@@ -73,9 +73,14 @@ struct KvstoreConfig {
 }
 
 struct DecisionConfig {
+  /** Fast reaction time to update decision SPF upon receiving adj db update
+  (in milliseconds). */
   1: i32 debounce_min_ms = 10;
+  /** Decision debounce time to update SPF in frequent adj db update
+    (in milliseconds). */
   2: i32 debounce_max_ms = 250;
 
+  /** Knob to enable/disable BGP route programming. */
   101: bool enable_bgp_dryrun = false;
 }
 
@@ -168,8 +173,64 @@ struct WatchdogConfig {
 }
 
 struct MonitorConfig {
+  /** Max number for storing recent event logs. */
   1: i32 max_event_log = 100
+  /** If set, will enable Monitor::processEventLog() to submit the event logs. */
   2: bool enable_event_log_submission  = true
+}
+
+enum VerifyClientType {
+  // Request a cert and verify it. Fail if verification fails or no
+  // cert is presented
+  ALWAYS = 0
+  // Request a cert from the peer and verify if one is presented.
+  // Will fail if verification fails.
+  // Do not fail if no cert is presented.
+  IF_PRESENTED = 1
+  // No verification is done and no cert is requested.
+  DO_NOT_REQUEST = 2
+}
+
+enum VerifyServerType {
+  // Server cert will be presented unless anon cipher,
+  // Verficiation will happen and a failure will result in termination
+  IF_PRESENTED = 0
+  // Server cert will be presented unless anon cipher,
+  // Verification will happen but the result will be ignored
+  IGNORE_VERIFY_RESULT = 1
+}
+
+struct ThriftServerConfig {
+  /** Bind address of thrift server. */
+  1: string listen_addr = "::"
+  /** Port of thrift server. */
+  2: i32 openr_ctrl_port = 2018
+  /** Knob to enable/disable TLS thrift server. */
+  3: bool enable_secure_thrift_server = false
+  /** Certificate authority path for verifying peers. */
+  4: optional string x509_ca_path
+  /** Certificate path for the associated wangle::SSLContextConfig. */
+  5: optional string x509_cert_path
+  /** The key path for the associated wangle::SSLContextConfig.
+  If unspecified, will use x509_cert_path */
+  6: optional string x509_key_path
+  /** eccCurveName for the associated wangle::SSLContextConfig */
+  7: optional string ecc_curve_name
+  /** A comma separated list of strings. Strings are x509 common names to
+  accept SSL connections from. If an empty string is provided, the server
+  will accept connections from any authenticated peer. */
+  8: optional string acceptable_peers
+  /** TLS ticket seed file path to use for client session resumption. */
+  9: optional string ticket_seed_path
+  /** Verify type for client when enabling secure server. */
+  10: optional VerifyClientType verify_client_type
+}
+
+struct ThriftClientConfig {
+  /** Knob to enable/disable TLS thrift client. */
+  1: bool enable_secure_thrift_client = false
+  /** Verify type for server when enabling secure client. */
+  2: VerifyServerType verify_server_type
 }
 
 enum PrefixForwardingType {
@@ -522,6 +583,17 @@ struct OpenrConfig {
    * area policy definitions
    */
   32: optional routing_policy.PolicyConfig area_policies
+
+  /**
+   * Config for thrift server.
+   */
+  33: ThriftServerConfig thrift_server;
+
+  /**
+   * Config for thrift client. If no config provided,
+   * go with non-secure client connenction.
+   */
+  34: optional ThriftClientConfig thrift_client;
 
   /**
    * Enable best route selection based on PrefixMetrics.
