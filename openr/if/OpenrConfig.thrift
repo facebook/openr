@@ -70,6 +70,14 @@ struct KvstoreConfig {
    * forth. If all root nodes went away, Open/R will fall back to naive flooding.
    */
   9: optional bool is_flood_root
+
+  /**
+  * Set buffering size for KvStore socket communication. Updates to neighbor node during
+  * flooding can be buffered upto this number. For larger networks where burst of updates
+  * can be high having high value makes sense. For smaller networks where burst of updates
+  * are low, having low value makes more sense. Defaults to 65536.
+  */
+  101: i32 zmq_hwm = 65536
 }
 
 struct DecisionConfig {
