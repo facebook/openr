@@ -27,7 +27,7 @@ struct RouteLimit {
     2: bool warning_only = false, // default false
     /* # of routes at which warning is to be issued. */
     3: i64 warning_limit = 0, // default 0, not using warning_limit
-}
+} (cpp.minimize_padding)
 
 /**
  * AdvertiseLinkBandwidth:
@@ -92,7 +92,7 @@ struct PeerGroup {
   30: optional bool enable_stateful_ha;
 
   31: optional AddPath add_path;
-}
+} (cpp.minimize_padding)
 
 /**
  * The configuration of a single BGP peer
@@ -207,7 +207,7 @@ struct BgpPeer {
    * functionality to this peer.
    */
   100: optional AddPath add_path;
-}
+} (cpp.minimize_padding)
 
 /**
  * BGP configuration
@@ -259,4 +259,4 @@ struct BgpConfig {
   17: optional bool compute_ucmp_from_link_bandwidth_community
 
   18: i32 eor_time_s = 45
-}
+} (cpp.minimize_padding)

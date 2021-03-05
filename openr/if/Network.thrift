@@ -51,17 +51,17 @@ struct MplsAction {
   // front() (index=0) in list will be bottom of stack and back()
   // element is top of the stack
   3: optional list<i32> pushLabels;   // Required if action == PUSH
-}
+} (cpp.minimize_padding)
 
 struct BinaryAddress {
   1: binary addr
   3: optional string ifName
-}
+} (cpp.minimize_padding)
 
 struct IpPrefix {
   1: BinaryAddress prefixAddress
   2: i16 prefixLength
-}
+} (cpp.minimize_padding)
 
 struct NextHopThrift {
   1: BinaryAddress address
@@ -94,7 +94,7 @@ struct NextHopThrift {
 
   // Name of next-hop device
   54: optional string neighborNodeName
-}
+} (cpp.minimize_padding)
 
 struct ClientAndNextHops {
   1: required i32 clientId,
@@ -108,13 +108,13 @@ struct RouteDetails {
   5: bool isConnected,
   6: optional AdminDistance adminDistance,
   7: list<NextHopThrift> nextHops,
-}
+} (cpp.minimize_padding)
 
 struct MplsRoute {
   1: i32 topLabel
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
-}
+} (cpp.minimize_padding)
 
 enum PrefixType {
   LOOPBACK = 1,
@@ -137,7 +137,7 @@ struct UnicastRoute {
   1: IpPrefix dest
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
-}
+} (cpp.minimize_padding)
 
 // For mimicing FBOSS agent thrift interfaces
 struct LinkNeighborThrift {
@@ -145,7 +145,7 @@ struct LinkNeighborThrift {
   2: i32 localVlan
   11: string printablePortId
   12: optional string systemName
-}
+} (cpp.minimize_padding)
 
 struct PortCounters {
   // avoid typechecker error here as bytes is a py3 reserved keyword
@@ -162,7 +162,7 @@ struct PortInfoThrift {
   10: PortCounters output,
   11: PortCounters input,
   12: string name
-}
+} (cpp.minimize_padding)
 
 // For mimicing FBOSS agent thrift interface
 struct PortStatus {
@@ -171,7 +171,7 @@ struct PortStatus {
   5: i64 speedMbps,
   // NOTE: Some fields are omitted intentionally as it is not supported
   // in Emulation!
-}
+} (cpp.minimize_padding)
 
 // For mimicing FBOSS agent thrift interface
 struct AggregatePortThrift {

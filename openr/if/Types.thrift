@@ -1098,7 +1098,7 @@ struct PerfDatabase {
    * Ordered list of historical performance events in ascending order of time
    */
   2: list<PerfEvents> eventInfo
-}
+} (cpp.minimize_padding)
 
 /**
  * Details about an interface in Open/R
@@ -1128,7 +1128,7 @@ struct InterfaceDetails {
    * functionality in LinkMonitor documentation.
    */
   4: optional i64 linkFlapBackOffMs
-}
+} (cpp.minimize_padding)
 
 /**
  * Information of all links of this node
@@ -1149,7 +1149,7 @@ struct DumpLinksReply {
    */
   6: map<string, InterfaceDetails>
         (cpp.template = "std::unordered_map") interfaceDetails
-}
+} (cpp.minimize_padding)
 
 /**
  * Set of attributes to uniquely identify an adjacency. It is identified by
@@ -1246,7 +1246,7 @@ struct OriginatedPrefixEntry {
    * drop next-hops.
    */
   3: bool installed = 0
-}
+} (cpp.minimize_padding)
 
 /**
  * Describe timestamp information about send/recv of hello packets. We use this
