@@ -161,7 +161,9 @@ struct SparkConfig {
 }
 
 struct WatchdogConfig {
+  /** Watchdog thread healthcheck interval. */
   1: i32 interval_s = 20
+  /** Watchdog thread aliveness threshold. */
   2: i32 thread_timeout_s = 300
   /**
    * Enforce upper limit on amount of memory in mega-bytes that Open/R process
@@ -525,6 +527,8 @@ struct OpenrConfig {
   17: SparkConfig spark_config
 
   # Watchdog
+  /** Enable watchdog thread to periodically check aliveness counters from each
+  Open/R thread, if unhealthy thread is detected, force crash Open/R. */
   18: optional bool enable_watchdog
   19: optional WatchdogConfig watchdog_config
 

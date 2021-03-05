@@ -291,7 +291,7 @@ main(int argc, char** argv) {
   Watchdog* watchdog{nullptr};
 
   // Watchdog thread to monitor thread aliveness
-  if (FLAGS_enable_watchdog) {
+  if (config->isWatchdogEnabled()) {
     watchdog = startEventBase(
         allThreads,
         orderedEvbs,

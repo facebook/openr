@@ -163,18 +163,6 @@ class GflagConfig final {
     *monitorConf.enable_event_log_submission_ref() =
         FLAGS_enable_event_log_submission;
 
-    // Watchdog
-    if (FLAGS_enable_watchdog) {
-      config.enable_watchdog_ref() = FLAGS_enable_watchdog;
-
-      thrift::WatchdogConfig watchdogConfig;
-      *watchdogConfig.interval_s_ref() = FLAGS_watchdog_interval_s;
-      *watchdogConfig.thread_timeout_s_ref() = FLAGS_watchdog_threshold_s;
-      *watchdogConfig.max_memory_mb_ref() = FLAGS_memory_limit_mb;
-
-      config.watchdog_config_ref() = std::move(watchdogConfig);
-    }
-
     // Prefix Allocation
     if (FLAGS_enable_prefix_alloc) {
       config.enable_prefix_allocation_ref() = FLAGS_enable_prefix_alloc;

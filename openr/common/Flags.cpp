@@ -244,13 +244,6 @@ DEFINE_int32(
     "Max backoff to dampen link flaps (in millseconds)");
 DEFINE_bool(enable_rib_policy, false, "Enable RibPolicy in Decision module");
 DEFINE_bool(
-    enable_watchdog,
-    true,
-    "Enable watchdog thread to periodically check aliveness counters from each "
-    "openr thread, if unhealthy thread is detected, force crash openr");
-DEFINE_int32(watchdog_interval_s, 20, "Watchdog thread healthcheck interval");
-DEFINE_int32(watchdog_threshold_s, 300, "Watchdog thread aliveness threshold");
-DEFINE_bool(
     enable_segment_routing, false, "Flag to disable/enable segment routing");
 DEFINE_bool(set_leaf_node, false, "Flag to enable/disable node as a leaf node");
 DEFINE_string(
@@ -263,7 +256,6 @@ DEFINE_string(
     "",
     "Only keys with originator ID matching any of the originator ID will "
     "be added to kvstore.");
-DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
 DEFINE_bool(
     enable_kvstore_thrift,
     false,

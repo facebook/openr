@@ -95,17 +95,11 @@ DECLARE_int32(link_flap_max_backoff_ms);
 
 DECLARE_bool(enable_rib_policy);
 
-DECLARE_bool(enable_watchdog);
-DECLARE_int32(watchdog_interval_s);
-DECLARE_int32(watchdog_threshold_s);
-
 DECLARE_bool(enable_segment_routing);
 DECLARE_bool(set_leaf_node);
 
 DECLARE_string(key_prefix_filters);
 DECLARE_string(key_originator_id_filters);
-
-DECLARE_int32(memory_limit_mb);
 
 DECLARE_int32(kvstore_zmq_hwm);
 DECLARE_int32(kvstore_flood_msg_per_sec);
