@@ -104,8 +104,6 @@ DEFINE_int32(
     kvstore_rep_port,
     openr::Constants::kKvStoreRepPort,
     "The port KvStore replier listens on");
-// Flag to enable or disable plugin module.
-DEFINE_bool(enable_plugin, false, "Enable plugin module");
 DEFINE_string(
     areas,
     openr::thrift::Types_constants::kDefaultArea(),
@@ -358,8 +356,6 @@ DEFINE_uint32(
     "Min nexthops for a route to be considered to program/announce."
     " This would only work for prefix announcing with ksp2 "
     "algorithm. Right now, only used in turbo-fabric setup");
-
-DEFINE_int32(add_path, 0, "add path value");
 
 DEFINE_uint32(
     monitor_max_event_log, 100, "Max number for storing recent event logs");

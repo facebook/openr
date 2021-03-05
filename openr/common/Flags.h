@@ -54,7 +54,6 @@ DECLARE_int32(openr_ctrl_port);
 DECLARE_int32(kvstore_rep_port);
 DECLARE_int32(fib_handler_port);
 
-DECLARE_bool(enable_plugin);
 DECLARE_string(areas);
 DECLARE_string(domain);
 DECLARE_string(listen_addr);
@@ -147,7 +146,6 @@ DECLARE_string(bgp_nexthop6);
 DECLARE_bool(bgp_nexthop_self);
 DECLARE_bool(bgp_override_auto_config);
 DECLARE_uint32(bgp_min_nexthop);
-DECLARE_int32(add_path);
 
 DECLARE_uint32(monitor_max_event_log);
 DECLARE_bool(enable_event_log_submission);

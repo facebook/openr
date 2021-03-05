@@ -7,14 +7,6 @@
 #
 # NOTE
 #
-# Ports 60000 - 60100 needs to be reserved in system so that they are always
-# free for openr to use. On linux you can do following to reserve.
-# > sysctl -w net.ipv4.ip_local_reserved_ports=60000-60100
-#
-
-#
-# NOTE
-#
 # Default OpenR configuration
 # Override the ones you need in `/etc/sysconfig/openr` for custom configuration
 # on the node or pass config name to this script
@@ -46,7 +38,6 @@ DECISION_DEBOUNCE_MIN_MS=10
 ENABLE_BGP_ROUTE_PROGRAMMING=true
 ENABLE_FIB_SERVICE_WAITING=true
 ENABLE_PERF_MEASUREMENT=true
-ENABLE_PLUGIN=false
 ENABLE_SECURE_THRIFT_SERVER=false
 ENABLE_WATCHDOG=true
 FIB_HANDLER_PORT=60100
@@ -63,7 +54,6 @@ VMODULE=""
 X509_CA_PATH=""
 X509_CERT_PATH=""
 X509_KEY_PATH=""
-PLUGIN_ARGS=
 
 #
 # Some sanity checks before we start OpenR
@@ -121,7 +111,6 @@ ARGS="\
   --enable_bgp_route_programming=${ENABLE_BGP_ROUTE_PROGRAMMING} \
   --enable_fib_service_waiting=${ENABLE_FIB_SERVICE_WAITING} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
-  --enable_plugin=${ENABLE_PLUGIN} \
   --enable_secure_thrift_server=${ENABLE_SECURE_THRIFT_SERVER} \
   --enable_watchdog=${ENABLE_WATCHDOG} \
   --fib_handler_port=${FIB_HANDLER_PORT} \
@@ -141,7 +130,6 @@ ARGS="\
   --max_log_size=1 \
   --v=${VERBOSITY} \
   --vmodule=${VMODULE} \
-  ${PLUGIN_ARGS} \
   ${OPENR_ARGS}"
 
 if [[ -n $LOG_FILE ]]; then
