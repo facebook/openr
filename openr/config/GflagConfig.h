@@ -191,7 +191,6 @@ class GflagConfig final {
     if (auto v = FLAGS_enable_ordered_fib_programming) {
       config.enable_ordered_fib_programming_ref() = v;
     }
-    *config.fib_port_ref() = FLAGS_fib_handler_port;
 
     // RibPolicy
     *config.enable_rib_policy_ref() = FLAGS_enable_rib_policy;

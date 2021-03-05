@@ -109,10 +109,6 @@ DEFINE_string(
     openr::thrift::Types_constants::kDefaultArea(),
     "Comma separated list of areas name specified as string");
 DEFINE_int32(
-    fib_handler_port,
-    openr::Constants::kFibAgentPort, // NOTE 100 is on purpose
-    "Switch agent thrift service port for FIB programming.");
-DEFINE_int32(
     spark_mcast_port,
     openr::Constants::kSparkMcastPort,
     "Spark UDP multicast port for sending spark-hello messages.");

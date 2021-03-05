@@ -52,7 +52,6 @@ DECLARE_int32(decision_debounce_max_ms);
 
 DECLARE_int32(openr_ctrl_port);
 DECLARE_int32(kvstore_rep_port);
-DECLARE_int32(fib_handler_port);
 
 DECLARE_string(areas);
 DECLARE_string(domain);
