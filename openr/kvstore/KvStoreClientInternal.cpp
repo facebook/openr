@@ -476,9 +476,8 @@ KvStoreClientInternal::clearPendingKeys() {
         keysToClear.emplace_back(key);
         continue;
       }
-      DCHECK(thriftVal.value_ref());
 
-      VLOG(2) << "Clearing (key, version, originatorId, ttlVersion, ttl, area)"
+      VLOG(1) << "Clearing (key, version, originatorId, ttlVersion, ttl, area)"
               << folly::sformat(
                      "({}, {}, {}, {}, {}, {})",
                      key,
@@ -487,9 +486,8 @@ KvStoreClientInternal::clearPendingKeys() {
                      *thriftVal.ttlVersion_ref(),
                      *thriftVal.ttl_ref(),
                      area.t);
-      VLOG(2) << "With value: "
-              << folly::humanify(thriftVal.value_ref().value());
 
+      DCHECK(thriftVal.value_ref());
       keyVals.emplace(key, thriftVal);
       keysToClear.emplace_back(key);
     }
@@ -793,28 +791,27 @@ KvStoreClientInternal::advertisePendingKeys(
 
       // Proceed only if backoff is active
       auto& backoff = backoffs_[area].at(key);
-      auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
-      VLOG(2) << eventType
-              << " (key, version, originatorId, ttlVersion, ttl, area) "
-              << folly::sformat(
-                     "({}, {}, {}, {}, {}, {})",
-                     key,
-                     *thriftValue.version_ref(),
-                     *thriftValue.originatorId_ref(),
-                     *thriftValue.ttlVersion_ref(),
-                     *thriftValue.ttl_ref(),
-                     area.t);
-      VLOG(2) << "With value: "
-              << folly::humanify(thriftValue.value_ref().value());
 
       if (not backoff.canTryNow()) {
         timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+        VLOG(2) << "Skipping key: " << key << ", area: " << area.t;
         continue;
       }
 
       // Apply backoff
       backoff.reportError();
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+
+      VLOG(1)
+          << "Advertising (key, version, originatorId, ttlVersion, ttl, area) "
+          << folly::sformat(
+                 "({}, {}, {}, {}, {}, {})",
+                 key,
+                 *thriftValue.version_ref(),
+                 *thriftValue.originatorId_ref(),
+                 *thriftValue.ttlVersion_ref(),
+                 *thriftValue.ttl_ref(),
+                 area.t);
 
       // Set in keyVals which is going to be advertise to the kvStore.
       DCHECK(thriftValue.value_ref());
