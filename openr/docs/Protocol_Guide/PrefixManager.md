@@ -4,27 +4,30 @@
 
 ---
 
-This module is responsible for keeping track of the prefixes originating from
-the node and advertising them into the network via KvStore.
+`PrefixManager` is the module which keeps track of the prefixes originated from
+local node. It advertises/withdraws prefixes to/from the network via `KvStore`.
+Main functions of this module are:
 
-For more information about message formats, checkout
-
-- [if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
+- Prefix operations, including advertising and withdrawing;
+- Route Origination;
+- Prefix redistribution(cross-AREA);
 
 ## Inter Module Communication
 
 ---
 
-![PrefixManager Intermodule Communication](https://user-images.githubusercontent.com/5740745/102555840-d5195500-4084-11eb-83a9-e55681139a4b.png)
-
-### Prefix Advertisements
+![PrefixManager Intermodule Communication](https://user-images.githubusercontent.com/51382140/110161227-ec253480-7da1-11eb-8584-844de9568e1d.png)
 
 There are three channels of information for managing route advertisements
 
-- `[Producer] ReplicateQueue<thrift::RouteDatabaseDelta>`: receive route
-  advertise & withdraw commands. Multiple sources within Open/R (`LinkMonitor`,
-  `PrefixAllocator`, `BgpRib`) uses this channel to manage their advertisements.
-  Each source is assigned and expected to use a unique type.
+- `[Producer] ReplicateQueue<DecisionRouteUpdate>`: publish static routes to be
+  programmed by local nodes. This queue is currently ONLY used for route
+  origination purpose. Each static route is with a special type `CONFIG`.
+
+- `[Consumer] RQueue<PrefixEvent>`: receive route advertising & withdrawing
+  commands. Multiple sources within Open/R (`LinkMonitor`, `PrefixAllocator`,
+  `BgpRib`) uses this channel to manage their advertisements. Each source is
+  assigned and expected to use a unique prefix type.
 
 - `[Consumer] RQueue<DecisionRouteUpdate>`: receive the computed (hence
   programmed) routes. The programmed routes are candidates for advertisements to
@@ -32,23 +35,30 @@ There are three channels of information for managing route advertisements
   re-distribution across the areas. Each RibRoute is converted into a route
   advertisement or withdraw with a special type `RIB`.
 
-- `originatedPrefixDb_`: routes read from `config.originated_prefixes`. These
-  routes supports route aggregation logic with `minimum_supporting_routes` knob.
-  Each originated route maintain a count of its supporting routes.
-
-In all cases, `PrefixManager` updates the PrefixDatabase advertised in `KvStore`
-and persisted on disk when the list changes.
-
-### KvStoreClient
-
-The kvStoreClient running with this module is responsible for making the
-`prefix:<node_name>` key persistent in the network.
+In addition, `PrefixManager` will read routes to be originated from
+`OpenrConfig.originated_prefixes` and stored them inside `originatedPrefixDb_`.
+These routes supports route-aggregation logic with `minimum_supporting_routes`
+knob. Each originated route maintains a count of its supporting routes.
 
 ## Operations
 
 ---
 
-Prefix Manager supports the following operations:
+To fulfill operations defined in previous section, `PrefixManager` updates its
+local prefix database and interacts with `KvStore` via:
+
+- [Advertise]: `persistKey()` API inside `KvStoreClientInternal`;
+- [Withdraw]: `clearKey()` API inside `KvStoreClientInternal`;
+
+For more information about message formats, checkout:
+
+- [if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
+
+For more information about `KvStoreClientInternal`'s APIs, checkout:
+
+- [KvStoreClientInternal](https://github.com/facebook/openr/blob/master/openr/docs/Protocol_Guide/KvStore.md#kvstoreclientinternal)
+
+`PrefixManager` supports the following operations:
 
 - `ADD_PREFIXES` => Adds the list of prefixes provided as an argument
 - `WITHDRAW_PREFIXES` => Withdraws the list of prefixes provided as an argument
