@@ -25,19 +25,21 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
    * There may be some replicated entries in stream that are also in snapshot.
    */
   // DEPRECATED
-  Types.Publication, stream<Types.Publication> subscribeAndGetKvStore()
+  Types.Publication, stream<Types.Publication> subscribeAndGetKvStore();
   // DEPRECATED
-  Types.Publication, stream<Types.Publication>
-    subscribeAndGetKvStoreFiltered(1: Types.KeyDumpParams filter)
+  Types.Publication, stream<Types.Publication> subscribeAndGetKvStoreFiltered(
+    1: Types.KeyDumpParams filter,
+  );
 
   // Prefer this API, above do not specfy area to subcribe to, default
   // constructing filter will yield all kvstore keys. provide set of areas to
   // dump and subscribe to. Providing an empty set will subscribe on all areas
-  list<Types.Publication>, stream<Types.Publication>
-  subscribeAndGetAreaKvStores(
+  list<Types.Publication>, stream<
+    Types.Publication
+  > subscribeAndGetAreaKvStores(
     1: Types.KeyDumpParams filter,
     2: set<string> selectAreas,
-  )
+  );
 
   /**
    * Retrieve Fib snapshot and subscribe for subsequent updates.
@@ -46,7 +48,8 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
    * are also in snapshot.
    */
 
-  Types.RouteDatabase, stream<Types.RouteDatabaseDelta> subscribeAndGetFib()
-  OpenrCtrl.RouteDatabaseDetail, stream<OpenrCtrl.RouteDatabaseDeltaDetail> subscribeAndGetFibDetail()
-
+  Types.RouteDatabase, stream<Types.RouteDatabaseDelta> subscribeAndGetFib();
+  OpenrCtrl.RouteDatabaseDetail, stream<
+    OpenrCtrl.RouteDatabaseDeltaDetail
+  > subscribeAndGetFibDetail();
 }

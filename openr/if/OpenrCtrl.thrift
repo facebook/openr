@@ -20,8 +20,8 @@ include "OpenrConfig.thrift"
 include "Types.thrift"
 
 exception OpenrError {
-  1: string message
-} ( message = "message" )
+  1: string message;
+} (message = "message")
 
 struct NodeAndArea {
   1: string node;
@@ -164,8 +164,8 @@ struct RibPolicy {
  * is not downloaded to FibService
  */
 struct UnicastRouteDetail {
-  1: Network.UnicastRoute unicastRoute (cpp.mixin)
-  2: optional Types.PrefixEntry bestRoute
+  1: Network.UnicastRoute unicastRoute (cpp.mixin);
+  2: optional Types.PrefixEntry bestRoute;
 }
 
 /*
@@ -173,7 +173,7 @@ struct UnicastRouteDetail {
  * is not downloaded to FibService
  */
 struct MplsRouteDetail {
-  1: Network.MplsRoute mplsRoute (cpp.mixin)
+  1: Network.MplsRoute mplsRoute (cpp.mixin);
 }
 
 /*
@@ -181,9 +181,9 @@ struct MplsRouteDetail {
  * is not downloaded to FibService
  */
 struct RouteDatabaseDetail {
-  1: string thisNodeName
-  2: list<UnicastRouteDetail> unicastRoutes
-  3: list<MplsRouteDetail> mplsRoutes
+  1: string thisNodeName;
+  2: list<UnicastRouteDetail> unicastRoutes;
+  3: list<MplsRouteDetail> mplsRoutes;
 }
 
 /*
@@ -191,10 +191,10 @@ struct RouteDatabaseDetail {
  * RouteDatabaseDelta which is not downloaded to FibService
  */
 struct RouteDatabaseDeltaDetail {
-  1: list<UnicastRouteDetail> unicastRoutesToUpdate
+  1: list<UnicastRouteDetail> unicastRoutesToUpdate;
   2: list<Network.IpPrefix> unicastRoutesToDelete;
-  3: list<MplsRouteDetail> mplsRoutesToUpdate
-  4: list<i32> mplsRoutesToDelete
+  3: list<MplsRouteDetail> mplsRoutesToUpdate;
+  4: list<i32> mplsRoutesToDelete;
 }
 
 /**
@@ -202,7 +202,6 @@ struct RouteDatabaseDeltaDetail {
  * modules.
  */
 service OpenrCtrl extends fb303_core.BaseService {
-
   //
   // Config APIs
   //
@@ -210,12 +209,12 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * get string config
    */
-  string getRunningConfig()
+  string getRunningConfig();
 
   /**
    * get config in thrift
    */
-  OpenrConfig.OpenrConfig getRunningConfigThrift()
+  OpenrConfig.OpenrConfig getRunningConfigThrift();
 
   /**
    * Load file config and do validation. Throws exception upon error.
@@ -225,8 +224,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * loaded content is returned so user could verify the difference between
    * file content and loaded content
    */
-  string dryrunConfig(1: string file)
-    throws (1: OpenrError error)
+  string dryrunConfig(1: string file) throws (1: OpenrError error);
 
   //
   // PrefixManager APIs
@@ -235,21 +233,24 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Advertise or Update prefixes
    */
-  void advertisePrefixes(1: list<Types.PrefixEntry> prefixes)
-    throws (1: OpenrError error)
+  void advertisePrefixes(1: list<Types.PrefixEntry> prefixes) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Withdraw previously advertised prefixes. Only relevant attributes for this
    * operation are `prefix` and `type`
    */
-  void withdrawPrefixes(1: list<Types.PrefixEntry> prefixes)
-    throws (1: OpenrError error)
+  void withdrawPrefixes(1: list<Types.PrefixEntry> prefixes) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Withdraw prefixes in bulk by type (aka client-id)
    */
-  void withdrawPrefixesByType(1: Network.PrefixType prefixType)
-    throws (1: OpenrError error)
+  void withdrawPrefixesByType(1: Network.PrefixType prefixType) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Sync prefixes by type. This operation set the new state for given type.
@@ -258,19 +259,21 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   void syncPrefixesByType(
     1: Network.PrefixType prefixType,
-    2: list<Types.PrefixEntry> prefixes) throws (1: OpenrError error)
+    2: list<Types.PrefixEntry> prefixes,
+  ) throws (1: OpenrError error);
 
   /**
    * Get all prefixes being advertised
    * @deprecated - use getAdvertisedRoutes() instead
    */
-  list<Types.PrefixEntry> getPrefixes() throws (1: OpenrError error)
+  list<Types.PrefixEntry> getPrefixes() throws (1: OpenrError error);
 
   /**
    * Get prefixes of specific types
    */
-  list<Types.PrefixEntry> getPrefixesByType(1: Network.PrefixType prefixType)
-    throws (1: OpenrError error)
+  list<Types.PrefixEntry> getPrefixesByType(
+    1: Network.PrefixType prefixType,
+  ) throws (1: OpenrError error);
 
   //
   // Route APIs
@@ -282,7 +285,8 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   list<AdvertisedRouteDetail> getAdvertisedRoutes();
   list<AdvertisedRouteDetail> getAdvertisedRoutesFiltered(
-      1: AdvertisedRouteFilter filter) throws (1: OpenrError error);
+    1: AdvertisedRouteFilter filter,
+  ) throws (1: OpenrError error);
 
   /**
    * Get received routes, aka Adjacency RIB. Filter parameters if specified will
@@ -290,19 +294,18 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   list<ReceivedRouteDetail> getReceivedRoutes();
   list<ReceivedRouteDetail> getReceivedRoutesFiltered(
-      1: ReceivedRouteFilter filter) throws (1: OpenrError error);
+    1: ReceivedRouteFilter filter,
+  ) throws (1: OpenrError error);
 
   /**
    * Get route database of the current node. It is retrieved from FIB module.
    */
-  Types.RouteDatabase getRouteDb()
-    throws (1: OpenrError error)
+  Types.RouteDatabase getRouteDb() throws (1: OpenrError error);
 
   /**
    * Get route detailed database of the current node. It is retrieved from FIB module.
    */
-  RouteDatabaseDetail getRouteDetailDb()
-    throws (1: OpenrError error)
+  RouteDatabaseDetail getRouteDetailDb() throws (1: OpenrError error);
 
   /**
    * Get route database from decision module. Since Decision has global
@@ -310,8 +313,9 @@ service OpenrCtrl extends fb303_core.BaseService {
    *
    * NOTE: Current node's routes are returned if `nodeName` is empty.
    */
-  Types.RouteDatabase getRouteDbComputed(1: string nodeName)
-    throws (1: OpenrError error)
+  Types.RouteDatabase getRouteDbComputed(1: string nodeName) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Get unicast routes after applying a list of prefix filter.
@@ -319,28 +323,27 @@ service OpenrCtrl extends fb303_core.BaseService {
    * in from FIB module.
    * Return all unicast routes if the input list is empty.
    */
-  list<Network.UnicastRoute> getUnicastRoutesFiltered(1: list<string> prefixes)
-    throws (1: OpenrError error)
+  list<Network.UnicastRoute> getUnicastRoutesFiltered(
+    1: list<string> prefixes,
+  ) throws (1: OpenrError error);
 
   /**
    * Get all unicast routes of the current node, retrieved from FIB module.
    */
-  list<Network.UnicastRoute> getUnicastRoutes()
-    throws (1: OpenrError error)
+  list<Network.UnicastRoute> getUnicastRoutes() throws (1: OpenrError error);
 
   /**
    * Get Mpls routes after applying a list of prefix filter.
    * Return all Mpls routes if the input list is empty.
    */
-  list<Network.MplsRoute> getMplsRoutesFiltered(1: list<i32> labels)
-    throws (1: OpenrError error)
+  list<Network.MplsRoute> getMplsRoutesFiltered(1: list<i32> labels) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Get all Mpls routes of the current node, retrieved from FIB module.
    */
-  list<Network.MplsRoute> getMplsRoutes()
-    throws (1: OpenrError error)
-
+  list<Network.MplsRoute> getMplsRoutes() throws (1: OpenrError error);
 
   //
   // Performance stats APIs
@@ -351,8 +354,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * of Open/R.
    */
 
-  Types.PerfDatabase getPerfDb()
-    throws (1: OpenrError error)
+  Types.PerfDatabase getPerfDb() throws (1: OpenrError error);
 
   //
   // Decision APIs
@@ -365,8 +367,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * only selects default area adj DBs. Deprecated, perfer
    * getDecisionAdjacenciesFiltered()
    */
-  Types.AdjDbs getDecisionAdjacencyDbs() throws (1: OpenrError error)
-
+  Types.AdjDbs getDecisionAdjacencyDbs() throws (1: OpenrError error);
 
   /**
    * Get adjacency databases of all nodes. NOTE: for ABRs, there can be more
@@ -374,8 +375,8 @@ service OpenrCtrl extends fb303_core.BaseService {
    * (includes bi-directional check)
    */
   list<Types.AdjacencyDatabase> getDecisionAdjacenciesFiltered(
-    1: AdjacenciesFilter filter
-  ) throws (1: OpenrError error)
+    1: AdjacenciesFilter filter,
+  ) throws (1: OpenrError error);
 
   /**
    * Get global prefix databases. This represents prefixes of actives nodes
@@ -384,8 +385,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    *
    * DEPRECATED. Prefer getReceivedRoutes APIs
    */
-  Types.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error)
-
+  Types.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error);
 
   //
   // KvStore APIs
@@ -395,22 +395,24 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get specific key-values from KvStore. If `filterKeys` is empty then no
    * keys will be returned
    */
-  Types.Publication getKvStoreKeyVals(1: list<string> filterKeys)
-    throws (1: OpenrError error)
+  Types.Publication getKvStoreKeyVals(1: list<string> filterKeys) throws (
+    1: OpenrError error,
+  );
 
   /**
    * with area option
    */
   Types.Publication getKvStoreKeyValsArea(
     1: list<string> filterKeys,
-    2: string area
-  ) throws (1: OpenrError error)
+    2: string area,
+  ) throws (1: OpenrError error);
 
   /**
    * Get raw key-values from KvStore with more control over filter
    */
-  Types.Publication getKvStoreKeyValsFiltered(1: Types.KeyDumpParams filter)
-    throws (1: OpenrError error)
+  Types.Publication getKvStoreKeyValsFiltered(
+    1: Types.KeyDumpParams filter,
+  ) throws (1: OpenrError error);
 
   /**
    * Get raw key-values from KvStore with more control over filter with 'area'
@@ -418,83 +420,86 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   Types.Publication getKvStoreKeyValsFilteredArea(
     1: Types.KeyDumpParams filter,
-    2: string area
-  ) throws (1: OpenrError error)
+    2: string area,
+  ) throws (1: OpenrError error);
 
   /**
    * Get kvstore metadata (no values) with filter
    */
-  Types.Publication getKvStoreHashFiltered(1: Types.KeyDumpParams filter)
-    throws (1: OpenrError error)
+  Types.Publication getKvStoreHashFiltered(
+    1: Types.KeyDumpParams filter,
+  ) throws (1: OpenrError error);
 
   /**
    * with area
    */
   Types.Publication getKvStoreHashFilteredArea(
     1: Types.KeyDumpParams filter,
-    2: string area
-  ) throws (1: OpenrError error)
+    2: string area,
+  ) throws (1: OpenrError error);
 
   /**
    * Set/Update key-values in KvStore.
    */
   void setKvStoreKeyVals(
     1: Types.KeySetParams setParams,
-    2: string area
-  ) throws (1: OpenrError error)
+    2: string area,
+  ) throws (1: OpenrError error);
 
   /**
    * Long poll API to get KvStore
    * Will return true/false with our own KeyVal snapshot provided
    */
-   bool longPollKvStoreAdjArea(1: string area, 2: Types.KeyVals snapshot)
-    throws (1: OpenrError error)
+  bool longPollKvStoreAdjArea(
+    1: string area,
+    2: Types.KeyVals snapshot,
+  ) throws (1: OpenrError error);
 
   // Deprecated, prefer API sepcfying area
   // TODO, remove once EBB has transition away from this
-  bool longPollKvStoreAdj(1: Types.KeyVals snapshot)
-    throws (1: OpenrError error)
+  bool longPollKvStoreAdj(1: Types.KeyVals snapshot) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Send Dual message
    */
   void processKvStoreDualMessage(
-    1: Types.DualMessages messages
-    2: string area
-  ) throws (1: OpenrError error)
+    1: Types.DualMessages messages,
+    2: string area,
+  ) throws (1: OpenrError error);
 
   /**
    * Set flood-topology parameters. Called by neighbors
    */
   void updateFloodTopologyChild(
     1: Types.FloodTopoSetParams params,
-    2: string area
-  ) throws (1: OpenrError error)
+    2: string area,
+  ) throws (1: OpenrError error);
 
   /**
    * Get spanning tree information
    */
-  Types.SptInfos getSpanningTreeInfos(
-    1: string area
-  ) throws (1: OpenrError error);
+  Types.SptInfos getSpanningTreeInfos(1: string area) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Get KvStore peers
    */
-  Types.PeersMap getKvStorePeers() throws (1: OpenrError error)
+  Types.PeersMap getKvStorePeers() throws (1: OpenrError error);
 
-  Types.PeersMap getKvStorePeersArea(
-    1: string area
-  ) throws (1: OpenrError error)
+  Types.PeersMap getKvStorePeersArea(1: string area) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Get KvStore Summary for each configured area (provided as the filter set).
    * The resp is a list of Summary structs, one for each area
    */
   list<Types.KvStoreAreaSummary> getKvStoreAreaSummary(
-    1: set<string> selectAreas
-  ) throws (1: OpenrError error)
-
+    1: set<string> selectAreas,
+  ) throws (1: OpenrError error);
 
   //
   // LinkMonitor APIs
@@ -505,18 +510,20 @@ service OpenrCtrl extends fb303_core.BaseService {
    * will not do any transit traffic. However node will still be reachable in
    * the network from other nodes.
    */
-  void setNodeOverload() throws (1: OpenrError error)
-  void unsetNodeOverload() throws (1: OpenrError error)
+  void setNodeOverload() throws (1: OpenrError error);
+  void unsetNodeOverload() throws (1: OpenrError error);
 
   /**
    * Command to set/unset overload bit for interface. If overload bit is set
    * then no transit traffic will pass through the interface which is equivalent
    * to hard drain on the interface.
    */
-  void setInterfaceOverload(1: string interfaceName)
-    throws (1: OpenrError error)
-  void unsetInterfaceOverload(1: string interfaceName)
-    throws (1: OpenrError error)
+  void setInterfaceOverload(1: string interfaceName) throws (
+    1: OpenrError error,
+  );
+  void unsetInterfaceOverload(1: string interfaceName) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Command to override metric for adjacencies over specific interfaces. This
@@ -525,10 +532,13 @@ service OpenrCtrl extends fb303_core.BaseService {
    *
    * Request must have valid `interfaceName` and `overrideMetric` values.
    */
-  void setInterfaceMetric(1: string interfaceName, 2: i32 overrideMetric)
-    throws (1: OpenrError error)
-  void unsetInterfaceMetric(1: string interfaceName)
-    throws (1: OpenrError error)
+  void setInterfaceMetric(
+    1: string interfaceName,
+    2: i32 overrideMetric,
+  ) throws (1: OpenrError error);
+  void unsetInterfaceMetric(1: string interfaceName) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Command to override metric for specific adjacencies. Request must have
@@ -538,21 +548,24 @@ service OpenrCtrl extends fb303_core.BaseService {
     1: string interfaceName,
     2: string adjNodeName,
     3: i32 overrideMetric,
-  ) throws (1: OpenrError error)
-  void unsetAdjacencyMetric(1: string interfaceName, 2: string adjNodeName)
-    throws (1: OpenrError error)
+  ) throws (1: OpenrError error);
+  void unsetAdjacencyMetric(
+    1: string interfaceName,
+    2: string adjNodeName,
+  ) throws (1: OpenrError error);
 
   /**
    * Get the current link status information
    */
-  Types.DumpLinksReply getInterfaces() throws (1: OpenrError error)
+  Types.DumpLinksReply getInterfaces() throws (1: OpenrError error);
 
   /**
    * Get the current adjacencies information, only works for nodes with one
    * configured area. DEPRECATED, prefer
    */
-  Types.AdjacencyDatabase getLinkMonitorAdjacencies()
-    throws (1: OpenrError error)
+  Types.AdjacencyDatabase getLinkMonitorAdjacencies() throws (
+    1: OpenrError error,
+  );
 
   /**
    * Get the current adjacencies information, provide set of areas to get
@@ -560,19 +573,19 @@ service OpenrCtrl extends fb303_core.BaseService {
    * all configured areas
    */
   list<Types.AdjacencyDatabase> getLinkMonitorAdjacenciesFiltered(
-    1: AdjacenciesFilter filter
-  ) throws (1: OpenrError error)
+    1: AdjacenciesFilter filter,
+  ) throws (1: OpenrError error);
 
   /**
    * Command to request OpenR version
    */
-  Types.OpenrVersions getOpenrVersion() throws (1: OpenrError error)
+  Types.OpenrVersions getOpenrVersion() throws (1: OpenrError error);
 
   /**
    * Command to request build information
    * @deprecated - instead use getRegexExportedValues("build.*") API
    */
-  Types.BuildInfo getBuildInfo() throws (1: OpenrError error)
+  Types.BuildInfo getBuildInfo() throws (1: OpenrError error);
 
   //
   // PersistentStore APIs (query / alter dynamic configuration)
@@ -582,18 +595,20 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Set new config key - you will never need to use it
    * NOTE: This API should only be accessible from local node
    */
-  void setConfigKey(1: string key, 2: binary value) throws (1: OpenrError error)
+  void setConfigKey(1: string key, 2: binary value) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Erase key from config
    * NOTE: This API should only be accessible from local node
    */
-  void eraseConfigKey(1: string key) throws (1: OpenrError error)
+  void eraseConfigKey(1: string key) throws (1: OpenrError error);
 
   /**
    * Get config key
    */
-  binary getConfigKey(1: string key) throws (1: OpenrError error)
+  binary getConfigKey(1: string key) throws (1: OpenrError error);
 
   //
   // Spark APIs
@@ -603,22 +618,22 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Send out SparkHelloMsg with `restarting` flag
    * indicating graceful restart usage
    */
-  void floodRestartingMsg() throws (1: OpenrError error)
+  void floodRestartingMsg() throws (1: OpenrError error);
 
   /*
    * Get info for Spark neighors
    */
-  list<Types.SparkNeighbor> getNeighbors() throws (1: OpenrError error)
+  list<Types.SparkNeighbor> getNeighbors() throws (1: OpenrError error);
 
   //
   //  Monitor APIs (get log events)
   //
 
   // Get log events
-  list<string> getEventLogs() throws (1: OpenrError error)
+  list<string> getEventLogs() throws (1: OpenrError error);
 
   // Get Openr Node Name
-  string getMyNodeName()
+  string getMyNodeName();
 
   //
   // RibPolicy
@@ -629,7 +644,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    *
    * @throws OpenrError if rib-policy is not valid or enabled via configuration
    */
-  void setRibPolicy(1: RibPolicy ribPolicy) throws (1: OpenrError error)
+  void setRibPolicy(1: RibPolicy ribPolicy) throws (1: OpenrError error);
 
   /**
    * Get RibPolicy.
@@ -637,12 +652,12 @@ service OpenrCtrl extends fb303_core.BaseService {
    * @throws OpenrError if rib-policy is not enabled via configuration or is
    *         not set previously
    */
-  RibPolicy getRibPolicy() throws (1: OpenrError error)
+  RibPolicy getRibPolicy() throws (1: OpenrError error);
 
   /**
   * Clear RibPolicy.
   * @throws OpenrError if rib-policy is not enabled via configuration or is
   *         not set previously.
   */
-  void clearRibPolicy() throws (1: OpenrError error)
+  void clearRibPolicy() throws (1: OpenrError error);
 }
