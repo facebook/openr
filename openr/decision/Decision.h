@@ -41,7 +41,7 @@ namespace openr {
 using StaticMplsRoutes =
     std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>;
 using StaticUnicastRoutes =
-    std::unordered_map<folly::CIDRNetwork, std::vector<thrift::NextHopThrift>>;
+    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>;
 
 /**
  * Captures the best route selection result. Especially highlights
@@ -216,7 +216,7 @@ class SpfSolver {
   //
 
   void updateStaticUnicastRoutes(
-      const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+      const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
       const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
 
   void updateStaticMplsRoutes(

@@ -316,7 +316,7 @@ class PrefixManager final : public OpenrEventBase {
      */
     bool
     shouldInstall() const {
-      return originatedPrefix.install_to_fib_ref().value_or(true);
+      return originatedPrefix.install_to_fib_ref().value_or(false);
     }
 
     bool

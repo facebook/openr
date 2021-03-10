@@ -206,7 +206,7 @@ class SpfSolver::SpfSolverImpl {
   //
 
   void updateStaticUnicastRoutes(
-      const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+      const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
       const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
 
   void updateStaticMplsRoutes(
@@ -369,27 +369,29 @@ class SpfSolver::SpfSolverImpl {
 
 void
 SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
-    const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+    const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
-  for (const auto& unicastRoute : unicastRoutesToUpdate) {
-    const auto prefix = toIPNetwork(*unicastRoute.dest_ref());
-    staticUnicastRoutes_.insert_or_assign(prefix, *unicastRoute.nextHops_ref());
+  LOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
+            << " static unicast routes.";
+  for (const auto& ribUnicastEntry : unicastRoutesToUpdate) {
+    const auto& prefix = ribUnicastEntry.prefix;
+    staticUnicastRoutes_.insert_or_assign(prefix, ribUnicastEntry);
 
-    VLOG(1) << "[STATIC UNICAST ROUTE ADVERTISEMENT] Prefix = "
-            << folly::IPAddress::networkToString(prefix)
-            << ", NextHopsCount = " << unicastRoute.nextHops_ref()->size();
-    for (auto const& nh : *unicastRoute.nextHops_ref()) {
+    VLOG(1) << "> " << folly::IPAddress::networkToString(prefix)
+            << ", NextHopsCount = " << ribUnicastEntry.nexthops.size();
+    for (auto const& nh : ribUnicastEntry.nexthops) {
       VLOG(2) << " via " << toString(nh);
     }
   }
 
+  LOG(INFO) << "Deleting " << unicastRoutesToDelete.size()
+            << " static unicast routes.";
   for (const auto& prefix : unicastRoutesToDelete) {
     // mark unicast entry to be deleted
     staticUnicastRoutes_.erase(prefix);
 
-    VLOG(1) << "[STATIC UNICAST ROUTE WITHDRAW] Prefix = "
-            << folly::IPAddress::networkToString(prefix);
+    VLOG(1) << "> " << folly::IPAddress::networkToString(prefix);
   }
 }
 
@@ -398,23 +400,25 @@ SpfSolver::SpfSolverImpl::updateStaticMplsRoutes(
     const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
     const std::vector<int32_t>& mplsRoutesToDelete) {
   // Process MPLS routes to add or update
+  LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
+            << " static mpls routes.";
   for (const auto& mplsRoute : mplsRoutesToUpdate) {
     const auto topLabel = *mplsRoute.topLabel_ref();
     staticMplsRoutes_.insert_or_assign(topLabel, *mplsRoute.nextHops_ref());
 
-    VLOG(1) << "[STATIC MPLS ROUTE ADVERTISEMENT] Prefix = "
-            << std::to_string(topLabel)
+    VLOG(1) << "> " << std::to_string(topLabel)
             << ", NextHopsCount = " << mplsRoute.nextHops_ref()->size();
     for (auto const& nh : *mplsRoute.nextHops_ref()) {
       VLOG(2) << " via " << toString(nh);
     }
   }
 
+  LOG(INFO) << "Deleting " << mplsRoutesToDelete.size()
+            << " static mpls routes.";
   for (const auto& topLabel : mplsRoutesToDelete) {
     staticMplsRoutes_.erase(topLabel);
 
-    VLOG(1) << "[STATIC MPLS ROUTE WITHDRAW] Prefix = "
-            << std::to_string(topLabel);
+    VLOG(1) << "> " << std::to_string(topLabel);
   }
 }
 
@@ -434,10 +438,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefixOrGetStaticRoute(
   // check `staticUnicastRoutes_`
   auto it = staticUnicastRoutes_.find(prefix);
   if (it != staticUnicastRoutes_.end()) {
-    return RibUnicastEntry(
-        it->first,
-        std::unordered_set<thrift::NextHopThrift>{
-            it->second.begin(), it->second.end()});
+    return it->second;
   }
   return std::nullopt;
 }
@@ -644,14 +645,12 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   }
 
   // Create static unicast routes
-  for (const auto& [prefix, nhs] : staticUnicastRoutes_) {
+  for (auto [prefix, ribUnicastEntry] : staticUnicastRoutes_) {
     if (routeDb.unicastRoutes.count(prefix)) {
       // ignore prefixes as prefixState has higher priority
       continue;
     }
-    routeDb.addUnicastRoute(RibUnicastEntry(
-        prefix,
-        std::unordered_set<thrift::NextHopThrift>{nhs.begin(), nhs.end()}));
+    routeDb.addUnicastRoute(RibUnicastEntry(ribUnicastEntry));
   }
 
   //
@@ -1356,7 +1355,7 @@ SpfSolver::~SpfSolver() {}
 
 void
 SpfSolver::updateStaticUnicastRoutes(
-    const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate,
+    const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   return impl_->updateStaticUnicastRoutes(
       unicastRoutesToUpdate, unicastRoutesToDelete);
@@ -1834,11 +1833,11 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
   // update static unicast routes
   if (routeUpdate.unicastRoutesToUpdate.size() or
       routeUpdate.unicastRoutesToDelete.size()) {
-    std::vector<thrift::UnicastRoute> unicastRoutesToUpdate{};
+    std::vector<RibUnicastEntry> unicastRoutesToUpdate{};
     std::unordered_set<folly::CIDRNetwork> addedPrefixes{};
     for (const auto& [prefix, ribUnicastEntry] :
          routeUpdate.unicastRoutesToUpdate) {
-      unicastRoutesToUpdate.emplace_back(ribUnicastEntry.toThrift());
+      unicastRoutesToUpdate.emplace_back(ribUnicastEntry);
       addedPrefixes.emplace(prefix);
     }
 

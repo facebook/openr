@@ -978,6 +978,7 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
 
   //
   // Filter on non-existing type (BGP)
+  //
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixType_ref() = thrift::PrefixType::BGP;
@@ -1042,12 +1043,9 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
 };
 
 /**
- * Test prefix advertisement in KvStore with multiple clients.
- * NOTE: Priority LOOPBACK > DEFAULT > BGP
- * 1. Inject prefix1 with client-bgp - Verify KvStore
- * 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
- * 3. Withdraw prefix1 with client-loopback - Verify KvStore
- * 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+ * Test cross-AREA behavior for Decision RIB routes:
+ *  1. prefix update;
+ *  2. nexthop update;
  */
 TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   auto kvStoreUpdatesQueue = kvStoreWrapper->getReader();
@@ -1337,9 +1335,9 @@ class RouteOriginationFixture : public PrefixManagerTestFixture {
     thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
     originatedPrefixV4.prefix_ref() = v4Prefix_;
     originatedPrefixV4.minimum_supporting_routes_ref() = minSupportingRouteV4_;
+    originatedPrefixV4.install_to_fib_ref() = true;
     originatedPrefixV6.prefix_ref() = v6Prefix_;
     originatedPrefixV6.minimum_supporting_routes_ref() = minSupportingRouteV6_;
-    originatedPrefixV6.install_to_fib_ref() = false;
 
     auto tConfig = PrefixManagerTestFixture::createConfig();
     tConfig.originated_prefixes_ref() = {
