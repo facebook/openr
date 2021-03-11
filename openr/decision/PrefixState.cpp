@@ -19,15 +19,15 @@ PrefixState::updatePrefix(
   std::unordered_set<folly::CIDRNetwork> changed;
 
   auto [it, inserted] = prefixes_[toIPNetwork(key.getIpPrefix())].emplace(
-      key.getNodeAndArea(), entry);
+      key.getNodeAndArea(), std::make_shared<thrift::PrefixEntry>(entry));
 
   // Skip rest of code, if prefix exists and has no change
-  if (not inserted && it->second == entry) {
+  if (not inserted && *it->second == entry) {
     return changed;
   }
   // Update prefix
   if (not inserted) {
-    it->second = entry;
+    it->second = std::make_shared<thrift::PrefixEntry>(entry);
   }
   changed.insert(toIPNetwork(key.getIpPrefix()));
 
@@ -112,7 +112,7 @@ PrefixState::filterAndAddReceivedRoute(
     auto& route = routeDetail.routes_ref()->back();
     route.key_ref()->node_ref() = nodeAndArea.first;
     route.key_ref()->area_ref() = nodeAndArea.second;
-    route.route_ref() = prefixEntry;
+    route.route_ref() = *prefixEntry;
   }
 
   // Add detail if there are entries to return
@@ -133,11 +133,11 @@ PrefixState::hasConflictingForwardingInfo(const PrefixEntries& prefixEntries) {
 
   // Iterate over all entries and make sure the forwarding information agrees
   for (auto& [_, entry] : prefixEntries) {
-    if (firstEntry.forwardingAlgorithm_ref() !=
-        entry.forwardingAlgorithm_ref()) {
+    if (firstEntry->forwardingAlgorithm_ref() !=
+        entry->forwardingAlgorithm_ref()) {
       return true;
     }
-    if (firstEntry.forwardingType_ref() != entry.forwardingType_ref()) {
+    if (firstEntry->forwardingType_ref() != entry->forwardingType_ref()) {
       return true;
     }
   }

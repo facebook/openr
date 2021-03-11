@@ -338,7 +338,8 @@ thrift::Value createThriftValueWithoutBinaryValue(const thrift::Value& val);
  * Utility functions to create `key, value` pairs for updating route
  * advertisements in KvStore or tests
  */
-std::pair<PrefixKey, thrift::PrefixEntry> createPrefixKeyAndEntry(
+std::pair<PrefixKey, std::shared_ptr<thrift::PrefixEntry>>
+createPrefixKeyAndEntry(
     const std::string& nodeName,
     thrift::IpPrefix const& prefix,
     const std::string& area = kTestingAreaName);
@@ -436,6 +437,18 @@ template <typename Key, typename MetricsWrapper>
 std::set<Key> selectBestPrefixMetrics(
     std::unordered_map<Key, MetricsWrapper> const& prefixes);
 
+/**
+ * One user of selectBestPrefixMetrics() is Decision (PrefixManager is the
+ * other). Decision's PrefixState now uses shared_ptr<thrift::PrefixEntry>. The
+ * overloaded version below accommodates the change in PrefixState
+ * TODO: Merge these two functions once the shared_ptr<thrift::PrefixEntry>
+ * change has been extended to other modules (BgpRib, Fib, possibly
+ * PrefixManager too)
+ */
+template <typename Key, typename MetricsWrapper>
+std::set<Key> selectBestPrefixMetrics(
+    std::unordered_map<Key, std::shared_ptr<MetricsWrapper>> const& prefixes);
+
 // Deterministic choose one as best path from multipaths. Used in Decision.
 // Choose local if local node is a part of the multipaths.
 // Otherwise choose smallest key: allNodeAreas.begin().
@@ -525,4 +538,38 @@ selectBestPrefixMetrics(
   return bestKeys;
 }
 
+template <typename Key, typename MetricsWrapper>
+std::set<Key>
+selectBestPrefixMetrics(
+    std::unordered_map<Key, std::shared_ptr<MetricsWrapper>> const& prefixes) {
+  // Leveraging tuple for ease of comparision
+  std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{
+      std::numeric_limits<int32_t>::min(),
+      std::numeric_limits<int32_t>::min(),
+      std::numeric_limits<int32_t>::min()};
+  std::set<Key> bestKeys;
+  for (auto& [key, metricsWrapper] : prefixes) {
+    auto& metrics = metricsWrapper->metrics_ref().value();
+    std::tuple<int32_t, int32_t, int32_t> metricsTuple{
+        metrics.path_preference_ref().value(), /* prefer-higher */
+        metrics.source_preference_ref().value(), /* prefer-higher */
+        metrics.distance_ref().value() * -1 /* prefer-lower */};
+
+    // Skip if this is less than best metrics we've seen so far
+    if (metricsTuple < bestMetricsTuple) {
+      continue;
+    }
+
+    // Clear set and update best metric if this is a new best metric
+    if (metricsTuple > bestMetricsTuple) {
+      bestMetricsTuple = metricsTuple;
+      bestKeys.clear();
+    }
+
+    // Current metrics is either best or same as best metrics we've seen so far
+    bestKeys.emplace(key);
+  }
+
+  return bestKeys;
+}
 } // namespace openr

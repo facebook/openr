@@ -466,8 +466,8 @@ getPrefixForwardingTypeAndAlgorithm(
     if (not bestNodeAreas.count(nodeAndArea)) {
       continue; // Skip the prefix-entry of non best node-area
     }
-    r.first = std::min(r.first, *prefixEntry.forwardingType_ref());
-    r.second = std::min(r.second, *prefixEntry.forwardingAlgorithm_ref());
+    r.first = std::min(r.first, *prefixEntry->forwardingType_ref());
+    r.second = std::min(r.second, *prefixEntry->forwardingAlgorithm_ref());
     // Optimization case for most common algorithm and forwarding type
     if (r.first == thrift::PrefixForwardingType::IP &&
         r.second == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
@@ -636,6 +636,8 @@ createPrefixDb(
 
 // TODO: refactor this as prefixEntry struct has been
 // completely refactored.
+// TODO: Create and return thrift::PrefixEntry as a
+// shared_ptr after adding support in BGPRIB/FIB/UT
 thrift::PrefixEntry
 createPrefixEntry(
     thrift::IpPrefix prefix,
@@ -696,14 +698,14 @@ createThriftValueWithoutBinaryValue(const thrift::Value& val) {
   return updatedVal;
 }
 
-std::pair<PrefixKey, thrift::PrefixEntry>
+std::pair<PrefixKey, std::shared_ptr<thrift::PrefixEntry>>
 createPrefixKeyAndEntry(
     const std::string& nodeName,
     thrift::IpPrefix const& prefix,
     const std::string& area) {
   return {
       PrefixKey(nodeName, toIPNetwork(prefix), area),
-      createPrefixEntry(prefix)};
+      std::make_shared<thrift::PrefixEntry>(createPrefixEntry(prefix))};
 }
 
 std::pair<PrefixKey, thrift::PrefixDatabase>

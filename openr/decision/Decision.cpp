@@ -508,13 +508,13 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
   // TODO: With new PrefixMetrics we no longer treat routes differently based
   // on their origin source aka `prefixEntry.type`
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-    bool isBGP = prefixEntry.type_ref().value() == thrift::PrefixType::BGP;
+    bool isBGP = prefixEntry->type_ref().value() == thrift::PrefixType::BGP;
     hasBGP |= isBGP;
     hasNonBGP |= !isBGP;
     if (nodeAndArea.first == myNodeName) {
-      hasSelfPrependLabel &= prefixEntry.prependLabel_ref().has_value();
+      hasSelfPrependLabel &= prefixEntry->prependLabel_ref().has_value();
     }
-    if (isBGP and not prefixEntry.mv_ref().has_value()) {
+    if (isBGP and not prefixEntry->mv_ref().has_value()) {
       missingMv = true;
       LOG(ERROR) << "Prefix entry for prefix "
                  << folly::IPAddress::networkToString(prefix)
@@ -828,11 +828,11 @@ SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
   std::optional<int64_t> maxMinNexthopForPrefix = std::nullopt;
   for (const auto& nodeArea : nodes.allNodeAreas) {
     const auto& prefixEntry = prefixEntries.at(nodeArea);
-    maxMinNexthopForPrefix = prefixEntry.minNexthop_ref().has_value() &&
+    maxMinNexthopForPrefix = prefixEntry->minNexthop_ref().has_value() &&
             (not maxMinNexthopForPrefix.has_value() ||
-             prefixEntry.minNexthop_ref().value() >
+             prefixEntry->minNexthop_ref().value() >
                  maxMinNexthopForPrefix.value())
-        ? prefixEntry.minNexthop_ref().value()
+        ? prefixEntry->minNexthop_ref().value()
         : maxMinNexthopForPrefix;
   }
   return maxMinNexthopForPrefix;
@@ -874,13 +874,13 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
     auto const& [nodeName, area] = nodeAndArea;
     switch (bestVector.has_value()
                 ? MetricVectorUtils::compareMetricVectors(
-                      can_throw(*prefixEntry.mv_ref()), *bestVector)
+                      can_throw(*prefixEntry->mv_ref()), *bestVector)
                 : MetricVectorUtils::CompareResult::WINNER) {
     case MetricVectorUtils::CompareResult::WINNER:
       ret.allNodeAreas.clear();
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_WINNER:
-      bestVector = can_throw(*prefixEntry.mv_ref());
+      bestVector = can_throw(*prefixEntry->mv_ref());
       ret.bestNodeArea = nodeAndArea;
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_LOOSER:
@@ -927,7 +927,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
   if (bestRouteSelectionResult.hasNode(myNodeName) && perDestination) {
     for (const auto& [nodeAndArea, prefixEntry] : prefixEntries) {
       if (perDestination && nodeAndArea.first == myNodeName &&
-          prefixEntry.prependLabel_ref()) {
+          prefixEntry->prependLabel_ref()) {
         filteredBestNodeAreas.erase(nodeAndArea);
         break;
       }
@@ -1050,9 +1050,9 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
       }
       labels.pop_back(); // Remove first node's label to respect PHP
       auto& prefixEntry = prefixEntries.at({nextNodeName, area});
-      if (prefixEntry.prependLabel_ref()) {
+      if (prefixEntry->prependLabel_ref()) {
         // add prepend label to bottom of the stack
-        labels.push_front(prefixEntry.prependLabel_ref().value());
+        labels.push_front(prefixEntry->prependLabel_ref().value());
       }
 
       // Create nexthop
@@ -1119,8 +1119,8 @@ SpfSolver::SpfSolverImpl::addBestPaths(
   if (bestRouteSelectionResult.hasNode(myNodeName)) {
     std::optional<int32_t> prependLabel;
     for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-      if (nodeAndArea.first == myNodeName and prefixEntry.prependLabel_ref()) {
-        prependLabel = prefixEntry.prependLabel_ref().value();
+      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel_ref()) {
+        prependLabel = prefixEntry->prependLabel_ref().value();
         break;
       }
     }
@@ -1145,7 +1145,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
   return RibUnicastEntry(
       prefix,
       std::move(nextHops),
-      prefixEntries.at(bestRouteSelectionResult.bestNodeArea),
+      *(prefixEntries.at(bestRouteSelectionResult.bestNodeArea)),
       bestRouteSelectionResult.bestNodeArea.second,
       isBgp & bgpDryRun_); // doNotInstall
 }
@@ -1294,8 +1294,8 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
 
           // Add prepend label if any
           auto& dstPrefixEntry = prefixEntries.at({dstNode, area});
-          if (dstPrefixEntry.prependLabel_ref()) {
-            pushLabels.emplace_back(dstPrefixEntry.prependLabel_ref().value());
+          if (dstPrefixEntry->prependLabel_ref()) {
+            pushLabels.emplace_back(dstPrefixEntry->prependLabel_ref().value());
             if (not isMplsLabelValid(pushLabels.back())) {
               continue;
             }

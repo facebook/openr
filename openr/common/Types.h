@@ -30,7 +30,8 @@ namespace openr {
 // Aliases for data-structures
 //
 using NodeAndArea = std::pair<std::string, std::string>;
-using PrefixEntries = std::unordered_map<NodeAndArea, thrift::PrefixEntry>;
+using PrefixEntries =
+    std::unordered_map<NodeAndArea, std::shared_ptr<thrift::PrefixEntry>>;
 
 // KvStore URLs
 BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);

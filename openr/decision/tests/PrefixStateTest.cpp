@@ -32,14 +32,14 @@ class PrefixStateTestFixture : public ::testing::Test {
     for (size_t i = 0; i < numNodes; ++i) {
       std::string nodeName = std::to_string(i);
       for (auto const& [key, entry] : createPrefixDbForNode(nodeName, i)) {
-        EXPECT_FALSE(state_.updatePrefix(key, entry).empty());
+        EXPECT_FALSE(state_.updatePrefix(key, *entry).empty());
         initialEntries_[toIPNetwork(key.getIpPrefix())].emplace(
             std::piecewise_construct,
             std::forward_as_tuple(key.getNodeName(), key.getPrefixArea()),
             std::forward_as_tuple(entry));
       }
     }
-    EXPECT_EQ(initialEntries_, state_.prefixes());
+    comparePrefixMaps(initialEntries_, state_.prefixes());
   }
 
   virtual size_t
@@ -47,37 +47,61 @@ class PrefixStateTestFixture : public ::testing::Test {
     return 2;
   }
 
-  virtual std::vector<std::pair<PrefixKey, thrift::PrefixEntry>>
+  virtual std::vector<
+      std::pair<PrefixKey, std::shared_ptr<thrift::PrefixEntry>>>
   createPrefixDbForNode(std::string const& name, size_t prefixSeed) const {
     return {
         createPrefixKeyAndEntry(name, getAddrFromSeed(prefixSeed, false)),
         createPrefixKeyAndEntry(name, getAddrFromSeed(prefixSeed, true))};
+  }
+
+  void
+  comparePrefixMaps(
+      const std::unordered_map<folly::CIDRNetwork, PrefixEntries>& map1,
+      const std::unordered_map<folly::CIDRNetwork, PrefixEntries>& map2) {
+    EXPECT_EQ(map1.size(), map2.size());
+    for (const auto& [key, innerMap1] : map1) {
+      const auto& iter = map2.find(key);
+      EXPECT_TRUE(iter != map2.end());
+      if (iter == map2.end())
+        continue;
+      const auto& innerMap2 = iter->second;
+      EXPECT_EQ(innerMap1.size(), innerMap2.size());
+      for (const auto& [k, v] : innerMap1) {
+        const auto& innerIter = innerMap2.find(k);
+        EXPECT_TRUE(innerIter != innerMap2.end());
+        if (innerIter == innerMap2.end())
+          continue;
+        EXPECT_EQ(*innerIter->second, *v);
+      }
+    }
+    return;
   }
 };
 
 TEST_F(PrefixStateTestFixture, basicOperation) {
   auto& [nodeArea, entry] = *(initialEntries_.begin()->second.begin());
   const PrefixKey key(
-      nodeArea.first, toIPNetwork(entry.get_prefix()), nodeArea.second);
-  EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
+      nodeArea.first, toIPNetwork(entry->get_prefix()), nodeArea.second);
+  EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
 
-  entry.type_ref() = thrift::PrefixType::BREEZE;
+  entry->type_ref() = thrift::PrefixType::BREEZE;
   EXPECT_THAT(
-      state_.updatePrefix(key, entry),
+      state_.updatePrefix(key, *entry),
       testing::UnorderedElementsAre(toIPNetwork(key.getIpPrefix())));
-  EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
+  EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
-      state_.prefixes().at(toIPNetwork(entry.get_prefix())).at(nodeArea),
-      entry);
+      *state_.prefixes().at(toIPNetwork(entry->get_prefix())).at(nodeArea),
+      *entry);
 
-  entry.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
+  entry->forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_THAT(
-      state_.updatePrefix(key, entry),
+      state_.updatePrefix(key, *entry),
       testing::UnorderedElementsAre(toIPNetwork(key.getIpPrefix())));
-  EXPECT_TRUE(state_.updatePrefix(key, entry).empty());
+  EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
-      state_.prefixes().at(toIPNetwork(entry.get_prefix())).at(nodeArea),
-      entry);
+      *state_.prefixes().at(toIPNetwork(entry->get_prefix())).at(nodeArea),
+      *entry);
 }
 
 /**
@@ -235,7 +259,8 @@ TEST(PrefixState, FilterReceivedRoutes) {
  * Test PrefixState::hasConflictingForwardingInfo
  */
 TEST(PrefixState, HasConflictingForwardingInfo) {
-  std::unordered_map<NodeAndArea, thrift::PrefixEntry> prefixEntries;
+  std::unordered_map<NodeAndArea, std::shared_ptr<thrift::PrefixEntry>>
+      prefixEntries;
 
   thrift::PrefixEntry pIpSpf, pMplsSpf, pMplsKspf;
   pIpSpf.forwardingType_ref() = thrift::PrefixForwardingType::IP;
@@ -255,25 +280,31 @@ TEST(PrefixState, HasConflictingForwardingInfo) {
   //
   // Single entry (doesn't conflict)
   //
-  prefixEntries = {{{"0", "0"}, pIpSpf}};
+  prefixEntries = {{{"0", "0"}, std::make_shared<thrift::PrefixEntry>(pIpSpf)}};
   EXPECT_FALSE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
 
   //
   // Multiple entries conflicting type
   //
-  prefixEntries = {{{"0", "0"}, pIpSpf}, {{"1", "1"}, pMplsSpf}};
+  prefixEntries = {
+      {{"0", "0"}, std::make_shared<thrift::PrefixEntry>(pIpSpf)},
+      {{"1", "1"}, std::make_shared<thrift::PrefixEntry>(pMplsSpf)}};
   EXPECT_TRUE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
 
   //
   // Multiple entries conflicting algorithm
   //
-  prefixEntries = {{{"0", "0"}, pMplsSpf}, {{"1", "1"}, pMplsKspf}};
+  prefixEntries = {
+      {{"0", "0"}, std::make_shared<thrift::PrefixEntry>(pMplsSpf)},
+      {{"1", "1"}, std::make_shared<thrift::PrefixEntry>(pMplsKspf)}};
   EXPECT_TRUE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
 
   //
   // Multiple entries (no conflicts)
   //
-  prefixEntries = {{{"0", "0"}, pMplsSpf}, {{"1", "1"}, pMplsSpf}};
+  prefixEntries = {
+      {{"0", "0"}, std::make_shared<thrift::PrefixEntry>(pMplsSpf)},
+      {{"1", "1"}, std::make_shared<thrift::PrefixEntry>(pMplsSpf)}};
   EXPECT_FALSE(PrefixState::hasConflictingForwardingInfo(prefixEntries));
 }
 
