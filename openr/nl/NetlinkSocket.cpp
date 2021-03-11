@@ -44,16 +44,6 @@ NetlinkSocket::NetlinkSocket(
         });
       });
 
-  nlSock_->setNeighborEventCB(
-      [this](openr::fbnl::Neighbor neigh, bool runHandler) noexcept {
-        evl_->runImmediatelyOrInEventLoop([this,
-                                           neigh = std::move(neigh),
-
-                                           runHandler = runHandler]() mutable {
-          doHandleNeighborEvent(neigh, runHandler);
-        });
-      });
-
   // need to reload routes from kernel to avoid re-adding existing route
   // type of exception in NetlinkSocket
   updateRouteCache();

@@ -15,10 +15,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
-
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkTypes.h>

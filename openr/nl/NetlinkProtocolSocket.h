@@ -108,10 +108,6 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Set netlinkSocket Addr event callback
   void setAddrEventCB(std::function<void(fbnl::IfAddress, bool)> addrEventCB);
 
-  // Set netlinkSocket Addr event callback
-  void setNeighborEventCB(
-      std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
-
   /**
    * Add or replace route. An existing paths of route will be replaced with
    * new paths. Supports AF_INET, AF_INET6 and AF_MPLS address families.
@@ -218,7 +214,6 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Event callbacks
   std::function<void(fbnl::Link, bool)> linkEventCB_;
   std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
-  std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
 
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;

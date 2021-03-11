@@ -172,13 +172,6 @@ NetlinkProtocolSocket::setAddrEventCB(
 }
 
 void
-NetlinkProtocolSocket::setNeighborEventCB(
-    std::function<void(fbnl::Neighbor, bool)> neighborEventCB) {
-  CHECK(!neighborEventCB_) << "Callback can be registered only once";
-  neighborEventCB_ = neighborEventCB;
-}
-
-void
 NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
   VLOG(2) << "Completed netlink request. seq=" << ack << ", retval=" << status;
   if (std::abs(status) != EEXIST && std::abs(status) != ESRCH && status != 0) {
@@ -402,11 +395,6 @@ NetlinkProtocolSocket::processMessage(
         // Neighbor notification
         VLOG(2) << "Netlink neighbor event. " << neighbor.str();
         fbData->addStatValue("netlink.notifications.neighbor", 1, fb303::SUM);
-        if (neighborEventCB_) {
-          neighborEventCB_(neighbor, true);
-        }
-
-        // notification via replicateQueue
         netlinkEventsQueue_.push(neighbor);
       }
     } break;
