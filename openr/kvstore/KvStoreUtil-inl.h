@@ -69,7 +69,7 @@ dumpAllWithPrefixMultipleAndParse(
 // static method to dump KvStore key-val over multiple instances
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
-    std::vector<folly::SocketAddress> /* unreachable url */>
+    std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
@@ -83,7 +83,7 @@ dumpAllWithThriftClientFromMultiple(
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   std::unordered_map<std::string, thrift::Value> merged;
-  std::vector<folly::SocketAddress> unreachableUrls;
+  std::vector<folly::SocketAddress> unreachableAddrs;
 
   thrift::KeyDumpParams params;
   *params.prefix_ref() = keyPrefix;
@@ -99,15 +99,15 @@ dumpAllWithThriftClientFromMultiple(
       }) |
       folly::gen::as<std::vector<std::string>>();
 
-  LOG(INFO) << "Dump kvStore key-vals from: " << folly::join(",", addrStrs)
-            << ". Required SSL secure connection: " << std::boolalpha
-            << (sslContext != nullptr);
+  VLOG(1) << "Dump kvStore key-vals from: " << folly::join(",", addrStrs)
+          << ". Required SSL secure connection: " << std::boolalpha
+          << (sslContext != nullptr);
 
   auto startTime = std::chrono::steady_clock::now();
   for (auto const& sockAddr : sockAddrs) {
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
     if (sslContext) {
-      VLOG(2) << "Try to connect Open/R SSL secure client.";
+      VLOG(3) << "Try to connect Open/R SSL secure client.";
       try {
         client = getOpenrCtrlSecureClient(
             evb,
@@ -128,7 +128,7 @@ dumpAllWithThriftClientFromMultiple(
 
     // Cannot connect to Open/R via secure client. Try plain-text client
     if (!client) {
-      VLOG(2) << "Try to connect Open/R plain-text client.";
+      VLOG(3) << "Try to connect Open/R plain-text client.";
       try {
         client = getOpenrCtrlPlainTextClient(
             evb,
@@ -148,7 +148,7 @@ dumpAllWithThriftClientFromMultiple(
 
     // Cannot connect to Open/R via either plain-text client or secured client
     if (!client) {
-      unreachableUrls.emplace_back(sockAddr);
+      unreachableAddrs.emplace_back(sockAddr);
       continue;
     }
 
@@ -162,18 +162,17 @@ dumpAllWithThriftClientFromMultiple(
 
   // can't connect to ANY single Open/R instance
   if (calls.empty()) {
-    return std::make_pair(std::nullopt, unreachableUrls);
+    return std::make_pair(std::nullopt, unreachableAddrs);
   }
 
   folly::collectAll(calls).via(&evb).thenValue(
       [&](std::vector<folly::Try<openr::thrift::Publication>>&& results) {
-        LOG(INFO) << "Merge key-vals from " << results.size()
-                  << " different Open/R instances.";
+        VLOG(1) << "Merge key-vals from " << results.size()
+                << " different Open/R instances.";
 
         // loop semifuture collection to merge all values
         for (auto& result : results) {
           // folly::Try will contain either value or exception
-          // Do NOT CHECK(result.hasValue()) since exception can happen.
           if (result.hasException()) {
             LOG(ERROR) << "Exception: "
                        << folly::exceptionStr(result.exception());
@@ -181,9 +180,9 @@ dumpAllWithThriftClientFromMultiple(
             auto keyVals = *result.value().keyVals_ref();
             const auto deltaPub = KvStore::mergeKeyValues(merged, keyVals);
 
-            LOG(INFO) << "Received kvstore publication with: " << keyVals.size()
-                      << " key-vals. Incurred " << deltaPub.size()
-                      << " key-val updates.";
+            VLOG(3) << "Received kvstore publication with: " << keyVals.size()
+                    << " key-vals. Incurred " << deltaPub.size()
+                    << " key-val updates.";
           }
         }
         evb.terminateLoopSoon();
@@ -198,9 +197,9 @@ dumpAllWithThriftClientFromMultiple(
           std::chrono::steady_clock::now() - startTime)
           .count();
 
-  LOG(INFO) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
+  VLOG(1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
 
-  return std::make_pair(merged, unreachableUrls);
+  return std::make_pair(merged, unreachableAddrs);
 }
 
 } // namespace openr

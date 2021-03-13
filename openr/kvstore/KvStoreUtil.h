@@ -84,8 +84,8 @@ dumpAllWithPrefixMultipleAndParse(
  *  - Second member of the pair is a list of unreachable addresses
  */
 static std::pair<
-    std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
-    std::vector<folly::SocketAddress> /* unreachable url */>
+    std::optional<std::unordered_map<std::string, thrift::Value>>,
+    std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
