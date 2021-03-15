@@ -761,15 +761,15 @@ Spark::sendHandshakeMsg(
 
   // build handshake msg
   thrift::SparkHandshakeMsg handshakeMsg;
-  *handshakeMsg.nodeName_ref() = myNodeName_;
+  handshakeMsg.nodeName_ref() = myNodeName_;
   handshakeMsg.isAdjEstablished_ref() = isAdjEstablished;
   handshakeMsg.holdTime_ref() = holdTime_.count();
   handshakeMsg.gracefulRestartTime_ref() = gracefulRestartTime_.count();
-  *handshakeMsg.transportAddressV6_ref() = toBinaryAddress(v6Addr);
-  *handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
+  handshakeMsg.transportAddressV6_ref() = toBinaryAddress(v6Addr);
+  handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort_ref() = kOpenrCtrlThriftPort_;
   handshakeMsg.kvStoreCmdPort_ref() = kKvStoreCmdPort_;
-  *handshakeMsg.area_ref() =
+  handshakeMsg.area_ref() =
       neighborAreaId; // send neighborAreaId deduced locally
   handshakeMsg.neighborNodeName_ref() = neighborName;
 
@@ -830,7 +830,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
 
   // build heartbeat msg
   thrift::SparkHeartbeatMsg heartbeatMsg;
-  *heartbeatMsg.nodeName_ref() = myNodeName_;
+  heartbeatMsg.nodeName_ref() = myNodeName_;
   heartbeatMsg.seqNum_ref() = mySeqNum_;
 
   thrift::SparkHelloPacket pkt;
@@ -1626,11 +1626,11 @@ Spark::sendHelloMsg(
 
   // build the helloMsg from scratch
   thrift::SparkHelloMsg helloMsg;
-  *helloMsg.domainName_ref() = myDomainName_;
-  *helloMsg.nodeName_ref() = myNodeName_;
-  *helloMsg.ifName_ref() = ifName;
+  helloMsg.domainName_ref() = myDomainName_;
+  helloMsg.nodeName_ref() = myNodeName_;
+  helloMsg.ifName_ref() = ifName;
   helloMsg.seqNum_ref() = mySeqNum_;
-  *helloMsg.neighborInfos_ref() =
+  helloMsg.neighborInfos_ref() =
       std::map<std::string, thrift::ReflectedNeighborInfo>{};
   helloMsg.version_ref() = openrVer;
   helloMsg.solicitResponse_ref() = inFastInitState;

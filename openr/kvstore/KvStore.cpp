@@ -756,7 +756,7 @@ KvStore::setKvStoreKeyVals(
 
       // Create publication and merge it with local KvStore
       thrift::Publication rcvdPublication;
-      *rcvdPublication.keyVals_ref() = std::move(*keySetParams.keyVals_ref());
+      rcvdPublication.keyVals_ref() = std::move(*keySetParams.keyVals_ref());
       rcvdPublication.nodeIds_ref().move_from(keySetParams.nodeIds_ref());
       rcvdPublication.floodRootId_ref().move_from(
           keySetParams.floodRootId_ref());
@@ -1297,7 +1297,7 @@ KvStoreDb::getKeyValsSize() const {
 thrift::Publication
 KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
   thrift::Publication thriftPub;
-  *thriftPub.area_ref() = area_;
+  thriftPub.area_ref() = area_;
 
   for (auto const& key : keys) {
     // if requested key if found, respond with version and value
@@ -1317,7 +1317,7 @@ KvStoreDb::dumpAllWithFilters(
     thrift::FilterOperator oper,
     bool doNotPublishValue) const {
   thrift::Publication thriftPub;
-  *thriftPub.area_ref() = area_;
+  thriftPub.area_ref() = area_;
 
   switch (oper) {
   case thrift::FilterOperator::AND:
@@ -1354,7 +1354,7 @@ KvStoreDb::dumpAllWithFilters(
 thrift::Publication
 KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
-  *thriftPub.area_ref() = area_;
+  thriftPub.area_ref() = area_;
   for (auto const& kv : kvStore_) {
     if (not kvFilters.keyMatch(kv.first, kv.second)) {
       continue;
@@ -1362,7 +1362,7 @@ KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
     DCHECK(kv.second.hash_ref().has_value());
     auto& value = thriftPub.keyVals_ref()[kv.first];
     value.version_ref() = *kv.second.version_ref();
-    *value.originatorId_ref() = *kv.second.originatorId_ref();
+    value.originatorId_ref() = *kv.second.originatorId_ref();
     value.hash_ref().copy_from(kv.second.hash_ref());
     value.ttl_ref() = *kv.second.ttl_ref();
     value.ttlVersion_ref() = *kv.second.ttlVersion_ref();
@@ -1380,7 +1380,7 @@ KvStoreDb::dumpDifference(
     std::unordered_map<std::string, thrift::Value> const& myKeyVal,
     std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const {
   thrift::Publication thriftPub;
-  *thriftPub.area_ref() = area_;
+  thriftPub.area_ref() = area_;
 
   thriftPub.tobeUpdatedKeys_ref() = std::vector<std::string>{};
   std::unordered_set<std::string> allKeys;
@@ -1505,7 +1505,7 @@ KvStoreDb::requestThriftPeerSync() {
       std::string keyPrefix =
           folly::join(",", kvParams_.filters.value().getKeyPrefixes());
       /* prefix is for backward compatibility */
-      *params.prefix_ref() = keyPrefix;
+      params.prefix_ref() = keyPrefix;
       if (not keyPrefix.empty()) {
         params.keys_ref() = kvParams_.filters.value().getKeyPrefixes();
       }
@@ -2010,7 +2010,7 @@ KvStoreDb::requestFullSyncFromPeers() {
 
     dumpRequest.cmd_ref() = thrift::Command::KEY_DUMP;
     dumpRequest.keyDumpParams_ref() = params;
-    *dumpRequest.area_ref() = area_;
+    dumpRequest.area_ref() = area_;
 
     VLOG(1) << "Sending full-sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
@@ -2208,12 +2208,12 @@ KvStoreDb::processFloodTopoGet() noexcept {
       nexthop = info.nexthop.value();
     }
     sptInfo.parent_ref().from_optional(nexthop);
-    *sptInfo.children_ref() = kv.second.children();
+    sptInfo.children_ref() = kv.second.children();
     sptInfos.infos_ref()->emplace(rootId, sptInfo);
   }
 
   // set counters
-  *sptInfos.counters_ref() = DualNode::getCounters();
+  sptInfos.counters_ref() = DualNode::getCounters();
 
   // set flood root-id and peers
   sptInfos.floodRootId_ref().from_optional(DualNode::getSptRootId());
@@ -2221,7 +2221,7 @@ KvStoreDb::processFloodTopoGet() noexcept {
   if (sptInfos.floodRootId_ref().has_value()) {
     floodRootId = sptInfos.floodRootId_ref().value();
   }
-  *sptInfos.floodPeers_ref() = getFloodPeers(floodRootId);
+  sptInfos.floodPeers_ref() = getFloodPeers(floodRootId);
   return sptInfos;
 }
 
@@ -2269,14 +2269,14 @@ KvStoreDb::sendTopoSetCmd(
   request.cmd_ref() = thrift::Command::FLOOD_TOPO_SET;
 
   thrift::FloodTopoSetParams setParams;
-  *setParams.rootId_ref() = rootId;
-  *setParams.srcId_ref() = kvParams_.nodeId;
+  setParams.rootId_ref() = rootId;
+  setParams.srcId_ref() = kvParams_.nodeId;
   setParams.setChild_ref() = setChild;
   if (allRoots) {
     setParams.allRoots_ref() = allRoots;
   }
   request.floodTopoSetParams_ref() = setParams;
-  *request.area_ref() = area_;
+  request.area_ref() = area_;
 
   const auto ret = sendMessageToPeer(dstCmdSocketId, request);
   if (ret.hasError()) {
@@ -2722,7 +2722,7 @@ KvStoreDb::finalizeFullSync(
 
   // Build params for final sync of 3-way handshake
   thrift::KeySetParams params;
-  *params.keyVals_ref() = std::move(*updates.keyVals_ref());
+  params.keyVals_ref() = std::move(*updates.keyVals_ref());
   // I'm the initiator, set flood-root-id
   params.floodRootId_ref().from_optional(DualNode::getSptRootId());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
@@ -2875,7 +2875,7 @@ KvStoreDb::floodPublication(
 
   // prepare thrift structure for flooding purpose
   thrift::KeySetParams params;
-  *params.keyVals_ref() = *publication.keyVals_ref();
+  params.keyVals_ref() = *publication.keyVals_ref();
   params.nodeIds_ref().copy_from(publication.nodeIds_ref());
   params.floodRootId_ref().copy_from(publication.floodRootId_ref());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
@@ -2967,8 +2967,12 @@ KvStoreDb::mergePublication(
       rcvdPublication.keyVals_ref()->size(),
       fb303::SUM);
 
+  static const std::vector<std::string> kUpdatedKeys = {};
+
   std::unordered_set<std::string> keysTobeUpdated;
-  for (auto const& key : rcvdPublication.tobeUpdatedKeys_ref().value_or({})) {
+  for (auto const& key : rcvdPublication.tobeUpdatedKeys_ref()
+           ? rcvdPublication.tobeUpdatedKeys_ref().value()
+           : kUpdatedKeys) {
     keysTobeUpdated.insert(key);
   }
   if (senderId.has_value()) {
@@ -2997,11 +3001,11 @@ KvStoreDb::mergePublication(
 
   // Generate delta with local KvStore
   thrift::Publication deltaPublication;
-  *deltaPublication.keyVals_ref() = KvStore::mergeKeyValues(
+  deltaPublication.keyVals_ref() = KvStore::mergeKeyValues(
       kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters);
   deltaPublication.floodRootId_ref().copy_from(
       rcvdPublication.floodRootId_ref());
-  *deltaPublication.area_ref() = area_;
+  deltaPublication.area_ref() = area_;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals_ref()->size();
   fb303::fbData->addStatValue(
@@ -3069,7 +3073,7 @@ KvStoreDb::sendDualMessages(
   thrift::KvStoreRequest dualRequest;
   dualRequest.cmd_ref() = thrift::Command::DUAL;
   dualRequest.dualMessages_ref() = msgs;
-  *dualRequest.area_ref() = area_;
+  dualRequest.area_ref() = area_;
   const auto ret = sendMessageToPeer(neighborCmdSocketId, dualRequest);
   // NOTE: we rely on zmq (on top of tcp) to reliably deliver message,
   // if we switch to other protocols, we need to make sure its reliability.

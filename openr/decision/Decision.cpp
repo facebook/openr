@@ -1897,7 +1897,8 @@ Decision::rebuildRoutes(std::string const& event) {
         spfSolver_->buildRouteDb(myNodeName_, areaLinkStates_, prefixState_);
     LOG_IF(WARNING, !maybeRouteDb)
         << "SEVERE: full route rebuild resulted in no routes";
-    auto db = std::move(maybeRouteDb).value_or(DecisionRouteDb{});
+    auto db = maybeRouteDb.has_value() ? std::move(maybeRouteDb).value()
+                                       : DecisionRouteDb{};
     if (ribPolicy_) {
       auto start = std::chrono::steady_clock::now();
       ribPolicy_->applyPolicy(db.unicastRoutes);
