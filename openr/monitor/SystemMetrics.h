@@ -32,7 +32,7 @@ class SystemMetrics {
   /**
   / To record CPU used time of current process (in nanoseconds)
   */
-  typedef struct ProcCpuTime {
+  using ProcCpuTime = struct ProcCpuTime {
     uint64_t userTime = 0; /* CPU time used in user mode */
     uint64_t sysTime = 0; /*  CPU time used in system mode*/
     uint64_t totalTime = 0; /* total CPU time used */
@@ -45,7 +45,7 @@ class SystemMetrics {
               usage.ru_stime.tv_sec * 1.0e9 + usage.ru_stime.tv_usec * 1.0e3),
           totalTime(userTime + sysTime),
           timestamp(getCurrentNanoTime()) {}
-  } ProcCpuTime;
+  };
 
   // cache for CPU used time of previous query
   ProcCpuTime prevCpuTime;

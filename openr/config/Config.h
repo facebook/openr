@@ -16,7 +16,7 @@
 
 namespace openr {
 
-typedef std::pair<folly::CIDRNetwork, uint8_t> PrefixAllocationParams;
+using PrefixAllocationParams = std::pair<folly::CIDRNetwork, uint8_t>;
 
 class AreaConfiguration {
  public:
