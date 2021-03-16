@@ -344,7 +344,7 @@ void
 Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   int fd = ioProvider_->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   mcastFd_ = fd;
-  LOG(INFO) << "Creatd UDP socket for neighbor discovery. fd: " << mcastFd_;
+  LOG(INFO) << "Created UDP socket for neighbor discovery. fd: " << mcastFd_;
   CHECK_GT(fd, 0);
 
   if (fd < 0) {
