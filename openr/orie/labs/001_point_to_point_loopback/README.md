@@ -14,8 +14,14 @@ We have the `setup_openr_lab001.sh` helper script. It can:
 - `check` namespaces
   - Show interface addrs + routes
   - `sudo ./setup_openr_lab001.sh check`
-- delete namespaces
+- `delete` namespaces
   - `sudo ./setup_openr_lab001.sh delete`
+- `copy-conf` to /tmp
+  - `./setup_openr_lab001.sh copy-conf`
+- `start` Open/R
+  - Copy config from fbcode to /tmp to get around Eden issues
+  - **Run from within the namespaces**
+  - `./setup_openr_lab001.sh start`
 
 ### Build Open/R
 
@@ -27,5 +33,4 @@ _(You could also use fbpkg to pull latest production verison too)_
 
 Use screen or tmux and run a openr in each namespace.
 
-- `sudo ip netns exec openr_left ~/fbsource/fbcode/buck-out/gen/openr/openr -v 2 -logtostderr true -config openr_left.conf`
-- `sudo ip netns exec openr_right ~/fbsource/fbcode/buck-out/gen/openr/openr -v 2 -logtostderr true -config openr_right.conf`
+- `./setup_openr_lab001.sh start`
