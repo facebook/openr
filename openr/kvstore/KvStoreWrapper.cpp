@@ -258,7 +258,7 @@ KvStoreWrapper::getPeerState(AreaId const& area, std::string const& peerName) {
   return kvStore_->getKvStorePeerState(area, peerName).get();
 }
 
-std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
+folly::F14NodeMap<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper::getPeers(AreaId const& area) {
   auto peers = *(kvStore_->getKvStorePeers(area).get());
   return peers;

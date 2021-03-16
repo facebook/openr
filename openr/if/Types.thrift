@@ -16,6 +16,8 @@ namespace wiki Open_Routing.Thrift_APIs.Types
 include "Network.thrift"
 include "OpenrConfig.thrift"
 
+cpp_include "folly/container/F14Map.h"
+
 /**
  * Default area constant. This is relevant only during the course of transition
  * to new area functionality.
@@ -774,7 +776,7 @@ struct PeerSpec {
  * as it has few entries and occassional update.
  */
 typedef map<string, PeerSpec> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::PeerSpec>",
+  cpp.type = "folly::F14NodeMap<std::string, openr::thrift::PeerSpec>",
 ) PeersMap
 
 /**

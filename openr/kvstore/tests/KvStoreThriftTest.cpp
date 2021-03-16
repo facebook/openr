@@ -221,9 +221,9 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     // dump peers to make sure they are aware of each other
     peerSpec1.state_ref() = thrift::KvStorePeerState::INITIALIZED;
     peerSpec2.state_ref() = thrift::KvStorePeerState::INITIALIZED;
-    std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
+    folly::F14NodeMap<std::string, thrift::PeerSpec> expPeer1_1 = {
         {store2->getNodeId(), peerSpec2}};
-    std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
+    folly::F14NodeMap<std::string, thrift::PeerSpec> expPeer2_1 = {
         {store1->getNodeId(), peerSpec1}};
     EXPECT_EQ(expPeer1_1, store1->getPeers(kTestingAreaName));
     EXPECT_EQ(expPeer2_1, store2->getPeers(kTestingAreaName));
@@ -272,7 +272,7 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         kTestingAreaName));
 
     newPeerSpec.state_ref() = thrift::KvStorePeerState::INITIALIZED;
-    std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
+    folly::F14NodeMap<std::string, thrift::PeerSpec> newExpPeer = {
         {store2->getNodeId(), newPeerSpec}};
     EXPECT_EQ(newExpPeer, store1->getPeers(kTestingAreaName));
 
