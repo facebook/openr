@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <folly/Format.h>
+#include <fmt/format.h>
 #include <string>
 
 namespace openr {
@@ -33,9 +33,9 @@ struct EventTag {
   str(void) const {
     // Note: outputs a blank space at end
     if (!sub_type_.empty()) {
-      return folly::sformat("{}({}): ", prefix_, sub_type_);
+      return fmt::format("{}({}): ", prefix_, sub_type_);
     } else {
-      return folly::sformat("{}: ", prefix_);
+      return fmt::format("{}: ", prefix_);
     }
   }
 

@@ -13,8 +13,8 @@
 #include <vector>
 
 #include <boost/serialization/strong_typedef.hpp>
+#include <fmt/core.h>
 #include <folly/Expected.h>
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <re2/re2.h>
 #include <re2/set.h>
@@ -353,7 +353,7 @@ class PrefixKey {
 
   static const RE2&
   getPrefixRE2() {
-    static const RE2 prefixKeyPattern{folly::sformat(
+    static const RE2 prefixKeyPattern{fmt::format(
         "{}(?P<node>[a-zA-Z\\d\\.\\-\\_]+):"
         "(?P<area>[a-zA-Z0-9\\.\\_\\-]+):"
         "\\[(?P<IPAddr>[a-fA-F\\d\\.\\:]+)/"

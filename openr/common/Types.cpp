@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fmt/core.h>
 #include <openr/common/Types.h>
 
 #include <openr/common/NetworkUtil.h>
@@ -46,7 +47,7 @@ PrefixKey::PrefixKey(
     const std::string& area)
     : nodeAndArea_(node, area),
       prefix_(prefix),
-      prefixKeyString_(folly::sformat(
+      prefixKeyString_(fmt::format(
           "{}{}:{}:[{}/{}]",
           Constants::kPrefixDbMarker.toString(),
           node,
@@ -63,12 +64,12 @@ PrefixKey::fromStr(const std::string& key) {
   folly::CIDRNetwork ipaddress;
   auto patt = RE2::FullMatch(key, getPrefixRE2(), &node, &area, &ipstr, &plen);
   if (!patt) {
-    return folly::makeUnexpected(folly::sformat("Invalid key format {}", key));
+    return folly::makeUnexpected(fmt::format("Invalid key format {}", key));
   }
 
   try {
     ipaddress =
-        folly::IPAddress::createNetwork(folly::sformat("{}/{}", ipstr, plen));
+        folly::IPAddress::createNetwork(fmt::format("{}/{}", ipstr, plen));
   } catch (const folly::IPAddressFormatException& e) {
     LOG(INFO) << "Exception in converting to Prefix. " << e.what();
     return folly::makeUnexpected(std::string("Invalid IP address in key"));

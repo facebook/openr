@@ -318,7 +318,7 @@ TEST(UtilTest, PrefixKeyTest) {
 
   for (const auto& keys : itemsToStr) {
     auto ipaddress = folly::IPAddress::createNetwork(
-        folly::sformat("{}/{}", keys.addr.str(), keys.plen));
+        fmt::format("{}/{}", keys.addr.str(), keys.plen));
     auto prefixStr = PrefixKey(keys.node, ipaddress, keys.area);
     EXPECT_EQ(prefixStr.getPrefixKey(), keys.pkey);
   }

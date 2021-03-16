@@ -624,7 +624,7 @@ Spark::validateV4AddressSubnet(
 
   // validate subnet of v4 address
   auto const& neighCidrNetwork =
-      folly::sformat("{}/{}", toString(neighV4Addr), myV4PrefixLen);
+      fmt::format("{}/{}", toString(neighV4Addr), myV4PrefixLen);
 
   if (!myV4Addr.inSubnet(neighCidrNetwork)) {
     LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
@@ -1298,9 +1298,9 @@ Spark::processHelloMsg(
           sendHandshakeMsg(ifName, neighborName, neighborAreaId, false);
           // send out handshake msg periodically to this neighbor
           CHECK(sparkNeighbors_.count(ifName) > 0)
-              << folly::sformat("Key NOT found for: {}", ifName);
+              << fmt::format("Key NOT found for: {}", ifName);
           CHECK(sparkNeighbors_.at(ifName).count(neighborName) > 0)
-              << folly::sformat(
+              << fmt::format(
                      "Key NOT found: {} under: {}", neighborName, ifName);
           sparkNeighbors_.at(ifName)
               .at(neighborName)
@@ -1791,7 +1791,7 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
             interfaceDb_.at(ifName).ifIndex,
             false /* leave */,
             ioProvider_.get())) {
-      LOG(ERROR) << folly::sformat(
+      LOG(ERROR) << fmt::format(
           "Failed leaving multicast group: {}", folly::errnoStr(errno));
     }
     // cleanup for this interface
@@ -1819,7 +1819,7 @@ Spark::addInterface(
             ifIndex,
             true /* join */,
             ioProvider_.get())) {
-      throw std::runtime_error(folly::sformat(
+      throw std::runtime_error(fmt::format(
           "Failed joining multicast group: {}", folly::errnoStr(errno)));
     }
 
@@ -1914,7 +1914,7 @@ Spark::updateInterface(
               interface.ifIndex,
               false /* leave */,
               ioProvider_.get())) {
-        LOG(WARNING) << folly::sformat(
+        LOG(WARNING) << fmt::format(
             "Failed leaving multicast group: {}", folly::errnoStr(errno));
       }
 
@@ -1926,7 +1926,7 @@ Spark::updateInterface(
               newInterface.ifIndex,
               true /* join */,
               ioProvider_.get())) {
-        throw std::runtime_error(folly::sformat(
+        throw std::runtime_error(fmt::format(
             "Failed joining multicast group: {}", folly::errnoStr(errno)));
       }
     }
@@ -2022,7 +2022,7 @@ Spark::getNeighborArea(
   for (const auto& [areaId, areaConfig] : areaConfigs) {
     if (areaConfig.shouldDiscoverOnIface(localIfName) &&
         areaConfig.shouldPeerWithNeighbor(peerNodeName)) {
-      VLOG(1) << folly::sformat(
+      VLOG(1) << fmt::format(
           "Area: {} found for neighbor: {} on interface: {}",
           areaId,
           peerNodeName,

@@ -120,7 +120,7 @@ IoProvider::recvMessage(
   ssize_t bytesRead = ioProvider->recvmsg(fd, &msg, MSG_DONTWAIT);
 
   if (bytesRead < 0) {
-    throw std::runtime_error(folly::sformat(
+    throw std::runtime_error(fmt::format(
         "Failed reading message on fd {}: {}", fd, folly::errnoStr(errno)));
   }
 

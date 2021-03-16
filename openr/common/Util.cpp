@@ -7,6 +7,7 @@
 
 #include "Util.h"
 
+#include <fmt/core.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -43,7 +44,7 @@ toString(thrift::PrefixForwardingAlgorithm const& value) {
 
 std::string
 toString(thrift::PrefixMetrics const& metrics) {
-  return folly::sformat(
+  return fmt::format(
       "Metrics: [SP={}, PP={}, D={}]",
       *metrics.source_preference_ref(),
       *metrics.path_preference_ref(),
@@ -54,7 +55,7 @@ std::string
 toString(thrift::PrefixEntry const& entry, bool detailed) {
   std::stringstream ss;
   ss << toString(*entry.prefix_ref())
-     << folly::sformat(
+     << fmt::format(
             ", Forwarding: [{}, {}], ",
             toString(*entry.forwardingType_ref()),
             toString(*entry.forwardingAlgorithm_ref()))
@@ -215,7 +216,7 @@ sprintPerfEvents(const thrift::PerfEvents& perfEvents) noexcept {
   for (auto const& event : events) {
     auto durationMs = *event.unixTs_ref() - recentTs;
     recentTs = *event.unixTs_ref();
-    eventStrs.emplace_back(folly::sformat(
+    eventStrs.emplace_back(fmt::format(
         "node: {}, event: {}, duration: {}ms, unix-timestamp: {}",
         *event.nodeName_ref(),
         *event.eventDescr_ref(),
@@ -249,7 +250,7 @@ getDurationBetweenPerfEvents(
       });
   if (search == perfEvents.events_ref()->end()) {
     return folly::makeUnexpected(
-        folly::sformat("Could not find first event: {}", firstName));
+        fmt::format("Could not find first event: {}", firstName));
   }
   int64_t first = *search->unixTs_ref();
   search = std::find_if(
@@ -260,7 +261,7 @@ getDurationBetweenPerfEvents(
       });
   if (search == perfEvents.events_ref()->end()) {
     return folly::makeUnexpected(
-        folly::sformat("Could not find second event: {}", secondName));
+        fmt::format("Could not find second event: {}", secondName));
   }
   int64_t second = *search->unixTs_ref();
   if (second < first) {
@@ -304,7 +305,7 @@ getRemoteIfName(const thrift::Adjacency& adj) {
   if (not adj.otherIfName_ref()->empty()) {
     return *adj.otherIfName_ref();
   }
-  return folly::sformat("neigh-{}", *adj.ifName_ref());
+  return fmt::format("neigh-{}", *adj.ifName_ref());
 }
 
 std::vector<thrift::NextHopThrift>

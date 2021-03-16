@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
@@ -117,8 +118,8 @@ toIpPrefix(const std::string& prefix) {
   try {
     ipPrefix = toIpPrefix(folly::IPAddress::createNetwork(prefix));
   } catch (const folly::IPAddressFormatException& e) {
-    throw thrift::OpenrError(folly::sformat(
-        "Invalid IPAddress: {}, exception: {}", prefix, e.what()));
+    throw thrift::OpenrError(
+        fmt::format("Invalid IPAddress: {}, exception: {}", prefix, e.what()));
   }
   return ipPrefix;
 }
@@ -130,7 +131,7 @@ toString(const thrift::BinaryAddress& addr) {
 
 inline std::string
 toString(const thrift::IpPrefix& ipPrefix) {
-  return folly::sformat(
+  return fmt::format(
       "{}/{}",
       toString(*ipPrefix.prefixAddress_ref()),
       *ipPrefix.prefixLength_ref());
@@ -138,7 +139,7 @@ toString(const thrift::IpPrefix& ipPrefix) {
 
 inline std::string
 toString(const thrift::MplsAction& mplsAction) {
-  return folly::sformat(
+  return fmt::format(
       "mpls {} {}{}",
       apache::thrift::util::enumNameSafe(*mplsAction.action_ref()),
       mplsAction.swapLabel_ref() ? std::to_string(*mplsAction.swapLabel_ref())
@@ -150,7 +151,7 @@ toString(const thrift::MplsAction& mplsAction) {
 
 inline std::string
 toString(const thrift::NextHopThrift& nextHop) {
-  return folly::sformat(
+  return fmt::format(
       "via {} dev {} weight {} metric {} area {} {}",
       toIPAddress(*nextHop.address_ref()).str(),
       nextHop.address_ref()->ifName_ref().value_or("N/A"),
@@ -165,8 +166,7 @@ toString(const thrift::NextHopThrift& nextHop) {
 inline std::string
 toString(const thrift::UnicastRoute& route) {
   std::vector<std::string> lines;
-  lines.emplace_back(
-      folly::sformat("> Prefix: {}", toString(*route.dest_ref())));
+  lines.emplace_back(fmt::format("> Prefix: {}", toString(*route.dest_ref())));
   for (const auto& nh : *route.nextHops_ref()) {
     lines.emplace_back("  " + toString(nh));
   }
@@ -176,7 +176,7 @@ toString(const thrift::UnicastRoute& route) {
 inline std::string
 toString(const thrift::MplsRoute& route) {
   std::vector<std::string> lines;
-  lines.emplace_back(folly::sformat("> Label: {}", *route.topLabel_ref()));
+  lines.emplace_back(fmt::format("> Label: {}", *route.topLabel_ref()));
   for (const auto& nh : *route.nextHops_ref()) {
     lines.emplace_back("  " + toString(nh));
   }
@@ -192,7 +192,7 @@ toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
         *prefix.prefixLength_ref(),
         applyMask);
   } catch (const folly::IPAddressFormatException& e) {
-    throw thrift::OpenrError(folly::sformat(
+    throw thrift::OpenrError(fmt::format(
         "Invalid IPAddress: {}, exception: {}", toString(prefix), e.what()));
   }
   return network;
