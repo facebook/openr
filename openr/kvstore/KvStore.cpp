@@ -1699,7 +1699,7 @@ KvStoreDb::processThriftFailure(
 
 void
 KvStoreDb::addThriftPeers(
-    folly::F14NodeMap<std::string, thrift::PeerSpec> const& peers) {
+    std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
   for (auto const& peerKv : peers) {
     auto const& peerName = peerKv.first;
@@ -1762,7 +1762,7 @@ KvStoreDb::addThriftPeers(
 // add new peers to subscribe to
 void
 KvStoreDb::addPeers(
-    folly::F14NodeMap<std::string, thrift::PeerSpec> const& peers) {
+    std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   ++peerAddCounter_;
   std::vector<std::string> dualPeersToAdd;
 

@@ -36,8 +36,6 @@
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
 
-#include "folly/container/F14Map.h"
-
 namespace openr {
 
 //
@@ -250,11 +248,11 @@ class KvStoreDb : public DualNode {
       thrift::Publication& thriftPub, bool removeAboutToExpire = false);
 
   // add new peers to sync with
-  void addPeers(folly::F14NodeMap<std::string, thrift::PeerSpec> const& peers);
+  void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
 
   // thrift flavor of peer adding
   void addThriftPeers(
-      folly::F14NodeMap<std::string, thrift::PeerSpec> const& peers);
+      std::unordered_map<std::string, thrift::PeerSpec> const& peers);
 
   // delete some peers we are subscribed to
   void delPeers(std::vector<std::string> const& peers);

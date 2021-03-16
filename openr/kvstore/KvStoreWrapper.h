@@ -20,8 +20,6 @@
 #include <openr/monitor/LogSample.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
-#include "folly/container/F14Map.h"
-
 namespace openr {
 
 /**
@@ -160,7 +158,7 @@ class KvStoreWrapper {
   /**
    * APIs to get existing peers of a KvStore.
    */
-  folly::F14NodeMap<std::string /* peerName */, thrift::PeerSpec> getPeers(
+  std::unordered_map<std::string /* peerName */, thrift::PeerSpec> getPeers(
       AreaId const& area);
 
   /**

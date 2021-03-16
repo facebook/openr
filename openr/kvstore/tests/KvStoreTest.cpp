@@ -1020,7 +1020,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
 
   waitForAllPeersInitialized();
   // map of peers we expect and dump peers to expect the results.
-  folly::F14NodeMap<std::string, thrift::PeerSpec> expectedPeers = {
+  std::unordered_map<std::string, thrift::PeerSpec> expectedPeers = {
       {store1->getNodeId(),
        store1->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
       {store2->getNodeId(),
@@ -1113,7 +1113,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
 
   // Remove store2 and verify that there are no more peers
   store0->delPeer(kTestingAreaName, "store2");
-  const folly::F14NodeMap<std::string, thrift::PeerSpec> emptyPeers{};
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers{};
   EXPECT_EQ(emptyPeers, store0->getPeers(kTestingAreaName));
 }
 
@@ -2804,11 +2804,11 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         storeC->addPeer(
             AreaId{plane.get_area_id()}, "storeB", storeB->getPeerSpec());
         // verify get peers command
-        folly::F14NodeMap<std::string, thrift::PeerSpec> expectedPeersPod = {
+        std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
             {storeA->getNodeId(),
              storeA->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
         };
-        folly::F14NodeMap<std::string, thrift::PeerSpec> expectedPeersPlane = {
+        std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
             {storeC->getNodeId(),
              storeC->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
         };

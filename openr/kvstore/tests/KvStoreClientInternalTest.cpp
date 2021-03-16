@@ -229,10 +229,10 @@ class MultipleAreaFixture : public MultipleStoreFixture {
 
   const AreaId podArea{"pod-area"};
   const AreaId planeArea{"plane-area"};
-  folly::F14NodeMap<std::string, thrift::PeerSpec> peers1;
-  folly::F14NodeMap<std::string, thrift::PeerSpec> peers2PlaneArea;
-  folly::F14NodeMap<std::string, thrift::PeerSpec> peers2PodArea;
-  folly::F14NodeMap<std::string, thrift::PeerSpec> peers3;
+  std::unordered_map<std::string, thrift::PeerSpec> peers1;
+  std::unordered_map<std::string, thrift::PeerSpec> peers2PlaneArea;
+  std::unordered_map<std::string, thrift::PeerSpec> peers2PodArea;
+  std::unordered_map<std::string, thrift::PeerSpec> peers3;
 };
 
 /**
