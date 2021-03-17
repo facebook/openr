@@ -319,10 +319,37 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
       continue;
     }
 
-    // TODO: run ingress policy
+    // run ingress policy
+    std::shared_ptr<thrift::PrefixEntry> postPolicyTPrefixEntry;
+    std::string hitPolicyName;
+
+    const auto& policy = areaToPolicy_.at(toArea);
+    if (policy) {
+      std::tie(postPolicyTPrefixEntry, hitPolicyName) =
+          policyManager_->applyPolicy(*policy, tPrefixEntry);
+
+      // policy reject prefix, nothing to do.
+      if (not postPolicyTPrefixEntry) {
+        VLOG(2) << "[Area Policy] " << *policy << " rejected prefix: "
+                << "(Type, PrefixEntry): (" << toString(type) << ", "
+                << toString(*tPrefixEntry, true) << "), hit term ("
+                << hitPolicyName << ")";
+        continue;
+      }
+
+      // policy accept prefix, go ahread with prefix announcement.
+      VLOG(2) << "[Area Policy] " << *policy << " accepted/modified prefix: "
+              << "(Type, PrefixEntry): (" << toString(type) << ", "
+              << toString(*tPrefixEntry, true) << "), PostPolicyEntry: ("
+              << toString(*postPolicyTPrefixEntry) << "), hit term ("
+              << hitPolicyName << ")";
+    } else {
+      postPolicyTPrefixEntry = tPrefixEntry;
+    }
+
     const auto prefixKey =
         PrefixKey(nodeId_, entry.network, toArea).getPrefixKey();
-    auto prefixDb = createPrefixDb(nodeId_, {*tPrefixEntry}, toArea);
+    auto prefixDb = createPrefixDb(nodeId_, {*postPolicyTPrefixEntry}, toArea);
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     // advertise key to `KvStore`
@@ -333,7 +360,7 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
                         << "Area: " << toArea << ", "
                         << "Type: " << toString(type) << ", "
-                        << toString(*tPrefixEntry, VLOG_IS_ON(2));
+                        << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
     prefixKeys.emplace(prefixKey);
   }
   return prefixKeys;

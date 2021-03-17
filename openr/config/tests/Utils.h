@@ -10,6 +10,7 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <optional>
 
 namespace {
 
@@ -18,11 +19,15 @@ openr::thrift::AreaConfig
 createAreaConfig(
     const std::string& areaId,
     const std::vector<std::string>& neighborRegexes,
-    const std::vector<std::string>& interfaceRegexes) {
+    const std::vector<std::string>& interfaceRegexes,
+    const std::optional<std::string>& policy = std::nullopt) {
   openr::thrift::AreaConfig areaConfig;
   areaConfig.area_id_ref() = areaId;
   areaConfig.neighbor_regexes_ref() = neighborRegexes;
   areaConfig.include_interface_regexes_ref() = interfaceRegexes;
+  if (policy) {
+    areaConfig.set_ingress_policy(*policy);
+  }
   return areaConfig;
 }
 
