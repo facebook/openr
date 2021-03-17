@@ -124,6 +124,7 @@ enum PrefixType {
   BREEZE = 5, // Prefixes injected via breeze
   RIB = 6,
   SLO_PREFIX_ALLOCATOR = 7,
+  CONFIG = 8, // Route Origination
 
   // Placeholder Types
   TYPE_1 = 21,

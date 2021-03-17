@@ -180,6 +180,12 @@ class PrefixManager final : public OpenrEventBase {
    */
   void syncKvStore();
 
+  std::unordered_set<std::string> updateKvStoreKeyHelper(
+      const PrefixEntry& entry);
+
+  void deleteKvStoreKeyHelper(
+      const std::unordered_set<std::string>& deletedKeys);
+
   /*
    * [Route Origination/Aggregation]
    *
@@ -206,12 +212,13 @@ class PrefixManager final : public OpenrEventBase {
    */
   void aggregatesToWithdraw(const folly::CIDRNetwork& prefix);
 
-  // Inject `PrefixEntry` into dstAreas.
-  std::unordered_set<std::string> updateKvStoreKeyHelper(
-      const PrefixEntry& entry);
-
-  void deleteKvStoreKeyHelper(
-      const std::unordered_set<std::string>& deletedKeys);
+  /*
+   * Util function to iterate through originatedPrefixDb_ for route
+   * advertisement/withdrawn
+   */
+  void processOriginatedPrefixes(
+      std::vector<PrefixEntry>& advertisedPrefixes,
+      std::vector<thrift::PrefixEntry>& withdrawnPrefixes);
 
   // process decision route update, inject routes to different areas
   void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);

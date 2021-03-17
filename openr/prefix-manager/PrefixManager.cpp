@@ -59,11 +59,6 @@ PrefixManager::PrefixManager(
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
       this, nodeId_, kvStore_, true /* useThrottle */);
 
-  // Load openrConfig for local-originated routes
-  if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
-    buildOriginatedPrefixDb(*prefixes);
-  }
-
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
   initialSyncKvStoreTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { syncKvStore(); });
@@ -217,6 +212,20 @@ PrefixManager::PrefixManager(
 
   // schedule one-time initial dump
   initialSyncKvStoreTimer_->scheduleTimeout(initialDumpTime);
+
+  // Load openrConfig for local-originated routes
+  if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
+    std::vector<PrefixEntry> advertisedPrefixes{};
+    std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
+
+    // read originated prefixes from OpenrConfig
+    buildOriginatedPrefixDb(*prefixes);
+
+    // ATTN: consider min_supporting_route = 0, immediately advertising
+    // them to `KvStore`
+    processOriginatedPrefixes(advertisedPrefixes, withdrawnPrefixes);
+    advertisePrefixesImpl(advertisedPrefixes);
+  }
 }
 
 PrefixManager::~PrefixManager() {
@@ -260,6 +269,9 @@ PrefixManager::buildOriginatedPrefixDb(
     thrift::PrefixEntry entry;
     entry.prefix_ref() = toIpPrefix(network);
     entry.metrics_ref() = std::move(metrics);
+    // ATTN: local-originated prefix has unique type CONFIG
+    //      to be differentiated from others.
+    entry.type_ref() = thrift::PrefixType::CONFIG;
     // ATTN: `area_stack` will be explicitly set to empty
     //      as there is no "cross-area" behavior for local
     //      originated prefixes.
@@ -788,53 +800,10 @@ PrefixManager::aggregatesToWithdraw(const folly::CIDRNetwork& prefix) {
 }
 
 void
-PrefixManager::processDecisionRouteUpdates(
-    DecisionRouteUpdate&& decisionRouteUpdate) {
-  std::vector<PrefixEntry> advertisePrefixes{};
-  std::vector<thrift::PrefixEntry> withdrawPrefixes{};
+PrefixManager::processOriginatedPrefixes(
+    std::vector<PrefixEntry>& advertisedPrefixes,
+    std::vector<thrift::PrefixEntry>& withdrawnPrefixes) {
   DecisionRouteUpdate routeUpdatesOut;
-
-  // Add/Update unicast routes to update
-  // Self originated (include routes imported from local BGP)
-  // won't show up in decisionRouteUpdate.
-  for (auto& [prefix, route] : decisionRouteUpdate.unicastRoutesToUpdate) {
-    auto& prefixEntry = route.bestPrefixEntry;
-
-    // NOTE: future expansion - run egress policy here
-
-    //
-    // cross area, modify attributes
-    //
-
-    // 1. append area stack
-    prefixEntry.area_stack_ref()->emplace_back(route.bestArea);
-    // 2. increase distance by 1
-    ++(*prefixEntry.metrics_ref()->distance_ref());
-    // 3. normalize to RIB routes
-    prefixEntry.type_ref() = thrift::PrefixType::RIB;
-
-    auto dstAreas = allAreas_;
-    for (const auto& nh : route.nexthops) {
-      if (nh.area_ref().has_value()) {
-        dstAreas.erase(*nh.area_ref());
-      }
-    }
-    advertisePrefixes.emplace_back(prefixEntry, dstAreas);
-
-    // populate originated prefixes to be advertised
-    aggregatesToAdvertise(prefix);
-  }
-
-  // Delete unicast routes
-  for (const auto& prefix : decisionRouteUpdate.unicastRoutesToDelete) {
-    withdrawPrefixes.emplace_back(
-        createPrefixEntry(toIpPrefix(prefix), thrift::PrefixType::RIB));
-
-    // populate originated prefixes to be withdrawn
-    aggregatesToWithdraw(prefix);
-  }
-
-  // Maybe advertise/withdrawn for local originated routes
   for (auto& [network, route] : originatedPrefixDb_) {
     if (route.shouldAdvertise()) {
       route.isAdvertised = true; // mark as advertised
@@ -843,6 +812,9 @@ PrefixManager::processDecisionRouteUpdates(
       if (route.shouldInstall()) {
         routeUpdatesOut.addRouteToUpdate(route.unicastEntry);
       }
+      advertisedPrefixes.emplace_back(
+          route.unicastEntry.bestPrefixEntry, allAreas_);
+
       LOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
                 << folly::IPAddress::networkToString(network);
     }
@@ -854,6 +826,9 @@ PrefixManager::processDecisionRouteUpdates(
       if (route.shouldInstall()) {
         routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
       }
+      withdrawnPrefixes.emplace_back(
+          createPrefixEntry(toIpPrefix(network), thrift::PrefixType::CONFIG));
+
       LOG(INFO) << "[ROUTE ORIGINATION] Withdrawing originated route "
                 << folly::IPAddress::networkToString(network);
     }
@@ -866,13 +841,79 @@ PrefixManager::processDecisionRouteUpdates(
     CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
   }
+}
+
+void
+PrefixManager::processDecisionRouteUpdates(
+    DecisionRouteUpdate&& decisionRouteUpdate) {
+  std::vector<PrefixEntry> advertisedPrefixes{};
+  std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
+
+  // ATTN: Routes imported from local BGP won't show up inside
+  // `decisionRouteUpdate`. However, local-originated static route
+  // (e.g. from route-aggregation) can come along.
+
+  // Add/Update unicast routes
+  for (auto& [prefix, route] : decisionRouteUpdate.unicastRoutesToUpdate) {
+    // NOTE: future expansion - run egress policy here
+
+    //
+    // cross area, modify attributes
+    //
+    auto& prefixEntry = route.bestPrefixEntry;
+
+    if (*prefixEntry.type_ref() == thrift::PrefixType::CONFIG) {
+      // skip local-originated prefix as it won't be considered as
+      // part of its own supporting routes.
+      continue;
+    }
+
+    // 1. append area stack
+    prefixEntry.area_stack_ref()->emplace_back(route.bestArea);
+    // 2. increase distance by 1
+    ++(*prefixEntry.metrics_ref()->distance_ref());
+    // 3. normalize to RIB routes
+    prefixEntry.type_ref() = thrift::PrefixType::RIB;
+
+    // populate routes to be advertised to KvStore
+    auto dstAreas = allAreas_;
+    for (const auto& nh : route.nexthops) {
+      if (nh.area_ref().has_value()) {
+        dstAreas.erase(*nh.area_ref());
+      }
+    }
+    advertisedPrefixes.emplace_back(prefixEntry, dstAreas);
+
+    // adjust supporting route count due to prefix advertisement
+    aggregatesToAdvertise(prefix);
+  }
+
+  // Delete unicast routes
+  for (const auto& prefix : decisionRouteUpdate.unicastRoutesToDelete) {
+    // TODO: remove this when advertise RibUnicastEntry for routes to delete
+    if (originatedPrefixDb_.count(prefix)) {
+      // skip local-originated prefix as it won't be considered as
+      // part of its own supporting routes.
+      continue;
+    }
+
+    // Routes to be withdrawn via KvStore
+    withdrawnPrefixes.emplace_back(
+        createPrefixEntry(toIpPrefix(prefix), thrift::PrefixType::RIB));
+
+    // adjust supporting route count due to prefix withdrawn
+    aggregatesToWithdraw(prefix);
+  }
+
+  // Maybe advertise/withdrawn for local originated routes
+  processOriginatedPrefixes(advertisedPrefixes, withdrawnPrefixes);
 
   // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
   // We want to keep processDecisionRouteUpdates() running as dynamic
   // configuration could add/remove areas.
   if (allAreas_.size() > 1) {
-    advertisePrefixesImpl(advertisePrefixes);
-    withdrawPrefixesImpl(withdrawPrefixes);
+    advertisePrefixesImpl(advertisedPrefixes);
+    withdrawPrefixesImpl(withdrawnPrefixes);
   }
 
   // ignore mpls updates

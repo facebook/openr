@@ -95,8 +95,6 @@ class PrefixManagerTestFixture : public testing::Test {
       kvStoreClient.reset();
     }
 
-    // this will be invoked before linkMonitorThread's d-tor
-    LOG(INFO) << "Stopping prefixMgr thread";
     prefixManager->stop();
     prefixManagerThread->join();
     prefixManager.reset();
@@ -1000,6 +998,7 @@ TEST(PrefixManager, FilterAdvertisedRoutes) {
 }
 
 class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
+ protected:
   thrift::OpenrConfig
   createConfig() override {
     // config three areas A B C without policy
@@ -1328,7 +1327,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   }
 }
 
-class RouteOriginationFixture : public PrefixManagerTestFixture {
+class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
  public:
   openr::thrift::OpenrConfig
   createConfig() override {
@@ -1339,7 +1338,7 @@ class RouteOriginationFixture : public PrefixManagerTestFixture {
     originatedPrefixV6.prefix_ref() = v6Prefix_;
     originatedPrefixV6.minimum_supporting_routes_ref() = minSupportingRouteV6_;
 
-    auto tConfig = PrefixManagerTestFixture::createConfig();
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
     tConfig.originated_prefixes_ref() = {
         originatedPrefixV4, originatedPrefixV6};
     return tConfig;
@@ -1380,18 +1379,99 @@ class RouteOriginationFixture : public PrefixManagerTestFixture {
     return reader.get().value().toThrift();
   }
 
+  // return false if publication is tll update.
+  void
+  waitForKvStorePublication(
+      messaging::RQueue<thrift::Publication>& reader,
+      std::unordered_map<std::string, thrift::PrefixEntry>& exp,
+      std::unordered_set<std::string>& expDeleted) {
+    while (exp.size() or expDeleted.size()) {
+      auto pub = reader.get().value();
+      for (const auto& [key, thriftVal] : *pub.keyVals_ref()) {
+        if (not thriftVal.value_ref().has_value()) {
+          // skip TTL update
+          continue;
+        }
+
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            thriftVal.value_ref().value(), serializer);
+        auto isDeleted = *db.deletePrefix_ref();
+        auto prefixEntry = db.prefixEntries_ref()->at(0);
+        if (isDeleted and expDeleted.count(key)) {
+          VLOG(2) << "Withdraw of prefix: " << key << " received";
+          expDeleted.erase(key);
+        }
+        if ((not isDeleted) and exp.count(key) and prefixEntry == exp.at(key)) {
+          VLOG(2) << "Advertising of prefix: " << key << " received";
+          exp.erase(key);
+        }
+      }
+
+      // no hogging of CPU cycle
+      std::this_thread::yield();
+    }
+  }
+
  protected:
   const std::string v4Prefix_ = "192.108.0.1/24";
   const std::string v6Prefix_ = "2001:1:2:3::1/64";
+
   const uint64_t minSupportingRouteV4_ = 1;
   const uint64_t minSupportingRouteV6_ = 2;
+
+  const thrift::NextHopThrift nh_v4 = createNextHop(
+      toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()));
+  const thrift::NextHopThrift nh_v6 = createNextHop(
+      toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()));
+
+  const folly::CIDRNetwork v4Network_ =
+      folly::IPAddress::createNetwork(v4Prefix_);
+  const folly::CIDRNetwork v6Network_ =
+      folly::IPAddress::createNetwork(v6Prefix_);
+
+  const std::string keyStrAV4_ =
+      PrefixKey(nodeId_, v4Network_, "A").getPrefixKey();
+  const std::string keyStrBV4_ =
+      PrefixKey(nodeId_, v4Network_, "B").getPrefixKey();
+  const std::string keyStrCV4_ =
+      PrefixKey(nodeId_, v4Network_, "C").getPrefixKey();
+  const std::string keyStrAV6_ =
+      PrefixKey(nodeId_, v6Network_, "A").getPrefixKey();
+  const std::string keyStrBV6_ =
+      PrefixKey(nodeId_, v6Network_, "B").getPrefixKey();
+  const std::string keyStrCV6_ =
+      PrefixKey(nodeId_, v6Network_, "C").getPrefixKey();
+};
+
+class RouteOriginationOverrideFixture : public RouteOriginationFixture {
+ public:
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV6.prefix_ref() = v6Prefix_;
+    // ATTN: specify supporting route cnt to be 0 for immediate advertisement
+    originatedPrefixV4.minimum_supporting_routes_ref() = 0;
+    originatedPrefixV6.minimum_supporting_routes_ref() = 0;
+
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
+    return tConfig;
+  }
 };
 
 //
 // Test case to verify prefix/attributes aligns with config read from
 // `thrift::OpenrConfig`. This is the sanity check.
 //
-TEST_F(RouteOriginationFixture, ReadFromConfig) {
+// Test also verifies that route with min_supporting_route=0 will be directly
+// advertised to `KvStore`.
+//
+TEST_F(RouteOriginationOverrideFixture, ReadFromConfig) {
+  // RQueue interface to read KvStore update
+  auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
+
   // read via public API
   auto mp = getOriginatedPrefixDb();
   auto& prefixEntryV4 = mp.at(v4Prefix_);
@@ -1400,32 +1480,44 @@ TEST_F(RouteOriginationFixture, ReadFromConfig) {
   // verify attributes from originated prefix config
   EXPECT_EQ(0, prefixEntryV4.supporting_prefixes_ref()->size());
   EXPECT_EQ(0, prefixEntryV6.supporting_prefixes_ref()->size());
-  EXPECT_FALSE(*prefixEntryV4.installed_ref());
-  EXPECT_FALSE(*prefixEntryV6.installed_ref());
+  EXPECT_TRUE(*prefixEntryV4.installed_ref());
+  EXPECT_TRUE(*prefixEntryV6.installed_ref());
   EXPECT_EQ(v4Prefix_, *prefixEntryV4.prefix_ref()->prefix_ref());
   EXPECT_EQ(v6Prefix_, *prefixEntryV6.prefix_ref()->prefix_ref());
-  EXPECT_EQ(
-      minSupportingRouteV4_,
-      *prefixEntryV4.prefix_ref()->minimum_supporting_routes_ref());
-  EXPECT_EQ(
-      minSupportingRouteV6_,
-      *prefixEntryV6.prefix_ref()->minimum_supporting_routes_ref());
+  EXPECT_EQ(0, *prefixEntryV4.prefix_ref()->minimum_supporting_routes_ref());
+  EXPECT_EQ(0, *prefixEntryV6.prefix_ref()->minimum_supporting_routes_ref());
+
+  // prefixes originated have specific thrift::PrefixType::CONFIG
+  const auto bestPrefixEntryV4_ =
+      createPrefixEntry(toIpPrefix(v4Prefix_), thrift::PrefixType::CONFIG);
+  const auto bestPrefixEntryV6_ =
+      createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
+
+  // v4Prefix_ is advertised to ALL areas configured
+  std::unordered_map<std::string, thrift::PrefixEntry> exp({
+      {keyStrAV4_, bestPrefixEntryV4_},
+      {keyStrBV4_, bestPrefixEntryV4_},
+      {keyStrCV4_, bestPrefixEntryV4_},
+      {keyStrAV6_, bestPrefixEntryV6_},
+      {keyStrBV6_, bestPrefixEntryV6_},
+      {keyStrCV6_, bestPrefixEntryV6_},
+  });
+  std::unordered_set<std::string> expDeleted{};
+
+  // wait for condition to be met for KvStore publication
+  waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
 }
 
 TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   // RQueue interface to read route updates
-  auto reader = staticRouteUpdatesQueue.getReader();
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+  auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
 
-  // ATTN: `area` must be populated for dstArea processing
-  auto nh_1 = createNextHop(
-      toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()));
-  auto nh_2 = createNextHop(
-      toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()));
+  // dummy nexthop
   auto nh_3 = createNextHop(toBinaryAddress("fe80::1"));
-  nh_1.area_ref() = thrift::Types_constants::kDefaultArea();
-  nh_2.area_ref() = thrift::Types_constants::kDefaultArea();
-  nh_3.area_ref().reset(); // empty next-hop
+  nh_3.area_ref().reset(); // empty area
 
+  // supporting prefixes
   const std::string v4Prefix_1 = "192.108.0.8/30";
   const std::string v6Prefix_1 = "2001:1:2:3::1/70";
   const std::string v4Prefix_2 = "192.108.1.2/32";
@@ -1435,7 +1527,13 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   const auto v4Network_2 = folly::IPAddress::createNetwork(v4Prefix_2);
   const auto v6Network_2 = folly::IPAddress::createNetwork(v6Prefix_2);
 
-  // ATTN: PrefixType is unrelated for this testing
+  // prefixes originated have specific thrift::PrefixType::CONFIG
+  const auto bestPrefixEntryV4_ =
+      createPrefixEntry(toIpPrefix(v4Prefix_), thrift::PrefixType::CONFIG);
+  const auto bestPrefixEntryV6_ =
+      createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
+
+  // ATTN: PrefixType is unrelated for supporting routes
   const auto prefixEntryV4_1 =
       createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
   const auto prefixEntryV6_1 =
@@ -1446,22 +1544,22 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
       createPrefixEntry(toIpPrefix(v6Prefix_2), thrift::PrefixType::RIB);
   auto unicastEntryV4_1 = RibUnicastEntry(
       v4Network_1,
-      {nh_1},
+      {nh_v4},
       prefixEntryV4_1,
       thrift::Types_constants::kDefaultArea());
   auto unicastEntryV6_1 = RibUnicastEntry(
       v6Network_1,
-      {nh_2},
+      {nh_v6},
       prefixEntryV6_1,
       thrift::Types_constants::kDefaultArea());
   auto unicastEntryV4_2 = RibUnicastEntry(
       v4Network_2,
-      {nh_1, nh_3},
+      {nh_v4, nh_3},
       prefixEntryV4_2,
       thrift::Types_constants::kDefaultArea());
   auto unicastEntryV6_2 = RibUnicastEntry(
       v6Network_2,
-      {nh_2, nh_3},
+      {nh_v6, nh_3},
       prefixEntryV6_2,
       thrift::Types_constants::kDefaultArea());
 
@@ -1478,53 +1576,79 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - v4Prefix_ will be advertised as `min_supporting_route=1`;
   //  - v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
   //
+  VLOG(1) << "Starting test step 1...";
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicastEntryV4_1);
     routeUpdate.addRouteToUpdate(unicastEntryV6_1);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
-    // v4 route update received
-    auto update = waitForRouteUpdate(reader, kRouteUpdateTimeout);
-    EXPECT_TRUE(update.has_value());
+    // Verify 1): PrefixManager -> Decision update
+    {
+      // v4 route update received
+      auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+      EXPECT_TRUE(update.has_value());
 
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
-    EXPECT_EQ(1, updatedRoutes.size());
-    EXPECT_EQ(0, deletedRoutes.size());
+      auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+      auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+      EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+      EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
 
-    // verify thrift::NextHopThrift struct
-    const auto& route = updatedRoutes.back();
-    const auto& nhs = *route.nextHops_ref();
-    EXPECT_EQ(toIpPrefix(v4Prefix_), *route.dest_ref());
-    EXPECT_EQ(1, nhs.size());
-    EXPECT_EQ(
-        toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()),
-        *nhs.back().address_ref());
+      // verify thrift::NextHopThrift struct
+      const auto& route = updatedRoutes.back();
+      EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
 
-    // no more route update received
-    EXPECT_FALSE(waitForRouteUpdate(reader, kRouteUpdateTimeout).has_value());
+      const auto& nhs = *route.nextHops_ref();
+      EXPECT_THAT(nhs, testing::SizeIs(1));
+      EXPECT_THAT(
+          nhs,
+          testing::UnorderedElementsAre(createNextHop(
+              toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()))));
 
-    // verificaiton via public API
-    auto mp = getOriginatedPrefixDb();
-    auto& prefixEntryV4 = mp.at(v4Prefix_);
-    auto& prefixEntryV6 = mp.at(v6Prefix_);
-    auto& supportingPrefixV4 = *prefixEntryV4.supporting_prefixes_ref();
-    auto& supportingPrefixV6 = *prefixEntryV6.supporting_prefixes_ref();
+      // no v6 route update received
+      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
+                       .has_value());
+    }
 
-    // v4Prefix - advertised, v6Prefix - NOT advertised
-    EXPECT_TRUE(*prefixEntryV4.installed_ref());
-    EXPECT_FALSE(*prefixEntryV6.installed_ref());
+    // Verify 2): PrefixManager -> KvStore update
+    {
+      // v4Prefix_ is advertised to ALL areas configured
+      std::unordered_map<std::string, thrift::PrefixEntry> exp({
+          {keyStrAV4_, bestPrefixEntryV4_},
+          {keyStrBV4_, bestPrefixEntryV4_},
+          {keyStrCV4_, bestPrefixEntryV4_},
+      });
+      std::unordered_set<std::string> expDeleted{};
 
-    // verify attributes
-    EXPECT_EQ(1, supportingPrefixV4.size());
-    EXPECT_EQ(1, supportingPrefixV6.size());
-    EXPECT_EQ(
-        supportingPrefixV4.back(),
-        folly::IPAddress::networkToString(v4Network_1));
-    EXPECT_EQ(
-        supportingPrefixV6.back(),
-        folly::IPAddress::networkToString(v6Network_1));
+      // wait for condition to be met for KvStore publication
+      waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+    }
+
+    // Verify 3): PrefixManager's public API
+    {
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+      // v4Prefix - advertised, v6Prefix - NOT advertised
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+
+      EXPECT_THAT(
+          *prefixEntryV4.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v4Network_1)));
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_1)));
+    }
   }
 
   //
@@ -1542,6 +1666,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - # of supporting prefix for v4Prefix_ won't change;
   //  - # of supporting prefix for v6Prefix_ won't change;
   //
+  VLOG(1) << "Starting test step 2...";
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicastEntryV4_2);
@@ -1549,26 +1674,39 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_2);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
-    // no more route update received
-    EXPECT_FALSE(waitForRouteUpdate(reader, kRouteUpdateTimeout).has_value());
+    // Verify 1): PrefixManager -> Decision update
+    {
+      // no more route update received
+      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
+                       .has_value());
+    }
 
-    // verificaiton via public API
-    auto mp = getOriginatedPrefixDb();
-    auto& prefixEntryV4 = mp.at(v4Prefix_);
-    auto& prefixEntryV6 = mp.at(v6Prefix_);
-    auto& supportingPrefixV4 = *prefixEntryV4.supporting_prefixes_ref();
-    auto& supportingPrefixV6 = *prefixEntryV6.supporting_prefixes_ref();
+    // Verify 2): PrefixManager's public API
+    {
+      // verificaiton via public API
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
 
-    // v4Prefix - advertised, v6Prefix - advertised
-    EXPECT_TRUE(*prefixEntryV4.installed_ref());
-    EXPECT_FALSE(*prefixEntryV6.installed_ref());
+      // v4Prefix - advertised, v6Prefix - withdrawn
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
 
-    // verify attributes
-    EXPECT_EQ(1, supportingPrefixV4.size());
-    EXPECT_EQ(1, supportingPrefixV6.size());
-    EXPECT_EQ(
-        supportingPrefixV6.back(),
-        folly::IPAddress::networkToString(v6Network_1));
+      EXPECT_THAT(
+          *prefixEntryV4.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v4Network_1)));
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_1)));
+    }
   }
 
   //
@@ -1581,10 +1719,11 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - exactly the same supporting route as previously for v4Prefix;
   //  - 1 supporting route for v6Prefix;
   // Expect:
-  //  - supporting routes vector doesn't change as same update is ignored
-  //  - v6Prefix_ will NOT be advertised even `min_supporting_route=2`
-  //    as `install_to_fib=false`;
+  //  - v4Prefix_'s supporting routes doesn't change as same update is ignored
+  //  - v6Prefix_ will be advertised to `KvStore` as `min_supporting_route=2`
+  //  - v6Prefix_ will NOT be advertised to `Decision` as `install_to_fib=false`
   //
+  VLOG(1) << "Starting test step 3...";
   {
     DecisionRouteUpdate routeUpdate;
     // ATTN: change ribEntry attributes to make sure no impact on ref-count
@@ -1594,78 +1733,124 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     routeUpdate.addRouteToUpdate(unicastEntryV6_2);
     routeUpdatesQueue.push(std::move(routeUpdate));
 
-    // no more route update received
-    EXPECT_FALSE(waitForRouteUpdate(reader, kRouteUpdateTimeout).has_value());
+    // Verify 1): PrefixManager -> Decision update
+    {
+      // no more route update received
+      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
+                       .has_value());
+    }
 
-    // verificaiton via public API
-    auto mp = getOriginatedPrefixDb();
-    auto& prefixEntryV4 = mp.at(v4Prefix_);
-    auto& prefixEntryV6 = mp.at(v6Prefix_);
-    auto& supportingPrefixV4 = *prefixEntryV4.supporting_prefixes_ref();
-    auto& supportingPrefixV6 = *prefixEntryV6.supporting_prefixes_ref();
+    // Verify 2): PrefixManager -> KvStore update
+    {
+      // v6Prefix_ is advertised to ALL areas configured
+      std::unordered_map<std::string, thrift::PrefixEntry> exp({
+          {keyStrAV6_, bestPrefixEntryV6_},
+          {keyStrBV6_, bestPrefixEntryV6_},
+          {keyStrCV6_, bestPrefixEntryV6_},
+      });
+      std::unordered_set<std::string> expDeleted{};
 
-    // v4Prefix - advertised, v6Prefix - advertised
-    EXPECT_TRUE(*prefixEntryV4.installed_ref());
-    EXPECT_TRUE(*prefixEntryV6.installed_ref());
+      // wait for condition to be met for KvStore publication
+      waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+    }
 
-    // verify supporting routes vector doesn't change
-    EXPECT_EQ(1, supportingPrefixV4.size());
-    EXPECT_EQ(2, supportingPrefixV6.size());
-    EXPECT_TRUE(
-        supportingPrefixV6.back() ==
-            folly::IPAddress::networkToString(v6Network_2) or
-        supportingPrefixV6.front() ==
-            folly::IPAddress::networkToString(v6Network_2));
-    EXPECT_NE(supportingPrefixV6.back(), supportingPrefixV6.front());
+    // Verify 3): PrefixManager's public API
+    {
+      // verificaiton via public API
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+      // v4Prefix - advertised, v6Prefix - advertised
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 2;
+                  }));
+
+      EXPECT_THAT(
+          *prefixEntryV4.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v4Network_1)));
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_1),
+              folly::IPAddress::networkToString(v6Network_2)));
+    }
   }
 
   // Step4: Withdraw:
   //  - 1 supporting route of v4Prefix;
-  //  - 1 supporting route for v6Prefix;
-  //  - 1 unrelated v6 ribEntry;
+  //  - 1 supporting route of v6Prefix;
   // Expect:
   //  - v4Prefix_ is withdrawn as `supporting_route_cnt=0`;
-  //  - # of supporting prefix for v6Prefix_ will shrink to 1,
-  //    but NOT shown as withdrawn as it will be ignored;
+  //  - v6Prefix_ is withdrawn as `supporting_route_cnt=1`;
+  //  - `Decision` won't receive routeUpdate for `v6Prefix_`
+  //    since it has `install_to_fib=false`;
   //
+  VLOG(1) << "Starting test step 4...";
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
     routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
-    // intentionally inject random non-existing prefix
-    routeUpdate.unicastRoutesToDelete.emplace_back(
-        folly::IPAddress::createNetwork("fe80::2"));
     routeUpdatesQueue.push(std::move(routeUpdate));
 
-    auto mp = getOriginatedPrefixDb();
-    auto& prefixEntryV4 = mp.at(v4Prefix_);
-    auto& prefixEntryV6 = mp.at(v6Prefix_);
-    auto& supportingPrefixV4 = *prefixEntryV4.supporting_prefixes_ref();
-    auto& supportingPrefixV6 = *prefixEntryV6.supporting_prefixes_ref();
+    // Verify 1): PrefixManager -> Decision update
+    {
+      // ONLY v4 route withdrawn updates received
+      auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+      EXPECT_TRUE(update.has_value());
 
-    // v4Prefix - withdrawn, v6Prefix - advertised
-    EXPECT_FALSE(*prefixEntryV4.installed_ref());
-    EXPECT_FALSE(*prefixEntryV6.installed_ref());
+      auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+      auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+      EXPECT_THAT(updatedRoutes, testing::SizeIs(0));
+      EXPECT_THAT(deletedRoutes, testing::SizeIs(1));
+      EXPECT_THAT(
+          deletedRoutes, testing::UnorderedElementsAre(toIpPrefix(v4Prefix_)));
+    }
 
-    // verify attributes
-    EXPECT_EQ(0, supportingPrefixV4.size());
-    EXPECT_EQ(1, supportingPrefixV6.size());
-    EXPECT_EQ(
-        supportingPrefixV6.back(),
-        folly::IPAddress::networkToString(v6Network_2));
+    // Verify 2): PrefixManager -> KvStore update
+    {
+      // both v4Prefix_ + v6Prefix_ are withdrawn from ALL areas configured
+      std::unordered_set<std::string> expDeleted{
+          keyStrAV4_,
+          keyStrBV4_,
+          keyStrCV4_,
+          keyStrAV6_,
+          keyStrBV6_,
+          keyStrCV6_};
+      std::unordered_map<std::string, thrift::PrefixEntry> exp{};
 
-    // v4/v6 route withdrawn updates received
-    auto update = waitForRouteUpdate(reader, kRouteUpdateTimeout);
-    EXPECT_TRUE(update.has_value());
+      // wait for condition to be met for KvStore publication
+      waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+    }
 
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    // Verify 3): PrefixManager's public API
+    {
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
 
-    // verify both v4/v6 prefixes get dropped
-    EXPECT_EQ(0, updatedRoutes.size());
-    EXPECT_EQ(1, deletedRoutes.size());
+      // v4Prefix - withdrawn, v6Prefix - withdrawn
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 0;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
 
-    EXPECT_TRUE(toIpPrefix(v4Prefix_) == deletedRoutes.back());
+      // verify attributes
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_2)));
+    }
   }
 }
 
