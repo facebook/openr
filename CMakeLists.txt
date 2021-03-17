@@ -212,6 +212,7 @@ add_library(openrlib
   openr/monitor/SystemMetrics.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/plugin/Plugin.cpp
+  openr/policy/PolicyManager.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp

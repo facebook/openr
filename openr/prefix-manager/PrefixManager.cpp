@@ -54,6 +54,10 @@ PrefixManager::PrefixManager(
   CHECK(kvStore_);
   CHECK(config);
 
+  if (auto policyConf = config->getAreaPolicies()) {
+    policyManager_ = std::make_unique<PolicyManager>(*policyConf);
+  }
+
   for (const auto& [areaId, areaConf] : config->getAreas()) {
     areaToPolicy_.emplace(areaId, areaConf.getIngressPolicy());
   }

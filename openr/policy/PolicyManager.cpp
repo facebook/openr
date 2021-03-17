@@ -12,8 +12,7 @@ namespace openr {
 class PolicyManagerImpl {};
 
 PolicyManager::PolicyManager(
-    const neteng::config::routing_policy::PolicyConfig& config)
-    : impl_(std::make_unique<PolicyManagerImpl>()) {}
+    const neteng::config::routing_policy::PolicyConfig& config) {}
 PolicyManager::~PolicyManager() = default;
 
 std::pair<std::shared_ptr<thrift::PrefixEntry>, std::string /*policy name*/>

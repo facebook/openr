@@ -21,6 +21,7 @@
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/Queue.h>
+#include <openr/policy/PolicyManager.h>
 
 namespace openr {
 
@@ -275,6 +276,8 @@ class PrefixManager final : public OpenrEventBase {
 
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
+
+  std::unique_ptr<PolicyManager> policyManager_{nullptr};
 
   /*
    * [Route Origination/Aggregation]

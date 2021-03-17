@@ -28,6 +28,9 @@ class PolicyManager {
       const std::string& policyStatementName,
       const std::shared_ptr<thrift::PrefixEntry>& prefixEntry) noexcept;
 
-  std::unique_ptr<PolicyManagerImpl> impl_{nullptr};
+  // PolicyManagerImpl uses forward declaration
+  // Use shared_ptr because it works with incomplete type, where unique_ptr
+  // requires full declaration
+  std::shared_ptr<PolicyManagerImpl> impl_{nullptr};
 };
 } // namespace openr
