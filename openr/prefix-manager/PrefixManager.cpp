@@ -98,7 +98,7 @@ PrefixManager::PrefixManager(
 
       switch (update.eventType) {
       case PrefixEventType::ADD_PREFIXES:
-        advertisePrefixesImpl(update.prefixes, dstAreas);
+        advertisePrefixesImpl(std::move(update.prefixes), dstAreas);
         break;
       case PrefixEventType::WITHDRAW_PREFIXES:
         withdrawPrefixesImpl(update.prefixes);
@@ -302,10 +302,10 @@ std::unordered_set<std::string>
 PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
   std::unordered_set<std::string> prefixKeys;
   const auto& tPrefixEntry = entry.tPrefixEntry;
-  const auto& type = *tPrefixEntry.type_ref();
+  const auto& type = *tPrefixEntry->type_ref();
   const std::unordered_set<std::string> areaStack{
-      tPrefixEntry.area_stack_ref()->begin(),
-      tPrefixEntry.area_stack_ref()->end()};
+      tPrefixEntry->area_stack_ref()->begin(),
+      tPrefixEntry->area_stack_ref()->end()};
 
   for (const auto& toArea : entry.dstAreas) {
     // prevent area_stack loop
@@ -318,7 +318,7 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
     // TODO: run ingress policy
     const auto prefixKey =
         PrefixKey(nodeId_, entry.network, toArea).getPrefixKey();
-    auto prefixDb = createPrefixDb(nodeId_, {tPrefixEntry}, toArea);
+    auto prefixDb = createPrefixDb(nodeId_, {*tPrefixEntry}, toArea);
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     // advertise key to `KvStore`
@@ -329,7 +329,7 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
     VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
                         << "Area: " << toArea << ", "
                         << "Type: " << toString(type) << ", "
-                        << toString(tPrefixEntry, VLOG_IS_ON(2));
+                        << toString(*tPrefixEntry, VLOG_IS_ON(2));
     prefixKeys.emplace(prefixKey);
   }
   return prefixKeys;
@@ -446,7 +446,7 @@ PrefixManager::advertisePrefixes(std::vector<thrift::PrefixEntry> prefixes) {
                         p = std::move(p),
                         prefixes = std::move(prefixes)]() mutable noexcept {
     auto dstAreas = allAreaIds();
-    p.setValue(advertisePrefixesImpl(prefixes, dstAreas));
+    p.setValue(advertisePrefixesImpl(std::move(prefixes), dstAreas));
   });
   return sf;
 }
@@ -498,7 +498,7 @@ PrefixManager::getPrefixes() {
     std::vector<thrift::PrefixEntry> prefixes;
     for (const auto& [_, typeToInfo] : prefixMap_) {
       for (const auto& [_, entry] : typeToInfo) {
-        prefixes.emplace_back(entry.tPrefixEntry);
+        prefixes.emplace_back(*entry.tPrefixEntry);
       }
     }
     p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
@@ -518,7 +518,7 @@ PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
     for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
       auto it = typeToPrefixes.find(prefixType);
       if (it != typeToPrefixes.end()) {
-        prefixes.emplace_back(it->second.tPrefixEntry);
+        prefixes.emplace_back(*it->second.tPrefixEntry);
       }
     }
     p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
@@ -614,7 +614,7 @@ PrefixManager::filterAndAddAdvertisedRoute(
     routeDetail.routes_ref()->emplace_back();
     auto& route = routeDetail.routes_ref()->back();
     route.key_ref() = prefixType;
-    route.route_ref() = prefixEntry.tPrefixEntry;
+    route.route_ref() = *prefixEntry.tPrefixEntry;
   }
 
   // Add detail if there are entries to return
@@ -625,11 +625,14 @@ PrefixManager::filterAndAddAdvertisedRoute(
 
 bool
 PrefixManager::advertisePrefixesImpl(
-    const std::vector<thrift::PrefixEntry>& tPrefixEntries,
+    std::vector<thrift::PrefixEntry>&& tPrefixEntries,
     const std::unordered_set<std::string>& dstAreas) {
   std::vector<PrefixEntry> toAddOrUpdate;
-  for (const auto& tPrefixEntry : tPrefixEntries) {
-    toAddOrUpdate.emplace_back(tPrefixEntry, dstAreas);
+  for (auto& tPrefixEntry : tPrefixEntries) {
+    auto dstAreasCp = dstAreas;
+    toAddOrUpdate.emplace_back(
+        std::make_shared<thrift::PrefixEntry>(std::move(tPrefixEntry)),
+        std::move(dstAreasCp));
   }
   return advertisePrefixesImpl(toAddOrUpdate);
 }
@@ -640,7 +643,7 @@ PrefixManager::advertisePrefixesImpl(
   folly::small_vector<folly::CIDRNetwork> changed{};
 
   for (const auto& entry : prefixEntries) {
-    const auto& type = *entry.tPrefixEntry.type_ref();
+    const auto& type = *entry.tPrefixEntry->type_ref();
     const auto& prefixCidr = entry.network;
 
     // ATTN: create new folly::CIDRNetwork -> typeToPrefixes
@@ -727,10 +730,11 @@ PrefixManager::syncPrefixesByTypeImpl(
     toAddOrUpdate.emplace_back(entry);
   }
   for (auto const& prefix : toRemoveSet) {
-    toRemove.emplace_back(prefixMap_.at(prefix).at(type).tPrefixEntry);
+    toRemove.emplace_back(*prefixMap_.at(prefix).at(type).tPrefixEntry);
   }
   bool updated = false;
-  updated |= ((advertisePrefixesImpl(toAddOrUpdate, dstAreas)) ? 1 : 0);
+  updated |=
+      ((advertisePrefixesImpl(std::move(toAddOrUpdate), dstAreas)) ? 1 : 0);
   updated |= ((withdrawPrefixesImpl(toRemove)) ? 1 : 0);
   return updated;
 }
@@ -741,7 +745,7 @@ PrefixManager::withdrawPrefixesByTypeImpl(thrift::PrefixType type) {
   for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
     auto it = typeToPrefixes.find(type);
     if (it != typeToPrefixes.end()) {
-      toRemove.emplace_back(it->second.tPrefixEntry);
+      toRemove.emplace_back(*it->second.tPrefixEntry);
     }
   }
 
@@ -818,7 +822,9 @@ PrefixManager::processOriginatedPrefixes(
         routeUpdatesOut.addRouteToUpdate(route.unicastEntry);
       }
       advertisedPrefixes.emplace_back(
-          route.unicastEntry.bestPrefixEntry, allAreaIds());
+          std::make_shared<thrift::PrefixEntry>(
+              route.unicastEntry.bestPrefixEntry),
+          allAreaIds());
 
       LOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
                 << folly::IPAddress::networkToString(network);
@@ -887,7 +893,9 @@ PrefixManager::processDecisionRouteUpdates(
         dstAreas.erase(*nh.area_ref());
       }
     }
-    advertisedPrefixes.emplace_back(prefixEntry, dstAreas);
+    advertisedPrefixes.emplace_back(
+        std::make_shared<thrift::PrefixEntry>(std::move(prefixEntry)),
+        std::move(dstAreas));
 
     // adjust supporting route count due to prefix advertisement
     aggregatesToAdvertise(prefix);

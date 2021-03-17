@@ -127,26 +127,27 @@ class PrefixManager final : public OpenrEventBase {
   // prefix entry with their destination areas
   // if dstAreas become empty, entry should be withdrawn
   struct PrefixEntry {
-    thrift::PrefixEntry tPrefixEntry;
+    std::shared_ptr<thrift::PrefixEntry> tPrefixEntry;
     std::unordered_set<std::string> dstAreas;
     folly::CIDRNetwork network;
 
     PrefixEntry() = default;
-    template <typename TPrefixEntry, typename AreaSet>
-    PrefixEntry(TPrefixEntry&& tPrefixEntry, AreaSet&& dstAreas)
-        : tPrefixEntry(std::forward<TPrefixEntry>(tPrefixEntry)),
-          dstAreas(std::forward<AreaSet>(dstAreas)) {
-      network = toIPNetwork(*tPrefixEntry.prefix_ref());
-    }
+    PrefixEntry(
+        std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
+        std::unordered_set<std::string>&& dstAreas)
+        : tPrefixEntry(std::move(tPrefixEntryIn)),
+          dstAreas(std::move(dstAreas)),
+          network(toIPNetwork(*tPrefixEntry->prefix_ref())) {}
 
     apache::thrift::field_ref<const thrift::PrefixMetrics&>
     metrics_ref() const& {
-      return tPrefixEntry.metrics_ref();
+      return tPrefixEntry->metrics_ref();
     }
 
     bool
     operator==(const PrefixEntry& other) const {
-      return tPrefixEntry == other.tPrefixEntry && dstAreas == other.dstAreas;
+      return *tPrefixEntry == *other.tPrefixEntry &&
+          dstAreas == other.dstAreas && network == other.network;
     }
   };
 
@@ -162,7 +163,7 @@ class PrefixManager final : public OpenrEventBase {
    * @return true if the db is modified
    */
   bool advertisePrefixesImpl(
-      const std::vector<thrift::PrefixEntry>& tPrefixEntries,
+      std::vector<thrift::PrefixEntry>&& tPrefixEntries,
       const std::unordered_set<std::string>& dstAreas);
   bool advertisePrefixesImpl(const std::vector<PrefixEntry>& prefixEntries);
   bool withdrawPrefixesImpl(
