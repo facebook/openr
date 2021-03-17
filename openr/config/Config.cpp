@@ -11,6 +11,7 @@
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <stdexcept>
 
 #include "Config.h"
 
@@ -112,20 +113,19 @@ Config::createPrefixAllocationParams(
 }
 
 void
-Config::addAreaConfig(thrift::AreaConfig const& area) {
-  if (!areaConfigs_.emplace(area.get_area_id(), area).second) {
-    throw std::invalid_argument(
-        folly::sformat("Duplicate area config id: {}", area.get_area_id()));
-  }
-}
-
-void
 Config::populateAreaConfig() {
   if (config_.get_areas().empty()) {
     // TODO remove once transition to areas is complete
     thrift::AreaConfig defaultArea;
     defaultArea.area_id_ref() = thrift::Types_constants::kDefaultArea();
     config_.areas_ref() = {defaultArea};
+  }
+
+  std::optional<neteng::config::routing_policy::Filters> propagationPolicy{
+      std::nullopt};
+  if (auto areaPolicies = getAreaPolicies()) {
+    propagationPolicy =
+        areaPolicies->filters_ref()->routePropagationPolicy_ref().to_optional();
   }
 
   for (auto& areaConf : *config_.areas_ref()) {
@@ -148,7 +148,18 @@ Config::populateAreaConfig() {
       areaConf.neighbor_regexes_ref() = {".*"};
     }
 
-    addAreaConfig(areaConf);
+    if (auto ingressPolicy = areaConf.ingress_policy_ref()) {
+      if (not propagationPolicy or
+          propagationPolicy->objects_ref()->count(*ingressPolicy) == 0) {
+        throw std::invalid_argument(folly::sformat(
+            "No area policy definition found for {}", *ingressPolicy));
+      }
+    }
+
+    if (!areaConfigs_.emplace(areaConf.get_area_id(), areaConf).second) {
+      throw std::invalid_argument(folly::sformat(
+          "Duplicate area config id: {}", areaConf.get_area_id()));
+    }
   }
 }
 
@@ -300,6 +311,7 @@ Config::populateInternalDb() {
         "monitor_max_event_log ({}) should be >= 0",
         *monitorConfig.max_event_log_ref()));
   }
+
   //
   // Link Monitor
   //

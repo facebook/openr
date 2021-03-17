@@ -10,6 +10,7 @@
 #include <folly/IPAddress.h>
 #include <re2/re2.h>
 #include <re2/set.h>
+#include <optional>
 
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -165,8 +166,6 @@ class Config {
   // area
   //
 
-  void addAreaConfig(thrift::AreaConfig const& areaConfig);
-
   void populateAreaConfig();
 
   const std::unordered_map<std::string, AreaConfiguration>&
@@ -278,6 +277,14 @@ class Config {
   const thrift::MonitorConfig&
   getMonitorConfig() const {
     return *config_.monitor_config_ref();
+  }
+
+  //
+  // policy
+  //
+  std::optional<neteng::config::routing_policy::PolicyConfig>
+  getAreaPolicies() const {
+    return config_.area_policies_ref().to_optional();
   }
 
  private:

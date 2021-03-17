@@ -152,6 +152,14 @@ TEST(ConfigTest, PopulateAreaConfig) {
     confInvalidArea.areas_ref()->emplace_back(getAreaConfig("1"));
     EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
   }
+  // cannot find policy definition for area policy
+  {
+    auto confInvalidAreaPolicy = getBasicOpenrConfig();
+    auto areaConfig = getAreaConfig("1");
+    areaConfig.set_ingress_policy("BLA");
+    confInvalidAreaPolicy.areas_ref()->emplace_back(std::move(areaConfig));
+    EXPECT_THROW((Config(confInvalidAreaPolicy)), std::invalid_argument);
+  }
 
   // non-empty interface regex
   {
