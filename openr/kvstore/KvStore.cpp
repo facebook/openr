@@ -2993,8 +2993,8 @@ KvStoreDb::mergePublication(
   // Check for loop
   const auto nodeIds = rcvdPublication.nodeIds_ref();
   if (nodeIds.has_value() and
-      std::find(nodeIds->begin(), nodeIds->end(), kvParams_.nodeId) !=
-          nodeIds->end()) {
+      std::find(nodeIds->cbegin(), nodeIds->cend(), kvParams_.nodeId) !=
+          nodeIds->cend()) {
     fb303::fbData->addStatValue("kvstore.looped_publications", 1, fb303::COUNT);
     return 0;
   }

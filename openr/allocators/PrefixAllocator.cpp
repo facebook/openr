@@ -796,8 +796,8 @@ PrefixAllocator::semifuture_syncIfAddrs(
   // Add new addresses
   for (auto& newAddr : newAddrs) {
     // Skip adding existing addresse
-    if (std::find(oldAddrs.begin(), oldAddrs.end(), newAddr) !=
-        oldAddrs.end()) {
+    if (std::find(oldAddrs.cbegin(), oldAddrs.cend(), newAddr) !=
+        oldAddrs.cend()) {
       continue;
     }
     // Add non-existing new address
@@ -811,8 +811,8 @@ PrefixAllocator::semifuture_syncIfAddrs(
   // Delete old addresses
   for (auto& oldAddr : oldAddrs) {
     // Skip removing new addresse
-    if (std::find(newAddrs.begin(), newAddrs.end(), oldAddr) !=
-        newAddrs.end()) {
+    if (std::find(newAddrs.cbegin(), newAddrs.cend(), oldAddr) !=
+        newAddrs.cend()) {
       continue;
     }
     // Remove non-existing old address

@@ -243,23 +243,23 @@ getDurationBetweenPerfEvents(
     const std::string& firstName,
     const std::string& secondName) noexcept {
   auto search = std::find_if(
-      perfEvents.events_ref()->begin(),
-      perfEvents.events_ref()->end(),
+      perfEvents.events_ref()->cbegin(),
+      perfEvents.events_ref()->cend(),
       [&firstName](const thrift::PerfEvent& event) {
         return *event.eventDescr_ref() == firstName;
       });
-  if (search == perfEvents.events_ref()->end()) {
+  if (search == perfEvents.events_ref()->cend()) {
     return folly::makeUnexpected(
         fmt::format("Could not find first event: {}", firstName));
   }
   int64_t first = *search->unixTs_ref();
   search = std::find_if(
       search + 1,
-      perfEvents.events_ref()->end(),
+      perfEvents.events_ref()->cend(),
       [&secondName](const thrift::PerfEvent& event) {
         return *event.eventDescr_ref() == secondName;
       });
-  if (search == perfEvents.events_ref()->end()) {
+  if (search == perfEvents.events_ref()->cend()) {
     return folly::makeUnexpected(
         fmt::format("Could not find second event: {}", secondName));
   }

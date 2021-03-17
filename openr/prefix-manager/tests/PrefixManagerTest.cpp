@@ -771,11 +771,11 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   auto& prefixes1 = *resp1;
   EXPECT_EQ(7, prefixes1.size());
   EXPECT_NE(
-      std::find(prefixes1.begin(), prefixes1.end(), prefixEntry4),
-      prefixes1.end());
+      std::find(prefixes1.cbegin(), prefixes1.cend(), prefixEntry4),
+      prefixes1.cend());
   EXPECT_EQ(
-      std::find(prefixes1.begin(), prefixes1.end(), prefixEntry8),
-      prefixes1.end());
+      std::find(prefixes1.cbegin(), prefixes1.cend(), prefixEntry8),
+      prefixes1.cend());
 
   auto resp2 =
       prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
@@ -783,11 +783,11 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   auto& prefixes2 = *resp2;
   EXPECT_EQ(3, prefixes2.size());
   EXPECT_NE(
-      std::find(prefixes2.begin(), prefixes2.end(), prefixEntry3),
-      prefixes2.end());
+      std::find(prefixes2.cbegin(), prefixes2.cend(), prefixEntry3),
+      prefixes2.cend());
   EXPECT_EQ(
-      std::find(prefixes2.begin(), prefixes2.end(), prefixEntry2),
-      prefixes2.end());
+      std::find(prefixes2.cbegin(), prefixes2.cend(), prefixEntry2),
+      prefixes2.cend());
 
   auto resp3 =
       prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT).get();
