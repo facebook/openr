@@ -781,13 +781,25 @@ TEST_F(NlMessageFixture, NeighborEventPublication) {
   EXPECT_EQ(neighV4.getIfIndex(), neighV6.getIfIndex());
 }
 
-TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
-  // Add IPv6 route with one next hop and no labels
-  // outoing IF is vethTestY
+/*
+ * Check empty route from kernel
+ */
+TEST_F(NlMessageFixture, EmptyRoute) {
+  auto kernelRoutesV4 = nlSock->getIPv4Routes(kRouteProtoId).get().value();
+  auto kernelRoutesV6 = nlSock->getIPv6Routes(kRouteProtoId).get().value();
 
+  EXPECT_EQ(0, kernelRoutesV4.size());
+  EXPECT_EQ(0, kernelRoutesV6.size());
+}
+
+/*
+ * Add IPv6 route with 1 next-hop and no labels
+ */
+TEST_F(NlMessageFixture, IPv6RouteSingleNextHop) {
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(buildNextHop(
+
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
@@ -796,9 +808,8 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes
-  auto kernelRoutes = nlSock->getAllRoutes().get().value();
+  auto kernelRoutes = nlSock->getIPv6Routes(kRouteProtoId).get().value();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -807,35 +818,32 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes().get().value();
+  kernelRoutes = nlSock->getIPv6Routes(kRouteProtoId).get().value();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
-TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
-  // Add IPv6 route with 4 next hops and no labels
-  // outoing IF is vethTestY
-
+/*
+ * Add IPv6 route with 4 next-hops and no labels
+ */
+TEST_F(NlMessageFixture, IPv6RouteMultipleNextHops) {
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
 
-  paths.push_back(buildNextHop(
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX, 1));
-  paths.push_back(buildNextHop(
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY2V6, ifIndexX, 1));
-  paths.push_back(buildNextHop(
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY3V6, ifIndexX, 1));
-  paths.push_back(buildNextHop(
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY4V6, ifIndexX, 1));
-
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
   ackCount = getAckCount();
-  // create label next hop
   EXPECT_EQ(0, nlSock->addRoute(route).get());
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getIPv6Routes(kRouteProtoId).get().value();
   EXPECT_EQ(1, kernelRoutes.size());
@@ -852,25 +860,24 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
+/*
+ * Add IPv4 route with 1 next-hop and no labels
+ */
 TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
-  // Add IPv4 route with one next hop and no labels
-  // outoing IF is vethTestY
-
   uint32_t ackCount{0};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(buildNextHop(
+
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
   ackCount = getAckCount();
-  // create label next hop
   EXPECT_EQ(0, nlSock->addRoute(route).get());
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes().get().value();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
@@ -885,27 +892,26 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
+/*
+ * Add IPv4 route with 2 next-hops and no labels
+ */
 TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
-  // Add IPv4 route with 2 next hops and no labels
-  // outoing IF is vethTestY
-
   uint32_t ackCount{0};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(buildNextHop(
+
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY, 1));
-  paths.push_back(buildNextHop(
+  paths.emplace_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY2V4, ifIndexY, 1));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
   ackCount = getAckCount();
-  // create label next hop
   EXPECT_EQ(0, nlSock->addRoute(route).get());
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes().get().value();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
