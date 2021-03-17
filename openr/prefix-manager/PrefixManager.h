@@ -223,6 +223,9 @@ class PrefixManager final : public OpenrEventBase {
   // process decision route update, inject routes to different areas
   void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
 
+  // get all areaIds
+  std::unordered_set<std::string> allAreaIds();
+
   /*
    * Private variables/Structures
    */
@@ -230,8 +233,8 @@ class PrefixManager final : public OpenrEventBase {
   // this node name
   const std::string nodeId_;
 
-  // area Id
-  const std::unordered_set<std::string> allAreas_{};
+  // map from area id to area policy
+  std::unordered_map<std::string, std::optional<std::string>> areaToPolicy_;
 
   // TTL for a key in the key value store
   const std::chrono::milliseconds ttlKeyInKvStore_{0};
@@ -271,17 +274,6 @@ class PrefixManager final : public OpenrEventBase {
 
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
-
-  // TODO:
-  //   struct AreaInfo {
-  //     // ingress policy
-  //     // AreaPolicy ingressPolicy;
-  //     // store post policy prefix entries
-  //     std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry>
-  //         postPolicyPrefixes;
-  //   }
-
-  //   std::unordered_map<std::string, AreaInfo> areaInfos_;
 
   /*
    * [Route Origination/Aggregation]

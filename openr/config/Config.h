@@ -29,6 +29,9 @@ class AreaConfiguration {
         compileRegexSet(area.get_exclude_interface_regexes());
     interfaceRedistRegexSet_ =
         compileRegexSet(area.get_redistribute_interface_regexes());
+    if (area.get_ingress_policy()) {
+      ingressPolicy_ = *area.ingress_policy_ref();
+    }
   }
 
   std::string const&
@@ -52,8 +55,15 @@ class AreaConfiguration {
     return interfaceRedistRegexSet_->Match(iface, nullptr);
   }
 
+  std::optional<std::string>
+  getIngressPolicy() const {
+    return ingressPolicy_;
+  }
+
  private:
   const std::string areaId_;
+
+  std::optional<std::string> ingressPolicy_{std::nullopt};
 
   // given a list of strings we will convert is to a compiled RE2::Set
   static std::shared_ptr<re2::RE2::Set> compileRegexSet(

@@ -47,13 +47,16 @@ PrefixManager::PrefixManager(
     KvStore* kvStore,
     const std::chrono::seconds& initialDumpTime)
     : nodeId_(config->getNodeName()),
-      allAreas_{config->getAreaIds()},
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvStore_(kvStore) {
   CHECK(kvStore_);
   CHECK(config);
+
+  for (const auto& [areaId, areaConf] : config->getAreas()) {
+    areaToPolicy_.emplace(areaId, areaConf.getIngressPolicy());
+  }
 
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -86,7 +89,7 @@ PrefixManager::PrefixManager(
       // if no specified dstination areas, apply to all areas
       std::unordered_set<std::string> dstAreas;
       if (update.dstAreas.empty()) {
-        dstAreas = allAreas_;
+        dstAreas = allAreaIds();
       } else {
         for (const auto& area : update.dstAreas) {
           dstAreas.emplace(area);
@@ -183,7 +186,7 @@ PrefixManager::PrefixManager(
   // get initial dump of keys related to `myNodeId_`.
   // ATTN: when Open/R restarts, newly started prefixManager will need to
   // understand what it has previously advertised.
-  for (const auto& area : allAreas_) {
+  for (const auto& [area, _] : areaToPolicy_) {
     auto result = kvStoreClient_->dumpAllWithPrefix(AreaId{area}, keyPrefix);
     if (not result.has_value()) {
       LOG(ERROR) << "Failed dumping prefix " << keyPrefix << " from area "
@@ -442,7 +445,8 @@ PrefixManager::advertisePrefixes(std::vector<thrift::PrefixEntry> prefixes) {
   runInEventBaseThread([this,
                         p = std::move(p),
                         prefixes = std::move(prefixes)]() mutable noexcept {
-    p.setValue(advertisePrefixesImpl(prefixes, allAreas_));
+    auto dstAreas = allAreaIds();
+    p.setValue(advertisePrefixesImpl(prefixes, dstAreas));
   });
   return sf;
 }
@@ -480,7 +484,8 @@ PrefixManager::syncPrefixesByType(
                         p = std::move(p),
                         prefixType = std::move(prefixType),
                         prefixes = std::move(prefixes)]() mutable noexcept {
-    p.setValue(syncPrefixesByTypeImpl(prefixType, prefixes, allAreas_));
+    auto dstAreas = allAreaIds();
+    p.setValue(syncPrefixesByTypeImpl(prefixType, prefixes, dstAreas));
   });
   return sf;
 }
@@ -813,7 +818,7 @@ PrefixManager::processOriginatedPrefixes(
         routeUpdatesOut.addRouteToUpdate(route.unicastEntry);
       }
       advertisedPrefixes.emplace_back(
-          route.unicastEntry.bestPrefixEntry, allAreas_);
+          route.unicastEntry.bestPrefixEntry, allAreaIds());
 
       LOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
                 << folly::IPAddress::networkToString(network);
@@ -876,7 +881,7 @@ PrefixManager::processDecisionRouteUpdates(
     prefixEntry.type_ref() = thrift::PrefixType::RIB;
 
     // populate routes to be advertised to KvStore
-    auto dstAreas = allAreas_;
+    auto dstAreas = allAreaIds();
     for (const auto& nh : route.nexthops) {
       if (nh.area_ref().has_value()) {
         dstAreas.erase(*nh.area_ref());
@@ -911,12 +916,21 @@ PrefixManager::processDecisionRouteUpdates(
   // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
   // We want to keep processDecisionRouteUpdates() running as dynamic
   // configuration could add/remove areas.
-  if (allAreas_.size() > 1) {
+  if (areaToPolicy_.size() > 1) {
     advertisePrefixesImpl(advertisedPrefixes);
     withdrawPrefixesImpl(withdrawnPrefixes);
   }
 
   // ignore mpls updates
+}
+
+std::unordered_set<std::string>
+PrefixManager::allAreaIds() {
+  std::unordered_set<std::string> allAreaIds;
+  for (const auto& [area, _] : areaToPolicy_) {
+    allAreaIds.emplace(area);
+  }
+  return allAreaIds;
 }
 
 } // namespace openr
