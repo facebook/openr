@@ -83,7 +83,7 @@ class DecisionWrapper {
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
         kvStoreUpdatesQueue.getReader(),
-        staticRoutesUpdateQueue.getReader(),
+        staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
 
     decisionThread = std::make_unique<std::thread>([this]() {
@@ -96,7 +96,7 @@ class DecisionWrapper {
 
   ~DecisionWrapper() {
     kvStoreUpdatesQueue.close();
-    staticRoutesUpdateQueue.close();
+    staticRouteUpdatesQueue.close();
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
     decisionThread->join();
@@ -169,7 +169,7 @@ class DecisionWrapper {
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
 

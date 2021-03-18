@@ -51,7 +51,7 @@ class Fib final : public OpenrEventBase {
       int32_t thriftPort,
       std::chrono::seconds coldStartDuration,
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-      messaging::RQueue<DecisionRouteUpdate> staticRoutesUpdateQueue,
+      messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       KvStore* kvStore);

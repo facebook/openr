@@ -57,7 +57,7 @@ class PrefixManager final : public OpenrEventBase {
 
   PrefixManager(
       // producer queue
-      messaging::ReplicateQueue<DecisionRouteUpdate>& staticRoutesUpdateQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
       // consumer queue
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,

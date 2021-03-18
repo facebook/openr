@@ -1403,7 +1403,7 @@ Decision::Decision(
     std::chrono::milliseconds debounceMaxDur,
     // consumer queue
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
-    messaging::RQueue<DecisionRouteUpdate> staticRoutesUpdateQueue,
+    messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     // producer queue
     messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
     : config_(config),
@@ -1482,7 +1482,7 @@ Decision::Decision(
 
   // Add reader to process static routes publication from prefix-manager
   addFiberTask(
-      [q = std::move(staticRoutesUpdateQueue), this]() mutable noexcept {
+      [q = std::move(staticRouteUpdatesQueue), this]() mutable noexcept {
         LOG(INFO) << "Starting static routes update processing fiber";
         while (true) {
           auto maybeThriftPub = q.get(); // perform read

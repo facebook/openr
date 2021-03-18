@@ -139,7 +139,7 @@ KvStore::KvStore(
     fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
-    messaging::RQueue<PeerEvent> peerUpdateQueue,
+    messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
     std::shared_ptr<const Config> config,
@@ -207,7 +207,7 @@ KvStore::KvStore(
       });
 
   // Add reader to process peer updates from LinkMonitor
-  addFiberTask([q = std::move(peerUpdateQueue), this]() mutable noexcept {
+  addFiberTask([q = std::move(peerUpdatesQueue), this]() mutable noexcept {
     LOG(INFO) << "Starting peer updates processing fiber";
     while (true) {
       auto maybePeerUpdate = q.get(); // perform read

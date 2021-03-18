@@ -280,7 +280,7 @@ main(int argc, char** argv) {
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
-  ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+  ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
@@ -413,7 +413,7 @@ main(int argc, char** argv) {
       watchdog,
       "PrefixManager",
       std::make_unique<PrefixManager>(
-          staticRoutesUpdateQueue,
+          staticRouteUpdatesQueue,
           prefixUpdatesQueue.getReader(),
           routeUpdatesQueue.getReader(),
           config,
@@ -503,7 +503,7 @@ main(int argc, char** argv) {
   if (config->isBgpPeeringEnabled()) {
     pluginStart(PluginArgs{
         prefixUpdatesQueue,
-        staticRoutesUpdateQueue,
+        staticRouteUpdatesQueue,
         routeUpdatesQueue.getReader(),
         config,
         sslContext});
@@ -525,7 +525,7 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
           std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
           kvStoreUpdatesQueue.getReader(),
-          staticRoutesUpdateQueue.getReader(),
+          staticRouteUpdatesQueue.getReader(),
           routeUpdatesQueue));
 
   // Define and start Fib Module
@@ -539,7 +539,7 @@ main(int argc, char** argv) {
           *config->getConfig().fib_port_ref(),
           std::chrono::seconds(3 * *sparkConf.keepalive_time_s_ref()),
           routeUpdatesQueue.getReader(),
-          staticRoutesUpdateQueue.getReader(),
+          staticRouteUpdatesQueue.getReader(),
           fibUpdatesQueue,
           logSampleQueue,
           kvStore));
@@ -624,7 +624,7 @@ main(int argc, char** argv) {
   kvStoreSyncEventsQueue.close();
   prefixUpdatesQueue.close();
   kvStoreUpdatesQueue.close();
-  staticRoutesUpdateQueue.close();
+  staticRouteUpdatesQueue.close();
   fibUpdatesQueue.close();
   netlinkEventsQueue.close();
   logSampleQueue.close();

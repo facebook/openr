@@ -25,7 +25,7 @@ Fib::Fib(
     int32_t thriftPort,
     std::chrono::seconds coldStartDuration,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-    messaging::RQueue<DecisionRouteUpdate> staticRoutesUpdateQueue,
+    messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStore* kvStore)
@@ -118,7 +118,7 @@ Fib::Fib(
   // - The routes are only programmed and updated but not deleted
   // - Updates arriving before first Decision RIB update will be processed. The
   //   fiber will terminate after that.
-  addFiberTask([q = std::move(staticRoutesUpdateQueue),
+  addFiberTask([q = std::move(staticRouteUpdatesQueue),
                 this]() mutable noexcept {
     LOG(INFO) << "Starting static routes update processing fiber";
     while (true) {

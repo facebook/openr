@@ -104,7 +104,7 @@ class LinkMonitor final : public OpenrEventBase {
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
       // producer queue
-      messaging::ReplicateQueue<InterfaceDatabase>& intfUpdatesQueue,
+      messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
       messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,

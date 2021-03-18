@@ -109,7 +109,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   void
   createPrefixManager() {
     prefixManager_ = std::make_unique<PrefixManager>(
-        staticRoutesUpdateQueue_,
+        staticRouteUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
         routeUpdatesQueue_.getReader(),
         config_,
@@ -124,7 +124,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
   void
   TearDown() override {
-    staticRoutesUpdateQueue_.close();
+    staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     routeUpdatesQueue_.close();
     logSampleQueue_.close();
@@ -185,7 +185,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   std::vector<std::thread> threads_;
 
   // Queue for publishing prefix-updates to PrefixManager
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
 
@@ -276,7 +276,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>> routeQueues{
         numAllocators};
     messaging::ReplicateQueue<LogSample> logSampleQueue;
-    messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+    messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
     std::vector<std::unique_ptr<PrefixAllocator>> allocators;
     std::vector<std::thread> threads;
 
@@ -430,7 +430,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
-          staticRoutesUpdateQueue,
+          staticRouteUpdatesQueue,
           prefixQueues.at(i).getReader(),
           routeQueues.at(i).getReader(),
           currConfig,
@@ -506,7 +506,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     for (auto& queue : routeQueues) {
       queue.close();
     }
-    staticRoutesUpdateQueue.close();
+    staticRouteUpdatesQueue.close();
     logSampleQueue.close();
     store->closeQueue();
 

@@ -4548,7 +4548,7 @@ class DecisionTestFixture : public ::testing::Test {
         debounceTimeoutMin,
         debounceTimeoutMax,
         kvStoreUpdatesQueue.getReader(),
-        staticRoutesUpdateQueue.getReader(),
+        staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
 
     decisionThread = std::make_unique<std::thread>([this]() {
@@ -4562,7 +4562,7 @@ class DecisionTestFixture : public ::testing::Test {
   void
   TearDown() override {
     kvStoreUpdatesQueue.close();
-    staticRoutesUpdateQueue.close();
+    staticRouteUpdatesQueue.close();
 
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
@@ -4632,7 +4632,7 @@ class DecisionTestFixture : public ::testing::Test {
     for (const auto& label : *publication.mplsRoutesToDelete_ref()) {
       routeUpdate.mplsRoutesToDelete.push_back(label);
     }
-    staticRoutesUpdateQueue.push(routeUpdate);
+    staticRouteUpdatesQueue.push(routeUpdate);
   }
 
   // helper function
@@ -4742,7 +4742,7 @@ class DecisionTestFixture : public ::testing::Test {
 
   std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
@@ -5837,7 +5837,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   auto decision = std::make_unique<Decision>(
       config,
@@ -5845,7 +5845,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
       debounceTimeoutMin,
       debounceTimeoutMax,
       kvStoreUpdatesQueue.getReader(),
-      staticRoutesUpdateQueue.getReader(),
+      staticRouteUpdatesQueue.getReader(),
       routeUpdatesQueue);
 
   // SET
@@ -5876,7 +5876,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
   }
 
   kvStoreUpdatesQueue.close();
-  staticRoutesUpdateQueue.close();
+  staticRouteUpdatesQueue.close();
   routeUpdatesQueue.close();
 }
 

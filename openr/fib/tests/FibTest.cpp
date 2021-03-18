@@ -319,7 +319,7 @@ class FibTestFixture : public ::testing::Test {
         port, /* thrift port */
         std::chrono::seconds(2), /* coldStartDuration */
         routeUpdatesQueue.getReader(),
-        staticRoutesUpdateQueue.getReader(),
+        staticRouteUpdatesQueue.getReader(),
         fibUpdatesQueue,
         logSampleQueue,
         nullptr /* KvStore module ptr */);
@@ -359,7 +359,7 @@ class FibTestFixture : public ::testing::Test {
     LOG(INFO) << "Closing queues";
     fibUpdatesQueue.close();
     routeUpdatesQueue.close();
-    staticRoutesUpdateQueue.close();
+    staticRouteUpdatesQueue.close();
     logSampleQueue.close();
 
     LOG(INFO) << "Stopping openr ctrl handler";
@@ -503,7 +503,7 @@ class FibTestFixture : public ::testing::Test {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdateQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
@@ -1388,7 +1388,7 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   routeUpdate.mplsRoutesToUpdate.emplace_back(
       RibMplsEntry(label1, {mpls_path1_2_1}));
   routeUpdate.mplsRoutesToDelete.emplace_back(label2);
-  staticRoutesUpdateQueue.push(routeUpdate);
+  staticRouteUpdatesQueue.push(routeUpdate);
 
   // Wait for MPLS route updates
   mockFibHandler->waitForUpdateMplsRoutes();
@@ -1430,11 +1430,11 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   EXPECT_EQ(mplsRoutes.size(), 0);
 
   // Expect fiber for processing static route to be active
-  EXPECT_EQ(1, staticRoutesUpdateQueue.getNumReaders());
+  EXPECT_EQ(1, staticRouteUpdatesQueue.getNumReaders());
 
   // Publish same event and we can expect it to terminate
-  staticRoutesUpdateQueue.push(routeUpdate);
-  while (staticRoutesUpdateQueue.getNumReaders()) {
+  staticRouteUpdatesQueue.push(routeUpdate);
+  while (staticRouteUpdatesQueue.getNumReaders()) {
     std::this_thread::yield();
   }
 }
