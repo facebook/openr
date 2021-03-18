@@ -205,7 +205,6 @@ class SpfSolver {
   SpfSolver(
       const std::string& myNodeName,
       bool enableV4,
-      bool enableOrderedFib = false,
       bool bgpDryRun = false,
       bool enableBestRouteSelection = false);
   ~SpfSolver();
@@ -351,10 +350,6 @@ class Decision : public OpenrEventBase {
    */
   void rebuildRoutes(std::string const& event);
 
-  // decremnts holds and send any resulting output, returns true if any
-  // linkstate has remaining holds
-  bool decrementOrderedFibHolds();
-
   void sendRouteUpdate(
       DecisionRouteDb&& routeDb,
       std::optional<thrift::PerfEvents>&& perfEvents);
@@ -398,9 +393,6 @@ class Decision : public OpenrEventBase {
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<folly::AsyncTimeout> monitorTimer_{nullptr};
-
-  // Timer for decrementing link holds for ordered fib programming
-  std::unique_ptr<folly::AsyncTimeout> orderedFibTimer_{nullptr};
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};

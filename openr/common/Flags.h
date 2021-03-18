@@ -77,7 +77,6 @@ DECLARE_bool(enable_encryption);
 
 DECLARE_bool(enable_rtt_metric);
 DECLARE_bool(enable_v4);
-DECLARE_bool(enable_ordered_fib_programming);
 
 DECLARE_int32(decision_graceful_restart_window_s);
 

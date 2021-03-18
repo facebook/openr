@@ -166,12 +166,10 @@ class SpfSolver::SpfSolverImpl {
   SpfSolverImpl(
       const std::string& myNodeName,
       bool enableV4,
-      bool enableOrderedFib,
       bool bgpDryRun,
       bool enableBestRouteSelection)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
-        enableOrderedFib_(enableOrderedFib),
         bgpDryRun_(bgpDryRun),
         enableBestRouteSelection_(enableBestRouteSelection) {
     // Initialize stat keys
@@ -359,8 +357,6 @@ class SpfSolver::SpfSolverImpl {
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
   // nexthops to Fib module for programming. Else it will just drop them.
   const bool enableV4_{false};
-
-  const bool enableOrderedFib_{false};
 
   const bool bgpDryRun_{false};
 
@@ -1341,15 +1337,10 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
 SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
-    bool enableOrderedFib,
     bool bgpDryRun,
     bool enableBestRouteSelection)
     : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName,
-          enableV4,
-          enableOrderedFib,
-          bgpDryRun,
-          enableBestRouteSelection)) {}
+          myNodeName, enableV4, bgpDryRun, enableBestRouteSelection)) {}
 
 SpfSolver::~SpfSolver() {}
 
@@ -1417,7 +1408,6 @@ Decision::Decision(
   spfSolver_ = std::make_unique<SpfSolver>(
       config->getNodeName(),
       config->isV4Enabled(),
-      config->isOrderedFibProgrammingEnabled(),
       bgpDryRun,
       config->isBestRouteSelectionEnabled());
 
@@ -1436,19 +1426,6 @@ Decision::Decision(
     counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
-
-  // Schedule periodic timer to decremtOrderedFibHolds
-  if (config->isOrderedFibProgrammingEnabled()) {
-    orderedFibTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-      LOG(INFO) << "Decrementing Holds";
-      if (decrementOrderedFibHolds()) {
-        auto timeout = getMaxFib();
-        LOG(INFO) << "Scheduling next hold decrement in " << timeout.count()
-                  << "ms";
-        orderedFibTimer_->scheduleTimeout(getMaxFib());
-      }
-    });
-  }
 
   // Add reader to process publication from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
@@ -1720,23 +1697,12 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
         adjacencyDb.area_ref() = area;
 
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
-        if (config_->isOrderedFibProgrammingEnabled()) {
-          if (auto maybeHoldUpTtl =
-                  areaLinkState.getHopsFromAToB(myNodeName_, nodeName)) {
-            holdUpTtl = maybeHoldUpTtl.value();
-            holdDownTtl = areaLinkState.getMaxHopsToNode(nodeName) - holdUpTtl;
-          }
-        }
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyLinkStateChange(
             nodeName,
             areaLinkState.updateAdjacencyDatabase(
                 adjacencyDb, holdUpTtl, holdDownTtl),
             adjacencyDb.perfEvents_ref());
-        if (areaLinkState.hasHolds() && orderedFibTimer_ != nullptr &&
-            !orderedFibTimer_->isScheduled()) {
-          orderedFibTimer_->scheduleTimeout(getMaxFib());
-        }
         continue;
       }
 
@@ -1940,23 +1906,6 @@ Decision::rebuildRoutes(std::string const& event) {
 
   // send `DecisionRouteUpdate` to Fib/PrefixMgr
   routeUpdatesQueue_.push(std::move(update));
-}
-
-bool
-Decision::decrementOrderedFibHolds() {
-  bool topoChanged = false;
-  bool stillHasHolds = false;
-  for (auto& [_, linkState] : areaLinkStates_) {
-    pendingUpdates_.applyLinkStateChange(
-        myNodeName_,
-        linkState.decrementHolds(),
-        thrift::AdjacencyDatabase().perfEvents_ref()); // Empty perf events
-    stillHasHolds |= linkState.hasHolds();
-  }
-  if (pendingUpdates_.needsRouteUpdate()) {
-    rebuildRoutes("ORDERED_FIB_HOLDS_EXPIRED");
-  }
-  return stillHasHolds;
 }
 
 std::chrono::milliseconds

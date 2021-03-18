@@ -92,7 +92,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_);
     decisionThread_ = std::thread([&]() { decision->run(); });
 
-    // Create Fib module
+    // Create Fib moduleKeySyncMultipleArea
     fib = std::make_shared<Fib>(
         config,
         -1, /* thrift port */
@@ -100,8 +100,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         fibUpdatesQueue_,
-        logSampleQueue_,
-        kvStoreWrapper_->getKvStore());
+        logSampleQueue_);
     fibThread_ = std::thread([&]() { fib->run(); });
 
     // Create PrefixManager module

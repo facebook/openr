@@ -227,8 +227,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       routeUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       fibUpdatesQueue_,
-      logSampleQueue_,
-      kvStore_.get());
+      logSampleQueue_);
 
   //
   // create PrefixAllocator

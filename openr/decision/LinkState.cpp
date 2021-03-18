@@ -750,15 +750,6 @@ LinkState::getMetricFromAToB(
   return std::nullopt;
 }
 
-LinkStateMetric
-LinkState::getMaxHopsToNode(const std::string& nodeName) const {
-  LinkStateMetric max = 0;
-  for (auto const& pathsFromNode : getSpfResult(nodeName, false)) {
-    max = std::max(max, pathsFromNode.second.metric());
-  }
-  return max;
-}
-
 std::vector<LinkState::Path> const&
 LinkState::getKthPaths(
     const std::string& src, const std::string& dest, size_t k) const {

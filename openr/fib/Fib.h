@@ -53,8 +53,7 @@ class Fib final : public OpenrEventBase {
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
-      messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      KvStore* kvStore);
+      messaging::ReplicateQueue<LogSample>& logSampleQueue);
 
   /**
    * Override stop method of OpenrEventBase
@@ -224,9 +223,6 @@ class Fib final : public OpenrEventBase {
   // Enable segment routing
   bool enableSegmentRouting_{false};
 
-  // indicates that we should publish fib programming time to kvstore
-  bool enableOrderedFib_{false};
-
   apache::thrift::CompactSerializer serializer_;
 
   // Thrift client connection to switch FIB Agent using which we actually
@@ -242,10 +238,6 @@ class Fib final : public OpenrEventBase {
 
   // periodically send alive msg to switch agent
   std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
-
-  // module ptr to refer to KvStore for KvStoreClientInternal usage
-  KvStore* kvStore_{nullptr};
-  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 
   // Queues to publish fib updates (Fib streaming)
   messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue_;

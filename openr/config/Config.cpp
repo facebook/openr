@@ -183,14 +183,6 @@ Config::populateInternalDb() {
   }
 
   //
-  // Fib
-  //
-  if (isOrderedFibProgrammingEnabled() and areaConfigs_.size() > 1) {
-    throw std::invalid_argument(folly::sformat(
-        "enable_ordered_fib_programming only support single area config"));
-  }
-
-  //
   // Kvstore
   //
   const auto& kvConf = *config_.kvstore_config_ref();

@@ -1123,7 +1123,6 @@ TEST(Decision, BestRouteSelection) {
   SpfSolver spfSolver(
       nodeName,
       false /* enableV4 */,
-      false /* enableOrderedFib */,
       false /* bgpDryRun */,
       true /* enableBestRouteSelection */);
 

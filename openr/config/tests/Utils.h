@@ -38,7 +38,6 @@ getBasicOpenrConfig(
     const std::vector<openr::thrift::AreaConfig>& areaCfg = {},
     bool enableV4 = true,
     bool enableSegmentRouting = false,
-    bool orderedFibProgramming = false,
     bool dryrun = true,
     bool enableV4OverV6Nexthop = false) {
   openr::thrift::LinkMonitorConfig linkMonitorConfig;
@@ -63,7 +62,6 @@ getBasicOpenrConfig(
   config.enable_v4_ref() = enableV4;
   config.v4_over_v6_nexthop_ref() = enableV4OverV6Nexthop;
   config.enable_segment_routing_ref() = enableSegmentRouting;
-  config.enable_ordered_fib_programming_ref() = orderedFibProgramming;
   config.dryrun_ref() = dryrun;
 
   *config.kvstore_config_ref() = kvstoreConfig;

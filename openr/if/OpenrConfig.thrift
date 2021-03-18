@@ -546,8 +546,8 @@ struct OpenrConfig {
   20: optional bool enable_prefix_allocation;
   21: optional PrefixAllocationConfig prefix_allocation_config;
 
-  # Fib
-  22: optional bool enable_ordered_fib_programming;
+  /** Deprecated. The feature is deprecated. */
+  22: optional bool enable_ordered_fib_programming (deprecated);
   /** TCP port on which FibService will be listening. */
   23: i32 fib_port;
 

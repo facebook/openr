@@ -345,14 +345,6 @@ class LinkState {
       std::string const& b,
       bool useLinkMetric = true) const;
 
-  std::optional<LinkStateMetric>
-  getHopsFromAToB(std::string const& a, std::string const& b) const {
-    return getMetricFromAToB(a, b, false);
-  }
-
-  // returns hop count to furthest away node connected to nodeName
-  LinkStateMetric getMaxHopsToNode(const std::string& nodeName) const;
-
   const std::string&
   getArea() const {
     return area_;

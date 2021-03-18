@@ -316,67 +316,6 @@ TEST(LinkStateTest, getKthPaths) {
   }
 }
 
-TEST(LinkStateTest, getHopCounts) {
-  {
-    // box
-    //
-    //   1--2
-    //   |  |
-    //   3--4
-    //
-    auto linkState = openr::getLinkState({
-        {1, {2, 3}},
-        {2, {1, 4}},
-        {3, {1, 4}},
-        {4, {2, 3}},
-    });
-
-    EXPECT_EQ(1, linkState.getHopsFromAToB("1", "2"));
-    EXPECT_EQ(2, linkState.getHopsFromAToB("1", "4"));
-    EXPECT_EQ(2, linkState.getMaxHopsToNode("1"));
-  }
-
-  {
-    // line
-    //
-    //   1-2-3-4-5
-    //
-    auto linkState = openr::getLinkState({
-        {1, {2}},
-        {2, {1, 3}},
-        {3, {2, 4}},
-        {4, {3, 5}},
-        {5, {4}},
-    });
-
-    EXPECT_EQ(1, linkState.getHopsFromAToB("1", "2"));
-    EXPECT_EQ(3, linkState.getHopsFromAToB("1", "4"));
-    EXPECT_EQ(1, linkState.getHopsFromAToB("2", "3"));
-    EXPECT_EQ(4, linkState.getMaxHopsToNode("1"));
-    EXPECT_EQ(3, linkState.getMaxHopsToNode("2"));
-    EXPECT_EQ(2, linkState.getMaxHopsToNode("3"));
-  }
-
-  {
-    // disconnect line
-    //
-    //   1-2-3-4 5
-    //
-    auto linkState = openr::getLinkState({
-        {1, {2}},
-        {2, {1, 3}},
-        {3, {2, 4}},
-        {4, {3}},
-        {5, {}},
-    });
-
-    EXPECT_FALSE(linkState.getHopsFromAToB("1", "5").has_value());
-    EXPECT_EQ(1, linkState.getHopsFromAToB("2", "3"));
-    EXPECT_EQ(3, linkState.getMaxHopsToNode("1"));
-    EXPECT_EQ(0, linkState.getMaxHopsToNode("5"));
-  }
-}
-
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

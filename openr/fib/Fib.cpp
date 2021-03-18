@@ -27,24 +27,19 @@ Fib::Fib(
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
-    messaging::ReplicateQueue<LogSample>& logSampleQueue,
-    KvStore* kvStore)
+    messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
       expBackoff_(
           Constants::kFibSyncInitialBackoff,
           Constants::kFibSyncMaxBackoff,
           false),
-      kvStore_(kvStore),
       fibUpdatesQueue_(fibUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
   auto tConfig = config->getConfig();
 
-  dryrun_ = config->getConfig().dryrun_ref().value_or(false);
-  enableSegmentRouting_ =
-      config->getConfig().enable_segment_routing_ref().value_or(false);
-  enableOrderedFib_ =
-      config->getConfig().enable_ordered_fib_programming_ref().value_or(false);
+  dryrun_ = tConfig.dryrun_ref().value_or(false);
+  enableSegmentRouting_ = tConfig.enable_segment_routing_ref().value_or(false);
 
   syncRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     if (routeState_.hasRoutesFromDecision) {
@@ -64,13 +59,6 @@ Fib::Fib(
   });
   // On startup we do require routedb_sync so explicitly set the counter to 0
   fb303::fbData->setCounter("fib.synced", 0);
-
-  if (enableOrderedFib_) {
-    // check non-empty module ptr
-    CHECK(kvStore_);
-    kvStoreClient_ =
-        std::make_unique<KvStoreClientInternal>(this, myNodeName_, kvStore_);
-  }
 
   if (not tConfig.eor_time_s_ref()) {
     routeState_.hasRoutesFromDecision = true;
@@ -159,12 +147,6 @@ Fib::Fib(
 
 void
 Fib::stop() {
-  // Stop KvStoreClient first
-  if (kvStoreClient_) {
-    kvStoreClient_->stop();
-    LOG(INFO) << "KvStoreClient successfully stopped.";
-  }
-
   // Invoke stop method of super class
   OpenrEventBase::stop();
 }
@@ -741,31 +723,6 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
   // Add latest event information (this function is meant to be called after
   // routeDb has synced)
   addPerfEvent(*perfEvents, myNodeName_, "OPENR_FIB_ROUTES_PROGRAMMED");
-
-  if (enableOrderedFib_) {
-    // Export convergence duration counter
-    // this is the local time it takes to program a route after the hold expired
-    // we are using this for ordered fib programming
-    auto localDuration = getDurationBetweenPerfEvents(
-        *perfEvents,
-        "ORDERED_FIB_HOLDS_EXPIRED",
-        "OPENR_FIB_ROUTES_PROGRAMMED");
-    if (localDuration.hasError()) {
-      LOG(WARNING) << "Ignoring perf event with bad local duration "
-                   << localDuration.error();
-    } else if (*localDuration <= Constants::kConvergenceMaxDuration) {
-      fb303::fbData->addStatValue(
-          "fib.local_route_program_time_ms",
-          localDuration->count(),
-          fb303::AVG);
-      kvStoreClient_->persistKey(
-          AreaId{openr::thrift::Types_constants::kDefaultArea()},
-          Constants::kFibTimeMarker.toString() + myNodeName_,
-          std::to_string(fb303::fbData->getCounters().at(
-              "fib.local_route_program_time_ms.avg.60")),
-          Constants::kTtlInfInterval);
-    }
-  }
 
   // Ignore perf events with very off total duration
   auto totalDuration = getTotalPerfEventsDuration(*perfEvents);

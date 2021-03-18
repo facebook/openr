@@ -321,8 +321,7 @@ class FibTestFixture : public ::testing::Test {
         routeUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         fibUpdatesQueue,
-        logSampleQueue,
-        nullptr /* KvStore module ptr */);
+        logSampleQueue);
 
     fibThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Fib thread starting";

@@ -123,11 +123,6 @@ class Config {
   }
 
   bool
-  isOrderedFibProgrammingEnabled() const {
-    return config_.enable_ordered_fib_programming_ref().value_or(false);
-  }
-
-  bool
   isNetlinkFibHandlerEnabled() const {
     return config_.enable_netlink_fib_handler_ref().value_or(false);
   }

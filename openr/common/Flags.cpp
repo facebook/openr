@@ -175,10 +175,6 @@ DEFINE_bool(
     false,
     "Enable v4 in OpenR for exchanging and programming v4 routes. Works only "
     "when Switch FIB Agent is used for FIB programming. No NSS/Linux.");
-DEFINE_bool(
-    enable_ordered_fib_programming,
-    false,
-    "Enable ordered fib programming per RFC 6976");
 DEFINE_int32(
     decision_graceful_restart_window_s,
     -1,

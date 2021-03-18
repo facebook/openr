@@ -541,8 +541,7 @@ main(int argc, char** argv) {
           routeUpdatesQueue.getReader(),
           staticRouteUpdatesQueue.getReader(),
           fibUpdatesQueue,
-          logSampleQueue,
-          kvStore));
+          logSampleQueue));
 
   // Start OpenrCtrl thrift server
   auto thriftCtrlServer = std::make_unique<apache::thrift::ThriftServer>();

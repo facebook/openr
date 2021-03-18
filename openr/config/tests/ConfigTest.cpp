@@ -584,7 +584,6 @@ TEST(ConfigTest, GeneralGetter) {
         {}, /* area config */
         true /* enableV4 */,
         false /* enableSegmentRouting */,
-        false /* orderedFibProgramming */,
         true /*dryrun*/);
     auto config = Config(tConfig);
 
@@ -623,7 +622,6 @@ TEST(ConfigTest, GeneralGetter) {
         {} /* area config */,
         true /* enable v4 */,
         false /* enableSegmentRouting */,
-        false /* orderedFibProgramming */,
         true /* dryrun */,
         true /* enableV4OverV6Nexthop */);
     auto config = Config(tConfig);
