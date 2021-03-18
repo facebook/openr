@@ -9,7 +9,7 @@ from typing import List, Optional, Tuple
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.cli.utils.utils import print_route_details
 from openr.Network import ttypes as network_types
-from openr.OpenrConfig.ttypes import PrefixForwardingType
+from openr.OpenrConfig.ttypes import PrefixForwardingType, PrefixForwardingAlgorithm
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
@@ -167,3 +167,54 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
             return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
 
         print_route_details(routes, key_fn, detailed)
+
+
+class OriginatedRoutesCmd(PrefixMgrCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+    ) -> None:
+
+        # Get data
+        self.render(client.getOriginatedPrefixes())
+
+    def render(
+        self,
+        originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+    ) -> None:
+        """
+        Render advertised routes
+        """
+        rows = [""]
+
+        for prefix_entry in originated_prefixes:
+            rows.append(f"> {prefix_entry.prefix.prefix}")
+            fwd_algo = PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
+                prefix_entry.prefix.forwardingAlgorithm
+            )
+            fwd_type = PrefixForwardingType._VALUES_TO_NAMES.get(
+                prefix_entry.prefix.forwardingType
+            )
+            rows.append(f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}")
+            rows.append(
+                f"     Metrics - path-preference: {prefix_entry.prefix.path_preference}"
+                f", source-preference: {prefix_entry.prefix.source_preference}"
+            )
+            if prefix_entry.prefix.tags:
+                rows.append(f"     Tags - {', '.join(prefix_entry.prefix.tags)}")
+            if prefix_entry.prefix.area_stack:
+                rows.append(
+                    f"     Area Stack - {', '.join(prefix_entry.prefix.area_stack)}"
+                )
+            if prefix_entry.prefix.minNexthop:
+                rows.append(f"     Min-nexthops: {prefix_entry.prefix.minNexthop}")
+            rows.append(
+                f"     Min Supporting Routes - {(prefix_entry.prefix.minimum_supporting_routes)}"
+            )
+            if prefix_entry.prefix.install_to_fib:
+                rows.append(
+                    f"     install_to_fib: {prefix_entry.prefix.install_to_fib}"
+                )
+            rows.append("")
+
+        print("\n".join(rows))

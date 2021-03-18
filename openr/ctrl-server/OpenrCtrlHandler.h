@@ -109,6 +109,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   semifuture_getReceivedRoutesFiltered(
       std::unique_ptr<thrift::ReceivedRouteFilter> filter) override;
 
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
+  semifuture_getOriginatedPrefixes() override;
+
   //
   // Fib APIs
   //

@@ -345,6 +345,13 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   list<Network.MplsRoute> getMplsRoutes() throws (1: OpenrError error);
 
+  /**
+   * Get all originated prefixes of the current node, retrieved from PrefixManager.
+   */
+  list<Types.OriginatedPrefixEntry> getOriginatedPrefixes() throws (
+    1: OpenrError error,
+  );
+
   //
   // Performance stats APIs
   //

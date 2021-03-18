@@ -18,6 +18,7 @@ class PrefixMgrCli(object):
         self.prefixmgr.add_command(ViewCli().view)
         self.prefixmgr.add_command(SyncCli().sync)
         self.prefixmgr.add_command(AdvertisedRoutesCli().show)
+        self.prefixmgr.add_command(OriginatedRoutesCli().show)
 
     @click.group()
     @click.pass_context
@@ -123,3 +124,16 @@ class AdvertisedRoutesCli(object):
         """
 
         prefix_mgr.AdvertisedRoutesCmd(cli_opts).run(prefix, prefix_type, json, detail)
+
+
+class OriginatedRoutesCli(object):
+    @click.command("originated-routes")
+    @click.pass_obj
+    def show(
+        cli_opts,  # noqa: B902
+    ) -> None:
+        """
+        Show originated routes configured on this node. Will show all by default
+        """
+
+        prefix_mgr.OriginatedRoutesCmd(cli_opts).run()

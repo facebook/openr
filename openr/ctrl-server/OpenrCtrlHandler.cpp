@@ -459,6 +459,12 @@ OpenrCtrlHandler::semifuture_getAdvertisedRoutesFiltered(
   return prefixManager_->getAdvertisedRoutesFiltered(std::move(*filter));
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
+OpenrCtrlHandler::semifuture_getOriginatedPrefixes() {
+  CHECK(prefixManager_);
+  return prefixManager_->getOriginatedPrefixes();
+}
+
 //
 // Fib APIs
 //
