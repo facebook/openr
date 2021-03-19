@@ -153,8 +153,9 @@ using NextHopSet = std::unordered_set<NextHop, NextHopHash>;
  * RT_SCOPE_NOWHERE
  * ============================
  * 'type_':
- * RTN_UNICAST (default)
- * RTN_MULTICAST
+ *  RTN_UNICAST       a gateway or direct route(default)
+ *  RTN_MULTICAST     a multicast route
+ *  RTN_UNSPEC        unknown route
  * ============================
  * 'protocolId_'
  * 99 (default)

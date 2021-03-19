@@ -394,6 +394,15 @@ class NlMessageFixture : public ::testing::Test {
   }
 
   openr::fbnl::Route
+  buildNullRoute(int protocolId, const folly::CIDRNetwork& dest) {
+    fbnl::RouteBuilder rtBuilder;
+    auto route = rtBuilder.setDestination(dest)
+                     .setProtocolId(protocolId)
+                     .setType(RTN_BLACKHOLE);
+    return rtBuilder.build();
+  }
+
+  openr::fbnl::Route
   buildRoute(
       int protocolId,
       const folly::Optional<folly::CIDRNetwork>& dest,
@@ -793,6 +802,86 @@ TEST_F(NlMessageFixture, EmptyRoute) {
 }
 
 /*
+ * Add IPv6 drop route(empty next-hop)
+ */
+TEST_F(NlMessageFixture, IPv6DropRoute) {
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network =
+      folly::IPAddress::createNetwork("fc00:cafe:4::4/128");
+  auto route = buildNullRoute(kRouteProtoId, network);
+  auto before = nlSock->getAllRoutes().get().value();
+
+  // Add drop route
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // Check in Kernel
+  // v6 blackhole route has default nexthop point to lo
+  // E.g. blackhole 2401:db00:e003:9100:106f::/80 dev lo
+  auto after = nlSock->getAllRoutes().get().value();
+  EXPECT_EQ(before.size() + 1, after.size());
+  bool found = false;
+  for (const auto& r : after) {
+    if (r.getDestination() == network and r.getProtocolId() == kRouteProtoId and
+        r.getNextHops().size() == 1 and r.getType() == RTN_BLACKHOLE) {
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found);
+
+  // Delete the routes
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  after = nlSock->getAllRoutes().get().value();
+  EXPECT_EQ(before.size(), after.size());
+}
+
+/*
+ * Add IPv6 drop route(empty next-hop)
+ */
+TEST_F(NlMessageFixture, IPv4DropRoute) {
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network =
+      folly::IPAddress::createNetwork("192.168.0.11/32");
+  auto route = buildNullRoute(kRouteProtoId, network);
+  auto before = nlSock->getAllRoutes().get().value();
+
+  // Add drop route
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // Check in Kernel
+  // v4 blackhole route:
+  // E.g. blackhole 10.120.175.0/24 proto gated/bgp
+  auto after = nlSock->getAllRoutes().get().value();
+  EXPECT_EQ(before.size() + 1, after.size());
+  bool found = false;
+  for (const auto& r : after) {
+    if (r.getDestination() == network and r.getProtocolId() == kRouteProtoId and
+        r.getNextHops().size() == 0 and r.getType() == RTN_BLACKHOLE) {
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found);
+
+  // Delete the routes
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  after = nlSock->getAllRoutes().get().value();
+  EXPECT_EQ(before.size(), after.size());
+}
+
+/*
  * Add IPv6 route with 1 next-hop and no labels
  */
 TEST_F(NlMessageFixture, IPv6RouteSingleNextHop) {
@@ -817,7 +906,7 @@ TEST_F(NlMessageFixture, IPv6RouteSingleNextHop) {
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  // verify if route is deleted
+  // verify v6 route is deleted
   kernelRoutes = nlSock->getIPv6Routes(kRouteProtoId).get().value();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
@@ -921,32 +1010,32 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  // verify if route is deleted
+  // verify v4 route is deleted
   kernelRoutes = nlSock->getAllRoutes().get().value();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
-TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
-  // Add IPv6 route with single next hop with one push label nexthop
-  // outoing IF is vethTestY
-
+/*
+ * Add IPv6 route with 1 next-hop with 1 push label next-hop
+ */
+TEST_F(NlMessageFixture, IPv6RouteLabelNexthop) {
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(buildNextHop(
-      outLabel1,
-      folly::none,
-      thrift::MplsActionCode::PUSH,
-      ipAddrY1V6,
-      ifIndexX));
+
+  // create label next hop
+  paths.emplace_back(buildNextHop(
+      outLabel1, /* push labels */
+      folly::none, /* swap labels */
+      thrift::MplsActionCode::PUSH, /* MPLS action */
+      ipAddrY1V6, /* gateway */
+      ifIndexX /* ifIndex */));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
   ackCount = getAckCount();
-  // create label next hop
   EXPECT_EQ(0, nlSock->addRoute(route).get());
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes().get().value();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
@@ -961,30 +1050,30 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
+/*
+ * Add IPv6 route with 48 push label next-hops
+ */
 TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
-  // Add IPv6 route with 48 path ECMP
-
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
+
+  // create label next hop
   for (uint32_t i = 0; i < 48; i++) {
     outLabel6[0] = outLabel6[0] + 10 + i;
-    paths.push_back(buildNextHop(
-        outLabel6,
-        folly::none,
-        thrift::MplsActionCode::PUSH,
-        ipAddrY1V6,
-        ifIndexX,
-        1));
+    paths.emplace_back(buildNextHop(
+        outLabel6, /* push labels */
+        folly::none, /* swap labels */
+        thrift::MplsActionCode::PUSH, /* MPLS action */
+        ipAddrY1V6, /* gateway */
+        ifIndexX /* ifIndex */));
   }
-
   auto route = buildRoute(kRouteProtoId, ipPrefix5, folly::none, paths);
+
   ackCount = getAckCount();
-  // create label next hop
   EXPECT_EQ(0, nlSock->addRoute(route).get());
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes for multiple label PUSH nexthops
   auto kernelRoutes = nlSock->getAllRoutes().get().value();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
@@ -994,7 +1083,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
-  // verify if route is deleted
+  // verify v6 route is deleted
   kernelRoutes = nlSock->getAllRoutes().get().value();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }

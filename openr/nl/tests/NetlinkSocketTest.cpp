@@ -48,6 +48,11 @@ const uint32_t kAqRouteProtoId1Priority = 255;
 
 } // namespace
 
+//
+// [TO BE DEPRECATED] Migrating all NetlinkSocketTest towards
+// NetlinkProtocolSocketTest and remove `NetlinkSocket` wrapper.
+//
+
 // This fixture creates virtual interface (veths)
 // which the UT can use to add routes (via interface)
 class NetlinkSocketFixture : public testing::Test {
@@ -141,15 +146,6 @@ class NetlinkSocketFixture : public testing::Test {
 
  protected:
   Route
-  buildNullRoute(int protocolId, const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder rtBuilder;
-    auto route = rtBuilder.setDestination(dest)
-                     .setProtocolId(protocolId)
-                     .setType(RTN_BLACKHOLE);
-    return rtBuilder.build();
-  }
-
-  Route
   buildRoute(
       int ifIndex,
       int protocolId,
@@ -169,34 +165,6 @@ class NetlinkSocketFixture : public testing::Test {
       rtBuilder.setPriority(kAqRouteProtoId1Priority);
     }
     return rtBuilder.build();
-  }
-
-  Route
-  buildMCastRoute(
-      int ifIndex,
-      int protocolId,
-      const std::string& ifName,
-      const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder builder;
-    builder.setRouteIfIndex(ifIndex)
-        .setProtocolId(protocolId)
-        .setDestination(dest)
-        .setRouteIfName(ifName);
-    return builder.buildMulticastRoute();
-  }
-
-  Route
-  buildLinkRoute(
-      int ifIndex,
-      int protocolId,
-      const std::string& ifName,
-      const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder builder;
-    builder.setRouteIfIndex(ifIndex)
-        .setProtocolId(protocolId)
-        .setDestination(dest)
-        .setRouteIfName(ifName);
-    return builder.buildLinkRoute();
   }
 
   std::unique_ptr<NetlinkSocket> netlinkSocket;
@@ -646,89 +614,6 @@ class NetlinkSocketFixture : public testing::Test {
     EXPECT_EQ(0, routes.size());
   }
 };
-
-// - Add a null route (nexthops empty)
-// - verify it is added,
-// - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, NullRouteTest) {
-  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:4::4"), 128};
-
-  auto kernelRoutes = netlinkSocket->getAllRoutes();
-  int before = kernelRoutes.size();
-
-  // Add a routet
-  netlinkSocket->addRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
-
-  // Check in Kernel
-  // v6 blackhole route has default nexthop point to lo
-  // E.g. blackhole 2401:db00:e003:9100:106f::/80 dev lo
-  kernelRoutes = netlinkSocket->getAllRoutes();
-  EXPECT_EQ(before + 1, kernelRoutes.size());
-  int count = 0;
-  for (const auto& r : kernelRoutes) {
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId &&
-        r.getNextHops().size() == 1 && r.getType() == RTN_BLACKHOLE) {
-      count++;
-    }
-  }
-  EXPECT_EQ(1, count);
-  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-
-  EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  const Route& rt = routes.at(prefix);
-  EXPECT_EQ(prefix, rt.getDestination());
-  EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
-  // buildNullRoute does not add nexthop.
-  EXPECT_EQ(0, rt.getNextHops().size());
-  EXPECT_EQ(RTN_BLACKHOLE, rt.getType());
-
-  // Delete the same route
-  netlinkSocket->delRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
-  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, routes.size());
-}
-
-// - Add a null route (nexthops empty)
-// - verify it is added,
-// - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, NullRouteV4Test) {
-  folly::CIDRNetwork prefix{folly::IPAddress("192.168.0.11"), 32};
-
-  auto kernelRoutes = netlinkSocket->getAllRoutes();
-  int before = kernelRoutes.size();
-
-  // Add a route
-  netlinkSocket->addRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
-
-  // Check in Kernel
-  // v4 blackhole route:
-  // E.g. blackhole 10.120.175.0/24 proto gated/bgp
-  kernelRoutes = netlinkSocket->getAllRoutes();
-  EXPECT_EQ(before + 1, kernelRoutes.size());
-  int count = 0;
-  for (const auto& r : kernelRoutes) {
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId &&
-        r.getNextHops().size() == 0 && r.getType() == RTN_BLACKHOLE) {
-      count++;
-    }
-  }
-  EXPECT_EQ(1, count);
-  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-
-  EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  const Route& rt = routes.at(prefix);
-  EXPECT_EQ(prefix, rt.getDestination());
-  EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
-  EXPECT_EQ(0, rt.getNextHops().size());
-  EXPECT_EQ(RTN_BLACKHOLE, rt.getType());
-
-  // Delete the same route
-  netlinkSocket->delRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
-  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, routes.size());
-}
 
 TEST_F(NetlinkSocketFixture, UpdateRouteTest) {
   doUpdateRouteTest(false);
