@@ -126,7 +126,8 @@ elif [ "$1" == "copy-conf" ]; then
     echo "--> Configuration being copied: $config_src to $CONFIG_DIR"
     mkdir -pv "$CONFIG_DIR"
     sudo chown "$USER" "$CONFIG_DIR"
-    cp -v "$config_src" "$CONFIG_DIR"
+    # shellcheck disable=SC2086
+    cp -v $config_src "$CONFIG_DIR"
     exit $?
 elif [ "$1" == "start" ]; then
     # Automagically selects config file depending on your netns
