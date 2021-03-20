@@ -606,6 +606,18 @@ struct OpenrConfig {
   34: optional ThriftClientConfig thrift_client;
 
   /**
+  * If set, will assume node is drained if no drain state
+  * is found in the persistent store.
+  */
+  35: bool assume_drained = true;
+
+  /**
+  * Set the file path for undrained_flag. If the file undrained_flag
+  * found, will set assume_drained to false.
+  */
+  36: optional string undrained_flag_path;
+
+  /**
    * Enable best route selection based on PrefixMetrics.
    * TODO: It is temporary & will go away once new prefix metrics is rolled out
    */
