@@ -38,6 +38,7 @@ using openr::fbnl::NetlinkProtocolSocket;
 using openr::fbnl::NetlinkRouteMessage;
 
 namespace {
+const std::chrono::milliseconds kProcTimeout{500};
 const std::string kVethNameX("vethTestX");
 const std::string kVethNameY("vethTestY");
 const uint8_t kRouteProtoId = 99;
@@ -651,33 +652,50 @@ TEST(NetlinkProtocolSocket, SafeDestruction) {
 TEST_F(NlMessageFixture, LinkEventPublication) {
   // Spawn RQueue to receive platformUpdate request
   auto netlinkEventsReader = netlinkEventsQ.getReader();
-  std::unordered_map<std::string, openr::fbnl::Link> linkEntryMap;
 
-  // bring DOWN link to trigger link DOWN event
-  bringDownIntf(kVethNameX);
-  bringDownIntf(kVethNameY);
-
-  while (linkEntryMap.size() < 2) {
-    auto req = netlinkEventsReader.get(); // perform read
-    ASSERT_TRUE(req.hasValue());
-    // get_if returns `nullptr` if targeted variant is NOT populated
-    if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
-      linkEntryMap.emplace(link->getLinkName(), *link);
+  auto waitForLinkEvent = [&](const std::string& ifName, const bool& isUp) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (true) {
+      // check if it is beyond kProcTimeout
+      auto endTime = std::chrono::steady_clock::now();
+      if (endTime - startTime > kProcTimeout) {
+        ASSERT_TRUE(0) << "Timeout receiving event. Time limit: "
+                       << kProcTimeout.count();
+      }
+      auto req = netlinkEventsReader.get(); // perform read
+      ASSERT_TRUE(req.hasValue());
+      // get_if returns `nullptr` if targeted variant is NOT populated
+      if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
+        if (link->getLinkName() == ifName and link->isUp() == isUp) {
+          return;
+        }
+      }
+      // yield CPU
+      std::this_thread::yield();
     }
+  };
+
+  {
+    VLOG(1) << "Bring link DOWN for interfaces: "
+            << fmt::format("{}, {}", kVethNameX, kVethNameY);
+    // bring DOWN link to trigger link DOWN event
+    bringDownIntf(kVethNameX);
+    bringDownIntf(kVethNameY);
+
+    waitForLinkEvent(kVethNameX, false);
+    waitForLinkEvent(kVethNameY, false);
   }
 
-  // verify link DOWN for kVethNameX
-  auto linkEntryX = linkEntryMap.at(kVethNameX);
-  EXPECT_EQ(linkEntryX.getLinkName(), kVethNameX);
-  EXPECT_EQ(linkEntryX.isUp(), false);
+  {
+    VLOG(1) << "Bring link UP for interfaces: "
+            << fmt::format("{}, {}", kVethNameX, kVethNameY);
+    // bring UP link to trigger link UP event
+    bringUpIntf(kVethNameX);
+    bringUpIntf(kVethNameY);
 
-  // verify link DOWN for kVethNameY
-  auto linkEntryY = linkEntryMap.at(kVethNameY);
-  EXPECT_EQ(linkEntryY.getLinkName(), kVethNameY);
-  EXPECT_EQ(linkEntryY.isUp(), false);
-
-  // verify ifIndex is different for different veth interface
-  EXPECT_NE(linkEntryX.getIfIndex(), linkEntryY.getIfIndex());
+    waitForLinkEvent(kVethNameX, true);
+    waitForLinkEvent(kVethNameX, true);
+  }
 }
 
 /*
@@ -1868,9 +1886,11 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
   EXPECT_EQ(0, findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
 }
 
+/*
+ * Add 100 neighbors and check if getAllNeighbors() API
+ * returns all of the neighbors.
+ */
 TEST_F(NlMessageFixture, GetAllNeighbors) {
-  // Add 100 neighbors and check if getAllReachableNeighbors
-  // in NetlinkProtocolSocket returns the neighbors
   int countNeighbors{100};
   LOG(INFO) << "Adding " << countNeighbors << " test neighbors";
   // Bring up neighbors
