@@ -7,14 +7,9 @@
 
 #pragma once
 
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
-#include <folly/Optional.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -178,22 +173,6 @@ class RouteBuilder {
    * @throw fbnl::NlException on failed
    */
   Route build() const;
-
-  /**
-   * Build multicast route
-   * @required parameter:
-   * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw fbnl::NlException on failed
-   */
-  Route buildMulticastRoute() const;
-
-  /**
-   * Build link route
-   * @required parameter:
-   * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw fbnl::NlException on failed
-   */
-  Route buildLinkRoute() const;
 
   // Required
   RouteBuilder& setDestination(const folly::CIDRNetwork& dst);
@@ -583,6 +562,8 @@ class Link final {
 
 bool operator==(const Link& lhs, const Link& rhs);
 
+// TODO: deprecate the following once NetlinkSocket being retired
+
 // Link helper class that records Link attributes on the fly
 struct LinkAttribute final {
   bool isUp{false};
@@ -601,23 +582,6 @@ using NlMplsRoutes = std::unordered_map<int32_t, Route>;
 
 // protocolId=>label routes
 using NlMplsRoutesDb = std::unordered_map<uint8_t, NlMplsRoutes>;
-
-/**
- * Multicast and link routes do not have nextHop IP
- * key => (destination, ifName)
- * value => route object
- */
-using NlMulticastRoutes =
-    std::unordered_map<std::pair<folly::CIDRNetwork, std::string>, Route>;
-
-// protocolId => routes
-using NlMulticastRoutesDb = std::unordered_map<uint8_t, NlMulticastRoutes>;
-
-using NlLinkRoutes =
-    std::unordered_map<std::pair<folly::CIDRNetwork, std::string>, Route>;
-
-// protocolId => routes
-using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
 
 /**
  * Neighbor Object Helpers

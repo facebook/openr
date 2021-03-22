@@ -5,10 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <set>
-
-#include <glog/logging.h>
-
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr::fbnl {
@@ -25,44 +21,6 @@ isNeighborReachable(int state) {
 Route
 RouteBuilder::build() const {
   return Route(*this);
-}
-
-Route
-RouteBuilder::buildMulticastRoute() const {
-  if (!routeIfIndex_.has_value() || routeIfIndex_.value() == 0 ||
-      !routeIfName_.has_value()) {
-    throw fbnl::NlException("Iface index and Iface name must be set");
-  }
-  NextHopBuilder nhBuilder;
-  nhBuilder.setIfIndex(routeIfIndex_.value());
-
-  RouteBuilder builder;
-  return builder.setDestination(dst_)
-      .setProtocolId(protocolId_)
-      .setScope(scope_)
-      .setType(RTN_MULTICAST)
-      .setRouteIfName(routeIfName_.value())
-      .addNextHop(nhBuilder.build())
-      .build();
-}
-
-Route
-RouteBuilder::buildLinkRoute() const {
-  if (!routeIfIndex_.has_value() || routeIfIndex_.value() == 0 ||
-      !routeIfName_.has_value()) {
-    throw fbnl::NlException("Iface index and Iface name must be set");
-  }
-  NextHopBuilder nhBuilder;
-  nhBuilder.setIfIndex(routeIfIndex_.value());
-
-  RouteBuilder builder;
-  return builder.setDestination(dst_)
-      .setProtocolId(protocolId_)
-      .setScope(RT_SCOPE_LINK)
-      .setType(RTN_UNICAST)
-      .setRouteIfName(routeIfName_.value())
-      .addNextHop(nhBuilder.build())
-      .build();
 }
 
 RouteBuilder&
