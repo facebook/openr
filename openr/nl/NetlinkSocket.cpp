@@ -131,15 +131,6 @@ NetlinkSocket::doHandleNeighborEvent(
     neighborUpdate.delNeighbor(neighbor.getDestination().str());
   }
 
-  if (neighborListener_) {
-    std::lock_guard<std::mutex> g(neighborListenerMutex_);
-    try {
-      neighborListener_(neighborUpdate);
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "neighbor call failed: " << ex.what();
-    }
-  }
-
   if (handler_ && runHandler && eventFlags_[NEIGH_EVENT]) {
     NeighborBuilder nhBuilder;
     EventVariant event = std::move(neighbor);
@@ -870,13 +861,6 @@ NetlinkSocket::unsubscribeAllEvents() {
 void
 NetlinkSocket::setEventHandler(EventsHandler* handler) {
   handler_ = handler;
-}
-
-void
-NetlinkSocket::registerNeighborListener(
-    std::function<void(const NeighborUpdate& neighborUpdate)> callback) {
-  std::lock_guard<std::mutex> g(neighborListenerMutex_);
-  neighborListener_ = std::move(callback);
 }
 
 } // namespace openr::fbnl

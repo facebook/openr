@@ -332,9 +332,6 @@ class NetlinkSocket {
 
   void setEventHandler(EventsHandler* handler);
 
-  void registerNeighborListener(
-      std::function<void(const NeighborUpdate& neighborUpdate)> callback);
-
   // Expose pointer to underlying protocol socket
   NetlinkProtocolSocket*
   getProtocolSocket() {
@@ -410,10 +407,6 @@ class NetlinkSocket {
   folly::ConcurrentBitSet<MAX_EVENT_TYPE> eventFlags_;
 
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock_{nullptr};
-
-  std::mutex neighborListenerMutex_;
-  std::function<void(const NeighborUpdate& neighborUpdate)> neighborListener_{
-      nullptr};
 };
 
 } // namespace openr::fbnl
