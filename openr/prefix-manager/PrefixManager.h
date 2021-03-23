@@ -117,7 +117,33 @@ class PrefixManager final : public OpenrEventBase {
   getOriginatedPrefixes();
 
   /**
-   * Filter routes only the <type> attribute
+   * Helper functinon used in getAreaAdvertisedRoutes()
+   * Filter routes with 1. <type> attribute
+   */
+  void filterAndAddAreaRoute(
+      std::vector<thrift::AdvertisedRoute>& routes,
+      const std::string& area,
+      const thrift::RouteFilterType& routeFilterType,
+      std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries,
+      apache::thrift::optional_field_ref<thrift::PrefixType&> const&
+          typeFilter);
+
+  /*
+   * Dump post filter (policy) routes for given area.
+   *
+   * @param rejected
+   * - true: return a list of accepted post policy routes
+   * - false: return a list of rejected routes
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+  getAreaAdvertisedRoutes(
+      std::string areaName,
+      thrift::RouteFilterType routeFilterType,
+      thrift::AdvertisedRouteFilter filter);
+
+  /**
+   * Helper functinon used in getAdvertisedRoutesFiltered()
+   * Filter routes with 1. <type> attribute
    */
   static void filterAndAddAdvertisedRoute(
       std::vector<thrift::AdvertisedRouteDetail>& routes,

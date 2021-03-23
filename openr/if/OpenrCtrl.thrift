@@ -28,9 +28,23 @@ struct NodeAndArea {
   2: string area;
 }
 
+//
+// Prefix Manager data structures
+//
+
+enum RouteFilterType {
+  PREFILTER_ADVERTISED = 0,
+  POSTFILTER_ADVERTISED = 1,
+  REJECTED_ON_ADVERTISE = 2,
+}
+
 struct AdvertisedRoute {
   1: Network.PrefixType key;
   2: Types.PrefixEntry route;
+  // Store the policy name that accepted the prefix if an area policy is configered.
+  // nullopt otherwise.
+  // Get populated in getAreaAdvertisedRoutes()
+  3: optional string hitPolicy;
 }
 
 struct AdvertisedRouteDetail {
@@ -44,6 +58,10 @@ struct AdvertisedRouteFilter {
   1: optional list<Network.IpPrefix> prefixes;
   2: optional Network.PrefixType prefixType;
 }
+
+//
+// Decision data structures
+//
 
 struct ReceivedRoute {
   1: NodeAndArea key;
@@ -286,6 +304,19 @@ service OpenrCtrl extends fb303_core.BaseService {
   list<AdvertisedRouteDetail> getAdvertisedRoutes();
   list<AdvertisedRouteDetail> getAdvertisedRoutesFiltered(
     1: AdvertisedRouteFilter filter,
+  ) throws (1: OpenrError error);
+
+  /**
+   * For given area, show pre/post policy advertised routes.
+   */
+  list<AdvertisedRoute> getAreaAdvertisedRoutes(
+    1: string area,
+    2: RouteFilterType RouteFilterType,
+  ) throws (1: OpenrError error);
+  list<AdvertisedRoute> getAreaAdvertisedRoutesFiltered(
+    1: string area,
+    2: RouteFilterType RouteFilterType,
+    3: AdvertisedRouteFilter filter,
   ) throws (1: OpenrError error);
 
   /**

@@ -102,12 +102,23 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
   semifuture_getPrefixesByType(thrift::PrefixType prefixType) override;
 
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
-  semifuture_getReceivedRoutes() override;
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
+  semifuture_getAdvertisedRoutes() override;
 
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
-  semifuture_getReceivedRoutesFiltered(
-      std::unique_ptr<thrift::ReceivedRouteFilter> filter) override;
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
+  semifuture_getAdvertisedRoutesFiltered(
+      std::unique_ptr<thrift::AdvertisedRouteFilter> filter) override;
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+  semifuture_getAreaAdvertisedRoutes(
+      std::unique_ptr<std::string> areaName,
+      thrift::RouteFilterType routeFilterType) override;
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+  semifuture_getAreaAdvertisedRoutesFiltered(
+      std::unique_ptr<std::string> areaName,
+      thrift::RouteFilterType routeFilterType,
+      std::unique_ptr<thrift::AdvertisedRouteFilter> filter) override;
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
   semifuture_getOriginatedPrefixes() override;
@@ -156,12 +167,12 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // Decision APIs
   //
 
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
-  semifuture_getAdvertisedRoutes() override;
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
+  semifuture_getReceivedRoutes() override;
 
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
-  semifuture_getAdvertisedRoutesFiltered(
-      std::unique_ptr<thrift::AdvertisedRouteFilter> filter) override;
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
+  semifuture_getReceivedRoutesFiltered(
+      std::unique_ptr<thrift::ReceivedRouteFilter> filter) override;
 
   folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
   semifuture_getDecisionAdjacencyDbs() override;

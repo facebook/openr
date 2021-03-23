@@ -465,6 +465,25 @@ OpenrCtrlHandler::semifuture_getOriginatedPrefixes() {
   return prefixManager_->getOriginatedPrefixes();
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+OpenrCtrlHandler::semifuture_getAreaAdvertisedRoutes(
+    std::unique_ptr<std::string> areaName,
+    thrift::RouteFilterType routeFilterType) {
+  auto filter = std::make_unique<thrift::AdvertisedRouteFilter>();
+  return semifuture_getAreaAdvertisedRoutesFiltered(
+      std::move(areaName), std::move(routeFilterType), std::move(filter));
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+OpenrCtrlHandler::semifuture_getAreaAdvertisedRoutesFiltered(
+    std::unique_ptr<std::string> areaName,
+    thrift::RouteFilterType routeFilterType,
+    std::unique_ptr<thrift::AdvertisedRouteFilter> filter) {
+  CHECK(prefixManager_);
+  return prefixManager_->getAreaAdvertisedRoutes(
+      std::move(*areaName), std::move(routeFilterType), std::move(*filter));
+}
+
 //
 // Fib APIs
 //
