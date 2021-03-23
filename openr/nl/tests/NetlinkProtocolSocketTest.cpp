@@ -356,8 +356,15 @@ class NlMessageFixture : public ::testing::Test {
   void
   addAddress(
       const std::string& ifName, const std::string& address, size_t mask) {
-    auto cmd =
-        folly::sformat("ip addr add {}/{} dev {}", address, mask, ifName);
+    auto cmd = fmt::format("ip addr add {}/{} dev {}", address, mask, ifName);
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+  }
+
+  void
+  deleteAddress(
+      const std::string& ifName, const std::string& address, size_t mask) {
+    auto cmd = fmt::format("ip addr del {}/{} dev {}", address, mask, ifName);
     folly::Subprocess proc(std::move(cmd));
     EXPECT_EQ(0, proc.wait().exitStatus());
   }
@@ -659,8 +666,10 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
       // check if it is beyond kProcTimeout
       auto endTime = std::chrono::steady_clock::now();
       if (endTime - startTime > kProcTimeout) {
-        ASSERT_TRUE(0) << "Timeout receiving event. Time limit: "
-                       << kProcTimeout.count();
+        ASSERT_TRUE(0) << fmt::format(
+            "Timeout receiving expected link event for intf: {}. Time limit: {}",
+            ifName,
+            kProcTimeout.count());
       }
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
@@ -713,51 +722,68 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   std::unordered_map<int64_t, std::string> ifIndexToName;
   std::unordered_map<std::string, openr::fbnl::IfAddress> addrEntryMap;
 
-  // build CIDRNetwork addresses
-  uint64_t prefixLen = 64;
-  std::string prefixX = "fe80::303";
-  std::string prefixY = "fe80::404";
-  folly::CIDRNetwork ipAddrX = folly::IPAddress::createNetwork(
-      folly::sformat("{}/{}", prefixX, prefixLen));
-  folly::CIDRNetwork ipAddrY = folly::IPAddress::createNetwork(
-      folly::sformat("{}/{}", prefixY, prefixLen));
+  // Create CIDRNetwork addresses
+  const folly::CIDRNetwork ipAddrX{folly::IPAddress("face:b00c::1"), 128};
+  const folly::CIDRNetwork ipAddrY{folly::IPAddress("face:b00c::2"), 128};
 
+  // Establish ifIndex -> ifName mapping
   auto links = nlSock->getAllLinks().get().value();
   for (const auto& link : links) {
     ifIndexToName.emplace(link.getIfIndex(), link.getLinkName());
   }
 
-  // add new address to interface to trigger ADDRESS_EVENT
-  addAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
-  addAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
-
-  while (addrEntryMap.size() < 2) {
-    auto req = netlinkEventsReader.get(); // perform read
-    ASSERT_TRUE(req.hasValue());
-    // get_if returns `nullptr` if targeted variant is NOT populated
-    if (auto* addr = std::get_if<openr::fbnl::IfAddress>(&req.value())) {
-      ASSERT_TRUE(ifIndexToName.count(addr->getIfIndex()));
-      auto ifName = ifIndexToName.at(addr->getIfIndex());
-      addrEntryMap.emplace(ifName, *addr);
+  auto waitForAddrEvent = [&](const std::string& ifName,
+                              const folly::CIDRNetwork& ipAddr,
+                              const bool& isValid) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (true) {
+      // check if it is beyond kProcTimeout
+      auto endTime = std::chrono::steady_clock::now();
+      if (endTime - startTime > kProcTimeout) {
+        ASSERT_TRUE(0) << fmt::format(
+            "Timeout receiving expected address event for intf: {}, address: {}. Time limit: {}",
+            ifName,
+            folly::IPAddress::networkToString(ipAddr),
+            kProcTimeout.count());
+      }
+      auto req = netlinkEventsReader.get(); // perform read
+      ASSERT_TRUE(req.hasValue());
+      // get_if returns `nullptr` if targeted variant is NOT populated
+      if (auto* addr = std::get_if<openr::fbnl::IfAddress>(&req.value())) {
+        ASSERT_TRUE(ifIndexToName.count(addr->getIfIndex()));
+        if (ifIndexToName.at(addr->getIfIndex()) == ifName and
+            addr->getPrefix().has_value() and
+            addr->getPrefix().value() == ipAddr and
+            addr->isValid() == isValid) {
+          return;
+        }
+      }
+      // yield CPU
+      std::this_thread::yield();
     }
+  };
+
+  {
+    VLOG(1) << "Adding address for interfaces: "
+            << fmt::format("{}, {}", kVethNameX, kVethNameY);
+    // add new address to interface to trigger ADDRESS_EVENT
+    addAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
+    addAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
+
+    waitForAddrEvent(kVethNameX, ipAddrX, true);
+    waitForAddrEvent(kVethNameY, ipAddrY, true);
   }
-  ASSERT_TRUE(addrEntryMap.count(kVethNameX));
-  ASSERT_TRUE(addrEntryMap.count(kVethNameY));
 
-  // verify new address added for kVethNameX
-  auto addrEntryX = addrEntryMap.at(kVethNameX);
-  EXPECT_EQ(addrEntryX.isValid(), true);
-  ASSERT_TRUE(addrEntryX.getPrefix().has_value());
-  EXPECT_EQ(addrEntryX.getPrefix().value(), ipAddrX);
+  {
+    VLOG(1) << "Removing address for interfaces: "
+            << fmt::format("{}, {}", kVethNameX, kVethNameY);
+    // remove new address to interface to trigger ADDRESS_EVENT
+    deleteAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
+    deleteAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
 
-  // verify new address added for kVethNameY
-  auto addrEntryY = addrEntryMap.at(kVethNameY);
-  EXPECT_EQ(addrEntryY.isValid(), true);
-  ASSERT_TRUE(addrEntryY.getPrefix().has_value());
-  EXPECT_EQ(addrEntryY.getPrefix().value(), ipAddrY);
-
-  // verify ifIndex is different for different veth interface
-  EXPECT_NE(addrEntryX.getIfIndex(), addrEntryY.getIfIndex());
+    waitForAddrEvent(kVethNameX, ipAddrX, false);
+    waitForAddrEvent(kVethNameY, ipAddrY, false);
+  }
 }
 
 /*
