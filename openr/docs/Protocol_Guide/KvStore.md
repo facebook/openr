@@ -80,7 +80,7 @@ getKvStoreKeyVals(std::string area, thrift::KeyGetParams keyGetParams)
  * @return: None
  */
 void
-setKvStoreKeyVals(std::string area, thrift::KeyGetParams keyGetParams)
+setKvStoreKeyVals(std::string area, thrift::KeySetParams keySetParams)
 
 /*
  * @params: area => single areaId to set K-V pairs
