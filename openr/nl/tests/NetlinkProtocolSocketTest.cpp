@@ -763,10 +763,13 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
     }
   };
 
+  //
+  // Test add/delete address via Linux system call
+  //
   {
     VLOG(1) << "Adding address for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY);
-    // add new address to interface to trigger ADDRESS_EVENT
+            << fmt::format("{}, {}", kVethNameX, kVethNameY)
+            << " via system call";
     addAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
     addAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
 
@@ -776,13 +779,75 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
 
   {
     VLOG(1) << "Removing address for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY);
-    // remove new address to interface to trigger ADDRESS_EVENT
+            << fmt::format("{}, {}", kVethNameX, kVethNameY)
+            << " via system call";
     deleteAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
     deleteAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
 
     waitForAddrEvent(kVethNameX, ipAddrX, false);
     waitForAddrEvent(kVethNameY, ipAddrY, false);
+  }
+
+  //
+  // Test add/delete address via NetlinkProtocolSocket API
+  //
+  std::vector<fbnl::IfAddress> ifAddresses;
+  {
+    VLOG(1) << "Adding address for interfaces: "
+            << fmt::format("{}, {}", kVethNameX, kVethNameY)
+            << " via NetlinkProtocolSocket API";
+
+    openr::fbnl::IfAddressBuilder builder1;
+    auto ifAddr1 = builder1.setPrefix(ipAddrX)
+                       .setIfIndex(ifIndexX)
+                       .setScope(RT_SCOPE_UNIVERSE)
+                       .setValid(true)
+                       .build();
+    EXPECT_EQ(0, nlSock->addIfAddress(ifAddr1).get());
+    ifAddresses.emplace_back(ifAddr1);
+
+    openr::fbnl::IfAddressBuilder builder2;
+    auto ifAddr2 = builder2.setPrefix(ipAddrY)
+                       .setIfIndex(ifIndexY)
+                       .setScope(RT_SCOPE_UNIVERSE)
+                       .setValid(true)
+                       .build();
+    EXPECT_EQ(0, nlSock->addIfAddress(ifAddr2).get());
+    ifAddresses.emplace_back(ifAddr2);
+
+    // Verify if addresses have been added
+    waitForAddrEvent(kVethNameX, ipAddrX, true);
+    waitForAddrEvent(kVethNameY, ipAddrY, true);
+
+    auto kernelAddresses = nlSock->getAllIfAddresses().get().value();
+    EXPECT_EQ(2, findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
+  }
+
+  {
+    VLOG(1) << "Removing address for interfaces: "
+            << fmt::format("{}, {}", kVethNameX, kVethNameY)
+            << " via NetlinkProtocolSocket API";
+
+    openr::fbnl::IfAddressBuilder builder1;
+    auto ifAddr1 = builder1.setPrefix(ipAddrX)
+                       .setIfIndex(ifIndexX)
+                       .setScope(RT_SCOPE_UNIVERSE)
+                       .build();
+    EXPECT_EQ(0, nlSock->deleteIfAddress(ifAddr1).get());
+
+    openr::fbnl::IfAddressBuilder builder2;
+    auto ifAddr2 = builder2.setPrefix(ipAddrY)
+                       .setIfIndex(ifIndexY)
+                       .setScope(RT_SCOPE_UNIVERSE)
+                       .build();
+    EXPECT_EQ(0, nlSock->deleteIfAddress(ifAddr2).get());
+
+    // Verify if addresses have been deleted
+    waitForAddrEvent(kVethNameX, ipAddrX, false);
+    waitForAddrEvent(kVethNameY, ipAddrY, false);
+
+    auto kernelAddresses = nlSock->getAllIfAddresses().get().value();
+    EXPECT_EQ(0, findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
   }
 }
 
@@ -1847,21 +1912,14 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   EXPECT_EQ(0, kernelRoutes.size());
 }
 
-// Add and remove 250 IPv4 and IPv6 addresses (total 500)
+/*
+ * Add and remove 250 IPv4 and IPv6 addresses (total 500).
+ * Verify addresses has been added/deleted from kernel.
+ */
 TEST_F(NlMessageFixture, AddrScaleTest) {
   const int addrCount{250};
-
-  auto links = nlSock->getAllLinks().get().value();
-  // Find kVethNameX
-  int ifIndexX{-1};
-  for (const auto& link : links) {
-    if (link.getLinkName() == kVethNameX) {
-      ifIndexX = link.getIfIndex();
-    }
-  }
-  EXPECT_NE(ifIndexX, -1);
-
   std::vector<fbnl::IfAddress> ifAddresses;
+
   for (int i = 0; i < addrCount; i++) {
     openr::fbnl::IfAddressBuilder builder;
     folly::CIDRNetwork prefix1{
