@@ -10,9 +10,6 @@
 #include <cstdlib>
 #include <thread>
 #include <tuple>
-#include <unordered_set>
-
-#include <sodium.h>
 
 #include <fb303/ServiceData.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -46,6 +43,12 @@ const std::chrono::seconds kDbSyncInterval(1);
 
 // wait time before checking counter
 const std::chrono::milliseconds counterUpdateWaitTime(5500);
+
+// Timeout of checking peers in all KvStores are initialized.
+const std::chrono::milliseconds kTimeoutOfAllPeersInitialized(1000);
+
+// Timeout of checking keys are propagated in all KvStores in the same area.
+const std::chrono::milliseconds kTimeoutOfKvStorePropagation(500);
 
 // TTL in ms
 const int64_t kTtlMs = 1000;
@@ -123,12 +126,12 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   }
 
   void
-  waitForAllPeersInitialized(
-      std::chrono::milliseconds timeout = std::chrono::milliseconds(50)) const {
+  waitForAllPeersInitialized() const {
     bool allInitialized = false;
     auto const start = std::chrono::steady_clock::now();
     while (not allInitialized &&
-           std::chrono::steady_clock::now() - start < timeout) {
+           (std::chrono::steady_clock::now() - start <
+            kTimeoutOfAllPeersInitialized)) {
       std::this_thread::yield();
       allInitialized = true;
       for (auto const& store : stores_) {
@@ -143,6 +146,20 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
       }
     }
     ASSERT_TRUE(allInitialized);
+  }
+
+  void
+  waitForKeyInStoreWithTimeout(
+      KvStoreWrapper* store,
+      AreaId const& areaId,
+      std::string const& key) const {
+    auto const start = std::chrono::steady_clock::now();
+    while (not store->getKey(areaId, key).has_value() &&
+           (std::chrono::steady_clock::now() - start <
+            kTimeoutOfKvStorePropagation)) {
+      std::this_thread::yield();
+    }
+    ASSERT_TRUE(store->getKey(areaId, key).has_value());
   }
 
   // Public member variables
@@ -2708,14 +2725,13 @@ TEST_F(KvStoreTestFixture, FullSync) {
  *  (pod-area) StoreB (plane-area)
  */
 TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
-  folly::EventBase evb;
-  auto scheduleTimePoint = std::chrono::steady_clock::now();
-
   thrift::AreaConfig pod, plane;
   *pod.area_id_ref() = "pod-area";
   pod.neighbor_regexes_ref()->emplace_back(".*");
   *plane.area_id_ref() = "plane-area";
   plane.neighbor_regexes_ref()->emplace_back(".*");
+  AreaId podAreaId{pod.get_area_id()};
+  AreaId planeAreaId{plane.get_area_id()};
 
   auto storeA = createKvStore("storeA", getTestKvConf(), {pod});
   auto storeB = createKvStore("storeB", getTestKvConf(), {pod, plane});
@@ -2789,170 +2805,147 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   keyVal3Size = k3.size() + thriftVal3.originatorId_ref()->size() +
       thriftVal3.value_ref()->size() + fixed_size;
 
-  evb.scheduleAt(
-      [&]() noexcept {
-        storeA->run();
-        storeB->run();
-        storeC->run();
+  {
+    storeA->run();
+    storeB->run();
+    storeC->run();
 
-        storeA->addPeer(
-            AreaId{pod.get_area_id()}, "storeB", storeB->getPeerSpec());
-        storeB->addPeer(
-            AreaId{pod.get_area_id()}, "storeA", storeA->getPeerSpec());
-        storeB->addPeer(
-            AreaId{plane.get_area_id()}, "storeC", storeC->getPeerSpec());
-        storeC->addPeer(
-            AreaId{plane.get_area_id()}, "storeB", storeB->getPeerSpec());
-        // verify get peers command
-        std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
-            {storeA->getNodeId(),
-             storeA->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
-        };
-        std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
-            {storeC->getNodeId(),
-             storeC->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
-        };
+    storeA->addPeer(podAreaId, "storeB", storeB->getPeerSpec());
+    storeB->addPeer(podAreaId, "storeA", storeA->getPeerSpec());
+    storeB->addPeer(planeAreaId, "storeC", storeC->getPeerSpec());
+    storeC->addPeer(planeAreaId, "storeB", storeB->getPeerSpec());
+    // verify get peers command
+    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
+        {storeA->getNodeId(),
+         storeA->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
+    };
+    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
+        {storeC->getNodeId(),
+         storeC->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
+    };
 
-        waitForAllPeersInitialized();
+    waitForAllPeersInitialized();
 
-        EXPECT_EQ(
-            expectedPeersPod, storeB->getPeers(AreaId{*pod.area_id_ref()}));
-        EXPECT_EQ(
-            expectedPeersPlane, storeB->getPeers(AreaId{*plane.area_id_ref()}));
+    EXPECT_EQ(expectedPeersPod, storeB->getPeers(podAreaId));
+    EXPECT_EQ(expectedPeersPlane, storeB->getPeers(planeAreaId));
+  }
 
-        // set key in default area, but storeA does not have default area, this
-        // should fail
-        EXPECT_FALSE(storeA->setKey(kTestingAreaName, k0, thriftVal0));
-        // set key in the correct area
-        EXPECT_TRUE(storeA->setKey(AreaId{pod.get_area_id()}, k0, thriftVal0));
-        // store A should not have the key in default area
-        EXPECT_FALSE(storeA->getKey(kTestingAreaName, k0).has_value());
-        // store A should have the key in pod-area
-        EXPECT_TRUE(storeA->getKey(AreaId{pod.get_area_id()}, k0).has_value());
-      },
-      scheduleTimePoint);
+  {
+    // set key in default area, but storeA does not have default area, this
+    // should fail
+    EXPECT_FALSE(storeA->setKey(kTestingAreaName, k0, thriftVal0));
+    // set key in the correct area
+    EXPECT_TRUE(storeA->setKey(podAreaId, k0, thriftVal0));
+    // store A should not have the key in default area
+    EXPECT_FALSE(storeA->getKey(kTestingAreaName, k0).has_value());
+    // store A should have the key in pod-area
+    EXPECT_TRUE(storeA->getKey(podAreaId, k0).has_value());
+    // store B should have the key in pod-area
+    waitForKeyInStoreWithTimeout(storeB, podAreaId, k0);
+    // store B should NOT have the key in plane-area
+    EXPECT_FALSE(storeB->getKey(planeAreaId, k0).has_value());
+  }
 
-  evb.scheduleAt(
-      [&]() noexcept {
-        // store B should have the key in pod-area
-        EXPECT_TRUE(storeB->getKey(AreaId{pod.get_area_id()}, k0).has_value());
-        // store B should NOT have the key in plane-area
-        EXPECT_FALSE(
-            storeB->getKey(AreaId{plane.get_area_id()}, k0).has_value());
+  {
+    // set key in store C and verify it's present in plane area in store B
+    // and not present in POD area in storeB and storeA set key in the
+    // correct area
+    EXPECT_TRUE(storeC->setKey(planeAreaId, k2, thriftVal2));
+    // store C should have the key in plane.area_id
+    EXPECT_TRUE(storeC->getKey(planeAreaId, k2).has_value());
+    // store B should have the key in plane.area_id
+    waitForKeyInStoreWithTimeout(storeB, planeAreaId, k2);
+    // store B should NOT have the key in pod.area_id
+    EXPECT_FALSE(storeB->getKey(podAreaId, k2).has_value());
+    // store A should NOT have the key in pod.area_id
+    EXPECT_FALSE(storeA->getKey(podAreaId, k2).has_value());
+  }
 
-        // set key in store C and verify it's present in plane area in store B
-        // and not present in POD area in storeB and storeA set key in the
-        // correct area
-        EXPECT_TRUE(
-            storeC->setKey(AreaId{plane.get_area_id()}, k2, thriftVal2));
-      },
-      scheduleTimePoint + std::chrono::milliseconds(100));
+  {
+    // add another key in both plane and pod area
+    EXPECT_TRUE(storeB->setKey(podAreaId, k1, thriftVal1));
+    EXPECT_TRUE(storeC->setKey(planeAreaId, k3, thriftVal3));
 
-  evb.scheduleAt(
-      [&]() noexcept {
-        // store B should have the key in plane.area_id
-        EXPECT_TRUE(
-            storeB->getKey(AreaId{plane.get_area_id()}, k2).has_value());
-        // store B should NOT have the key in pod.area_id
-        EXPECT_FALSE(storeB->getKey(AreaId{pod.get_area_id()}, k2).has_value());
-        // store A should NOT have the key in pod.area_id
-        EXPECT_FALSE(storeA->getKey(AreaId{pod.get_area_id()}, k2).has_value());
+    waitForKeyInStoreWithTimeout(storeA, podAreaId, k1);
+    waitForKeyInStoreWithTimeout(storeB, planeAreaId, k3);
 
-        // pod area expected key values
-        expectedKeyValsPod[k0] = thriftVal0;
-        expectedKeyValsPod[k1] = thriftVal1;
+    // pod area expected key values
+    expectedKeyValsPod[k0] = thriftVal0;
+    expectedKeyValsPod[k1] = thriftVal1;
 
-        // plane area expected key values
-        expectedKeyValsPlane[k2] = thriftVal2;
-        expectedKeyValsPlane[k3] = thriftVal3;
+    // plane area expected key values
+    expectedKeyValsPlane[k2] = thriftVal2;
+    expectedKeyValsPlane[k3] = thriftVal3;
 
-        // add another key in both plane and pod area
-        EXPECT_TRUE(storeB->setKey(AreaId{pod.get_area_id()}, k1, thriftVal1));
-        EXPECT_TRUE(
-            storeC->setKey(AreaId{plane.get_area_id()}, k3, thriftVal3));
-      },
-      scheduleTimePoint + std::chrono::milliseconds(300));
+    // pod area
+    EXPECT_EQ(expectedKeyValsPod, storeA->dumpAll(podAreaId));
+    EXPECT_EQ(expectedKeyValsPod, storeB->dumpAll(podAreaId));
 
-  evb.scheduleAt(
-      [&]() noexcept {
-        // pod area
-        EXPECT_EQ(
-            expectedKeyValsPod, storeA->dumpAll(AreaId{pod.get_area_id()}));
-        EXPECT_EQ(
-            expectedKeyValsPod, storeB->dumpAll(AreaId{pod.get_area_id()}));
+    // plane area
+    EXPECT_EQ(expectedKeyValsPlane, storeB->dumpAll(planeAreaId));
+    EXPECT_EQ(expectedKeyValsPlane, storeC->dumpAll(planeAreaId));
 
-        // plane area
-        EXPECT_EQ(
-            expectedKeyValsPlane, storeB->dumpAll(AreaId{plane.get_area_id()}));
-        EXPECT_EQ(
-            expectedKeyValsPlane, storeC->dumpAll(AreaId{plane.get_area_id()}));
+    // check for counters on StoreB that has 2 instances. Number of keys
+    // must be the total of both areas number of keys must be 4, 2 from
+    // pod.area_id and 2 from planArea number of peers at storeB must be 2 -
+    // one from each area
+    EXPECT_EQ(2, storeB->dumpAll(podAreaId).size());
+    EXPECT_EQ(2, storeB->dumpAll(planeAreaId).size());
+  }
 
-        // check for counters on StoreB that has 2 instances. Number of keys
-        // must be the total of both areas number of keys must be 4, 2 from
-        // pod.area_id and 2 from planArea number of peers at storeB must be 2 -
-        // one from each area
-        EXPECT_EQ(2, storeB->dumpAll(AreaId{pod.get_area_id()}).size());
-        EXPECT_EQ(2, storeB->dumpAll(AreaId{plane.get_area_id()}).size());
+  {
+    // based on above config, with 3 kvstore nodes spanning two areas,
+    // storeA and storeC will send back areaSummary vector with 1 entry
+    // and storeB, which has two areas, will send back vector with 2
+    // entries. each entry in the areaSummary vector will have 2 keys (per
+    // above)
+    std::set<std::string> areaSetAll{
+        pod.get_area_id(), plane.get_area_id(), kTestingAreaName};
+    std::set<std::string> areaSetEmpty{};
+    std::map<std::string, int> storeBTest{};
 
-        std::set<std::string> areaSetAll{
-            pod.get_area_id(), plane.get_area_id(), kTestingAreaName};
-        std::set<std::string> areaSetEmpty{};
-        std::map<std::string, int> storeBTest{};
+    auto summary = storeA->getSummary(areaSetAll);
+    EXPECT_EQ(1, summary.size());
+    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+    EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
+    EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
 
-        // based on above config, with 3 kvstore nodes spanning two areas,
-        // storeA and storeC will send back areaSummary vector with 1 entry
-        // and storeB, which has two areas, will send back vector with 2
-        // entries. each entry in the areaSummary vector will have 2 keys (per
-        // above)
-        auto summary = storeA->getSummary(areaSetAll);
-        EXPECT_EQ(1, summary.size());
-        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-        EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
-        EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
+    summary = storeA->getSummary(areaSetEmpty);
+    EXPECT_EQ(1, summary.size());
+    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+    EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
+    EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
 
-        summary = storeA->getSummary(areaSetEmpty);
-        EXPECT_EQ(1, summary.size());
-        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-        EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
-        EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
+    summary = storeB->getSummary(areaSetAll);
+    EXPECT_EQ(2, summary.size());
+    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+    EXPECT_EQ(2, summary.at(1).get_keyValsCount());
+    // for storeB, spanning 2 areas, check that kv count for all areas add
+    // up individually
+    storeBTest[summary.at(0).get_area()] = summary.at(0).get_keyValsBytes();
+    storeBTest[summary.at(1).get_area()] = summary.at(1).get_keyValsBytes();
+    EXPECT_EQ(1, storeBTest.count(plane.get_area_id()));
+    EXPECT_EQ(keyVal2Size + keyVal3Size, storeBTest[plane.get_area_id()]);
+    EXPECT_EQ(1, storeBTest.count(pod.get_area_id()));
+    EXPECT_EQ(keyVal0Size + keyVal1Size, storeBTest[pod.get_area_id()]);
 
-        summary = storeB->getSummary(areaSetAll);
-        EXPECT_EQ(2, summary.size());
-        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-        EXPECT_EQ(2, summary.at(1).get_keyValsCount());
-        // for storeB, spanning 2 areas, check that kv count for all areas add
-        // up individually
-        storeBTest[summary.at(0).get_area()] = summary.at(0).get_keyValsBytes();
-        storeBTest[summary.at(1).get_area()] = summary.at(1).get_keyValsBytes();
-        EXPECT_EQ(1, storeBTest.count(plane.get_area_id()));
-        EXPECT_EQ(keyVal2Size + keyVal3Size, storeBTest[plane.get_area_id()]);
-        EXPECT_EQ(1, storeBTest.count(pod.get_area_id()));
-        EXPECT_EQ(keyVal0Size + keyVal1Size, storeBTest[pod.get_area_id()]);
+    summary = storeB->getSummary(areaSetEmpty);
+    EXPECT_EQ(2, summary.size());
+    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+    EXPECT_EQ(2, summary.at(1).get_keyValsCount());
 
-        summary = storeB->getSummary(areaSetEmpty);
-        EXPECT_EQ(2, summary.size());
-        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-        EXPECT_EQ(2, summary.at(1).get_keyValsCount());
+    summary = storeC->getSummary(areaSetAll);
+    EXPECT_EQ(1, summary.size());
+    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+    EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
+    EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
 
-        summary = storeC->getSummary(areaSetAll);
-        EXPECT_EQ(1, summary.size());
-        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-        EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
-        EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
-
-        summary = storeC->getSummary(areaSetEmpty);
-        EXPECT_EQ(1, summary.size());
-        EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-        EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
-        EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
-      },
-      scheduleTimePoint + std::chrono::milliseconds(400));
-
-  evb.scheduleAt(
-      [&]() noexcept { evb.terminateLoopSoon(); },
-      scheduleTimePoint + std::chrono::milliseconds(401));
-
-  evb.loop();
+    summary = storeC->getSummary(areaSetEmpty);
+    EXPECT_EQ(1, summary.size());
+    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
+    EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
+    EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
+  }
 }
 
 int
