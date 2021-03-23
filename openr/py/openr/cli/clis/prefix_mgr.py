@@ -9,6 +9,7 @@ from typing import List, Optional
 
 import click
 from openr.cli.commands import prefix_mgr
+from openr.OpenrCtrl import ttypes as ctrl_types
 
 
 class PrefixMgrCli(object):
@@ -19,6 +20,9 @@ class PrefixMgrCli(object):
         self.prefixmgr.add_command(SyncCli().sync)
         self.prefixmgr.add_command(AdvertisedRoutesCli().show)
         self.prefixmgr.add_command(OriginatedRoutesCli().show)
+        self.prefixmgr.add_command(PrefilterAdvertisedRoutesCli().show)
+        self.prefixmgr.add_command(PostfilterAdvertisedRoutesCli().show)
+        self.prefixmgr.add_command(RejectedOnAdvertiseRoutesCli().show)
 
     @click.group()
     @click.pass_context
@@ -137,3 +141,117 @@ class OriginatedRoutesCli(object):
         """
 
         prefix_mgr.OriginatedRoutesCmd(cli_opts).run()
+
+
+class PrefilterAdvertisedRoutesCli(object):
+    @click.command("prefilter-advertised")
+    @click.argument("area", type=str)
+    @click.argument("prefix", nargs=-1, type=str)
+    @click.option(
+        "--prefix-type",
+        "-t",
+        help="Filter on source of origination. e.g. RIB, BGP, LINK_MONITOR",
+    )
+    @click.option(
+        "--detail/--no-detail",
+        default=False,
+        help="Show all details including tags and area-stack",
+    )
+    @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    @click.pass_obj
+    def show(
+        cli_opts,  # noqa: B902
+        area: str,
+        prefix: List[str],
+        prefix_type: Optional[str],
+        detail: bool,
+        json: bool,
+    ) -> None:
+        """
+        Given an area, show prefilter advertised routes to the area. Will show all by default
+        """
+
+        prefix_mgr.AreaAdvertisedRoutesCmd(cli_opts).run(
+            area,
+            ctrl_types.RouteFilterType.PREFILTER_ADVERTISED,
+            prefix,
+            prefix_type,
+            json,
+            detail,
+        )
+
+
+class PostfilterAdvertisedRoutesCli(object):
+    @click.command("postfilter-advertised")
+    @click.argument("area", type=str)
+    @click.argument("prefix", nargs=-1, type=str)
+    @click.option(
+        "--prefix-type",
+        "-t",
+        help="Filter on source of origination. e.g. RIB, BGP, LINK_MONITOR",
+    )
+    @click.option(
+        "--detail/--no-detail",
+        default=False,
+        help="Show all details including tags, area-stack and accept policy",
+    )
+    @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    @click.pass_obj
+    def show(
+        cli_opts,  # noqa: B902
+        area: str,
+        prefix: List[str],
+        prefix_type: Optional[str],
+        detail: bool,
+        json: bool,
+    ) -> None:
+        """
+        Given an area, show postfilter advertised routes to the area. Will show all by default
+        """
+
+        prefix_mgr.AreaAdvertisedRoutesCmd(cli_opts).run(
+            area,
+            ctrl_types.RouteFilterType.POSTFILTER_ADVERTISED,
+            prefix,
+            prefix_type,
+            json,
+            detail,
+        )
+
+
+class RejectedOnAdvertiseRoutesCli(object):
+    @click.command("postfilter-rejected")
+    @click.argument("area", type=str)
+    @click.argument("prefix", nargs=-1, type=str)
+    @click.option(
+        "--prefix-type",
+        "-t",
+        help="Filter on source of origination. e.g. RIB, BGP, LINK_MONITOR",
+    )
+    @click.option(
+        "--detail/--no-detail",
+        default=False,
+        help="Show all details including tags, area-stack and reject policy",
+    )
+    @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    @click.pass_obj
+    def show(
+        cli_opts,  # noqa: B902
+        area: str,
+        prefix: List[str],
+        prefix_type: Optional[str],
+        detail: bool,
+        json: bool,
+    ) -> None:
+        """
+        Given an area, show routes rejected on advertise to the area. Will show all by default
+        """
+
+        prefix_mgr.AreaAdvertisedRoutesCmd(cli_opts).run(
+            area,
+            ctrl_types.RouteFilterType.REJECTED_ON_ADVERTISE,
+            prefix,
+            prefix_type,
+            json,
+            detail,
+        )

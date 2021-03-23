@@ -1919,7 +1919,66 @@ def print_route_details(
     """
 
     rows = []
+    # print header
+    print_route_header(rows, detailed)
 
+    for route_detail in routes:
+        best_key = key_str(route_detail.bestKey)
+        best_keys = {key_str(k) for k in route_detail.bestKeys}
+
+        # Create a title for the route
+        rows.append(
+            f"> {ipnetwork.sprint_prefix(route_detail.prefix)}"
+            f", {len(best_keys)}/{len(route_detail.routes)}"
+        )
+
+        # Add all entries associated with routes
+        for route in route_detail.routes:
+            markers = f"{'*' if route.key in best_keys else ''}{'@' if route.key == best_key else ' '}"
+            print_route_helper(rows, route, key_str, detailed, markers)
+        rows.append("")
+
+    print("\n".join(rows))
+
+
+def print_advertised_routes(
+    routes: List[ctrl_types.AdvertisedRoute],
+    key_str,
+    detailed: bool,
+) -> None:
+    """
+    Print postfilter advertised or rejected route.
+
+    `key_fn` argument specifies the transformation of key attributes to tuple of
+    strings
+
+    Output format
+      > 10.0.0.0/8, entries=10, best-entries(*)=1, best-entry(@)
+        [@*] source <key>
+             forwarding algo=<fwd-algo> type=<fwd-type>
+             metrics=<metrics>
+             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+
+
+    """
+
+    rows = []
+    # print header
+    print_route_header(rows, detailed)
+
+    for route in routes:
+        # Create a title for the route
+        rows.append(f"> {ipnetwork.sprint_prefix(route.route.prefix)}")
+        print_route_helper(rows, route, key_str, detailed, "{*@}")
+        rows.append("")
+
+    print("\n".join(rows))
+
+
+def print_route_header(rows: List[str], detailed: bool):
+    """
+    Helper function to construct print lines of header for advertised and received rooutes.
+    """
     # Add marker information
     rows.append("Markers: * - One of the best entries, @ - The best entry")
     if not detailed:
@@ -1945,69 +2004,66 @@ def print_route_details(
         )
         rows.append("")
 
-    for route_detail in routes:
-        best_key = key_str(route_detail.bestKey)
-        best_keys = {key_str(k) for k in route_detail.bestKeys}
 
-        # Create a title for the route
+def print_route_helper(
+    rows: List[str],
+    route: ctrl_types.AdvertisedRoute,
+    key_str,
+    detailed: bool,
+    markers: str,
+) -> None:
+    """
+    Construct print lines of advertised route, append to rows
+
+    `key_fn` argument specifies the transformation of key attributes to tuple of
+    strings
+    `markers` argument specifies [@*] to indicate route is ecmp/best entry
+
+    Output format
+        [@*] source <key>
+             forwarding algo=<fwd-algo> type=<fwd-type>
+             metrics=<metrics>
+             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+
+
+    """
+
+    key, metrics = key_str(route.key), route.route.metrics
+    fwd_algo = config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
+        route.route.forwardingAlgorithm
+    )
+    fwd_type = config_types.PrefixForwardingType._VALUES_TO_NAMES.get(
+        route.route.forwardingType
+    )
+    if detailed:
+        rows.append(f"{markers} from {' '.join(key)}")
+        rows.append(f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}")
         rows.append(
-            f"> {ipnetwork.sprint_prefix(route_detail.prefix)}"
-            f", {len(best_keys)}/{len(route_detail.routes)}"
+            f"     Metrics - path-preference: {metrics.path_preference}"
+            f", source-preference: {metrics.source_preference}"
+            f", distance: {metrics.distance}"
         )
-
-        # Add all entries associated with routes
-        for route in route_detail.routes:
-            key, metrics = key_str(route.key), route.route.metrics
-            fwd_algo = config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
-                route.route.forwardingAlgorithm
-            )
-            fwd_type = config_types.PrefixForwardingType._VALUES_TO_NAMES.get(
-                route.route.forwardingType
-            )
-            markers = (
-                f"{'*' if key in best_keys else ''}{'@' if key == best_key else ' '}"
-            )
-
-            if detailed:
-                rows.append(f"{markers} from {' '.join(key)}")
-                rows.append(
-                    f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}"
-                )
-                rows.append(
-                    f"     Metrics - path-preference: {metrics.path_preference}"
-                    f", source-preference: {metrics.source_preference}"
-                    f", distance: {metrics.distance}"
-                )
-                if route.route.minNexthop:
-                    rows.append(
-                        f"     Performance - min-nexthops: {route.route.minNexthop}"
-                    )
-                if route.route.prependLabel:
-                    rows.append(
-                        f"     Misc - prepend-label: {route.route.prependLabel}"
-                    )
-                rows.append(f"     Tags - {', '.join(route.route.tags)}")
-                rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
-            else:
-                min_nexthop = (
-                    route.route.minNexthop
-                    if route.route.minNexthop is not None
-                    else "-"
-                )
-                prepend_label = (
-                    route.route.prependLabel
-                    if route.route.prependLabel is not None
-                    else "-"
-                )
-                rows.append(
-                    f"{markers:<2} {' '.join(key)[:36]:<36} "
-                    f"{fwd_algo:<12} {fwd_type:<8} "
-                    f"{metrics.source_preference:<6} "
-                    f"{metrics.path_preference:<6} "
-                    f"{metrics.distance:<6} "
-                    f"{min_nexthop:<6}"
-                    f"{prepend_label:<6}"
-                )
-        rows.append("")
-
-    print("\n".join(rows))
+        if route.route.minNexthop:
+            rows.append(f"     Performance - min-nexthops: {route.route.minNexthop}")
+        if route.route.prependLabel:
+            rows.append(f"     Misc - prepend-label: {route.route.prependLabel}")
+        rows.append(f"     Tags - {', '.join(route.route.tags)}")
+        rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
+        if hasattr(route, "hitPolicy") and route.hitPolicy:
+            rows.append(f"     Policy - {route.hitPolicy}")
+    else:
+        min_nexthop = (
+            route.route.minNexthop if route.route.minNexthop is not None else "-"
+        )
+        prepend_label = (
+            route.route.prependLabel if route.route.prependLabel is not None else "-"
+        )
+        rows.append(
+            f"{markers:<2} {' '.join(key)[:36]:<36} "
+            f"{fwd_algo:<12} {fwd_type:<8} "
+            f"{metrics.source_preference:<6} "
+            f"{metrics.path_preference:<6} "
+            f"{metrics.distance:<6} "
+            f"{min_nexthop:<6}"
+            f"{prepend_label:<6}"
+        )

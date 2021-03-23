@@ -7,7 +7,7 @@
 from typing import List, Optional, Tuple
 
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.cli.utils.utils import print_route_details
+from openr.cli.utils.utils import print_route_details, print_advertised_routes
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig.ttypes import PrefixForwardingType, PrefixForwardingAlgorithm
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
@@ -218,3 +218,62 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
             rows.append("")
 
         print("\n".join(rows))
+
+
+class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
+
+    # @override
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        area: str,
+        route_filter_type: ctrl_types.RouteFilterType,
+        prefixes: List[str],
+        prefix_type: Optional[str],
+        json: bool,
+        detailed: bool,
+    ) -> None:
+
+        # Get data
+        routes = self.fetch(client, area, route_filter_type, prefixes, prefix_type)
+
+        # Print json if
+        if json:
+            # TODO: Print routes in json
+            raise NotImplementedError()
+        else:
+            self.render(routes, detailed)
+
+    def fetch(
+        self,
+        client: OpenrCtrl.Client,
+        area: str,
+        route_filter_type: ctrl_types.RouteFilterType,
+        prefixes: List[str],
+        prefix_type: Optional[str],
+    ) -> List[ctrl_types.AdvertisedRoute]:
+        """
+        Fetch the requested data
+        """
+
+        # Create filter
+        route_filter = ctrl_types.AdvertisedRouteFilter()
+        if prefixes:
+            route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+        if prefix_type:
+            route_filter.prefixType = self.to_thrift_prefix_type(prefix_type)
+
+        # Get routes
+        return client.getAreaAdvertisedRoutesFiltered(
+            area, route_filter_type, route_filter
+        )
+
+    def render(self, routes: List[ctrl_types.AdvertisedRoute], detailed: bool) -> None:
+        """
+        Render advertised routes
+        """
+
+        def key_fn(key: network_types.PrefixType) -> Tuple[str]:
+            return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
+
+        print_advertised_routes(routes, key_fn, detailed)
