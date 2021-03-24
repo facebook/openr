@@ -403,7 +403,7 @@ Fib::printUnicastRoutesAddUpdate(
     VLOG(1) << "> " << toString(*route.dest_ref())
             << ", NextHopsCount = " << route.nextHops_ref()->size();
     for (auto const& nh : *route.nextHops_ref()) {
-      VLOG(2) << " " << toString(nh);
+      VLOG(1) << " " << toString(nh);
     }
   }
 }
@@ -419,7 +419,7 @@ Fib::printMplsRoutesAddUpdate(
     VLOG(1) << "> " << std::to_string(*route.topLabel_ref()) << ", "
             << " NextHopsCount = " << route.nextHops_ref()->size();
     for (auto const& nh : *route.nextHops_ref()) {
-      VLOG(2) << " " << toString(nh);
+      VLOG(1) << " " << toString(nh);
     }
   }
 }
