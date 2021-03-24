@@ -75,8 +75,8 @@ Commands:
 The submodule themselves then have subcommands to do different interactions with
 that Open/R module.
 
-Please refer to the [Protocol Guide](../Protocol_Guide/index.rst) for more
-information about each Open/R module.
+Please refer to the [Protocol Guide](../Protocol_Guide/) for more information
+about each Open/R module.
 
 ### Bash Autocompletion
 

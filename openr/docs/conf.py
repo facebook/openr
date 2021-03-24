@@ -58,3 +58,6 @@ html_theme = "alabaster"
 html_static_path = ["_static"]
 
 html_logo = "_static/openr_logo_white_200.png"
+
+# linkcheck config
+linkcheck_anchors = False
