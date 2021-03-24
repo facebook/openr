@@ -1854,6 +1854,74 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   }
 }
 
+class RouteOriginationV4OverV6Fixture : public RouteOriginationFixture {
+ public:
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4; // only to test v4 prefix
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = 1;
+    originatedPrefixV4.install_to_fib_ref() = true;
+
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {originatedPrefixV4};
+    // Enable v4 over v6 nexthop feature
+    tConfig.v4_over_v6_nexthop_ref() = true;
+    tConfig_ = tConfig;
+    return tConfig;
+  }
+
+  const openr::thrift::OpenrConfig
+  getConfig() const {
+    return tConfig_;
+  }
+
+ private:
+  thrift::OpenrConfig tConfig_;
+};
+
+TEST_F(RouteOriginationV4OverV6Fixture, V4OverV6NexthopTest) {
+  const auto tConfig = getConfig();
+  EXPECT_TRUE(tConfig.v4_over_v6_nexthop_ref());
+
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+
+  // This prefix only acts as "supporting prefix".
+  // Otherwise, we cannot get the element in the staticRouteUpdatesQueue.
+  const std::string v4Prefix_1 = "192.108.0.8/30";
+  const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
+  const auto prefixEntryV4_1 =
+      createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
+  auto unicastEntryV4_1 = RibUnicastEntry(
+      v4Network_1,
+      {nh_v6}, // V6 nexthop is the key changes with v4 over v6 nexthop :-)
+      prefixEntryV4_1,
+      thrift::Types_constants::kDefaultArea());
+  DecisionRouteUpdate routeUpdate;
+  routeUpdate.addRouteToUpdate(unicastEntryV4_1);
+  routeUpdatesQueue.push(std::move(routeUpdate));
+
+  auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+  EXPECT_TRUE(update.has_value());
+
+  auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+  auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+  EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+  EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+  // verify thrift::NextHopThrift struct
+  const auto& route = updatedRoutes.back();
+  EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+
+  const auto& nhs = *route.nextHops_ref();
+  EXPECT_THAT(nhs, testing::SizeIs(1));
+  // we expect the nexthop is V6
+  EXPECT_THAT(
+      nhs,
+      testing::UnorderedElementsAre(createNextHop(
+          toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()))));
+}
+
 TEST(PrefixManagerPendingUpdates, updatePrefixes) {
   detail::PrefixManagerPendingUpdates updates;
 

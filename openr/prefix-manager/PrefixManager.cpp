@@ -50,6 +50,7 @@ PrefixManager::PrefixManager(
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
+      v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       kvStore_(kvStore) {
   CHECK(kvStore_);
   CHECK(config);
@@ -260,8 +261,9 @@ PrefixManager::buildOriginatedPrefixDb(
     const std::vector<thrift::OriginatedPrefix>& prefixes) {
   for (const auto& prefix : prefixes) {
     auto network = folly::IPAddress::createNetwork(*prefix.prefix_ref());
-    auto nh = network.first.isV4() ? Constants::kLocalRouteNexthopV4.toString()
-                                   : Constants::kLocalRouteNexthopV6.toString();
+    auto nh = network.first.isV4() and not v4OverV6Nexthop_
+        ? Constants::kLocalRouteNexthopV4.toString()
+        : Constants::kLocalRouteNexthopV6.toString();
 
     // Populate PrefixMetric struct
     thrift::PrefixMetrics metrics;

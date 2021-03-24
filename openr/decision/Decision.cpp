@@ -167,11 +167,13 @@ class SpfSolver::SpfSolverImpl {
       const std::string& myNodeName,
       bool enableV4,
       bool bgpDryRun,
-      bool enableBestRouteSelection)
+      bool enableBestRouteSelection,
+      bool v4OverV6Nexthop)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
         bgpDryRun_(bgpDryRun),
-        enableBestRouteSelection_(enableBestRouteSelection) {
+        enableBestRouteSelection_(enableBestRouteSelection),
+        v4OverV6Nexthop_(v4OverV6Nexthop) {
     // Initialize stat keys
     fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
     fb303::fbData->addStatExportType(
@@ -334,6 +336,7 @@ class SpfSolver::SpfSolverImpl {
       const std::string& myNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
       bool isV4,
+      bool v4OverV6Nexthop,
       bool perDestination,
       const Metric minMetric,
       std::unordered_map<std::pair<std::string, std::string>, Metric>
@@ -361,6 +364,11 @@ class SpfSolver::SpfSolverImpl {
   const bool bgpDryRun_{false};
 
   const bool enableBestRouteSelection_{false};
+
+  // is v4 over v6 nexthop enabled. If yes then Decision will forward v4
+  // prefixes with v6 nexthops to Fib module for programming. Else it will just
+  // use v4 over v4 nexthop.
+  const bool v4OverV6Nexthop_{false};
 };
 
 void
@@ -728,6 +736,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
                       myNodeName,
                       {{adjDb.thisNodeName_ref().value(), area}},
                       false,
+                      v4OverV6Nexthop_,
                       false,
                       metricNhs.first,
                       metricNhs.second,
@@ -951,6 +960,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
           myNodeName,
           bestRouteSelectionResult.allNodeAreas,
           isV4Prefix,
+          v4OverV6Nexthop_,
           perDestination,
           nextHopsWithMetric.first,
           nextHopsWithMetric.second,
@@ -1063,8 +1073,9 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
 
       bool isV4Prefix = prefix.first.isV4();
       nextHops.emplace(createNextHop(
-          isV4Prefix ? firstLink->getNhV4FromNode(myNodeName)
-                     : firstLink->getNhV6FromNode(myNodeName),
+          isV4Prefix and not v4OverV6Nexthop_
+              ? firstLink->getNhV4FromNode(myNodeName)
+              : firstLink->getNhV6FromNode(myNodeName),
           firstLink->getIfaceFromNode(myNodeName),
           cost,
           mplsAction,
@@ -1224,11 +1235,14 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
   return std::make_pair(shortestMetric, nextHopNodes);
 }
 
+// TODO Let's use strong-types for the bools to detect any abusement at the
+// building time.
 std::unordered_set<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getNextHopsThrift(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
+    bool v4OverV6Nexthop,
     bool perDestination,
     const Metric minMetric,
     std::unordered_map<std::pair<std::string, std::string>, Metric>
@@ -1317,8 +1331,8 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
         }
 
         nextHops.emplace(createNextHop(
-            isV4 ? link->getNhV4FromNode(myNodeName)
-                 : link->getNhV6FromNode(myNodeName),
+            isV4 and not v4OverV6Nexthop ? link->getNhV4FromNode(myNodeName)
+                                         : link->getNhV6FromNode(myNodeName),
             link->getIfaceFromNode(myNodeName),
             distOverLink,
             mplsAction,
@@ -1338,9 +1352,14 @@ SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
     bool bgpDryRun,
-    bool enableBestRouteSelection)
+    bool enableBestRouteSelection,
+    bool v4OverV6Nexthop)
     : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName, enableV4, bgpDryRun, enableBestRouteSelection)) {}
+          myNodeName,
+          enableV4,
+          bgpDryRun,
+          enableBestRouteSelection,
+          v4OverV6Nexthop)) {}
 
 SpfSolver::~SpfSolver() {}
 
@@ -1409,7 +1428,8 @@ Decision::Decision(
       config->getNodeName(),
       config->isV4Enabled(),
       bgpDryRun,
-      config->isBestRouteSelectionEnabled());
+      config->isBestRouteSelectionEnabled(),
+      config->isV4OverV6NexthopEnabled());
 
   coldStartTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     pendingUpdates_.setNeedsFullRebuild();

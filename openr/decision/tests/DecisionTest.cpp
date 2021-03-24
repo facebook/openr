@@ -211,9 +211,11 @@ createNextHopFromAdj(
     bool isV4,
     int32_t metric,
     std::optional<thrift::MplsAction> mplsAction = std::nullopt,
-    const std::string& area = kTestingAreaName) {
+    const std::string& area = kTestingAreaName,
+    bool v4OverV6Nexthop = false) {
   return createNextHop(
-      isV4 ? *adj.nextHopV4_ref() : *adj.nextHopV6_ref(),
+      isV4 and not v4OverV6Nexthop ? *adj.nextHopV4_ref()
+                                   : *adj.nextHopV6_ref(),
       *adj.ifName_ref(),
       metric,
       std::move(mplsAction),
@@ -6763,6 +6765,129 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
   EXPECT_EQ(
       skippedUnicastRouteCnt,
       counters.at("decision.skipped_unicast_route.count.60"));
+}
+
+/**
+ * Test fixture for testing Decision module with V4 over V6 nexthop feature.
+ */
+class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
+ protected:
+  /**
+   * The only differences between this test fixture and the DecisionTetFixture
+   * is the config where here we enable V4OverV6Nexthop
+   */
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = getBasicOpenrConfig(
+        "1", // nodeName
+        "domain", // domainName
+        {}, // areaCfg
+        true, // enableV4
+        false, // enableSegmentRouting
+        true, // dryrun
+        true // enableV4OverV6Nexthop
+    );
+    // set coldstart to be longer than debounce time
+    tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
+
+    tConfig_ = tConfig;
+    return tConfig;
+  }
+
+  openr::thrift::OpenrConfig tConfig_;
+};
+
+/**
+ * Similar as the BasicalOperations, we test the Decision module with the
+ * v4_over_v6_nexthop feature enabled.
+ *
+ * We are using the topology: 1---2---3
+ *
+ * We upload the link 1--2 with initial sync and later publish the 2---3 link
+ * information. We check the nexthop from full routing dump and other fields.
+ */
+TEST_F(DecisionV4OverV6NexthopTestFixture, BasicOperationsV4OverV6Nexthop) {
+  // First make sure the v4 over v6 nexthop is enabled
+  EXPECT_TRUE(*tConfig_.v4_over_v6_nexthop_ref());
+
+  // public the link state info to KvStore
+  auto publication = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1V4),
+       createPrefixKeyValue("2", 1, addr2V4)},
+      {},
+      {},
+      {},
+      std::string(""));
+
+  sendKvPublication(publication);
+  auto routeDbDelta = recvRouteUpdates();
+
+  auto routeDb = dumpRouteDb({"1"})["1"];
+
+  RouteMap routeMap;
+  fillRouteMap("1", routeMap, routeDb);
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2V4))],
+      NextHops({createNextHopFromAdj(
+          adj12,
+          true /*isV4*/,
+          10,
+          std::nullopt,
+          kTestingAreaName,
+          true /*v4OverV6Nexthop*/)}));
+
+  // for router 3 we publish new key-value
+  publication = createThriftPublication(
+      {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
+       {"adj:2", createAdjValue("2", 2, {adj21, adj23}, false, 2)},
+       createPrefixKeyValue("3", 1, addr3V4)},
+      {},
+      {},
+      {},
+      std::string(""));
+
+  sendKvPublication(publication);
+
+  routeDb = dumpRouteDb({"1"})["1"];
+  fillRouteMap("1", routeMap, routeDb);
+
+  // nexthop checking for node 1
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2V4))],
+      NextHops({createNextHopFromAdj(
+          adj12, true, 10, std::nullopt, kTestingAreaName, true)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr3V4))],
+      NextHops({createNextHopFromAdj(
+          adj12, true, 20, std::nullopt, kTestingAreaName, true)}));
+
+  auto routeDbMap = dumpRouteDb({"2", "3"});
+  for (auto& [key, value] : routeDbMap) {
+    fillRouteMap(key, routeMap, value);
+  }
+
+  // nexthop checking for node 2
+  EXPECT_EQ(
+      routeMap[make_pair("2", toString(addr1V4))],
+      NextHops({createNextHopFromAdj(
+          adj21, true, 10, std::nullopt, kTestingAreaName, true)}));
+  EXPECT_EQ(
+      routeMap[make_pair("2", toString(addr3V4))],
+      NextHops({createNextHopFromAdj(
+          adj23, true, 10, std::nullopt, kTestingAreaName, true)}));
+
+  // nexthop checking for node 3
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(addr1V4))],
+      NextHops({createNextHopFromAdj(
+          adj32, true, 20, std::nullopt, kTestingAreaName, true)}));
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(addr2V4))],
+      NextHops({createNextHopFromAdj(
+          adj32, true, 10, std::nullopt, kTestingAreaName, true)}));
 }
 
 TEST(DecisionPendingUpdates, needsFullRebuild) {

@@ -206,7 +206,8 @@ class SpfSolver {
       const std::string& myNodeName,
       bool enableV4,
       bool bgpDryRun = false,
-      bool enableBestRouteSelection = false);
+      bool enableBestRouteSelection = false,
+      bool v4OverV6Nexthop = false);
   ~SpfSolver();
 
   //

@@ -270,6 +270,9 @@ class PrefixManager final : public OpenrEventBase {
   // queue to publish originated route updates to decision
   messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue_;
 
+  // V4 prefix over V6 nexthop enabled
+  const bool v4OverV6Nexthop_{false};
+
   // module ptr to interact with KvStore
   KvStore* kvStore_{nullptr};
 
