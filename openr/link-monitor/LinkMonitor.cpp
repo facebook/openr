@@ -910,7 +910,7 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
 
 bool
 LinkMonitor::syncInterfaces() {
-  VLOG(1) << "Syncing Interface DB from Netlink Platform";
+  VLOG(2) << "Syncing Interface DB from Netlink Platform";
 
   // Retrieve latest link snapshot from NetlinkProtocolSocket
   InterfaceDatabase ifDb;

@@ -92,12 +92,10 @@ Fib::Fib(
   addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
     while (true) {
       auto maybeThriftObj = q.get(); // perform read
-      VLOG(1) << "Received route updates";
       if (maybeThriftObj.hasError()) {
-        LOG(INFO) << "Terminating route delta processing fiber";
+        VLOG(1) << "Terminating route delta processing fiber";
         break;
       }
-
       processRouteUpdates(std::move(maybeThriftObj).value());
     }
   });

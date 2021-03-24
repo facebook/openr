@@ -645,7 +645,7 @@ Spark::processRttChange(
   // Neighbor must exist if this callback is fired
   auto& sparkNeighbor = sparkNeighbors_.at(ifName).at(neighborName);
 
-  // only report RTT change if the neighbor is adjacent
+  // only report RTT change in ESTABLISHED state
   if (sparkNeighbor.state != SparkNeighState::ESTABLISHED) {
     VLOG(2) << "Neighbor: " << neighborName << " over iface: " << ifName
             << " is in state: " << toStr(sparkNeighbor.state)
@@ -653,13 +653,16 @@ Spark::processRttChange(
     return;
   }
 
-  LOG(INFO) << "RTT for sparkNeighbor " << neighborName << " has changed "
+  // update rtt value
+  sparkNeighbor.rtt = std::chrono::microseconds(newRtt);
+
+  if (*config_->getLinkMonitorConfig().use_rtt_metric_ref()) {
+    VLOG(1) << "RTT for sparkNeighbor " << neighborName << " has changed "
             << "from " << sparkNeighbor.rtt.count() << "usecs to " << newRtt
             << "usecs over interface " << ifName;
-
-  sparkNeighbor.rtt = std::chrono::microseconds(newRtt);
-  notifySparkNeighborEvent(
-      NeighborEventType::NEIGHBOR_RTT_CHANGE, sparkNeighbor.toThrift());
+    notifySparkNeighborEvent(
+        NeighborEventType::NEIGHBOR_RTT_CHANGE, sparkNeighbor.toThrift());
+  }
 }
 
 void
