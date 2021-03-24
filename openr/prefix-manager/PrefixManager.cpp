@@ -59,7 +59,7 @@ PrefixManager::PrefixManager(
   }
 
   for (const auto& [areaId, areaConf] : config->getAreas()) {
-    areaToPolicy_.emplace(areaId, areaConf.getIngressPolicy());
+    areaToPolicy_.emplace(areaId, areaConf.getImportPolicyName());
   }
 
   // Create KvStore client

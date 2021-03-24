@@ -26,7 +26,7 @@ createAreaConfig(
   areaConfig.neighbor_regexes_ref() = neighborRegexes;
   areaConfig.include_interface_regexes_ref() = interfaceRegexes;
   if (policy) {
-    areaConfig.set_ingress_policy(*policy);
+    areaConfig.set_import_policy_name(*policy);
   }
   return areaConfig;
 }

@@ -156,7 +156,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
   {
     auto confInvalidAreaPolicy = getBasicOpenrConfig();
     auto areaConfig = getAreaConfig("1");
-    areaConfig.set_ingress_policy("BLA");
+    areaConfig.set_import_policy_name("BLA");
     confInvalidAreaPolicy.areas_ref()->emplace_back(std::move(areaConfig));
     EXPECT_THROW((Config(confInvalidAreaPolicy)), std::invalid_argument);
   }

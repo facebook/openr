@@ -413,7 +413,11 @@ struct AreaConfig {
    * advertised to this area
    */
   6: list<string> redistribute_interface_regexes;
-  7: optional string ingress_policy;
+
+  /**
+   * Area import policy, applied when a route enter this area
+   */
+  7: optional string import_policy_name;
 }
 
 /**

@@ -148,11 +148,11 @@ Config::populateAreaConfig() {
       areaConf.neighbor_regexes_ref() = {".*"};
     }
 
-    if (auto ingressPolicy = areaConf.ingress_policy_ref()) {
+    if (auto importPolicyName = areaConf.import_policy_name_ref()) {
       if (not propagationPolicy or
-          propagationPolicy->objects_ref()->count(*ingressPolicy) == 0) {
+          propagationPolicy->objects_ref()->count(*importPolicyName) == 0) {
         throw std::invalid_argument(folly::sformat(
-            "No area policy definition found for {}", *ingressPolicy));
+            "No area policy definition found for {}", *importPolicyName));
       }
     }
 
