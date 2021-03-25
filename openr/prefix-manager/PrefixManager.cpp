@@ -86,7 +86,7 @@ PrefixManager::PrefixManager(
     while (true) {
       auto maybeUpdate = q.get(); // perform read
       if (maybeUpdate.hasError()) {
-        LOG(INFO) << "Terminating prefix update request processing fiber";
+        VLOG(1) << "Terminating prefix update request processing fiber";
         break;
       }
       auto& update = maybeUpdate.value();
@@ -129,7 +129,7 @@ PrefixManager::PrefixManager(
     while (true) {
       auto maybeThriftObj = q.get(); // perform read
       if (maybeThriftObj.hasError()) {
-        LOG(INFO) << "Terminating route delta processing fiber";
+        VLOG(1) << "Terminating route delta processing fiber";
         break;
       }
 
@@ -250,7 +250,7 @@ void
 PrefixManager::stop() {
   // Stop KvStoreClient first
   kvStoreClient_->stop();
-  LOG(INFO) << "KvStoreClient successfully stopped.";
+  VLOG(1) << "KvStoreClient successfully stopped.";
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
@@ -359,7 +359,7 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
         AreaId{toArea}, prefixKey, prefixDbStr, ttlKeyInKvStore_);
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
-    VLOG_IF(1, changed) << "[ROUTE ADVERTISEMENT] "
+    VLOG_IF(1, changed) << "[Prefix Advertisement] "
                         << "Area: " << toArea << ", "
                         << "Type: " << toString(type) << ", "
                         << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
@@ -384,7 +384,7 @@ PrefixManager::deleteKvStoreKeyHelper(
     thrift::PrefixEntry entry;
     entry.prefix_ref() = prefixKey.value().getIpPrefix();
     deletedPrefixDb.prefixEntries_ref() = {entry};
-    VLOG(1) << "[ROUTE WITHDRAW] "
+    VLOG(1) << "[Prefix Withdraw] "
             << "Area: " << prefixKey->getPrefixArea() << ", "
             << toString(*entry.prefix_ref());
     fb303::fbData->addStatValue(
@@ -400,7 +400,7 @@ PrefixManager::deleteKvStoreKeyHelper(
 
 void
 PrefixManager::syncKvStore() {
-  LOG(INFO)
+  VLOG(1)
       << "[KvStore Sync] Syncing "
       << pendingUpdates_.getChangedPrefixes().size()
       << " changed prefixes. Total prefixes advertised: " << prefixMap_.size();
@@ -454,9 +454,9 @@ PrefixManager::syncKvStore() {
     }
   }
 
-  LOG(INFO) << "[KvStore Sync] Done syncing: "
-            << pendingUpdates_.getChangedPrefixes().size()
-            << " changed prefixes.";
+  VLOG(1) << "[KvStore Sync] Done syncing: "
+          << pendingUpdates_.getChangedPrefixes().size()
+          << " changed prefixes.";
 
   // clean up
   pendingUpdates_.reset();
@@ -860,7 +860,7 @@ PrefixManager::syncPrefixesByTypeImpl(
     thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& tPrefixEntries,
     const std::unordered_set<std::string>& dstAreas) {
-  LOG(INFO) << "Syncing prefixes of type " << toString(type);
+  VLOG(1) << "Syncing prefixes of type " << toString(type);
   // building these lists so we can call add and remove and get detailed
   // logging
   std::vector<thrift::PrefixEntry> toAddOrUpdate, toRemove;
@@ -915,7 +915,7 @@ PrefixManager::aggregatesToAdvertise(const folly::CIDRNetwork& prefix) {
       continue;
     }
 
-    VLOG(1) << "[ROUTE ORIGINATION] Adding supporting route "
+    VLOG(1) << "[Route Origination] Adding supporting route "
             << folly::IPAddress::networkToString(prefix)
             << " for originated route "
             << folly::IPAddress::networkToString(network);
@@ -942,7 +942,7 @@ PrefixManager::aggregatesToWithdraw(const folly::CIDRNetwork& prefix) {
     CHECK(originatedPrefixIt != originatedPrefixDb_.end());
     auto& route = originatedPrefixIt->second;
 
-    VLOG(1) << "[ROUTE ORIGINATION] Removing supporting route "
+    VLOG(1) << "[Route Origination] Removing supporting route "
             << folly::IPAddress::networkToString(prefix)
             << " for originated route "
             << folly::IPAddress::networkToString(network);
@@ -972,8 +972,8 @@ PrefixManager::processOriginatedPrefixes(
               route.unicastEntry.bestPrefixEntry),
           allAreaIds());
 
-      LOG(INFO) << "[ROUTE ORIGINATION] Advertising originated route "
-                << folly::IPAddress::networkToString(network);
+      VLOG(1) << "[Route Origination] Advertising originated route "
+              << folly::IPAddress::networkToString(network);
     }
 
     if (route.shouldWithdraw()) {
@@ -986,8 +986,8 @@ PrefixManager::processOriginatedPrefixes(
       withdrawnPrefixes.emplace_back(
           createPrefixEntry(toIpPrefix(network), thrift::PrefixType::CONFIG));
 
-      LOG(INFO) << "[ROUTE ORIGINATION] Withdrawing originated route "
-                << folly::IPAddress::networkToString(network);
+      VLOG(1) << "[Route Origination] Withdrawing originated route "
+              << folly::IPAddress::networkToString(network);
     }
   }
 
