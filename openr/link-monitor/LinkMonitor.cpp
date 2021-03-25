@@ -704,6 +704,8 @@ LinkMonitor::advertiseRedistAddrs() {
   for (auto& [_, interface] : interfaces_) {
     // Ignore in-active interfaces
     if (not interface.isActive()) {
+      VLOG(1) << "Interface: " << interface.getIfName()
+              << " is NOT active. Skip advertising.";
       continue;
     }
 
@@ -717,6 +719,8 @@ LinkMonitor::advertiseRedistAddrs() {
 
     // Do not advertise interface addresses if no destination area qualifies
     if (dstAreas.empty()) {
+      VLOG(1) << "No qualified area found for interface: "
+              << interface.getIfName() << ". Skip advertising.";
       continue;
     }
 
@@ -748,6 +752,9 @@ LinkMonitor::advertiseRedistAddrs() {
       }
 
       prefixMap.emplace(prefix, std::move(prefixEntry));
+
+      VLOG(1) << "Advertise LOOPBACK prefix: "
+              << folly::IPAddress::networkToString(prefix);
     }
   }
 
@@ -768,6 +775,9 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.prefix_ref() = toIpPrefix(prefix);
     prefixEntry.type_ref() = thrift::PrefixType::LOOPBACK;
     toWithdraw.emplace_back(std::move(prefixEntry));
+
+    VLOG(1) << "Withdraw LOOPBACK prefix: "
+            << folly::IPAddress::networkToString(prefix);
   }
 
   // Advertise prefixes (one for each area)

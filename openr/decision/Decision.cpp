@@ -1863,7 +1863,7 @@ Decision::rebuildRoutes(std::string const& event) {
   }
 
   pendingUpdates_.addEvent(event);
-  VLOG(2) << "Decision: processing " << pendingUpdates_.getCount()
+  VLOG(1) << "Decision: processing " << pendingUpdates_.getCount()
           << " accumulated updates. " << event;
   if (pendingUpdates_.perfEvents()) {
     if (auto expectedDuration = getDurationBetweenPerfEvents(
