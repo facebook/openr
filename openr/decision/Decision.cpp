@@ -474,7 +474,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     auto const& mySpfResult = linkState.getSpfResult(myNodeName);
 
     // Delete entries of unreachable nodes from prefixEntries
-    for (auto it = prefixEntries.begin(); it != prefixEntries.end();) {
+    for (auto it = prefixEntries.cbegin(); it != prefixEntries.cend();) {
       const auto& [prefixNode, prefixArea] = it->first;
       if (area != prefixArea || mySpfResult.count(prefixNode)) {
         ++it; // retain
@@ -786,7 +786,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   for (const auto& [topLabel, nhs] : staticMplsRoutes_) {
     routeDb.addMplsRoute(RibMplsEntry(
         topLabel,
-        std::unordered_set<thrift::NextHopThrift>{nhs.begin(), nhs.end()}));
+        std::unordered_set<thrift::NextHopThrift>{nhs.cbegin(), nhs.cend()}));
   }
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -848,8 +848,8 @@ SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
     BestRouteSelectionResult&& result,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
   BestRouteSelectionResult filtered = folly::copy(result);
-  for (auto iter = filtered.allNodeAreas.begin();
-       iter != filtered.allNodeAreas.end();) {
+  for (auto iter = filtered.allNodeAreas.cbegin();
+       iter != filtered.allNodeAreas.cend();) {
     const auto& [node, area] = *iter;
     if (areaLinkStates.at(area).isNodeOverloaded(node)) {
       iter = filtered.allNodeAreas.erase(iter);
@@ -1066,7 +1066,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
       auto const& firstLink = path.front();
       std::optional<thrift::MplsAction> mplsAction;
       if (labels.size()) {
-        std::vector<int32_t> labelVec{labels.begin(), labels.end()};
+        std::vector<int32_t> labelVec{labels.cbegin(), labels.cend()};
         mplsAction = createMplsAction(
             thrift::MplsActionCode::PUSH, std::nullopt, std::move(labelVec));
       }
@@ -1837,8 +1837,8 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
         std::move(addedPrefixes), thrift::PrefixDatabase().perfEvents_ref());
     pendingUpdates_.applyPrefixStateChange(
         std::unordered_set<folly::CIDRNetwork>{
-            routeUpdate.unicastRoutesToDelete.begin(),
-            routeUpdate.unicastRoutesToDelete.end()},
+            routeUpdate.unicastRoutesToDelete.cbegin(),
+            routeUpdate.unicastRoutesToDelete.cend()},
         thrift::PrefixDatabase().perfEvents_ref());
   }
 
