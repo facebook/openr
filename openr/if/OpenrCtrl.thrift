@@ -311,11 +311,11 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   list<AdvertisedRoute> getAreaAdvertisedRoutes(
     1: string area,
-    2: RouteFilterType RouteFilterType,
+    2: RouteFilterType routeFilterType,
   ) throws (1: OpenrError error);
   list<AdvertisedRoute> getAreaAdvertisedRoutesFiltered(
     1: string area,
-    2: RouteFilterType RouteFilterType,
+    2: RouteFilterType routeFilterType,
     3: AdvertisedRouteFilter filter,
   ) throws (1: OpenrError error);
 
