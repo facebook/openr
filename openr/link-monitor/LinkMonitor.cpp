@@ -1385,7 +1385,6 @@ LinkMonitor::logLinkEvent(
 
   LogSample sample{};
   const std::string event = isUp ? "UP" : "DOWN";
-
   sample.addString("event", folly::sformat("IFACE_{}", event));
   sample.addString("interface", iface);
   sample.addInt("backoff_ms", backoffTime.count());
@@ -1402,13 +1401,19 @@ LinkMonitor::logPeerEvent(
     const std::string& peerName,
     const thrift::PeerSpec& peerSpec) {
   LogSample sample{};
-
+  const auto& peerAddr = *peerSpec.peerAddr_ref();
+  const auto& ctrlPort = *peerSpec.ctrlPort_ref();
   sample.addString("event", event);
   sample.addString("node_name", nodeId_);
   sample.addString("peer_name", peerName);
-  sample.addString("cmd_url", *peerSpec.cmdUrl_ref());
+  sample.addString("peer_addr", peerAddr);
+  sample.addInt("ctrl_port", ctrlPort);
 
   logSampleQueue_.push(sample);
+
+  SYSLOG(INFO) << "[" << event << "] for " << peerName
+               << " with address: " << peerAddr
+               << ", port: " << std::to_string(ctrlPort);
 }
 
 bool
