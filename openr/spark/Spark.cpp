@@ -1440,7 +1440,7 @@ Spark::processHandshakeMsg(
         neighbor.area,
         neighbor.state != SparkNeighState::NEGOTIATE);
     LOG(INFO) << "Neighbor: (" << neighborName
-              << ") has NOT forming adj with us yet. "
+              << ") has NOT formed adj with us yet. "
               << "Reply to handshakeMsg immediately.";
   }
 
@@ -1810,7 +1810,7 @@ Spark::addInterface(
   for (const auto& ifName : toAdd) {
     auto newInterface = newInterfaceDb.at(ifName);
     auto ifIndex = newInterface.ifIndex;
-    CHECK_NE(ifIndex, 0) << "Cound not get ifIndex for Iface " << ifName;
+    CHECK_NE(ifIndex, 0) << "Could not get ifIndex for Iface " << ifName;
     LOG(INFO) << "Adding iface " << ifName << " for tracking with ifindex "
               << ifIndex;
 
