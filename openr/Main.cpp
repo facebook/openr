@@ -101,20 +101,30 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
   // TODO: handle case when openr received SIGTERM when waiting for fibService
   auto waitForFibStart = std::chrono::steady_clock::now();
   auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
+  auto switchState = thrift::SwitchRunState::UNINITIALIZED;
   folly::EventBase evb;
   std::shared_ptr<folly::AsyncSocket> socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
 
-  while (mainEvb.isRunning() &&
-         facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus) {
+  // Block until the Fib client is ALIVE, AND switch is ready to accept
+  // route updates (aka, of CONFIGURED or FIB_SYNCED state).
+  while (mainEvb.isRunning() and
+         (facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus or
+          (thrift::SwitchRunState::CONFIGURED != switchState and
+           thrift::SwitchRunState::FIB_SYNCED != switchState))) {
+    // TODO: As indicated in T87145565, FIB_SYNCED state will be deprecated in
+    // Fib wedge agent. If that happens, above condition checking FIB_SYNCED
+    // state could be removed.
     openr::Fib::createFibClient(evb, socket, client, port);
     try {
       fibStatus = client->sync_getStatus();
+      switchState = client->sync_getSwitchRunState();
     } catch (const std::exception& e) {
     }
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    LOG(INFO) << "Waiting for FibService to come up...";
+    LOG(INFO) << "Waiting for FibService to come up and be ready to accept "
+              << "route updates...";
   }
 
   auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
