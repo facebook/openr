@@ -123,11 +123,9 @@ class NlMessageFixture : public ::testing::Test {
     proc.wait();
 
     // add veth interface pair
-    cmd = "ip link add {} type veth peer name {}"_shellify(
-        kVethNameX.c_str(), kVethNameY.c_str());
-    folly::Subprocess proc1(std::move(cmd));
-    EXPECT_EQ(0, proc1.wait().exitStatus());
+    addIntfPair(kVethNameX, kVethNameY);
 
+    // add addresses for interfaces
     addAddress(kVethNameX, ipAddrX1V6.str(), 64);
     addAddress(kVethNameY, ipAddrY1V6.str(), 64);
     addAddress(kVethNameY, ipAddrY2V6.str(), 64);
@@ -176,10 +174,7 @@ class NlMessageFixture : public ::testing::Test {
     }
 
     // cleanup virtual interfaces
-    auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
-    folly::Subprocess proc(std::move(cmd));
-    // Ignore result
-    proc.wait();
+    deleteIntfPair(kVethNameX.c_str());
 
     // messaging::queue closing
     netlinkEventsQ.close();
@@ -189,6 +184,22 @@ class NlMessageFixture : public ::testing::Test {
 
     // print netlink counters
     printCounters();
+  }
+
+  void
+  addIntfPair(const std::string& ifNameA, const std::string& ifNameB) {
+    auto cmd = "ip link add {} type veth peer name {}"_shellify(
+        ifNameA.c_str(), ifNameB.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+  }
+
+  void
+  deleteIntfPair(const std::string& ifNameA) {
+    auto cmd = "ip link delete {}"_shellify(ifNameA.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    // Ignore result
+    proc.wait();
   }
 
   void
@@ -1913,6 +1924,78 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
 }
 
 /*
+ * Flap multiple links up and down and stress test link events
+ */
+TEST_F(NlMessageFixture, LinkFlapScaleTest) {
+  // Spawn RQueue to receive netlink event
+  auto netlinkEventsReader = netlinkEventsQ.getReader();
+  const int32_t linkCount{100};
+  const int32_t flapCount{10};
+
+  auto checkLinkEventCount = [&](int32_t cnt) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (cnt > 0) {
+      // check if it is beyond kProcTimeout
+      auto endTime = std::chrono::steady_clock::now();
+      if (endTime - startTime > kProcTimeout) {
+        ASSERT_TRUE(0) << fmt::format(
+            "Timeout receiving {} link event. Time limit: {}",
+            cnt,
+            kProcTimeout.count());
+      }
+      auto req = netlinkEventsReader.get(); // perform read
+      ASSERT_TRUE(req.hasValue());
+      // get_if returns `nullptr` if targeted variant is NOT populated
+      if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
+        --cnt;
+      }
+    }
+
+    auto endTime = std::chrono::steady_clock::now();
+    const auto elapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            endTime - startTime)
+            .count();
+
+    VLOG(1) << "Took: " << elapsedTime << "ms to receive all link events";
+  };
+
+  // Create link paris to stress testing link-flapping
+  for (int i = 0; i < linkCount; i++) {
+    const std::string vethNameA{"vethTestA" + std::to_string(i)};
+    const std::string vethNameB{"vethTestB" + std::to_string(i)};
+    addIntfPair(vethNameA, vethNameB);
+  }
+
+  // Simulate flapping of linkCount of links
+  for (int flap = 0; flap < flapCount; flap++) {
+    // Bring up links
+    for (int i = 0; i < linkCount; i++) {
+      const std::string vethNameA{"vethTestA" + std::to_string(i)};
+      const std::string vethNameB{"vethTestB" + std::to_string(i)};
+      bringUpIntf(vethNameA);
+      bringUpIntf(vethNameB);
+    }
+    // Bring down links
+    for (int i = 0; i < linkCount; i++) {
+      const std::string vethNameA{"vethTestA" + std::to_string(i)};
+      const std::string vethNameB{"vethTestB" + std::to_string(i)};
+      bringDownIntf(vethNameA);
+      bringDownIntf(vethNameB);
+    }
+  }
+
+  // Verify 2 * linkCount * flapCount (vethNameA + vethNameB) events
+  checkLinkEventCount(2 * linkCount * flapCount);
+
+  // Cleanup
+  for (int i = 0; i < linkCount; i++) {
+    const std::string vethNameA{"vethTestA" + std::to_string(i)};
+    deleteIntfPair(vethNameA);
+  }
+}
+
+/*
  * Add and remove 250 IPv4 and IPv6 addresses (total 500).
  * Verify addresses has been added/deleted from kernel.
  */
@@ -1971,13 +2054,13 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
 }
 
 /*
- * Add 100 neighbors and check if getAllNeighbors() API
+ * Add 100 IPV6 neighbors and check if getAllNeighbors() API
  * returns all of the neighbors.
  */
-TEST_F(NlMessageFixture, GetAllNeighbors) {
-  int countNeighbors{100};
+TEST_F(NlMessageFixture, GetAllNeighborsV6) {
+  const int countNeighbors{100};
+
   LOG(INFO) << "Adding " << countNeighbors << " test neighbors";
-  // Bring up neighbors
   for (int i = 0; i < countNeighbors; i++) {
     addNeighborEntry(
         kVethNameX,
@@ -1985,19 +2068,9 @@ TEST_F(NlMessageFixture, GetAllNeighbors) {
         kLinkAddr1);
   }
 
-  // Get links and neighbors
   LOG(INFO) << "Getting links and neighbors";
   auto links = nlSock->getAllLinks().get().value();
   auto neighbors = nlSock->getAllNeighbors().get().value();
-
-  // Find kVethNameX
-  int ifIndexX{-1};
-  for (const auto& link : links) {
-    if (link.getLinkName() == kVethNameX) {
-      ifIndexX = link.getIfIndex();
-    }
-  }
-  EXPECT_NE(ifIndexX, -1);
 
   int testNeighbors = 0;
   for (const auto& neighbor : neighbors) {
@@ -2011,11 +2084,9 @@ TEST_F(NlMessageFixture, GetAllNeighbors) {
       EXPECT_EQ(kLinkAddr1, neighbor.getLinkAddress());
     }
   }
-  // Check if Netlink returned all the test neighbors
   EXPECT_EQ(testNeighbors, countNeighbors);
   EXPECT_EQ(0, getErrorCount());
 
-  // Delete neighbors
   LOG(INFO) << "Deleting " << countNeighbors << " test neighbors";
   for (int i = 0; i < countNeighbors; i++) {
     deleteNeighborEntry(
@@ -2042,12 +2113,14 @@ TEST_F(NlMessageFixture, GetAllNeighbors) {
   EXPECT_EQ(testNeighbors, 0);
 }
 
+/*
+ * Add 100 IPV4 neighbors and check if getAllNeighbors() API
+ * returns all of the neighbors.
+ */
 TEST_F(NlMessageFixture, GetAllNeighborsV4) {
-  // Add 100 V4 neighbors and check if getAllNeighbors
-  // in NetlinkProtocolSocket returns the neighbors
-  int countNeighbors{100};
+  const int countNeighbors{100};
+
   LOG(INFO) << "Adding " << countNeighbors << " test V4 neighbors";
-  // Bring up neighbors
   for (int i = 0; i < countNeighbors; i++) {
     addV4NeighborEntry(
         kVethNameX,
@@ -2055,19 +2128,9 @@ TEST_F(NlMessageFixture, GetAllNeighborsV4) {
         kLinkAddr1);
   }
 
-  // Get links and neighbors
   LOG(INFO) << "Getting links and neighbors";
   auto links = nlSock->getAllLinks().get().value();
   auto neighbors = nlSock->getAllNeighbors().get().value();
-
-  // Find kVethNameX
-  int ifIndexX{-1};
-  for (const auto& link : links) {
-    if (link.getLinkName() == kVethNameX) {
-      ifIndexX = link.getIfIndex();
-    }
-  }
-  EXPECT_NE(ifIndexX, -1);
 
   int testNeighbors = 0;
   for (const auto& neighbor : neighbors) {
@@ -2080,11 +2143,9 @@ TEST_F(NlMessageFixture, GetAllNeighborsV4) {
       EXPECT_EQ(kLinkAddr1, neighbor.getLinkAddress());
     }
   }
-  // Check if Netlink returned all the test neighbors
   EXPECT_EQ(testNeighbors, countNeighbors);
   EXPECT_EQ(0, getErrorCount());
 
-  // Delete neighbors
   LOG(INFO) << "Deleting " << countNeighbors << " test neighbors";
   for (int i = 0; i < countNeighbors; i++) {
     deleteV4NeighborEntry(
