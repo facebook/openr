@@ -43,7 +43,7 @@ class NetlinkMessage {
   virtual ~NetlinkMessage();
 
   // construct message with type
-  NetlinkMessage(int type);
+  explicit NetlinkMessage(int type);
 
   // get pointer to NLMSG Header
   struct nlmsghdr* getMessagePtr();

@@ -17,7 +17,7 @@
 
 #include <folly/IPAddress.h>
 #include <openr/if/gen-cpp2/Network_types.h>
-#include <openr/nl/NetlinkMessage.h>
+#include <openr/nl/NetlinkMessageBase.h>
 #include <openr/nl/NetlinkTypes.h>
 
 #ifndef MPLS_IPTUNNEL_DST
@@ -29,7 +29,6 @@ namespace openr::fbnl {
 constexpr uint16_t kMaxLabels{16};
 constexpr uint32_t kLabelBosShift{8};
 constexpr uint32_t kLabelShift{12};
-constexpr uint32_t kLabelMask{0xFFFFF000};
 constexpr uint32_t kLabelSizeBits{20};
 
 /**

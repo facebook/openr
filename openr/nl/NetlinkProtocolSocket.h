@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <vector>
-
 #include <folly/IPAddress.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
@@ -17,7 +15,7 @@
 #include <folly/io/async/NotificationQueue.h>
 
 #include <openr/messaging/ReplicateQueue.h>
-#include <openr/nl/NetlinkMessage.h>
+#include <openr/nl/NetlinkMessageBase.h>
 #include <openr/nl/NetlinkRoute.h>
 #include <openr/nl/NetlinkTypes.h>
 

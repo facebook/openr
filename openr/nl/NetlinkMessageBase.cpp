@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/nl/NetlinkMessage.h>
+#include <openr/nl/NetlinkMessageBase.h>
 
 namespace openr::fbnl {
 
@@ -41,18 +41,18 @@ NetlinkMessage::getDataLength() const {
 struct rtattr*
 NetlinkMessage::addSubAttributes(
     struct rtattr* rta, int type, const void* data, uint32_t len) const {
+  struct rtattr* subrta{nullptr};
   uint32_t subRtaLen = RTA_LENGTH(len);
 
   if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > kMaxNlPayloadSize) {
     LOG(ERROR) << "No buffer for adding attr: " << type << " length: " << len;
-    return nullptr;
+    return subrta;
   }
 
   VLOG(3) << "Adding sub attribute. type=" << type << ", len=" << len;
 
   // add the subattribute
-  struct rtattr* subrta =
-      (struct rtattr*)(((char*)rta) + RTA_ALIGN(rta->rta_len));
+  subrta = (struct rtattr*)(((char*)rta) + RTA_ALIGN(rta->rta_len));
   subrta->rta_type = type;
   subrta->rta_len = subRtaLen;
   if (data) {
