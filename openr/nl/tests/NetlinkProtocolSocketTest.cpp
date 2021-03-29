@@ -203,10 +203,14 @@ class NlMessageFixture : public ::testing::Test {
   }
 
   void
-  addNeighborEntry(
+  addV6NeighborEntry(
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
+    VLOG(1) << fmt::format(
+        "Adding IPV6 neighbor entry for ip address: {}, mac address: {}",
+        nextHopIp.str(),
+        linkAddr.toString());
     auto cmd = "ip -6 neigh add {} lladdr {} nud reachable dev {}"_shellify(
         nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -214,11 +218,14 @@ class NlMessageFixture : public ::testing::Test {
   }
 
   void
-  deleteNeighborEntry(
+  deleteV6NeighborEntry(
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
-    // Now delete the neighbor entry from the system
+    VLOG(1) << fmt::format(
+        "Deleting IPV6 neighbor entry for ip address: {}, mac address: {}",
+        nextHopIp.str(),
+        linkAddr.toString());
     auto cmd = "ip -6 neigh del {} lladdr {} nud reachable dev {}"_shellify(
         nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -230,6 +237,10 @@ class NlMessageFixture : public ::testing::Test {
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
+    VLOG(1) << fmt::format(
+        "Adding ARP entry for ip address: {}, mac address: {}",
+        nextHopIp.str(),
+        linkAddr.toString());
     auto cmd = "ip neigh add {} lladdr {} nud reachable dev {}"_shellify(
         nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -241,7 +252,10 @@ class NlMessageFixture : public ::testing::Test {
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
-    // Now delete the neighbor entry from the system
+    VLOG(1) << fmt::format(
+        "Deleting ARP entry for ip address: {}, mac address: {}",
+        nextHopIp.str(),
+        linkAddr.toString());
     auto cmd = "ip neigh del {} lladdr {} nud reachable dev {}"_shellify(
         nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -731,7 +745,6 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   // Spawn RQueue to receive platformUpdate request for addr event
   auto netlinkEventsReader = netlinkEventsQ.getReader();
   std::unordered_map<int64_t, std::string> ifIndexToName;
-  std::unordered_map<std::string, openr::fbnl::IfAddress> addrEntryMap;
 
   // Create CIDRNetwork addresses
   const folly::CIDRNetwork ipAddrX{folly::IPAddress("face:b00c::1"), 128};
@@ -871,42 +884,63 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
 TEST_F(NlMessageFixture, NeighborEventPublication) {
   // spawn RQueue to receive platformUpdate request for neigh event
   auto netlinkEventsReader = netlinkEventsQ.getReader();
-  std::unordered_map<int, openr::fbnl::Neighbor> neighEntryMap;
+
+  // Create CIDRNetwork addresses
   const folly::IPAddress addressV4{"172.8.0.1"};
   const folly::IPAddress addressV6{"face:b00c::1"};
 
-  // add new neighbor entry associated with MAC address
-  addV4NeighborEntry(kVethNameX, addressV4, kLinkAddr1);
-  addNeighborEntry(kVethNameX, addressV6, kLinkAddr2);
-
-  while (neighEntryMap.size() < 2) {
-    auto req = netlinkEventsReader.get(); // perform read
-    ASSERT_TRUE(req.hasValue());
-    // get_if returns `nullptr` of targeted variant is NOT populated
-    if (auto* neigh = std::get_if<openr::fbnl::Neighbor>(&req.value())) {
-      // mapping of [AF_INET/AF_INET6 => neigh]
-      neighEntryMap.emplace(neigh->getFamily(), *neigh);
+  auto waitForNeighborEvent = [&](const folly::IPAddress& ipAddr,
+                                  const folly::MacAddress& macAddress,
+                                  const bool& isReachable) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (true) {
+      // check if it is beyond kProcTimeout
+      auto endTime = std::chrono::steady_clock::now();
+      if (endTime - startTime > kProcTimeout) {
+        ASSERT_TRUE(0) << fmt::format(
+            "Timeout receiving expected neighbor event for ip address: {}, mac address: {}, isReachable: {}, Time limit: {}",
+            ipAddr.str(),
+            macAddress.toString(),
+            isReachable,
+            kProcTimeout.count());
+      }
+      auto req = netlinkEventsReader.get(); // perform read
+      ASSERT_TRUE(req.hasValue());
+      // get_if returns `nullptr` if targeted variant is NOT populated
+      if (auto* neigh = std::get_if<openr::fbnl::Neighbor>(&req.value())) {
+        if (neigh->getDestination() == ipAddr and
+            neigh->isReachable() == isReachable and
+            neigh->getFamily() == (ipAddr.isV4() ? AF_INET : AF_INET6)) {
+          // ATTN: neighbor delete msg doesn't have link address field populated
+          if (isReachable and neigh->getLinkAddress().has_value() and
+              neigh->getLinkAddress().value() == macAddress) {
+            return;
+          } else if (
+              (not isReachable) and (not neigh->getLinkAddress().has_value())) {
+            return;
+          }
+        }
+      }
+      // yield CPU
+      std::this_thread::yield();
     }
+  };
+
+  {
+    addV4NeighborEntry(kVethNameX, addressV4, kLinkAddr1);
+    addV6NeighborEntry(kVethNameX, addressV6, kLinkAddr2);
+
+    waitForNeighborEvent(addressV4, kLinkAddr1, true);
+    waitForNeighborEvent(addressV6, kLinkAddr2, true);
   }
-  ASSERT_TRUE(neighEntryMap.count(AF_INET));
-  ASSERT_TRUE(neighEntryMap.count(AF_INET6));
 
-  // verify V4 entry(ARP entry)
-  auto neighV4 = neighEntryMap.at(AF_INET);
-  EXPECT_EQ(neighV4.getDestination(), addressV4);
-  EXPECT_EQ(neighV4.isReachable(), true);
-  ASSERT_TRUE(neighV4.getLinkAddress().has_value());
-  EXPECT_EQ(neighV4.getLinkAddress().value(), kLinkAddr1);
+  {
+    deleteV4NeighborEntry(kVethNameX, addressV4, kLinkAddr1);
+    deleteV6NeighborEntry(kVethNameX, addressV6, kLinkAddr2);
 
-  // verify V6 entry(NEIGHBOR entry)
-  auto neighV6 = neighEntryMap.at(AF_INET6);
-  EXPECT_EQ(neighV6.getDestination(), addressV6);
-  EXPECT_EQ(neighV6.isReachable(), true);
-  ASSERT_TRUE(neighV6.getLinkAddress().has_value());
-  EXPECT_EQ(neighV6.getLinkAddress().value(), kLinkAddr2);
-
-  // verify ifIndex is SAME for same veth interface
-  EXPECT_EQ(neighV4.getIfIndex(), neighV6.getIfIndex());
+    waitForNeighborEvent(addressV4, kLinkAddr1, false);
+    waitForNeighborEvent(addressV6, kLinkAddr2, false);
+  }
 }
 
 /*
@@ -2062,7 +2096,7 @@ TEST_F(NlMessageFixture, GetAllNeighborsV6) {
 
   LOG(INFO) << "Adding " << countNeighbors << " test neighbors";
   for (int i = 0; i < countNeighbors; i++) {
-    addNeighborEntry(
+    addV6NeighborEntry(
         kVethNameX,
         folly::IPAddress{"face:b00c::" + std::to_string(i)},
         kLinkAddr1);
@@ -2089,7 +2123,7 @@ TEST_F(NlMessageFixture, GetAllNeighborsV6) {
 
   LOG(INFO) << "Deleting " << countNeighbors << " test neighbors";
   for (int i = 0; i < countNeighbors; i++) {
-    deleteNeighborEntry(
+    deleteV6NeighborEntry(
         kVethNameX,
         folly::IPAddress{"face:b00c::" + std::to_string(i)},
         kLinkAddr1);
