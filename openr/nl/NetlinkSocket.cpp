@@ -13,9 +13,8 @@ namespace openr::fbnl {
 
 NetlinkSocket::NetlinkSocket(
     fbzmq::ZmqEventLoop* evl,
-    EventsHandler* handler,
     std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock)
-    : evl_(evl), handler_(handler), nlSock_(std::move(nlSock)) {
+    : evl_(evl), nlSock_(std::move(nlSock)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
   CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
 
@@ -57,10 +56,6 @@ NetlinkSocket::doHandleLinkEvent(Link link, bool runHandler) noexcept {
   if (!linkAttr.isUp) {
     removeNeighborCacheEntries(linkName);
   }
-  if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
-    EventVariant event = std::move(link);
-    handler_->handleEvent(linkName, event);
-  }
 }
 
 void
@@ -87,11 +82,6 @@ NetlinkSocket::doHandleAddrEvent(IfAddress ifAddr, bool runHandler) noexcept {
       it->second.networks.erase(ifAddr.getPrefix().value());
     }
   }
-
-  if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
-    EventVariant event = std::move(ifAddr);
-    handler_->handleEvent(ifName, event);
-  }
 }
 
 void
@@ -107,12 +97,6 @@ NetlinkSocket::doHandleNeighborEvent(
     neighborUpdate.addNeighbor(neighbor.getDestination().str());
   } else {
     neighborUpdate.delNeighbor(neighbor.getDestination().str());
-  }
-
-  if (handler_ && runHandler && eventFlags_[NEIGH_EVENT]) {
-    NeighborBuilder nhBuilder;
-    EventVariant event = std::move(neighbor);
-    handler_->handleEvent(ifName, event);
   }
 }
 
@@ -804,41 +788,6 @@ NetlinkSocket::updateRouteCache() {
 std::vector<fbnl::Route>
 NetlinkSocket::getAllRoutes() const {
   return nlSock_->getAllRoutes().get().value();
-}
-
-void
-NetlinkSocket::subscribeEvent(NetlinkEventType event) {
-  if (event >= MAX_EVENT_TYPE) {
-    return;
-  }
-  eventFlags_.set(event);
-}
-
-void
-NetlinkSocket::unsubscribeEvent(NetlinkEventType event) {
-  if (event >= MAX_EVENT_TYPE) {
-    return;
-  }
-  eventFlags_.reset(event);
-}
-
-void
-NetlinkSocket::subscribeAllEvents() {
-  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
-    eventFlags_.set(i);
-  }
-}
-
-void
-NetlinkSocket::unsubscribeAllEvents() {
-  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
-    eventFlags_.reset(i);
-  }
-}
-
-void
-NetlinkSocket::setEventHandler(EventsHandler* handler) {
-  handler_ = handler;
 }
 
 } // namespace openr::fbnl

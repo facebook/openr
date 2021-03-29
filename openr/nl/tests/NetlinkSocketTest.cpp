@@ -57,16 +57,6 @@ const uint32_t kAqRouteProtoId1Priority = 255;
 // which the UT can use to add routes (via interface)
 class NetlinkSocketFixture : public testing::Test {
  public:
-  struct RouteCallbackContext {
-    struct nl_cache* routeCache{nullptr};
-    std::vector<Route> results;
-  };
-
-  struct AddressCallbackContext {
-    struct nl_cache* linkeCache{nullptr};
-    std::vector<IfAddress> results;
-  };
-
   NetlinkSocketFixture() = default;
   ~NetlinkSocketFixture() override = default;
 
@@ -106,8 +96,8 @@ class NetlinkSocketFixture : public testing::Test {
     evb.waitUntilRunning();
 
     // create netlink route socket
-    netlinkSocket = std::make_unique<NetlinkSocket>(
-        &evl, nullptr, std::move(nlProtocolSocket));
+    netlinkSocket =
+        std::make_unique<NetlinkSocket>(&evl, std::move(nlProtocolSocket));
 
     // Run the zmq event loop in its own thread
     // We will either timeout if expected events are not received

@@ -38,10 +38,6 @@ struct PrefixCmp {
  * For testability:
  *   Making the public interfaces VIRTUAL to make it works with GMock framework
 
- * For events subscription:
- *   User can use NetlinkSocket::EventsHandler to implement events handlers then
- *   using sub/unsub APIs to control events subscription
- *
  * A ZmqEventLoop is provided which the implementation uses to register
  * socket fds. Caller is responsible for running the zmq event loop.
  *
@@ -59,45 +55,6 @@ struct PrefixCmp {
  */
 class NetlinkSocket {
  public:
-  // A simple collection of handlers invoked on relevant netlink events. If
-  // caller is not interested in a handler, it can simply not override it
-  class EventsHandler {
-   public:
-    EventsHandler() = default;
-    virtual ~EventsHandler() = default;
-
-    // Callback invoked by NetlinkSocket when registered event happens
-    void
-    handleEvent(const std::string& ifName, const EventVariant& event) noexcept {
-      std::visit(EventVisitor(ifName, this), event);
-    }
-
-    virtual void
-    linkEventFunc(
-        const std::string& /* ifName */,
-        const openr::fbnl::Link& /* linkEntry */) noexcept {
-      LOG(FATAL) << "linkEventFunc is not implemented";
-    }
-
-    virtual void
-    neighborEventFunc(
-        const std::string& /* ifName */,
-        const openr::fbnl::Neighbor& /* neighborEntry */) noexcept {
-      LOG(FATAL) << "neighborEventFunc is not implemented";
-    }
-
-    virtual void
-    addrEventFunc(
-        const std::string& /* ifName */,
-        const openr::fbnl::IfAddress& /* addrEntry */) noexcept {
-      LOG(FATAL) << "addrEventFunc is not implemented";
-    }
-
-   private:
-    EventsHandler(const EventsHandler&) = delete;
-    EventsHandler& operator=(const EventsHandler&) = delete;
-  };
-
   class NeighborUpdate {
    public:
     NeighborUpdate() = default;
@@ -127,31 +84,8 @@ class NetlinkSocket {
     std::vector<std::string> removed_;
   };
 
-  struct EventVisitor {
-    std::string linkName;
-    EventsHandler* eventHandler;
-    EventVisitor(const std::string& ifName, EventsHandler* handler)
-        : linkName(ifName), eventHandler(handler) {}
-
-    void
-    operator()(openr::fbnl::IfAddress const& addr) const {
-      eventHandler->addrEventFunc(linkName, addr);
-    }
-
-    void
-    operator()(openr::fbnl::Neighbor const& neigh) const {
-      eventHandler->neighborEventFunc(linkName, neigh);
-    }
-
-    void
-    operator()(openr::fbnl::Link const& link) const {
-      eventHandler->linkEventFunc(linkName, link);
-    }
-  };
-
   explicit NetlinkSocket(
       fbzmq::ZmqEventLoop* evl,
-      EventsHandler* handler = nullptr,
       std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock = nullptr);
 
   virtual ~NetlinkSocket();
@@ -311,27 +245,6 @@ class NetlinkSocket {
   // get all routes from kernel
   std::vector<fbnl::Route> getAllRoutes() const;
 
-  /**
-   * Subscribe specific event
-   * No effect for invalid event types
-   * NOTE: By default NetlinkSocket subscribes NO event
-   */
-  void subscribeEvent(NetlinkEventType event);
-
-  /**
-   * Unsubscribe specific event
-   * No effect for invalid event types
-   */
-  void unsubscribeEvent(NetlinkEventType event);
-
-  // Subscribe all supported events
-  void subscribeAllEvents();
-
-  // Unsubscribe all events
-  void unsubscribeAllEvents();
-
-  void setEventHandler(EventsHandler* handler);
-
   // Expose pointer to underlying protocol socket
   NetlinkProtocolSocket*
   getProtocolSocket() {
@@ -392,8 +305,6 @@ class NetlinkSocket {
    */
   NlMplsRoutesDb mplsRoutesCache_;
 
-  EventsHandler* handler_{nullptr};
-
   std::optional<int> loopbackIfIndex_;
 
   /**
@@ -402,9 +313,6 @@ class NetlinkSocket {
    */
   NlNeighbors neighbors_{};
   NlLinks links_{};
-
-  // Indicating to run which event type's handler
-  folly::ConcurrentBitSet<MAX_EVENT_TYPE> eventFlags_;
 
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock_{nullptr};
 };

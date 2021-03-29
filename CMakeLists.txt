@@ -399,25 +399,6 @@ if(BUILD_TESTS)
     ${GMOCK_INCLUDE_DIRS}
   )
 
-  add_executable(netlink_socket_sample
-    openr/nl/examples/NetlinkSocketSample.cpp
-  )
-
-  target_link_libraries(netlink_socket_sample
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${GLOG}
-    ${GFLAGS}
-    Folly::folly
-    ${FOLLY_EXCEPTION_TRACER}
-    -lpthread
-  )
-
-  install(TARGETS
-    netlink_socket_sample
-    DESTINATION sbin
-  )
-
   # function that adds tests, typical usage example:
   # add_openr_test(TestName test_bin_name
   #   SOURCES Feature1Test.cpp Feature2Test.cpp
