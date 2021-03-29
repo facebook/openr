@@ -17,32 +17,10 @@ NetlinkSocket::NetlinkSocket(
     std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock)
     : evl_(evl), handler_(handler), nlSock_(std::move(nlSock)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
-
   CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
 
   // Instantiate local link and neighbor caches
   getAllReachableNeighbors().get();
-
-  // Pass link and address callbacks to NetlinkProtocolSocket
-  nlSock_->setLinkEventCB(
-      [this](openr::fbnl::Link link, bool runHandler) noexcept {
-        evl_->runImmediatelyOrInEventLoop([this,
-                                           link = std::move(link),
-
-                                           runHandler = runHandler]() mutable {
-          doHandleLinkEvent(link, runHandler);
-        });
-      });
-
-  nlSock_->setAddrEventCB(
-      [this](openr::fbnl::IfAddress ifAddr, bool runHandler) noexcept {
-        evl_->runImmediatelyOrInEventLoop([this,
-                                           ifAddr = std::move(ifAddr),
-
-                                           runHandler = runHandler]() mutable {
-          doHandleAddrEvent(ifAddr, runHandler);
-        });
-      });
 
   // need to reload routes from kernel to avoid re-adding existing route
   // type of exception in NetlinkSocket

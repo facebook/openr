@@ -158,20 +158,6 @@ NetlinkProtocolSocket::handlerReady(uint16_t events) noexcept {
 }
 
 void
-NetlinkProtocolSocket::setLinkEventCB(
-    std::function<void(fbnl::Link, bool)> linkEventCB) {
-  CHECK(!linkEventCB_) << "Callback can be registered only once";
-  linkEventCB_ = linkEventCB;
-}
-
-void
-NetlinkProtocolSocket::setAddrEventCB(
-    std::function<void(fbnl::IfAddress, bool)> addrEventCB) {
-  CHECK(!addrEventCB_) << "Callback can be registered only once";
-  addrEventCB_ = addrEventCB;
-}
-
-void
 NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
   VLOG(2) << "Completed netlink request. seq=" << ack << ", retval=" << status;
   if (std::abs(status) != EEXIST && std::abs(status) != ESRCH && status != 0) {
@@ -333,11 +319,6 @@ NetlinkProtocolSocket::processMessage(
         // Link notification
         VLOG(1) << "Link event. " << link.str();
         fbData->addStatValue("netlink.notifications.link", 1, fb303::SUM);
-        if (linkEventCB_) {
-          linkEventCB_(link, true);
-        }
-
-        // notification via replicateQueue
         netlinkEventsQueue_.push(link);
       }
     } break;
@@ -372,11 +353,6 @@ NetlinkProtocolSocket::processMessage(
         // IfAddress notification
         VLOG(1) << "Address event. " << addr.str();
         fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
-        if (addrEventCB_) {
-          addrEventCB_(addr, true);
-        }
-
-        // notification via replicateQueue
         netlinkEventsQueue_.push(addr);
       }
     } break;
@@ -393,7 +369,7 @@ NetlinkProtocolSocket::processMessage(
         nlSeqIt->second->rcvdNeighbor(std::move(neighbor));
       } else {
         // Neighbor notification
-        VLOG(2) << "Netlink neighbor event. " << neighbor.str();
+        VLOG(2) << "Neighbor event. " << neighbor.str();
         fbData->addStatValue("netlink.notifications.neighbor", 1, fb303::SUM);
         netlinkEventsQueue_.push(neighbor);
       }
