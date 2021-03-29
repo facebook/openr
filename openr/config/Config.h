@@ -282,6 +282,14 @@ class Config {
     return config_.area_policies_ref().to_optional();
   }
 
+  //
+  // VIP thrift injection service
+  //
+  bool
+  isVipServiceEnabled() const {
+    return config_.enable_vip_service_ref().value_or(false);
+  }
+
  private:
   void populateInternalDb();
 

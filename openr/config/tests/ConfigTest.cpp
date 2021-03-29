@@ -573,6 +573,13 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalid.enable_watchdog_ref() = true;
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
+
+  // vip service
+  {
+    auto conf = getBasicOpenrConfig();
+    conf.enable_vip_service_ref() = true;
+    EXPECT_TRUE(Config(conf).isVipServiceEnabled());
+  }
 }
 
 TEST(ConfigTest, GeneralGetter) {
@@ -609,6 +616,8 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
     // enable_v4_over_v6_nexthop
     EXPECT_FALSE(config.isV4OverV6NexthopEnabled());
+    // enable_vip_service
+    EXPECT_FALSE(config.isVipServiceEnabled());
 
     // getSparkConfig
     EXPECT_EQ(*tConfig.spark_config_ref(), config.getSparkConfig());

@@ -661,6 +661,9 @@ struct OpenrConfig {
    */
   55: i32 adj_hold_time_s = 4;
 
+  # vip thrift injection service
+  90: optional bool enable_vip_service;
+
   # bgp
   100: optional bool enable_bgp_peering;
   102: optional BgpConfig.BgpConfig bgp_config;
