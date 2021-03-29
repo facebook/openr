@@ -223,15 +223,15 @@ PrefixManager::PrefixManager(
 
   // Load openrConfig for local-originated routes
   if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
-    std::vector<PrefixEntry> advertisedPrefixes{};
-    std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
-
     // read originated prefixes from OpenrConfig
     buildOriginatedPrefixDb(*prefixes);
 
-    // ATTN: consider min_supporting_route = 0, immediately advertising
-    // them to `KvStore`
+    std::vector<PrefixEntry> advertisedPrefixes{};
+    std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
     processOriginatedPrefixes(advertisedPrefixes, withdrawnPrefixes);
+
+    // ATTN: consider min_supporting_route = 0, immediately advertise
+    // originated routes to `KvStore`
     advertisePrefixesImpl(advertisedPrefixes);
   }
 }

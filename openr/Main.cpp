@@ -295,6 +295,12 @@ main(int argc, char** argv) {
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
 
+  // Create the readers in the first place to make sure they can receive every
+  // messages from the writer(s)
+  auto decisionStaticRouteUpdatesQueueReader =
+      staticRouteUpdatesQueue.getReader();
+  auto fibStaticRouteUpdatesQueueReader = staticRouteUpdatesQueue.getReader();
+
   // structures to organize our modules
   std::vector<std::thread> allThreads;
   std::vector<std::unique_ptr<OpenrEventBase>> orderedEvbs;
@@ -535,7 +541,7 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
           std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
           kvStoreUpdatesQueue.getReader(),
-          staticRouteUpdatesQueue.getReader(),
+          std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));
 
   // Define and start Fib Module
@@ -549,7 +555,7 @@ main(int argc, char** argv) {
           *config->getConfig().fib_port_ref(),
           std::chrono::seconds(3 * *sparkConf.keepalive_time_s_ref()),
           routeUpdatesQueue.getReader(),
-          staticRouteUpdatesQueue.getReader(),
+          std::move(fibStaticRouteUpdatesQueueReader),
           fibUpdatesQueue,
           logSampleQueue));
 

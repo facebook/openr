@@ -1445,21 +1445,70 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
 
 class RouteOriginationOverrideFixture : public RouteOriginationFixture {
  public:
+  void
+  SetUp() override {
+    // We register the read in the beginning of the test
+    earlyStaticRoutesReaderPtr =
+        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
+            staticRouteUpdatesQueue.getReader());
+
+    // Other set ups
+    RouteOriginationFixture::SetUp();
+  }
+
   openr::thrift::OpenrConfig
   createConfig() override {
     thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
     originatedPrefixV4.prefix_ref() = v4Prefix_;
     originatedPrefixV6.prefix_ref() = v6Prefix_;
+
     // ATTN: specify supporting route cnt to be 0 for immediate advertisement
     originatedPrefixV4.minimum_supporting_routes_ref() = 0;
     originatedPrefixV6.minimum_supporting_routes_ref() = 0;
+
+    // Make sure we install the prefixes to FIB
+    originatedPrefixV4.install_to_fib_ref() = true;
+    originatedPrefixV6.install_to_fib_ref() = false; // we can check both cases
 
     auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
     tConfig.originated_prefixes_ref() = {
         originatedPrefixV4, originatedPrefixV6};
     return tConfig;
   }
+
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+  getEarlyStaticRoutesReaderPtr() {
+    return earlyStaticRoutesReaderPtr;
+  }
+
+ private:
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+      earlyStaticRoutesReaderPtr;
 };
+
+TEST_F(RouteOriginationOverrideFixture, StaticRoutesAnnounce) {
+  auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
+
+  auto update = waitForRouteUpdate(*staticRoutesReaderPtr, kRouteUpdateTimeout);
+  EXPECT_TRUE(update.has_value());
+
+  auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+  auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+  EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+  EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+  // Verify that the destination is the v4 address
+  const auto& route = updatedRoutes.back();
+  EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+
+  // Verify the next hop address is also v4 address
+  const auto& nhs = *route.nextHops_ref();
+  EXPECT_THAT(nhs, testing::SizeIs(1));
+  EXPECT_THAT(
+      nhs,
+      testing::UnorderedElementsAre(createNextHop(
+          toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()))));
+}
 
 //
 // Test case to verify prefix/attributes aligns with config read from
@@ -1854,13 +1903,88 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   }
 }
 
-class RouteOriginationV4OverV6Fixture : public RouteOriginationFixture {
+class RouteOriginationV4OverV6ZeroSupportFixture
+    : public RouteOriginationFixture {
+ public:
+  void
+  SetUp() override {
+    // We register the read in the beginning of the test
+    earlyStaticRoutesReaderPtr =
+        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
+            staticRouteUpdatesQueue.getReader());
+
+    // Other set ups
+    RouteOriginationFixture::SetUp();
+  }
+
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = 0;
+    originatedPrefixV4.install_to_fib_ref() = true;
+
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {originatedPrefixV4};
+    // Enable v4 over v6 nexthop feature
+    tConfig.v4_over_v6_nexthop_ref() = true;
+    tConfig_ = tConfig;
+    return tConfig;
+  }
+
+  const openr::thrift::OpenrConfig
+  getConfig() const {
+    return tConfig_;
+  }
+
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+  getEarlyStaticRoutesReaderPtr() {
+    return earlyStaticRoutesReaderPtr;
+  }
+
+ private:
+  thrift::OpenrConfig tConfig_;
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+      earlyStaticRoutesReaderPtr;
+};
+
+TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, ConfigVerification) {
+  const auto tConfig = getConfig();
+  EXPECT_TRUE(tConfig.v4_over_v6_nexthop_ref());
+}
+
+TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, StateRouteAnnounce) {
+  auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
+
+  auto update = waitForRouteUpdate(*staticRoutesReaderPtr, kRouteUpdateTimeout);
+  EXPECT_TRUE(update.has_value());
+
+  auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+  auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+  EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+  EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+  // verify thrift::NextHopThrift struct
+  const auto& route = updatedRoutes.back();
+  EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+
+  const auto& nhs = *route.nextHops_ref();
+  EXPECT_THAT(nhs, testing::SizeIs(1));
+  // we expect the nexthop is V6
+  EXPECT_THAT(
+      nhs,
+      testing::UnorderedElementsAre(createNextHop(
+          toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()))));
+}
+
+class RouteOriginationV4OverV6NonZeroSupportFixture
+    : public RouteOriginationFixture {
  public:
   openr::thrift::OpenrConfig
   createConfig() override {
-    thrift::OriginatedPrefix originatedPrefixV4; // only to test v4 prefix
+    thrift::OriginatedPrefix originatedPrefixV4;
     originatedPrefixV4.prefix_ref() = v4Prefix_;
-    originatedPrefixV4.minimum_supporting_routes_ref() = 1;
+    originatedPrefixV4.minimum_supporting_routes_ref() = 2; // 2 support pfxs
     originatedPrefixV4.install_to_fib_ref() = true;
 
     auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
@@ -1880,29 +2004,46 @@ class RouteOriginationV4OverV6Fixture : public RouteOriginationFixture {
   thrift::OpenrConfig tConfig_;
 };
 
-TEST_F(RouteOriginationV4OverV6Fixture, V4OverV6NexthopTest) {
-  const auto tConfig = getConfig();
-  EXPECT_TRUE(tConfig.v4_over_v6_nexthop_ref());
-
+TEST_F(
+    RouteOriginationV4OverV6NonZeroSupportFixture,
+    StaticRoutesAnnounceNeedsSupport) {
   auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
 
-  // This prefix only acts as "supporting prefix".
-  // Otherwise, we cannot get the element in the staticRouteUpdatesQueue.
-  const std::string v4Prefix_1 = "192.108.0.8/30";
+  // Supporting prefix number 1
+  // Note the v4Prefix is 192.108.0.1/24 :-)
+  const std::string v4Prefix_1 = "192.108.0.11/30";
   const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
   const auto prefixEntryV4_1 =
       createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
   auto unicastEntryV4_1 = RibUnicastEntry(
       v4Network_1,
-      {nh_v6}, // V6 nexthop is the key changes with v4 over v6 nexthop :-)
+      {nh_v6}, // doesn't matter but we are enabling v6 nexthop only :-)
       prefixEntryV4_1,
       thrift::Types_constants::kDefaultArea());
-  DecisionRouteUpdate routeUpdate;
-  routeUpdate.addRouteToUpdate(unicastEntryV4_1);
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.addRouteToUpdate(unicastEntryV4_1);
+  routeUpdatesQueue.push(std::move(routeUpdate1));
 
   auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
-  EXPECT_TRUE(update.has_value());
+  EXPECT_FALSE(update.has_value()); // we need two supports, but only has 1
+
+  // Supporting prefix number 2
+  // Note the v4Prefix is 192.108.0.1/24 :-)
+  const std::string v4Prefix_2 = "192.108.0.22/30";
+  const auto v4Network_2 = folly::IPAddress::createNetwork(v4Prefix_2);
+  const auto prefixEntryV4_2 =
+      createPrefixEntry(toIpPrefix(v4Prefix_2), thrift::PrefixType::DEFAULT);
+  auto unicastEntryV4_2 = RibUnicastEntry(
+      v4Network_2,
+      {nh_v6}, // doesn't matter but we are enabling v6 nexhop only :-)
+      prefixEntryV4_2,
+      thrift::Types_constants::kDefaultArea());
+  DecisionRouteUpdate routeUpdate2;
+  routeUpdate2.addRouteToUpdate(unicastEntryV4_2);
+  routeUpdatesQueue.push(std::move(routeUpdate2));
+
+  update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+  EXPECT_TRUE(update.has_value()); // now we have two ;-)
 
   auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
   auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
