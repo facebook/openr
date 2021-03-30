@@ -944,6 +944,40 @@ TEST_F(NlMessageFixture, NeighborEventPublication) {
 }
 
 /*
+ * Add and delete duplicate interface addresses to make sure
+ * NetlinkProtocolSocket can take care of duplicate requests
+ */
+TEST_F(NlMessageFixture, AddDelDuplicateIfAddress) {
+  auto network = folly::IPAddress::createNetwork("fc00:cafe:4::4/128");
+  openr::fbnl::IfAddressBuilder builder;
+
+  auto ifAddr = builder.setPrefix(network)
+                    .setIfIndex(ifIndexX)
+                    .setScope(RT_SCOPE_UNIVERSE)
+                    .setValid(true)
+                    .build();
+  auto ifAddrDup = ifAddr; // NOTE: explicit copy
+
+  auto before = nlSock->getAllIfAddresses().get().value();
+
+  // Add new interface address
+  EXPECT_EQ(0, nlSock->addIfAddress(ifAddr).get());
+  // Add duplicated address entry. -EEXIST error.
+  EXPECT_EQ(-EEXIST, nlSock->addIfAddress(ifAddrDup).get());
+
+  auto after = nlSock->getAllIfAddresses().get().value();
+  EXPECT_EQ(before.size() + 1, after.size());
+
+  // delete interface address
+  EXPECT_EQ(0, nlSock->deleteIfAddress(ifAddr).get());
+  // Double delete. -EADDRNOTAVAIL error.
+  EXPECT_EQ(-EADDRNOTAVAIL, nlSock->deleteIfAddress(ifAddrDup).get());
+
+  auto kernelAddresses = nlSock->getAllIfAddresses().get().value();
+  EXPECT_EQ(before.size(), kernelAddresses.size());
+}
+
+/*
  * Check empty route from kernel
  */
 TEST_F(NlMessageFixture, EmptyRoute) {
