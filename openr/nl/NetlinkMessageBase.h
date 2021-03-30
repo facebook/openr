@@ -36,14 +36,14 @@ constexpr uint16_t kMaxNlPayloadSize{4096};
  *
  * Maximum size of message is limited by `kMaxNlPayloadSize` parameter.
  */
-class NetlinkMessage {
+class NetlinkMessageBase {
  public:
-  NetlinkMessage();
+  NetlinkMessageBase();
 
-  virtual ~NetlinkMessage();
+  virtual ~NetlinkMessageBase();
 
   // construct message with type
-  explicit NetlinkMessage(int type);
+  explicit NetlinkMessageBase(int type);
 
   // get pointer to NLMSG Header
   struct nlmsghdr* getMessagePtr();
@@ -126,8 +126,8 @@ class NetlinkMessage {
 
  private:
   // disable copy, assign constructores
-  NetlinkMessage(NetlinkMessage const&) = delete;
-  NetlinkMessage& operator=(NetlinkMessage const&) = delete;
+  NetlinkMessageBase(NetlinkMessageBase const&) = delete;
+  NetlinkMessageBase& operator=(NetlinkMessageBase const&) = delete;
 
   // pointer to the netlink message header
   struct nlmsghdr* const msghdr{nullptr};

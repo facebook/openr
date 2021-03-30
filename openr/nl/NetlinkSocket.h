@@ -8,9 +8,7 @@
 #pragma once
 
 #include <fbzmq/async/ZmqEventLoop.h>
-#include <folly/ConcurrentBitSet.h>
 #include <folly/IPAddress.h>
-#include <folly/String.h>
 #include <folly/futures/Future.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 

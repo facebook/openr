@@ -15,8 +15,11 @@
 #include <folly/io/async/NotificationQueue.h>
 
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/nl/NetlinkAddrMessage.h>
+#include <openr/nl/NetlinkLinkMessage.h>
 #include <openr/nl/NetlinkMessageBase.h>
-#include <openr/nl/NetlinkRoute.h>
+#include <openr/nl/NetlinkNeighborMessage.h>
+#include <openr/nl/NetlinkRouteMessage.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr::fbnl {
@@ -234,9 +237,9 @@ class NetlinkProtocolSocket : public folly::EventHandler {
 
   // Notification queue for thread safe enqueuing of messages from external
   // threads. All the messages enqueued are processed by the event thread.
-  folly::NotificationQueue<std::unique_ptr<NetlinkMessage>> notifQueue_;
+  folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>> notifQueue_;
   std::unique_ptr<
-      folly::NotificationQueue<std::unique_ptr<NetlinkMessage>>::Consumer,
+      folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>>::Consumer,
       folly::DelayedDestruction::Destructor>
       notifConsumer_;
 
@@ -272,13 +275,14 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // translates into one or more NetlinkMessages. These messages are first
   // stored in the queue and sent to kernel in rate limiting fashion. When ack
   // for in-flight messages is received, subsequent messages are sent.
-  std::queue<std::unique_ptr<NetlinkMessage>> msgQueue_;
+  std::queue<std::unique_ptr<NetlinkMessageBase>> msgQueue_;
 
   // Sequence number to NetlinkMesage request mapping. Each in-flight message
   // sent to kernel, is assigned a unique sequence-number and stored in this
   // map. On receipt of ack from kernel (either success or error) we clear the
   // corresponding entry from this map.
-  std::unordered_map<uint32_t, std::shared_ptr<NetlinkMessage>> nlSeqNumMap_;
+  std::unordered_map<uint32_t, std::shared_ptr<NetlinkMessageBase>>
+      nlSeqNumMap_;
 
   // Timer to help keep track of timeout of messages sent to kernel. It also
   // ensures the aliveness of the netlink socket-fd. Timer is

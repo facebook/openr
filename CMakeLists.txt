@@ -201,9 +201,12 @@ add_library(openrlib
   openr/kvstore/KvStoreWrapper.cpp
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
+  openr/nl/NetlinkAddrMessage.cpp
+  openr/nl/NetlinkLinkMessage.cpp
+  openr/nl/NetlinkNeighborMessage.cpp
+  openr/nl/NetlinkRouteMessage.cpp
   openr/nl/NetlinkMessageBase.cpp
   openr/nl/NetlinkProtocolSocket.cpp
-  openr/nl/NetlinkRoute.cpp
   openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
   openr/monitor/LogSample.cpp

@@ -7,18 +7,16 @@
 
 #pragma once
 
-#include <linux/lwtunnel.h>
-#include <linux/mpls.h>
-#include <linux/rtnetlink.h>
-#include <net/if_arp.h>
-#include <netinet/ether.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-
 #include <folly/IPAddress.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/nl/NetlinkMessageBase.h>
 #include <openr/nl/NetlinkTypes.h>
+
+extern "C" {
+#include <linux/lwtunnel.h>
+#include <linux/mpls.h>
+#include <linux/rtnetlink.h>
+}
 
 #ifndef MPLS_IPTUNNEL_DST
 #define MPLS_IPTUNNEL_DST 1
@@ -34,7 +32,7 @@ constexpr uint32_t kLabelSizeBits{20};
 /**
  * Message specialization for ROUTE object
  */
-class NetlinkRouteMessage final : public NetlinkMessage {
+class NetlinkRouteMessage final : public NetlinkMessageBase {
  public:
   NetlinkRouteMessage();
 
@@ -165,121 +163,6 @@ class NetlinkRouteMessage final : public NetlinkMessage {
 
   folly::Promise<folly::Expected<std::vector<Route>, int>> routePromise_;
   std::vector<Route> rcvdRoutes_;
-};
-
-/**
- * Message specialization for LINK object
- */
-class NetlinkLinkMessage final : public NetlinkMessage {
- public:
-  NetlinkLinkMessage();
-
-  ~NetlinkLinkMessage() override;
-
-  // Override setReturnStatus. Set linkPromise_ with rcvdLinks_
-  void setReturnStatus(int status) override;
-
-  // Get future for received links in response to GET request
-  folly::SemiFuture<folly::Expected<std::vector<Link>, int>>
-  getLinksSemiFuture() {
-    return linkPromise_.getSemiFuture();
-  }
-
-  // initiallize link message with default params
-  void init(int type, uint32_t flags);
-
-  // parse Netlink Link message
-  static Link parseMessage(const struct nlmsghdr* nlh);
-
- private:
-  // pointer to link message header
-  struct ifinfomsg* ifinfomsg_{nullptr};
-
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
-
-  void rcvdLink(Link&& link) override;
-
-  folly::Promise<folly::Expected<std::vector<Link>, int>> linkPromise_;
-  std::vector<Link> rcvdLinks_;
-};
-
-/**
- * Message specialization for ADDR object
- */
-class NetlinkAddrMessage final : public NetlinkMessage {
- public:
-  NetlinkAddrMessage();
-
-  ~NetlinkAddrMessage() override;
-
-  // Override setReturnStatus. Set addrPromise_ with rcvdAddrs_
-  void setReturnStatus(int status) override;
-
-  // Get future for received addresses in response to GET request
-  folly::SemiFuture<folly::Expected<std::vector<IfAddress>, int>>
-  getAddrsSemiFuture() {
-    return addrPromise_.getSemiFuture();
-  }
-
-  // initiallize address message with default params
-  void init(int type);
-
-  // parse Netlink Address message
-  static IfAddress parseMessage(const struct nlmsghdr* nlh);
-
-  // create netlink message to add/delete interface address
-  // type - RTM_NEWADDR or RTM_DELADDR
-  int addOrDeleteIfAddress(const IfAddress& ifAddr, const int type);
-
- private:
-  // pointer to interface message header
-  struct ifaddrmsg* ifaddrmsg_{nullptr};
-
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
-
-  void rcvdIfAddress(IfAddress&& ifAddr) override;
-
-  folly::Promise<folly::Expected<std::vector<IfAddress>, int>> addrPromise_;
-  std::vector<IfAddress> rcvdAddrs_;
-};
-
-/**
- * Message specialization for NEIGHBOR object
- */
-class NetlinkNeighborMessage final : public NetlinkMessage {
- public:
-  NetlinkNeighborMessage();
-
-  ~NetlinkNeighborMessage() override;
-
-  // Override setReturnStatus. Set neighborPromise_ with rcvdNeighbors_
-  void setReturnStatus(int status) override;
-
-  // Get future for received neighbors in response to GET request
-  folly::SemiFuture<folly::Expected<std::vector<Neighbor>, int>>
-  getNeighborsSemiFuture() {
-    return neighborPromise_.getSemiFuture();
-  }
-
-  // initiallize neighbor message with default params
-  void init(int type, uint32_t flags);
-
-  // parse Netlink Neighbor message
-  static Neighbor parseMessage(const struct nlmsghdr* nlh);
-
- private:
-  // pointer to neighbor message header
-  struct ndmsg* ndmsg_{nullptr};
-
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
-
-  void rcvdNeighbor(Neighbor&& ifAddr) override;
-
-  folly::Promise<folly::Expected<std::vector<Neighbor>, int>> neighborPromise_;
-  std::vector<Neighbor> rcvdNeighbors_;
 };
 
 } // namespace openr::fbnl

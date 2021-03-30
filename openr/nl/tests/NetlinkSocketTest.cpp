@@ -5,13 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <map>
-#include <memory>
-#include <string>
-#include <thread>
-
 #include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Exception.h>
 #include <folly/Format.h>
 #include <folly/IPAddress.h>

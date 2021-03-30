@@ -58,8 +58,8 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
 
   // Create consumer for procesing netlink messages to be sent in an event loop
   notifConsumer_ =
-      folly::NotificationQueue<std::unique_ptr<NetlinkMessage>>::Consumer::make(
-          [this](std::unique_ptr<NetlinkMessage>&& nlmsg) noexcept {
+      folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>>::Consumer::
+          make([this](std::unique_ptr<NetlinkMessageBase>&& nlmsg) noexcept {
             msgQueue_.push(std::move(nlmsg));
             // Invoke send messages API if socket is initialized and no in
             // flight messages
@@ -90,7 +90,7 @@ NetlinkProtocolSocket::~NetlinkProtocolSocket() {
   nlSeqNumMap_.clear(); // Clear all timed out requests
 
   // Clear all requests that yet needs to be sent
-  std::unique_ptr<NetlinkMessage> msg;
+  std::unique_ptr<NetlinkMessageBase> msg;
   while (notifQueue_.tryConsume(msg)) {
     CHECK_NOTNULL(msg.get());
     LOG(WARNING) << "Clearing netlink message, not yet send";

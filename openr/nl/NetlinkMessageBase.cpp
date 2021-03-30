@@ -9,37 +9,37 @@
 
 namespace openr::fbnl {
 
-NetlinkMessage::NetlinkMessage()
+NetlinkMessageBase::NetlinkMessageBase()
     : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {}
 
-NetlinkMessage::NetlinkMessage(int type)
+NetlinkMessageBase::NetlinkMessageBase(int type)
     : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {
   // initialize netlink header
   msghdr->nlmsg_len = NLMSG_LENGTH(0);
   msghdr->nlmsg_type = type;
 }
 
-NetlinkMessage::~NetlinkMessage() {
+NetlinkMessageBase::~NetlinkMessageBase() {
   CHECK(promise_.isFulfilled());
 }
 
 struct nlmsghdr*
-NetlinkMessage::getMessagePtr() {
+NetlinkMessageBase::getMessagePtr() {
   return msghdr;
 }
 
 uint16_t
-NetlinkMessage::getMessageType() const {
+NetlinkMessageBase::getMessageType() const {
   return msghdr->nlmsg_type;
 }
 
 uint32_t
-NetlinkMessage::getDataLength() const {
+NetlinkMessageBase::getDataLength() const {
   return msghdr->nlmsg_len;
 }
 
 struct rtattr*
-NetlinkMessage::addSubAttributes(
+NetlinkMessageBase::addSubAttributes(
     struct rtattr* rta, int type, const void* data, uint32_t len) const {
   struct rtattr* subrta{nullptr};
   uint32_t subRtaLen = RTA_LENGTH(len);
@@ -65,7 +65,7 @@ NetlinkMessage::addSubAttributes(
 }
 
 int
-NetlinkMessage::addAttributes(
+NetlinkMessageBase::addAttributes(
     int type,
     const char* const data,
     uint32_t len,
@@ -94,12 +94,12 @@ NetlinkMessage::addAttributes(
 }
 
 folly::SemiFuture<int>
-NetlinkMessage::getSemiFuture() {
+NetlinkMessageBase::getSemiFuture() {
   return promise_.getSemiFuture();
 }
 
 void
-NetlinkMessage::setReturnStatus(int status) {
+NetlinkMessageBase::setReturnStatus(int status) {
   VLOG(3) << "Netlink request completed. retval=" << status << ", "
           << folly::errnoStr(std::abs(status));
   promise_.setValue(status);
