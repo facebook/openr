@@ -62,15 +62,15 @@ NetlinkAddrMessage::init(int type) {
 int
 NetlinkAddrMessage::addOrDeleteIfAddress(
     const IfAddress& ifAddr, const int type) {
-  if (type != RTM_NEWADDR && type != RTM_DELADDR) {
-    LOG(ERROR) << "Incorrect Netlink message type";
+  if (type != RTM_NEWADDR and type != RTM_DELADDR) {
+    LOG(ERROR) << "Incorrect Netlink message type. " << ifAddr.str();
     return EINVAL;
-  } else if (ifAddr.getFamily() != AF_INET && ifAddr.getFamily() != AF_INET6) {
-    LOG(ERROR) << "Invalid address family" << ifAddr.str();
+  } else if (ifAddr.getFamily() != AF_INET and ifAddr.getFamily() != AF_INET6) {
+    LOG(ERROR) << "Invalid address family. " << ifAddr.str();
     return EINVAL;
-  } else if (!ifAddr.getPrefix().has_value()) {
+  } else if (not ifAddr.getPrefix().has_value()) {
     // No IP address given
-    LOG(ERROR) << "No IP address given to add " << ifAddr.str();
+    LOG(ERROR) << "No interface address given. " << ifAddr.str();
     return EDESTADDRREQ;
   }
 

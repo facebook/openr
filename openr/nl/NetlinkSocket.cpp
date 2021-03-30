@@ -225,46 +225,6 @@ NetlinkSocket::delMplsRoute(Route mplsRoute) {
   return future;
 }
 
-folly::Future<folly::Unit>
-NetlinkSocket::syncMplsRoutes(uint8_t protocolId, NlMplsRoutes newMplsRouteDb) {
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-
-  evl_->runImmediatelyOrInEventLoop([this,
-                                     p = std::move(promise),
-                                     syncDb = std::move(newMplsRouteDb),
-                                     protocolId]() mutable {
-    try {
-      LOG(INFO) << "Syncing " << syncDb.size() << " mpls routes";
-      auto& mplsRoutes = mplsRoutesCache_[protocolId];
-      std::unordered_set<int32_t> toDelete;
-      // collect label routes to delete
-      for (auto const& kv : mplsRoutes) {
-        if (syncDb.find(kv.first) == syncDb.end()) {
-          toDelete.insert(kv.first);
-        }
-      }
-      // delete
-      LOG(INFO) << "Sync: Deleting " << toDelete.size() << " mpls routes";
-      for (auto label : toDelete) {
-        auto mplsRouteEntry = mplsRoutes.at(label);
-        doDeleteMplsRoute(mplsRouteEntry);
-      }
-      // Go over MPLS routes in new routeDb, update/add
-      for (auto& kv : syncDb) {
-        doAddUpdateMplsRoute(kv.second);
-      }
-      p.setValue();
-      LOG(INFO) << "Sync done.";
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error syncing MPLS routeDb with Fib: "
-                 << folly::exceptionStr(ex);
-      p.setException(ex);
-    }
-  });
-  return future;
-}
-
 folly::Future<NlMplsRoutes>
 NetlinkSocket::getCachedMplsRoutes(uint8_t protocolId) const {
   VLOG(3) << "NetlinkSocket get cached MPLS routes by protocol "
@@ -443,60 +403,6 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
 
   // Update local cache with removed prefix
   unicastRoutes.erase(route.getDestination());
-}
-
-folly::Future<folly::Unit>
-NetlinkSocket::syncUnicastRoutes(
-    uint8_t protocolId, NlUnicastRoutes newRouteDb) {
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-
-  evl_->runImmediatelyOrInEventLoop([this,
-                                     p = std::move(promise),
-                                     syncDb = std::move(newRouteDb),
-                                     protocolId]() mutable {
-    try {
-      LOG(INFO) << "Syncing " << syncDb.size() << " routes for protocol "
-                << static_cast<int>(protocolId);
-      doSyncUnicastRoutes(protocolId, std::move(syncDb));
-      p.setValue();
-      LOG(INFO) << "Sync done.";
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
-                 << folly::exceptionStr(ex);
-      p.setException(ex);
-    }
-  });
-  return future;
-}
-
-void
-NetlinkSocket::doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb) {
-  auto& unicastRoutes = unicastRoutesCache_[protocolId];
-
-  // Go over routes that are not in new routeDb, delete
-  std::unordered_set<folly::CIDRNetwork> toDelete;
-  for (auto const& kv : unicastRoutes) {
-    if (syncDb.find(kv.first) == syncDb.end()) {
-      toDelete.insert(kv.first);
-    }
-  }
-  // Delete routes from kernel
-  LOG(INFO) << "Sync: number of routes to delete: " << toDelete.size();
-  for (auto it = toDelete.begin(); it != toDelete.end(); ++it) {
-    auto const& prefix = *it;
-    auto iter = unicastRoutes.find(prefix);
-    if (iter == unicastRoutes.end()) {
-      continue;
-    }
-    doDeleteUnicastRoute(iter->second);
-  }
-
-  // Go over routes in new routeDb, update/add
-  LOG(INFO) << "Sync: number of routes to add: " << syncDb.size();
-  for (auto& kv : syncDb) {
-    doAddUpdateUnicastRoute(kv.second);
-  }
 }
 
 folly::Future<NlUnicastRoutes>

@@ -968,13 +968,38 @@ TEST_F(NlMessageFixture, AddDelDuplicateIfAddress) {
   auto after = nlSock->getAllIfAddresses().get().value();
   EXPECT_EQ(before.size() + 1, after.size());
 
-  // delete interface address
+  // Delete interface address
   EXPECT_EQ(0, nlSock->deleteIfAddress(ifAddr).get());
   // Double delete. -EADDRNOTAVAIL error.
   EXPECT_EQ(-EADDRNOTAVAIL, nlSock->deleteIfAddress(ifAddrDup).get());
 
   auto kernelAddresses = nlSock->getAllIfAddresses().get().value();
   EXPECT_EQ(before.size(), kernelAddresses.size());
+}
+
+TEST_F(NlMessageFixture, InvalidIfAddress) {
+  openr::fbnl::IfAddressBuilder builder;
+
+  // Case 1: Invalid interface address with `AF_UNSPEC`
+  // Should be either `AF_INET` or `AF_INET6`
+  //
+  // ATTN: to test INVALID family, do NOT populate `prefix_`
+  // field. Otherwise, it will ignore `setFamily()` and honor
+  // `prefix_.first.family()`
+  auto ifAddr1 = builder.setFamily(AF_UNSPEC).build();
+  builder.reset();
+
+  // Case 2: Invalid interface address without `prefix_`
+  auto ifAddr2 = builder.setFamily(AF_INET6).build();
+  builder.reset();
+
+  // Verify addIfAddress() API failed sanity check
+  EXPECT_EQ(EINVAL, nlSock->addIfAddress(ifAddr1).get());
+  EXPECT_EQ(EDESTADDRREQ, nlSock->addIfAddress(ifAddr2).get());
+
+  // Verify deleteIfAddress() API failed sanity check
+  EXPECT_EQ(EINVAL, nlSock->deleteIfAddress(ifAddr1).get());
+  EXPECT_EQ(EDESTADDRREQ, nlSock->deleteIfAddress(ifAddr2).get());
 }
 
 /*
@@ -1066,6 +1091,39 @@ TEST_F(NlMessageFixture, IPv4DropRoute) {
 
   after = nlSock->getAllRoutes().get().value();
   EXPECT_EQ(before.size(), after.size());
+}
+
+/*
+ * Add an invalid IP route and verify it can't be programmed
+ */
+TEST_F(NlMessageFixture, InvalidIpRoute) {
+  std::vector<openr::fbnl::NextHop> path;
+  openr::fbnl::Route route;
+  uint32_t ackCount{0};
+
+  path.emplace_back(buildNextHop(
+      std::nullopt,
+      std::nullopt,
+      std::nullopt,
+      ipAddrY1V6,
+      ifIndexX,
+      1 /* default weight */));
+  route = buildRoute(
+      kRouteProtoId, /* proto */
+      std::nullopt, /* prefix */
+      std::nullopt, /* mpls label */
+      path /* nexthops */);
+
+  ackCount = getAckCount();
+  // family is by default AF_UNSPEC
+  EXPECT_EQ(-EPROTONOSUPPORT, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_EQ(getAckCount(), ackCount);
+
+  // family is by default AF_UNSPEC
+  EXPECT_EQ(-EPROTONOSUPPORT, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount()); // ESRCH is ignored in error count
+  EXPECT_EQ(getAckCount(), ackCount);
 }
 
 /*
@@ -1467,7 +1525,7 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
   EXPECT_NE(0, getErrorCount());
 }
 
-TEST_F(NlMessageFixture, InvalidRoute) {
+TEST_F(NlMessageFixture, InvalidMplsRoute) {
   // Add two routes, one valid and the other invalid. Only one should be
   // sent to program
 

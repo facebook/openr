@@ -123,24 +123,6 @@ class NetlinkSocket {
   virtual folly::Future<folly::Unit> delMplsRoute(Route route);
 
   /**
-   * Sync route table in kernel with given route table
-   * Delete routes that not in the 'newRouteDb' but in kernel
-   * Add/Update routes in 'newRouteDb'
-   * Basically when there's mismatch between backend kernel and route table in
-   * application, we sync kernel routing table with given data source
-   * @throws fbnl::NlException
-   */
-  virtual folly::Future<folly::Unit> syncUnicastRoutes(
-      uint8_t protocolId, NlUnicastRoutes newRouteDb);
-
-  /**
-   * Sync MPLS label routes. Delete label routes not in 'MplsRouteDb' and
-   * add the routes not present in kernel
-   */
-  virtual folly::Future<folly::Unit> syncMplsRoutes(
-      uint8_t protocolId, NlMplsRoutes newMplsRouteDb);
-
-  /**
    * Get cached unicast routing by protocol ID
    * @throws fbnl::NlException
    */
@@ -268,8 +250,6 @@ class NetlinkSocket {
   void doAddUpdateMplsRoute(Route route);
 
   void doDeleteMplsRoute(Route route);
-
-  void doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb);
 
   void checkUnicastRoute(const Route& route);
 

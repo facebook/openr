@@ -120,27 +120,6 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   }
 }
 
-void
-NetlinkRouteMessage::showRtmMsg(const struct rtmsg* const hdr) const {
-  LOG(INFO) << "Route message data"
-            << "\nrtm_family:   " << +hdr->rtm_family
-            << "\nrtm_dst_len:  " << +hdr->rtm_dst_len
-            << "\nrtm_src_len:  " << +hdr->rtm_src_len
-            << "\nrtm_tos:      " << +hdr->rtm_tos
-            << "\nrtm_table:    " << +hdr->rtm_table
-            << "\nrtm_protocol: " << +hdr->rtm_protocol
-            << "\nrtm_scope:    " << +hdr->rtm_scope
-            << "\nrtm_type:     " << +hdr->rtm_type
-            << "\nrtm_flags:    " << std::hex << hdr->rtm_flags;
-}
-
-void
-NetlinkRouteMessage::showRouteAttribute(const struct rtattr* const hdr) const {
-  LOG(INFO) << "Route attributes"
-            << "\nrta_len       " << hdr->rta_len << "\nrta_type      "
-            << hdr->rta_type;
-}
-
 uint32_t
 NetlinkRouteMessage::encodeLabel(uint32_t label, bool bos) {
   if (label > 0xFFFFF) {
@@ -426,27 +405,6 @@ NetlinkRouteMessage::addMultiPathNexthop(
     rtnh = RTNH_NEXT(rtnh);
   }
   return result;
-}
-
-void
-NetlinkRouteMessage::showMultiPathAttribues(
-    const struct rtattr* const rta) const {
-  const struct rtnexthop* const rtnh =
-      reinterpret_cast<struct rtnexthop*>(RTA_DATA(rta));
-  LOG(INFO) << "  NextHop Len=" << static_cast<size_t>(rtnh->rtnh_len)
-            << ", flags: " << static_cast<size_t>(rtnh->rtnh_flags)
-            << ", weight: " << static_cast<size_t>(rtnh->rtnh_hops) + 1
-            << ", ifIndex: " << rtnh->rtnh_ifindex;
-
-  const struct rtattr* subrta = RTNH_DATA(rtnh);
-  int len = rtnh->rtnh_len;
-
-  do {
-    if (!RTA_OK(subrta, len)) {
-      break;
-    }
-    showRouteAttribute(subrta);
-  } while ((subrta = RTA_NEXT(subrta, len)));
 }
 
 folly::Expected<folly::IPAddress, folly::IPAddressFormatError>

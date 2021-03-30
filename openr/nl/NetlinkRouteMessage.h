@@ -79,15 +79,6 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   static Route parseMessage(const struct nlmsghdr* nlmsg);
 
  private:
-  // print ancillary data
-  void showRtmMsg(const struct rtmsg* const hdr) const;
-
-  // print route attribute
-  void showRouteAttribute(const struct rtattr* const hdr) const;
-
-  // print multi path attributes
-  void showMultiPathAttribues(const struct rtattr* const rta) const;
-
   // parse IP address
   static folly::Expected<folly::IPAddress, folly::IPAddressFormatError> parseIp(
       const struct rtattr* ipAttr, unsigned char family);
