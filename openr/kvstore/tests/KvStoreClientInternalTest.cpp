@@ -164,7 +164,7 @@ class MultipleAreaFixture : public MultipleStoreFixture {
 
   void
   setUpPeers() {
-    // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
+    // node1(plane-area)  --- (plane area) node2 (pod area) -- (pod area) node3
     for (auto& peer : peers1) {
       EXPECT_TRUE(store1->addPeer(planeArea, peer.first, peer.second));
     }

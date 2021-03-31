@@ -1517,12 +1517,23 @@ Spark::processHandshakeMsg(
       // default area, we can check that domains match
       // TODO remove when trasition to areas is complete
       mismatch = myDomainName_ != neighbor.domainName;
+      if (not mismatch) {
+        LOG(INFO) << fmt::format(
+            "Neighbor: {} is under migration from area {} to {}.",
+            neighbor.nodeName,
+            neighbor.area,
+            handshakeMsg.get_area());
+      }
     }
     if (mismatch) {
-      LOG(ERROR)
-          << "Inconsistent areaId deduced between local and remote review. "
-          << "Neighbor's areaId: [" << neighbor.area << "], "
-          << "My areaId from remote: [" << *handshakeMsg.area_ref() << "].";
+      LOG(ERROR) << fmt::format(
+          "Inconsistent areaId deduced between local and remote view. "
+          "Neighbor's areaId is {} and my areaId from remote is {}. Neighbor's "
+          "domainName is {} and mine is {}.",
+          handshakeMsg.get_area(),
+          neighbor.area,
+          neighbor.domainName,
+          myDomainName_);
 
       // state transition
       SparkNeighState oldState = neighbor.state;

@@ -2645,70 +2645,90 @@ TEST_F(KvStoreTestFixture, FullSync) {
       {k1, 1}, {k2, 1}, {k3, 9}, {k4, 6}};
 
   // set key vals in storeA
-  for (const auto& keyVer : keyVersionAs) {
-    thrift::Value val(
-        apache::thrift::FRAGILE,
-        keyVer.second /* version */,
+  for (const auto& [key, version] : keyVersionAs) {
+    thrift::Value val = createThriftValue(
+        version /* version */,
         "storeA" /* originatorId */,
         "a" /* value */,
         30000 /* ttl */,
         99 /* ttl version */,
-        0 /* hash*/);
+        0 /* hash*/
+    );
     val.hash_ref() = generateHash(
         *val.version_ref(), *val.originatorId_ref(), val.value_ref());
-    EXPECT_TRUE(storeA->setKey(kTestingAreaName, keyVer.first, val));
+    EXPECT_TRUE(storeA->setKey(kTestingAreaName, key, val));
   }
 
   // set key vals in storeB
-  for (const auto& keyVer : keyVersionBs) {
-    thrift::Value val(
-        apache::thrift::FRAGILE,
-        keyVer.second /* version */,
-        "storeA" /* originatorId */,
+  for (const auto& [key, version] : keyVersionBs) {
+    thrift::Value val = createThriftValue(
+        version /* version */,
+        "storeB" /* originatorId */,
         "b" /* value */,
         30000 /* ttl */,
         99 /* ttl version */,
-        0 /* hash*/);
-    if (keyVer.first == k1) {
+        0 /* hash*/
+    );
+    if (key == k1) {
       val.value_ref() = "a"; // set same value for k1
     }
     val.hash_ref() = generateHash(
         *val.version_ref(), *val.originatorId_ref(), val.value_ref());
-    EXPECT_TRUE(storeB->setKey(kTestingAreaName, keyVer.first, val));
+    EXPECT_TRUE(storeB->setKey(kTestingAreaName, key, val));
   }
 
-  // storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
-  // storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
-  // let A sends a full sync request to B and wait for completion
-  storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec());
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  OpenrEventBase evb;
+  folly::Baton waitBaton;
+  int scheduleAt{0};
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+        // storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+        // let A sends a full sync request to B and wait for completion
+        storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec());
+      });
 
-  // after full-sync, we expect both A and B have:
-  // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
-  for (const auto& key : allKeys) {
-    auto valA = storeA->getKey(kTestingAreaName, key);
-    auto valB = storeB->getKey(kTestingAreaName, key);
-    EXPECT_TRUE(valA.has_value());
-    EXPECT_TRUE(valB.has_value());
-    EXPECT_EQ(valA->value_ref().value(), valB->value_ref().value());
-    EXPECT_EQ(*valA->version_ref(), *valB->version_ref());
-  }
-  auto v0 = storeA->getKey(kTestingAreaName, k0);
-  EXPECT_EQ(*v0->version_ref(), 5);
-  EXPECT_EQ(v0->value_ref().value(), "a");
-  auto v1 = storeA->getKey(kTestingAreaName, k1);
-  EXPECT_EQ(*v1->version_ref(), 1);
-  EXPECT_EQ(v1->value_ref().value(), "a");
-  auto v2 = storeA->getKey(kTestingAreaName, k2);
-  EXPECT_EQ(*v2->version_ref(), 9);
-  EXPECT_EQ(v2->value_ref().value(), "a");
-  auto v3 = storeA->getKey(kTestingAreaName, k3);
-  EXPECT_EQ(*v3->version_ref(), 9);
-  EXPECT_EQ(v3->value_ref().value(), "b");
-  auto v4 = storeA->getKey(kTestingAreaName, k4);
-  EXPECT_EQ(*v4->version_ref(), 6);
-  EXPECT_EQ(v4->value_ref().value(), "b");
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 1000), [&]() noexcept {
+        // after full-sync, we expect both A and B have:
+        // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+        for (const auto& key : allKeys) {
+          auto valA = storeA->getKey(kTestingAreaName, key);
+          auto valB = storeB->getKey(kTestingAreaName, key);
+          EXPECT_TRUE(valA.has_value());
+          EXPECT_TRUE(valB.has_value());
+          EXPECT_EQ(valA->value_ref().value(), valB->value_ref().value());
+          EXPECT_EQ(*valA->version_ref(), *valB->version_ref());
+        }
+        auto v0 = storeA->getKey(kTestingAreaName, k0);
+        EXPECT_EQ(*v0->version_ref(), 5);
+        EXPECT_EQ(v0->value_ref().value(), "a");
+        auto v1 = storeA->getKey(kTestingAreaName, k1);
+        EXPECT_EQ(*v1->version_ref(), 1);
+        EXPECT_EQ(v1->value_ref().value(), "a");
+        auto v2 = storeA->getKey(kTestingAreaName, k2);
+        EXPECT_EQ(*v2->version_ref(), 9);
+        EXPECT_EQ(v2->value_ref().value(), "a");
+        auto v3 = storeA->getKey(kTestingAreaName, k3);
+        EXPECT_EQ(*v3->version_ref(), 9);
+        EXPECT_EQ(v3->value_ref().value(), "b");
+        auto v4 = storeA->getKey(kTestingAreaName, k4);
+        EXPECT_EQ(*v4->version_ref(), 6);
+        EXPECT_EQ(v4->value_ref().value(), "b");
+        // Synchronization primitive
+        waitBaton.post();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evbThread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
+
+  evb.stop();
+  evb.waitUntilStopped();
+  evbThread.join();
 }
 
 /*
@@ -2946,6 +2966,130 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
     EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
   }
+}
+
+/**
+ * this is to verify correctness of 3-way full-sync between default and
+ * non-default Areas. storeA is in kDefaultArea, while storeB is in areaB.
+ * tuple represents (key, value-version, value)
+ * storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+ * storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+ * Let A do init a full-sync with B
+ * we expect both storeA and storeB have:
+ *           (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+ */
+TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
+  thrift::AreaConfig defaultAreaConfig, nonDefaultAreaConfig;
+  defaultAreaConfig.area_id_ref() =
+      openr::thrift::Types_constants::kDefaultArea();
+  defaultAreaConfig.neighbor_regexes_ref()->emplace_back(".*");
+  nonDefaultAreaConfig.area_id_ref() = kTestingAreaName;
+  nonDefaultAreaConfig.neighbor_regexes_ref()->emplace_back(".*");
+  AreaId defaultAreaId{defaultAreaConfig.get_area_id()};
+
+  auto storeA = createKvStore("storeA", getTestKvConf(), {defaultAreaConfig});
+  auto storeB =
+      createKvStore("storeB", getTestKvConf(), {nonDefaultAreaConfig});
+  storeA->run();
+  storeB->run();
+
+  const std::string k0{"key0"};
+  const std::string k1{"key1"};
+  const std::string k2{"key2"};
+  const std::string k3{"key3"};
+  const std::string k4{"key4"};
+  std::vector<std::string> allKeys = {k0, k1, k2, k3, k4};
+  std::vector<std::pair<std::string, int>> keyVersionAs = {
+      {k0, 5}, {k1, 1}, {k2, 9}, {k3, 1}};
+  std::vector<std::pair<std::string, int>> keyVersionBs = {
+      {k1, 1}, {k2, 1}, {k3, 9}, {k4, 6}};
+
+  // set key vals in storeA
+  for (const auto& [key, version] : keyVersionAs) {
+    thrift::Value val = createThriftValue(
+        version /* version */,
+        "storeA" /* originatorId */,
+        "a" /* value */,
+        30000 /* ttl */,
+        99 /* ttl version */,
+        0 /* hash*/
+    );
+
+    val.hash_ref() = generateHash(
+        *val.version_ref(), *val.originatorId_ref(), val.value_ref());
+    EXPECT_TRUE(storeA->setKey(kTestingAreaName, key, val));
+  }
+
+  // set key vals in storeB
+  for (const auto& [key, version] : keyVersionBs) {
+    thrift::Value val = createThriftValue(
+        version /* version */,
+        "storeB" /* originatorId */,
+        "b" /* value */,
+        30000 /* ttl */,
+        99 /* ttl version */,
+        0 /* hash*/);
+    if (key == k1) {
+      val.value_ref() = "a"; // set same value for k1
+    }
+    val.hash_ref() = generateHash(
+        *val.version_ref(), *val.originatorId_ref(), val.value_ref());
+    EXPECT_TRUE(storeB->setKey(kTestingAreaName, key, val));
+  }
+
+  OpenrEventBase evb;
+  folly::Baton waitBaton;
+  int scheduleAt{0};
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+        // storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+        // let A sends a full sync request to B and wait for completion
+        storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec());
+        storeB->addPeer(defaultAreaId, "storeA", storeA->getPeerSpec());
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 1000), [&]() noexcept {
+        // after full-sync, we expect both A and B have:
+        // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+        for (const auto& key : allKeys) {
+          auto valA = storeA->getKey(kTestingAreaName, key);
+          auto valB = storeB->getKey(kTestingAreaName, key);
+          EXPECT_TRUE(valA.has_value());
+          EXPECT_TRUE(valB.has_value());
+          EXPECT_EQ(valA->value_ref().value(), valB->value_ref().value());
+          EXPECT_EQ(*valA->version_ref(), *valB->version_ref());
+        }
+        auto v0 = storeA->getKey(kTestingAreaName, k0);
+        EXPECT_EQ(*v0->version_ref(), 5);
+        EXPECT_EQ(v0->value_ref().value(), "a");
+        auto v1 = storeA->getKey(kTestingAreaName, k1);
+        EXPECT_EQ(*v1->version_ref(), 1);
+        EXPECT_EQ(v1->value_ref().value(), "a");
+        auto v2 = storeA->getKey(kTestingAreaName, k2);
+        EXPECT_EQ(*v2->version_ref(), 9);
+        EXPECT_EQ(v2->value_ref().value(), "a");
+        auto v3 = storeA->getKey(kTestingAreaName, k3);
+        EXPECT_EQ(*v3->version_ref(), 9);
+        EXPECT_EQ(v3->value_ref().value(), "b");
+        auto v4 = storeA->getKey(kTestingAreaName, k4);
+        EXPECT_EQ(*v4->version_ref(), 6);
+        EXPECT_EQ(v4->value_ref().value(), "b");
+        // Synchronization primitive
+        waitBaton.post();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evbThread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
+
+  evb.stop();
+  evb.waitUntilStopped();
+  evbThread.join();
 }
 
 int

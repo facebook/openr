@@ -496,8 +496,8 @@ KvStore::getAreaDbOrThrow(
     std::string const& areaId, std::string const& caller) {
   auto search = kvStoreDb_.find(areaId);
   if (kvStoreDb_.end() == search) {
-    LOG(ERROR) << "Area " << areaId
-               << " requested but not configured for this node.";
+    LOG(WARNING) << "Area " << areaId
+                 << " requested but not configured for this node.";
     // TODO: migration workaround => if me/peer does is using default area,
     // always honor my config, ignore peer's config.
     if (kvStoreDb_.size() == 1 and
@@ -636,52 +636,55 @@ KvStore::dumpKvStoreKeys(
                 : folly::sformat("areas: {}.", folly::join(", ", selectAreas)));
 
     auto result = std::make_unique<std::vector<thrift::Publication>>();
-    for (auto& [area, kvStoreDb] : kvStoreDb_) {
-      if (not selectAreas.empty() && not selectAreas.count(area)) {
-        continue;
-      }
-      fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
+    for (auto& area : selectAreas) {
+      try {
+        auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreKeys");
+        fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
-      std::vector<std::string> keyPrefixList;
-      if (keyDumpParams.keys_ref().has_value()) {
-        keyPrefixList = *keyDumpParams.keys_ref();
-      } else {
-        folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
-      }
-      const auto keyPrefixMatch =
-          KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
-
-      thrift::FilterOperator oper = thrift::FilterOperator::OR;
-      if (keyDumpParams.oper_ref().has_value()) {
-        oper = *keyDumpParams.oper_ref();
-      }
-
-      auto thriftPub = kvStoreDb.dumpAllWithFilters(
-          keyPrefixMatch, oper, *keyDumpParams.doNotPublishValue_ref());
-      if (keyDumpParams.keyValHashes_ref().has_value()) {
-        thriftPub = kvStoreDb.dumpDifference(
-            *thriftPub.keyVals_ref(), keyDumpParams.keyValHashes_ref().value());
-      }
-      kvStoreDb.updatePublicationTtl(thriftPub);
-      // I'm the initiator, set flood-root-id
-      thriftPub.floodRootId_ref().from_optional(kvStoreDb.getSptRootId());
-
-      if (keyDumpParams.keyValHashes_ref().has_value() and
-          (*keyDumpParams.prefix_ref()).empty() and
-          (not keyDumpParams.keys_ref().has_value() or
-           (*keyDumpParams.keys_ref()).empty())) {
-        // This usually comes from neighbor nodes
-        size_t numMissingKeys = 0;
-        if (thriftPub.tobeUpdatedKeys_ref().has_value()) {
-          numMissingKeys = thriftPub.tobeUpdatedKeys_ref()->size();
+        std::vector<std::string> keyPrefixList;
+        if (keyDumpParams.keys_ref().has_value()) {
+          keyPrefixList = *keyDumpParams.keys_ref();
+        } else {
+          folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
         }
-        LOG(INFO) << "[Thrift Sync] Processed full-sync request with "
-                  << keyDumpParams.keyValHashes_ref().value().size()
-                  << " keyValHashes item(s). Sending "
-                  << thriftPub.keyVals_ref()->size() << " key-vals and "
-                  << numMissingKeys << " missing keys";
+        const auto keyPrefixMatch =
+            KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
+
+        thrift::FilterOperator oper = thrift::FilterOperator::OR;
+        if (keyDumpParams.oper_ref().has_value()) {
+          oper = *keyDumpParams.oper_ref();
+        }
+
+        auto thriftPub = kvStoreDb.dumpAllWithFilters(
+            keyPrefixMatch, oper, *keyDumpParams.doNotPublishValue_ref());
+        if (keyDumpParams.keyValHashes_ref().has_value()) {
+          thriftPub = kvStoreDb.dumpDifference(
+              *thriftPub.keyVals_ref(),
+              keyDumpParams.keyValHashes_ref().value());
+        }
+        kvStoreDb.updatePublicationTtl(thriftPub);
+        // I'm the initiator, set flood-root-id
+        thriftPub.floodRootId_ref().from_optional(kvStoreDb.getSptRootId());
+
+        if (keyDumpParams.keyValHashes_ref().has_value() and
+            (*keyDumpParams.prefix_ref()).empty() and
+            (not keyDumpParams.keys_ref().has_value() or
+             (*keyDumpParams.keys_ref()).empty())) {
+          // This usually comes from neighbor nodes
+          size_t numMissingKeys = 0;
+          if (thriftPub.tobeUpdatedKeys_ref().has_value()) {
+            numMissingKeys = thriftPub.tobeUpdatedKeys_ref()->size();
+          }
+          LOG(INFO) << "[Thrift Sync] Processed full-sync request with "
+                    << keyDumpParams.keyValHashes_ref().value().size()
+                    << " keyValHashes item(s). Sending "
+                    << thriftPub.keyVals_ref()->size() << " key-vals and "
+                    << numMissingKeys << " missing keys";
+        }
+        result->push_back(std::move(thriftPub));
+      } catch (thrift::OpenrError const& e) {
+        LOG(ERROR) << " Failed to find area " << area << " in kvStoreDb_.";
       }
-      result->push_back(std::move(thriftPub));
     }
     p.setValue(std::move(result));
   });
