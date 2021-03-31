@@ -944,65 +944,6 @@ TEST_F(NlMessageFixture, NeighborEventPublication) {
 }
 
 /*
- * Add and delete duplicate interface addresses to make sure
- * NetlinkProtocolSocket can take care of duplicate requests
- */
-TEST_F(NlMessageFixture, AddDelDuplicateIfAddress) {
-  auto network = folly::IPAddress::createNetwork("fc00:cafe:4::4/128");
-  openr::fbnl::IfAddressBuilder builder;
-
-  auto ifAddr = builder.setPrefix(network)
-                    .setIfIndex(ifIndexX)
-                    .setScope(RT_SCOPE_UNIVERSE)
-                    .setValid(true)
-                    .build();
-  auto ifAddrDup = ifAddr; // NOTE: explicit copy
-
-  auto before = nlSock->getAllIfAddresses().get().value();
-
-  // Add new interface address
-  EXPECT_EQ(0, nlSock->addIfAddress(ifAddr).get());
-  // Add duplicated address entry. -EEXIST error.
-  EXPECT_EQ(-EEXIST, nlSock->addIfAddress(ifAddrDup).get());
-
-  auto after = nlSock->getAllIfAddresses().get().value();
-  EXPECT_EQ(before.size() + 1, after.size());
-
-  // Delete interface address
-  EXPECT_EQ(0, nlSock->deleteIfAddress(ifAddr).get());
-  // Double delete. -EADDRNOTAVAIL error.
-  EXPECT_EQ(-EADDRNOTAVAIL, nlSock->deleteIfAddress(ifAddrDup).get());
-
-  auto kernelAddresses = nlSock->getAllIfAddresses().get().value();
-  EXPECT_EQ(before.size(), kernelAddresses.size());
-}
-
-TEST_F(NlMessageFixture, InvalidIfAddress) {
-  openr::fbnl::IfAddressBuilder builder;
-
-  // Case 1: Invalid interface address with `AF_UNSPEC`
-  // Should be either `AF_INET` or `AF_INET6`
-  //
-  // ATTN: to test INVALID family, do NOT populate `prefix_`
-  // field. Otherwise, it will ignore `setFamily()` and honor
-  // `prefix_.first.family()`
-  auto ifAddr1 = builder.setFamily(AF_UNSPEC).build();
-  builder.reset();
-
-  // Case 2: Invalid interface address without `prefix_`
-  auto ifAddr2 = builder.setFamily(AF_INET6).build();
-  builder.reset();
-
-  // Verify addIfAddress() API failed sanity check
-  EXPECT_EQ(EINVAL, nlSock->addIfAddress(ifAddr1).get());
-  EXPECT_EQ(EDESTADDRREQ, nlSock->addIfAddress(ifAddr2).get());
-
-  // Verify deleteIfAddress() API failed sanity check
-  EXPECT_EQ(EINVAL, nlSock->deleteIfAddress(ifAddr1).get());
-  EXPECT_EQ(EDESTADDRREQ, nlSock->deleteIfAddress(ifAddr2).get());
-}
-
-/*
  * Check empty route from kernel
  */
 TEST_F(NlMessageFixture, EmptyRoute) {
@@ -2349,6 +2290,108 @@ TEST_F(NlMessageFixture, MplsUcmpError) {
 
 class NlMessageFixtureV4OrV6 : public NlMessageFixture,
                                public testing::WithParamInterface<bool> {};
+
+/*
+ * Construct INVALID interface address to make sure NetlinkProtocolSocket
+ * returns the correct system error code.
+ */
+TEST_P(NlMessageFixtureV4OrV6, InvalidIfAddress) {
+  const bool isV4 = GetParam();
+
+  // Case 1: Invalid interface address with `AF_UNSPEC`
+  // Should be either `AF_INET` or `AF_INET6`
+  //
+  // ATTN: to test INVALID family, do NOT populate `prefix_`
+  // field. Otherwise, it will ignore `setFamily()` and honor
+  // `prefix_.first.family()`
+  openr::fbnl::IfAddressBuilder builder;
+  auto ifAddr1 = builder.setFamily(AF_UNSPEC).build();
+  builder.reset();
+
+  // Case 2: Invalid interface address without `prefix_`
+  auto ifAddr2 = builder.setFamily(isV4 ? AF_INET : AF_INET6).build();
+  builder.reset();
+
+  // Verify addIfAddress() API failed sanity check
+  EXPECT_EQ(EINVAL, nlSock->addIfAddress(ifAddr1).get());
+  EXPECT_EQ(EDESTADDRREQ, nlSock->addIfAddress(ifAddr2).get());
+
+  // Verify deleteIfAddress() API failed sanity check
+  EXPECT_EQ(EINVAL, nlSock->deleteIfAddress(ifAddr1).get());
+  EXPECT_EQ(EDESTADDRREQ, nlSock->deleteIfAddress(ifAddr2).get());
+}
+
+/*
+ * Add and delete duplicate interface addresses to make sure
+ * NetlinkProtocolSocket can take care of duplicate requests
+ */
+TEST_P(NlMessageFixtureV4OrV6, AddDelDuplicateIfAddress) {
+  const bool isV4 = GetParam();
+
+  folly::CIDRNetwork network = isV4
+      ? folly::IPAddress::createNetwork("10.0.0.1/32")
+      : folly::IPAddress::createNetwork("fc00:cafe:4::4/128");
+  openr::fbnl::IfAddressBuilder builder;
+
+  auto ifAddr = builder.setPrefix(network)
+                    .setIfIndex(ifIndexX)
+                    .setScope(RT_SCOPE_UNIVERSE)
+                    .setValid(true)
+                    .build();
+  auto ifAddrDup = ifAddr; // NOTE: explicit copy
+
+  auto before = nlSock->getAllIfAddresses().get().value();
+
+  // Add new interface address
+  EXPECT_EQ(0, nlSock->addIfAddress(ifAddr).get());
+  // Add duplicated address entry. -EEXIST error.
+  EXPECT_EQ(-EEXIST, nlSock->addIfAddress(ifAddrDup).get());
+
+  auto after = nlSock->getAllIfAddresses().get().value();
+  EXPECT_EQ(before.size() + 1, after.size());
+
+  // Delete interface address
+  EXPECT_EQ(0, nlSock->deleteIfAddress(ifAddr).get());
+  // Double delete. -EADDRNOTAVAIL error.
+  EXPECT_EQ(-EADDRNOTAVAIL, nlSock->deleteIfAddress(ifAddrDup).get());
+
+  auto kernelAddresses = nlSock->getAllIfAddresses().get().value();
+  EXPECT_EQ(before.size(), kernelAddresses.size());
+}
+
+/*
+ * Deleting non-existing routes for v4 or v6
+ */
+TEST_P(NlMessageFixtureV4OrV6, DeleteNonExistingRoute) {
+  const bool isV4 = GetParam();
+
+  folly::CIDRNetwork network = isV4
+      ? folly::IPAddress::createNetwork("10.10.0.0/24")
+      : folly::IPAddress::createNetwork("fd00::/64");
+  std::vector<openr::fbnl::NextHop> path;
+  openr::fbnl::Route route;
+  uint32_t ackCount{0};
+
+  path.emplace_back(buildNextHop(
+      std::nullopt,
+      std::nullopt,
+      std::nullopt,
+      isV4 ? ipAddrY1V4 : ipAddrY1V6,
+      ifIndexY,
+      1 /* default weight */));
+  route = buildRoute(
+      kRouteProtoId, /* proto */
+      network, /* prefix */
+      std::nullopt, /* mpls label */
+      path /* nexthops */);
+  ackCount = getAckCount();
+
+  // Delete non-existing route leads to:
+  //  ESRCH: No such process
+  EXPECT_EQ(-ESRCH, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_EQ(ackCount + 1, getAckCount());
+}
 
 /**
  * Validates the UCMP functionality with single next-hop. The kernel ignore the

@@ -587,69 +587,6 @@ TEST_F(NetlinkSocketFixture, MultiPathTest) {
   EXPECT_EQ(0, count);
 }
 
-// - Add a simple unicast route with single path
-// - Verify it is added
-// - Try deleting route but with an invalid path
-// - Verify this return error
-// - Now delete correct route and verify it is deleted
-TEST_F(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
-  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
-  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
-  std::vector<folly::IPAddress> nexthops1{folly::IPAddress("fe80::1")};
-  int ifIndex = netlinkSocket->getIfIndex(kVethNameY).get();
-
-  // Add a route via a single nextHop nh1
-  netlinkSocket
-      ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1))
-      .get();
-  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-
-  SCOPE_EXIT {
-    EXPECT_EQ(0, routes.size());
-  };
-
-  EXPECT_EQ(1, routes.size());
-  EXPECT_EQ(1, routes.count(prefix1));
-  const Route& rt = routes.at(prefix1);
-  EXPECT_EQ(1, rt.getNextHops().size());
-  EXPECT_TRUE(CompareNextHops(nexthops1, rt));
-
-  // Try deleting the route with a non existing prefix2
-  netlinkSocket
-      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix2))
-      .get();
-  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(1, routes.size());
-
-  // Check kernel
-  auto kernelRoutes = netlinkSocket->getAllRoutes();
-  int count = 0;
-  for (const auto& r : kernelRoutes) {
-    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId &&
-        r.getNextHops().size() == 1) {
-      count++;
-    }
-  }
-  EXPECT_EQ(1, count);
-
-  // Delete the route
-  netlinkSocket
-      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1))
-      .get();
-  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, routes.size());
-
-  kernelRoutes = netlinkSocket->getAllRoutes();
-  count = 0;
-  for (const auto& r : kernelRoutes) {
-    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId &&
-        r.getNextHops().size() == 1) {
-      count++;
-    }
-  }
-  EXPECT_EQ(0, count);
-}
-
 // - Add different routes for different protocols
 // - Verify it is added,
 // - Update nh and then verify it is updated
