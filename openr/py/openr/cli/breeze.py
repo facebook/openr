@@ -5,8 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import json
-
 #
 # Set encoding to UTF-8 for all modules as it is needed for click in python3
 #
