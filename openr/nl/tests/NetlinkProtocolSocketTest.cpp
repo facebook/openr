@@ -32,10 +32,8 @@ DEFINE_bool(
     enable_ipv6_rr_semantics, false, "Enable ipv6 route replace semantics");
 
 using namespace openr;
+using namespace openr::fbnl;
 using namespace folly::literals::shell_literals;
-
-using openr::fbnl::NetlinkProtocolSocket;
-using openr::fbnl::NetlinkRouteMessage;
 
 namespace {
 const std::chrono::milliseconds kProcTimeout{500};
@@ -261,7 +259,7 @@ class NlMessageFixture : public ::testing::Test {
   // Check if route is present in routes obtained from kernel
   bool
   checkRouteInKernelRoutes(
-      const std::vector<fbnl::Route>& kernelRoutes, const fbnl::Route& route) {
+      const std::vector<Route>& kernelRoutes, const Route& route) {
     LOG_FN_EXECUTION_TIME;
     for (auto& kernelRoute : kernelRoutes) {
       if (route == kernelRoute) {
@@ -274,14 +272,12 @@ class NlMessageFixture : public ::testing::Test {
   // find count of routes present in the kernel routes
   int
   findRoutesInKernelRoutes(
-      const std::vector<fbnl::Route>& kernelRoutes,
-      const std::vector<fbnl::Route>& routes) {
+      const std::vector<Route>& kernelRoutes,
+      const std::vector<Route>& routes) {
     LOG_FN_EXECUTION_TIME;
-    std::unordered_map<std::tuple<uint8_t, uint8_t, uint32_t>, fbnl::Route>
+    std::unordered_map<std::tuple<uint8_t, uint8_t, uint32_t>, Route>
         mplsRoutes;
-    std::unordered_map<
-        std::tuple<uint8_t, uint8_t, folly::CIDRNetwork>,
-        fbnl::Route>
+    std::unordered_map<std::tuple<uint8_t, uint8_t, folly::CIDRNetwork>, Route>
         unicastRoutes;
 
     // Build map for efficient search
@@ -305,7 +301,7 @@ class NlMessageFixture : public ::testing::Test {
 
     int routeCount{0};
     for (auto const& route : routes) {
-      std::optional<fbnl::Route> maybeRoute;
+      std::optional<Route> maybeRoute;
       if (route.getFamily() == AF_MPLS) {
         auto it = mplsRoutes.find(std::make_tuple(
             route.getRouteTable(),
@@ -333,8 +329,7 @@ class NlMessageFixture : public ::testing::Test {
   // Check if if address is present in addresses obtained from kernel
   bool
   checkAddressInKernelAddresses(
-      const std::vector<fbnl::IfAddress>& kernelAddresses,
-      const fbnl::IfAddress& addr) {
+      const std::vector<IfAddress>& kernelAddresses, const IfAddress& addr) {
     for (auto& kernelAddr : kernelAddresses) {
       if (addr == kernelAddr) {
         return true;
@@ -346,8 +341,8 @@ class NlMessageFixture : public ::testing::Test {
   // find count of addresses present in the kernel addresses
   int
   findAddressesInKernelAddresses(
-      const std::vector<fbnl::IfAddress>& kernelAddresses,
-      const std::vector<fbnl::IfAddress>& addresses) {
+      const std::vector<IfAddress>& kernelAddresses,
+      const std::vector<IfAddress>& addresses) {
     int addrCount{0};
     for (auto& addr : addresses) {
       addrCount += checkAddressInKernelAddresses(kernelAddresses, addr) ? 1 : 0;
@@ -390,7 +385,7 @@ class NlMessageFixture : public ::testing::Test {
     EXPECT_EQ(0, proc.wait().exitStatus());
   }
 
-  openr::fbnl::NextHop
+  NextHop
   buildNextHop(
       std::optional<std::vector<int32_t>> pushLabels,
       std::optional<uint32_t> swapLabel,
@@ -398,7 +393,7 @@ class NlMessageFixture : public ::testing::Test {
       std::optional<folly::IPAddress> gateway,
       std::optional<int> ifIndex,
       std::optional<uint8_t> weight = std::nullopt) {
-    openr::fbnl::NextHopBuilder nhBuilder;
+    NextHopBuilder nhBuilder;
 
     if (weight.has_value()) {
       nhBuilder.setWeight(weight.value());
@@ -421,22 +416,22 @@ class NlMessageFixture : public ::testing::Test {
     return nhBuilder.build();
   }
 
-  openr::fbnl::Route
+  Route
   buildNullRoute(int protocolId, const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder rtBuilder;
+    RouteBuilder rtBuilder;
     auto route = rtBuilder.setDestination(dest)
                      .setProtocolId(protocolId)
                      .setType(RTN_BLACKHOLE);
     return rtBuilder.build();
   }
 
-  openr::fbnl::Route
+  Route
   buildRoute(
       int protocolId,
       const std::optional<folly::CIDRNetwork>& dest,
       std::optional<uint32_t> mplsLabel,
-      const std::optional<std::vector<openr::fbnl::NextHop>>& nexthops) {
-    fbnl::RouteBuilder rtBuilder;
+      const std::optional<std::vector<NextHop>>& nexthops) {
+    RouteBuilder rtBuilder;
 
     rtBuilder.setProtocolId(protocolId);
     if (dest.has_value()) {
@@ -460,10 +455,10 @@ class NlMessageFixture : public ::testing::Test {
     return rtBuilder.build();
   }
 
-  std::vector<openr::fbnl::Route>
+  std::vector<Route>
   buildV4RouteDb(uint32_t count) {
-    std::vector<openr::fbnl::Route> routes;
-    std::vector<openr::fbnl::NextHop> paths;
+    std::vector<Route> routes;
+    std::vector<NextHop> paths;
     paths.push_back(buildNextHop(
         outLabel4,
         std::nullopt,
@@ -499,10 +494,10 @@ class NlMessageFixture : public ::testing::Test {
     return routes;
   }
 
-  std::vector<openr::fbnl::Route>
+  std::vector<Route>
   buildV6RouteDb(uint32_t count) {
-    std::vector<openr::fbnl::Route> routes;
-    std::vector<openr::fbnl::NextHop> paths;
+    std::vector<Route> routes;
+    std::vector<NextHop> paths;
     // create mix of next hops, including without label
     paths.push_back(buildNextHop(
         outLabel1,
@@ -562,7 +557,7 @@ class NlMessageFixture : public ::testing::Test {
   };
   // netlink message socket
   std::unique_ptr<NetlinkProtocolSocket> nlSock{nullptr};
-  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
+  messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQ;
 };
 
 TEST(NetlinkRouteMessage, EncodeLabel) {
@@ -591,7 +586,7 @@ TEST(NetlinkRouteMessage, EncodeLabel) {
  */
 TEST(NetlinkProtocolSocket, DelayedEventBase) {
   folly::EventBase evb;
-  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
+  messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQ;
 
   // Create netlink protocol socket
   NetlinkProtocolSocket nlSock(&evb, netlinkEventsQ);
@@ -619,7 +614,7 @@ TEST(NetlinkProtocolSocket, DelayedEventBase) {
 TEST(NetlinkProtocolSocket, GetApiError) {
   // Create netlink protocol socket
   folly::EventBase evb;
-  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
+  messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQ;
   auto nlSock = std::make_unique<NetlinkProtocolSocket>(&evb, netlinkEventsQ);
 
   // Make requests
@@ -650,7 +645,7 @@ TEST(NetlinkProtocolSocket, GetApiError) {
  */
 TEST(NetlinkProtocolSocket, SafeDestruction) {
   auto evb = std::make_unique<folly::EventBase>();
-  messaging::ReplicateQueue<openr::fbnl::NetlinkEvent> netlinkEventsQ;
+  messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQ;
 
   // Create netlink protocol socket
   auto nlSock =
@@ -695,7 +690,7 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
+      if (auto* link = std::get_if<Link>(&req.value())) {
         if (link->getLinkName() == ifName and link->isUp() == isUp) {
           return;
         }
@@ -733,7 +728,7 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
  *  1) ADDR_EVENT(ADD) is populated through replicate queue;
  *  2) RQueue can receive updates from different interfaces;
  *  3) verify attributes by cross-reference between:
- *      [ifName => openr::fbnl::IfAddress]
+ *      [ifName => IfAddress]
  *      and
  *      [ifIndex => ifName]
  */
@@ -769,7 +764,7 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* addr = std::get_if<openr::fbnl::IfAddress>(&req.value())) {
+      if (auto* addr = std::get_if<IfAddress>(&req.value())) {
         ASSERT_TRUE(ifIndexToName.count(addr->getIfIndex()));
         if (ifIndexToName.at(addr->getIfIndex()) == ifName and
             addr->getPrefix().has_value() and
@@ -811,13 +806,13 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   //
   // Test add/delete address via NetlinkProtocolSocket API
   //
-  std::vector<fbnl::IfAddress> ifAddresses;
+  std::vector<IfAddress> ifAddresses;
   {
     VLOG(1) << "Adding address for interfaces: "
             << fmt::format("{}, {}", kVethNameX, kVethNameY)
             << " via NetlinkProtocolSocket API";
 
-    openr::fbnl::IfAddressBuilder builder1;
+    IfAddressBuilder builder1;
     auto ifAddr1 = builder1.setPrefix(ipAddrX)
                        .setIfIndex(ifIndexX)
                        .setScope(RT_SCOPE_UNIVERSE)
@@ -826,7 +821,7 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
     EXPECT_EQ(0, nlSock->addIfAddress(ifAddr1).get());
     ifAddresses.emplace_back(ifAddr1);
 
-    openr::fbnl::IfAddressBuilder builder2;
+    IfAddressBuilder builder2;
     auto ifAddr2 = builder2.setPrefix(ipAddrY)
                        .setIfIndex(ifIndexY)
                        .setScope(RT_SCOPE_UNIVERSE)
@@ -848,14 +843,14 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
             << fmt::format("{}, {}", kVethNameX, kVethNameY)
             << " via NetlinkProtocolSocket API";
 
-    openr::fbnl::IfAddressBuilder builder1;
+    IfAddressBuilder builder1;
     auto ifAddr1 = builder1.setPrefix(ipAddrX)
                        .setIfIndex(ifIndexX)
                        .setScope(RT_SCOPE_UNIVERSE)
                        .build();
     EXPECT_EQ(0, nlSock->deleteIfAddress(ifAddr1).get());
 
-    openr::fbnl::IfAddressBuilder builder2;
+    IfAddressBuilder builder2;
     auto ifAddr2 = builder2.setPrefix(ipAddrY)
                        .setIfIndex(ifIndexY)
                        .setScope(RT_SCOPE_UNIVERSE)
@@ -903,7 +898,7 @@ TEST_F(NlMessageFixture, NeighborEventPublication) {
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* neigh = std::get_if<openr::fbnl::Neighbor>(&req.value())) {
+      if (auto* neigh = std::get_if<Neighbor>(&req.value())) {
         if (neigh->getDestination() == ipAddr and
             neigh->isReachable() == isReachable and
             neigh->getFamily() == (ipAddr.isV4() ? AF_INET : AF_INET6)) {
@@ -955,8 +950,8 @@ TEST_F(NlMessageFixture, EmptyRoute) {
  * Verify it won't be programmed.
  */
 TEST_F(NlMessageFixture, InvalidIpRoute) {
-  std::vector<openr::fbnl::NextHop> path;
-  openr::fbnl::Route route;
+  std::vector<NextHop> path;
+  Route route;
   uint32_t ackCount{0};
 
   path.emplace_back(buildNextHop(
@@ -989,7 +984,7 @@ TEST_F(NlMessageFixture, InvalidIpRoute) {
  */
 TEST_F(NlMessageFixture, IPv6RouteLabelNexthop) {
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
 
   // create label next hop
   paths.emplace_back(buildNextHop(
@@ -1024,7 +1019,7 @@ TEST_F(NlMessageFixture, IPv6RouteLabelNexthop) {
  */
 TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
 
   // create label next hop
   for (uint32_t i = 0; i < 48; i++) {
@@ -1061,7 +1056,7 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
   // check for max payload handling. Add nexthops that exceeds payload size
   // Should error out
 
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   struct v6Addr addr6 {
     0
   };
@@ -1085,7 +1080,7 @@ TEST_F(NlMessageFixture, PopLabel) {
   // pop label to loopback i/f
 
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       std::nullopt,
       std::nullopt,
@@ -1118,7 +1113,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
   // pop labels to different interfaces
 
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       std::nullopt,
       std::nullopt,
@@ -1158,7 +1153,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       std::nullopt,
       swapLabel,
@@ -1192,7 +1187,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       std::nullopt,
       swapLabel,
@@ -1234,7 +1229,7 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
   // and an invalid outgoing I/F. Function should return Fail
   // and the nlmsg error should increase
 
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   uint32_t invalidIfindex = 1000;
   paths.push_back(buildNextHop(
       std::nullopt,
@@ -1253,8 +1248,8 @@ TEST_F(NlMessageFixture, InvalidMplsRoute) {
   // Add two routes, one valid and the other invalid. Only one should be
   // sent to program
 
-  std::vector<openr::fbnl::NextHop> paths1;
-  std::vector<openr::fbnl::Route> routes;
+  std::vector<NextHop> paths1;
+  std::vector<Route> routes;
   uint32_t ackCount{0};
   // Valid route with non-zero push labels.
   // NOTE: IP routes can only have `PUSH` instructions on their next-hops.
@@ -1269,7 +1264,7 @@ TEST_F(NlMessageFixture, InvalidMplsRoute) {
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix1, std::nullopt, paths1));
 
-  std::vector<openr::fbnl::NextHop> paths2;
+  std::vector<NextHop> paths2;
   // Invalid route, send PUSH without labels
   paths2.push_back(buildNextHop(
       std::nullopt,
@@ -1357,7 +1352,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
   // Add label route with single path label with PHP nexthop
 
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       std::nullopt,
       std::nullopt,
@@ -1390,7 +1385,7 @@ TEST_F(NlMessageFixture, LabelRouteAutoResolveInterfaceIndex) {
   // Add label route with single path label with PHP nexthop
 
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.emplace_back(buildNextHop(
       std::nullopt,
       std::nullopt,
@@ -1413,7 +1408,7 @@ TEST_F(NlMessageFixture, LabelRouteAutoResolveInterfaceIndex) {
   //
   // Kernel will report next-hops with resolved interface index
   //
-  std::vector<openr::fbnl::NextHop> resolvedPaths;
+  std::vector<NextHop> resolvedPaths;
   resolvedPaths.emplace_back(buildNextHop(
       std::nullopt,
       std::nullopt,
@@ -1448,7 +1443,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   // Add label route with single path label with PHP nexthop
 
   uint32_t ackCount{0};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       std::nullopt,
       std::nullopt,
@@ -1503,7 +1498,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   uint32_t ackCount{0};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel4,
       std::nullopt,
@@ -1544,7 +1539,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthopAutoResolveInterface) {
   uint32_t ackCount{0};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
-  std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+  std::vector<NextHop> paths{buildNextHop(
       outLabel4,
       std::nullopt,
       thrift::MplsActionCode::PUSH,
@@ -1560,7 +1555,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthopAutoResolveInterface) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // Kernel will report next-hops with resolved interface index
-  std::vector<openr::fbnl::NextHop> resolvedPaths{buildNextHop(
+  std::vector<NextHop> resolvedPaths{buildNextHop(
       outLabel4,
       std::nullopt,
       thrift::MplsActionCode::PUSH,
@@ -1591,7 +1586,7 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
   uint32_t ackCount{0};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("11.10.0.0/24");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   std::vector<int32_t> labels(16);
   std::iota(std::begin(labels), std::end(labels), 701);
   paths.push_back(buildNextHop(
@@ -1719,7 +1714,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
 
   uint32_t ackCount{0};
   uint32_t count{20000};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   // create label next hop
   paths.push_back(buildNextHop(
       std::nullopt,
@@ -1727,7 +1722,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
       thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
       ifIndexX));
-  std::vector<openr::fbnl::Route> labelRoutes;
+  std::vector<Route> labelRoutes;
   for (uint32_t i = 0; i < count; i++) {
     labelRoutes.push_back(
         buildRoute(kRouteProtoId, std::nullopt, 600 + i, paths));
@@ -1796,7 +1791,7 @@ TEST_F(NlMessageFixture, LinkFlapScaleTest) {
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
+      if (auto* link = std::get_if<Link>(&req.value())) {
         --cnt;
       }
     }
@@ -1851,10 +1846,10 @@ TEST_F(NlMessageFixture, LinkFlapScaleTest) {
  */
 TEST_F(NlMessageFixture, AddrScaleTest) {
   const int addrCount{250};
-  std::vector<fbnl::IfAddress> ifAddresses;
+  std::vector<IfAddress> ifAddresses;
 
   for (int i = 0; i < addrCount; i++) {
-    openr::fbnl::IfAddressBuilder builder;
+    IfAddressBuilder builder;
     folly::CIDRNetwork prefix1{
         folly::IPAddress("face:d00d::" + std::to_string(i)), 128};
     auto ifAddr = builder.setPrefix(prefix1)
@@ -1865,7 +1860,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
     EXPECT_EQ(0, nlSock->addIfAddress(ifAddr).get());
     ifAddresses.emplace_back(ifAddr);
 
-    openr::fbnl::IfAddressBuilder ipv4builder;
+    IfAddressBuilder ipv4builder;
     folly::CIDRNetwork prefix2{
         folly::IPAddress("10.0." + std::to_string(i) + ".0"), 32};
     auto ifAddrV4 = ipv4builder.setPrefix(prefix2)
@@ -1884,13 +1879,13 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
       findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
 
   for (int i = 0; i < addrCount; i++) {
-    openr::fbnl::IfAddressBuilder builder;
+    IfAddressBuilder builder;
     folly::CIDRNetwork prefix1{
         folly::IPAddress("face:d00d::" + std::to_string(i)), 128};
     builder.setPrefix(prefix1).setIfIndex(ifIndexX).setScope(RT_SCOPE_UNIVERSE);
     EXPECT_EQ(0, nlSock->deleteIfAddress(builder.build()).get());
 
-    openr::fbnl::IfAddressBuilder ipv4builder;
+    IfAddressBuilder ipv4builder;
     folly::CIDRNetwork prefix2{
         folly::IPAddress("10.0." + std::to_string(i) + ".0"), 32};
     ipv4builder.setPrefix(prefix2).setIfIndex(ifIndexX).setScope(
@@ -2029,7 +2024,7 @@ TEST_F(NlMessageFixture, MplsUcmpError) {
   // POP next-hop
   //
   {
-    std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+    std::vector<NextHop> paths{buildNextHop(
         std::nullopt,
         std::nullopt,
         thrift::MplsActionCode::POP_AND_LOOKUP,
@@ -2044,7 +2039,7 @@ TEST_F(NlMessageFixture, MplsUcmpError) {
   // PHP next-hop
   //
   {
-    std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+    std::vector<NextHop> paths{buildNextHop(
         std::nullopt,
         std::nullopt,
         thrift::MplsActionCode::PHP,
@@ -2059,7 +2054,7 @@ TEST_F(NlMessageFixture, MplsUcmpError) {
   // SWAP next-hop
   //
   {
-    std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+    std::vector<NextHop> paths{buildNextHop(
         std::nullopt,
         swapLabel1,
         thrift::MplsActionCode::SWAP,
@@ -2131,7 +2126,7 @@ TEST_P(NlMessageFixtureV4OrV6, InvalidIfAddress) {
   // ATTN: to test INVALID family, do NOT populate `prefix_`
   // field. Otherwise, it will ignore `setFamily()` and honor
   // `prefix_.first.family()`
-  openr::fbnl::IfAddressBuilder builder;
+  IfAddressBuilder builder;
   auto ifAddr1 = builder.setFamily(AF_UNSPEC).build();
   builder.reset();
 
@@ -2158,7 +2153,7 @@ TEST_P(NlMessageFixtureV4OrV6, AddDelDuplicateIfAddress) {
   folly::CIDRNetwork network = isV4
       ? folly::IPAddress::createNetwork("10.0.0.1/32")
       : folly::IPAddress::createNetwork("fc00:cafe:4::4/128");
-  openr::fbnl::IfAddressBuilder builder;
+  IfAddressBuilder builder;
 
   auto ifAddr = builder.setPrefix(network)
                     .setIfIndex(ifIndexX)
@@ -2195,8 +2190,8 @@ TEST_P(NlMessageFixtureV4OrV6, DeleteNonExistingRoute) {
   folly::CIDRNetwork network = isV4
       ? folly::IPAddress::createNetwork("10.10.0.0/24")
       : folly::IPAddress::createNetwork("fd00::/64");
-  std::vector<openr::fbnl::NextHop> path;
-  openr::fbnl::Route route;
+  std::vector<NextHop> path;
+  Route route;
   uint32_t ackCount{0};
 
   path.emplace_back(buildNextHop(
@@ -2230,7 +2225,7 @@ TEST_P(NlMessageFixtureV4OrV6, RouteWithSingleNextHop) {
   folly::CIDRNetwork network = isV4
       ? folly::IPAddress::createNetwork("10.10.0.0/24")
       : folly::IPAddress::createNetwork("fd00::/64");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
 
   paths.emplace_back(buildNextHop(
       std::nullopt,
@@ -2273,7 +2268,7 @@ TEST_P(NlMessageFixtureV4OrV6, RouteWithMultipleNextHop) {
   folly::CIDRNetwork network = isV4
       ? folly::IPAddress::createNetwork("10.10.0.0/24")
       : folly::IPAddress::createNetwork("fd00::/64");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
 
   paths.emplace_back(buildNextHop(
       std::nullopt,
@@ -2312,6 +2307,220 @@ TEST_P(NlMessageFixtureV4OrV6, RouteWithMultipleNextHop) {
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
+/*
+ * Add multiple routes with multiple NHs and verify
+ */
+TEST_P(NlMessageFixtureV4OrV6, MultiRouteWithMultiNextHops) {
+  const bool isV4 = GetParam();
+
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network1 = isV4
+      ? folly::IPAddress::createNetwork("10.10.0.0/24")
+      : folly::IPAddress::createNetwork("fd00::/64");
+  folly::CIDRNetwork network2 = isV4
+      ? folly::IPAddress::createNetwork("20.20.0.0/24")
+      : folly::IPAddress::createNetwork("fe00::/64");
+  std::vector<NextHop> paths;
+  std::vector<Route> routes;
+
+  // build and add one route with multiple NHs
+  {
+    paths.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        isV4 ? ipAddrY1V4 : ipAddrY1V6, /* NH address */
+        isV4 ? ifIndexY : ifIndexX /* interface index */));
+    paths.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        isV4 ? ipAddrY2V4 : ipAddrY2V6, /* NH address */
+        isV4 ? ifIndexY : ifIndexX /* interface index */));
+    routes.emplace_back(
+        buildRoute(kRouteProtoId, network1, std::nullopt, paths));
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(routes.front()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route is added
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, routes.front()));
+  }
+
+  // build and add another route with single NH
+  {
+    paths.pop_back();
+    routes.emplace_back(
+        buildRoute(kRouteProtoId, network2, std::nullopt, paths));
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(routes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route is added
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, routes.back()));
+  }
+
+  // delete both routes and verify
+  {
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->deleteRoute(routes.front()).get());
+    EXPECT_EQ(0, nlSock->deleteRoute(routes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 2);
+
+    // verify route is deleted
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, routes.front()));
+    EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, routes.back()));
+  }
+}
+
+/*
+ * Update nexthop(NH) tests with the following:
+ *  - add a route with single NH and verify
+ *  - change the route pointing to a different NH and verify
+ *  - add both NHs to the same route and verify
+ *  - remove one of the NHs and verify
+ *  - delete the route and verify
+ */
+TEST_P(NlMessageFixtureV4OrV6, UpdateNextHop) {
+  const bool isV4 = GetParam();
+
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network = isV4
+      ? folly::IPAddress::createNetwork("10.10.0.0/24")
+      : folly::IPAddress::createNetwork("fd00::/64");
+  std::vector<NextHop> path1, path2;
+
+  //
+  // Step1: add route with single NH
+  //
+  {
+    path1.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        isV4 ? ipAddrY1V4 : ipAddrY1V6, /* NH address */
+        isV4 ? ifIndexY : ifIndexX /* egress interface */));
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path1);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+          r.getNextHops().begin()->getGateway() ==
+              (isV4 ? ipAddrY1V4 : ipAddrY1V6)) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+
+  //
+  // Step2: change the same route to point to a different NH
+  //
+  {
+    path2.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        isV4 ? ipAddrY2V4 : ipAddrY2V6, /* NH address */
+        isV4 ? ifIndexY : ifIndexX /* egress interface */));
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path2);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+          r.getNextHops().begin()->getGateway() ==
+              (isV4 ? ipAddrY2V4 : ipAddrY2V6)) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+
+  //
+  // Step3: change the route to point to both NHs
+  //
+  {
+    path1.insert(path1.end(), path2.begin(), path2.end());
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path1);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 2) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+
+  //
+  // Step4: remove one of the NHs and verify
+  //
+  {
+    path1.pop_back();
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path1);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+          r.getNextHops().begin()->getGateway() ==
+              (isV4 ? ipAddrY1V4 : ipAddrY1V6)) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+}
+
 /**
  * Validates the UCMP functionality with single next-hop. The kernel ignore the
  * weight and reports default weight (0 aka 1) as there is no effective UCMP for
@@ -2324,7 +2533,7 @@ TEST_P(NlMessageFixtureV4OrV6, UcmpSingleNextHop) {
       ? folly::IPAddress::createNetwork("10.10.0.0/24")
       : folly::IPAddress::createNetwork("fd00::/64");
 
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel4,
       std::nullopt,
@@ -2338,7 +2547,7 @@ TEST_P(NlMessageFixtureV4OrV6, UcmpSingleNextHop) {
   EXPECT_EQ(0, nlSock->addRoute(route).get());
 
   // Create expected route object
-  std::vector<openr::fbnl::NextHop> expectedPaths;
+  std::vector<NextHop> expectedPaths;
   expectedPaths.push_back(buildNextHop(
       outLabel4,
       std::nullopt,
@@ -2377,7 +2586,7 @@ TEST_P(NlMessageFixtureV4OrV6, UcmpMultipleNextHops) {
       : folly::IPAddress::createNetwork("fd00::/64");
 
   // Path contains one MPLS push next-hop and another IP nexthop
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel4,
       std::nullopt,
@@ -2422,7 +2631,7 @@ TEST_P(NlMessageFixtureV4OrV6, UcmpMultipleNextHopsDefaultWeight) {
       : folly::IPAddress::createNetwork("fd00::/64");
 
   // Path contains one MPLS push next-hop and another IP nexthop
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel4,
       std::nullopt,
@@ -2443,7 +2652,7 @@ TEST_P(NlMessageFixtureV4OrV6, UcmpMultipleNextHopsDefaultWeight) {
   EXPECT_EQ(0, nlSock->addRoute(route).get());
 
   // Create expected route. It contains both next-hops with weight=1
-  std::vector<openr::fbnl::NextHop> expectedPaths;
+  std::vector<NextHop> expectedPaths;
   expectedPaths.push_back(buildNextHop(
       outLabel4,
       std::nullopt,
