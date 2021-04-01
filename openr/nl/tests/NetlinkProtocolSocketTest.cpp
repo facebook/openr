@@ -2312,6 +2312,140 @@ TEST_P(NlMessageFixtureV4OrV6, RouteWithMultipleNextHop) {
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
+/*
+ * Update nexthop(NH) tests with the following:
+ *  - add a route with single NH and verify
+ *  - change the route pointing to a different NH and verify
+ *  - add both NHs to the same route and verify
+ *  - remove one of the NHs and verify
+ *  - delete the route and verify
+ */
+TEST_P(NlMessageFixtureV4OrV6, UpdateNextHop) {
+  const bool isV4 = GetParam();
+
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network = isV4
+      ? folly::IPAddress::createNetwork("10.10.0.0/24")
+      : folly::IPAddress::createNetwork("fd00::/64");
+  std::vector<openr::fbnl::NextHop> path1, path2;
+
+  //
+  // Step1: add route with single NH
+  //
+  {
+    path1.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        isV4 ? ipAddrY1V4 : ipAddrY1V6, /* NH address */
+        isV4 ? ifIndexY : ifIndexX /* egress interface */));
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path1);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+          r.getNextHops().begin()->getGateway() ==
+              (isV4 ? ipAddrY1V4 : ipAddrY1V6)) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+
+  //
+  // Step2: change the same route to point to a different NH
+  //
+  {
+    path2.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        isV4 ? ipAddrY2V4 : ipAddrY2V6, /* NH address */
+        isV4 ? ifIndexY : ifIndexX /* egress interface */));
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path2);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+          r.getNextHops().begin()->getGateway() ==
+              (isV4 ? ipAddrY2V4 : ipAddrY2V6)) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+
+  //
+  // Step3: change the route to point to both NHs
+  //
+  {
+    path1.insert(path1.end(), path2.begin(), path2.end());
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path1);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 2) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+
+  //
+  // Step4: remove one of the NHs and verify
+  //
+  {
+    path1.pop_back();
+    auto route = buildRoute(kRouteProtoId, network, std::nullopt, path1);
+
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(route).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+
+    // verify route
+    auto kernelRoutes = isV4
+        ? nlSock->getIPv4Routes(kRouteProtoId).get().value()
+        : nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    bool found = false;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+          r.getNextHops().begin()->getGateway() ==
+              (isV4 ? ipAddrY1V4 : ipAddrY1V6)) {
+        found = true;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+}
+
 /**
  * Validates the UCMP functionality with single next-hop. The kernel ignore the
  * weight and reports default weight (0 aka 1) as there is no effective UCMP for
