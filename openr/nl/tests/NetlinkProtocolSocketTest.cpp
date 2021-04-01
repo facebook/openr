@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 
 extern "C" {
@@ -39,8 +40,10 @@ namespace {
 const std::chrono::milliseconds kProcTimeout{500};
 const std::string kVethNameX("vethTestX");
 const std::string kVethNameY("vethTestY");
-const uint8_t kRouteProtoId = 99;
-const uint32_t kAqRouteProtoIdPriority = 10;
+const uint8_t kRouteProtoId = 99; // Open/R protocolId
+const uint8_t kBgpProtoId = 253; // BGP protocolId
+const std::map<int16_t, int16_t> protoIdToPriority =
+    thrift::Platform_constants::protocolIdtoPriority();
 } // namespace
 
 folly::CIDRNetwork ipPrefix1 = folly::IPAddress::createNetwork("5501::/64");
@@ -436,6 +439,10 @@ class NlMessageFixture : public ::testing::Test {
     rtBuilder.setProtocolId(protocolId);
     if (dest.has_value()) {
       rtBuilder.setDestination(dest.value());
+
+      // Priority only for IPv4 and IPv6 routes
+      CHECK_NE(0, protoIdToPriority.count(protocolId));
+      rtBuilder.setPriority(protoIdToPriority.at(protocolId));
     }
     if (mplsLabel.has_value()) {
       rtBuilder.setMplsLabel(mplsLabel.value());
@@ -444,11 +451,6 @@ class NlMessageFixture : public ::testing::Test {
       for (const auto& nh : nexthops.value()) {
         rtBuilder.addNextHop(nh);
       }
-    }
-    // Default values
-    if (dest.has_value()) {
-      // Priority only for IPv4 and IPv6 routes
-      rtBuilder.setPriority(kAqRouteProtoIdPriority);
     }
     rtBuilder.setFlags(0);
     rtBuilder.setValid(true);
@@ -977,6 +979,109 @@ TEST_F(NlMessageFixture, InvalidIpRoute) {
   EXPECT_EQ(-EPROTONOSUPPORT, nlSock->deleteRoute(route).get());
   EXPECT_EQ(0, getErrorCount()); // ESRCH is ignored in error count
   EXPECT_EQ(getAckCount(), ackCount);
+}
+
+/*
+ * Add different routes for different protocols
+ */
+TEST_F(NlMessageFixture, MultiProtocolUnicastRoute) {
+  uint32_t ackCount{0};
+  std::vector<NextHop> v4Paths, v6Paths;
+  std::vector<Route> v4Routes, v6Routes;
+
+  //
+  // Prepare routes data structure for both BGP and Open/R protocolId
+  //
+  {
+    // V4 routes for BGP protocolId
+    folly::CIDRNetwork prefix1V4 =
+        folly::IPAddress::createNetwork("10.10.0.0/24");
+    folly::CIDRNetwork prefix2V4 =
+        folly::IPAddress::createNetwork("20.20.0.0/24");
+    // V6 routes for Open/R protocolId
+    folly::CIDRNetwork prefix1V6 = folly::IPAddress::createNetwork("fd00::/64");
+    folly::CIDRNetwork prefix2V6 = folly::IPAddress::createNetwork("fe00::/64");
+
+    v4Paths.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        ipAddrY1V4, /* NH address */
+        ifIndexY /* interface index */));
+    v6Paths.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        ipAddrY1V6, /* NH address */
+        ifIndexX /* interface index */));
+    v4Routes.emplace_back(
+        buildRoute(kBgpProtoId, prefix1V4, std::nullopt, v4Paths));
+    v4Routes.emplace_back(
+        buildRoute(kBgpProtoId, prefix2V4, std::nullopt, v4Paths));
+    v6Routes.emplace_back(
+        buildRoute(kRouteProtoId, prefix1V6, std::nullopt, v6Paths));
+    v6Routes.emplace_back(
+        buildRoute(kRouteProtoId, prefix2V6, std::nullopt, v6Paths));
+  }
+
+  //
+  // Add route for BGP protocolId
+  //
+  {
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(v4Routes.front()).get());
+    EXPECT_EQ(0, nlSock->addRoute(v4Routes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 2);
+
+    auto kernelRoutesV4 = nlSock->getIPv4Routes(kBgpProtoId).get().value();
+    auto kernelRoutesV6 = nlSock->getIPv6Routes(kBgpProtoId).get().value();
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV4, v4Routes.front()));
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV4, v4Routes.back()));
+    EXPECT_EQ(0, kernelRoutesV6.size());
+  }
+
+  //
+  // Add route for Open/R protocolId
+  //
+  {
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(v6Routes.front()).get());
+    EXPECT_EQ(0, nlSock->addRoute(v6Routes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 2);
+
+    auto kernelRoutesV4 = nlSock->getIPv4Routes(kRouteProtoId).get().value();
+    auto kernelRoutesV6 = nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV6, v6Routes.front()));
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV6, v6Routes.back()));
+    EXPECT_EQ(0, kernelRoutesV4.size());
+  }
+
+  //
+  // Delete route for both BGP and Open/R protocolId
+  //
+  {
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->deleteRoute(v4Routes.front()).get());
+    EXPECT_EQ(0, nlSock->deleteRoute(v4Routes.back()).get());
+    EXPECT_EQ(0, nlSock->deleteRoute(v6Routes.front()).get());
+    EXPECT_EQ(0, nlSock->deleteRoute(v6Routes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 4);
+
+    // verify route is deleted
+    auto kernelBgpRoutesV4 = nlSock->getIPv4Routes(kBgpProtoId).get().value();
+    auto kernelBgpRoutesV6 = nlSock->getIPv6Routes(kBgpProtoId).get().value();
+    auto kernelOpenrRoutesV4 =
+        nlSock->getIPv4Routes(kRouteProtoId).get().value();
+    auto kernelOpenrRoutesV6 =
+        nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    EXPECT_EQ(0, kernelBgpRoutesV4.size());
+    EXPECT_EQ(0, kernelBgpRoutesV6.size());
+    EXPECT_EQ(0, kernelOpenrRoutesV4.size());
+    EXPECT_EQ(0, kernelOpenrRoutesV6.size());
+  }
 }
 
 /*
