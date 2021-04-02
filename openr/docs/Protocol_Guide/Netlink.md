@@ -20,14 +20,14 @@ Defines C++ classes to represent various routing information e.g. Address, Link,
 Route etc. This serves as data representation between application code and
 netlink C++ library.
 
-### NetlinkMessage
+### NetlinkMessageBase
 
 Defines base class that facilitates serialization and de-serialization of
 message exchange with linux kernel.
 
 Reference: http://man7.org/linux/man-pages/man7/netlink.7.html
 
-### NetlinkRoute
+### AddrMessage/LinkMessage/NeighborMessage/RouteMessage
 
 Specialization of netlink message for `NETLINK_ROUTE` (aka rtnetlink) family. It
 implements Addresses, Link, Neighbor and Route (IP, IPv6 & MPLS).
@@ -39,11 +39,6 @@ Reference: http://man7.org/linux/man-pages/man7/rtnetlink.7.html
 Implements send and receive netlink messages with the use of `AF_NETLINK` socket
 type. Also provides public APIs to get/add/del for Addresses, Link, Neighbor and
 Routes.
-
-### NetlinkSocket [DEPRECATED]
-
-Further wraps NetlinkProtocolSocket for backward compatibility with previous C++
-interface.
 
 ### Unit Testing
 

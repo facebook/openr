@@ -207,7 +207,6 @@ add_library(openrlib
   openr/nl/NetlinkRouteMessage.cpp
   openr/nl/NetlinkMessageBase.cpp
   openr/nl/NetlinkProtocolSocket.cpp
-  openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
   openr/monitor/LogSample.cpp
   openr/monitor/Monitor.cpp
@@ -602,19 +601,6 @@ if(BUILD_TESTS)
         openr/nl/tests/NetlinkProtocolSocketTest.cpp
       DESTINATION sbin/tests/openr/nl
     )
-
-    add_openr_test(NetlinkSocketTest netlink_socket_test
-      SOURCES
-        openr/nl/tests/NetlinkSocketTest.cpp
-      DESTINATION sbin/tests/openr/nl
-    )
-
-    add_openr_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test
-      SOURCES
-        openr/nl/tests/NetlinkSocketSubscribeTest.cpp
-      DESTINATION sbin/tests/openr/nl
-    )
-
   endif()
 
   add_openr_test(PrefixManagerTest prefix_manager_test
