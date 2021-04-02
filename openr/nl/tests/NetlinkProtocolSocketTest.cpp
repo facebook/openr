@@ -983,8 +983,11 @@ TEST_F(NlMessageFixture, InvalidIpRoute) {
 
 /*
  * Add different routes for different protocols
+ *  - add both v4 routes for BGP protocolId and verify
+ *  - add both v6 routes for Open/R protocolId and verify
+ *  - delete ALL the routes and verify
  */
-TEST_F(NlMessageFixture, MultiProtocolUnicastRoute) {
+TEST_F(NlMessageFixture, MultiProtocolDiffRoute) {
   uint32_t ackCount{0};
   std::vector<NextHop> v4Paths, v6Paths;
   std::vector<Route> v4Routes, v6Routes;
@@ -1081,6 +1084,109 @@ TEST_F(NlMessageFixture, MultiProtocolUnicastRoute) {
     EXPECT_EQ(0, kernelBgpRoutesV6.size());
     EXPECT_EQ(0, kernelOpenrRoutesV4.size());
     EXPECT_EQ(0, kernelOpenrRoutesV6.size());
+  }
+}
+
+/*
+ * Add same route(same NHs) for different protocols:
+ *  - add 1 v4 and 1 v6 route for BGP protocolId
+ *  - add 1 v4 and 1 v6 route for Open/R protocolId
+ *  - verify kernel will program different routes with different priority;
+ *
+ * ATTN:
+ * This test ONLY make sure netlinkProtocolSocket can program SAME routes
+ * with different priority to kernel. This test doesn't verify `route-selection`
+ * behavior based on different priorities. This can be added as a separate test
+ * case.
+ */
+TEST_F(NlMessageFixture, MultiProtocolSameRoute) {
+  uint32_t ackCount{0};
+  std::vector<NextHop> v4Paths, v6Paths;
+  std::vector<Route> bgpRoutes, openrRoutes;
+  // V4 routes for BGP protocolId
+  folly::CIDRNetwork prefixV4 = folly::IPAddress::createNetwork("10.10.0.0/24");
+  // V6 routes for Open/R protocolId
+  folly::CIDRNetwork prefixV6 = folly::IPAddress::createNetwork("fd00::/64");
+
+  //
+  // Prepare routes data structure for both BGP and Open/R protocolId
+  //
+  {
+    v4Paths.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        ipAddrY1V4, /* NH address */
+        ifIndexY /* interface index */));
+    v6Paths.emplace_back(buildNextHop(
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+        ipAddrY1V6, /* NH address */
+        ifIndexX /* interface index */));
+    bgpRoutes.emplace_back(
+        buildRoute(kBgpProtoId, prefixV4, std::nullopt, v4Paths));
+    bgpRoutes.emplace_back(
+        buildRoute(kBgpProtoId, prefixV6, std::nullopt, v6Paths));
+    openrRoutes.emplace_back(
+        buildRoute(kRouteProtoId, prefixV4, std::nullopt, v4Paths));
+    openrRoutes.emplace_back(
+        buildRoute(kRouteProtoId, prefixV6, std::nullopt, v6Paths));
+  }
+
+  //
+  // Add route for BGP protocolId
+  //
+  {
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(bgpRoutes.front()).get());
+    EXPECT_EQ(0, nlSock->addRoute(bgpRoutes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 2);
+
+    auto kernelRoutesV4 = nlSock->getIPv4Routes(kBgpProtoId).get().value();
+    auto kernelRoutesV6 = nlSock->getIPv6Routes(kBgpProtoId).get().value();
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV4, bgpRoutes.front()));
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV6, bgpRoutes.back()));
+  }
+
+  //
+  // Add route for Open/R protocolId
+  //
+  {
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addRoute(openrRoutes.front()).get());
+    EXPECT_EQ(0, nlSock->addRoute(openrRoutes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 2);
+
+    auto kernelRoutesV4 = nlSock->getIPv4Routes(kRouteProtoId).get().value();
+    auto kernelRoutesV6 = nlSock->getIPv6Routes(kRouteProtoId).get().value();
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV4, openrRoutes.front()));
+    EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutesV6, openrRoutes.back()));
+  }
+
+  //
+  // Delete route for both BGP and Open/R protocolId
+  //
+  {
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->deleteRoute(bgpRoutes.front()).get());
+    EXPECT_EQ(0, nlSock->deleteRoute(bgpRoutes.back()).get());
+    EXPECT_EQ(0, nlSock->deleteRoute(openrRoutes.front()).get());
+    EXPECT_EQ(0, nlSock->deleteRoute(openrRoutes.back()).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 4);
+
+    // verify route is deleted
+    auto kernelRoutes = nlSock->getAllRoutes().get().value();
+    int16_t count = 0;
+    for (auto const& r : kernelRoutes) {
+      if (r.getDestination() == prefixV4 or r.getDestination() == prefixV6) {
+        ++count;
+      }
+    }
+    ASSERT_EQ(0, count);
   }
 }
 
@@ -2414,6 +2520,9 @@ TEST_P(NlMessageFixtureV4OrV6, RouteWithMultipleNextHop) {
 
 /*
  * Add multiple routes with multiple NHs and verify
+ *  - add one route with multiple NHs and verify
+ *  - add anothe route with single NH and verify
+ *  - delete both routes and verify
  */
 TEST_P(NlMessageFixtureV4OrV6, MultiRouteWithMultiNextHops) {
   const bool isV4 = GetParam();
