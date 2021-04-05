@@ -982,6 +982,43 @@ TEST_F(NlMessageFixture, InvalidIpRoute) {
 }
 
 /*
+ * Validate unicast route with 1 next-hop and no labels
+ */
+TEST_F(NlMessageFixture, V4RouteOverV6NextHop) {
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network = folly::IPAddress::createNetwork("10.10.0.0/24");
+  std::vector<NextHop> paths;
+
+  paths.emplace_back(buildNextHop(
+      std::nullopt,
+      std::nullopt,
+      std::nullopt,
+      ipAddrY1V6, /* NH address */
+      ifIndexX /* egress interface */));
+  auto route = buildRoute(kRouteProtoId, network, std::nullopt, paths);
+
+  // add route
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify route is added
+  auto kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
+
+  // delete route
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
+}
+
+/*
  * Add different routes for different protocols
  *  - add both v4 routes for BGP protocolId and verify
  *  - add both v6 routes for Open/R protocolId and verify

@@ -133,6 +133,19 @@ NetlinkRouteMessage::encodeLabel(uint32_t label, bool bos) {
   return encodeLabel;
 }
 
+/*
+ * Util function to add IPv4/IPv6 nexthops for route.
+ *
+ * rtnetlink.h defines "struct rtnexthop" to describe all necessary nexthop
+ * information, i.e. parameters of path to a destination via this nexthop.
+ *
+ *  struct rtnexthop {
+ *    unsigned short      rtnh_len;
+ *    unsigned char       rtnh_flags;
+ *    unsigned char       rtnh_hops;
+ *    int                 rtnh_ifindex;
+ *  };
+ */
 int
 NetlinkRouteMessage::addIpNexthop(
     struct rtattr* rta,
@@ -140,9 +153,18 @@ NetlinkRouteMessage::addIpNexthop(
     const NextHop& path,
     const Route& route) const {
   rtnh->rtnh_len = sizeof(*rtnh);
+
+  // specify rtnh_ifindex
   if (path.getIfIndex().has_value()) {
     rtnh->rtnh_ifindex = path.getIfIndex().value();
   }
+
+  // specify rtnh_flags
+  //
+  //    RTNH_F_DEAD         1   /* Nexthop is dead (used by multipath)  */
+  //    RTNH_F_PERVASIVE    2   /* Do recursive gateway lookup  */
+  //    RTNH_F_ONLINK       4   /* Gateway is forced on link    */
+  //
   rtnh->rtnh_flags = 0;
 
   // Set weight if specified - This is only applicable for IP nexthops
@@ -151,23 +173,44 @@ NetlinkRouteMessage::addIpNexthop(
     rtnh->rtnh_hops = path.getWeight() - 1;
   }
 
-  // RTA_GATEWAY
+  // speficy RTA_VIA or RTA_GATEWAY
   auto const via = path.getGateway();
-  if (!via.has_value()) {
+  if (not via.has_value()) {
     if (route.getType() == RTN_MULTICAST || route.getScope() == RT_SCOPE_LINK) {
       return 0;
     }
-    LOG(ERROR) << "Nexthop IP not provided";
+    LOG(ERROR) << "Nexthop address not provided";
     return EINVAL;
   }
-  if (addSubAttributes(
-          rta, RTA_GATEWAY, via.value().bytes(), via.value().byteCount()) ==
-      nullptr) {
-    return ENOBUFS;
-  };
 
-  // update length in rtnexthop
-  rtnh->rtnh_len += via.value().byteCount() + sizeof(struct rtattr);
+  // In case of route family is different from the NH gateway family,
+  // it requires to specify `RTA_VIA` field instead of `RTA_GATEWAY`.
+  const auto& gw = via.value();
+  if (isV4RouteOverV6Nexthop(route, path)) {
+    // RTA_VIA
+    struct _NextHop nh;
+    nh.addrFamily = path.getFamily();
+    uint32_t nhLen = nh.addrFamily == AF_INET ? sizeof(struct _NextHopV4)
+                                              : sizeof(struct _NextHop);
+    memcpy(nh.ip, reinterpret_cast<const char*>(gw.bytes()), gw.byteCount());
+    if (addSubAttributes(
+            rta, RTA_VIA, reinterpret_cast<const char*>(&nh), nhLen) ==
+        nullptr) {
+      return ENOBUFS;
+    }
+
+    // update length in rtnexthop
+    rtnh->rtnh_len += nhLen + sizeof(struct rtattr);
+  } else {
+    // RTA_GATEWAY
+    if (addSubAttributes(rta, RTA_GATEWAY, gw.bytes(), gw.byteCount()) ==
+        nullptr) {
+      return ENOBUFS;
+    }
+
+    // update length in rtnexthop
+    rtnh->rtnh_len += gw.byteCount() + sizeof(struct rtattr);
+  }
   return 0;
 }
 
@@ -353,7 +396,7 @@ NetlinkRouteMessage::addNextHops(const Route& route) {
     int payloadLen = RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(nhop.data()));
     if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_))) {
       return status;
-    };
+    }
   }
   return 0;
 }
@@ -524,6 +567,13 @@ NetlinkRouteMessage::setMplsAction(
       nhBuilder.setLabelAction(thrift::MplsActionCode::POP_AND_LOOKUP);
     }
   }
+}
+
+bool
+NetlinkRouteMessage::isV4RouteOverV6Nexthop(
+    const Route& route, const NextHop& nh) {
+  return static_cast<int>(route.getFamily()) == AF_INET and
+      static_cast<int>(nh.getFamily()) == AF_INET6;
 }
 
 Route

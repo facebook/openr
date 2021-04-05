@@ -79,6 +79,9 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   static Route parseMessage(const struct nlmsghdr* nlmsg);
 
  private:
+  // inherited class implementation
+  void rcvdRoute(Route&& route) override;
+
   // parse IP address
   static folly::Expected<folly::IPAddress, folly::IPAddressFormatError> parseIp(
       const struct rtattr* ipAttr, unsigned char family);
@@ -100,8 +103,8 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   // set mpls action based on nexthop fields
   static void setMplsAction(NextHopBuilder& nhBuilder, unsigned char family);
 
-  // pointer to route message header
-  struct rtmsg* rtmsg_{nullptr};
+  // util function to check if it is v4 route over v6 nexthops
+  static bool isV4RouteOverV6Nexthop(const Route& route, const NextHop& nh);
 
   // add set of nexthops
   int addNextHops(const Route& route);
@@ -129,10 +132,17 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
       const NextHop& path,
       const Route& route) const;
 
+  //
+  // Private variables for rtnetlink msg exchange
+  //
+
+  // pointer to route message header
+  struct rtmsg* rtmsg_{nullptr};
+
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};
 
-  // for via nexthop
+  // for RTA_VIA nexthop
   struct _NextHop {
     uint16_t addrFamily;
     char ip[16];
@@ -142,9 +152,6 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
     uint16_t addrFamily;
     char ip[4];
   } __attribute__((__packed__));
-
- private:
-  void rcvdRoute(Route&& route) override;
 
   struct {
     uint8_t table{0};
