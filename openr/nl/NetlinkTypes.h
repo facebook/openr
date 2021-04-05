@@ -555,36 +555,4 @@ class Link final {
 
 bool operator==(const Link& lhs, const Link& rhs);
 
-// TODO: deprecate the following once NetlinkSocket being retired
-
-// Link helper class that records Link attributes on the fly
-struct LinkAttribute final {
-  bool isUp{false};
-  int ifIndex{0};
-  std::unordered_set<folly::CIDRNetwork> networks;
-};
-
-// Route => prefix and its possible nextHops
-using NlUnicastRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
-
-// protocolId=>routes
-using NlUnicastRoutesDb = std::unordered_map<uint8_t, NlUnicastRoutes>;
-
-// MPLS => label and its possible nextHops
-using NlMplsRoutes = std::unordered_map<int32_t, Route>;
-
-// protocolId=>label routes
-using NlMplsRoutesDb = std::unordered_map<uint8_t, NlMplsRoutes>;
-
-/**
- * Neighbor Object Helpers
- * Map of neighbors that are reachable
- * link name, destination IP and link Address
- */
-using NlNeighbors =
-    std::unordered_map<std::pair<std::string, folly::IPAddress>, Neighbor>;
-
-// keyed by link name
-using NlLinks = std::unordered_map<std::string, LinkAttribute>;
-
 } // namespace openr::fbnl

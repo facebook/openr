@@ -7,16 +7,14 @@
 
 #include <openr/nl/NetlinkTypes.h>
 
+extern "C" {
+#include <linux/netlink.h>
+#include <linux/types.h>
+}
+
 namespace openr::fbnl {
 
-const std::set<int> kNeighborReachableStates{
-    NUD_REACHABLE, NUD_STALE, NUD_DELAY, NUD_PERMANENT, NUD_PROBE, NUD_NOARP};
-const int kIpAddrBufSize = 128;
-
-bool
-isNeighborReachable(int state) {
-  return kNeighborReachableStates.count(state);
-}
+/*=================================Route====================================*/
 
 Route
 RouteBuilder::build() const {
@@ -833,6 +831,12 @@ operator==(const IfAddress& lhs, const IfAddress& rhs) {
 }
 
 /*================================Neighbor====================================*/
+
+bool
+isNeighborReachable(int state) {
+  return state == NUD_REACHABLE or state == NUD_STALE or state == NUD_DELAY or
+      state == NUD_PERMANENT or state == NUD_PROBE or state == NUD_NOARP;
+}
 
 Neighbor
 NeighborBuilder::build() const {

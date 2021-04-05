@@ -7,10 +7,6 @@
 
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/SocketAddress.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 

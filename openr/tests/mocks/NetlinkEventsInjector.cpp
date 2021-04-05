@@ -24,70 +24,68 @@ NetlinkEventsInjector::NetlinkEventsInjector(
 void
 NetlinkEventsInjector::getAllLinks(InterfaceDatabase& ifDb) {
   VLOG(3) << "Query links from Netlink according to link name";
-  SYNCHRONIZED(linkDb_) {
-    for (const auto& link : linkDb_) {
-      InterfaceInfo info(
-          link.first,
-          link.second.isUp,
-          link.second.ifIndex,
-          link.second.networks);
-      ifDb.emplace_back(std::move(info));
+
+  linkDb_.withRLock([&](auto& linkDb) {
+    for (const auto& [_, info] : linkDb) {
+      ifDb.emplace_back(info);
     }
-  }
+  });
 }
 
 void
 NetlinkEventsInjector::sendLinkEvent(
     const std::string& ifName, const uint64_t ifIndex, const bool isUp) {
-  // Update linkDb_
-  SYNCHRONIZED(linkDb_) {
-    if (!linkDb_.count(ifName)) {
-      fbnl::LinkAttribute newLinkEntry;
-      newLinkEntry.isUp = isUp;
-      newLinkEntry.ifIndex = ifIndex;
-      linkDb_.emplace(ifName, newLinkEntry);
+  // Update cached linkDb_ for link event
+  linkDb_.withWLock([&](auto& linkDb) {
+    auto it = linkDb.find(ifName);
+    if (it == linkDb.end()) {
+      InterfaceInfo info(ifName, isUp, ifIndex, {});
+      linkDb.emplace(ifName, info);
     } else {
-      auto& link = linkDb_.at(ifName);
-      link.isUp = isUp;
-      CHECK_EQ(link.ifIndex, ifIndex) << "Interface index changed";
+      it->second.isUp = isUp;
+      CHECK_EQ(it->second.ifIndex, ifIndex) << fmt::format(
+          "Interface index changed from {} to {}", it->second.ifIndex, ifIndex);
     }
-  }
+  });
 
   // Send event to NetlinkProtocolSocket
   fbnl::LinkBuilder builder;
-  builder.setLinkName(ifName);
-  builder.setIfIndex(ifIndex);
-  builder.setFlags(isUp ? IFF_RUNNING : 0);
-  nlSock_->addLink(builder.build()).get();
+  auto link = builder.setLinkName(ifName)
+                  .setIfIndex(ifIndex)
+                  .setFlags(isUp ? IFF_RUNNING : 0)
+                  .build();
+  nlSock_->addLink(link).get();
 }
 
 void
 NetlinkEventsInjector::sendAddrEvent(
     const std::string& ifName, const std::string& prefix, const bool isValid) {
-  const auto ipNetwork = folly::IPAddress::createNetwork(prefix, -1, false);
+  const auto network = folly::IPAddress::createNetwork(prefix, -1, false);
 
-  // Update linkDb_
+  // Update cached linkDb_ for address event
   std::optional<int> ifIndex;
-  SYNCHRONIZED(linkDb_) {
-    auto& link = linkDb_.at(ifName);
+  linkDb_.withWLock([&](auto& linkDb) {
+    auto& link = linkDb.at(ifName);
     ifIndex = link.ifIndex;
     if (isValid) {
-      link.networks.insert(ipNetwork);
+      link.networks.insert(network);
     } else {
-      link.networks.erase(ipNetwork);
+      link.networks.erase(network);
     }
-  }
+  });
 
   // Send event to NetlinkProtocolSocket
-  CHECK(ifIndex.has_value()) << "Unknown interface";
+  CHECK(ifIndex.has_value()) << fmt::format("Unknown interface: {}", ifName);
+
   fbnl::IfAddressBuilder builder;
-  builder.setIfIndex(ifIndex.value());
-  builder.setPrefix(ipNetwork);
-  builder.setValid(isValid);
+  auto addr = builder.setIfIndex(ifIndex.value())
+                  .setPrefix(network)
+                  .setValid(isValid)
+                  .build();
   if (isValid) {
-    nlSock_->addIfAddress(builder.build()).get();
+    nlSock_->addIfAddress(addr).get();
   } else {
-    nlSock_->deleteIfAddress(builder.build()).get();
+    nlSock_->deleteIfAddress(addr).get();
   }
 }
 

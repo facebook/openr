@@ -40,7 +40,9 @@ class NetlinkEventsInjector {
   fbnl::MockNetlinkProtocolSocket* nlSock_{nullptr};
 
   // Interface/link name => link attributes mapping
-  folly::Synchronized<fbnl::NlLinks> linkDb_{};
+  folly::Synchronized<
+      std::unordered_map<std::string /* ifName */, InterfaceInfo>>
+      linkDb_{};
 };
 
 } // namespace openr
