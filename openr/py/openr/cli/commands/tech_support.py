@@ -51,7 +51,8 @@ class TechSupportCmd(object):
             ("breeze decision validate", self.print_decision_validate),
             ("breeze decision routes", self.print_decision_routes),
             ("breeze fib validate", self.print_fib_validate),
-            ("breeze fib routes-computed", self.print_fib_routes_computed),
+            ("breeze fib unicast-routes", self.print_fib_unicast_routes),
+            ("breeze fib mpls-routes", self.print_fib_mpls_routes),
             ("breeze fib routes-installed", self.print_fib_routes_installed),
             ("breeze perf fib", self.print_perf_fib),
             ("breeze monitor counters", self.print_monitor_counters),
@@ -129,10 +130,15 @@ class TechSupportCmd(object):
     def print_fib_validate(self):
         fib.FibValidateRoutesCmd(self.cli_opts).run(self.cli_opts)
 
-    def print_fib_routes_computed(self):
+    def print_fib_unicast_routes(self):
         if not self.print_routes:
             return
         fib.FibUnicastRoutesCmd(self.cli_opts).run([], False)
+
+    def print_fib_mpls_routes(self):
+        if not self.print_routes:
+            return
+        fib.FibMplsRoutesCmd(self.cli_opts).run([], False)
 
     def print_fib_routes_installed(self):
         if not self.print_routes:

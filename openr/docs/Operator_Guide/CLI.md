@@ -893,7 +893,7 @@ command to replace all existing routing entries with newly specified routes.
 - List routes
 
 ```console
-$ breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib routes-installed
 
 == leb01.labdca1's FIB routes ==
 
@@ -913,7 +913,7 @@ $ breeze -H leb01.labdca1 fib add '192.168.0.0/32' '1.3.4.5@Port-Channel1201'
 Added 1 routes.
 
 # list routes
-$ breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib routes-installed
 
 == leb01.labdca1's FIB routes ==
 
@@ -936,7 +936,7 @@ $ breeze -H leb01.labdca1 fib del '192.168.0.0/32'
 Deleted 1 routes.
 
 // list routes
-$ breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib routes-installed
 
 == leb01.labdca1's FIB routes ==
 
@@ -953,7 +953,7 @@ You can use sync API to synchronize routing table with fresh routing table
 entries.
 
 ```console
-$ breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib routes-installed
 
 == leb01.labdca1's FIB routes ==
 
@@ -966,20 +966,19 @@ via fe80::21c:73ff:fe3c:e50c@Port-Channel1201
 
 $ breeze -H leb01.labdca1 fib sync '' ''
 Reprogrammed FIB with 0 routes.
-$ breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib routes-installed
 
 == leb01.labdca1's FIB routes ==
 ```
 
-#### `linux` for platforms where we use Linux routing
+#### Validation for platforms routes checking
 
-One can then use `linux` specific commands, the most useful being "validate"
-which validates if the system (kernel routing table) has all the routes that
-Open/R intended to program. In case of a mismatch, the discrepancies will be
-reported to aid debugging.
+One can `validate` command to validate if the platform (e.g. kernel routing
+table) has all the routes that Open/R intended to program. In case of a
+mismatch, the discrepancies will be reported to help debugging.
 
 ```console
-$ breeze fib validate-linux
+$ breeze fib validate
 PASS
 Fib and Kernel routing table match
 ```
@@ -987,7 +986,7 @@ Fib and Kernel routing table match
 An example of reporting discrepancy
 
 ```console
-$ breeze fib validate-linux
+$ breeze fib validate
 FAIL
 Fib and Kernel routing table do not match
 Routes in kernel but not in Fib

@@ -16,14 +16,12 @@ from openr.cli.utils.options import breeze_option
 
 class FibCli(object):
     def __init__(self):
-        self.fib.add_command(FibUnicastRoutesCli().routes, name="routes-computed")
+        # ATTN: get unicast + mpls routes installed on platform, aka,
+        # fibAgent via thrift port.
         self.fib.add_command(FibRoutesInstalledCli().routes, name="routes-installed")
 
-        # NOTE: keeping alias `list` and `routes`
-        # for backward compatibility. Deprecated.
-        self.fib.add_command(FibUnicastRoutesCli().routes, name="routes")
-        self.fib.add_command(FibRoutesInstalledCli().routes, name="list")
-
+        # ATTN: get unicast and mpls routes respectively from Open/R's
+        # software state, aka, Fib module.
         self.fib.add_command(FibUnicastRoutesCli().routes, name="unicast-routes")
         self.fib.add_command(FibMplsRoutesCli().routes, name="mpls-routes")
 
