@@ -131,22 +131,21 @@ LinkMonitor::LinkMonitor(
   auto state =
       configStore_->loadThriftObj<thrift::LinkMonitorState>(kConfigKey).get();
   if (state.hasValue()) {
-    LOG(INFO) << "Loaded link-monitor state from disk.";
+    LOG(INFO) << "Successfully loaded link-monitor state from disk.";
     state_ = state.value();
     printLinkMonitorState(state_);
   } else {
-    // no persistent store found, use assumeDrained
-    state_.isOverloaded_ref() = assumeDrained;
-    LOG(WARNING) << folly::sformat(
-        "Failed to load link-monitor state from disk. Setting node as {}",
+    LOG(INFO) << fmt::format(
+        "Failed to load link-monitor-state from disk. Setting node as {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
+    state_.isOverloaded_ref() = assumeDrained;
   }
+
   // overrideDrainState provided, use assumeDrained
   if (overrideDrainState) {
+    LOG(INFO) << fmt::format(
+        "Override node as {}", assumeDrained ? "DRAINED" : "UNDRAINED");
     state_.isOverloaded_ref() = assumeDrained;
-    LOG(WARNING) << folly::sformat(
-        "FLAGS_override_drain_state == true, setting drain state based on FLAGS_assume_drained to {}",
-        assumeDrained ? "DRAINED" : "UNDRAINED");
   }
 
   //  Create KvStore client
