@@ -361,36 +361,32 @@ Route::str() const {
   std::string result;
   if (family_ == AF_MPLS) {
     if (mplsLabel_.has_value()) {
-      result += folly::sformat("label {} ", mplsLabel_.value());
+      result += fmt::format("label {} ", mplsLabel_.value());
     }
   } else {
-    result +=
-        folly::sformat("route {} ", folly::IPAddress::networkToString(dst_));
+    result += fmt::format("route {} ", folly::IPAddress::networkToString(dst_));
   }
-  uint32_t flags = 0;
-  if (flags_.has_value()) {
-    flags = flags_.value();
-  }
-  result += folly::sformat(
-      " proto {}, table {}, valid {}, family {}, flags {}, type {}",
+  result += fmt::format(
+      "proto {}, table {}, valid {}, family {}, flags {}, scope {}, type {}",
       protocolId_,
       routeTable_,
       isValid_ ? "Yes" : "No",
       static_cast<int>(family_),
-      flags,
+      flags_.has_value() ? flags_.value() : 0,
+      scope_,
       static_cast<int>(type_));
 
   if (priority_) {
-    result += folly::sformat(", priority {}", priority_.value());
+    result += fmt::format(", priority {}", priority_.value());
   }
   if (tos_) {
-    result += folly::sformat(", tos {}", tos_.value());
+    result += fmt::format(", tos {}", tos_.value());
   }
   if (mtu_) {
-    result += folly::sformat(", mtu {}", mtu_.value());
+    result += fmt::format(", mtu {}", mtu_.value());
   }
   if (advMss_) {
-    result += folly::sformat(", advmss {}", advMss_.value());
+    result += fmt::format(", advmss {}", advMss_.value());
   }
   for (auto const& nextHop : nextHops_) {
     result += "\n  " + nextHop.str();
@@ -587,23 +583,24 @@ NextHop::getFamily() const {
 std::string
 NextHop::str() const {
   std::string result;
-  result += folly::sformat(
-      "nexthop via {}, intf-index {}, weight {}",
+  result += fmt::format(
+      "nexthop via {}, intf-index {}, weight {}, family {}",
       (gateway_ ? gateway_->str() : "n/a"),
       (ifIndex_ ? std::to_string(*ifIndex_) : "n/a"),
-      std::to_string(weight_));
+      std::to_string(weight_),
+      static_cast<int>(getFamily()));
   if (labelAction_.has_value()) {
-    result += folly::sformat(
+    result += fmt::format(
         " Label action {}",
         apache::thrift::util::enumNameSafe(labelAction_.value()));
   }
   if (swapLabel_.has_value()) {
-    result += folly::sformat(" Swap label {}", swapLabel_.value());
+    result += fmt::format(" Swap label {}", swapLabel_.value());
   }
   if (pushLabels_.has_value()) {
     result += " Push Labels: ";
     for (const auto& label : pushLabels_.value()) {
-      result += folly::sformat(" {} ", label);
+      result += fmt::format(" {} ", label);
     }
   }
   return result;
@@ -786,7 +783,7 @@ IfAddress::getFlags() const {
 
 std::string
 IfAddress::str() const {
-  return folly::sformat(
+  return fmt::format(
       "addr {} {} intf-index {}, valid {}, scope {}",
       getFamily() == AF_INET ? "inet" : "inet6",
       prefix_.has_value() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
@@ -949,7 +946,7 @@ Neighbor::str() const {
     stateStr = std::to_string(state_.value());
   }
 
-  return folly::sformat(
+  return fmt::format(
       "neighbor {} reachable {}, intf-index {}, mac-addr {}, state {}",
       destination_.str(),
       isReachable_ ? "Yes" : "No",
@@ -1074,7 +1071,7 @@ Link::isLoopback() const {
 
 std::string
 Link::str() const {
-  return folly::sformat(
+  return fmt::format(
       "link {} intf-index {}, flags {}",
       linkName_,
       ifIndex_,

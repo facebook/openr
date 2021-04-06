@@ -26,7 +26,7 @@ namespace openr::fbnl {
 class NlException : public std::runtime_error {
  public:
   explicit NlException(const std::string& msg, int err = 0)
-      : std::runtime_error(folly::sformat(
+      : std::runtime_error(fmt::format(
             "Error({}) - {}. {} ", err, folly::errnoStr(std::abs(err)), msg)) {}
 };
 
@@ -288,8 +288,6 @@ class Route final {
 
   bool isValid() const;
 
-  std::optional<std::string> getRouteIfName() const;
-
   void setPriority(uint32_t priority);
 
   std::string str() const;
@@ -310,7 +308,6 @@ class Route final {
   std::optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
-  std::optional<std::string> routeIfName_;
   std::optional<uint32_t> mplsLabel_;
 };
 
