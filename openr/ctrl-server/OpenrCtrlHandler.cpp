@@ -74,17 +74,15 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               break;
             }
 
-            SYNCHRONIZED(kvStorePublishers_) {
-              for (auto& kv : kvStorePublishers_) {
-                kv.second->publish(maybePublication.value());
+            kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
+              for (auto& [_, publisher] : kvStorePublishers_) {
+                publisher->publish(maybePublication.value());
               }
-            }
+            });
 
             bool isAdjChanged = false;
             // check if any of KeyVal has 'adj' update
-            for (auto& kv : *maybePublication.value().keyVals_ref()) {
-              auto& key = kv.first;
-              auto& val = kv.second;
+            for (auto& [key, val] : *maybePublication.value().keyVals_ref()) {
               // check if we have any value update.
               // Ttl refreshing won't update any value.
               if (!val.value_ref().has_value()) {
@@ -206,11 +204,11 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
 void
 OpenrCtrlHandler::closeKvStorePublishers() {
   std::vector<std::unique_ptr<KvStorePublisher>> publishers;
-  SYNCHRONIZED(kvStorePublishers_) {
-    for (auto& kv : kvStorePublishers_) {
-      publishers.emplace_back(std::move(kv.second));
+  kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
+    for (auto& [_, publisher] : kvStorePublishers_) {
+      publishers.emplace_back(std::move(publisher));
     }
-  }
+  });
   LOG(INFO) << "Terminating " << publishers.size()
             << " active KvStore snoop stream(s).";
   for (auto& publisher : publishers) {
@@ -227,8 +225,8 @@ OpenrCtrlHandler::closeFibPublishers() {
   std::vector<apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDelta>>
       fibPublishers_close;
   fibPublishers_.withWLock([&fibPublishers_close](auto& fibPublishers) {
-    for (auto& kv : fibPublishers) {
-      fibPublishers_close.emplace_back(std::move(kv.second));
+    for (auto& [_, fibPublisher] : fibPublishers) {
+      fibPublishers_close.emplace_back(std::move(fibPublisher));
     }
   });
   LOG(INFO) << "Terminating " << fibPublishers_close.size()
@@ -269,7 +267,7 @@ OpenrCtrlHandler::authorizeConnection() {
 
   if (!acceptablePeerCommonNames_.count(peerCommonName)) {
     throw thrift::OpenrError(
-        folly::sformat("Peer name {} is unacceptable", peerCommonName));
+        fmt::format("Peer name {} is unacceptable", peerCommonName));
   }
 }
 
@@ -364,7 +362,7 @@ OpenrCtrlHandler::dryrunConfig(
   const auto& fileName = *file;
   if (not fs::exists(fileName)) {
     throw thrift::OpenrError(
-        folly::sformat("Config file doesn't exist: {}", fileName));
+        fmt::format("Config file doesn't exist: {}", fileName));
   }
 
   try {
@@ -389,7 +387,7 @@ OpenrCtrlHandler::getRunningConfigThrift(thrift::OpenrConfig& _config) {
 std::unique_ptr<std::string>
 OpenrCtrlHandler::getSingleAreaOrThrow(std::string const& caller) {
   fb303::fbData->addStatValue(
-      folly::sformat("ctrl.get_single_area.{}", caller), 1, fb303::COUNT);
+      fmt::format("ctrl.get_single_area.{}", caller), 1, fb303::COUNT);
   auto const& areas = config_->getAreas();
   if (1 != areas.size()) {
     throw thrift::OpenrError(
@@ -807,7 +805,7 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
   auto streamAndPublisher =
       apache::thrift::ServerStream<thrift::Publication>::createPublisher(
           [this, clientToken]() {
-            SYNCHRONIZED(kvStorePublishers_) {
+            kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
               if (kvStorePublishers_.erase(clientToken)) {
                 LOG(INFO) << "KvStore snoop stream-" << clientToken
                           << " ended.";
@@ -817,10 +815,10 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
               }
               fb303::fbData->setCounter(
                   "subscribers.kvstore", kvStorePublishers_.size());
-            }
+            });
           });
 
-  SYNCHRONIZED(kvStorePublishers_) {
+  kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
     assert(kvStorePublishers_.count(clientToken) == 0);
     LOG(INFO) << "KvStore snoop stream-" << clientToken
               << " started for areas: " << folly::join(", ", *selectAreas);
@@ -828,7 +826,7 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
         *selectAreas, std::move(*filter), std::move(streamAndPublisher.second));
     kvStorePublishers_.emplace(clientToken, std::move(kvStorePublisher));
     fb303::fbData->setCounter("subscribers.kvstore", kvStorePublishers_.size());
-  }
+  });
   return std::move(streamAndPublisher.first);
 }
 
