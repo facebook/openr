@@ -77,6 +77,7 @@ LinkMonitor::LinkMonitor(
     : nodeId_(config->getNodeName()),
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(config->isV4Enabled()),
+      v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
       enableNewGRBehavior_(config->isNewGRBehaviorEnabled()),
       prefixForwardingType_(*config->getConfig().prefix_forwarding_type_ref()),
@@ -724,7 +725,8 @@ LinkMonitor::advertiseRedistAddrs() {
     }
 
     // Add all prefixes of this interface
-    for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
+    for (auto& prefix :
+         interface.getGlobalUnicastNetworks(enableV4_ or v4OverV6Nexthop_)) {
       // Add prefix in the cache
       prefixesToAdvertise.emplace(prefix, dstAreas);
 
@@ -1035,8 +1037,8 @@ LinkMonitor::processNeighborEvent(NeighborEvent&& event) {
   VLOG(1) << "Received neighbor event for " << remoteNodeName << " from "
           << remoteIfName << " at " << localIfName << " with addrs "
           << toString(neighborAddrV6) << " and "
-          << (enableV4_ ? toString(neighborAddrV4) : "") << " Area:" << area
-          << " Event Type: " << toString(event.eventType);
+          << (enableV4_ or v4OverV6Nexthop_ ? toString(neighborAddrV4) : "")
+          << " Area:" << area << " Event Type: " << toString(event.eventType);
 
   switch (event.eventType) {
   case NeighborEventType::NEIGHBOR_UP:

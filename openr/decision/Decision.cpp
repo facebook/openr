@@ -494,10 +494,11 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
 
   // Sanity check for V4 prefixes
   const bool isV4Prefix = prefix.first.isV4();
-  if (isV4Prefix && !enableV4_) {
+  if (isV4Prefix && !enableV4_ && !v4OverV6Nexthop_) {
     LOG(WARNING) << "Received v4 prefix "
                  << folly::IPAddress::networkToString(prefix)
-                 << " while v4 is not enabled.";
+                 << " while v4 is not enabled, and "
+                 << "we are not allowing v4 prefix over v6 nexthop.";
     fb303::fbData->addStatValue(
         "decision.skipped_unicast_route", 1, fb303::COUNT);
     return std::nullopt;

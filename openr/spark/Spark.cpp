@@ -251,6 +251,7 @@ Spark::Spark(
       gracefulRestartTime_(std::chrono::seconds(
           *config->getSparkConfig().graceful_restart_time_s_ref())),
       enableV4_(config->isV4Enabled()),
+      v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(openrCtrlThriftPort),
@@ -1481,7 +1482,7 @@ Spark::processHandshakeMsg(
       gracefulRestartTime_);
 
   // v4 subnet validation if enabled
-  if (enableV4_) {
+  if (enableV4_ or v4OverV6Nexthop_) {
     if (PacketValidationResult::FAILURE ==
         validateV4AddressSubnet(
             ifName, *handshakeMsg.transportAddressV4_ref())) {
@@ -1789,7 +1790,8 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
       //    1). v6Addr is empty for this neighbor;
       //    2). v4 enabled and v4Addr is empty for this neighbor;
       if (neighbor.transportAddressV6.addr_ref()->empty() ||
-          (enableV4_ && neighbor.transportAddressV4.addr_ref()->empty())) {
+          ((enableV4_ or v4OverV6Nexthop_) &&
+           neighbor.transportAddressV4.addr_ref()->empty())) {
         continue;
       }
       neighborDownWrapper(neighbor, ifName, neighborName);

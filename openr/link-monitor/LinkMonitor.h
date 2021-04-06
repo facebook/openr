@@ -308,6 +308,8 @@ class LinkMonitor final : public OpenrEventBase {
   const bool enablePerfMeasurement_{false};
   // enable v4
   bool enableV4_{false};
+  // v4 over v6 nexthop
+  bool v4OverV6Nexthop_{false};
   // enable segment routing
   bool enableSegmentRouting_{false};
   // Feature gate for new graceful restart behavior:

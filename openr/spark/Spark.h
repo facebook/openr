@@ -482,6 +482,9 @@ class Spark final : public OpenrEventBase {
   // Spark HelloMessage
   const bool enableV4_{false};
 
+  // This flag indicates that we will enable v4 over v6 nexthop
+  const bool v4OverV6Nexthop_{false};
+
   // the next sequence number to be used on any interface for outgoing hellos
   // NOTE: we increment this on hello sent out of any interfaces
   uint64_t mySeqNum_{1};
