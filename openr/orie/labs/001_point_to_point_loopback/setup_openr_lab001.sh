@@ -38,6 +38,9 @@ get_prefix() {
         "openr_left_lo")
             echo "fd00:1::1/64"
             ;;
+        "openr_left_lo_v4")
+            echo "10.6.9.1/32"
+            ;;
         "openr_right_oob2")
             echo "fd00:69::3/64"
             ;;
@@ -46,6 +49,9 @@ get_prefix() {
             ;;
         "openr_right_lo")
             echo "fd00:2::1/64"
+            ;;
+        "openr_right_lo_v4")
+            echo "10.6.9.2/32"
             ;;
     esac
 }
@@ -101,9 +107,10 @@ elif [ "$1" == "create" ]; then
         "$IP" netns exec "$namespace" "$IP" addr add "$(get_prefix "${namespace}_oob${netns_oob_index}")" dev "oob${netns_oob_index}"
         netns_oob_index=$((netns_oob_index+1))
 
-        # Enable + address loopback for netns
+        # Enable + v4 + v6 address loopback for netns
         "$IP" netns exec "$namespace" ip link set up lo
         "$IP" netns exec "$namespace" ip addr add "$(get_prefix ${namespace}_lo)" dev lo
+        "$IP" netns exec "$namespace" ip addr add "$(get_prefix ${namespace}_lo_v4)" dev lo
 
         # Create a veth to other netns
         side=$(echo $namespace | cut -d '_' -f 2)
