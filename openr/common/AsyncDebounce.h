@@ -17,10 +17,10 @@ namespace openr {
 
 /**
  * This class provides you the capability to rate-limit certain events with an
- * exponentioal backoff which might happen rapidly in the system when processing
+ * exponential backoff which might happen rapidly in the system when processing
  * of the event is expensive.
  *
- * It is similar to AsyncThorttle expect each time invoked we double the amount
+ * It is similar to AsyncThrottle except each time invoked we double the amount
  * of wait time until execution from minBackoff to maxBackoff
  */
 template <typename Duration>
