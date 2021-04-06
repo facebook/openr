@@ -109,14 +109,6 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf,
    */
   static uint8_t protocolToPriority(const uint8_t protocol);
 
-  /**
-   * Convert list<SemiFuture<int>> to SemiFuture<Unit>
-   * The first error if any will be converted to NlException
-   */
-  static folly::SemiFuture<folly::Unit> collectAllResult(
-      std::vector<folly::SemiFuture<int>>&& result,
-      std::set<int> errorsToIgnore);
-
  protected:
   /**
    * TODO: Migrate BGP++ to stream API for neighbor notifications. Also need to

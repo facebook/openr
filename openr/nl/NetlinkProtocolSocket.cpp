@@ -425,26 +425,22 @@ NetlinkProtocolSocket::recvNetlinkMessage() {
   processMessage(recvMsg, static_cast<uint32_t>(bytesRead));
 }
 
-folly::SemiFuture<int>
+folly::SemiFuture<folly::Unit>
 NetlinkProtocolSocket::collectReturnStatus(
     std::vector<folly::SemiFuture<int>>&& futures,
     std::unordered_set<int> ignoredErrors) {
   return folly::collectAll(std::move(futures))
-      .defer(
-          [ignoredErrors](folly::Try<std::vector<folly::Try<int>>>&& results) {
-            for (auto& result : results.value()) {
-              auto retval = std::abs(result.value()); // Throws exeption if any
-              if (retval == 0 or ignoredErrors.count(retval)) {
-                continue;
-              }
-
-              // We encountered first non zero value. Report error and return
-              LOG(ERROR) << "One or more Netlink requests failed with error: "
-                         << retval << " -- " << folly::errnoStr(retval);
-              return retval;
-            }
-            return 0;
-          });
+      .defer([ignoredErrors](
+                 folly::Try<std::vector<folly::Try<int>>>&& results) {
+        for (auto& result : results.value()) {
+          auto retval = std::abs(result.value()); // Throws exeption if any
+          if (retval == 0 or ignoredErrors.count(retval)) {
+            continue;
+          }
+          throw fbnl::NlException("One or more netlink request failed", retval);
+        }
+        return folly::Unit();
+      });
 }
 
 folly::SemiFuture<int>

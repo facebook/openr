@@ -193,11 +193,11 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   getMplsRoutes(uint8_t protocolId);
 
   /**
-   * Utility function to accumulate result of multiple requests into one. The
-   * result will be 0 if all the futures are successful else it will contains
-   * the first non-zero value (aka error code), in given sequence.
+   * Utility function to accumulate result of multiple requests into one.
+   * It will throw the exception with the first non-zero value(aka error code),
+   * in given sequence.
    */
-  static folly::SemiFuture<int> collectReturnStatus(
+  static folly::SemiFuture<folly::Unit> collectReturnStatus(
       std::vector<folly::SemiFuture<int>>&& futures,
       std::unordered_set<int> ignoredErrors = {});
 

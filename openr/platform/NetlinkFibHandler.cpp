@@ -86,23 +86,6 @@ NetlinkFibHandler::protocolToPriority(const uint8_t protocol) {
 }
 
 folly::SemiFuture<folly::Unit>
-NetlinkFibHandler::collectAllResult(
-    std::vector<folly::SemiFuture<int>>&& result,
-    std::set<int> errorsToIgnore) {
-  return folly::collectAll(std::move(result))
-      .deferValue([errorsToIgnore](std::vector<folly::Try<int>>&& retvals) {
-        for (auto& retvalTry : retvals) {
-          auto retval = std::abs(retvalTry.value()); // Throws exception if any
-          if (retval == 0 or errorsToIgnore.count(retval)) {
-            continue;
-          }
-          throw fbnl::NlException("One or more netlink request failed", retval);
-        }
-        return folly::Unit();
-      });
-}
-
-folly::SemiFuture<folly::Unit>
 NetlinkFibHandler::semifuture_addUnicastRoute(
     int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) {
   auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
@@ -135,7 +118,8 @@ NetlinkFibHandler::semifuture_addUnicastRoutes(
   for (auto& route : *routes) {
     result.emplace_back(nlSock_->addRoute(buildRoute(route, protocol.value())));
   }
-  return collectAllResult(std::move(result), {EEXIST});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -157,7 +141,8 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     rtBuilder.setProtocolId(protocol.value());
     result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
   }
-  return collectAllResult(std::move(result), {ESRCH});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {ESRCH});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -177,7 +162,8 @@ NetlinkFibHandler::semifuture_addMplsRoutes(
     result.emplace_back(
         nlSock_->addRoute(buildMplsRoute(route, protocol.value())));
   }
-  return collectAllResult(std::move(result), {EEXIST});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -199,7 +185,8 @@ NetlinkFibHandler::semifuture_deleteMplsRoutes(
     rtBuilder.setProtocolId(protocol.value());
     result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
   }
-  return collectAllResult(std::move(result), {ESRCH});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {ESRCH});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -281,7 +268,8 @@ NetlinkFibHandler::semifuture_syncFib(
   // Return collected result
   // NOTE: We're ignoring EEXIST error code. ESRCH error code must not be
   // raised because we're deleting route that already exist
-  return collectAllResult(std::move(result), {EEXIST});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -345,7 +333,8 @@ NetlinkFibHandler::semifuture_syncMplsFib(
   }
 
   // Return collected result
-  return collectAllResult(std::move(result), {EEXIST, ESRCH});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST, ESRCH});
 }
 
 int64_t

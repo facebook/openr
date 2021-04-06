@@ -1560,9 +1560,9 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
     for (auto& route : routes) {
       futures.emplace_back(nlSock->addRoute(route));
     }
-    int status =
-        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get();
-    EXPECT_EQ(0, status);
+    EXPECT_EQ(
+        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get(),
+        folly::Unit());
   }
   LOG(INFO) << "Done adding " << count << " routes";
   EXPECT_EQ(0, getErrorCount());
@@ -1583,9 +1583,9 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
     for (auto& route : routes) {
       futures.emplace_back(nlSock->deleteRoute(route));
     }
-    int status =
-        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get();
-    EXPECT_EQ(0, status);
+    EXPECT_EQ(
+        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get(),
+        folly::Unit());
   }
   EXPECT_EQ(0, getErrorCount());
   // should have received acks status = 0
@@ -1885,9 +1885,9 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
     for (auto& route : routes) {
       futures.emplace_back(nlSock->addRoute(route));
     }
-    int status =
-        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get();
-    EXPECT_EQ(0, status);
+    EXPECT_EQ(
+        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get(),
+        folly::Unit());
   }
   LOG(INFO) << "Done adding " << count << " routes";
   EXPECT_EQ(0, getErrorCount());
@@ -1909,9 +1909,9 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
     for (auto& route : routes) {
       futures.emplace_back(nlSock->deleteRoute(route));
     }
-    int status =
-        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get();
-    EXPECT_EQ(0, status);
+    EXPECT_EQ(
+        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get(),
+        folly::Unit());
   }
   LOG(INFO) << "Done deleting";
   EXPECT_EQ(0, getErrorCount());
@@ -1983,9 +1983,9 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
     for (auto& route : labelRoutes) {
       futures.emplace_back(nlSock->addRoute(route));
     }
-    int status =
-        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get();
-    EXPECT_EQ(0, status);
+    EXPECT_EQ(
+        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get(),
+        folly::Unit());
   }
   LOG(INFO) << "Done adding " << count << " label routes";
   EXPECT_GE(getAckCount(), ackCount + count);
@@ -2004,9 +2004,9 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
     for (auto& route : labelRoutes) {
       futures.emplace_back(nlSock->deleteRoute(route));
     }
-    int status =
-        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get();
-    EXPECT_EQ(0, status);
+    EXPECT_EQ(
+        NetlinkProtocolSocket::collectReturnStatus(std::move(futures)).get(),
+        folly::Unit());
   }
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + count);
