@@ -42,35 +42,33 @@ class NextHopBuilder final {
 
   void reset();
 
+  // ifIndex related methods
   NextHopBuilder& setIfIndex(int ifIndex);
-
-  NextHopBuilder& setGateway(const folly::IPAddress& gateway);
-  NextHopBuilder&
-  unsetGateway() {
-    gateway_.reset();
-    return *this;
-  }
-
-  NextHopBuilder& setWeight(uint8_t weight);
-
-  NextHopBuilder& setLabelAction(thrift::MplsActionCode);
-
-  NextHopBuilder& setSwapLabel(uint32_t swapLabel);
-
-  NextHopBuilder& setPushLabels(const std::vector<int32_t>& pushLabels);
-
   std::optional<int> getIfIndex() const;
 
+  // gateway related methods
+  NextHopBuilder& setGateway(const folly::IPAddress& gateway);
+  NextHopBuilder& unsetGateway();
   std::optional<folly::IPAddress> getGateway() const;
 
+  // weight related methods
+  NextHopBuilder& setWeight(uint8_t weight);
   uint8_t getWeight() const;
 
+  // MPLS label action related methods
+  NextHopBuilder& setLabelAction(thrift::MplsActionCode);
   std::optional<thrift::MplsActionCode> getLabelAction() const;
 
+  // SWAP label related methods
+  NextHopBuilder& setSwapLabel(uint32_t swapLabel);
   std::optional<uint32_t> getSwapLabel() const;
 
+  // PUSH label related methods
+  NextHopBuilder& setPushLabels(const std::vector<int32_t>& pushLabels);
   std::optional<std::vector<int32_t>> getPushLabels() const;
 
+  // ATTN: `family_` will be set based on `gateway_` family.
+  // No explicit mutator method provided.
   uint8_t getFamily() const;
 
  private:
@@ -167,71 +165,68 @@ class RouteBuilder {
    */
   Route build() const;
 
-  // Required
+  // [REQUIRED] destination related methods
   RouteBuilder& setDestination(const folly::CIDRNetwork& dst);
-
   const folly::CIDRNetwork& getDestination() const;
 
-  RouteBuilder& setMplsLabel(uint32_t mplsLabel);
-
-  std::optional<uint32_t> getMplsLabel() const;
-  // Required, default RTN_UNICAST
+  // [REQUIRED] rtm type related methods, default RTN_UNICAST
   RouteBuilder& setType(uint8_t type = RTN_UNICAST);
-
   uint8_t getType() const;
 
-  // Required, default RT_TABLE_MAIN
+  // [REQUIRED] rtm routeTable_ related methods, default RT_TABLE_MAIN
   RouteBuilder& setRouteTable(uint8_t routeTable = RT_TABLE_MAIN);
-
   uint8_t getRouteTable() const;
 
-  // Required, default 99
+  // [REQUIRED] rtm protocolId_ related methods, default 99
   RouteBuilder& setProtocolId(uint8_t protocolId = DEFAULT_PROTOCOL_ID);
-
   uint8_t getProtocolId() const;
 
-  // Required, default RT_SCOPE_UNIVERSE
+  // [REQUIRED] rtm scope_ related methods, default RT_SCOPE_UNIVERSE
   RouteBuilder& setScope(uint8_t scope = RT_SCOPE_UNIVERSE);
-
-  RouteBuilder& setValid(bool isValid);
-
-  bool isValid() const;
-
   uint8_t getScope() const;
 
-  RouteBuilder& setFlags(uint32_t flags);
-
-  std::optional<uint32_t> getFlags() const;
-
-  RouteBuilder& setPriority(uint32_t priority);
-
-  std::optional<uint32_t> getPriority() const;
-
-  RouteBuilder& setTos(uint8_t tos);
-
-  std::optional<uint8_t> getTos() const;
-
-  RouteBuilder& setMtu(uint32_t mtu);
-
-  std::optional<uint32_t> getMtu() const;
-
-  RouteBuilder& setAdvMss(uint32_t tos);
-
-  std::optional<uint32_t> getAdvMss() const;
-
+  // [REQUIRED] unicast routes nexthop related methods
   RouteBuilder& addNextHop(const NextHop& nextHop);
-
-  RouteBuilder& setRouteIfName(const std::string& ifName);
-
-  std::optional<std::string> getRouteIfName() const;
-
-  // Multicast/Link route only need ifIndex in nexthop
-  RouteBuilder& setRouteIfIndex(int ifIndex);
-
-  std::optional<int> getRouteIfIndex() const;
-
   const NextHopSet& getNextHops() const;
 
+  // [REQUIRED] mpls routes label related methods
+  RouteBuilder& setMplsLabel(uint32_t mplsLabel);
+  std::optional<uint32_t> getMplsLabel() const;
+
+  // route valid flag to differentiate route add/delete
+  RouteBuilder& setValid(bool isValid);
+  bool isValid() const;
+
+  // rtm flag related methods
+  //
+  // rtm_flags have the following value and meaning:
+  //    RTM_F_NOTIFY     if the route changes, notify the user via rtnetlink
+  //    RTM_F_CLONED     route is cloned from another route
+  //    RTM_F_EQUALIZE   a multipath equalizer (not yet implemented)
+  RouteBuilder& setFlags(uint32_t flags);
+  std::optional<uint32_t> getFlags() const;
+
+  // Open/R use this as admin-distance for route programmed
+  RouteBuilder& setPriority(uint32_t priority);
+  std::optional<uint32_t> getPriority() const;
+
+  // TOS related methods
+  RouteBuilder& setTos(uint8_t tos);
+  std::optional<uint8_t> getTos() const;
+
+  // MTU related methods
+  RouteBuilder& setMtu(uint32_t mtu);
+  std::optional<uint32_t> getMtu() const;
+
+  // advMss related methods
+  RouteBuilder& setAdvMss(uint32_t tos);
+  std::optional<uint32_t> getAdvMss() const;
+
+  // ATTN: `family_` will be set when:
+  //    UNICAST: `dst_` is set;
+  //    MPLS: `mplsLabel_` is set;
+  //
+  // No explicit mutator method provided.
   uint8_t getFamily() const;
 
   void reset();
@@ -250,8 +245,6 @@ class RouteBuilder {
   std::optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
-  std::optional<int> routeIfIndex_; // for multicast or link route
-  std::optional<std::string> routeIfName_; // for multicast or linkroute
   std::optional<uint32_t> mplsLabel_;
 };
 

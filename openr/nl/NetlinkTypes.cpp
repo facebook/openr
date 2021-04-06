@@ -146,28 +146,6 @@ RouteBuilder::getAdvMss() const {
 }
 
 RouteBuilder&
-RouteBuilder::setRouteIfName(const std::string& ifName) {
-  routeIfName_ = ifName;
-  return *this;
-}
-
-std::optional<std::string>
-RouteBuilder::getRouteIfName() const {
-  return routeIfName_;
-}
-
-RouteBuilder&
-RouteBuilder::setRouteIfIndex(int ifIndex) {
-  routeIfIndex_ = ifIndex;
-  return *this;
-}
-
-std::optional<int>
-RouteBuilder::getRouteIfIndex() const {
-  return routeIfIndex_;
-}
-
-RouteBuilder&
 RouteBuilder::addNextHop(const NextHop& nextHop) {
   nextHops_.emplace(nextHop);
   return *this;
@@ -207,7 +185,6 @@ RouteBuilder::reset() {
   mtu_.reset();
   advMss_.reset();
   nextHops_.clear();
-  routeIfName_.reset();
 }
 
 Route::Route(const RouteBuilder& builder)
@@ -224,7 +201,6 @@ Route::Route(const RouteBuilder& builder)
       advMss_(builder.getAdvMss()),
       nextHops_(builder.getNextHops()),
       dst_(builder.getDestination()),
-      routeIfName_(builder.getRouteIfName()),
       mplsLabel_(builder.getMplsLabel()) {}
 
 Route::~Route() {}
@@ -250,7 +226,6 @@ Route::operator=(Route&& other) noexcept {
   advMss_ = std::move(other.advMss_);
   nextHops_ = std::move(other.nextHops_);
   dst_ = std::move(other.dst_);
-  routeIfName_ = std::move(other.routeIfName_);
   family_ = std::move(other.family_);
   mplsLabel_ = std::move(other.mplsLabel_);
   return *this;
@@ -277,7 +252,6 @@ Route::operator=(const Route& other) {
   advMss_ = other.advMss_;
   nextHops_ = other.nextHops_;
   dst_ = other.dst_;
-  routeIfName_ = other.routeIfName_;
   family_ = other.family_;
   mplsLabel_ = other.mplsLabel_;
   return *this;
@@ -296,7 +270,6 @@ operator==(const Route& lhs, const Route& rhs) {
        lhs.getFlags() == rhs.getFlags() &&
        lhs.getPriority() == rhs.getPriority() && lhs.getTos() == rhs.getTos() &&
        lhs.getMtu() == rhs.getMtu() && lhs.getAdvMss() == rhs.getAdvMss() &&
-       lhs.getRouteIfName() == rhs.getRouteIfName() &&
        lhs.getFamily() == rhs.getFamily());
 
   if (!ret) {
@@ -376,11 +349,6 @@ Route::getPriority() const {
 const NextHopSet&
 Route::getNextHops() const {
   return nextHops_;
-}
-
-std::optional<std::string>
-Route::getRouteIfName() const {
-  return routeIfName_;
 }
 
 bool
@@ -467,6 +435,12 @@ NextHopBuilder::setIfIndex(int ifIndex) {
 NextHopBuilder&
 NextHopBuilder::setGateway(const folly::IPAddress& gateway) {
   gateway_ = gateway;
+  return *this;
+}
+
+NextHopBuilder&
+NextHopBuilder::unsetGateway() {
+  gateway_.reset();
   return *this;
 }
 
