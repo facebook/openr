@@ -39,14 +39,17 @@ class NetlinkLinkMessage final : public NetlinkMessageBase {
   static Link parseMessage(const struct nlmsghdr* nlh);
 
  private:
+  // inherited class implementation
+  void rcvdLink(Link&& link) override;
+
+  //
+  // Private variables for rtnetlink msg exchange
+  //
+
   // pointer to link message header
   struct ifinfomsg* ifinfomsg_{nullptr};
 
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
-
-  void rcvdLink(Link&& link) override;
-
+  // promise to be fulfilled when receiving kernel reply
   folly::Promise<folly::Expected<std::vector<Link>, int>> linkPromise_;
   std::vector<Link> rcvdLinks_;
 };

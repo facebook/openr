@@ -35,22 +35,25 @@ class NetlinkAddrMessage final : public NetlinkMessageBase {
   // initiallize address message with default params
   void init(int type);
 
-  // parse Netlink Address message
-  static IfAddress parseMessage(const struct nlmsghdr* nlh);
-
   // create netlink message to add/delete interface address
   // type - RTM_NEWADDR or RTM_DELADDR
   int addOrDeleteIfAddress(const IfAddress& ifAddr, const int type);
 
+  // parse Netlink Address message
+  static IfAddress parseMessage(const struct nlmsghdr* nlh);
+
  private:
+  // inherited class implementation
+  void rcvdIfAddress(IfAddress&& ifAddr) override;
+
+  //
+  // Private variables for rtnetlink msg exchange
+  //
+
   // pointer to interface message header
   struct ifaddrmsg* ifaddrmsg_{nullptr};
 
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
-
-  void rcvdIfAddress(IfAddress&& ifAddr) override;
-
+  // promise to be fulfilled when receiving kernel reply
   folly::Promise<folly::Expected<std::vector<IfAddress>, int>> addrPromise_;
   std::vector<IfAddress> rcvdAddrs_;
 };

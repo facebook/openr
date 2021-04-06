@@ -9,10 +9,7 @@
 
 namespace openr::fbnl {
 
-NetlinkNeighborMessage::NetlinkNeighborMessage() {
-  // get pointer to NLMSG header
-  msghdr_ = getMessagePtr();
-}
+NetlinkNeighborMessage::NetlinkNeighborMessage() : NetlinkMessageBase() {}
 
 NetlinkNeighborMessage::~NetlinkNeighborMessage() {
   CHECK(neighborPromise_.isFulfilled());

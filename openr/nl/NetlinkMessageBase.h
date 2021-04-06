@@ -129,15 +129,16 @@ class NetlinkMessageBase {
   NetlinkMessageBase(NetlinkMessageBase const&) = delete;
   NetlinkMessageBase& operator=(NetlinkMessageBase const&) = delete;
 
-  // pointer to the netlink message header
-  struct nlmsghdr* const msghdr{nullptr};
-
   // Promise to relay the status code received from kernel
   folly::Promise<int> promise_;
 
   // Timestamp when message object was created
   const std::chrono::steady_clock::time_point createTs_{
       std::chrono::steady_clock::now()};
+
+ protected:
+  // pointer to the netlink message header
+  struct nlmsghdr* msghdr_{nullptr};
 };
 
 } // namespace openr::fbnl

@@ -50,16 +50,6 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   // initiallize route message with default params
   void init(int type, uint32_t flags, const Route& route);
 
-  friend std::ostream&
-  operator<<(std::ostream& out, NetlinkRouteMessage const& msg) {
-    out << "\nMessage type:     " << msg.msghdr_->nlmsg_type
-        << "\nMessage length:   " << msg.msghdr_->nlmsg_len
-        << "\nMessage flags:    " << std::hex << msg.msghdr_->nlmsg_flags
-        << "\nMessage sequence: " << msg.msghdr_->nlmsg_seq
-        << "\nMessage pid:      " << msg.msghdr_->nlmsg_pid << std::endl;
-    return out;
-  }
-
   // add a unicast route
   int addRoute(const Route& route);
 
@@ -139,9 +129,6 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   // pointer to route message header
   struct rtmsg* rtmsg_{nullptr};
 
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
-
   // for RTA_VIA nexthop
   struct _NextHop {
     uint16_t addrFamily;
@@ -159,6 +146,7 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
     uint8_t type{0};
   } filters_;
 
+  // promise to be fulfilled when receiving kernel reply
   folly::Promise<folly::Expected<std::vector<Route>, int>> routePromise_;
   std::vector<Route> rcvdRoutes_;
 };

@@ -43,14 +43,13 @@ class NetlinkNeighborMessage final : public NetlinkMessageBase {
   static Neighbor parseMessage(const struct nlmsghdr* nlh);
 
  private:
+  // inherited class implementation
+  void rcvdNeighbor(Neighbor&& ifAddr) override;
+
   // pointer to neighbor message header
   struct ndmsg* ndmsg_{nullptr};
 
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
-
-  void rcvdNeighbor(Neighbor&& ifAddr) override;
-
+  // promise to be fulfilled when receiving kernel reply
   folly::Promise<folly::Expected<std::vector<Neighbor>, int>> neighborPromise_;
   std::vector<Neighbor> rcvdNeighbors_;
 };

@@ -10,13 +10,13 @@
 namespace openr::fbnl {
 
 NetlinkMessageBase::NetlinkMessageBase()
-    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {}
+    : msghdr_(reinterpret_cast<struct nlmsghdr*>(msg.data())) {}
 
 NetlinkMessageBase::NetlinkMessageBase(int type)
-    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {
+    : msghdr_(reinterpret_cast<struct nlmsghdr*>(msg.data())) {
   // initialize netlink header
-  msghdr->nlmsg_len = NLMSG_LENGTH(0);
-  msghdr->nlmsg_type = type;
+  msghdr_->nlmsg_len = NLMSG_LENGTH(0);
+  msghdr_->nlmsg_type = type;
 }
 
 NetlinkMessageBase::~NetlinkMessageBase() {
@@ -25,17 +25,17 @@ NetlinkMessageBase::~NetlinkMessageBase() {
 
 struct nlmsghdr*
 NetlinkMessageBase::getMessagePtr() {
-  return msghdr;
+  return msghdr_;
 }
 
 uint16_t
 NetlinkMessageBase::getMessageType() const {
-  return msghdr->nlmsg_type;
+  return msghdr_->nlmsg_type;
 }
 
 uint32_t
 NetlinkMessageBase::getDataLength() const {
-  return msghdr->nlmsg_len;
+  return msghdr_->nlmsg_len;
 }
 
 struct rtattr*
