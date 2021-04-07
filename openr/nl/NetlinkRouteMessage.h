@@ -122,6 +122,10 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
       const NextHop& path,
       const Route& route) const;
 
+  // DO NOT REMOVE - debugging util functions
+  static void showRtmMsg(const struct rtmsg* const hdr);
+  static void showMultiPathAttributes(const struct rtattr* const rta);
+
   //
   // Private variables for rtnetlink msg exchange
   //

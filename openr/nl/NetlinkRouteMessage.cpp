@@ -394,7 +394,13 @@ NetlinkRouteMessage::addNextHops(const Route& route) {
     if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_))) {
       return status;
     }
+    // print attributes when log level is enabled
+    showMultiPathAttributes(reinterpret_cast<struct rtattr*>(nhop.data()));
   }
+
+  // print attributes when log level is enabled
+  showRtmMsg(rtmsg_);
+
   return 0;
 }
 
@@ -812,6 +818,46 @@ NetlinkRouteMessage::deleteLabelRoute(const Route& route) {
       reinterpret_cast<const char*>(&mlabel),
       sizeof(mpls_label),
       msghdr_);
+}
+
+/* ATTN: debugging util function. DO NOT REMOVE */
+void
+NetlinkRouteMessage::showRtmMsg(const struct rtmsg* const hdr) {
+  VLOG(3) << "Route message data"
+          << "\n\trtm_family    =>  " << +hdr->rtm_family
+          << "\n\trtm_dst_len   =>  " << +hdr->rtm_dst_len
+          << "\n\trtm_src_len   =>  " << +hdr->rtm_src_len
+          << "\n\trtm_tos       =>  " << +hdr->rtm_tos
+          << "\n\trtm_table     =>  " << +hdr->rtm_table
+          << "\n\trtm_protocol  =>  " << +hdr->rtm_protocol
+          << "\n\trtm_scope     =>  " << +hdr->rtm_scope
+          << "\n\trtm_type      =>  " << +hdr->rtm_type
+          << "\n\trtm_flags     =>  " << std::hex << hdr->rtm_flags;
+}
+
+void
+NetlinkRouteMessage::showMultiPathAttributes(const struct rtattr* const rta) {
+  struct rtnexthop* rtnh = reinterpret_cast<struct rtnexthop*>(RTA_DATA(rta));
+  int nhLen = RTA_PAYLOAD(rta);
+
+  VLOG(3) << "Multi-path nexthop data"
+          << "\n\trtnh_len      => " << rtnh->rtnh_len
+          << "\n\trtnh_flags    => " << static_cast<size_t>(rtnh->rtnh_flags)
+          << "\n\trtnh_hops     => " << static_cast<size_t>(rtnh->rtnh_hops)
+          << "\n\trtnh_ifindex  => " << rtnh->rtnh_ifindex;
+
+  do {
+    const struct rtattr* attr;
+    auto attrLen = rtnh->rtnh_len;
+    for (attr = RTNH_DATA(rtnh); RTA_OK(attr, attrLen);
+         attr = RTA_NEXT(attr, attrLen)) {
+      VLOG(3) << "Nexthop attributes:"
+              << "\n\trta_len       => " << attr->rta_len
+              << "\n\trta_type      => " << attr->rta_type;
+    }
+    nhLen -= NLMSG_ALIGN(rtnh->rtnh_len);
+    rtnh = RTNH_NEXT(rtnh);
+  } while (RTNH_OK(rtnh, nhLen));
 }
 
 } // namespace openr::fbnl

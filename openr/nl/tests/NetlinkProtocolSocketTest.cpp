@@ -995,6 +995,12 @@ TEST_F(NlMessageFixture, V4RouteOverV6NextHop) {
       std::nullopt,
       ipAddrY1V6, /* NH address */
       ifIndexX /* egress interface */));
+  paths.emplace_back(buildNextHop(
+      std::nullopt,
+      std::nullopt,
+      std::nullopt,
+      ipAddrY2V6, /* NH address */
+      ifIndexX /* egress interface */));
   auto route = buildRoute(kRouteProtoId, network, std::nullopt, paths);
 
   // add route
