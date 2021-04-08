@@ -72,6 +72,9 @@ if [ "$1" == "check" ]; then
         echo "## Addresses"
         "$IP" netns exec $namespace "$IP" addr show
         echo "## Routes"
+        echo "### Legacy IP (v4)"
+        "$IP" netns exec $namespace "$IP" route show
+        echo "### IP (v6)"
         "$IP" netns exec $namespace "$IP" -6 route show
     done
     exit 0
