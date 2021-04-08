@@ -25,16 +25,62 @@ namespace openr::fbnl {
 
 constexpr uint16_t kMaxNlPayloadSize{4096};
 
-/**
+/*
  * Data structure representing a netlink message, either to be sent or received.
  * It wraps `struct nlmsghdr` and provides buffer for appending message payload.
- * Further message payload in turn can contains multiple attributes and
+ * Further message payload in turn can contain multiple attributes and
  * sub-attributes depending on the message type.
  *
  * Aim of the message is to faciliate serialization and deserialization of
  * C++ object (application) to/from bytes (kernel).
  *
  * Maximum size of message is limited by `kMaxNlPayloadSize` parameter.
+ */
+/*
+ * For netlink reference:
+ *
+ * https://man7.org/linux/man-pages/man7/netlink.7.html
+ *
+ * Synopsis:
+ *
+ * netlink_socket = socket(AF_NETLINK, socket_type, netlink_family);
+ *
+ * Description:
+ * Netlink is used to transfer information between the kernel and user-space
+ * processes. It consists of a standard sockets-based interface for user space
+ * processes and an internal kernel API for kernel modules.
+ *
+ * Netlink is a datagram-oriented service. Both `SOCK_RAW` and `SOCK_DGRAM`
+ * are valid values for `socket_type`. However, the netlink protocol does not
+ * distinguish between datagram and raw sockets.
+ *
+ * `netlink_family` selects the kernel module or netlink group to communicate
+ * with. Especially for Open/R's interest:
+ *
+ * NETLINK_ROUTE
+ *      Receives routing and link updates and may be used to
+ *      modify the routing tables (IPv4,  IPv6 and MPLS), IP
+ *      addresses, link parameters, neighbor setups, queueing
+ *      disciplines, traffic classes, and packet classifiers.
+ */
+/*
+ * For rtnetlink reference:
+ *
+ * https://man7.org/linux/man-pages/man7/rtnetlink.7.html
+ *
+ * Synopsis:
+ *
+ * rtnetlink_socket = socket(AF_NETLINK, socket_type, NETLINK_ROUTE);
+ *
+ * Description:
+ * Rtnetlink allows the kernel's routing tables to be read and altered.
+ *
+ * Message Types:
+ * - RTM_NEWLINK, RTM_DELLINK, RTM_GETLINK
+ * - RTM_NEWADDR, RTM_DELADDR, RTM_GETADDR
+ * - RTM_NEWROUTE, RTM_DELROUTE, RTM_GETROUTE
+ * - RTM_NEWNEIGH, RTM_DELNEIGH, RTM_GETNEIGH
+ * - etc.
  */
 class NetlinkMessageBase {
  public:

@@ -27,12 +27,16 @@ message exchange with linux kernel.
 
 Reference: http://man7.org/linux/man-pages/man7/netlink.7.html
 
-### AddrMessage/LinkMessage/NeighborMessage/RouteMessage
+### Addr/Link/Neighbor/Route
 
 Specialization of netlink message for `NETLINK_ROUTE` (aka rtnetlink) family. It
 implements Addresses, Link, Neighbor and Route (IP, IPv6 & MPLS).
 
 Reference: http://man7.org/linux/man-pages/man7/rtnetlink.7.html
+
+For example, a sample message layout of `RTM_NEWROUTE` will be like:
+
+![Layout of sample RTM_NEWROUTE msg](https://user-images.githubusercontent.com/51382140/113812173-799dd080-9722-11eb-80d3-220dc3907fab.png)
 
 ### NetlinkProtocolSocket
 

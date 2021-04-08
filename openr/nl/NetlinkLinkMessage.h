@@ -14,8 +14,31 @@
 
 namespace openr::fbnl {
 
-/**
- * Message specialization for LINK object
+/*
+ * Message specialization for rtnetlink LINK type
+ *
+ * For reference: https://man7.org/linux/man-pages/man7/rtnetlink.7.html
+ *
+ * RTM_NEWLINK, RTM_DELLINK, RTM_GETLINK
+ *    Create, remove, or get information about a specific
+ *    network interface.  These messages contain an ifinfomsg
+ *    structure followed by a series of rtattr structures.
+ *
+ *    struct ifinfomsg {
+ *      unsigned char  ifi_family;  // AF_UNSPEC
+ *      unsigned short ifi_type;    // Device type
+ *      int ifi_index;              // Interface index
+ *      unsigned int ifi_flags;     // Device flags
+ *      unsigned int ifi_change;    // change mask
+ *    };
+ *
+ *    ifi_flags contains the device flags, see netdevice(7);
+ *    ifi_index is the unique interface index(since Linux 3.7,
+ *    it is possible to feed a nonzero value with the
+ *    RTM_NEWLINK message, thus creating a link with the given
+ *    ifindex);
+ *    ifi_change is reserved for future use and should
+ *    be always set to 0xFFFFFFFF.
  */
 class NetlinkLinkMessage final : public NetlinkMessageBase {
  public:

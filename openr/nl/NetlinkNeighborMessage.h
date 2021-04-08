@@ -18,8 +18,50 @@ extern "C" {
 
 namespace openr::fbnl {
 
-/**
- * Message specialization for NEIGHBOR object
+/*
+ * Message specialization for rtnetlink NEIGHBOR type
+ *
+ * For reference: https://man7.org/linux/man-pages/man7/rtnetlink.7.html
+ *
+ * RTM_NEWNEIGH, RTM_DELNEIGH, RTM_GETNEIGH
+ *    Add, remove, or receive information about a neighbor table
+ *    entry (e.g., an ARP entry).  The message contains an ndmsg
+ *    structure.
+ *
+ *    struct ndmsg {
+ *        unsigned char ndm_family;
+ *        int           ndm_ifindex;  // Interface index
+ *        __u16         ndm_state;    // State
+ *        __u8          ndm_flags;    // Flags
+ *        __u8          ndm_type;
+ *    };
+ *
+ *     ndm_state is a bit mask of the following states:
+ *
+ *    NUD_INCOMPLETE   a currently resolving cache entry
+ *    NUD_REACHABLE    a confirmed working cache entry
+ *    NUD_STALE        an expired cache entry
+ *    NUD_DELAY        an entry waiting for a timer
+ *    NUD_PROBE        a cache entry that is currently reprobed
+ *    NUD_FAILED       an invalid cache entry
+ *    NUD_NOARP        a device with no destination cache
+ *    NUD_PERMANENT    a static entry
+ *
+ *    Valid ndm_flags are:
+ *
+ *    NTF_PROXY    a proxy arp entry
+ *    NTF_ROUTER   an IPv6 router
+ *
+ *    The rtattr struct has the following meanings for the
+ *    rta_type field:
+ *
+ *    NDA_UNSPEC      unknown type
+ *    NDA_DST         a neighbor cache n/w layer destination address
+ *    NDA_LLADDR      a neighbor cache link layer address
+ *    NDA_CACHEINFO   cache statistics
+ *
+ *    If the rta_type field is NDA_CACHEINFO, then a struct
+ *    nda_cacheinfo header follows.
  */
 class NetlinkNeighborMessage final : public NetlinkMessageBase {
  public:

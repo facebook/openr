@@ -30,7 +30,30 @@ constexpr uint32_t kLabelShift{12};
 constexpr uint32_t kLabelSizeBits{20};
 
 /**
- * Message specialization for ROUTE object
+ * Message specialization for rtnetlink ROUTE type
+ *
+ * For reference: https://man7.org/linux/man-pages/man7/rtnetlink.7.html
+ *
+ * RTM_NEWROUTE, RTM_DELROUTE, RTM_GETROUTE
+ *    Create, remove, or receive information about a network
+ *    route.  These messages contain an rtmsg structure with an
+ *    optional sequence of rtattr structures following.  For
+ *    RTM_GETROUTE, setting rtm_dst_len and rtm_src_len to 0
+ *    means you get all entries for the specified routing table.
+ *    For the other fields, except rtm_table and rtm_protocol, 0
+ *    is the wildcard.
+ *
+ *    struct rtmsg {
+ *        unsigned char rtm_family;   // Address family of route
+ *        unsigned char rtm_dst_len;  // Length of destination
+ *        unsigned char rtm_src_len;  // Length of source
+ *        unsigned char rtm_tos;      // TOS filter
+ *        unsigned char rtm_table;    // Routing table ID
+ *        unsigned char rtm_protocol; // Routing protocol
+ *        unsigned char rtm_scope;
+ *        unsigned char rtm_type;
+ *        unsigned int  rtm_flags;
+ *    };
  */
 class NetlinkRouteMessage final : public NetlinkMessageBase {
  public:

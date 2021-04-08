@@ -15,7 +15,26 @@
 namespace openr::fbnl {
 
 /**
- * Message specialization for ADDR object
+ * Message specialization for rtnetlink ADDR type
+ *
+ * For reference: https://man7.org/linux/man-pages/man7/rtnetlink.7.html
+ *
+ * RTM_NEWADDR, RTM_DELADDR, RTM_GETADDR
+ *    Add, remove, or receive information about an IP address
+ *    associated with an interface.  In Linux 2.2, an interface
+ *    can carry multiple IP addresses, this replaces the alias
+ *    device concept in 2.0.  In Linux 2.2, these messages
+ *    support IPv4 and IPv6 addresses.  They contain an
+ *    `ifaddrmsg` structure, optionally followed by rtattr routing
+ *    attributes.
+ *
+ * struct ifaddrmsg {
+ *    unsigned char ifa_family;    // Address type
+ *    unsigned char ifa_prefixlen; // Prefixlength of address
+ *    unsigned char ifa_flags;     // Address flags
+ *    unsigned char ifa_scope;     // Address scope
+ *    unsigned int  ifa_index;     // Interface index
+ * };
  */
 class NetlinkAddrMessage final : public NetlinkMessageBase {
  public:
