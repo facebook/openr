@@ -66,12 +66,9 @@ NetlinkMessageBase::addSubAttributes(
 
 int
 NetlinkMessageBase::addAttributes(
-    int type,
-    const char* const data,
-    uint32_t len,
-    struct nlmsghdr* const msghdr) {
+    int type, const char* const data, uint32_t len) {
   uint32_t rtaLen = (RTA_LENGTH(len));
-  uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr)->nlmsg_len);
+  uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr_)->nlmsg_len);
 
   if (nlmsgAlen + RTA_ALIGN(rtaLen) > kMaxNlPayloadSize) {
     LOG(ERROR) << "Space not available to add attribute type " << type;
@@ -80,7 +77,7 @@ NetlinkMessageBase::addAttributes(
 
   // set the pointer to the aligned location
   struct rtattr* rptr =
-      reinterpret_cast<struct rtattr*>(((char*)(msghdr)) + nlmsgAlen);
+      reinterpret_cast<struct rtattr*>(((char*)(msghdr_)) + nlmsgAlen);
   rptr->rta_type = type;
   rptr->rta_len = rtaLen;
   VLOG(3) << "Adding attribute. type=" << type << ", len=" << rtaLen;
@@ -89,7 +86,7 @@ NetlinkMessageBase::addAttributes(
   }
 
   // update the length in NL MSG header
-  msghdr->nlmsg_len = nlmsgAlen + RTA_ALIGN(rtaLen);
+  msghdr_->nlmsg_len = nlmsgAlen + RTA_ALIGN(rtaLen);
   return 0;
 }
 

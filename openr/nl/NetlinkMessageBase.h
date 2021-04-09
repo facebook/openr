@@ -155,20 +155,37 @@ class NetlinkMessageBase {
   }
 
  protected:
-  // Add TLV attributes, specify the length and size of data returns ENOBUFS
-  // if enough buffer is not available. Also updates the length field in
-  // NLMSG header.
-  // @returns 0 on success else relevant system error code
-  int addAttributes(
-      int type,
-      const char* const data,
-      uint32_t len,
-      struct nlmsghdr* const msghdr);
+  /*
+   * Add TLV(Type-Length-Value) attributes and update the length field in
+   * NLMSG header.
+   *
+   * @params: type => data type
+   *          data => data value
+   *          length => data length
+   *
+   * @return:
+   *  - EVNOBUFS: if enough buffer is not available
+   *  - 0: on success
+   *  - System error code: if failed to add attributes
+   */
+  int addAttributes(int type, const char* const data, uint32_t len);
 
-  // add a sub RTA inside an RTA. The length of sub RTA will not be added into
-  // the NLMSG header, but will be added to the parent RTA.
+  /*
+   * Add a sub RTA(Route Attribures) inside an RTA. The length of sub RTA will
+   * not be added into the NLMSG header, but will be added to the parent RTA.
+   *
+   * @params: rta => route attribute struct ptr
+   *          type => data type
+   *          data => data value
+   *          length => data length
+   *
+   * @return: route attribute struct ptr
+   */
   struct rtattr* addSubAttributes(
       struct rtattr* rta, int type, const void* data, uint32_t len) const;
+
+  // pointer to the netlink message header
+  struct nlmsghdr* msghdr_{nullptr};
 
  private:
   // disable copy, assign constructores
@@ -181,10 +198,6 @@ class NetlinkMessageBase {
   // Timestamp when message object was created
   const std::chrono::steady_clock::time_point createTs_{
       std::chrono::steady_clock::now()};
-
- protected:
-  // pointer to the netlink message header
-  struct nlmsghdr* msghdr_{nullptr};
 };
 
 } // namespace openr::fbnl

@@ -85,14 +85,14 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
   ifaddrmsg_->ifa_index = ifAddr.getIfIndex();
 
   const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
-  int status = addAttributes(IFA_ADDRESS, ipptr, ip.byteCount(), msghdr_);
+  int status = addAttributes(IFA_ADDRESS, ipptr, ip.byteCount());
   if (status) {
     return status;
   }
   // For IPv4, need to specify the ip address in IFA_LOCAL attribute as well
   // for point-to-point interfaces
   // For IPv6, the extra attribute has no effect
-  return addAttributes(IFA_LOCAL, ipptr, ip.byteCount(), msghdr_);
+  return addAttributes(IFA_LOCAL, ipptr, ip.byteCount());
 }
 
 IfAddress

@@ -391,7 +391,7 @@ NetlinkRouteMessage::addNextHops(const Route& route) {
     const char* const data = reinterpret_cast<const char*>(
         RTA_DATA(reinterpret_cast<struct rtattr*>(nhop.data())));
     int payloadLen = RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(nhop.data()));
-    if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_))) {
+    if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen))) {
       return status;
     }
     // print attributes when log level is enabled
@@ -733,7 +733,7 @@ NetlinkRouteMessage::addRoute(const Route& route) {
   rtmsg_->rtm_dst_len = plen; /* netmask */
   const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
   int status{0};
-  if ((status = addAttributes(RTA_DST, ipptr, ip.byteCount(), msghdr_))) {
+  if ((status = addAttributes(RTA_DST, ipptr, ip.byteCount()))) {
     return status;
   }
 
@@ -741,8 +741,7 @@ NetlinkRouteMessage::addRoute(const Route& route) {
   if (route.getPriority()) {
     const uint32_t adminDistance = route.getPriority().value();
     const char* const adPtr = reinterpret_cast<const char*>(&adminDistance);
-    if ((status =
-             addAttributes(RTA_PRIORITY, adPtr, sizeof(uint32_t), msghdr_))) {
+    if ((status = addAttributes(RTA_PRIORITY, adPtr, sizeof(uint32_t)))) {
       return status;
     }
   }
@@ -765,7 +764,7 @@ NetlinkRouteMessage::deleteRoute(const Route& route) {
   rtmsg_->rtm_family = addressFamily;
   rtmsg_->rtm_dst_len = plen; /* netmask */
   const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
-  return addAttributes(RTA_DST, ipptr, ip.byteCount(), msghdr_);
+  return addAttributes(RTA_DST, ipptr, ip.byteCount());
 }
 
 int
@@ -792,8 +791,7 @@ NetlinkRouteMessage::addLabelRoute(const Route& route) {
   if ((status = addAttributes(
            RTA_DST,
            reinterpret_cast<const char*>(&mlabel),
-           sizeof(mpls_label),
-           msghdr_))) {
+           sizeof(mpls_label)))) {
     return status;
   }
 
@@ -814,10 +812,7 @@ NetlinkRouteMessage::deleteLabelRoute(const Route& route) {
   }
   mlabel.entry = encodeLabel(label.value(), true);
   return addAttributes(
-      RTA_DST,
-      reinterpret_cast<const char*>(&mlabel),
-      sizeof(mpls_label),
-      msghdr_);
+      RTA_DST, reinterpret_cast<const char*>(&mlabel), sizeof(mpls_label));
 }
 
 /* ATTN: debugging util function. DO NOT REMOVE */
