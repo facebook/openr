@@ -344,6 +344,12 @@ struct OriginatedPrefix {
    * set, Decision will not do extra check the number of nexthops.
    */
   11: optional i64 minNexthop;
+
+  /**
+   * Next hop to specify.
+   * It's used for Thrift-based VIP injection
+   */
+  12: optional string nexthop;
 }
 
 /**

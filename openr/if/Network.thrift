@@ -125,6 +125,7 @@ enum PrefixType {
   RIB = 6,
   SLO_PREFIX_ALLOCATOR = 7,
   CONFIG = 8, // Route Origination
+  VIP = 9, // VIP injected by vip service
 
   // Placeholder Types
   TYPE_1 = 21,
