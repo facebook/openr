@@ -16,7 +16,7 @@ from builtins import chr, input, map
 from collections import defaultdict
 from functools import lru_cache, partial
 from itertools import product
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, Callable
 
 import bunch
 import click
@@ -1899,13 +1899,13 @@ def print_route_details(
     routes: List[
         Union[ctrl_types.AdvertisedRouteDetail, ctrl_types.ReceivedRouteDetail]
     ],
-    key_str,
+    key_to_str_fn: Callable[[network_types.PrefixType], Tuple[str]],
     detailed: bool,
 ) -> None:
     """
     Print advertised or received route.
 
-    `key_fn` argument specifies the transformation of key attributes to tuple of
+    `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
     strings
 
     Output format
@@ -1923,8 +1923,8 @@ def print_route_details(
     print_route_header(rows, detailed)
 
     for route_detail in routes:
-        best_key = key_str(route_detail.bestKey)
-        best_keys = {key_str(k) for k in route_detail.bestKeys}
+        best_key = key_to_str_fn(route_detail.bestKey)
+        best_keys = {key_to_str_fn(k) for k in route_detail.bestKeys}
 
         # Create a title for the route
         rows.append(
@@ -1934,8 +1934,8 @@ def print_route_details(
 
         # Add all entries associated with routes
         for route in route_detail.routes:
-            markers = f"{'*' if route.key in best_keys else ''}{'@' if route.key == best_key else ' '}"
-            print_route_helper(rows, route, key_str, detailed, markers)
+            markers = f"{'*' if key_to_str_fn(route.key) in best_keys else ''}{'@' if key_to_str_fn(route.key) == best_key else ' '}"
+            print_route_helper(rows, route, key_to_str_fn, detailed, markers)
         rows.append("")
 
     print("\n".join(rows))
@@ -1943,13 +1943,13 @@ def print_route_details(
 
 def print_advertised_routes(
     routes: List[ctrl_types.AdvertisedRoute],
-    key_str,
+    key_to_str_fn: Callable[[network_types.PrefixType], Tuple[str]],
     detailed: bool,
 ) -> None:
     """
     Print postfilter advertised or rejected route.
 
-    `key_fn` argument specifies the transformation of key attributes to tuple of
+    `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
     strings
 
     Output format
@@ -1969,7 +1969,7 @@ def print_advertised_routes(
     for route in routes:
         # Create a title for the route
         rows.append(f"> {ipnetwork.sprint_prefix(route.route.prefix)}")
-        print_route_helper(rows, route, key_str, detailed, "{*@}")
+        print_route_helper(rows, route, key_to_str_fn, detailed, "{*@}")
         rows.append("")
 
     print("\n".join(rows))
@@ -2008,14 +2008,14 @@ def print_route_header(rows: List[str], detailed: bool):
 def print_route_helper(
     rows: List[str],
     route: ctrl_types.AdvertisedRoute,
-    key_str,
+    key_to_str_fn: Callable[[network_types.PrefixType], Tuple[str]],
     detailed: bool,
     markers: str,
 ) -> None:
     """
     Construct print lines of advertised route, append to rows
 
-    `key_fn` argument specifies the transformation of key attributes to tuple of
+    `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
     strings
     `markers` argument specifies [@*] to indicate route is ecmp/best entry
 
@@ -2028,7 +2028,7 @@ def print_route_helper(
 
     """
 
-    key, metrics = key_str(route.key), route.route.metrics
+    key, metrics = key_to_str_fn(route.key), route.route.metrics
     fwd_algo = config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
         route.route.forwardingAlgorithm
     )
