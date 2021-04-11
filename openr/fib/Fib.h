@@ -67,7 +67,7 @@ class Fib final : public OpenrEventBase {
    */
   static void createFibClient(
       folly::EventBase& evb,
-      std::shared_ptr<folly::AsyncSocket>& socket,
+      folly::AsyncSocket*& socket,
       std::unique_ptr<thrift::FibServiceAsyncClient>& client,
       int32_t port);
 
@@ -228,7 +228,7 @@ class Fib final : public OpenrEventBase {
   // Thrift client connection to switch FIB Agent using which we actually
   // manipulate routes.
   folly::EventBase evb_;
-  std::shared_ptr<folly::AsyncSocket> socket_{nullptr};
+  folly::AsyncSocket* socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 
   // Callback timer to sync routes to switch agent and scheduled on route-sync

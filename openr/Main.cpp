@@ -103,7 +103,7 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
   auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
   auto switchState = thrift::SwitchRunState::UNINITIALIZED;
   folly::EventBase evb;
-  std::shared_ptr<folly::AsyncSocket> socket;
+  folly::AsyncSocket* socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
 
   // Block until the Fib client is ALIVE, AND switch is ready to accept

@@ -651,13 +651,16 @@ Fib::keepAliveCheck() {
 void
 Fib::createFibClient(
     folly::EventBase& evb,
-    std::shared_ptr<folly::AsyncSocket>& socket,
+    folly::AsyncSocket*& socket,
     std::unique_ptr<thrift::FibServiceAsyncClient>& client,
     int32_t port) {
+  if (!client) {
+    socket = nullptr;
+  }
   // Reset client if channel is not good
   if (socket && (!socket->good() || socket->hangup())) {
     client.reset();
-    socket.reset();
+    socket = nullptr;
   }
 
   // Do not create new client if one exists already
@@ -666,14 +669,16 @@ Fib::createFibClient(
   }
 
   // Create socket to thrift server and set some connection parameters
-  socket = folly::AsyncSocket::newSocket(
+  auto newSocket = folly::AsyncSocket::newSocket(
       &evb,
       Constants::kPlatformHost.toString(),
       port,
       Constants::kPlatformConnTimeout.count());
+  socket = newSocket.get();
 
   // Create channel and set timeout
-  auto channel = apache::thrift::HeaderClientChannel::newChannel(socket);
+  auto channel =
+      apache::thrift::HeaderClientChannel::newChannel(std::move(newSocket));
   channel->setTimeout(Constants::kPlatformRoutesProcTimeout.count());
 
   // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
