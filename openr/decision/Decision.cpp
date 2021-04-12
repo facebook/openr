@@ -166,11 +166,13 @@ class SpfSolver::SpfSolverImpl {
   SpfSolverImpl(
       const std::string& myNodeName,
       bool enableV4,
+      bool enableAdjacencyLabels,
       bool bgpDryRun,
       bool enableBestRouteSelection,
       bool v4OverV6Nexthop)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
+        enableAdjacencyLabels_(enableAdjacencyLabels),
         bgpDryRun_(bgpDryRun),
         enableBestRouteSelection_(enableBestRouteSelection),
         v4OverV6Nexthop_(v4OverV6Nexthop) {
@@ -360,6 +362,8 @@ class SpfSolver::SpfSolverImpl {
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
   // nexthops to Fib module for programming. Else it will just drop them.
   const bool enableV4_{false};
+
+  const bool enableAdjacencyLabels_{true};
 
   const bool bgpDryRun_{false};
 
@@ -696,7 +700,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
       // Install POP_AND_LOOKUP for next layer
       if (*adjDb.thisNodeName_ref() == myNodeName) {
         thrift::NextHopThrift nh;
-        *nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
+        nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
         nh.area_ref() = area;
         nh.mplsAction_ref() =
             createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
@@ -753,31 +757,33 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
   //
   // Create MPLS routes for all of our adjacencies
   //
-  for (const auto& [_, linkState] : areaLinkStates) {
-    for (const auto& link : linkState.linksFromNode(myNodeName)) {
-      const auto topLabel = link->getAdjLabelFromNode(myNodeName);
-      // Top label is not set => Non-SR mode
-      if (topLabel == 0) {
-        continue;
-      }
-      // If mpls label is not valid then ignore it
-      if (not isMplsLabelValid(topLabel)) {
-        LOG(ERROR) << "Ignoring invalid adjacency label " << topLabel
-                   << " of link " << link->directionalToString(myNodeName);
-        fb303::fbData->addStatValue(
-            "decision.skipped_mpls_route", 1, fb303::COUNT);
-        continue;
-      }
+  if (enableAdjacencyLabels_) {
+    for (const auto& [_, linkState] : areaLinkStates) {
+      for (const auto& link : linkState.linksFromNode(myNodeName)) {
+        const auto topLabel = link->getAdjLabelFromNode(myNodeName);
+        // Top label is not set => Non-SR mode
+        if (topLabel == 0) {
+          continue;
+        }
+        // If mpls label is not valid then ignore it
+        if (not isMplsLabelValid(topLabel)) {
+          LOG(ERROR) << "Ignoring invalid adjacency label " << topLabel
+                     << " of link " << link->directionalToString(myNodeName);
+          fb303::fbData->addStatValue(
+              "decision.skipped_mpls_route", 1, fb303::COUNT);
+          continue;
+        }
 
-      routeDb.addMplsRoute(RibMplsEntry(
-          topLabel,
-          {createNextHop(
-              link->getNhV6FromNode(myNodeName),
-              link->getIfaceFromNode(myNodeName),
-              link->getMetricFromNode(myNodeName),
-              createMplsAction(thrift::MplsActionCode::PHP),
-              link->getArea(),
-              link->getOtherNodeName(myNodeName))}));
+        routeDb.addMplsRoute(RibMplsEntry(
+            topLabel,
+            {createNextHop(
+                link->getNhV6FromNode(myNodeName),
+                link->getIfaceFromNode(myNodeName),
+                link->getMetricFromNode(myNodeName),
+                createMplsAction(thrift::MplsActionCode::PHP),
+                link->getArea(),
+                link->getOtherNodeName(myNodeName))}));
+      }
     }
   }
 
@@ -1352,12 +1358,14 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
 SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
+    bool enableAdjacencyLabels,
     bool bgpDryRun,
     bool enableBestRouteSelection,
     bool v4OverV6Nexthop)
     : impl_(new SpfSolver::SpfSolverImpl(
           myNodeName,
           enableV4,
+          enableAdjacencyLabels,
           bgpDryRun,
           enableBestRouteSelection,
           v4OverV6Nexthop)) {}
@@ -1428,6 +1436,7 @@ Decision::Decision(
   spfSolver_ = std::make_unique<SpfSolver>(
       config->getNodeName(),
       config->isV4Enabled(),
+      config->isAdjacencyLabelsEnabled(),
       bgpDryRun,
       config->isBestRouteSelectionEnabled(),
       config->isV4OverV6NexthopEnabled());

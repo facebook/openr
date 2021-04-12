@@ -205,6 +205,7 @@ class SpfSolver {
   SpfSolver(
       const std::string& myNodeName,
       bool enableV4,
+      bool enableAdjacencyLabels,
       bool bgpDryRun = false,
       bool enableBestRouteSelection = false,
       bool v4OverV6Nexthop = false);

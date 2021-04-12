@@ -1219,7 +1219,9 @@ Spark::processHelloMsg(
             neighborName, // neighborNode name
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
-            getNewLabelForIface(ifName), // label for Segment Routing
+            config_->isAdjacencyLabelsEnabled()
+                ? getNewLabelForIface(ifName) // label for Segment Routing
+                : 0, // Non-SR mode (will be ignored)
             remoteSeqNum, // seqNum reported by neighborNode
             keepAliveTime_, // stepDetector sample period
             std::move(rttChangeCb),

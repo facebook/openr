@@ -118,6 +118,16 @@ class Config {
   }
 
   bool
+  isAdjacencyLabelsEnabled() const {
+    // TODO
+    // Once segment_routing_config gets added, the
+    // this check will be replaced with a logic
+    // which checks if adj segment ids stanza is
+    // configured.
+    return isSegmentRoutingEnabled();
+  }
+
+  bool
   isNewGRBehaviorEnabled() const {
     return *config_.enable_new_gr_behavior_ref();
   }
