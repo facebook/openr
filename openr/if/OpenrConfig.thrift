@@ -628,6 +628,11 @@ struct OpenrConfig {
   36: optional string undrained_flag_path;
 
   /**
+  * File path where to persist internal state across restart.
+  */
+  37: string persistent_config_store_path = "/tmp/openr_persistent_config_store.bin";
+
+  /**
    * Enable best route selection based on PrefixMetrics.
    * TODO: It is temporary & will go away once new prefix metrics is rolled out
    */
