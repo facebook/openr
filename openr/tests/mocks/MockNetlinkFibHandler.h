@@ -9,6 +9,7 @@
 
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include "openr/if/gen-cpp2/Platform_types.h"
 
 namespace openr {
 
@@ -65,6 +66,8 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
       int16_t clientId,
       std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) override;
 
+  thrift::SwitchRunState getSwitchRunState() override;
+
   // Wait for adding/deleting routes to complete
   void waitForUpdateUnicastRoutes();
   void waitForDeleteUnicastRoutes();
@@ -109,6 +112,11 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
     return delMplsRoutesCount_;
   }
 
+  void
+  setSwitchRunState(thrift::SwitchRunState state) {
+    switchState_ = state;
+  }
+
   void stop();
 
   void restart();
@@ -132,6 +140,8 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   std::atomic<size_t> fibMplsSyncCount_{0};
   std::atomic<size_t> addMplsRoutesCount_{0};
   std::atomic<size_t> delMplsRoutesCount_{0};
+  std::atomic<thrift::SwitchRunState> switchState_{
+      thrift::SwitchRunState::CONFIGURED};
 
   // A baton for synchronization
   folly::Baton<> updateUnicastRoutesBaton_;

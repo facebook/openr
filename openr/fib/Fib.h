@@ -186,6 +186,11 @@ class Fib final : public OpenrEventBase {
   // log perf events
   void logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents);
 
+  void updateRouteState(const DecisionRouteUpdate& routeUpdate);
+
+  // Check if Fib agent is ready. If not, raise std::exception.
+  bool isClientReady();
+
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
   struct RouteState {
@@ -193,9 +198,14 @@ class Fib final : public OpenrEventBase {
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
     std::unordered_map<uint32_t, RibMplsEntry> mplsRoutes;
 
-    // indicates we've received a decision route publication and therefore have
-    // routes to sync. will not synce routes with system until this is set
+    // Indicates we've received a decision route publication and therefore have
+    // routes to sync. will not synce routes with system until this or
+    // hasStaticRouteUpdates is set.
     bool hasRoutesFromDecision{false};
+
+    // Indicates static routes received from PrefixManager and therefore have
+    // routes to sync.
+    bool hasStaticRouteUpdates{false};
 
     // Flag to indicate the result of previous route programming attempt.
     // If set, it means what currently cached in local routes has not been 100%
@@ -230,6 +240,7 @@ class Fib final : public OpenrEventBase {
   folly::EventBase evb_;
   folly::AsyncSocket* socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
+  thrift::SwitchRunState clientState_{thrift::SwitchRunState::UNINITIALIZED};
 
   // Callback timer to sync routes to switch agent and scheduled on route-sync
   // failure. ExponentialBackoff timer to ease up things if they go wrong

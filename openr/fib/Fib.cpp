@@ -10,6 +10,7 @@
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <exception>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
@@ -42,7 +43,8 @@ Fib::Fib(
   enableSegmentRouting_ = tConfig.enable_segment_routing_ref().value_or(false);
 
   syncRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    if (routeState_.hasRoutesFromDecision) {
+    if (routeState_.hasRoutesFromDecision or
+        routeState_.hasStaticRouteUpdates) {
       if (syncRouteDb()) {
         hasSyncedFib_ = true;
         expBackoff_.reportSuccess();
@@ -75,6 +77,7 @@ Fib::Fib(
     } catch (const std::exception& e) {
       fb303::fbData->addStatValue(
           "fib.thrift.failure.keepalive", 1, fb303::COUNT);
+
       client_.reset();
       LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
                  << folly::exceptionStr(e);
@@ -121,6 +124,13 @@ Fib::Fib(
       maybeThriftPub->unicastRoutesToUpdate.clear();
       maybeThriftPub->unicastRoutesToDelete.clear();
       maybeThriftPub->mplsRoutesToDelete.clear();
+
+      // Update route state.
+      updateRouteState(maybeThriftPub.value());
+      // Set hasStaticRouteUpdates. In case of later updateRoutes() failed due
+      // to FIB client is not yet ready, later keepAliveTimer_ will program the
+      // static routes cached in routeState_.
+      routeState_.hasStaticRouteUpdates = true;
 
       // Program received static route updates
       updateRoutes(std::move(maybeThriftPub).value(), true /* static routes */);
@@ -323,27 +333,7 @@ Fib::getFibUpdatesReader() {
 }
 
 void
-Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
-  routeState_.hasRoutesFromDecision = true;
-  // Update perfEvents_ .. We replace existing perf events with new one as
-  // convergence is going to be based on new data, not the old.
-  if (routeUpdate.perfEvents.has_value()) {
-    addPerfEvent(
-        routeUpdate.perfEvents.value(), myNodeName_, "FIB_ROUTE_DB_RECVD");
-  }
-
-  // Before anything, get rid of doNotInstall routes
-  auto i = routeUpdate.unicastRoutesToUpdate.begin();
-  while (i != routeUpdate.unicastRoutesToUpdate.end()) {
-    if (i->second.doNotInstall) {
-      LOG(INFO) << "Not installing route for prefix "
-                << folly::IPAddress::networkToString(i->first);
-      i = routeUpdate.unicastRoutesToUpdate.erase(i);
-    } else {
-      ++i;
-    }
-  }
-
+Fib::updateRouteState(const DecisionRouteUpdate& routeUpdate) {
   // Add/Update unicast routes to update
   for (const auto& [prefix, route] : routeUpdate.unicastRoutesToUpdate) {
     auto it = routeState_.unicastRoutes.find(prefix);
@@ -373,9 +363,37 @@ Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
   for (const auto& topLabel : routeUpdate.mplsRoutesToDelete) {
     routeState_.mplsRoutes.erase(topLabel);
   }
+}
+
+void
+Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
+  routeState_.hasRoutesFromDecision = true;
+
+  // Update perfEvents_ .. We replace existing perf events with new one as
+  // convergence is going to be based on new data, not the old.
+  if (routeUpdate.perfEvents.has_value()) {
+    addPerfEvent(
+        routeUpdate.perfEvents.value(), myNodeName_, "FIB_ROUTE_DB_RECVD");
+  }
+
+  // Before anything, get rid of doNotInstall routes
+  auto iter = routeUpdate.unicastRoutesToUpdate.cbegin();
+  while (iter != routeUpdate.unicastRoutesToUpdate.cend()) {
+    if (iter->second.doNotInstall) {
+      LOG(INFO) << "Not installing route for prefix "
+                << folly::IPAddress::networkToString(iter->first);
+      iter = routeUpdate.unicastRoutesToUpdate.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+
+  // Update route state
+  updateRouteState(routeUpdate);
 
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
+
   // Send request to agent
   updateRoutes(std::move(routeUpdate), false /* static routes */);
 }
@@ -420,6 +438,21 @@ Fib::printMplsRoutesAddUpdate(
       VLOG(1) << " " << toString(nh);
     }
   }
+}
+
+bool
+Fib::isClientReady() {
+  if (socket_ == nullptr or client_ == nullptr) {
+    return false;
+  }
+  if (!socket_->good() or socket_->hangup()) {
+    return false;
+  }
+  if (clientState_ != thrift::SwitchRunState::CONFIGURED and
+      clientState_ != thrift::SwitchRunState::FIB_SYNCED) {
+    return false;
+  }
+  return true;
 }
 
 void
@@ -490,10 +523,12 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
   // Make thrift calls to do real programming
   try {
     LOG(INFO) << "Updating routes in FIB";
-    const auto startTime = std::chrono::steady_clock::now();
 
-    // Create FIB client if doesn't exists
-    createFibClient(evb_, socket_, client_, thriftPort_);
+    if (not isClientReady()) {
+      throw std::runtime_error("FIB client is not ready for route updates.");
+    }
+
+    const auto startTime = std::chrono::steady_clock::now();
 
     // Delete unicast routes
     if (numUnicastRoutesToDelete) {
@@ -545,8 +580,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     const auto elapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
-    LOG(INFO) << "It took " << elapsedTime.count() << "ms to update "
-              << "routes in FIB";
+    LOG(INFO) << "It took " << elapsedTime.count()
+              << "ms to update routes in FIB";
 
     routeState_.dirtyRouteDb = false;
     fb303::fbData->addStatValue(
@@ -556,7 +591,6 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
   } catch (const std::exception& e) {
     fb303::fbData->addStatValue(
         "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-    client_.reset();
     routeState_.dirtyRouteDb = true;
     syncRouteDbDebounced(); // Schedule future full sync of route DB
     LOG(ERROR) << "Failed to update routes in FIB. Error: "
@@ -588,9 +622,12 @@ Fib::syncRouteDb() {
 
   try {
     LOG(INFO) << "Syncing routes in FIB";
+
+    if (not isClientReady()) {
+      throw std::runtime_error("FIB client is not ready for route updates.");
+    }
     auto startTime = std::chrono::steady_clock::now();
 
-    createFibClient(evb_, socket_, client_, thriftPort_);
     fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
 
     // Sync unicast routes
@@ -619,7 +656,6 @@ Fib::syncRouteDb() {
     LOG(ERROR) << "Failed to sync routes in FIB. Error: "
                << folly::exceptionStr(e);
     routeState_.dirtyRouteDb = true;
-    client_.reset();
     return false;
   }
 }
@@ -635,8 +671,12 @@ Fib::syncRouteDbDebounced() {
 void
 Fib::keepAliveCheck() {
   createFibClient(evb_, socket_, client_, thriftPort_);
-  int64_t aliveSince = client_->sync_aliveSince();
+
+  // Update FIB client state
+  clientState_ = client_->sync_getSwitchRunState();
+
   // Check if FIB has restarted or not
+  int64_t aliveSince = client_->sync_aliveSince();
   if (aliveSince != latestAliveSince_) {
     LOG(WARNING) << "FibAgent seems to have restarted. "
                  << "Performing full route DB sync ...";
