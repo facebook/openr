@@ -125,11 +125,11 @@ KvStoreFilters::str() const {
   std::string result{};
   result += "\nPrefix filters:\n";
   for (const auto& prefixString : keyPrefixList_) {
-    result += folly::sformat("{}, ", prefixString);
+    result += fmt::format("{}, ", prefixString);
   }
   result += "\nOriginator ID filters:\n";
   for (const auto& originatorId : originatorIds_) {
-    result += folly::sformat("{}, ", originatorId);
+    result += fmt::format("{}, ", originatorId);
   }
   return result;
 }
@@ -153,7 +153,7 @@ KvStore::KvStore(
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
               fbzmq::IdentityString{
-                  folly::sformat("{}::TCP::CMD", config->getNodeName())},
+                  fmt::format("{}::TCP::CMD", config->getNodeName())},
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
@@ -504,12 +504,12 @@ KvStore::getAreaDbOrThrow(
       LOG(INFO) << "Falling back to my single area: "
                 << kvStoreDb_.begin()->first;
       fb303::fbData->addStatValue(
-          folly::sformat("kvstore.default_area_compatibility.{}", caller),
+          fmt::format("kvstore.default_area_compatibility.{}", caller),
           1,
           fb303::COUNT);
       return kvStoreDb_.begin()->second;
     } else {
-      throw thrift::OpenrError(folly::sformat("Invalid area: {}", areaId));
+      throw thrift::OpenrError(fmt::format("Invalid area: {}", areaId));
     }
   }
   return search->second;
@@ -631,7 +631,7 @@ KvStore::dumpKvStoreKeys(
         << "Dump all keys requested for "
         << (selectAreas.empty()
                 ? "all areas."
-                : folly::sformat("areas: {}.", folly::join(", ", selectAreas)));
+                : fmt::format("areas: {}.", folly::join(", ", selectAreas)));
 
     auto result = std::make_unique<std::vector<thrift::Publication>>();
     for (auto& area : selectAreas) {
@@ -817,7 +817,7 @@ KvStore::getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas) {
         << "KvStore Summary requested for "
         << (selectAreas.empty()
                 ? "all areas."
-                : folly::sformat("areas: {}.", folly::join(", ", selectAreas)));
+                : fmt::format("areas: {}.", folly::join(", ", selectAreas)));
 
     auto result = std::make_unique<std::vector<thrift::KvStoreAreaSummary>>();
     for (auto& [area, kvStoreDb] : kvStoreDb_) {
@@ -1776,7 +1776,7 @@ KvStoreDb::addPeers(
   for (auto const& kv : peers) {
     auto const& peerName = kv.first;
     auto const& newPeerSpec = kv.second;
-    auto const& newPeerCmdId = folly::sformat(
+    auto const& newPeerCmdId = fmt::format(
         Constants::kGlobalCmdLocalIdTemplate.toString(),
         peerName,
         peerAddCounter_);
@@ -2606,7 +2606,7 @@ KvStoreDb::cleanupTtlCountdownQueue() {
       LOG(WARNING)
           << "Delete expired (key, version, originatorId, ttlVersion, ttl, "
           << "node, area) "
-          << folly::sformat(
+          << fmt::format(
                  "({}, {}, {}, {}, {}, {}, {})",
                  top.key,
                  *it->second.version_ref(),
@@ -2809,7 +2809,7 @@ void
 KvStoreDb::collectSendFailureStats(
     const fbzmq::Error& error, const std::string& dstSockId) {
   fb303::fbData->addStatValue(
-      folly::sformat("kvstore.send_failure.{}.{}", dstSockId, error.errNum),
+      fmt::format("kvstore.send_failure.{}.{}", dstSockId, error.errNum),
       1,
       fb303::COUNT);
 }
