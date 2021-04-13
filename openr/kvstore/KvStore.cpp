@@ -144,9 +144,7 @@ KvStore::KvStore(
     KvStoreGlobalCmdUrl globalCmdUrl,
     std::shared_ptr<const Config> config,
     std::optional<int> maybeIpTos,
-    int zmqHwm,
-    bool enableKvStoreThrift,
-    bool enablePeriodicSync)
+    int zmqHwm)
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
@@ -159,8 +157,8 @@ KvStore::KvStore(
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
-          enableKvStoreThrift,
-          enablePeriodicSync,
+          config->isKvStoreThriftEnabled(),
+          config->isPeriodicSyncEnabled(),
           maybeIpTos,
           std::chrono::seconds(
               *config->getKvStoreConfig().sync_interval_s_ref()),

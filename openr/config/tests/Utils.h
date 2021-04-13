@@ -41,34 +41,36 @@ getBasicOpenrConfig(
     bool dryrun = true,
     bool enableV4OverV6Nexthop = false) {
   openr::thrift::LinkMonitorConfig linkMonitorConfig;
-  *linkMonitorConfig.include_interface_regexes_ref() =
+  linkMonitorConfig.include_interface_regexes_ref() =
       std::vector<std::string>{".*"};
-  *linkMonitorConfig.redistribute_interface_regexes_ref() =
+  linkMonitorConfig.redistribute_interface_regexes_ref() =
       std::vector<std::string>{"lo1"};
 
   openr::thrift::KvstoreConfig kvstoreConfig;
 
   openr::thrift::SparkConfig sparkConfig;
-  *sparkConfig.hello_time_s_ref() = 2;
-  *sparkConfig.keepalive_time_s_ref() = 1;
-  *sparkConfig.fastinit_hello_time_ms_ref() = 50;
-  *sparkConfig.hold_time_s_ref() = 2;
-  *sparkConfig.graceful_restart_time_s_ref() = 6;
+  sparkConfig.hello_time_s_ref() = 2;
+  sparkConfig.keepalive_time_s_ref() = 1;
+  sparkConfig.fastinit_hello_time_ms_ref() = 50;
+  sparkConfig.hold_time_s_ref() = 2;
+  sparkConfig.graceful_restart_time_s_ref() = 6;
 
   openr::thrift::OpenrConfig config;
 
-  *config.node_name_ref() = nodeName;
-  *config.domain_ref() = domainName;
+  config.node_name_ref() = nodeName;
+  config.domain_ref() = domainName;
   config.enable_v4_ref() = enableV4;
   config.v4_over_v6_nexthop_ref() = enableV4OverV6Nexthop;
   config.enable_segment_routing_ref() = enableSegmentRouting;
   config.dryrun_ref() = dryrun;
 
-  *config.kvstore_config_ref() = kvstoreConfig;
-  *config.link_monitor_config_ref() = linkMonitorConfig;
-  *config.spark_config_ref() = sparkConfig;
+  config.kvstore_config_ref() = kvstoreConfig;
+  config.link_monitor_config_ref() = linkMonitorConfig;
+  config.spark_config_ref() = sparkConfig;
 
-  *config.enable_rib_policy_ref() = true;
+  config.enable_rib_policy_ref() = true;
+  config.enable_kvstore_thrift_ref() = true;
+  config.enable_periodic_sync_ref() = true;
 
   if (areaCfg.empty()) {
     config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};

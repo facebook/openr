@@ -419,9 +419,7 @@ main(int argc, char** argv) {
               FLAGS_kvstore_rep_port)},
           config,
           maybeIpTos,
-          FLAGS_kvstore_zmq_hwm,
-          config->isKvStoreThriftEnabled(),
-          config->isPeriodicSyncEnabled()));
+          FLAGS_kvstore_zmq_hwm));
 
   auto prefixManager = startEventBase(
       allThreads,

@@ -566,9 +566,7 @@ class KvStore final : public OpenrEventBase {
       // IP TOS value to set on sockets using TCP
       std::optional<int> ipTos,
       // ZMQ high water mark
-      int zmqHwm = Constants::kHighWaterMark,
-      bool enableKvStoreThrift = false,
-      bool enablePeriodicSync = true);
+      int zmqHwm = Constants::kHighWaterMark);
 
   ~KvStore() override = default;
 

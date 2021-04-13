@@ -45,20 +45,20 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /*orderedFibProgramming*/,
       true /*dryrun*/);
 
-  *tConfig.kvstore_config_ref()->sync_interval_s_ref() =
+  tConfig.kvstore_config_ref()->sync_interval_s_ref() =
       kvStoreDbSyncInterval.count();
 
   // link monitor config
   auto& lmConf = *tConfig.link_monitor_config_ref();
-  *lmConf.linkflap_initial_backoff_ms_ref() = linkFlapInitialBackoff.count();
-  *lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
-  *lmConf.use_rtt_metric_ref() = false;
-  *lmConf.include_interface_regexes_ref() = {".*"};
+  lmConf.linkflap_initial_backoff_ms_ref() = linkFlapInitialBackoff.count();
+  lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
+  lmConf.use_rtt_metric_ref() = false;
+  lmConf.include_interface_regexes_ref() = {".*"};
 
   // prefix allocation config
   tConfig.enable_prefix_allocation_ref() = true;
   thrift::PrefixAllocationConfig pfxAllocationConf;
-  *pfxAllocationConf.loopback_interface_ref() = "";
+  pfxAllocationConf.loopback_interface_ref() = "";
   pfxAllocationConf.prefix_allocation_mode_ref() =
       thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
   pfxAllocationConf.seed_prefix_ref() = "fc00:cafe:babe::/62";
@@ -81,7 +81,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   config_ = std::make_shared<Config>(tConfig);
 
-  // create fakeNetlinkProtocolSocket
+  // create MockNetlinkProtocolSocket
   folly::EventBase evb;
   nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
 
@@ -109,9 +109,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       config_,
       std::nullopt, /* ip-tos */
-      Constants::kHighWaterMark, /* zmq hwm */
-      true, /* enable kvstore thrift */
-      false /* disable periodic sync */);
+      Constants::kHighWaterMark /* zmq hwm */);
   std::thread kvStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " KvStore running.";
     kvStore_->run();
