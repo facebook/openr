@@ -157,7 +157,6 @@ KvStore::KvStore(
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
-          config->isKvStoreThriftEnabled(),
           config->isPeriodicSyncEnabled(),
           maybeIpTos,
           std::chrono::seconds(
@@ -1760,22 +1759,17 @@ KvStoreDb::addThriftPeers(
   }
 }
 
-// add new peers to subscribe to
+// TODO: replace addPeers with addThriftPeers call
 void
 KvStoreDb::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
+  // thrift peer addition
+  addThriftPeers(peers);
+
+  // ZMQ peer addition
   ++peerAddCounter_;
   std::vector<std::string> dualPeersToAdd;
-
-  // in case thrift communication knob enabled, create a thrift peers
-  // to track
-  if (kvParams_.enableKvStoreThrift) {
-    addThriftPeers(peers);
-  }
-
-  for (auto const& kv : peers) {
-    auto const& peerName = kv.first;
-    auto const& newPeerSpec = kv.second;
+  for (auto const& [peerName, newPeerSpec] : peers) {
     auto const& newPeerCmdId = fmt::format(
         Constants::kGlobalCmdLocalIdTemplate.toString(),
         peerName,
@@ -1852,18 +1846,6 @@ KvStoreDb::addPeers(
           unsetChildAll(peerName);
         }
       }
-
-      // ATTN: under thrift connection, initial full-sync will be handled
-      //       separately. `peersToSyncWith_` will ONLY handle periodic
-      //       random sync.
-      if (not kvParams_.enableKvStoreThrift) {
-        // Enqueue for full-sync requests
-        LOG(INFO) << "Enqueuing full-sync request for peer " << peerName;
-        peersToSyncWith_.emplace(
-            peerName,
-            ExponentialBackoff<std::chrono::milliseconds>(
-                Constants::kInitialBackoff, Constants::kMaxBackoff));
-      }
     } catch (std::exception const& e) {
       LOG(ERROR) << "Error connecting to: `" << peerName
                  << "` reason: " << folly::exceptionStr(e);
@@ -1924,15 +1906,14 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
   }
 }
 
-// delete some peers we are subscribed to
+// TODO: replace delPeers with delThriftPeers call
 void
 KvStoreDb::delPeers(std::vector<std::string> const& peers) {
+  // thrift peer deletion
+  delThriftPeers(peers);
+
+  // ZMQ peer deletion
   std::vector<std::string> dualPeersToRemove;
-
-  if (kvParams_.enableKvStoreThrift) {
-    delThriftPeers(peers);
-  }
-
   for (auto const& peerName : peers) {
     // not currently subscribed
     auto it = peers_.find(peerName);

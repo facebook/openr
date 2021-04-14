@@ -126,8 +126,6 @@ struct KvStoreParams {
 
   // ZMQ high water
   int zmqHwm;
-  // flag to enable KvStore external communication over thrift
-  bool enableKvStoreThrift{false};
   // flag to enable periodic sync over ZMQ
   bool enablePeriodicSync{true};
   // IP ToS
@@ -151,8 +149,6 @@ struct KvStoreParams {
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
       int zmqhwm,
-      // flags for thrift communication
-      bool enableKvStoreThrift,
       // flags for periodic sync
       bool enablePeriodicSync,
       // IP QoS
@@ -172,7 +168,6 @@ struct KvStoreParams {
         logSampleQueue(logSampleQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
-        enableKvStoreThrift(enableKvStoreThrift),
         enablePeriodicSync(enablePeriodicSync),
         maybeIpTos(std::move(maybeipTos)),
         dbSyncInterval(dbsyncInterval),
