@@ -12,7 +12,6 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
-#include <unistd.h>
 
 using folly::gen::as;
 using folly::gen::from;
@@ -160,11 +159,6 @@ MockNetlinkFibHandler::syncMplsFib(
   }
   ++fibMplsSyncCount_;
   syncMplsFibBaton_.post();
-}
-
-thrift::SwitchRunState
-MockNetlinkFibHandler::getSwitchRunState() {
-  return switchState_;
 }
 
 int64_t
