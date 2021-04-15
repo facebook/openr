@@ -186,13 +186,11 @@ class SpfSolver {
       const folly::CIDRNetwork& prefixThrift,
       const BestRouteSelectionResult& bestRouteSelectionResult,
       const PrefixEntries& prefixEntries,
-      const PrefixState& prefixState,
       const bool isBgp,
       std::unordered_set<thrift::NextHopThrift>&& nextHops);
 
   // helper function to find the nodes for the nexthop for bgp route
   BestRouteSelectionResult runBestPathSelectionBgp(
-      std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       PrefixEntries const& prefixEntries,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
