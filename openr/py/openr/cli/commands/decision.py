@@ -22,6 +22,7 @@ from openr.utils.serializer import deserialize_thrift_object
 
 
 class DecisionPrefixesCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -42,6 +43,7 @@ class DecisionPrefixesCmd(OpenrCtrlCmd):
 
 
 class DecisionRoutesComputedCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -71,11 +73,13 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
 
         nodes = set()
         adj_dbs = client.getDecisionPrefixDbs()
+        # pyre-fixme[6]: Expected `Set[typing.Any]` for 3rd param but got `List[str]`.
         self.iter_dbs(nodes, adj_dbs, ["all"], _parse)
         return nodes
 
 
 class DecisionAdjCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, areas: set, bidir: bool, json: bool
     ) -> None:
@@ -97,6 +101,7 @@ class DecisionAdjCmd(OpenrCtrlCmd):
 
 
 class PathCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int, area: str
     ) -> None:
@@ -105,6 +110,7 @@ class PathCmd(OpenrCtrlCmd):
             src = src or host_id
             dst = dst or host_id
 
+        # pyre-fixme[16]: `PathCmd` has no attribute `prefix_dbs`.
         self.prefix_dbs: Dict[str, openr_types.PrefixDatabase] = {}
         area = utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
@@ -433,6 +439,8 @@ class PathCmd(OpenrCtrlCmd):
 
 
 class DecisionValidateCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
+    # pyre-fixme[9]: area has type `str`; used as `None`.
     def _run(self, client: OpenrCtrl.Client, json=False, area: str = None) -> None:
         """Returns a status code. 0 = success, 1 = failure"""
         (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
@@ -479,6 +487,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             json,
         )
 
+        # pyre-fixme[7]: Expected `None` but got `int`.
         return adjValidateRet or prefixValidateRet
 
     def get_dbs(self, client: OpenrCtrl.Client, area: str) -> Tuple[Dict, Dict, Dict]:
@@ -660,6 +669,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 class DecisionRibPolicyCmd(OpenrCtrlCmd):
 
     # @override
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client):
         policy = None
         try:
@@ -673,7 +683,9 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
         for stmt in policy.statements:
             if stmt.matcher.prefixes:
                 stmt.matcher.prefixes = [
-                    ipnetwork.sprint_prefix(p) for p in stmt.matcher.prefixes
+                    ipnetwork.sprint_prefix(p)
+                    # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
+                    for p in stmt.matcher.prefixes
                 ]
 
         # NOTE: We don't do explicit effor to print policy in
@@ -685,6 +697,8 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
             action = stmt.action.set_weight or ctrl_types.RibRouteActionWeight()
             print(f"  Statement: {stmt.name}")
             if prefixes:
+                # pyre-fixme[6]: Expected `Iterable[str]` for 1st param but got
+                #  `Union[List[typing.Any], List[network_types.IpPrefix]]`.
                 print(f"    Prefix Match List: {', '.join(prefixes)}")
             if tags:
                 print(f"    Tags Match List: {', '.join(tags)}")
@@ -701,6 +715,7 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
 class ReceivedRoutesCmd(OpenrCtrlCmd):
 
     # @override
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -719,6 +734,8 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
             # TODO: Print routes in json
             raise NotImplementedError()
         else:
+            # pyre-fixme[6]: Expected `List[ctrl_types.ReceivedRouteDetail]` for 1st
+            #  param but got `List[ctrl_types.AdvertisedRouteDetail]`.
             self.render(routes, detailed)
 
     def fetch(
@@ -742,6 +759,8 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
             route_filter.areaName = area
 
         # Get routes
+        # pyre-fixme[7]: Expected `List[ctrl_types.AdvertisedRouteDetail]` but got
+        #  `List[ctrl_types.ReceivedRouteDetail]`.
         return client.getReceivedRoutesFiltered(route_filter)
 
     def render(
@@ -752,6 +771,11 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         """
 
         def key_fn(key: ctrl_types.NodeAndArea) -> Tuple[str]:
+            # pyre-fixme[7]: Expected `Tuple[str]` but got `Tuple[str, str]`.
             return (key.node, key.area)
 
+        # pyre-fixme[6]: Expected
+        #  `List[typing.Union[ctrl_types.AdvertisedRouteDetail,
+        #  ctrl_types.ReceivedRouteDetail]]` for 1st param but got
+        #  `List[ctrl_types.ReceivedRouteDetail]`.
         utils.print_route_details(routes, key_fn, detailed)

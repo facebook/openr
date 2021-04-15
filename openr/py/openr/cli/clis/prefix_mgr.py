@@ -44,6 +44,7 @@ class WithdrawCli(object):
     def withdraw(cli_opts, prefixes: List[str], prefix_type: str):  # noqa: B902
         """ Withdraw the prefixes being advertised from this node """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `WithdrawCli`.
         prefix_mgr.WithdrawCmd(cli_opts).run(prefixes, prefix_type)
 
 
@@ -127,6 +128,7 @@ class AdvertisedRoutesCli(object):
         Show routes this node is advertising. Will show all by default
         """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `AdvertisedRoutesCli`.
         prefix_mgr.AdvertisedRoutesCmd(cli_opts).run(prefix, prefix_type, json, detail)
 
 
@@ -140,6 +142,7 @@ class OriginatedRoutesCli(object):
         Show originated routes configured on this node. Will show all by default
         """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `OriginatedRoutesCli`.
         prefix_mgr.OriginatedRoutesCmd(cli_opts).run()
 
 
@@ -171,6 +174,8 @@ class PrefilterAdvertisedRoutesCli(object):
         Given an area, show prefilter advertised routes to the area. Will show all by default
         """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got
+        #  `PrefilterAdvertisedRoutesCli`.
         prefix_mgr.AreaAdvertisedRoutesCmd(cli_opts).run(
             area,
             ctrl_types.RouteFilterType.PREFILTER_ADVERTISED,
@@ -209,6 +214,8 @@ class PostfilterAdvertisedRoutesCli(object):
         Given an area, show postfilter advertised routes to the area. Will show all by default
         """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got
+        #  `PostfilterAdvertisedRoutesCli`.
         prefix_mgr.AreaAdvertisedRoutesCmd(cli_opts).run(
             area,
             ctrl_types.RouteFilterType.POSTFILTER_ADVERTISED,
@@ -247,6 +254,8 @@ class RejectedOnAdvertiseRoutesCli(object):
         Given an area, show routes rejected on advertise to the area. Will show all by default
         """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got
+        #  `RejectedOnAdvertiseRoutesCli`.
         prefix_mgr.AreaAdvertisedRoutesCmd(cli_opts).run(
             area,
             ctrl_types.RouteFilterType.REJECTED_ON_ADVERTISE,

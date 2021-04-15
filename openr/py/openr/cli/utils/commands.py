@@ -114,12 +114,16 @@ class OpenrCtrlCmd(object):
         Build KeyDumpParams based on input parameter list
         """
         params = openr_types.KeyDumpParams(prefix)
+        # pyre-fixme[8]: Attribute has type `Optional[typing.Set[str]]`; used as
+        #  `List[Variable[_T]]`.
         params.originatorIds = []
         params.keyValHashes = None
         if prefix:
             params.keys = [prefix]
 
         if originator_ids:
+            # pyre-fixme[8]: Attribute has type `Optional[typing.Set[str]]`; used as
+            #  `List[str]`.
             params.originatorIds = originator_ids
         if keyval_hash:
             params.keyValHashes = keyval_hash

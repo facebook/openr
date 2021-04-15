@@ -54,6 +54,7 @@ class PrefixMgrCmd(OpenrCtrlCmd):
 
 
 class WithdrawCmd(PrefixMgrCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self, client: OpenrCtrl.Client, prefixes: List[str], prefix_type: str
     ) -> None:
@@ -65,6 +66,7 @@ class WithdrawCmd(PrefixMgrCmd):
 
 
 class AdvertiseCmd(PrefixMgrCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -82,6 +84,7 @@ class AdvertiseCmd(PrefixMgrCmd):
 
 
 class SyncCmd(PrefixMgrCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -98,6 +101,7 @@ class SyncCmd(PrefixMgrCmd):
 
 
 class ViewCmd(PrefixMgrCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client) -> None:
         prefixes = client.getPrefixes()
         rows = []
@@ -120,6 +124,7 @@ class ViewCmd(PrefixMgrCmd):
 class AdvertisedRoutesCmd(PrefixMgrCmd):
 
     # @override
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -166,10 +171,15 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         def key_fn(key: network_types.PrefixType) -> Tuple[str]:
             return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
 
+        # pyre-fixme[6]: Expected
+        #  `List[typing.Union[ctrl_types.AdvertisedRouteDetail,
+        #  ctrl_types.ReceivedRouteDetail]]` for 1st param but got
+        #  `List[ctrl_types.AdvertisedRouteDetail]`.
         print_route_details(routes, key_fn, detailed)
 
 
 class OriginatedRoutesCmd(PrefixMgrCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -201,9 +211,13 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
                 f", source-preference: {prefix_entry.prefix.source_preference}"
             )
             if prefix_entry.prefix.tags:
+                # pyre-fixme[6]: Expected `Iterable[str]` for 1st param but got
+                #  `Optional[typing.Set[str]]`.
                 rows.append(f"     Tags - {', '.join(prefix_entry.prefix.tags)}")
             if prefix_entry.prefix.area_stack:
                 rows.append(
+                    # pyre-fixme[6]: Expected `Iterable[str]` for 1st param but got
+                    #  `Optional[List[str]]`.
                     f"     Area Stack - {', '.join(prefix_entry.prefix.area_stack)}"
                 )
             if prefix_entry.prefix.minNexthop:
@@ -223,6 +237,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
 class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
 
     # @override
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,

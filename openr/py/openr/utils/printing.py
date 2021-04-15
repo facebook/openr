@@ -31,12 +31,15 @@ def sprint_bytes(bytes: int) -> str:
 
     if bytes < 1024:
         return f"{bytes} B"
+    # pyre-fixme[9]: bytes has type `int`; used as `float`.
     bytes /= 1024
     if bytes < 1024:
         return f"{bytes:.2f} KB"
+    # pyre-fixme[9]: bytes has type `int`; used as `float`.
     bytes /= 1024
     if bytes < 1024:
         return f"{bytes:.2f} MB"
+    # pyre-fixme[9]: bytes has type `int`; used as `float`.
     bytes /= 1024
     return f"{bytes:.2f} GB"
 
@@ -97,7 +100,9 @@ def render_vertical_table(
         if timestamp:
             item_str += get_timestamp()
 
+        # pyre-fixme[16]: `Iterable` has no attribute `__getitem__`.
         item_str += f"{element_prefix} {item[0]} {element_suffix}\n"
+        # pyre-fixme[6]: Expected `Sized` for 1st param but got `Iterable[str]`.
         for idx in range(1, len(item)):
             if column_labels:
                 item_str += f"{column_labels[idx - 1]} "

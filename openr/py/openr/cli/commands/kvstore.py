@@ -40,11 +40,15 @@ class KvStoreCmdBase(OpenrCtrlCmd):
     def _init_area(self, client: Union[OpenrCtrl.Client, OpenrCtrlCppClient]):
         # find out if area feature is supported
         # TODO: remove self.area_feature as it will be supported by default
+        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `area_feature`.
         self.area_feature = True
 
         # get list of areas if area feature is supported.
+        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `areas`.
         self.areas = set()
         if self.area_feature:
+            # pyre-fixme[6]: Expected `Client` for 1st param but got
+            #  `Union[OpenrCtrl.Client, OpenrCtrlCppClient]`.
             self.areas = utils.get_areas_list(client)
             if self.cli_opts.area != "":
                 if self.cli_opts.area in self.areas:
@@ -109,16 +113,19 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
             parse_func(container, value)
 
+    # pyre-fixme[9]: area has type `str`; used as `None`.
     def get_node_to_ips(self, client: OpenrCtrl.Client, area: str = None) -> Dict:
         """ get the dict of all nodes to their IP in the network """
 
         node_dict = {}
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = openr_types.Publication()
+        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `area_feature`.
         if not self.area_feature:
             resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         else:
             if area is None:
+                # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `areas`.
                 print(f"Error: Must specify one of the areas: {self.areas}")
                 sys.exit(1)
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
@@ -146,8 +153,11 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         return None
 
     def get_area_id(self) -> str:
+        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `area_feature`.
         if not self.area_feature:
+            # pyre-fixme[7]: Expected `str` but got `None`.
             return None
+        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `areas`.
         if 1 != len(self.areas):
             print(f"Error: Must specify one of the areas: {self.areas}")
             sys.exit(1)
@@ -156,6 +166,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
 
 class KvPrefixesCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -166,6 +177,8 @@ class KvPrefixesCmd(KvStoreCmdBase):
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        # pyre-fixme[6]: Expected `Dict[str, openr_types.Publication]` for 1st param
+        #  but got `Dict[None, openr_types.Publication]`.
         self.print_prefix({None: resp}, nodes, json, prefix, client_type)
 
     def print_prefix(
@@ -199,11 +212,13 @@ class PrefixesCmd(KvPrefixesCmd):
         prefix: str = "",
         client_type: str = "",
     ) -> None:
+        # pyre-fixme[16]: `PrefixesCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, nodes, json, prefix, client_type)
             return
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         area_kv = {}
+        # pyre-fixme[16]: `PrefixesCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
             area_kv[area] = resp
@@ -211,6 +226,7 @@ class PrefixesCmd(KvPrefixesCmd):
 
 
 class KvKeysCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -223,6 +239,8 @@ class KvKeysCmd(KvStoreCmdBase):
             prefix, [originator] if originator else None
         )
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        # pyre-fixme[6]: Expected `Dict[str, openr_types.Publication]` for 1st param
+        #  but got `Dict[None, openr_types.Publication]`.
         self.print_kvstore_keys({None: resp}, ttl, json)
 
     def print_kvstore_keys(
@@ -255,9 +273,13 @@ class KvKeysCmd(KvStoreCmdBase):
             area_str = "N/A" if area is None else area
             for key, value in sorted(keyVals.items(), key=lambda x: x[0]):
                 # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
+                # pyre-fixme[6]: Expected `Sized` for 1st param but got
+                #  `Optional[bytes]`.
                 kv_size = 32 + len(key) + len(value.originatorId) + len(value.value)
                 db_bytes += kv_size
 
+                # pyre-fixme[58]: `>` is not supported for operand types
+                #  `Optional[int]` and `int`.
                 hash_offset = "+" if value.hash > 0 else ""
                 row = [
                     key,
@@ -294,6 +316,7 @@ class KeysCmd(KvKeysCmd):
         originator: Any = None,
         ttl: bool = False,
     ) -> None:
+        # pyre-fixme[16]: `KeysCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, json, prefix, originator, ttl)
             return
@@ -303,6 +326,7 @@ class KeysCmd(KvKeysCmd):
         )
 
         area_kv = {}
+        # pyre-fixme[16]: `KeysCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
             area_kv[area] = resp
@@ -311,6 +335,7 @@ class KeysCmd(KvKeysCmd):
 
 
 class KvKeyValsCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, keys: List[str]) -> None:
         resp = client.getKvStoreKeyVals(keys)
         self.print_kvstore_values(resp)
@@ -332,7 +357,10 @@ class KvKeyValsCmd(KvStoreCmdBase):
             return None
 
     def print_kvstore_values(
-        self, resp: openr_types.Publication, area: str = None
+        self,
+        resp: openr_types.Publication,
+        # pyre-fixme[9]: area has type `str`; used as `None`.
+        area: str = None,
     ) -> None:
         """ print values from raw publication from KvStore"""
 
@@ -341,7 +369,9 @@ class KvKeyValsCmd(KvStoreCmdBase):
             val = self.deserialize_kvstore_publication(key, value)
             if not val:
                 if all(
-                    isinstance(c, str) and c in string.printable for c in value.value
+                    isinstance(c, str) and c in string.printable
+                    # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
+                    for c in value.value
                 ):
                     val = value.value
                 else:
@@ -369,10 +399,12 @@ class KvKeyValsCmd(KvStoreCmdBase):
 
 class KeyValsCmd(KvKeyValsCmd):
     def _run(self, client: OpenrCtrl.Client, keys: List[str]) -> None:
+        # pyre-fixme[16]: `KeyValsCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, keys)
             return
 
+        # pyre-fixme[16]: `KeyValsCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsArea(keys, area)
             if len(resp.keyVals):
@@ -380,6 +412,7 @@ class KeyValsCmd(KvKeyValsCmd):
 
 
 class KvNodesCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client) -> None:
         prefix_keys = client.getKvStoreKeyValsFiltered(
             self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
@@ -414,6 +447,7 @@ class KvNodesCmd(KvStoreCmdBase):
                     graph.add_edge(adj.otherNodeName, adj_db.thisNodeName)
                     continue
                 edges.add((adj_db.thisNodeName, adj.otherNodeName, adj.ifName))
+        # pyre-fixme[16]: Module `nx` has no attribute `node_connected_component`.
         return nx.node_connected_component(graph, node_id)
 
     def print_kvstore_nodes(
@@ -421,6 +455,7 @@ class KvNodesCmd(KvStoreCmdBase):
         connected_nodes: Set[str],
         prefix_keys: openr_types.Publication,
         host_id: str,
+        # pyre-fixme[9]: node_area has type `Dict[str, str]`; used as `None`.
         node_area: Dict[str, str] = None,
     ) -> None:
         """
@@ -474,6 +509,7 @@ class KvNodesCmd(KvStoreCmdBase):
 
 class NodesCmd(KvNodesCmd):
     def _run(self, client: OpenrCtrl.Client) -> None:
+        # pyre-fixme[16]: `NodesCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
             return
@@ -482,6 +518,7 @@ class NodesCmd(KvNodesCmd):
         all_kv.keyVals = {}
         node_area = {}
         nodes = set()
+        # pyre-fixme[16]: `NodesCmd` has no attribute `areas`.
         for area in self.areas:
             prefix_keys = client.getKvStoreKeyValsFilteredArea(
                 self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER), area
@@ -501,11 +538,14 @@ class NodesCmd(KvNodesCmd):
 
 
 class KvAdjCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        # pyre-fixme[6]: Expected `Dict[str, openr_types.Publication]` for 1st param
+        #  but got `Dict[None, openr_types.Publication]`.
         self.print_adj({None: publication}, nodes, bidir, json)
 
     def print_adj(
@@ -542,11 +582,13 @@ class AdjCmd(KvAdjCmd):
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
     ) -> None:
+        # pyre-fixme[16]: `AdjCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, nodes, bidir, json)
             return
 
         publications = {}
+        # pyre-fixme[16]: `AdjCmd` has no attribute `areas`.
         for area in self.areas:
             keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
             publications[area] = client.getKvStoreKeyValsFilteredArea(
@@ -556,39 +598,48 @@ class AdjCmd(KvAdjCmd):
 
 
 class Areas(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, in_json: bool) -> None:
+        # pyre-fixme[16]: `Areas` has no attribute `area_feature`.
         if not self.area_feature:
             return
 
         if in_json:
+            # pyre-fixme[16]: `Areas` has no attribute `areas`.
             print(json.dumps(list(self.areas)))
         else:
             print(f"Areas configured: {self.areas}")
 
 
 class KvFloodCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, roots: List[str]) -> None:
+        # pyre-fixme[20]: Argument `area` expected.
         spt_infos = client.getSpanningTreeInfos()
         utils.print_spt_infos(spt_infos, roots)
 
 
 class FloodCmd(KvFloodCmd):
     def _run(self, client: OpenrCtrl.Client, roots: List[str]) -> None:
+        # pyre-fixme[16]: `FloodCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, roots)
             return
 
+        # pyre-fixme[16]: `FloodCmd` has no attribute `areas`.
         for area in self.areas:
             spt_infos = client.getSpanningTreeInfos(area)
             utils.print_spt_infos(spt_infos, roots, area)
 
 
 class KvShowAdjNodeCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, node: Any, interface: Any
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        # pyre-fixme[20]: Argument `interface` expected.
         self.printAdjNode(publication, nodes)
 
     def printAdjNode(self, publication, nodes, node, interface):
@@ -602,13 +653,16 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, node: Any, interface: Any
     ) -> None:
+        # pyre-fixme[16]: `ShowAdjNodeCmd` has no attribute `area_feature`.
         if not self.area_feature:
+            # pyre-fixme[20]: Argument `interface` expected.
             super()._run(client, nodes, interface)
             return
 
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         resp = openr_types.Publication()
         resp.keyVals = {}
+        # pyre-fixme[16]: `ShowAdjNodeCmd` has no attribute `areas`.
         for area in self.areas:
             publication = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
             resp.keyVals.update(publication.keyVals)
@@ -616,13 +670,17 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
 
 
 class KvCompareCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, nodes: set) -> None:
         area = self.get_area_id()
 
         all_nodes_to_ips = self.get_node_to_ips(client, area)
         if nodes:
+            # pyre-fixme[16]: `Set` has no attribute `strip`.
             nodes = set(nodes.strip().split(","))
             if "all" in nodes:
+                # pyre-fixme[9]: nodes has type `Set[typing.Any]`; used as
+                #  `List[typing.Any]`.
                 nodes = list(all_nodes_to_ips.keys())
             host_id = client.getMyNodeName()
             if host_id in nodes:
@@ -630,6 +688,7 @@ class KvCompareCmd(KvStoreCmdBase):
 
             keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
             pub = None
+            # pyre-fixme[16]: `KvCompareCmd` has no attribute `area_feature`.
             if not self.area_feature:
                 pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
             else:
@@ -638,6 +697,8 @@ class KvCompareCmd(KvStoreCmdBase):
             for node in kv_dict:
                 self.compare(pub.keyVals, kv_dict[node], host_id, node)
         else:
+            # pyre-fixme[9]: nodes has type `Set[typing.Any]`; used as
+            #  `List[typing.Any]`.
             nodes = list(all_nodes_to_ips.keys())
             kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips, area)
             for our_node, other_node in combinations(kv_dict.keys(), 2):
@@ -718,6 +779,7 @@ class KvCompareCmd(KvStoreCmdBase):
             )
         )
 
+    # pyre-fixme[9]: area has type `str`; used as `None`.
     def dump_nodes_kvs(self, nodes: set, all_nodes_to_ips: Dict, area: str = None):
         """ get the kvs of a set of nodes """
 
@@ -732,8 +794,11 @@ class KvCompareCmd(KvStoreCmdBase):
 
 
 class KvPeersCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client) -> None:
         peers = client.getKvStorePeers()
+        # pyre-fixme[6]: Expected `Dict[str, typing.Any]` for 2nd param but got
+        #  `Dict[None, Dict[str, openr_types.PeerSpec]]`.
         self.print_peers(client, {None: peers})
 
     def print_peers(self, client: OpenrCtrl.Client, peers_list: Dict[str, Any]) -> None:
@@ -755,16 +820,19 @@ class KvPeersCmd(KvStoreCmdBase):
 
 class PeersCmd(KvPeersCmd):
     def _run(self, client: OpenrCtrl.Client) -> None:
+        # pyre-fixme[16]: `PeersCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
             return
         peers_list = {}
+        # pyre-fixme[16]: `PeersCmd` has no attribute `areas`.
         for area in self.areas:
             peers_list[area] = client.getKvStorePeersArea(area)
         self.print_peers(client, peers_list)
 
 
 class EraseKeyCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, key: str) -> None:
         area = self.get_area_id()
         publication = None
@@ -780,13 +848,17 @@ class EraseKeyCmd(KvStoreCmdBase):
 
         # Get and modify the key
         val = keyVals.get(key)
+        # pyre-fixme[16]: `Optional` has no attribute `value`.
         val.value = None
+        # pyre-fixme[16]: `Optional` has no attribute `ttl`.
         val.ttl = 256  # set new ttl to 256ms (its decremented 1ms on every hop)
+        # pyre-fixme[16]: `Optional` has no attribute `ttlVersion`.
         val.ttlVersion += 1  # bump up ttl version
 
         print(keyVals)
 
         if area is None:
+            # pyre-fixme[20]: Argument `area` expected.
             client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals))
         else:
             client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
@@ -795,6 +867,7 @@ class EraseKeyCmd(KvStoreCmdBase):
 
 
 class SetKeyCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -818,6 +891,7 @@ class SetKeyCmd(KvStoreCmdBase):
                 existing_val = publication.keyVals.get(key)
                 print(
                     "Key {} found in KvStore w/ version {}. Overwriting with"
+                    # pyre-fixme[16]: `Optional` has no attribute `version`.
                     " higher version ...".format(key, existing_val.version)
                 )
                 version = existing_val.version + 1
@@ -833,6 +907,7 @@ class SetKeyCmd(KvStoreCmdBase):
         # Advertise publication back to KvStore
         keyVals = {key: val}
         if area is None:
+            # pyre-fixme[20]: Argument `area` expected.
             client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals))
         else:
             client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
@@ -848,6 +923,7 @@ class SetKeyCmd(KvStoreCmdBase):
 
 
 class KvSignatureCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, prefix: str) -> None:
         area = self.get_area_id()
         keyDumpParams = self.buildKvStoreKeyDumpParams(prefix)
@@ -884,6 +960,8 @@ class SnoopCmd(KvStoreCmdBase):
         loop.run_until_complete(_wrapper())
         loop.close()
 
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
+    # pyre-fixme[15]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient,
@@ -902,6 +980,8 @@ class SnoopCmd(KvStoreCmdBase):
         kvDumpParams = openr_types_py3.KeyDumpParams(
             ignoreTtl=not ttl,
             keys=regexes,
+            # pyre-fixme[6]: Expected `Optional[typing.AbstractSet[str]]` for 3rd
+            #  param but got `Optional[List[str]]`.
             originatorIds=originator_ids,
             oper=openr_types_py3.FilterOperator.AND
             if match_all
@@ -909,7 +989,11 @@ class SnoopCmd(KvStoreCmdBase):
         )
 
         print("Retrieving and subcribing KvStore ... ")
+        # pyre-fixme[23]: Unable to unpack
+        #  `ResponseAndClientBufferedStream__Types_Publication_Types_Publication` into
+        #  2 values.
         snapshot, updates = await client.subscribeAndGetKvStoreFiltered(kvDumpParams)
+        # pyre-fixme[6]: Expected `str` for 2nd param but got `None`.
         global_dbs = self.process_snapshot(snapshot, area)
         self.print_delta(snapshot, ttl, delta, global_dbs)
         print("Magic begins here ... \n")
@@ -944,8 +1028,10 @@ class SnoopCmd(KvStoreCmdBase):
             rows.append(["Key: {} got expired".format(key)])
 
             # Delete key from global DBs
+            # pyre-fixme[16]: `Dict` has no attribute `publications`.
             global_dbs.publications.pop(key, None)
             if key.startswith(Consts.ADJ_DB_MARKER):
+                # pyre-fixme[16]: `Dict` has no attribute `adjs`.
                 global_dbs.adjs.pop(key.split(":")[1], None)
 
             if key.startswith(Consts.PREFIX_DB_MARKER):
@@ -958,6 +1044,7 @@ class SnoopCmd(KvStoreCmdBase):
                     addr_str = prefix_match.group("ipaddr")
                     prefix_len = prefix_match.group("plen")
                     prefix_set.add("{}/{}".format(addr_str, prefix_len))
+                    # pyre-fixme[16]: `Dict` has no attribute `prefixes`.
                     node_prefix_set = global_dbs.prefixes[prefix_match.group("node")]
                     node_prefix_set = node_prefix_set - prefix_set
                 else:
@@ -974,6 +1061,7 @@ class SnoopCmd(KvStoreCmdBase):
                 print("Traversal List: {}".format(msg.nodeIds))
                 self.print_publication_delta(
                     "Key: {}, ttl update".format(key),
+                    # pyre-fixme[6]: Expected `List[str]` for 2nd param but got `str`.
                     "ttl: {}, ttlVersion: {}".format(value.ttl, value.ttlVersion),
                     timestamp=True,
                 )
@@ -981,13 +1069,26 @@ class SnoopCmd(KvStoreCmdBase):
 
             if key.startswith(Consts.ADJ_DB_MARKER):
                 self.print_adj_delta(
-                    key, value, delta, global_dbs.adjs, global_dbs.publications
+                    key,
+                    value,
+                    delta,
+                    # pyre-fixme[16]: `Dict` has no attribute `adjs`.
+                    global_dbs.adjs,
+                    # pyre-fixme[16]: `Dict` has no attribute `publications`.
+                    global_dbs.publications,
                 )
                 continue
 
             if key.startswith(Consts.PREFIX_DB_MARKER):
                 self.print_prefix_delta(
-                    key, value, delta, global_dbs.prefixes, global_dbs.publications
+                    key,
+                    # pyre-fixme[6]: Expected `Publication` for 2nd param but got
+                    #  `Value`.
+                    value,
+                    delta,
+                    # pyre-fixme[16]: `Dict` has no attribute `prefixes`.
+                    global_dbs.prefixes,
+                    global_dbs.publications,
                 )
                 continue
 
@@ -1007,7 +1108,9 @@ class SnoopCmd(KvStoreCmdBase):
         global_publication_db: Dict,
     ):
         prefix_db = serializer.deserialize_thrift_object(
-            value.value, openr_types.PrefixDatabase
+            # pyre-fixme[16]: `Publication` has no attribute `value`.
+            value.value,
+            openr_types.PrefixDatabase,
         )
         if delta:
             lines = "\n".join(
@@ -1070,10 +1173,13 @@ class SnoopCmd(KvStoreCmdBase):
 
         # Filter key-vals based for an area if specified
         if area:
+            # pyre-fixme[16]: `Value` has no attribute `area`.
             resp.keyVals = {k: v for k, v in resp.keyVals.items() if v.area == area}
 
         # Populate global_dbs
+        # pyre-fixme[16]: `Bunch` has no attribute `prefixes`.
         global_dbs.prefixes = utils.build_global_prefix_db(resp)
+        # pyre-fixme[16]: `Bunch` has no attribute `adjs`.
         global_dbs.adjs = utils.build_global_adj_db(resp)
         for key, value in resp.keyVals.items():
             global_dbs.publications[key] = value
@@ -1083,13 +1189,18 @@ class SnoopCmd(KvStoreCmdBase):
 
 
 class KvAllocationsListCmd(KvStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client) -> None:
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
         resp = client.getKvStoreKeyVals([key])
         self.print_allocations(key, resp.keyVals)
 
     def print_allocations(
-        self, key: str, keyVals: openr_types.KeyVals, area: str = None
+        self,
+        key: str,
+        keyVals: openr_types.KeyVals,
+        # pyre-fixme[9]: area has type `str`; used as `None`.
+        area: str = None,
     ) -> None:
         if key not in keyVals:
             print("Static allocation is not set in KvStore")
@@ -1098,22 +1209,26 @@ class KvAllocationsListCmd(KvStoreCmdBase):
                 "" if area is None else f'Static prefix allocations in area "{area}"'
             )
             print(area_str)
+            # pyre-fixme[16]: `Optional` has no attribute `value`.
             utils.print_allocations_table(keyVals.get(key).value)
 
 
 class AllocationsListCmd(KvAllocationsListCmd):
     def _run(self, client: OpenrCtrl.Client) -> None:
+        # pyre-fixme[16]: `AllocationsListCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
             return
 
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
+        # pyre-fixme[16]: `AllocationsListCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsArea([key], area)
             self.print_allocations(key, resp.keyVals, area)
 
 
 class AllocationsSetCmd(SetKeyCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `SetKeyCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, node_name: str, prefix_str: str) -> None:
         area = self.get_area_id()
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
@@ -1127,7 +1242,9 @@ class AllocationsSetCmd(SetKeyCmd):
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
-                resp.keyVals.get(key).value, openr_types.StaticAllocation
+                # pyre-fixme[16]: `Optional` has no attribute `value`.
+                resp.keyVals.get(key).value,
+                openr_types.StaticAllocation,
             )
         else:
             allocs = openr_types.StaticAllocation(nodePrefixes={})
@@ -1152,6 +1269,7 @@ class AllocationsSetCmd(SetKeyCmd):
 
 
 class AllocationsUnsetCmd(SetKeyCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `SetKeyCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, node_name: str) -> None:
         area = self.get_area_id()
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
@@ -1165,9 +1283,13 @@ class AllocationsUnsetCmd(SetKeyCmd):
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
-                resp.keyVals.get(key).value, openr_types.StaticAllocation
+                # pyre-fixme[16]: `Optional` has no attribute `value`.
+                resp.keyVals.get(key).value,
+                openr_types.StaticAllocation,
             )
         else:
+            # pyre-fixme[6]: Expected `Optional[Dict[str, network_types.IpPrefix]]`
+            #  for 1st param but got `Dict[str, str]`.
             allocs = openr_types.StaticAllocation(nodePrefixes={node_name: ""})
 
         # Return if there need no change
@@ -1200,6 +1322,7 @@ class SummaryCmd(KvStoreCmdBase):
     ]
 
     def _get_area_str(self) -> str:
+        # pyre-fixme[16]: `SummaryCmd` has no attribute `areas`.
         s = "s" if len(self.areas) != 1 else ""
         return f", {str(len(self.areas))} configured area{s}"
 
@@ -1233,6 +1356,8 @@ class SummaryCmd(KvStoreCmdBase):
     ) -> openr_types.KvStoreAreaSummary:
         global_summary = openr_types.KvStoreAreaSummary()
         global_summary.area = "ALL" + self._get_area_str()
+        # pyre-fixme[35]: Target cannot be annotated.
+        # pyre-fixme[11]: Annotation `peerSpec` is not defined as a type.
         global_summary.peersMap: Dict[str, openr_types.peerSpec] = {}
         # create a map of unique total peers for this node
         for s in summaries:
@@ -1260,6 +1385,7 @@ class SummaryCmd(KvStoreCmdBase):
         allFlag: bool = False
         # if no area(s) filter specified in CLI, then get all configured areas
         if len(input_areas) == 0:
+            # pyre-fixme[16]: `SummaryCmd` has no attribute `areas`.
             input_areas = set(self.areas)
             allFlag = True
 
@@ -1273,7 +1399,9 @@ class SummaryCmd(KvStoreCmdBase):
 
         return global_output + output
 
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, input_areas: Set[str]) -> None:
+        # pyre-fixme[16]: `SummaryCmd` has no attribute `areas`.
         areaSet = set(self.areas)
         # get per-area Summary list from KvStore for all areas
         summaries = client.getKvStoreAreaSummary(areaSet)

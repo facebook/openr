@@ -148,6 +148,7 @@ class FloodCli(object):
         """ dump the flooding-topology information """
 
         if roots is not None:
+            # pyre-fixme[9]: roots has type `str`; used as `List[str]`.
             roots = roots.split(",")
         kvstore.FloodCmd(cli_opts).run(roots)
 
@@ -293,6 +294,8 @@ class AllocationsCli(object):
 
 class SummaryCli(object):
     @click.command()
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument `[]` to
+    #  decorator factory `click.option`.
     @click.option(
         "--area",
         "-a",
@@ -306,4 +309,5 @@ class SummaryCli(object):
     def summary(cli_opts, area: List[str]) -> None:  # noqa: B902
         """ show the KV store summary for each area """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `SummaryCli`.
         kvstore.SummaryCmd(cli_opts).run(set(area))

@@ -97,6 +97,7 @@ class LMCmdBase(OpenrCtrlCmd):
         """
         metricOverride = links.interfaceDetails[interface].metricOverride
         if not metricOverride:
+            # pyre-fixme[7]: Expected `bool` but got `None`.
             return None
         return metricOverride == metric
 
@@ -143,26 +144,31 @@ class LMCmdBase(OpenrCtrlCmd):
 
 
 class SetNodeOverloadCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
         self.toggle_node_overload_bit(client, True, yes)
 
 
 class UnsetNodeOverloadCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
         self.toggle_node_overload_bit(client, False, yes)
 
 
 class SetLinkOverloadCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
         self.toggle_link_overload_bit(client, True, interface, yes)
 
 
 class UnsetLinkOverloadCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
         self.toggle_link_overload_bit(client, False, interface, yes)
 
 
 class SetLinkMetricCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self, client: OpenrCtrl.Client, interface: str, metric: str, yes: bool
     ) -> None:
@@ -170,11 +176,13 @@ class SetLinkMetricCmd(LMCmdBase):
 
 
 class UnsetLinkMetricCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
         self.toggle_link_metric(client, False, interface, 0, yes)
 
 
 class SetAdjMetricCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -187,6 +195,7 @@ class SetAdjMetricCmd(LMCmdBase):
 
 
 class UnsetAdjMetricCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self, client: OpenrCtrl.Client, node: str, interface: str, yes: bool
     ) -> None:
@@ -194,6 +203,7 @@ class UnsetAdjMetricCmd(LMCmdBase):
 
 
 class LMAdjCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, nodes: set, json: bool) -> None:
         adj_db = client.getLinkMonitorAdjacencies()
 
@@ -208,6 +218,7 @@ class LMAdjCmd(LMCmdBase):
 
 
 class LMLinksCmd(LMCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, only_suppressed: bool, json: bool) -> None:
         links = client.getInterfaces()
         if only_suppressed:
@@ -285,10 +296,14 @@ class LMLinksCmd(LMCmdBase):
 
     @staticmethod
     def build_table_row(k: str, v: object) -> List[Any]:
+        # pyre-fixme[16]: `object` has no attribute `metricOverride`.
         metric_override = v.metricOverride if v.metricOverride else ""
+        # pyre-fixme[16]: `object` has no attribute `info`.
         if v.info.isUp:
             backoff_sec = int(
-                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0) / 1000
+                # pyre-fixme[16]: `object` has no attribute `linkFlapBackOffMs`.
+                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0)
+                / 1000
             )
             if backoff_sec == 0:
                 state = "Up"
@@ -302,6 +317,7 @@ class LMLinksCmd(LMCmdBase):
                 if utils.is_color_output_supported()
                 else "Down"
             )
+        # pyre-fixme[16]: `object` has no attribute `isOverloaded`.
         if v.isOverloaded:
             metric_override = (
                 click.style("Overloaded", fg="red")

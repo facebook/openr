@@ -216,4 +216,5 @@ class ReceivedRoutesCli(object):
         Show routes this node is advertising. Will show all by default
         """
 
+        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `ReceivedRoutesCli`.
         decision.ReceivedRoutesCmd(cli_opts).run(prefix, node, area, json, detail)

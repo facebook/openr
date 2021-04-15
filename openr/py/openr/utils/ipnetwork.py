@@ -34,6 +34,7 @@ def sprint_prefix(prefix):
     return "{}/{}".format(sprint_addr(prefix.prefixAddress.addr), prefix.prefixLength)
 
 
+# pyre-fixme[9]: if_index has type `str`; used as `None`.
 def ip_str_to_addr(addr_str: str, if_index: str = None) -> network_types.BinaryAddress:
     """
     :param addr_str: ip address in string representation
@@ -111,6 +112,7 @@ def mpls_to_mpls_route(
     :param nexthops: List of nexthops
     """
 
+    # pyre-fixme[7]: Expected `UnicastRoute` but got `MplsRoute`.
     return network_types.MplsRoute(topLabel=label, nextHops=nexthops)
 
 
@@ -137,6 +139,7 @@ def mpls_nexthop_to_nexthop_thrift(
     )
     mpls_action = network_types.MplsAction(action=action)
     if action == network_types.MplsActionCode.SWAP:
+        # pyre-fixme[16]: `Optional` has no attribute `__getitem__`.
         mpls_action.swapLabel = label[0]
     elif action == network_types.MplsActionCode.PUSH:
         mpls_action.pushLabels = label[:]
@@ -186,6 +189,7 @@ def sprint_prefix_forwarding_algorithm(
     :param forwarding_algorithm: openr_config_types.PrefixForwardingAlgorithm
     """
 
+    # pyre-fixme[7]: Expected `str` but got `Optional[str]`.
     return openr_config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
         forwarding_algo
     )

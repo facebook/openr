@@ -220,10 +220,13 @@ def parse_prefix_database(
     """
     if client_type_filter:
         _TYPES = network_types.PrefixType._NAMES_TO_VALUES
+        # pyre-fixme[9]: client_type_filter has type `str`; used as
+        #  `Optional[network_types.PrefixType]`.
         client_type_filter = _TYPES.get(client_type_filter.upper(), None)
         if client_type_filter is None:
             raise Exception(f"Unknown client type. Use one of {list(_TYPES.keys())}")
     if prefix_filter:
+        # pyre-fixme[9]: prefix_filter has type `str`; used as `IpPrefix`.
         prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
 
     if isinstance(prefix_db, openr_types.Value):
@@ -788,6 +791,7 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
 def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
     """ convert nextHop from thrift instance into a dict in strings """
     if nextHop is None:
+        # pyre-fixme[7]: Expected `Dict[str, typing.Any]` but got `None`.
         return None
 
     def _update(next_hop_dict, nextHop):
@@ -844,7 +848,11 @@ def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
 
 
 def print_routes_json(
-    route_db_dict, prefixes: List[str] = None, labels: List[int] = None
+    route_db_dict,
+    # pyre-fixme[9]: prefixes has type `List[str]`; used as `None`.
+    prefixes: List[str] = None,
+    # pyre-fixme[9]: labels has type `List[int]`; used as `None`.
+    labels: List[int] = None,
 ):
     """
     Print json representation of routes. Takes prefixes and labels to
@@ -884,7 +892,9 @@ def print_routes_json(
 
 def print_route_db(
     route_db: openr_types.RouteDatabase,
+    # pyre-fixme[9]: prefixes has type `List[str]`; used as `None`.
     prefixes: List[str] = None,
+    # pyre-fixme[9]: labels has type `List[int]`; used as `None`.
     labels: List[int] = None,
 ) -> None:
     """ print the routes from Decision/Fib module """
@@ -1080,6 +1090,7 @@ def sprint_pub_update(global_publication_db, key, value):
     return printing.render_horizontal_table(rows, tablefmt="plain") if rows else ""
 
 
+# pyre-fixme[9]: key has type `str`; used as `None`.
 def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = None):
     """update the global prefix map with a single publication
 
@@ -1164,7 +1175,10 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
 
 
 def sprint_prefixes_db_delta(
-    global_prefixes_db: Dict, prefix_db: Dict, key: str = None
+    global_prefixes_db: Dict,
+    prefix_db: Dict,
+    # pyre-fixme[9]: key has type `str`; used as `None`.
+    key: str = None,
 ):
     """given serialzied prefixes for a single node, output the delta
         between those prefixes and global prefixes snapshot
@@ -1179,6 +1193,7 @@ def sprint_prefixes_db_delta(
     :return [str]: the array of prefix strings
     """
 
+    # pyre-fixme[16]: `Dict` has no attribute `thisNodeName`.
     this_node_name = prefix_db.thisNodeName
     prev_prefixes = global_prefixes_db.get(this_node_name, set())
 
@@ -1186,11 +1201,13 @@ def sprint_prefixes_db_delta(
     removed_prefixes = set()
     cur_prefixes = set()
 
+    # pyre-fixme[16]: `Dict` has no attribute `prefixEntries`.
     for prefix_entry in prefix_db.prefixEntries:
         cur_prefixes.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
     # per prefix key format contains only one key, it can be an 'add' or 'delete'
     if key and re.match(Consts.PER_PREFIX_KEY_REGEX, key):
+        # pyre-fixme[16]: `Dict` has no attribute `deletePrefix`.
         if prefix_db.deletePrefix:
             removed_prefixes = cur_prefixes
         else:
@@ -1206,7 +1223,10 @@ def sprint_prefixes_db_delta(
 
 
 def dump_node_kvs(
-    cli_opts: bunch.Bunch, host: str, area: str = None
+    cli_opts: bunch.Bunch,
+    host: str,
+    # pyre-fixme[9]: area has type `str`; used as `None`.
+    area: str = None,
 ) -> openr_types.Publication:
     pub = None
 
@@ -1260,11 +1280,16 @@ def build_routes(
     Build list of UnicastRoute using prefixes and nexthops list
     """
 
+    # pyre-fixme[9]: prefixes has type `List[str]`; used as
+    #  `List[network_types.IpPrefix]`.
     prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
     nhs = build_nexthops(nexthops)
     return [
         network_types.UnicastRoute(
-            dest=p, nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs]
+            # pyre-fixme[6]: Expected `Optional[network_types.IpPrefix]` for 1st
+            #  param but got `str`.
+            dest=p,
+            nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs],
         )
         for p in prefixes
     ]
@@ -1284,6 +1309,7 @@ def get_route_as_dict_in_str(
     # dict of prefixes(str) : nexthops(str)
     if route_type == "unicast":
         routes_dict = {
+            # pyre-fixme[16]: `MplsRoute` has no attribute `dest`.
             ipnetwork.sprint_prefix(route.dest): sorted(
                 ip_nexthop_to_str(nh, True) for nh in route.nextHops
             )
@@ -1291,6 +1317,7 @@ def get_route_as_dict_in_str(
         }
     elif route_type == "mpls":
         routes_dict = {
+            # pyre-fixme[16]: `UnicastRoute` has no attribute `topLabel`.
             str(route.topLabel): sorted(
                 ip_nexthop_to_str(nh, True, True) for nh in route.nextHops
             )
@@ -1299,6 +1326,8 @@ def get_route_as_dict_in_str(
     else:
         assert 0, "Unknown route type %s" % route_type
 
+    # pyre-fixme[7]: Expected `Dict[str, str]` but got `Optional[Dict[typing.Any,
+    #  List[str]]]`.
     return routes_dict
 
 
@@ -1314,9 +1343,11 @@ def get_route_as_dict(
 
     if route_type == "unicast":
         for route in routes:
+            # pyre-fixme[16]: `MplsRoute` has no attribute `dest`.
             routes_dict[ipnetwork.sprint_prefix(route.dest)] = route
     elif route_type == "mpls":
         for route in routes:
+            # pyre-fixme[16]: `UnicastRoute` has no attribute `topLabel`.
             routes_dict[str(route.topLabel)] = route
     else:
         assert 0, "Unknown route type %s" % route_type
@@ -1410,6 +1441,7 @@ def compare_route_db(
     route_type: str,
     sources: List[str],
     quiet: bool = False,
+    # pyre-fixme[31]: Expression `List[str])` is not a valid type.
 ) -> (bool, List[str]):
 
     extra_routes_in_a = routes_difference(routes_a, routes_b, route_type)
@@ -1440,8 +1472,14 @@ def compare_route_db(
         caption = "Routes in {} but not in {}".format(*sources)
         if not quiet:
             if route_type == "unicast":
+                # pyre-fixme[6]: Expected `List[network_types.UnicastRoute]` for 2nd
+                #  param but got `List[Union[network_types.MplsRoute,
+                #  network_types.UnicastRoute]]`.
                 print_unicast_routes(caption, extra_routes_in_a)
             elif route_type == "mpls":
+                # pyre-fixme[6]: Expected `List[network_types.MplsRoute]` for 2nd
+                #  param but got `List[Union[network_types.MplsRoute,
+                #  network_types.UnicastRoute]]`.
                 print_mpls_routes(caption, extra_routes_in_a)
         else:
             error_msg.append(caption)
@@ -1450,8 +1488,14 @@ def compare_route_db(
         caption = "Routes in {} but not in {}".format(*reversed(sources))
         if not quiet:
             if route_type == "unicast":
+                # pyre-fixme[6]: Expected `List[network_types.UnicastRoute]` for 2nd
+                #  param but got `List[Union[network_types.MplsRoute,
+                #  network_types.UnicastRoute]]`.
                 print_unicast_routes(caption, extra_routes_in_b)
             elif route_type == "mpls":
+                # pyre-fixme[6]: Expected `List[network_types.MplsRoute]` for 2nd
+                #  param but got `List[Union[network_types.MplsRoute,
+                #  network_types.UnicastRoute]]`.
                 print_mpls_routes(caption, extra_routes_in_b)
         else:
             error_msg.append(caption)
@@ -1573,6 +1617,7 @@ def mpls_action_to_str(mpls_action: network_types.MplsAction) -> str:
     if mpls_action.swapLabel is not None:
         label_str = f" {mpls_action.swapLabel}"
     if mpls_action.pushLabels is not None:
+        # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
         label_str = f" {'/'.join(str(l) for l in mpls_action.pushLabels)}"
     return "mpls {}{}".format(action_str, label_str)
 
@@ -1595,6 +1640,8 @@ def ip_nexthop_to_str(
     addr_str = "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
 
     mpls_action_str = (
+        # pyre-fixme[6]: Expected `MplsAction` for 1st param but got
+        #  `Optional[network_types.MplsAction]`.
         " {}".format(mpls_action_to_str(nextHop.mplsAction))
         if nextHop.mplsAction is not None
         else ""
@@ -1665,14 +1712,18 @@ def build_unicast_route(
         :param filter_for_networks: IP/Prefixes to filter.
         :param filter_exact_match: Indicate exact match or subnet match.
     """
+    # pyre-fixme[16]: `object` has no attribute `dest`.
     dest = ipnetwork.sprint_prefix(route.dest)
     if filter_for_networks:
         if filter_exact_match:
             if not ipaddress.ip_network(dest) in filter_for_networks:
+                # pyre-fixme[7]: Expected `Tuple[str, List[str]]` but got `None`.
                 return None
         else:
             if not ipnetwork.contain_any_prefix(dest, filter_for_networks):
+                # pyre-fixme[7]: Expected `Tuple[str, List[str]]` but got `None`.
                 return None
+    # pyre-fixme[16]: `object` has no attribute `nextHops`.
     nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
     return dest, nexthops
 
@@ -1720,8 +1771,12 @@ def get_routes_json(
     host: str,
     client: int,
     routes: List[network_types.UnicastRoute],
+    # pyre-fixme[9]: prefixes has type `List[str]`; used as `None`.
     prefixes: List[str] = None,
+    # pyre-fixme[9]: mpls_routes has type `List[network_types.MplsRoute]`; used as
+    #  `None`.
     mpls_routes: List[network_types.MplsRoute] = None,
+    # pyre-fixme[9]: labels has type `List[int]`; used as `None`.
     labels: List[int] = None,
 ):
     networks = None
@@ -1738,6 +1793,7 @@ def get_routes_json(
             "dest": dest,
             "nexthops": [ip_nexthop_to_str(nh) for nh in route.nextHops],
         }
+        # pyre-fixme[16]: `int` has no attribute `append`.
         data["routes"].append(route_data)
 
     for label in mpls_routes:
@@ -1755,6 +1811,7 @@ def get_routes_json(
 
 def get_routes(
     route_db: openr_types.RouteDatabase,
+    # pyre-fixme[31]: Expression `MplsRoute])` is not a valid type.
 ) -> (List[network_types.UnicastRoute], List[network_types.MplsRoute]):
     """
     Find all routes for each prefix in routeDb
@@ -1776,7 +1833,10 @@ def get_routes(
 
 
 def print_spt_infos(
-    spt_infos: openr_types.SptInfos, roots: List[str], area: str = None
+    spt_infos: openr_types.SptInfos,
+    roots: List[str],
+    # pyre-fixme[9]: area has type `str`; used as `None`.
+    area: str = None,
 ) -> None:
     """
     print spanning tree information
@@ -1829,6 +1889,7 @@ def print_spt_infos(
             root, state, info.parent, info.cost, len(info.children)
         )
         rows = []
+        # pyre-fixme[16]: `Optional` has no attribute `items`.
         for nb, counters in root_counters.get(root).items():
             role = "-"
             if nb == info.parent:
@@ -1923,7 +1984,11 @@ def print_route_details(
     print_route_header(rows, detailed)
 
     for route_detail in routes:
+        # pyre-fixme[6]: Expected `PrefixType` for 1st param but got
+        #  `Union[ctrl_types.NodeAndArea, network_types.PrefixType]`.
         best_key = key_to_str_fn(route_detail.bestKey)
+        # pyre-fixme[6]: Expected `PrefixType` for 1st param but got
+        #  `Union[ctrl_types.NodeAndArea, network_types.PrefixType]`.
         best_keys = {key_to_str_fn(k) for k in route_detail.bestKeys}
 
         # Create a title for the route
@@ -1934,7 +1999,11 @@ def print_route_details(
 
         # Add all entries associated with routes
         for route in route_detail.routes:
+            # pyre-fixme[6]: Expected `PrefixType` for 1st param but got
+            #  `Union[ctrl_types.NodeAndArea, network_types.PrefixType]`.
             markers = f"{'*' if key_to_str_fn(route.key) in best_keys else ''}{'@' if key_to_str_fn(route.key) == best_key else ' '}"
+            # pyre-fixme[6]: Expected `AdvertisedRoute` for 2nd param but got
+            #  `Union[ctrl_types.AdvertisedRoute, ctrl_types.ReceivedRoute]`.
             print_route_helper(rows, route, key_to_str_fn, detailed, markers)
         rows.append("")
 

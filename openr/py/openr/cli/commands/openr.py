@@ -11,6 +11,7 @@ from openr.utils import printing
 
 
 class VersionCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, json: bool) -> None:
         openr_version = client.getOpenrVersion()
         build_info = client.getBuildInfo()

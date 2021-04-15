@@ -10,6 +10,7 @@ from openr.OpenrCtrl import OpenrCtrl
 
 
 class GracefulRestartCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
         question_str = "Are you sure to force sending GR msg to neighbors?"
         if not utils.yesno(question_str, yes):

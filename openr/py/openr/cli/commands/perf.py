@@ -13,6 +13,7 @@ from openr.OpenrCtrl import OpenrCtrl
 
 
 class ViewFibCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(self, client: OpenrCtrl.Client) -> None:
         resp = client.getPerfDb()
         headers = ["Node", "Events", "Duration", "Unix Timestamp"]
