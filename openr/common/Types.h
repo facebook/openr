@@ -155,15 +155,23 @@ struct PrefixEvent {
    */
   std::unordered_set<std::string> dstAreas{};
 
+  /**
+   * List of originatedPrefix-entries to advertise or withdraw.
+   * Support `min_supporting_route` and `install_to_fib` features.
+   */
+  std::vector<thrift::OriginatedPrefix> originatedPrefixes{};
+
   explicit PrefixEvent(
       const PrefixEventType& eventType,
       const std::optional<thrift::PrefixType>& type = std::nullopt,
       std::vector<thrift::PrefixEntry> prefixes = {},
-      std::unordered_set<std::string> dstAreas = {})
+      std::unordered_set<std::string> dstAreas = {},
+      std::vector<thrift::OriginatedPrefix> originatedPrefixes = {})
       : eventType(eventType),
         type(type),
         prefixes(std::move(prefixes)),
-        dstAreas(std::move(dstAreas)) {}
+        dstAreas(std::move(dstAreas)),
+        originatedPrefixes(std::move(originatedPrefixes)) {}
 };
 
 /**
