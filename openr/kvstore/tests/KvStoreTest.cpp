@@ -372,6 +372,9 @@ INSTANTIATE_TEST_CASE_P(
 // Test counter reporting
 //
 TEST_F(KvStoreTestFixture, CounterReport) {
+  // clean up counters before testing
+  fb303::fbData->resetAllData();
+
   auto kvStore = createKvStore("node1");
   kvStore->run();
 
@@ -409,23 +412,24 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   auto counters = fb303::fbData->getCounters();
 
   // Verify the counter keys exist
-  ASSERT_EQ(1, counters.count("kvstore.num_peers"));
-  ASSERT_EQ(1, counters.count("kvstore.cmd_peer_dump.count"));
-  ASSERT_EQ(1, counters.count("kvstore.cmd_peer_add.count"));
-  ASSERT_EQ(1, counters.count("kvstore.cmd_per_del.count"));
-  ASSERT_EQ(1, counters.count("kvstore.expired_key_vals.sum"));
-  ASSERT_EQ(1, counters.count("kvstore.flood_duration_ms.avg"));
-  ASSERT_EQ(1, counters.count("kvstore.full_sync_duration_ms.avg"));
-  ASSERT_EQ(1, counters.count("kvstore.peers.bytes_received.sum"));
-  ASSERT_EQ(1, counters.count("kvstore.peers.bytes_sent.sum"));
-  ASSERT_EQ(1, counters.count("kvstore.rate_limit_keys.avg"));
-  ASSERT_EQ(1, counters.count("kvstore.rate_limit_suppress.count"));
-  ASSERT_EQ(1, counters.count("kvstore.received_dual_messages.count"));
-  ASSERT_EQ(1, counters.count("kvstore.cmd_hash_dump.count"));
-  ASSERT_EQ(1, counters.count("kvstore.cmd_key_dump.count"));
-  ASSERT_EQ(1, counters.count("kvstore.cmd_key_get.count"));
-  ASSERT_EQ(1, counters.count("kvstore.sent_key_vals.sum"));
-  ASSERT_EQ(1, counters.count("kvstore.sent_publications.count"));
+  ASSERT_TRUE(counters.count("kvstore.evb_queue_size"));
+  ASSERT_TRUE(counters.count("kvstore.num_peers"));
+  ASSERT_TRUE(counters.count("kvstore.cmd_peer_dump.count"));
+  ASSERT_TRUE(counters.count("kvstore.cmd_peer_add.count"));
+  ASSERT_TRUE(counters.count("kvstore.cmd_per_del.count"));
+  ASSERT_TRUE(counters.count("kvstore.expired_key_vals.sum"));
+  ASSERT_TRUE(counters.count("kvstore.flood_duration_ms.avg"));
+  ASSERT_TRUE(counters.count("kvstore.full_sync_duration_ms.avg"));
+  ASSERT_TRUE(counters.count("kvstore.peers.bytes_received.sum"));
+  ASSERT_TRUE(counters.count("kvstore.peers.bytes_sent.sum"));
+  ASSERT_TRUE(counters.count("kvstore.rate_limit_keys.avg"));
+  ASSERT_TRUE(counters.count("kvstore.rate_limit_suppress.count"));
+  ASSERT_TRUE(counters.count("kvstore.received_dual_messages.count"));
+  ASSERT_TRUE(counters.count("kvstore.cmd_hash_dump.count"));
+  ASSERT_TRUE(counters.count("kvstore.cmd_key_dump.count"));
+  ASSERT_TRUE(counters.count("kvstore.cmd_key_get.count"));
+  ASSERT_TRUE(counters.count("kvstore.sent_key_vals.sum"));
+  ASSERT_TRUE(counters.count("kvstore.sent_publications.count"));
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_peer_dump.count"));

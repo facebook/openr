@@ -970,7 +970,7 @@ KvStore::getCounters() {
 }
 
 std::map<std::string, int64_t>
-KvStore::getGlobalCounters() const {
+KvStore::getGlobalCounters() {
   std::map<std::string, int64_t> flatCounters;
   for (auto& kvDb : kvStoreDb_) {
     auto kvDbCounters = kvDb.second.getCounters();
@@ -985,6 +985,10 @@ KvStore::getGlobalCounters() const {
           return flatCounters;
         });
   }
+  // Record eventbase's notification queue size for mem usage check
+  // ATTN: since all KvStoreDbs share the same eventbase, do NOT accumulate
+  // evb related counters inside individual KvStoreDb.
+  flatCounters["kvstore.evb_queue_size"] = getEvb()->getNotificationQueueSize();
   return flatCounters;
 }
 

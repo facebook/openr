@@ -657,7 +657,7 @@ class KvStore final : public OpenrEventBase {
 
   void processPeerUpdates(PeerEvent&& event);
 
-  std::map<std::string, int64_t> getGlobalCounters() const;
+  std::map<std::string, int64_t> getGlobalCounters();
 
   // helper for public semifuture API. Returns a reference to the relevant
   // KvStoreDb (to be captured and operated on in this event loop) or throws an
