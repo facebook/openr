@@ -191,6 +191,7 @@ add_library(openrlib
   openr/decision/LinkState.cpp
   openr/decision/PrefixState.cpp
   openr/decision/RibPolicy.cpp
+  openr/decision/SpfSolver.cpp
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/dual/Dual.cpp
