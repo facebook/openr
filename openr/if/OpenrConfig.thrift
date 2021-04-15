@@ -491,6 +491,104 @@ struct BgpRouteTranslationConfig {
   10: bool disable_legacy_translation = 0;
 }
 
+struct LabelRange {
+  1: i32 start_label;
+  2: i32 end_label;
+}
+
+enum SegmentRoutingAdjLabelType {
+  /**
+   * Disable adjacency label allocation.
+   */
+  DISABLED = 0,
+  /**
+   * Automatic allocation of adjacency labels and use
+   * interface ifIndex to generate unique adj label.
+   */
+  AUTO_IFINDEX = 1,
+}
+
+struct SegmentRoutingAdjLabel {
+  1: SegmentRoutingAdjLabelType sr_adj_label_type;
+  /**
+   * The range of labels to assign adjacency labels from
+   * if SegmentRoutingAdjLabelType is AUTO_IFINDEX.
+   */
+  2: LabelRange adj_label_range;
+}
+
+enum SegmentRoutingNodeLabelType {
+  /**
+   * Current way of allocation. Needs range parameter.
+   */
+  AUTO = 0,
+  /**
+   * Node Segment IDs are allocated statically.
+   * The uniqueness of node label will be determined
+   * by the application which generates static
+   * node label.
+   */
+  STATIC = 1,
+}
+
+struct SegmentRoutingNodeLabel {
+  /**
+   * The way node segment label should be allocated.
+   */
+  1: SegmentRoutingNodeLabelType sr_node_label_type;
+
+  /**
+   * Statically allocated node label for this node.
+   * Applicable if SegmentRoutingNodeLabelType is
+   * SegmentRoutingNodeLabelType::STATIC
+   */
+  2: optional i32 node_segment_label;
+
+  /**
+   * Label range for node segment label to allocate from if
+   * sr_node_label_type is AUTO.
+   */
+  3: optional LabelRange node_segment_label_range;
+} (cpp.minimize_padding)
+
+struct MplsLabelRanges {
+  /**
+   * Label Range for V4 address family
+   */
+  1: LabelRange v4;
+
+  /**
+   * Label Range for V6 address family
+   */
+  2: LabelRange v6;
+}
+
+struct SegmentRoutingConfig {
+  /**
+   * The way node segment label should be allocated.
+   * This feature is turned off if
+   * sr_node_label is not specified in config.
+   */
+  1: optional SegmentRoutingNodeLabel sr_node_label;
+
+  /**
+   * Specifies how adj segment label should be allocated.
+   * This feature is turned off if:
+   *  (a) sr_adj_label is not specified in config.
+   *  (b) type is sr_adj_label.SegmentRoutingAdjLabelType
+   *      is DISABLE
+   */
+  2: optional SegmentRoutingAdjLabel sr_adj_label;
+
+  /**
+   * Specifies the ranges for prepend labels
+   * for v4 and v6 address families.
+   * Relevant for routing scheme with alternative
+   * topology(non-CLOS)
+   */
+  3: optional MplsLabelRanges prepend_label_ranges;
+} (cpp.minimize_padding)
+
 struct OpenrConfig {
   1: string node_name;
   /** Deprecated. Use area config. */
@@ -533,6 +631,8 @@ struct OpenrConfig {
   12: PrefixForwardingAlgorithm prefix_forwarding_algorithm = PrefixForwardingAlgorithm.SP_ECMP;
   /**
    * Enables segment routing feature. Currently, it only elects node/adjacency labels.
+   * TODO
+   * We can deprecate this field once SegmentRoutingConfig becomes functional.
    */
   13: optional bool enable_segment_routing;
   14: optional i32 prefix_min_nexthop;
@@ -672,6 +772,11 @@ struct OpenrConfig {
    */
   55: i32 adj_hold_time_s = 4;
 
+  /**
+   * Config for segment routing.
+   */
+  56: optional SegmentRoutingConfig segment_routing_config;
+
   # vip thrift injection service
   90: optional bool enable_vip_service;
 
@@ -684,4 +789,4 @@ struct OpenrConfig {
    * NOTE: This must be specified if bgp_peering is enabled
    */
   104: optional BgpRouteTranslationConfig bgp_translation_config;
-}
+} (cpp.minimize_padding)
