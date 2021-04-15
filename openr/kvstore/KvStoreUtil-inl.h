@@ -51,7 +51,7 @@ dumpAllWithPrefixMultipleAndParse(
     std::optional<int> maybeIpTos /* std::nullopt */,
     const folly::SocketAddress&
         bindAddr /* folly::AsyncSocket::anyAddress()*/) {
-  auto val = dumpAllWithThriftClientFromMultiple(
+  const auto [res, unreachableAddrs] = dumpAllWithThriftClientFromMultiple(
       area,
       sockAddrs,
       keyPrefix,
@@ -60,10 +60,10 @@ dumpAllWithPrefixMultipleAndParse(
       sslContext,
       maybeIpTos,
       bindAddr);
-  if (not val.first) {
-    return std::make_pair(std::nullopt, val.second);
+  if (not res) {
+    return std::make_pair(std::nullopt, unreachableAddrs);
   }
-  return std::make_pair(parseThriftValues<ThriftType>(*val.first), val.second);
+  return std::make_pair(parseThriftValues<ThriftType>(*res), unreachableAddrs);
 }
 
 // static method to dump KvStore key-val over multiple instances

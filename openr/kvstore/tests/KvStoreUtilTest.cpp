@@ -328,11 +328,11 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
       folly::SocketAddress{Constants::kPlatformHost.toString(), port2});
 
   // Step1: verify there is NOTHING inside kvStore instances
-  auto preDb =
+  const auto [db, unreachableAddrs] =
       dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, prefix);
-  EXPECT_TRUE(preDb.first.has_value());
-  EXPECT_TRUE(preDb.first.value().empty());
-  EXPECT_TRUE(preDb.second.empty());
+  EXPECT_TRUE(db.has_value());
+  EXPECT_TRUE(db.value().empty());
+  EXPECT_TRUE(unreachableAddrs.empty());
 
   evb.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
     // Step2: initilize kvStoreClient connecting to different thriftServers
@@ -361,10 +361,10 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   // Step4: verify we can fetch 2 keys from different servers as aggregation
   // result
   {
-    auto postDb = dumpAllWithThriftClientFromMultiple(
+    const auto [db, _] = dumpAllWithThriftClientFromMultiple(
         kTestingAreaName, sockAddrs, prefix);
-    ASSERT_TRUE(postDb.first.has_value());
-    auto pub = postDb.first.value();
+    ASSERT_TRUE(db.has_value());
+    auto pub = db.value();
     EXPECT_TRUE(pub.size() == 2);
     EXPECT_TRUE(pub.count(key1));
     EXPECT_TRUE(pub.count(key2));
@@ -372,10 +372,10 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
 
   // Step5: verify dumpAllWithPrefixMultipleAndParse API
   {
-    auto maybe = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
+    const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
         kTestingAreaName, sockAddrs, "test_");
-    ASSERT_TRUE(maybe.first.has_value());
-    auto pub = maybe.first.value();
+    ASSERT_TRUE(maybe.has_value());
+    auto pub = maybe.value();
     EXPECT_EQ(2, pub.size());
     EXPECT_EQ("test_value1", pub[key1].value_ref());
     EXPECT_EQ("test_value2", pub[key2].value_ref());
@@ -391,10 +391,10 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     kvStoreWrapper1_->stopThriftServer();
     kvStoreWrapper2_->stopThriftServer();
 
-    auto db = dumpAllWithThriftClientFromMultiple(
+    const auto [db, _] = dumpAllWithThriftClientFromMultiple(
         kTestingAreaName, sockAddrs, prefix);
-    ASSERT_TRUE(db.first.has_value());
-    ASSERT_TRUE(db.first.value().empty());
+    ASSERT_TRUE(db.has_value());
+    ASSERT_TRUE(db.value().empty());
   }
 }
 

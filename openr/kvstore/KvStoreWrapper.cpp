@@ -121,8 +121,8 @@ KvStoreWrapper::setKeys(
   // Prepare KeySetParams
   thrift::KeySetParams params;
   params.nodeIds_ref().from_optional(std::move(nodeIds));
-  for (const auto& keyVal : keyVals) {
-    params.keyVals_ref()->emplace(keyVal.first, keyVal.second);
+  for (const auto& [key, val] : keyVals) {
+    params.keyVals_ref()->emplace(key, val);
   }
 
   try {

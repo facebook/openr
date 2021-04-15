@@ -67,20 +67,17 @@ main(int argc, char** argv) {
                 // Print updates
                 auto updatedKeyVals = openr::KvStore::mergeKeyValues(
                     areaKeyVals.at(pub.get_area()), *pub.keyVals_ref());
-                for (auto& kv : updatedKeyVals) {
-                  std::cout << (kv.second.value_ref().has_value() ? "Updated"
-                                                                  : "Refreshed")
-                            << " KeyVal: " << kv.first << std::endl;
-                  std::cout << "  version: " << *kv.second.version_ref()
-                            << std::endl;
+                for (auto& [key, val] : updatedKeyVals) {
                   std::cout
-                      << "  originatorId: " << *kv.second.originatorId_ref()
-                      << std::endl;
-                  std::cout << "  ttl: " << *kv.second.ttl_ref() << std::endl;
-                  std::cout << "  ttlVersion: " << *kv.second.ttlVersion_ref()
+                      << (val.value_ref().has_value() ? "Updated" : "Refreshed")
+                      << " KeyVal: " << key << std::endl;
+                  std::cout << "  version: " << *val.version_ref() << std::endl;
+                  std::cout << "  originatorId: " << *val.originatorId_ref()
                             << std::endl;
-                  std::cout << "  hash: " << kv.second.hash_ref().value()
-                            << std::endl
+                  std::cout << "  ttl: " << *val.ttl_ref() << std::endl;
+                  std::cout << "  ttlVersion: " << *val.ttlVersion_ref()
+                            << std::endl;
+                  std::cout << "  hash: " << val.hash_ref().value() << std::endl
                             << std::endl; // intended
                 }
               });

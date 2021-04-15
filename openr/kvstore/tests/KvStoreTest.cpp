@@ -303,10 +303,10 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
 
           // Print for debugging.
           VLOG(4) << "Store " << store->getNodeId() << " received keys.";
-          for (auto const& kv : receivedKeyVals) {
-            VLOG(4) << "\tkey: " << kv.first
-                    << ", value: " << kv.second.value_ref().value()
-                    << ", version: " << *kv.second.version_ref();
+          for (auto const& [key, val] : receivedKeyVals) {
+            VLOG(4) << "\tkey: " << key
+                    << ", value: " << val.value_ref().value()
+                    << ", version: " << *val.version_ref();
           }
         } // for `j < kNumStores`
 
@@ -333,9 +333,8 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
             if (not keyVals.empty()) {
               VLOG(2) << store->getNodeId() << " still has " << keyVals.size()
                       << " keys remaining";
-              for (auto& kv : keyVals) {
-                VLOG(2) << "  " << kv.first
-                        << ", ttl: " << *kv.second.ttl_ref();
+              for (auto& [key, val] : keyVals) {
+                VLOG(2) << "  " << key << ", ttl: " << *val.ttl_ref();
               }
               allStoreEmpty = false;
               break;
@@ -1784,10 +1783,9 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     VLOG(3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
-      for (auto const& kv : *publication.keyVals_ref()) {
-        VLOG(3) << "\tkey: " << kv.first
-                << ", value: " << kv.second.value_ref().value();
-        keys.insert(kv.first);
+      for (auto const& [key, val] : *publication.keyVals_ref()) {
+        VLOG(3) << "\tkey: " << key << ", value: " << val.value_ref().value();
+        keys.insert(key);
       }
     }
   }
@@ -1832,10 +1830,9 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     VLOG(3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
-      for (auto const& kv : *publication.keyVals_ref()) {
-        VLOG(3) << "\tkey: " << kv.first
-                << ", value: " << kv.second.value_ref().value();
-        keys.insert(kv.first);
+      for (auto const& [key, val] : *publication.keyVals_ref()) {
+        VLOG(3) << "\tkey: " << key << ", value: " << val.value_ref().value();
+        keys.insert(key);
       }
     }
   }
@@ -2124,10 +2121,9 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
     VLOG(3) << "Store " << myStore->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = myStore->recvPublication();
-      for (auto const& kv : *publication.keyVals_ref()) {
-        VLOG(3) << "\tkey: " << kv.first
-                << ", value: " << kv.second.value_ref().value();
-        keys.insert(kv.first);
+      for (auto const& [key, val] : *publication.keyVals_ref()) {
+        VLOG(3) << "\tkey: " << key << ", value: " << val.value_ref().value();
+        keys.insert(key);
       }
     }
   }

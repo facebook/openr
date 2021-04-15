@@ -165,17 +165,17 @@ class MultipleAreaFixture : public MultipleStoreFixture {
   void
   setUpPeers() {
     // node1(plane-area)  --- (plane area) node2 (pod area) -- (pod area) node3
-    for (auto& peer : peers1) {
-      EXPECT_TRUE(store1->addPeer(planeArea, peer.first, peer.second));
+    for (auto& [peerName, peerSpec] : peers1) {
+      EXPECT_TRUE(store1->addPeer(planeArea, peerName, peerSpec));
     }
-    for (auto& peer : peers2PlaneArea) {
-      EXPECT_TRUE(store2->addPeer(planeArea, peer.first, peer.second));
+    for (auto& [peerName, peerSpec] : peers2PlaneArea) {
+      EXPECT_TRUE(store2->addPeer(planeArea, peerName, peerSpec));
     }
-    for (auto& peer : peers2PodArea) {
-      EXPECT_TRUE(store2->addPeer(podArea, peer.first, peer.second));
+    for (auto& [peerName, peerSpec] : peers2PodArea) {
+      EXPECT_TRUE(store2->addPeer(podArea, peerName, peerSpec));
     }
-    for (auto& peer : peers3) {
-      EXPECT_TRUE(store3->addPeer(podArea, peer.first, peer.second));
+    for (auto& [peerName, peerSpec] : peers3) {
+      EXPECT_TRUE(store3->addPeer(podArea, peerName, peerSpec));
     }
   }
 
@@ -281,14 +281,14 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   // Synchronization primitive
   waitBaton.wait();
 
-  auto maybe = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
+  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       kTestingAreaName, sockAddrs_, "test_");
 
-  ASSERT_TRUE(maybe.first.has_value());
+  ASSERT_TRUE(maybe.has_value());
 
   {
-    auto dump = maybe.first.value();
-    EXPECT_EQ(3, dump.size());
+    auto dump = maybe.value();
+    EXPECT_EQ(3, maybe.value().size());
     EXPECT_EQ("test_value1", dump["test_key1"].value_ref());
     EXPECT_EQ("test_value2", dump["test_key2"].value_ref());
     EXPECT_EQ("test_value3", dump["test_key3"].value_ref());
@@ -343,13 +343,13 @@ TEST_F(
   // Synchronization primitive
   waitBaton.wait();
 
-  auto maybe = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
+  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       kTestingAreaName, sockAddrs_, "test_");
 
-  ASSERT_TRUE(maybe.first.has_value());
+  ASSERT_TRUE(maybe.has_value());
 
   {
-    auto dump = maybe.first.value();
+    auto dump = maybe.value();
     EXPECT_EQ(1, dump.size());
     EXPECT_EQ("test_value1", dump["test_key"].value_ref());
   }
@@ -403,13 +403,13 @@ TEST_F(
   // Synchronization primitive
   waitBaton.wait();
 
-  auto maybe = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
+  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       kTestingAreaName, sockAddrs_, "test_");
 
-  ASSERT_TRUE(maybe.first.has_value());
+  ASSERT_TRUE(maybe.has_value());
 
   {
-    auto dump = maybe.first.value();
+    auto dump = maybe.value();
     EXPECT_EQ(1, dump.size());
     EXPECT_EQ("test_value3", dump["test_key"].value_ref());
   }
@@ -1033,9 +1033,8 @@ TEST(KvStoreClientInternal, ApiTest) {
     // Verify key-value info
     const auto keyValResponse = store->dumpAll(kTestingAreaName);
     LOG(INFO) << "received response.";
-    for (const auto& kv : keyValResponse) {
-      VLOG(4) << "key: " << kv.first
-              << ", val: " << kv.second.value_ref().value();
+    for (const auto& [key, val] : keyValResponse) {
+      VLOG(4) << "key: " << key << ", val: " << val.value_ref().value();
     }
     ASSERT_EQ(3, keyValResponse.size());
 
@@ -1343,14 +1342,14 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
 
   evb.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
     // test addPeers in invalid area, following result must be false
-    for (auto& peer : peers1) {
-      EXPECT_FALSE(store1->addPeer(kTestingAreaName, peer.first, peer.second));
+    for (auto& [peerName, peerSpec] : peers1) {
+      EXPECT_FALSE(store1->addPeer(kTestingAreaName, peerName, peerSpec));
     }
-    for (auto& peer : peers2PlaneArea) {
-      EXPECT_FALSE(store2->addPeer(kTestingAreaName, peer.first, peer.second));
+    for (auto& [peerName, peerSpec] : peers2PlaneArea) {
+      EXPECT_FALSE(store2->addPeer(kTestingAreaName, peerName, peerSpec));
     }
-    for (auto& peer : peers3) {
-      EXPECT_FALSE(store3->addPeer(kTestingAreaName, peer.first, peer.second));
+    for (auto& [peerName, peerSpec] : peers3) {
+      EXPECT_FALSE(store3->addPeer(kTestingAreaName, peerName, peerSpec));
     }
     // add peers in valid area,
     // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
@@ -1509,32 +1508,18 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
   // verify dumpAllWithThriftClientFromMultiple
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        auto maybe = dumpAllWithThriftClientFromMultiple(
-            planeArea,
-            sockAddrs_,
-            "test_",
-            Constants::kServiceConnTimeout,
-            Constants::kServiceProcTimeout,
-            nullptr, /* disable SSLSocket Connection for UT */
-            192, /* IP_TOS */
-            folly::AsyncSocket::anyAddress());
+        auto [db1, addr1] =
+            dumpAllWithThriftClientFromMultiple(planeArea, sockAddrs_, "test_");
         // there will be plane area key "test_ttl_key_plane"
-        ASSERT_TRUE(maybe.first.has_value());
-        EXPECT_EQ(maybe.first.value().size(), 1);
+        ASSERT_TRUE(db1.has_value());
+        EXPECT_EQ(db1.value().size(), 1);
 
         // only one key in pod Area too, "test_ttl_pod_area"
-        maybe = dumpAllWithThriftClientFromMultiple(
-            podArea,
-            sockAddrs_,
-            "test_",
-            Constants::kServiceConnTimeout,
-            Constants::kServiceProcTimeout,
-            nullptr, /* disable SSLSocket Connection for UT */
-            192, /* IP_TOS */
-            folly::AsyncSocket::anyAddress());
+        auto [db2, addr2] =
+            dumpAllWithThriftClientFromMultiple(podArea, sockAddrs_, "test_");
         // there will be plane area key "test_ttl_key_plane"
-        ASSERT_TRUE(maybe.first.has_value());
-        EXPECT_EQ(maybe.first.value().size(), 1);
+        ASSERT_TRUE(db2.has_value());
+        EXPECT_EQ(db2.value().size(), 1);
       });
 
   // unset key, this stops key ttl refresh

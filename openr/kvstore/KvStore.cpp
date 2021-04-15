@@ -170,8 +170,8 @@ KvStore::KvStore(
           config->getKvStoreConfig().is_flood_root_ref().value_or(false)) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    for (auto& counter : getGlobalCounters()) {
-      fb303::fbData->setCounter(counter.first, counter.second);
+    for (auto& [key, val] : getGlobalCounters()) {
+      fb303::fbData->setCounter(key, val);
     }
     counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
@@ -744,8 +744,7 @@ KvStore::setKvStoreKeyVals(
       }
 
       // Update hash for key-values
-      for (auto& kv : *keySetParams.keyVals_ref()) {
-        auto& value = kv.second;
+      for (auto& [_, value] : *keySetParams.keyVals_ref()) {
         if (value.value_ref().has_value()) {
           value.hash_ref() = generateHash(
               *value.version_ref(),
@@ -972,16 +971,16 @@ KvStore::getCounters() {
 std::map<std::string, int64_t>
 KvStore::getGlobalCounters() {
   std::map<std::string, int64_t> flatCounters;
-  for (auto& kvDb : kvStoreDb_) {
-    auto kvDbCounters = kvDb.second.getCounters();
+  for (auto& [_, kvDb] : kvStoreDb_) {
+    auto kvDbCounters = kvDb.getCounters();
     // add up counters for same key from all kvStoreDb instances
     flatCounters = std::accumulate(
         kvDbCounters.begin(),
         kvDbCounters.end(),
         flatCounters,
         [](std::map<std::string, int64_t>& flatCounters,
-           const std::pair<const std::string, int64_t>& kvDbcounter) {
-          flatCounters[kvDbcounter.first] += kvDbcounter.second;
+           const std::pair<const std::string, int64_t>& kvDbCounter) {
+          flatCounters[kvDbCounter.first] += kvDbCounter.second;
           return flatCounters;
         });
   }
@@ -996,8 +995,7 @@ KvStore::getGlobalCounters() {
 std::vector<std::string>
 KvStoreDb::getPeersByState(thrift::KvStorePeerState state) {
   std::vector<std::string> res;
-  for (auto const& kv : thriftPeers_) {
-    auto const& peer = kv.second;
+  for (auto const& [_, peer] : thriftPeers_) {
     if (peer.peerSpec.get_state() == state) {
       res.emplace_back(peer.nodeName);
     }
@@ -1249,10 +1247,7 @@ KvStoreDb::~KvStoreDb() {
 
 void
 KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
-  for (const auto& kv : *publication.keyVals_ref()) {
-    const auto& key = kv.first;
-    const auto& value = kv.second;
-
+  for (const auto& [key, value] : *publication.keyVals_ref()) {
     if (*value.ttl_ref() != Constants::kTtlInfinity) {
       TtlCountdownQueueEntry queueEntry;
       queueEntry.expiryTime = std::chrono::steady_clock::now() +
@@ -1325,28 +1320,26 @@ KvStoreDb::dumpAllWithFilters(
 
   switch (oper) {
   case thrift::FilterOperator::AND:
-    for (auto const& kv : kvStore_) {
-      if (not kvFilters.keyMatchAll(kv.first, kv.second)) {
+    for (auto const& [key, val] : kvStore_) {
+      if (not kvFilters.keyMatchAll(key, val)) {
         continue;
       }
       if (not doNotPublishValue) {
-        thriftPub.keyVals_ref()[kv.first] = kv.second;
+        thriftPub.keyVals_ref()[key] = val;
       } else {
-        thriftPub.keyVals_ref()[kv.first] =
-            createThriftValueWithoutBinaryValue(kv.second);
+        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
       }
     }
     break;
   default:
-    for (auto const& kv : kvStore_) {
-      if (not kvFilters.keyMatch(kv.first, kv.second)) {
+    for (auto const& [key, val] : kvStore_) {
+      if (not kvFilters.keyMatch(key, val)) {
         continue;
       }
       if (not doNotPublishValue) {
-        thriftPub.keyVals_ref()[kv.first] = kv.second;
+        thriftPub.keyVals_ref()[key] = val;
       } else {
-        thriftPub.keyVals_ref()[kv.first] =
-            createThriftValueWithoutBinaryValue(kv.second);
+        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
       }
     }
   }
@@ -1359,17 +1352,17 @@ thrift::Publication
 KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
   thriftPub.area_ref() = area_;
-  for (auto const& kv : kvStore_) {
-    if (not kvFilters.keyMatch(kv.first, kv.second)) {
+  for (auto const& [key, val] : kvStore_) {
+    if (not kvFilters.keyMatch(key, val)) {
       continue;
     }
-    DCHECK(kv.second.hash_ref().has_value());
-    auto& value = thriftPub.keyVals_ref()[kv.first];
-    value.version_ref() = *kv.second.version_ref();
-    value.originatorId_ref() = *kv.second.originatorId_ref();
-    value.hash_ref().copy_from(kv.second.hash_ref());
-    value.ttl_ref() = *kv.second.ttl_ref();
-    value.ttlVersion_ref() = *kv.second.ttlVersion_ref();
+    DCHECK(val.hash_ref().has_value());
+    auto& value = thriftPub.keyVals_ref()[key];
+    value.version_ref() = *val.version_ref();
+    value.originatorId_ref() = *val.originatorId_ref();
+    value.hash_ref().copy_from(val.hash_ref());
+    value.ttl_ref() = *val.ttl_ref();
+    value.ttlVersion_ref() = *val.ttlVersion_ref();
   }
   return thriftPub;
 }
@@ -1388,11 +1381,11 @@ KvStoreDb::dumpDifference(
 
   thriftPub.tobeUpdatedKeys_ref() = std::vector<std::string>{};
   std::unordered_set<std::string> allKeys;
-  for (const auto& kv : myKeyVal) {
-    allKeys.insert(kv.first);
+  for (const auto& [key, _] : myKeyVal) {
+    allKeys.insert(key);
   }
-  for (const auto& kv : reqKeyVal) {
-    allKeys.insert(kv.first);
+  for (const auto& [key, _] : reqKeyVal) {
+    allKeys.insert(key);
   }
 
   for (const auto& key : allKeys) {
@@ -1705,10 +1698,7 @@ void
 KvStoreDb::addThriftPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
-  for (auto const& peerKv : peers) {
-    auto const& peerName = peerKv.first;
-    auto const& newPeerSpec = peerKv.second;
-
+  for (auto const& [peerName, newPeerSpec] : peers) {
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter != thriftPeers_.end()) {
@@ -1745,15 +1735,16 @@ KvStoreDb::addThriftPeers(
               Constants::kInitialBackoff, Constants::kMaxBackoff));
       // initialize keepAlive timer to make sure thrift client connection
       // will NOT be closed by thrift server due to inactivity
-      peer.keepAliveTimer = folly::AsyncTimeout::make(
-          *(evb_->getEvb()), [this, peerName]() noexcept {
+      const auto name = peerName;
+      peer.keepAliveTimer =
+          folly::AsyncTimeout::make(*(evb_->getEvb()), [this, name]() noexcept {
             auto period = addJitter(Constants::kThriftClientKeepAliveInterval);
-            auto& p = thriftPeers_.at(peerName);
+            auto& p = thriftPeers_.at(name);
             CHECK(p.client) << "thrift client is NOT initialized";
             p.client->semifuture_getStatus();
             p.keepAliveTimer->scheduleTimeout(period);
           });
-      thriftPeers_.emplace(peerName, std::move(peer));
+      thriftPeers_.emplace(name, std::move(peer));
     }
   } // for loop
 
@@ -2182,9 +2173,8 @@ KvStoreDb::processFloodTopoGet() noexcept {
   const auto& duals = DualNode::getDuals();
 
   // set spt-infos
-  for (const auto& kv : duals) {
-    const auto& rootId = kv.first;
-    const auto& info = kv.second.getInfo();
+  for (const auto& [rootId, dual] : duals) {
+    const auto& info = dual.getInfo();
     thrift::SptInfo sptInfo;
     sptInfo.passive_ref() = info.sm.state == DualState::PASSIVE;
     sptInfo.cost_ref() = info.distance;
@@ -2194,7 +2184,7 @@ KvStoreDb::processFloodTopoGet() noexcept {
       nexthop = info.nexthop.value();
     }
     sptInfo.parent_ref().from_optional(nexthop);
-    sptInfo.children_ref() = kv.second.children();
+    sptInfo.children_ref() = dual.children();
     sptInfos.infos_ref()->emplace(rootId, sptInfo);
   }
 
@@ -2218,8 +2208,8 @@ KvStoreDb::processFloodTopoSet(
       not(*setParams.setChild_ref())) {
     // process unset-child for all-roots command
     auto& duals = DualNode::getDuals();
-    for (auto& kv : duals) {
-      kv.second.removeChild(*setParams.srcId_ref());
+    for (auto& [_, dual] : duals) {
+      dual.removeChild(*setParams.srcId_ref());
     }
     return;
   }
@@ -2440,9 +2430,9 @@ KvStoreDb::requestSync() {
   int index{0};
   std::string randomNeighbor;
 
-  for (auto const& kv : peers_) {
+  for (auto const& [peerName, _] : peers_) {
     if (index++ == randomIndex) {
-      randomNeighbor = kv.first;
+      randomNeighbor = peerName;
       break;
     }
   }
@@ -2640,8 +2630,8 @@ KvStoreDb::bufferPublication(thrift::Publication&& publication) {
     floodRootId = publication.floodRootId_ref().value();
   }
   // update or add keys
-  for (auto const& kv : *publication.keyVals_ref()) {
-    publicationBuffer_[floodRootId].emplace(kv.first);
+  for (auto const& [key, _] : *publication.keyVals_ref()) {
+    publicationBuffer_[floodRootId].emplace(key);
   }
   for (auto const& key : *publication.expiredKeys_ref()) {
     publicationBuffer_[floodRootId].emplace(key);
@@ -2658,15 +2648,15 @@ KvStoreDb::floodBufferedUpdates() {
   std::vector<thrift::Publication> publications;
 
   // merge publication per root-id
-  for (const auto& kv : publicationBuffer_) {
+  for (const auto& [rootId, keys] : publicationBuffer_) {
     thrift::Publication publication{};
     // convert from std::optional to std::optional
     std::optional<std::string> floodRootId{std::nullopt};
-    if (kv.first.has_value()) {
-      floodRootId = kv.first.value();
+    if (rootId.has_value()) {
+      floodRootId = rootId.value();
     }
     publication.floodRootId_ref().from_optional(floodRootId);
-    for (const auto& key : kv.second) {
+    for (const auto& key : keys) {
       auto kvStoreIt = kvStore_.find(key);
       if (kvStoreIt != kvStore_.end()) {
         publication.keyVals_ref()->emplace(make_pair(key, kvStoreIt->second));
@@ -2780,9 +2770,7 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
 
   // flood-peers: SPT-peers + peers-who-does-not-support-dual
   std::unordered_set<std::string> floodPeers;
-  for (const auto& kv : peers_) {
-    const auto& peer = kv.first;
-    const auto& peerSpec = kv.second.first;
+  for (const auto& [peer, _] : peers_) {
     if (floodToAll or sptPeers.count(peer) != 0) {
       floodPeers.emplace(peer);
     }
