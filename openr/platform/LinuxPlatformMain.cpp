@@ -7,6 +7,7 @@
 
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/SocketAddress.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/system/ThreadName.h>
@@ -68,7 +69,9 @@ main(int argc, char** argv) {
       folly::setThreadName("FibService");
       linuxFibAgentServer.setNWorkerThreads(1);
       linuxFibAgentServer.setNPoolThreads(1);
-      linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
+      folly::SocketAddress linuxFibAgentServerAddr("::1", FLAGS_fib_thrift_port);
+      linuxFibAgentServer.setAddress(linuxFibAgentServerAddr);
+
       linuxFibAgentServer.setInterface(fibHandler);
       linuxFibAgentServer.setDuplex(true);
 
