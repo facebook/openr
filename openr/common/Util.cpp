@@ -54,12 +54,13 @@ toString(thrift::PrefixMetrics const& metrics) {
 std::string
 toString(thrift::PrefixEntry const& entry, bool detailed) {
   std::stringstream ss;
-  ss << toString(*entry.prefix_ref())
-     << fmt::format(
-            ", Forwarding: [{}, {}], ",
-            toString(*entry.forwardingType_ref()),
-            toString(*entry.forwardingAlgorithm_ref()))
-     << toString(*entry.metrics_ref());
+  ss << fmt::format(
+      FMT_STRING("[{}], Forwarding: [{}, {}], {}, Type: {}"),
+      toString(*entry.prefix_ref()),
+      toString(*entry.forwardingType_ref()),
+      toString(*entry.forwardingAlgorithm_ref()),
+      toString(*entry.metrics_ref()),
+      toString(*entry.type_ref()));
   if (entry.minNexthop_ref()) {
     ss << ", NM: " << *entry.minNexthop_ref();
   }
@@ -659,6 +660,28 @@ createPrefixEntry(
   prefixEntry.mv_ref().from_optional(mv);
   prefixEntry.minNexthop_ref().from_optional(minNexthop);
   return prefixEntry;
+}
+
+// Currently used by DecisionTest and PrefixManagerTest
+thrift::PrefixMetrics
+createMetrics(int32_t pp, int32_t sp, int32_t d) {
+  thrift::PrefixMetrics metrics;
+  metrics.path_preference_ref() = pp;
+  metrics.source_preference_ref() = sp;
+  metrics.distance_ref() = d;
+  return metrics;
+}
+// TODO - coalesce createPrefixEntry() with createPrefixEntryWithMetrics()
+thrift::PrefixEntry
+createPrefixEntryWithMetrics(
+    thrift::IpPrefix const& prefix,
+    thrift::PrefixType const& type,
+    thrift::PrefixMetrics const& metrics) {
+  thrift::PrefixEntry entry;
+  entry.prefix_ref() = prefix;
+  entry.type_ref() = type;
+  entry.metrics_ref() = metrics;
+  return entry;
 }
 
 thrift::Value

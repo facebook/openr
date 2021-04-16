@@ -335,23 +335,6 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
  * 5. Withdraw prefix1 with client-default - Verify KvStore
  */
 TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
-  auto createMetrics = [](int32_t pp, int32_t sp, int32_t d) {
-    thrift::PrefixMetrics metrics;
-    metrics.path_preference_ref() = pp;
-    metrics.source_preference_ref() = sp;
-    metrics.distance_ref() = d;
-    return metrics;
-  };
-  auto createPrefixEntryWithMetrics = [](thrift::IpPrefix const& prefix,
-                                         thrift::PrefixType const& type,
-                                         thrift::PrefixMetrics const& metrics) {
-    thrift::PrefixEntry entry;
-    entry.prefix_ref() = prefix;
-    entry.type_ref() = type;
-    entry.metrics_ref() = metrics;
-    return entry;
-  };
-
   //
   // Order of prefix-entries -> loopback > bgp > default
   //
@@ -374,6 +357,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
       &evb, nodeId_, kvStoreWrapper->getKvStore());
 
+  // TODO - reevaluate subscribeKey + folly::Baton for pushing along the UTs
   kvStoreClient->subscribeKey(
       kTestingAreaName,
       keyStr,
@@ -2084,6 +2068,142 @@ TEST(PrefixManagerPendingUpdates, updatePrefixes) {
   // cleanup
   updates.reset();
   EXPECT_TRUE(updates.getChangedPrefixes().empty());
+}
+
+class RouteOriginationKnobTestFixture : public PrefixManagerTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = getBasicOpenrConfig(nodeId_);
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    tConfig.prefer_openr_originated_routes_ref() = 1;
+
+    return tConfig;
+  }
+};
+
+// Verify that thrift::PrefixType::CONFIG prefixes (Open/R originated)
+// take precedence over thrift::PrefixType::BGP prefixes when they both
+// both have the same metrics, and when prefer_openr_originated_routes KNOB
+// is turned ON
+// Also verify that this KNOB does not interfere with any other
+// thrift::PrefixType prefixes, like thrift::PrefixType::LOOPBACK
+// This ensures that no other existing functionality has changed
+TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
+  /*
+   * Order of prefix-entries without config knob:
+   *    loopback > bgp > config > default
+   *
+   * With knob turned on, just BGP and CONFIG get swapped:
+   *    loopback > config > bgp > default
+   */
+  const auto loopback_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
+  const auto default_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
+  const auto bgp_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
+  const auto openr_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::CONFIG, createMetrics(200, 0, 0));
+
+  auto keyStr =
+      PrefixKey(nodeId_, toIPNetwork(addr1), kTestingAreaName).getPrefixKey();
+
+  // Synchronization primitive
+  folly::Baton baton;
+  std::optional<thrift::PrefixEntry> expectedPrefix;
+  bool gotExpected = true;
+
+  // start kvStoreClientInternal separately with different thread
+  kvStoreClient = std::make_unique<KvStoreClientInternal>(
+      &evb, nodeId_, kvStoreWrapper->getKvStore());
+
+  kvStoreClient->subscribeKey(
+      kTestingAreaName,
+      keyStr,
+      [&](std::string const&, std::optional<thrift::Value> val) mutable {
+        ASSERT_TRUE(val.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            val->value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        if (expectedPrefix.has_value() and
+            db.prefixEntries_ref()->size() != 0) {
+          // we should always be advertising one prefix until we withdraw all
+          EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+          EXPECT_EQ(expectedPrefix, db.prefixEntries_ref()->at(0));
+          gotExpected = true;
+        } else {
+          EXPECT_TRUE(*db.deletePrefix_ref());
+          EXPECT_TRUE(db.prefixEntries_ref()->size() == 1);
+        }
+
+        // Signal verification
+        if (gotExpected) {
+          baton.post();
+        }
+      });
+
+  // Start event loop in it's own thread
+  evbThread = std::thread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  //
+  // 1. Inject prefix1 with client-bgp - Verify KvStore
+  //
+  expectedPrefix = bgp_prefix;
+  gotExpected = false;
+  prefixManager->advertisePrefixes({bgp_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 2. Inject prefix1 with client-loopback, default and config - Verify KvStore
+  //
+  expectedPrefix = loopback_prefix; // lowest client-id will win
+  gotExpected = false;
+  prefixManager
+      ->advertisePrefixes({loopback_prefix, default_prefix, openr_prefix})
+      .get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 3. Withdraw prefix1 with client-loopback - Verify KvStore
+  // with loopback gone, BGP will become lowest client_id.
+  // Since config KNOB is turned on, and CONFIG is present, CONFIG will win
+  //
+  expectedPrefix = openr_prefix;
+  gotExpected = false;
+  prefixManager->withdrawPrefixes({loopback_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 4. Withdraw prefix1 with client-config - Verify KvStore
+  //
+  expectedPrefix = bgp_prefix;
+  gotExpected = false;
+  prefixManager->withdrawPrefixes({openr_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 5. Withdraw prefix1 with client-bgp - Verify KvStore
+  //
+  expectedPrefix = default_prefix;
+  gotExpected = false;
+  prefixManager->withdrawPrefixes({bgp_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 6. Withdraw prefix1 with client-default - Verify KvStore
+  //
+  expectedPrefix = std::nullopt;
+  gotExpected = true;
+  prefixManager->withdrawPrefixes({default_prefix}).get();
+  baton.wait();
+  baton.reset();
 }
 
 int

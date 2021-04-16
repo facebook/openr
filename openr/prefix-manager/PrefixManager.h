@@ -367,6 +367,11 @@ class PrefixManager final : public OpenrEventBase {
     }
   };
 
+  /* prefer local originated prefix over BGP originated prefix
+   * Turned on/off via thrift::OpenrConfig::prefer_openr_originated_config
+   */
+  bool preferOpenrOriginatedRoutes_{false};
+
   /*
    * prefixes to be originated from prefix-manager
    * ATTN: to support quick information retrieval, cache the mapping:

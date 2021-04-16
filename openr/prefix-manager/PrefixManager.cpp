@@ -51,7 +51,9 @@ PrefixManager::PrefixManager(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
-      kvStore_(kvStore) {
+      kvStore_(kvStore),
+      preferOpenrOriginatedRoutes_(
+          *config->getConfig().prefer_openr_originated_routes_ref()) {
   CHECK(kvStore_);
   CHECK(config);
 
@@ -425,7 +427,15 @@ PrefixManager::syncKvStore() {
       const auto& typeToPrefixes = it->second;
 
       // select the best entry/entries by comparing metric_ref() field
-      auto bestType = *selectBestPrefixMetrics(typeToPrefixes).begin();
+      const auto bestTypes = selectBestPrefixMetrics(typeToPrefixes);
+      auto bestType = *bestTypes.begin();
+      // if best route is BGP, and an equivalent CONFIG route exists,
+      // then prefer config route if knob prefer_openr_originated_config_=true
+      if (bestType == thrift::PrefixType::BGP and
+          preferOpenrOriginatedRoutes_ and
+          bestTypes.count(thrift::PrefixType::CONFIG)) {
+        bestType = thrift::PrefixType::CONFIG;
+      }
       auto& bestEntry = typeToPrefixes.at(bestType);
 
       // advertise best-entry for this prefix to `KvStore`

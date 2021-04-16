@@ -223,27 +223,6 @@ createNextHopFromAdj(
       *adj.otherNodeName_ref());
 }
 
-thrift::PrefixMetrics
-createMetrics(int32_t pp, int32_t sp, int32_t d) {
-  thrift::PrefixMetrics metrics;
-  metrics.path_preference_ref() = pp;
-  metrics.source_preference_ref() = sp;
-  metrics.distance_ref() = d;
-  return metrics;
-}
-
-thrift::PrefixEntry
-createPrefixEntryWithMetrics(
-    thrift::IpPrefix const& prefix,
-    thrift::PrefixType const& type,
-    thrift::PrefixMetrics const& metrics) {
-  thrift::PrefixEntry entry;
-  entry.prefix_ref() = prefix;
-  entry.type_ref() = type;
-  entry.metrics_ref() = metrics;
-  return entry;
-}
-
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order
 using NextHops = unordered_set<thrift::NextHopThrift>;
 using RouteMap = unordered_map<

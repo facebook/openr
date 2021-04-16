@@ -324,6 +324,13 @@ thrift::PrefixEntry createPrefixEntry(
     std::optional<thrift::MetricVector> mv = std::nullopt,
     std::optional<int64_t> minNexthop = std::nullopt);
 
+thrift::PrefixMetrics createMetrics(int32_t pp, int32_t sp, int32_t d);
+
+thrift::PrefixEntry createPrefixEntryWithMetrics(
+    thrift::IpPrefix const& prefix,
+    thrift::PrefixType const& type,
+    thrift::PrefixMetrics const& metrics);
+
 thrift::Value createThriftValue(
     int64_t version,
     std::string originatorId,
