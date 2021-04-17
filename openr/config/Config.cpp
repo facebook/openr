@@ -34,13 +34,13 @@ AreaConfiguration::compileRegexSet(std::vector<std::string> const& strings) {
   if (strings.empty()) {
     // make this regex set unmatchable
     std::string const unmatchable = "a^";
-    CHECK_NE(-1, reSet->Add(unmatchable, &regexErr)) << folly::sformat(
+    CHECK_NE(-1, reSet->Add(unmatchable, &regexErr)) << fmt::format(
         "Failed to add regex: {}. Error: {}", unmatchable, regexErr);
   }
   for (const auto& str : strings) {
     if (reSet->Add(str, &regexErr) == -1) {
       throw std::invalid_argument(
-          folly::sformat("Failed to add regex: {}. Error: {}", str, regexErr));
+          fmt::format("Failed to add regex: {}. Error: {}", str, regexErr));
     }
   }
   CHECK(reSet->Compile()) << "Regex compilation failed";
@@ -50,7 +50,7 @@ AreaConfiguration::compileRegexSet(std::vector<std::string> const& strings) {
 Config::Config(const std::string& configFile) {
   std::string contents;
   if (not folly::readFile(configFile.c_str(), contents)) {
-    auto errStr = folly::sformat("Could not read config file: {}", configFile);
+    auto errStr = fmt::format("Could not read config file: {}", configFile);
     LOG(ERROR) << errStr;
     throw thrift::ConfigError(errStr);
   }
@@ -59,7 +59,7 @@ Config::Config(const std::string& configFile) {
   try {
     jsonSerializer.deserialize(contents, config_);
   } catch (const std::exception& ex) {
-    auto errStr = folly::sformat(
+    auto errStr = fmt::format(
         "Could not parse OpenrConfig struct: {}", folly::exceptionStr(ex));
     LOG(ERROR) << errStr;
     throw thrift::ConfigError(errStr);
@@ -95,7 +95,7 @@ Config::createPrefixAllocationParams(
   // validate allocate_prefix_len
   if (seedPfx.first.isV4() and
       (allocationPfxLen <= seedPfx.second or allocationPfxLen > 32)) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "invalid allocate_prefix_len ({}), valid range = ({}, 32]",
         allocationPfxLen,
         seedPfx.second));
@@ -103,7 +103,7 @@ Config::createPrefixAllocationParams(
 
   if ((seedPfx.first.isV6()) and
       (allocationPfxLen <= seedPfx.second or allocationPfxLen > 128)) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "invalid allocate_prefix_len ({}), valid range = ({}, 128]",
         allocationPfxLen,
         seedPfx.second));
@@ -126,6 +126,10 @@ Config::populateAreaConfig() {
   if (auto areaPolicies = getAreaPolicies()) {
     propagationPolicy =
         areaPolicies->filters_ref()->routePropagationPolicy_ref().to_optional();
+  }
+
+  if (getDomainName().empty()) {
+    throw std::invalid_argument("domain name must be non-empty");
   }
 
   for (auto& areaConf : *config_.areas_ref()) {
@@ -151,14 +155,14 @@ Config::populateAreaConfig() {
     if (auto importPolicyName = areaConf.import_policy_name_ref()) {
       if (not propagationPolicy or
           propagationPolicy->objects_ref()->count(*importPolicyName) == 0) {
-        throw std::invalid_argument(folly::sformat(
+        throw std::invalid_argument(fmt::format(
             "No area policy definition found for {}", *importPolicyName));
       }
     }
 
     if (!areaConfigs_.emplace(areaConf.get_area_id(), areaConf).second) {
-      throw std::invalid_argument(folly::sformat(
-          "Duplicate area config id: {}", areaConf.get_area_id()));
+      throw std::invalid_argument(
+          fmt::format("Duplicate area config id: {}", areaConf.get_area_id()));
     }
   }
 }
@@ -201,13 +205,13 @@ Config::populateInternalDb() {
   const auto& sparkConfig = *config_.spark_config_ref();
   if (*sparkConfig.neighbor_discovery_port_ref() <= 0 ||
       *sparkConfig.neighbor_discovery_port_ref() > 65535) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "neighbor_discovery_port ({}) should be in range [0, 65535]",
         *sparkConfig.neighbor_discovery_port_ref()));
   }
 
   if (*sparkConfig.hello_time_s_ref() <= 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "hello_time_s ({}) should be > 0", *sparkConfig.hello_time_s_ref()));
   }
 
@@ -216,14 +220,14 @@ Config::populateInternalDb() {
   // an immediate reply. This allows us to discover new neighbors in hundreds
   // of milliseconds (or as configured).
   if (*sparkConfig.fastinit_hello_time_ms_ref() <= 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "fastinit_hello_time_ms ({}) should be > 0",
         *sparkConfig.fastinit_hello_time_ms_ref()));
   }
 
   if (*sparkConfig.fastinit_hello_time_ms_ref() >
       1000 * *sparkConfig.hello_time_s_ref()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "fastinit_hello_time_ms ({}) should be <= hold_time_s ({}) * 1000",
         *sparkConfig.fastinit_hello_time_ms_ref(),
         *sparkConfig.hello_time_s_ref()));
@@ -232,13 +236,13 @@ Config::populateInternalDb() {
   // The rate of hello packet send is defined by keepAliveTime.
   // This time must be less than the holdTime for each node.
   if (*sparkConfig.keepalive_time_s_ref() <= 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "keepalive_time_s ({}) should be > 0",
         *sparkConfig.keepalive_time_s_ref()));
   }
 
   if (*sparkConfig.keepalive_time_s_ref() > *sparkConfig.hold_time_s_ref()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "keepalive_time_s ({}) should be <= hold_time_s ({})",
         *sparkConfig.keepalive_time_s_ref(),
         *sparkConfig.hold_time_s_ref()));
@@ -246,19 +250,19 @@ Config::populateInternalDb() {
 
   // Hold time tells the receiver how long to keep the information valid for.
   if (*sparkConfig.hold_time_s_ref() <= 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "hold_time_s ({}) should be > 0", *sparkConfig.hold_time_s_ref()));
   }
 
   if (*sparkConfig.graceful_restart_time_s_ref() <= 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "graceful_restart_time_s ({}) should be > 0",
         *sparkConfig.graceful_restart_time_s_ref()));
   }
 
   if (*sparkConfig.graceful_restart_time_s_ref() <
       3 * *sparkConfig.keepalive_time_s_ref()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "graceful_restart_time_s ({}) should be >= 3 * keepalive_time_s ({})",
         *sparkConfig.graceful_restart_time_s_ref(),
         *sparkConfig.keepalive_time_s_ref()));
@@ -268,7 +272,7 @@ Config::populateInternalDb() {
       *sparkConfig.step_detector_conf_ref()->upper_threshold_ref() < 0 ||
       *sparkConfig.step_detector_conf_ref()->lower_threshold_ref() >=
           *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({}), and they should be >= 0",
         *sparkConfig.step_detector_conf_ref()->lower_threshold_ref(),
         *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()));
@@ -278,7 +282,7 @@ Config::populateInternalDb() {
       *sparkConfig.step_detector_conf_ref()->slow_window_size_ref() < 0 ||
       (*sparkConfig.step_detector_conf_ref()->fast_window_size_ref() >
        *sparkConfig.step_detector_conf_ref()->slow_window_size_ref())) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "step_detector_conf.fast_window_size ({}) should be <= step_detector_conf.slow_window_size ({}), and they should be >= 0",
         *sparkConfig.step_detector_conf_ref()->fast_window_size_ref(),
         *sparkConfig.step_detector_conf_ref()->slow_window_size_ref()));
@@ -288,7 +292,7 @@ Config::populateInternalDb() {
       *sparkConfig.step_detector_conf_ref()->upper_threshold_ref() < 0 ||
       *sparkConfig.step_detector_conf_ref()->lower_threshold_ref() >=
           *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({})",
         *sparkConfig.step_detector_conf_ref()->lower_threshold_ref(),
         *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()));
@@ -299,7 +303,7 @@ Config::populateInternalDb() {
   //
   const auto& monitorConfig = *config_.monitor_config_ref();
   if (*monitorConfig.max_event_log_ref() < 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "monitor_max_event_log ({}) should be >= 0",
         *monitorConfig.max_event_log_ref()));
   }
@@ -311,20 +315,20 @@ Config::populateInternalDb() {
 
   // backoff validation
   if (*lmConf.linkflap_initial_backoff_ms_ref() < 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "linkflap_initial_backoff_ms ({}) should be >= 0",
         *lmConf.linkflap_initial_backoff_ms_ref()));
   }
 
   if (*lmConf.linkflap_max_backoff_ms_ref() < 0) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "linkflap_max_backoff_ms ({}) should be >= 0",
         *lmConf.linkflap_max_backoff_ms_ref()));
   }
 
   if (*lmConf.linkflap_initial_backoff_ms_ref() >
       *lmConf.linkflap_max_backoff_ms_ref()) {
-    throw std::out_of_range(folly::sformat(
+    throw std::out_of_range(fmt::format(
         "linkflap_initial_backoff_ms ({}) should be < linkflap_max_backoff_ms ({})",
         *lmConf.linkflap_initial_backoff_ms_ref(),
         *lmConf.linkflap_max_backoff_ms_ref()));

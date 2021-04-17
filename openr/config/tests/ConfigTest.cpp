@@ -161,20 +161,23 @@ TEST(ConfigTest, PopulateAreaConfig) {
     EXPECT_THROW((Config(confInvalidAreaPolicy)), std::invalid_argument);
   }
 
-  // non-empty interface regex
+  // non-empty interface regex and non-empty domain name
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = myArea;
+    areaConfig.area_id_ref() = myArea;
     areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
+
+    confValidArea.domain_ref() = "";
+    EXPECT_THROW((Config(confValidArea)), std::invalid_argument);
   }
 
   // non-empty neighbor regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = myArea;
+    areaConfig.area_id_ref() = myArea;
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
@@ -184,7 +187,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty neighbor and interface regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = myArea;
+    areaConfig.area_id_ref() = myArea;
     areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
@@ -194,7 +197,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = myArea;
+    areaConfig.area_id_ref() = myArea;
     areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
@@ -209,7 +212,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // invalid include_interface_regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = myArea;
+    areaConfig.area_id_ref() = myArea;
     areaConfig.include_interface_regexes_ref()->emplace_back("[0-9]++");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto conf = getBasicOpenrConfig("node-1", "domain", vec);
@@ -227,7 +230,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
   //  invalid redistribute_interface_regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = myArea;
+    areaConfig.area_id_ref() = myArea;
     areaConfig.redistribute_interface_regexes_ref()->emplace_back("*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto conf = getBasicOpenrConfig("node-1", "domain", vec);
@@ -237,7 +240,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
 TEST(ConfigTest, AreaConfiguration) {
   openr::thrift::AreaConfig areaConfig;
-  *areaConfig.area_id_ref() = "myArea";
+  areaConfig.area_id_ref() = "myArea";
   areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
   areaConfig.exclude_interface_regexes_ref()->emplace_back(".*400.*");
   areaConfig.exclude_interface_regexes_ref()->emplace_back(".*450.*");
@@ -687,7 +690,7 @@ TEST(ConfigTest, KvstoreGetter) {
 TEST(ConfigTest, LinkMonitorGetter) {
   auto tConfig = getBasicOpenrConfig();
   const auto& lmConf = getTestLinkMonitorConfig();
-  *tConfig.link_monitor_config_ref() = lmConf;
+  tConfig.link_monitor_config_ref() = lmConf;
   // set empty area list to see doamin get converted to area
   tConfig.areas_ref().emplace();
   auto config = Config(tConfig);
