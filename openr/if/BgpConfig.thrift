@@ -8,6 +8,7 @@
 namespace cpp2 openr.thrift
 namespace py openr.BgpConfig
 namespace py3 openr.thrift
+namespace lua openr.BgpConfig
 
 struct BgpPeerTimers {
   1: i32 hold_time_seconds,
