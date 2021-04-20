@@ -380,8 +380,9 @@ SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
     const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
-  LOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
-            << " static unicast routes.";
+  LOG_IF(INFO, unicastRoutesToUpdate.size())
+      << "Adding/Updating " << unicastRoutesToUpdate.size()
+      << " static unicast routes.";
   for (const auto& ribUnicastEntry : unicastRoutesToUpdate) {
     const auto& prefix = ribUnicastEntry.prefix;
     staticUnicastRoutes_.insert_or_assign(prefix, ribUnicastEntry);
@@ -393,8 +394,9 @@ SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
     }
   }
 
-  LOG(INFO) << "Deleting " << unicastRoutesToDelete.size()
-            << " static unicast routes.";
+  LOG_IF(INFO, unicastRoutesToDelete.size())
+      << "Deleting " << unicastRoutesToDelete.size()
+      << " static unicast routes.";
   for (const auto& prefix : unicastRoutesToDelete) {
     // mark unicast entry to be deleted
     staticUnicastRoutes_.erase(prefix);
@@ -408,8 +410,9 @@ SpfSolver::SpfSolverImpl::updateStaticMplsRoutes(
     const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
     const std::vector<int32_t>& mplsRoutesToDelete) {
   // Process MPLS routes to add or update
-  LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
-            << " static mpls routes.";
+  LOG_IF(INFO, mplsRoutesToUpdate.size())
+      << "Adding/Updating " << mplsRoutesToUpdate.size()
+      << " static mpls routes.";
   for (const auto& mplsRoute : mplsRoutesToUpdate) {
     const auto topLabel = *mplsRoute.topLabel_ref();
     staticMplsRoutes_.insert_or_assign(topLabel, *mplsRoute.nextHops_ref());
@@ -421,8 +424,8 @@ SpfSolver::SpfSolverImpl::updateStaticMplsRoutes(
     }
   }
 
-  LOG(INFO) << "Deleting " << mplsRoutesToDelete.size()
-            << " static mpls routes.";
+  LOG_IF(INFO, mplsRoutesToDelete.size())
+      << "Deleting " << mplsRoutesToDelete.size() << " static mpls routes.";
   for (const auto& topLabel : mplsRoutesToDelete) {
     staticMplsRoutes_.erase(topLabel);
 
@@ -525,7 +528,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
     }
     if (isBGP and not prefixEntry->mv_ref().has_value()) {
       missingMv = true;
-      LOG(ERROR) << "Prefix entry for prefix "
+      LOG(ERROR) << "Prefix entry for "
                  << folly::IPAddress::networkToString(prefix)
                  << " advertised by " << nodeAndArea.first << ", area "
                  << nodeAndArea.second
