@@ -8,9 +8,11 @@
 #pragma once
 
 #include <folly/IPAddress.h>
+#include <openr/common/MplsUtil.h>
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <optional>
+#include "openr/if/gen-cpp2/OpenrConfig_types.h"
 
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -223,6 +225,30 @@ class Config {
   }
 
   //
+  // segment routing
+  //
+  const thrift::SegmentRoutingConfig&
+  getSegmentRoutingConfig() const {
+    return *config_.segment_routing_config_ref();
+  }
+
+  const thrift::SegmentRoutingNodeLabel&
+  getNodeSegmentLabel() const {
+    CHECK(
+        config_.segment_routing_config_ref().has_value() and
+        config_.segment_routing_config_ref()->sr_node_label_ref().has_value());
+    return *config_.segment_routing_config_ref()->sr_node_label_ref();
+  }
+
+  const thrift::SegmentRoutingAdjLabel&
+  getAdjSegmentLabels() const {
+    CHECK(
+        config_.segment_routing_config_ref().has_value() and
+        config_.segment_routing_config_ref()->sr_adj_label_ref().has_value());
+    return *config_.segment_routing_config_ref()->sr_adj_label_ref();
+  }
+
+  //
   // prefix Allocation
   //
   bool
@@ -240,6 +266,24 @@ class Config {
   getPrefixAllocationParams() const {
     CHECK(isPrefixAllocationEnabled());
     return *prefixAllocationParams_;
+  }
+
+  // MPLS labels
+  bool
+  isLabelRangeValid(thrift::LabelRange range) const {
+    if (not isMplsLabelValid(*range.start_label_ref())) {
+      return false;
+    }
+
+    if (not isMplsLabelValid(*range.end_label_ref())) {
+      return false;
+    }
+
+    if (*range.start_label_ref() > *range.end_label_ref()) {
+      return false;
+    }
+
+    return true;
   }
 
   //

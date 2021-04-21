@@ -13,6 +13,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <stdexcept>
 
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include "Config.h"
 
 using apache::thrift::util::enumName;
@@ -332,6 +333,81 @@ Config::populateInternalDb() {
         "linkflap_initial_backoff_ms ({}) should be < linkflap_max_backoff_ms ({})",
         *lmConf.linkflap_initial_backoff_ms_ref(),
         *lmConf.linkflap_max_backoff_ms_ref()));
+  }
+
+  //
+  // Segment Routing Config
+  //
+
+  if (config_.segment_routing_config_ref().has_value()) {
+    const auto& srConfig = *config_.segment_routing_config_ref();
+    // Check label range values for prepend labels
+    if (srConfig.prepend_label_ranges_ref().has_value()) {
+      const auto& v4LblRange = *srConfig.prepend_label_ranges_ref()->v4_ref();
+      if (not isLabelRangeValid(v4LblRange)) {
+        throw std::invalid_argument(fmt::format(
+            "v4: prepend label range [{}, {}] is invalid",
+            *v4LblRange.start_label_ref(),
+            *v4LblRange.end_label_ref()));
+      }
+
+      const auto& v6LblRange = *srConfig.prepend_label_ranges_ref()->v6_ref();
+      if (not isLabelRangeValid(v6LblRange)) {
+        throw std::invalid_argument(fmt::format(
+            "v6: prepend label range [{}, {}] is invalid",
+            *v6LblRange.start_label_ref(),
+            *v6LblRange.end_label_ref()));
+      }
+    }
+
+    // Check Node Segment Label if configured or if label range is valid
+    if (srConfig.sr_node_label_ref().has_value()) {
+      if (*srConfig.sr_node_label_ref()->sr_node_label_type_ref() ==
+          thrift::SegmentRoutingNodeLabelType::AUTO) {
+        // Automatic node segment label allocation
+        if (not srConfig.sr_node_label_ref()
+                    ->node_segment_label_range_ref()
+                    .has_value()) {
+          throw std::invalid_argument(
+              fmt::format("node segment label range is not configured"));
+        } else if (not isLabelRangeValid(
+                       *srConfig.sr_node_label_ref()
+                            ->node_segment_label_range_ref())) {
+          const auto& label_range =
+              *srConfig.sr_node_label_ref()->node_segment_label_range_ref();
+          throw std::invalid_argument(fmt::format(
+              "node segment label range [{}, {}] is invalid",
+              *label_range.start_label_ref(),
+              *label_range.end_label_ref()));
+        }
+      } else if (not srConfig.sr_node_label_ref()
+                         ->node_segment_label_ref()
+                         .has_value()) {
+        throw std::invalid_argument(
+            fmt::format("static node segment label is not configured"));
+      }
+    }
+
+    if (srConfig.sr_adj_label_ref().has_value()) {
+      // Check adj segment labels if configured or if label range is valid
+      if (srConfig.sr_adj_label_ref()->sr_adj_label_type_ref() ==
+          thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX) {
+        if (not srConfig.sr_adj_label_ref()
+                    ->adj_label_range_ref()
+                    .has_value()) {
+          throw std::invalid_argument(fmt::format(
+              "label range for adjacency labels is not configured"));
+        } else if (not isLabelRangeValid(
+                       *srConfig.sr_adj_label_ref()->adj_label_range_ref())) {
+          const auto& label_range =
+              *srConfig.sr_adj_label_ref()->adj_label_range_ref();
+          throw std::invalid_argument(fmt::format(
+              "label range [{}, {}] for adjacency labels is invalid",
+              *label_range.start_label_ref(),
+              *label_range.end_label_ref()));
+        }
+      }
+    }
   }
 
   //

@@ -25,6 +25,7 @@
 
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
 #include <openr/decision/RibEntry.h>
@@ -195,15 +196,6 @@ std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
 getPrefixForwardingTypeAndAlgorithm(
     const PrefixEntries& prefixEntries,
     const std::set<NodeAndArea>& bestNodeAreas);
-
-/**
- * Validates that label is 20 bit only and other bits are not set
- * XXX: We can do more validation - e.g. reserved range, global vs local range
- */
-inline bool
-isMplsLabelValid(int32_t const mplsLabel) {
-  return (mplsLabel & 0xfff00000) == 0;
-}
 
 /**
  * Validates mplsAction object and fatals

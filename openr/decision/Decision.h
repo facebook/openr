@@ -22,6 +22,7 @@
 
 #include <openr/common/AsyncDebounce.h>
 #include <openr/common/AsyncThrottle.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
