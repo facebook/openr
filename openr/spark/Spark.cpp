@@ -216,7 +216,6 @@ Spark::SparkNeighbor::SparkNeighbor(
           samplingPeriod /* sampling period */,
           rttChangeCb /* callback function */),
       area(adjArea) {
-  CHECK(not this->domainName.empty());
   CHECK(not this->nodeName.empty());
   CHECK(not this->localIfName.empty());
   CHECK(not this->remoteIfName.empty());
@@ -1519,7 +1518,9 @@ Spark::processHandshakeMsg(
       // for backward compatibility: if the peer is still advertising
       // default area, we can check that domains match
       // TODO remove when trasition to areas is complete
-      mismatch = myDomainName_ != neighbor.domainName;
+      mismatch =
+          ((myDomainName_ != neighbor.domainName) or
+           (myDomainName_ == "" and neighbor.domainName == ""));
       if (not mismatch) {
         LOG(INFO) << fmt::format(
             "Neighbor: {} is under migration from area {} to {}.",
