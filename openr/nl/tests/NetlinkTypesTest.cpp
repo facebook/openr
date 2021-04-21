@@ -555,6 +555,45 @@ TEST(NetlinkTypes, LinkCopyTest) {
   EXPECT_EQ(link, link2);
 }
 
+TEST(NetlinkTypes, GreInfoBaseTest) {
+  const auto ip1 = folly::IPAddress("1.2.3.4");
+  const auto ip2 = folly::IPAddress("5.6.7.8");
+  const auto ttl = 64;
+  GreInfo greInfo(ip1, ip2, ttl);
+  EXPECT_EQ(ip1, greInfo.getLocalAddr());
+  EXPECT_EQ(ip2, greInfo.getRemoteAddr());
+  EXPECT_EQ(ttl, greInfo.getTtl());
+}
+
+TEST(NetlinkTypes, GreInfoMoveTest) {
+  const auto ip1 = folly::IPAddress("1.2.3.4");
+  const auto ip2 = folly::IPAddress("5.6.7.8");
+  const auto ttl = 64;
+  GreInfo greInfo(ip1, ip2, ttl);
+
+  // Move constructor
+  fbnl::GreInfo greInfo2(std::move(greInfo));
+
+  EXPECT_EQ(ip1, greInfo2.getLocalAddr());
+  EXPECT_EQ(ip2, greInfo2.getRemoteAddr());
+  EXPECT_EQ(ttl, greInfo2.getTtl());
+}
+
+TEST(NetlinkTypes, GreInfoCopyTest) {
+  const auto ip1 = folly::IPAddress("1.2.3.4");
+  const auto ip2 = folly::IPAddress("5.6.7.8");
+  const auto ttl = 64;
+  GreInfo greInfo(ip1, ip2, ttl);
+
+  // Copy constructor
+  fbnl::GreInfo greInfo2(greInfo);
+  EXPECT_EQ(greInfo, greInfo2);
+
+  // Copy assignment operator
+  greInfo2 = greInfo;
+  EXPECT_EQ(greInfo, greInfo2);
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

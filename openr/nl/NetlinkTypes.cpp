@@ -965,6 +965,80 @@ operator==(const Neighbor& lhs, const Neighbor& rhs) {
       lhs.getState() == rhs.getState());
 }
 
+/*================================GreInfo=====================================*/
+
+GreInfo::GreInfo(
+    const folly::IPAddress& localAddr,
+    const folly::IPAddress& remoteAddr,
+    uint8_t ttl)
+    : localAddr_(localAddr), remoteAddr_(remoteAddr), ttl_(ttl) {}
+
+GreInfo::~GreInfo() {}
+
+GreInfo::GreInfo(GreInfo&& other) noexcept {
+  *this = std::move(other);
+}
+
+GreInfo&
+GreInfo::operator=(GreInfo&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+
+  localAddr_ = std::move(other.localAddr_);
+  remoteAddr_ = std::move(other.remoteAddr_);
+  ttl_ = std::move(other.ttl_);
+  return *this;
+}
+
+GreInfo::GreInfo(const GreInfo& other) {
+  *this = other;
+}
+
+GreInfo&
+GreInfo::operator=(const GreInfo& other) {
+  if (this == &other) {
+    return *this;
+  }
+
+  localAddr_ = other.localAddr_;
+  remoteAddr_ = other.remoteAddr_;
+  ttl_ = other.ttl_;
+  return *this;
+}
+
+folly::IPAddress
+GreInfo::getLocalAddr() const {
+  return localAddr_;
+}
+
+folly::IPAddress
+GreInfo::getRemoteAddr() const {
+  return remoteAddr_;
+}
+
+uint8_t
+GreInfo::getTtl() const {
+  return ttl_;
+}
+
+std::string
+GreInfo::str() const {
+  return fmt::format(
+      "GreInfo: localAddr {}, remoteAddr {}, ttl {}",
+      localAddr_.str(),
+      remoteAddr_.str(),
+      ttl_);
+}
+
+bool
+operator==(const GreInfo& lhs, const GreInfo& rhs) {
+  return (
+      lhs.getLocalAddr() == rhs.getLocalAddr() and
+      lhs.getRemoteAddr() == rhs.getRemoteAddr() and
+      lhs.getTtl() == rhs.getTtl());
+}
+
 /*==================================Link======================================*/
 
 Link

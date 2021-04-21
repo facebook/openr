@@ -487,6 +487,39 @@ class Neighbor final {
 bool operator==(const Neighbor& lhs, const Neighbor& rhs);
 bool isNeighborReachable(int state);
 
+class GreInfo final {
+ public:
+  GreInfo(
+      const folly::IPAddress& localAddr,
+      const folly::IPAddress& remoteAddr,
+      uint8_t ttl);
+  ~GreInfo();
+
+  // Copy+Move constructor and assignment operator
+  GreInfo(GreInfo&&) noexcept;
+  GreInfo& operator=(GreInfo&&) noexcept;
+  GreInfo(const GreInfo&);
+  GreInfo& operator=(const GreInfo&);
+
+  folly::IPAddress getLocalAddr() const;
+
+  folly::IPAddress getRemoteAddr() const;
+
+  uint8_t getTtl() const;
+
+  std::string str() const;
+
+ private:
+  // local address
+  folly::IPAddress localAddr_;
+  // remote address
+  folly::IPAddress remoteAddr_;
+  // ttl, default value is 0 (inherit for IPv4)
+  uint8_t ttl_{0};
+};
+
+bool operator==(const GreInfo& lhs, const GreInfo& rhs);
+
 class Link;
 class LinkBuilder final {
  public:
