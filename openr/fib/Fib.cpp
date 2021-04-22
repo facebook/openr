@@ -10,10 +10,13 @@
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <algorithm>
+#include <exception>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/fib/Fib.h>
 
 namespace fb303 = facebook::fb303;
@@ -30,7 +33,7 @@ Fib::Fib(
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
-      expBackoff_(
+      syncRoutesExpBackoff_(
           Constants::kFibSyncInitialBackoff,
           Constants::kFibSyncMaxBackoff,
           false),
@@ -45,11 +48,11 @@ Fib::Fib(
     if (routeState_.hasRoutesFromDecision) {
       if (syncRouteDb()) {
         hasSyncedFib_ = true;
-        expBackoff_.reportSuccess();
+        syncRoutesExpBackoff_.reportSuccess();
       } else {
         // Apply exponential backoff and schedule next run
-        expBackoff_.reportError();
-        const auto period = expBackoff_.getTimeRemainingUntilRetry();
+        syncRoutesExpBackoff_.reportError();
+        const auto period = syncRoutesExpBackoff_.getTimeRemainingUntilRetry();
         LOG(INFO) << "Scheduling fib sync after " << period.count() << "ms";
         syncRoutesTimer_->scheduleTimeout(period);
       }
@@ -323,27 +326,7 @@ Fib::getFibUpdatesReader() {
 }
 
 void
-Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
-  routeState_.hasRoutesFromDecision = true;
-  // Update perfEvents_ .. We replace existing perf events with new one as
-  // convergence is going to be based on new data, not the old.
-  if (routeUpdate.perfEvents.has_value()) {
-    addPerfEvent(
-        routeUpdate.perfEvents.value(), myNodeName_, "FIB_ROUTE_DB_RECVD");
-  }
-
-  // Before anything, get rid of doNotInstall routes
-  auto i = routeUpdate.unicastRoutesToUpdate.begin();
-  while (i != routeUpdate.unicastRoutesToUpdate.end()) {
-    if (i->second.doNotInstall) {
-      LOG(INFO) << "Not installing route for prefix "
-                << folly::IPAddress::networkToString(i->first);
-      i = routeUpdate.unicastRoutesToUpdate.erase(i);
-    } else {
-      ++i;
-    }
-  }
-
+Fib::backupRouteState(const DecisionRouteUpdate& routeUpdate) {
   // Add/Update unicast routes to update
   for (const auto& [prefix, route] : routeUpdate.unicastRoutesToUpdate) {
     auto it = routeState_.unicastRoutes.find(prefix);
@@ -373,11 +356,45 @@ Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
   for (const auto& topLabel : routeUpdate.mplsRoutesToDelete) {
     routeState_.mplsRoutes.erase(topLabel);
   }
+}
+
+// Process new route updates received from Decision module.
+void
+Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
+  routeState_.hasRoutesFromDecision = true;
+
+  // Update perfEvents_ .. We replace existing perf events with new one as
+  // convergence is going to be based on new data, not the old.
+  if (routeUpdate.perfEvents.has_value()) {
+    addPerfEvent(
+        routeUpdate.perfEvents.value(), myNodeName_, "FIB_ROUTE_DB_RECVD");
+  }
+
+  // Before anything, get rid of doNotInstall routes
+  auto iter = routeUpdate.unicastRoutesToUpdate.cbegin();
+  while (iter != routeUpdate.unicastRoutesToUpdate.cend()) {
+    if (iter->second.doNotInstall) {
+      LOG(INFO) << "Not installing route for prefix "
+                << folly::IPAddress::networkToString(iter->first);
+      iter = routeUpdate.unicastRoutesToUpdate.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+
+  // Backup routes in routeState_. In case update routes failed, routes will be
+  // programmed in later scheduled FIB sync.
+  backupRouteState(routeUpdate);
 
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
-  // Send request to agent
-  updateRoutes(std::move(routeUpdate), false /* static routes */);
+
+  if (updateRoutes(std::move(routeUpdate), false /* static routes */)) {
+    routeState_.dirtyRouteDb = false;
+  } else {
+    routeState_.dirtyRouteDb = true;
+    syncRouteDbDebounced(); // Schedule future full sync of route DB
+  }
 }
 
 thrift::PerfDatabase
@@ -422,7 +439,7 @@ Fib::printMplsRoutesAddUpdate(
   }
 }
 
-void
+bool
 Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
@@ -436,7 +453,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     // Do not program routes in case of dryrun
     LOG(INFO) << "Skipping programming of routes in dryrun ... ";
     logPerfEvents(routeUpdate.perfEvents);
-    return;
+    return true; // Treat route updates successful in dry run.
   }
 
   // Publish the fib streaming routes after considering donotinstall
@@ -455,16 +472,15 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     // Check if there's any full sync scheduled,
     // if so, skip partial sync
     LOG(INFO) << "Pending full sync is scheduled, skip delta sync for now...";
-    return;
+    return true;
   } else if (!isStaticRoutes && (routeState_.dirtyRouteDb or !hasSyncedFib_)) {
-    if (hasSyncedFib_) {
-      LOG(INFO) << "Previous route programming failed or, skip delta sync to "
-                << "enforce full fib sync...";
-    } else {
-      LOG(INFO) << "Syncing fib on startup...";
-    }
+    LOG_IF(INFO, routeState_.dirtyRouteDb)
+        << "Previous route programming failed or, skip delta sync to enforce "
+           "full fib sync...";
+    LOG_IF(INFO, !hasSyncedFib_) << "Syncing fib on startup...";
+
     syncRouteDbDebounced();
-    return;
+    return true;
   }
 
   // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
@@ -484,7 +500,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
       numUnicastRoutesToUpdate + numMplsRoutesToDelete + numMplsRoutesToUpdate;
 
   if (numOfRouteUpdates == 0) {
-    return;
+    return true;
   }
 
   // Make thrift calls to do real programming
@@ -499,7 +515,6 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     if (numUnicastRoutesToDelete) {
       LOG(INFO) << "Deleting " << numUnicastRoutesToDelete
                 << " unicast routes in FIB";
-
       for (auto const& prefix : *routeDbDelta.unicastRoutesToDelete_ref()) {
         VLOG(1) << "> " << toString(prefix);
       }
@@ -512,7 +527,6 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     if (numUnicastRoutesToUpdate) {
       LOG(INFO) << "Adding/Updating " << numUnicastRoutesToUpdate
                 << " unicast routes in FIB";
-
       printUnicastRoutesAddUpdate(unicastRoutesToUpdate);
 
       client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
@@ -523,7 +537,6 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
       if (numMplsRoutesToDelete) {
         LOG(INFO) << "Deleting " << numMplsRoutesToDelete
                   << " mpls routes in FIB";
-
         for (auto const& topLabel : *routeDbDelta.mplsRoutesToDelete_ref()) {
           VLOG(1) << "> " << std::to_string(topLabel);
         }
@@ -536,8 +549,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
       if (numMplsRoutesToUpdate) {
         LOG(INFO) << "Adding/Updating " << numMplsRoutesToUpdate
                   << " mpls routes in FIB";
-
         printMplsRoutesAddUpdate(mplsRoutesToUpdate);
+
         client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
       }
     }
@@ -545,22 +558,24 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     const auto elapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
-    LOG(INFO) << "It took " << elapsedTime.count() << "ms to update "
-              << "routes in FIB";
 
-    routeState_.dirtyRouteDb = false;
+    LOG(INFO) << fmt::format(
+        "It took {} ms to update {} routes in FIB",
+        elapsedTime.count(),
+        numOfRouteUpdates);
+
     fb303::fbData->addStatValue(
         "fib.route_programming.time_ms", elapsedTime.count(), fb303::AVG);
     fb303::fbData->addStatValue(
         "fib.num_of_route_updates", numOfRouteUpdates, fb303::SUM);
+    return true;
   } catch (const std::exception& e) {
+    client_.reset();
     fb303::fbData->addStatValue(
         "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-    client_.reset();
-    routeState_.dirtyRouteDb = true;
-    syncRouteDbDebounced(); // Schedule future full sync of route DB
     LOG(ERROR) << "Failed to update routes in FIB. Error: "
                << folly::exceptionStr(e);
+    return false;
   }
 }
 
@@ -642,7 +657,7 @@ Fib::keepAliveCheck() {
                  << "Performing full route DB sync ...";
     // set dirty flag
     routeState_.dirtyRouteDb = true;
-    expBackoff_.reportSuccess();
+    syncRoutesExpBackoff_.reportSuccess();
     syncRouteDbDebounced();
   }
   latestAliveSince_ = aliveSince;

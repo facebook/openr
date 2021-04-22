@@ -159,7 +159,7 @@ class Fib final : public OpenrEventBase {
    * on success no action needed
    * on failure invokes syncRouteDbDebounced
    */
-  void updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes);
+  bool updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes);
 
   /**
    * Sync the current routeDb_ with the switch agent.
@@ -186,6 +186,8 @@ class Fib final : public OpenrEventBase {
   // log perf events
   void logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents);
 
+  void backupRouteState(const DecisionRouteUpdate& routeUpdate);
+
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
   struct RouteState {
@@ -193,8 +195,8 @@ class Fib final : public OpenrEventBase {
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
     std::unordered_map<uint32_t, RibMplsEntry> mplsRoutes;
 
-    // indicates we've received a decision route publication and therefore have
-    // routes to sync. will not synce routes with system until this is set
+    // Indicates we've received a decision route publication and therefore have
+    // routes to sync. Will not synce routes with system until this is set.
     bool hasRoutesFromDecision{false};
 
     // Flag to indicate the result of previous route programming attempt.
@@ -234,7 +236,7 @@ class Fib final : public OpenrEventBase {
   // Callback timer to sync routes to switch agent and scheduled on route-sync
   // failure. ExponentialBackoff timer to ease up things if they go wrong
   std::unique_ptr<folly::AsyncTimeout> syncRoutesTimer_{nullptr};
-  ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
+  ExponentialBackoff<std::chrono::milliseconds> syncRoutesExpBackoff_;
 
   // periodically send alive msg to switch agent
   std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
