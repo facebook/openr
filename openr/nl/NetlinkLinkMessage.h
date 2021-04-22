@@ -65,6 +65,14 @@ class NetlinkLinkMessage final : public NetlinkMessageBase {
   // inherited class implementation
   void rcvdLink(Link&& link) override;
 
+  // get link kind and gre info from IFLA_LINKINFO
+  static std::pair<std::optional<std::string>, std::optional<GreInfo>>
+  parseLinkInfo(const struct rtattr* attr);
+
+  // get gre info from IFLA_INFO_DATA
+  static std::optional<GreInfo> parseInfoData(
+      const struct rtattr* attr, unsigned char family);
+
   //
   // Private variables for rtnetlink msg exchange
   //

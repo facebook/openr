@@ -499,31 +499,63 @@ TEST(NetlinkTypes, NeighborCopyTest) {
   EXPECT_EQ(neigh, neigh2);
 }
 
-TEST(NetlinkTypes, LinkTypeTest) {
-  std::string linkName("iface");
+TEST(NetlinkTypes, LinkTypeBaseTest) {
+  const std::string linkName("iface");
   unsigned int flags = 0x0 | IFF_RUNNING;
 
   LinkBuilder builder;
-  auto link = builder.setIfIndex(kIfIndex)
-                  .setFlags(flags)
-                  .setLinkName(linkName)
-                  .build();
+  const auto link = builder.setIfIndex(kIfIndex)
+                        .setFlags(flags)
+                        .setLinkName(linkName)
+                        .build();
   LOG(INFO) << link.str();
 
   EXPECT_EQ(kIfIndex, link.getIfIndex());
   EXPECT_EQ(linkName, link.getLinkName());
   EXPECT_EQ(flags, link.getFlags());
   EXPECT_TRUE(link.isUp());
+  EXPECT_FALSE(link.getLinkKind().has_value());
+  EXPECT_FALSE(link.getGreInfo().has_value());
 }
 
-TEST(NetlinkTypes, LinkMoveTest) {
-  std::string linkName("iface");
+TEST(NetlinkTypes, LinkTypeGreTest) {
+  const std::string linkName("iface");
   unsigned int flags = 0x0 | IFF_RUNNING;
+  const std::string linkKind("gre");
+  const GreInfo greInfo(
+      folly::IPAddress("192.0.2.0"), folly::IPAddress("192.0.2.1"), 64);
 
   LinkBuilder builder;
   auto link = builder.setIfIndex(kIfIndex)
                   .setFlags(flags)
                   .setLinkName(linkName)
+                  .setLinkKind(linkKind)
+                  .setGreInfo(greInfo)
+                  .build();
+
+  EXPECT_EQ(kIfIndex, link.getIfIndex());
+  EXPECT_EQ(linkName, link.getLinkName());
+  EXPECT_EQ(flags, link.getFlags());
+  EXPECT_TRUE(link.isUp());
+  EXPECT_TRUE(link.getLinkKind().has_value());
+  EXPECT_EQ(linkKind, link.getLinkKind().value());
+  EXPECT_TRUE(link.getGreInfo().has_value());
+  EXPECT_EQ(greInfo, link.getGreInfo().value());
+}
+
+TEST(NetlinkTypes, LinkMoveTest) {
+  const std::string linkName("iface");
+  unsigned int flags = 0x0 | IFF_RUNNING;
+  const std::string linkKind("gre");
+  const GreInfo greInfo(
+      folly::IPAddress("192.0.2.0"), folly::IPAddress("192.0.2.1"), 64);
+
+  LinkBuilder builder;
+  auto link = builder.setIfIndex(kIfIndex)
+                  .setFlags(flags)
+                  .setLinkName(linkName)
+                  .setLinkKind(linkKind)
+                  .setGreInfo(greInfo)
                   .build();
 
   // Move constructor
@@ -534,16 +566,23 @@ TEST(NetlinkTypes, LinkMoveTest) {
   EXPECT_EQ(kIfIndex, link2.getIfIndex());
   EXPECT_EQ(flags, link.getFlags());
   EXPECT_TRUE(link.isUp());
+  EXPECT_EQ(linkKind, link2.getLinkKind().value());
+  EXPECT_EQ(greInfo, link2.getGreInfo().value());
 }
 
 TEST(NetlinkTypes, LinkCopyTest) {
-  std::string linkName("iface");
+  const std::string linkName("iface");
   unsigned int flags = 0x0 | IFF_RUNNING;
+  const std::string linkKind("gre");
+  const GreInfo greInfo(
+      folly::IPAddress("192.0.2.0"), folly::IPAddress("192.0.2.1"), 64);
 
   LinkBuilder builder;
   auto link = builder.setIfIndex(kIfIndex)
                   .setFlags(flags)
                   .setLinkName(linkName)
+                  .setLinkKind(linkKind)
+                  .setGreInfo(greInfo)
                   .build();
 
   // Copy constructor
@@ -556,8 +595,8 @@ TEST(NetlinkTypes, LinkCopyTest) {
 }
 
 TEST(NetlinkTypes, GreInfoBaseTest) {
-  const auto ip1 = folly::IPAddress("1.2.3.4");
-  const auto ip2 = folly::IPAddress("5.6.7.8");
+  const auto ip1 = folly::IPAddress("192.0.2.0");
+  const auto ip2 = folly::IPAddress("192.0.2.1");
   const auto ttl = 64;
   GreInfo greInfo(ip1, ip2, ttl);
   EXPECT_EQ(ip1, greInfo.getLocalAddr());
@@ -566,8 +605,8 @@ TEST(NetlinkTypes, GreInfoBaseTest) {
 }
 
 TEST(NetlinkTypes, GreInfoMoveTest) {
-  const auto ip1 = folly::IPAddress("1.2.3.4");
-  const auto ip2 = folly::IPAddress("5.6.7.8");
+  const auto ip1 = folly::IPAddress("192.0.2.0");
+  const auto ip2 = folly::IPAddress("192.0.2.1");
   const auto ttl = 64;
   GreInfo greInfo(ip1, ip2, ttl);
 
@@ -580,8 +619,8 @@ TEST(NetlinkTypes, GreInfoMoveTest) {
 }
 
 TEST(NetlinkTypes, GreInfoCopyTest) {
-  const auto ip1 = folly::IPAddress("1.2.3.4");
-  const auto ip2 = folly::IPAddress("5.6.7.8");
+  const auto ip1 = folly::IPAddress("192.0.2.0");
+  const auto ip2 = folly::IPAddress("192.0.2.1");
   const auto ttl = 64;
   GreInfo greInfo(ip1, ip2, ttl);
 

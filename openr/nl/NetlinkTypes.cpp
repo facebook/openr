@@ -10,6 +10,7 @@
 extern "C" {
 #include <linux/netlink.h>
 #include <linux/types.h>
+#include <net/if.h>
 }
 
 namespace openr::fbnl {
@@ -1079,10 +1080,34 @@ LinkBuilder::getFlags() const {
   return flags_;
 }
 
+LinkBuilder&
+LinkBuilder::setLinkKind(const std::string& linkKind) {
+  linkKind_ = linkKind;
+  return *this;
+}
+
+std::optional<std::string>
+LinkBuilder::getLinkKind() const {
+  return linkKind_;
+}
+
+LinkBuilder&
+LinkBuilder::setGreInfo(const GreInfo& greInfo) {
+  greInfo_ = greInfo;
+  return *this;
+}
+
+std::optional<GreInfo>
+LinkBuilder::getGreInfo() const {
+  return greInfo_;
+}
+
 Link::Link(const LinkBuilder& builder)
     : linkName_(builder.getLinkName()),
       ifIndex_(builder.getIfIndex()),
-      flags_(builder.getFlags()) {}
+      flags_(builder.getFlags()),
+      linkKind_(builder.getLinkKind()),
+      greInfo_(builder.getGreInfo()) {}
 
 Link::~Link() {}
 
@@ -1099,6 +1124,8 @@ Link::operator=(Link&& other) noexcept {
   linkName_ = std::move(other.linkName_);
   ifIndex_ = std::move(other.ifIndex_);
   flags_ = std::move(other.flags_);
+  linkKind_ = std::move(other.linkKind_);
+  greInfo_ = std::move(other.greInfo_);
   return *this;
 }
 
@@ -1115,6 +1142,8 @@ Link::operator=(const Link& other) {
   linkName_ = other.linkName_;
   ifIndex_ = other.ifIndex_;
   flags_ = other.flags_;
+  linkKind_ = other.linkKind_;
+  greInfo_ = other.greInfo_;
   return *this;
 }
 
@@ -1143,20 +1172,35 @@ Link::isLoopback() const {
   return !!(flags_ & IFF_LOOPBACK);
 }
 
+std::optional<std::string>
+Link::getLinkKind() const {
+  return linkKind_;
+}
+
+std::optional<GreInfo>
+Link::getGreInfo() const {
+  return greInfo_;
+}
+
 std::string
 Link::str() const {
   return fmt::format(
-      "link {} intf-index {}, flags {}",
+      "link {} intf-index {}, flags {}, kind {}, gre_info {}",
       linkName_,
       ifIndex_,
-      std::to_string(flags_));
+      std::to_string(flags_),
+      linkKind_ ? linkKind_.value() : "n/a",
+      greInfo_ ? greInfo_.value().str() : "n/a");
 }
 
 bool
 operator==(const Link& lhs, const Link& rhs) {
   return (
-      lhs.getLinkName() == rhs.getLinkName() &&
-      lhs.getIfIndex() == rhs.getIfIndex() && lhs.getFlags() == rhs.getFlags());
+      lhs.getLinkName() == rhs.getLinkName() and
+      lhs.getIfIndex() == rhs.getIfIndex() and
+      lhs.getFlags() == rhs.getFlags() and
+      lhs.getLinkKind() == rhs.getLinkKind() and
+      lhs.getGreInfo() == rhs.getGreInfo());
 }
 
 } // namespace openr::fbnl

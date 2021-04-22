@@ -5,7 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <linux/if_tunnel.h>
 #include <openr/nl/NetlinkLinkMessage.h>
+
+namespace {
+const std::string kGreKind{"gre"};
+const std::string kIp6GreKind{"ip6gre"};
+} // namespace
 
 namespace openr::fbnl {
 
@@ -72,12 +78,93 @@ NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     case IFLA_IFNAME: {
       const char* name = reinterpret_cast<const char*>(RTA_DATA(linkAttr));
       builder = builder.setLinkName(std::string(name));
-    }
+    } break;
+    case IFLA_LINKINFO: {
+      auto infoPair = parseLinkInfo(linkAttr);
+      if (infoPair.first.has_value()) {
+        builder = builder.setLinkKind(infoPair.first.value());
+      }
+      if (infoPair.second.has_value()) {
+        builder = builder.setGreInfo(infoPair.second.value());
+      }
+    } break;
     }
   }
   auto link = builder.build();
   VLOG(3) << "Netlink parsed link message. " << link.str();
   return link;
+}
+
+std::pair<std::optional<std::string>, std::optional<GreInfo>>
+NetlinkLinkMessage::parseLinkInfo(const struct rtattr* attr) {
+  const struct rtattr* linkInfoAttr =
+      reinterpret_cast<struct rtattr*> RTA_DATA(attr);
+  int attrLen = RTA_PAYLOAD(attr);
+  std::optional<std::string> linkKind;
+  std::optional<GreInfo> greInfo;
+  // track pointer to attr IFLA_INFO_DATA, linkKind is needed to parse ip
+  const struct rtattr* infoDataAttr = nullptr;
+  do {
+    switch (linkInfoAttr->rta_type) {
+    case IFLA_INFO_KIND: {
+      const char* kind = reinterpret_cast<const char*>(RTA_DATA(linkInfoAttr));
+      linkKind = std::string(kind);
+    } break;
+    case IFLA_INFO_DATA: {
+      infoDataAttr = linkInfoAttr;
+    } break;
+    }
+    linkInfoAttr = RTA_NEXT(linkInfoAttr, attrLen);
+  } while (RTA_OK(linkInfoAttr, attrLen));
+
+  if (infoDataAttr && linkKind) {
+    if (linkKind == kGreKind) {
+      greInfo = parseInfoData(infoDataAttr, AF_INET);
+    } else if (linkKind == kIp6GreKind) {
+      greInfo = parseInfoData(infoDataAttr, AF_INET6);
+    }
+  }
+  return std::make_pair(linkKind, greInfo);
+}
+
+std::optional<GreInfo>
+NetlinkLinkMessage::parseInfoData(
+    const struct rtattr* attr, unsigned char family) {
+  const struct rtattr* infoDataAttr =
+      reinterpret_cast<struct rtattr*> RTA_DATA(attr);
+  int attrLen = RTA_PAYLOAD(attr);
+
+  std::optional<GreInfo> greInfo;
+  std::optional<folly::IPAddress> localAddr;
+  std::optional<folly::IPAddress> remoteAddr;
+  std::optional<uint8_t> ttl;
+
+  do {
+    switch (infoDataAttr->rta_type) {
+    case IFLA_GRE_LOCAL: {
+      const auto ipExpected = parseIp(infoDataAttr, family);
+      if (ipExpected.hasValue()) {
+        localAddr = ipExpected.value();
+      }
+    } break;
+    case IFLA_GRE_REMOTE: {
+      const auto ipExpected = parseIp(infoDataAttr, family);
+      if (ipExpected.hasValue()) {
+        remoteAddr = ipExpected.value();
+      }
+    } break;
+    case IFLA_GRE_TTL: {
+      ttl = *(reinterpret_cast<int*> RTA_DATA(infoDataAttr));
+    } break;
+    }
+    infoDataAttr = RTA_NEXT(infoDataAttr, attrLen);
+  } while (RTA_OK(infoDataAttr, attrLen));
+
+  if (localAddr and remoteAddr and ttl) {
+    greInfo = GreInfo(localAddr.value(), remoteAddr.value(), ttl.value());
+  }
+
+  return greInfo;
 }
 
 } // namespace openr::fbnl

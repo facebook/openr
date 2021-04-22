@@ -453,21 +453,6 @@ NetlinkRouteMessage::addMultiPathNexthop(
   return result;
 }
 
-folly::Expected<folly::IPAddress, folly::IPAddressFormatError>
-NetlinkRouteMessage::parseIp(
-    const struct rtattr* ipAttr, unsigned char family) {
-  if (family == AF_INET) {
-    struct in_addr* addr4 = reinterpret_cast<in_addr*> RTA_DATA(ipAttr);
-    return folly::IPAddressV4::fromLong(addr4->s_addr);
-  } else if (family == AF_INET6) {
-    struct in6_addr* addr6 = reinterpret_cast<in6_addr*> RTA_DATA(ipAttr);
-    return folly::IPAddressV6::tryFromBinary(
-        folly::ByteRange(reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
-  } else {
-    return makeUnexpected(folly::IPAddressFormatError::UNSUPPORTED_ADDR_FAMILY);
-  }
-}
-
 std::optional<std::vector<int32_t>>
 NetlinkRouteMessage::parseMplsLabels(const struct rtattr* routeAttr) {
   const struct rtattr* mplsAttr =

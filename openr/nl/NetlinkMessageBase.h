@@ -154,6 +154,10 @@ class NetlinkMessageBase {
     return createTs_;
   }
 
+  // parse IP address
+  static folly::Expected<folly::IPAddress, folly::IPAddressFormatError> parseIp(
+      const struct rtattr* ipAttr, unsigned char family);
+
  protected:
   /*
    * Add TLV(Type-Length-Value) attributes and update the length field in

@@ -18,7 +18,6 @@
 
 extern "C" {
 #include <linux/rtnetlink.h>
-#include <net/if.h>
 }
 
 namespace openr::fbnl {
@@ -540,10 +539,20 @@ class LinkBuilder final {
 
   uint32_t getFlags() const;
 
+  LinkBuilder& setLinkKind(const std::string& linkKind);
+
+  std::optional<std::string> getLinkKind() const;
+
+  LinkBuilder& setGreInfo(const GreInfo& greInfo);
+
+  std::optional<GreInfo> getGreInfo() const;
+
  private:
   std::string linkName_;
   int ifIndex_{0};
   uint32_t flags_{0};
+  std::optional<std::string> linkKind_;
+  std::optional<GreInfo> greInfo_;
 };
 
 class Link final {
@@ -568,12 +577,18 @@ class Link final {
 
   bool isLoopback() const;
 
+  std::optional<std::string> getLinkKind() const;
+
+  std::optional<GreInfo> getGreInfo() const;
+
   std::string str() const;
 
  private:
   std::string linkName_;
   int ifIndex_{0};
   uint32_t flags_{0};
+  std::optional<std::string> linkKind_;
+  std::optional<GreInfo> greInfo_;
 };
 
 bool operator==(const Link& lhs, const Link& rhs);

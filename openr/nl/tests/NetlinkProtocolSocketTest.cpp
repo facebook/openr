@@ -38,6 +38,7 @@ using namespace folly::literals::shell_literals;
 
 namespace {
 const std::chrono::milliseconds kProcTimeout{500};
+const std::string kVethKind{"veth"};
 const std::string kVethNameX("vethTestX");
 const std::string kVethNameY("vethTestY");
 const uint8_t kRouteProtoId = 99; // Open/R protocolId
@@ -678,7 +679,9 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
   // Spawn RQueue to receive platformUpdate request
   auto netlinkEventsReader = netlinkEventsQ.getReader();
 
-  auto waitForLinkEvent = [&](const std::string& ifName, const bool& isUp) {
+  auto waitForLinkEvent = [&](const std::string& ifName,
+                              const bool& isUp,
+                              const std::string& kind) {
     auto startTime = std::chrono::steady_clock::now();
     while (true) {
       // check if it is beyond kProcTimeout
@@ -693,7 +696,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
       if (auto* link = std::get_if<Link>(&req.value())) {
-        if (link->getLinkName() == ifName and link->isUp() == isUp) {
+        if (link->getLinkName() == ifName and link->isUp() == isUp and
+            link->getLinkKind().value_or("") == kind) {
           return;
         }
       }
@@ -709,8 +713,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
     bringDownIntf(kVethNameX);
     bringDownIntf(kVethNameY);
 
-    waitForLinkEvent(kVethNameX, false);
-    waitForLinkEvent(kVethNameY, false);
+    waitForLinkEvent(kVethNameX, false, kVethKind);
+    waitForLinkEvent(kVethNameY, false, kVethKind);
   }
 
   {
@@ -720,8 +724,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
 
-    waitForLinkEvent(kVethNameX, true);
-    waitForLinkEvent(kVethNameX, true);
+    waitForLinkEvent(kVethNameX, true, kVethKind);
+    waitForLinkEvent(kVethNameX, true, kVethKind);
   }
 }
 

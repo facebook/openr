@@ -95,10 +95,6 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   // inherited class implementation
   void rcvdRoute(Route&& route) override;
 
-  // parse IP address
-  static folly::Expected<folly::IPAddress, folly::IPAddressFormatError> parseIp(
-      const struct rtattr* ipAttr, unsigned char family);
-
   // process netlink next hops
   static std::vector<NextHop> parseNextHops(
       const struct rtattr* routeAttrMultipath, unsigned char family);
