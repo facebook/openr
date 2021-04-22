@@ -24,7 +24,9 @@ namespace detail {
 static void
 setCompressionTransform(apache::thrift::HeaderClientChannel* channel) {
   CHECK(channel);
-  channel->setTransform(apache::thrift::transport::THeader::ZSTD_TRANSFORM);
+  apache::thrift::CompressionConfig compressionConfig;
+  compressionConfig.codecConfig_ref().ensure().set_zstdConfig();
+  channel->setDesiredCompressionConfig(compressionConfig);
 }
 
 static void
