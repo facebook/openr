@@ -61,6 +61,10 @@ class NetlinkLinkMessage final : public NetlinkMessageBase {
   // parse Netlink Link message
   static Link parseMessage(const struct nlmsghdr* nlh);
 
+  int addLink(const Link& link);
+
+  int deleteLink(const Link& link);
+
  private:
   // inherited class implementation
   void rcvdLink(Link&& link) override;
@@ -72,6 +76,13 @@ class NetlinkLinkMessage final : public NetlinkMessageBase {
   // get gre info from IFLA_INFO_DATA
   static std::optional<GreInfo> parseInfoData(
       const struct rtattr* attr, unsigned char family);
+
+  // add IFLA_LINKINFO
+  int addLinkInfo(const Link& link);
+
+  // add sub-attributes to IFLA_LINKINFO
+  int addLinkInfoSubAttrs(
+      std::array<char, kMaxNlPayloadSize>& linkInfo, const Link& link) const;
 
   //
   // Private variables for rtnetlink msg exchange

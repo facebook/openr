@@ -150,6 +150,20 @@ class NetlinkProtocolSocket : public folly::EventHandler {
       const openr::fbnl::IfAddress& ifAddr);
 
   /**
+   * Add a network interface
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> addLink(const openr::fbnl::Link& link);
+
+  /**
+   * Delete a network interface
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> deleteLink(const openr::fbnl::Link& link);
+
+  /**
    * API to get interfaces from kernel
    */
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>

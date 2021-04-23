@@ -1993,6 +1993,116 @@ TEST_F(NlMessageFixture, MplsUcmpError) {
   }
 }
 
+/*
+ * Verifies link add/delete API
+ * Requires GRE module, modprobe ip_gre, modprobe ip6_gre
+ */
+TEST_F(NlMessageFixture, LinkAddDelete) {
+  auto getLinkMap = [&]() {
+    auto links = nlSock->getAllLinks().get().value();
+    std::unordered_map<std::string, openr::fbnl::Link> nameToLink;
+    for (const auto& link : links) {
+      nameToLink[link.getLinkName()] = link;
+    }
+    return nameToLink;
+  };
+
+  uint32_t ackCount{0};
+
+  {
+    // initial state, should have kVethNameX, kVethNameY, state up
+    auto linkMap = getLinkMap();
+    ASSERT_TRUE(linkMap.count(kVethNameX));
+    auto vethX = linkMap.at(kVethNameX);
+    EXPECT_TRUE(vethX.isUp());
+    ASSERT_TRUE(linkMap.count(kVethNameY));
+    auto vethY = linkMap.at(kVethNameY);
+    EXPECT_TRUE(vethY.isUp());
+  }
+
+  // Test gre interfaces
+  {
+    const auto kLocalAddr = folly::IPAddress("192.0.2.0");
+    const auto kRemoteAddr = folly::IPAddress("192.0.2.1");
+    const std::string kGreName{"greTest"};
+    const GreInfo greInfo(kLocalAddr, kRemoteAddr, 64);
+    const auto greLink = LinkBuilder()
+                             .setLinkName(kGreName)
+                             .setLinkKind("gre")
+                             .setGreInfo(greInfo)
+                             .setFlags(IFF_UP)
+                             .build();
+    // cleanup old interface if any
+    deleteIntfPair(kGreName);
+    auto linkMap = getLinkMap();
+    EXPECT_FALSE(linkMap.count(kGreName));
+
+    // add link
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addLink(greLink).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+    linkMap = getLinkMap();
+    ASSERT_TRUE(linkMap.count(kGreName));
+    const auto actualGreLink = linkMap.at(kGreName);
+    EXPECT_EQ("gre", actualGreLink.getLinkKind());
+    EXPECT_EQ(kLocalAddr, actualGreLink.getGreInfo()->getLocalAddr());
+    EXPECT_EQ(kRemoteAddr, actualGreLink.getGreInfo()->getRemoteAddr());
+    EXPECT_EQ(64, actualGreLink.getGreInfo()->getTtl());
+    // link is up
+    EXPECT_TRUE(actualGreLink.isUp());
+
+    // delete link
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->deleteLink(greLink).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+    linkMap = getLinkMap();
+    EXPECT_FALSE(linkMap.count(kGreName));
+  }
+
+  // Test ipv6 gre interfaces
+  {
+    const auto kLocalAddr = folly::IPAddress("2001:DB8::1");
+    const auto kRemoteAddr = folly::IPAddress("2001:DB8::2");
+    const std::string kGreV6Name{"greV6Test"};
+    const GreInfo greInfo(kLocalAddr, kRemoteAddr, 64);
+    const auto greLink = LinkBuilder()
+                             .setLinkName(kGreV6Name)
+                             .setLinkKind("ip6gre")
+                             .setGreInfo(greInfo)
+                             .setFlags(IFF_UP)
+                             .build();
+    // cleanup old interface if any
+    deleteIntfPair(kGreV6Name);
+    auto linkMap = getLinkMap();
+    EXPECT_FALSE(linkMap.count(kGreV6Name));
+
+    // add link
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->addLink(greLink).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+    linkMap = getLinkMap();
+    ASSERT_TRUE(linkMap.count(kGreV6Name));
+    const auto actualGreLink = linkMap.at(kGreV6Name);
+    EXPECT_EQ("ip6gre", actualGreLink.getLinkKind());
+    EXPECT_EQ(kLocalAddr, actualGreLink.getGreInfo()->getLocalAddr());
+    EXPECT_EQ(kRemoteAddr, actualGreLink.getGreInfo()->getRemoteAddr());
+    EXPECT_EQ(64, actualGreLink.getGreInfo()->getTtl());
+    // link is up
+    EXPECT_TRUE(actualGreLink.isUp());
+
+    // delete link
+    ackCount = getAckCount();
+    EXPECT_EQ(0, nlSock->deleteLink(greLink).get());
+    EXPECT_EQ(0, getErrorCount());
+    EXPECT_GE(getAckCount(), ackCount + 1);
+    linkMap = getLinkMap();
+    EXPECT_FALSE(linkMap.count(kGreV6Name));
+  }
+}
+
 class NlMessageFixtureV4OrV6 : public NlMessageFixture,
                                public testing::WithParamInterface<bool> {};
 

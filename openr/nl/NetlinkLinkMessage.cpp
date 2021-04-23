@@ -52,6 +52,12 @@ NetlinkLinkMessage::init(int type, uint32_t linkFlags) {
     msghdr_->nlmsg_flags |= NLM_F_DUMP;
   }
 
+  if (type == RTM_NEWLINK) {
+    // We create new link or replace existing
+    msghdr_->nlmsg_flags |= NLM_F_CREATE;
+    msghdr_->nlmsg_flags |= NLM_F_REPLACE;
+  }
+
   // intialize the route link message header
   auto nlmsgAlen = NLMSG_ALIGN(sizeof(struct nlmsghdr));
   ifinfomsg_ = reinterpret_cast<struct ifinfomsg*>((char*)msghdr_ + nlmsgAlen);
@@ -165,6 +171,123 @@ NetlinkLinkMessage::parseInfoData(
   }
 
   return greInfo;
+}
+
+int
+NetlinkLinkMessage::addLink(const Link& link) {
+  init(RTM_NEWLINK, link.getFlags());
+
+  int status{0};
+  if ((status = addAttributes(
+           IFLA_IFNAME,
+           link.getLinkName().c_str(),
+           link.getLinkName().length()))) {
+    return status;
+  }
+  if ((status = addLinkInfo(link))) {
+    return status;
+  }
+
+  return 0;
+}
+
+int
+NetlinkLinkMessage::addLinkInfo(const Link& link) {
+  std::array<char, kMaxNlPayloadSize> linkInfo = {};
+  int status{0};
+  if (!link.getLinkKind().has_value()) {
+    return 0;
+  }
+  struct rtattr* rta = reinterpret_cast<struct rtattr*>(linkInfo.data());
+  // init linkinfo
+  rta->rta_type = IFLA_LINKINFO;
+  rta->rta_len = RTA_LENGTH(0);
+  if ((status = addLinkInfoSubAttrs(linkInfo, link))) {
+    return status;
+  }
+
+  const char* const data = reinterpret_cast<const char*>(
+      RTA_DATA(reinterpret_cast<struct rtattr*>(linkInfo.data())));
+  int payloadLen =
+      RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(linkInfo.data()));
+  if ((status = addAttributes(IFLA_LINKINFO, data, payloadLen))) {
+    return status;
+  }
+
+  return 0;
+}
+
+int
+NetlinkLinkMessage::addLinkInfoSubAttrs(
+    std::array<char, kMaxNlPayloadSize>& linkInfo, const Link& link) const {
+  struct rtattr* rta = reinterpret_cast<struct rtattr*>(linkInfo.data());
+
+  if (addSubAttributes(
+          rta,
+          IFLA_INFO_KIND,
+          link.getLinkKind()->c_str(),
+          link.getLinkKind()->length()) == nullptr) {
+    return ENOBUFS;
+  }
+
+  const auto greInfo = link.getGreInfo();
+  if (greInfo.has_value()) {
+    // init sub attribute
+    std::array<char, kMaxNlPayloadSize> linkInfoData = {};
+    struct rtattr* subRta =
+        reinterpret_cast<struct rtattr*>(linkInfoData.data());
+    subRta->rta_type = IFLA_INFO_DATA;
+    subRta->rta_len = RTA_LENGTH(0);
+
+    const auto localAddr = greInfo->getLocalAddr();
+    const auto remoteAddr = greInfo->getRemoteAddr();
+    const auto ttl = greInfo->getTtl();
+    if (addSubAttributes(
+            subRta, IFLA_GRE_LOCAL, localAddr.bytes(), localAddr.byteCount()) ==
+        nullptr) {
+      return ENOBUFS;
+    }
+    if (addSubAttributes(
+            subRta,
+            IFLA_GRE_REMOTE,
+            remoteAddr.bytes(),
+            remoteAddr.byteCount()) == nullptr) {
+      return ENOBUFS;
+    }
+    if (addSubAttributes(
+            subRta,
+            IFLA_GRE_TTL,
+            reinterpret_cast<const char*>(&ttl),
+            sizeof(uint8_t)) == nullptr) {
+      return ENOBUFS;
+    }
+
+    // add to parent rta
+    const char* const data = reinterpret_cast<const char*>(
+        RTA_DATA(reinterpret_cast<struct rtattr*>(linkInfoData.data())));
+    int payloadLen =
+        RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(linkInfoData.data()));
+    if (addSubAttributes(rta, IFLA_INFO_DATA, data, payloadLen) == nullptr) {
+      return ENOBUFS;
+    }
+  }
+
+  return 0;
+}
+
+int
+NetlinkLinkMessage::deleteLink(const Link& link) {
+  init(RTM_DELLINK, 0);
+
+  int status{0};
+  if ((status = addAttributes(
+           IFLA_IFNAME,
+           link.getLinkName().c_str(),
+           link.getLinkName().length()))) {
+    return status;
+  }
+
+  return 0;
 }
 
 } // namespace openr::fbnl
