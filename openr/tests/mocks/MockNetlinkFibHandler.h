@@ -9,6 +9,7 @@
 
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include "openr/if/gen-cpp2/Platform_types.h"
 
 namespace openr {
 
@@ -109,6 +110,11 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
     return delMplsRoutesCount_;
   }
 
+  void
+  setHandlerHealthyState(bool isHealthy) {
+    isHealthy_ = isHealthy;
+  }
+
   void stop();
 
   void restart();
@@ -132,6 +138,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   std::atomic<size_t> fibMplsSyncCount_{0};
   std::atomic<size_t> addMplsRoutesCount_{0};
   std::atomic<size_t> delMplsRoutesCount_{0};
+  std::atomic<bool> isHealthy_{true};
 
   // A baton for synchronization
   folly::Baton<> updateUnicastRoutesBaton_;

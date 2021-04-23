@@ -34,9 +34,9 @@ Fib::Fib(
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
       syncRoutesExpBackoff_(
-          Constants::kFibSyncInitialBackoff,
-          Constants::kFibSyncMaxBackoff,
-          false),
+          Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
+      syncStaticRoutesExpBackoff_(
+          Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       fibUpdatesQueue_(fibUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
   auto tConfig = config->getConfig();
@@ -103,6 +103,34 @@ Fib::Fib(
     }
   });
 
+  syncStaticRoutesTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+        if (routeState_.hasRoutesFromDecision or
+            not routeState_.hasStaticMplsRoutes) {
+          LOG(INFO) << "Terminating syncStaticRoutesTimer_.";
+          return;
+        }
+
+        DecisionRouteUpdate routeUpdate;
+        std::transform(
+            routeState_.mplsRoutes.cbegin(),
+            routeState_.mplsRoutes.cend(),
+            std::back_inserter(routeUpdate.mplsRoutesToUpdate),
+            [](auto& iter) { return iter.second; });
+
+        if (updateRoutes(std::move(routeUpdate), true /* static routes */)) {
+          syncStaticRoutesExpBackoff_.reportSuccess();
+        } else {
+          // Apply exponential backoff and schedule next run
+          syncStaticRoutesExpBackoff_.reportError();
+          const auto period =
+              syncStaticRoutesExpBackoff_.getTimeRemainingUntilRetry();
+          LOG(INFO) << "Scheduling re-programming static MPLS routes after "
+                    << period.count() << "ms";
+          syncStaticRoutesTimer_->scheduleTimeout(period);
+        }
+      });
+
   // Fiber to process and program static route updates.
   // - The routes are only programmed and updated but not deleted
   // - Updates arriving before first Decision RIB update will be processed. The
@@ -125,8 +153,18 @@ Fib::Fib(
       maybeThriftPub->unicastRoutesToDelete.clear();
       maybeThriftPub->mplsRoutesToDelete.clear();
 
+      // Backup static MPLS routes. In case of update Routes failed, later
+      // scheduled syncStaticRoutesTimer_ will retry programming the routes.
+      routeState_.hasStaticMplsRoutes = true;
+      backupRouteState(maybeThriftPub.value());
+
       // Program received static route updates
-      updateRoutes(std::move(maybeThriftPub).value(), true /* static routes */);
+      if (not updateRoutes(
+              std::move(maybeThriftPub).value(), true /* static routes */)) {
+        // If failed, trigger syncStaticRoutesTimer_ to retry programming of
+        // static MPLS routes.
+        syncStaticRoutesTimer_->scheduleTimeout(Constants::kFibInitialBackoff);
+      }
     }
   });
 

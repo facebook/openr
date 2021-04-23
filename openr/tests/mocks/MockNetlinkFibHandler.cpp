@@ -12,6 +12,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
+#include <unistd.h>
 
 using folly::gen::as;
 using folly::gen::from;
@@ -28,6 +29,9 @@ MockNetlinkFibHandler::MockNetlinkFibHandler()
 void
 MockNetlinkFibHandler::addUnicastRoute(
     int16_t, std::unique_ptr<openr::thrift::UnicastRoute> route) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(unicastRouteDb_) {
     auto prefix = std::make_pair(
         toIPAddress(*(*route).dest_ref()->prefixAddress_ref()),
@@ -48,6 +52,9 @@ MockNetlinkFibHandler::addUnicastRoute(
 void
 MockNetlinkFibHandler::deleteUnicastRoute(
     int16_t, std::unique_ptr<openr::thrift::IpPrefix> prefix) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(unicastRouteDb_) {
     VLOG(3) << "Deleting routes of prefix" << toString(*prefix);
     auto myPrefix = std::make_pair(
@@ -61,6 +68,9 @@ MockNetlinkFibHandler::deleteUnicastRoute(
 void
 MockNetlinkFibHandler::addUnicastRoutes(
     int16_t, std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(unicastRouteDb_) {
     for (auto const& route : *routes) {
       auto prefix = std::make_pair(
@@ -85,6 +95,9 @@ MockNetlinkFibHandler::addUnicastRoutes(
 void
 MockNetlinkFibHandler::deleteUnicastRoutes(
     int16_t, std::unique_ptr<std::vector<openr::thrift::IpPrefix>> prefixes) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(unicastRouteDb_) {
     for (auto const& prefix : *prefixes) {
       auto myPrefix = std::make_pair(
@@ -100,6 +113,9 @@ MockNetlinkFibHandler::deleteUnicastRoutes(
 void
 MockNetlinkFibHandler::syncFib(
     int16_t, std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(unicastRouteDb_) {
     VLOG(3) << "MockNetlinkFibHandler: Sync Fib.... " << (*routes).size()
             << " entries";
@@ -127,6 +143,9 @@ MockNetlinkFibHandler::syncFib(
 void
 MockNetlinkFibHandler::addMplsRoutes(
     int16_t, std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(mplsRouteDb_) {
     for (auto& route : *routes) {
       mplsRouteDb_[*route.topLabel_ref()] = std::move(*route.nextHops_ref());
@@ -139,6 +158,9 @@ MockNetlinkFibHandler::addMplsRoutes(
 void
 MockNetlinkFibHandler::deleteMplsRoutes(
     int16_t, std::unique_ptr<std::vector<int32_t>> labels) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(mplsRouteDb_) {
     for (auto& label : *labels) {
       mplsRouteDb_.erase(label);
@@ -151,6 +173,9 @@ MockNetlinkFibHandler::deleteMplsRoutes(
 void
 MockNetlinkFibHandler::syncMplsFib(
     int16_t, std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) {
+  if (not isHealthy_) {
+    throw std::runtime_error("Handler rejects routes since it is unhealthy");
+  }
   SYNCHRONIZED(mplsRouteDb_) {
     mplsRouteDb_.clear();
     for (auto& route : *routes) {

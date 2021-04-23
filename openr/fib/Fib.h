@@ -199,6 +199,9 @@ class Fib final : public OpenrEventBase {
     // routes to sync. Will not synce routes with system until this is set.
     bool hasRoutesFromDecision{false};
 
+    // Indicates whether we've received static MPLS routes.
+    bool hasStaticMplsRoutes{false};
+
     // Flag to indicate the result of previous route programming attempt.
     // If set, it means what currently cached in local routes has not been 100%
     // successfully synced with agent, we have to trigger an enforced full fib
@@ -237,6 +240,9 @@ class Fib final : public OpenrEventBase {
   // failure. ExponentialBackoff timer to ease up things if they go wrong
   std::unique_ptr<folly::AsyncTimeout> syncRoutesTimer_{nullptr};
   ExponentialBackoff<std::chrono::milliseconds> syncRoutesExpBackoff_;
+
+  std::unique_ptr<folly::AsyncTimeout> syncStaticRoutesTimer_{nullptr};
+  ExponentialBackoff<std::chrono::milliseconds> syncStaticRoutesExpBackoff_;
 
   // periodically send alive msg to switch agent
   std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
