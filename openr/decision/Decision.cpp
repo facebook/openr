@@ -158,225 +158,45 @@ DecisionRouteDb::update(DecisionRouteUpdate const& update) {
   }
 }
 
-/**
- * Private implementation of the SpfSolver
- */
-class SpfSolver::SpfSolverImpl {
- public:
-  SpfSolverImpl(
-      const std::string& myNodeName,
-      bool enableV4,
-      bool enableAdjacencyLabels,
-      bool bgpDryRun,
-      bool enableBestRouteSelection,
-      bool v4OverV6Nexthop)
-      : myNodeName_(myNodeName),
-        enableV4_(enableV4),
-        enableAdjacencyLabels_(enableAdjacencyLabels),
-        bgpDryRun_(bgpDryRun),
-        enableBestRouteSelection_(enableBestRouteSelection),
-        v4OverV6Nexthop_(v4OverV6Nexthop) {
-    // Initialize stat keys
-    fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
-    fb303::fbData->addStatExportType(
-        "decision.incompatible_forwarding_type", fb303::COUNT);
-    fb303::fbData->addStatExportType(
-        "decision.no_route_to_label", fb303::COUNT);
-    fb303::fbData->addStatExportType(
-        "decision.no_route_to_prefix", fb303::COUNT);
-    fb303::fbData->addStatExportType("decision.path_build_ms", fb303::AVG);
-    fb303::fbData->addStatExportType("decision.prefix_db_update", fb303::COUNT);
-    fb303::fbData->addStatExportType("decision.route_build_ms", fb303::AVG);
-    fb303::fbData->addStatExportType("decision.route_build_runs", fb303::COUNT);
-    fb303::fbData->addStatExportType(
-        "decision.get_route_for_prefix", fb303::COUNT);
-    fb303::fbData->addStatExportType(
-        "decision.skipped_mpls_route", fb303::COUNT);
-    fb303::fbData->addStatExportType(
-        "decision.duplicate_node_label", fb303::COUNT);
-    fb303::fbData->addStatExportType(
-        "decision.skipped_unicast_route", fb303::COUNT);
-    fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
-    fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
-    fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
-  }
+SpfSolver::SpfSolver(
+    const std::string& myNodeName,
+    bool enableV4,
+    bool enableAdjacencyLabels,
+    bool bgpDryRun,
+    bool enableBestRouteSelection,
+    bool v4OverV6Nexthop)
+    : myNodeName_(myNodeName),
+      enableV4_(enableV4),
+      enableAdjacencyLabels_(enableAdjacencyLabels),
+      bgpDryRun_(bgpDryRun),
+      enableBestRouteSelection_(enableBestRouteSelection),
+      v4OverV6Nexthop_(v4OverV6Nexthop) {
+  // Initialize stat keys
+  fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "decision.incompatible_forwarding_type", fb303::COUNT);
+  fb303::fbData->addStatExportType("decision.no_route_to_label", fb303::COUNT);
+  fb303::fbData->addStatExportType("decision.no_route_to_prefix", fb303::COUNT);
+  fb303::fbData->addStatExportType("decision.path_build_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("decision.prefix_db_update", fb303::COUNT);
+  fb303::fbData->addStatExportType("decision.route_build_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("decision.route_build_runs", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "decision.get_route_for_prefix", fb303::COUNT);
+  fb303::fbData->addStatExportType("decision.skipped_mpls_route", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "decision.duplicate_node_label", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "decision.skipped_unicast_route", fb303::COUNT);
+  fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
+  fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
+}
 
-  ~SpfSolverImpl() = default;
-
-  //
-  // util function to update IP/MPLS static route
-  //
-
-  void updateStaticUnicastRoutes(
-      const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
-      const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
-
-  void updateStaticMplsRoutes(
-      const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
-      const std::vector<int32_t>& mplsRoutesToDelete);
-
-  //
-  // best path calculation
-  //
-
-  // Build route database using global prefix database and cached SPF
-  // computation from perspective of a given router.
-  // Returns std::nullopt if myNodeName doesn't have any prefix database
-  std::optional<DecisionRouteDb> buildRouteDb(
-      const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixState const& prefixState);
-
-  std::optional<RibUnicastEntry> createRouteForPrefixOrGetStaticRoute(
-      const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixState const& prefixState,
-      folly::CIDRNetwork const& prefix);
-
-  std::optional<RibUnicastEntry> createRouteForPrefix(
-      const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixState const& prefixState,
-      folly::CIDRNetwork const& prefix);
-
-  std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult> const&
-  getBestRoutesCache() const {
-    return bestRoutesCache_;
-  }
-
-  // helpers used in best path calculation
-  static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
-      const SpfResult& spfResult, const std::set<NodeAndArea>& dstNodeAreas);
-
-  // spf counters
-  void updateGlobalCounters();
-
- private:
-  // no copy
-  SpfSolverImpl(SpfSolverImpl const&) = delete;
-  SpfSolverImpl& operator=(SpfSolverImpl const&) = delete;
-
-  // Given prefixes and the nodes who announce it, get the ecmp routes.
-  std::optional<RibUnicastEntry> selectBestPathsSpf(
-      std::string const& myNodeName,
-      folly::CIDRNetwork const& prefix,
-      BestRouteSelectionResult const& bestRouteSelectionResult,
-      PrefixEntries const& prefixEntries,
-      bool const isBgp,
-      thrift::PrefixForwardingType const& forwardingType,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixState const& prefixState);
-
-  // Given prefixes and the nodes who announce it, get the kspf routes.
-  std::optional<RibUnicastEntry> selectBestPathsKsp2(
-      const std::string& myNodeName,
-      const folly::CIDRNetwork& prefix,
-      BestRouteSelectionResult const& bestRouteSelectionResult,
-      PrefixEntries const& prefixEntries,
-      bool isBgp,
-      thrift::PrefixForwardingType const& forwardingType,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixState const& prefixState);
-
-  std::optional<RibUnicastEntry> addBestPaths(
-      const std::string& myNodeName,
-      const folly::CIDRNetwork& prefixThrift,
-      const BestRouteSelectionResult& bestRouteSelectionResult,
-      const PrefixEntries& prefixEntries,
-      const PrefixState& prefixState,
-      const bool isBgp,
-      std::unordered_set<thrift::NextHopThrift>&& nextHops);
-
-  // helper function to find the nodes for the nexthop for bgp route
-  BestRouteSelectionResult runBestPathSelectionBgp(
-      std::string const& myNodeName,
-      folly::CIDRNetwork const& prefix,
-      PrefixEntries const& prefixEntries,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates);
-
-  /**
-   * Performs best route selection from received route announcements
-   */
-  BestRouteSelectionResult selectBestRoutes(
-      std::string const& myNodeName,
-      folly::CIDRNetwork const& prefix,
-      PrefixEntries const& prefixEntries,
-      bool const hasBgp,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates);
-
-  // helper to get min nexthop for a prefix, used in selectKsp2
-  std::optional<int64_t> getMinNextHopThreshold(
-      BestRouteSelectionResult nodes, PrefixEntries const& prefixEntries);
-
-  // Helper to filter overloaded nodes for anycast addresses
-  //
-  // TODO: This should go away, once Open/R policy is in place. The overloaded
-  // nodes will stop advertising specific prefixes if they're overloaded
-  BestRouteSelectionResult maybeFilterDrainedNodes(
-      BestRouteSelectionResult&& result,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
-
-  // Give source node-name and dstNodeNames, this function returns the set of
-  // nexthops towards these set of dstNodeNames
-  std::pair<
-      Metric /* minimum metric to destination */,
-      std::unordered_map<
-          std::pair<std::string /* nextHopNodeName */, std::string /* dest */>,
-          Metric /* the distance from the nexthop to the dest */>>
-  getNextHopsWithMetric(
-      const std::string& srcNodeName,
-      const std::set<NodeAndArea>& dstNodeAreas,
-      bool perDestination,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates);
-
-  // This function converts best nexthop nodes to best nexthop adjacencies
-  // which can then be passed to FIB for programming. It considers and
-  // parallel link logic (tested by our UT)
-  // If swap label is provided then it will be used to associate SWAP or PHP
-  // mpls action
-  std::unordered_set<thrift::NextHopThrift> getNextHopsThrift(
-      const std::string& myNodeName,
-      const std::set<NodeAndArea>& dstNodeAreas,
-      bool isV4,
-      bool v4OverV6Nexthop,
-      bool perDestination,
-      const Metric minMetric,
-      std::unordered_map<std::pair<std::string, std::string>, Metric>
-          nextHopNodes,
-      std::optional<int32_t> swapLabel,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixEntries const& prefixEntries = {}) const;
-
-  // Collection to store static IP/MPLS routes
-  StaticMplsRoutes staticMplsRoutes_;
-  StaticUnicastRoutes staticUnicastRoutes_;
-
-  // Cache of best route selection.
-  // - Cleared when topology changes
-  // - Updated for the prefix whenever a route is created for it
-  std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult>
-      bestRoutesCache_;
-
-  const std::string myNodeName_;
-
-  // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
-  // nexthops to Fib module for programming. Else it will just drop them.
-  const bool enableV4_{false};
-
-  const bool enableAdjacencyLabels_{true};
-
-  const bool bgpDryRun_{false};
-
-  const bool enableBestRouteSelection_{false};
-
-  // is v4 over v6 nexthop enabled. If yes then Decision will forward v4
-  // prefixes with v6 nexthops to Fib module for programming. Else it will just
-  // use v4 over v4 nexthop.
-  const bool v4OverV6Nexthop_{false};
-};
+SpfSolver::~SpfSolver() = default;
 
 void
-SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
+SpfSolver::updateStaticUnicastRoutes(
     const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
@@ -406,7 +226,7 @@ SpfSolver::SpfSolverImpl::updateStaticUnicastRoutes(
 }
 
 void
-SpfSolver::SpfSolverImpl::updateStaticMplsRoutes(
+SpfSolver::updateStaticMplsRoutes(
     const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
     const std::vector<int32_t>& mplsRoutesToDelete) {
   // Process MPLS routes to add or update
@@ -434,7 +254,7 @@ SpfSolver::SpfSolverImpl::updateStaticMplsRoutes(
 }
 
 std::optional<RibUnicastEntry>
-SpfSolver::SpfSolverImpl::createRouteForPrefixOrGetStaticRoute(
+SpfSolver::createRouteForPrefixOrGetStaticRoute(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
@@ -455,7 +275,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefixOrGetStaticRoute(
 }
 
 std::optional<RibUnicastEntry>
-SpfSolver::SpfSolverImpl::createRouteForPrefix(
+SpfSolver::createRouteForPrefix(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
@@ -628,7 +448,7 @@ SpfSolver::SpfSolverImpl::createRouteForPrefix(
 }
 
 std::optional<DecisionRouteDb>
-SpfSolver::SpfSolverImpl::buildRouteDb(
+SpfSolver::buildRouteDb(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState) {
@@ -808,7 +628,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(
 } // buildRouteDb
 
 BestRouteSelectionResult
-SpfSolver::SpfSolverImpl::selectBestRoutes(
+SpfSolver::selectBestRoutes(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries,
@@ -838,7 +658,7 @@ SpfSolver::SpfSolverImpl::selectBestRoutes(
 }
 
 std::optional<int64_t>
-SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
+SpfSolver::getMinNextHopThreshold(
     BestRouteSelectionResult nodes, PrefixEntries const& prefixEntries) {
   std::optional<int64_t> maxMinNexthopForPrefix = std::nullopt;
   for (const auto& nodeArea : nodes.allNodeAreas) {
@@ -854,7 +674,7 @@ SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
 }
 
 BestRouteSelectionResult
-SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
+SpfSolver::maybeFilterDrainedNodes(
     BestRouteSelectionResult&& result,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
   BestRouteSelectionResult filtered = folly::copy(result);
@@ -878,7 +698,7 @@ SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
 }
 
 BestRouteSelectionResult
-SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
+SpfSolver::runBestPathSelectionBgp(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries,
@@ -918,7 +738,7 @@ SpfSolver::SpfSolverImpl::runBestPathSelectionBgp(
 }
 
 std::optional<RibUnicastEntry>
-SpfSolver::SpfSolverImpl::selectBestPathsSpf(
+SpfSolver::selectBestPathsSpf(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     BestRouteSelectionResult const& bestRouteSelectionResult,
@@ -980,7 +800,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsSpf(
 }
 
 std::optional<RibUnicastEntry>
-SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
+SpfSolver::selectBestPathsKsp2(
     const std::string& myNodeName,
     const folly::CIDRNetwork& prefix,
     BestRouteSelectionResult const& bestRouteSelectionResult,
@@ -1105,7 +925,7 @@ SpfSolver::SpfSolverImpl::selectBestPathsKsp2(
 }
 
 std::optional<RibUnicastEntry>
-SpfSolver::SpfSolverImpl::addBestPaths(
+SpfSolver::addBestPaths(
     const std::string& myNodeName,
     const folly::CIDRNetwork& prefixThrift,
     const BestRouteSelectionResult& bestRouteSelectionResult,
@@ -1168,7 +988,7 @@ SpfSolver::SpfSolverImpl::addBestPaths(
 }
 
 std::pair<Metric, std::unordered_set<std::string>>
-SpfSolver::SpfSolverImpl::getMinCostNodes(
+SpfSolver::getMinCostNodes(
     const SpfResult& spfResult, const std::set<NodeAndArea>& dstNodeAreas) {
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
@@ -1197,7 +1017,7 @@ std::pair<
     std::unordered_map<
         std::pair<std::string /* nextHopNodeName */, std::string /* dstNode */>,
         Metric /* the distance from the nexthop to the dest */>>
-SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
+SpfSolver::getNextHopsWithMetric(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
     bool perDestination,
@@ -1248,7 +1068,7 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
 // TODO Let's use strong-types for the bools to detect any abusement at the
 // building time.
 std::unordered_set<thrift::NextHopThrift>
-SpfSolver::SpfSolverImpl::getNextHopsThrift(
+SpfSolver::getNextHopsThrift(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
@@ -1352,65 +1172,6 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
     } // end for linkState ...
   }
   return nextHops;
-}
-
-//
-// Public SpfSolver
-//
-
-SpfSolver::SpfSolver(
-    const std::string& myNodeName,
-    bool enableV4,
-    bool enableAdjacencyLabels,
-    bool bgpDryRun,
-    bool enableBestRouteSelection,
-    bool v4OverV6Nexthop)
-    : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName,
-          enableV4,
-          enableAdjacencyLabels,
-          bgpDryRun,
-          enableBestRouteSelection,
-          v4OverV6Nexthop)) {}
-
-SpfSolver::~SpfSolver() {}
-
-void
-SpfSolver::updateStaticUnicastRoutes(
-    const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
-    const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
-  return impl_->updateStaticUnicastRoutes(
-      unicastRoutesToUpdate, unicastRoutesToDelete);
-}
-
-void
-SpfSolver::updateStaticMplsRoutes(
-    const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
-    const std::vector<int32_t>& mplsRoutesToDelete) {
-  return impl_->updateStaticMplsRoutes(mplsRoutesToUpdate, mplsRoutesToDelete);
-}
-
-std::optional<RibUnicastEntry>
-SpfSolver::createRouteForPrefixOrGetStaticRoute(
-    const std::string& myNodeName,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates,
-    PrefixState const& prefixState,
-    folly::CIDRNetwork const& prefix) {
-  return impl_->createRouteForPrefixOrGetStaticRoute(
-      myNodeName, areaLinkStates, prefixState, prefix);
-}
-
-std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult> const&
-SpfSolver::getBestRoutesCache() const {
-  return impl_->getBestRoutesCache();
-}
-
-std::optional<DecisionRouteDb>
-SpfSolver::buildRouteDb(
-    const std::string& myNodeName,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates,
-    PrefixState const& prefixState) {
-  return impl_->buildRouteDb(myNodeName, areaLinkStates, prefixState);
 }
 
 //
