@@ -555,8 +555,7 @@ SpfSolver::selectBestRoutes(
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
     ret.success = true;
   } else if (isBgp) {
-    ret = runBestPathSelectionBgp(
-        myNodeName, prefix, prefixEntries, areaLinkStates);
+    ret = runBestPathSelectionBgp(prefix, prefixEntries, areaLinkStates);
   } else {
     // If it is openr route, all nodes are considered as best nodes.
     for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
@@ -611,14 +610,12 @@ SpfSolver::maybeFilterDrainedNodes(
 
 BestRouteSelectionResult
 SpfSolver::runBestPathSelectionBgp(
-    std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   BestRouteSelectionResult ret;
   std::optional<thrift::MetricVector> bestVector;
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-    auto const& [nodeName, area] = nodeAndArea;
     switch (bestVector.has_value()
                 ? MetricVectorUtils::compareMetricVectors(
                       can_throw(*prefixEntry->mv_ref()), *bestVector)
@@ -696,7 +693,6 @@ SpfSolver::selectBestPathsSpf(
       prefix,
       bestRouteSelectionResult,
       prefixEntries,
-      prefixState,
       isBgp,
       getNextHopsThrift(
           myNodeName,
@@ -831,7 +827,6 @@ SpfSolver::selectBestPathsKsp2(
       prefix,
       bestRouteSelectionResult,
       prefixEntries,
-      prefixState,
       isBgp,
       std::move(nextHops));
 }
@@ -842,7 +837,6 @@ SpfSolver::addBestPaths(
     const folly::CIDRNetwork& prefixThrift,
     const BestRouteSelectionResult& bestRouteSelectionResult,
     const PrefixEntries& prefixEntries,
-    const PrefixState& prefixState,
     const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops) {
   const auto prefix = prefixThrift;
