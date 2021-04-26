@@ -102,7 +102,8 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   rtmsg_ = reinterpret_cast<struct rtmsg*>((char*)msghdr_ + nlmsgAlen);
 
   // Initialize values from route object or function params
-  rtmsg_->rtm_table = route.getRouteTable();
+  const int routeTable = route.getRouteTable();
+  rtmsg_->rtm_table = routeTable < 256 ? routeTable : RT_TABLE_COMPAT;
   rtmsg_->rtm_protocol = route.getProtocolId();
   rtmsg_->rtm_scope = route.getScope();
   rtmsg_->rtm_type = route.getType();
@@ -115,6 +116,12 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   if (rtFlag.has_value()) {
     rtmsg_->rtm_flags |= rtFlag.value();
   }
+}
+
+void
+NetlinkRouteMessage::initGet(uint32_t flags, const Route& route) {
+  init(RTM_GETROUTE, flags, route);
+  addRtaTable(route.getRouteTable());
 }
 
 uint32_t
@@ -453,6 +460,12 @@ NetlinkRouteMessage::addMultiPathNexthop(
   return result;
 }
 
+int
+NetlinkRouteMessage::addRtaTable(uint32_t tableId) {
+  return addAttributes(
+      RTA_TABLE, reinterpret_cast<const char*>(&tableId), sizeof(uint32_t));
+}
+
 std::optional<std::vector<int32_t>>
 NetlinkRouteMessage::parseMplsLabels(const struct rtattr* routeAttr) {
   const struct rtattr* mplsAttr =
@@ -632,6 +645,12 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
         }
       }
     } break;
+
+    // 32bit Routing table ID; if set, rtm_table is ignored
+    case RTA_TABLE: {
+      uint32_t table = *(reinterpret_cast<uint32_t*> RTA_DATA(routeAttr));
+      routeBuilder.setRouteTable(table);
+    } break;
     }
   }
 
@@ -731,6 +750,10 @@ NetlinkRouteMessage::addRoute(const Route& route) {
     }
   }
 
+  if ((status = addRtaTable(route.getRouteTable()))) {
+    return status;
+  }
+
   return addNextHops(route);
 }
 
@@ -749,6 +772,12 @@ NetlinkRouteMessage::deleteRoute(const Route& route) {
   rtmsg_->rtm_family = addressFamily;
   rtmsg_->rtm_dst_len = plen; /* netmask */
   const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
+
+  int status{0};
+  if ((status = addRtaTable(route.getRouteTable()))) {
+    return status;
+  }
+
   return addAttributes(RTA_DST, ipptr, ip.byteCount());
 }
 

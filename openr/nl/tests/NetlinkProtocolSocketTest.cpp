@@ -2103,6 +2103,59 @@ TEST_F(NlMessageFixture, LinkAddDelete) {
   }
 }
 
+/*
+ * Validate route table with large id
+ *
+ * Add a route with table id larger than 255, verify that route is added, route
+ * table is set correctly.
+ * Delete the route, verify that route is removed.
+ */
+TEST_F(NlMessageFixture, RouteTableIdTest) {
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network = folly::IPAddress::createNetwork("10.10.0.8/32");
+  const uint32_t kRouteTableId = 1000;
+  std::vector<NextHop> paths;
+  const auto filter = RouteBuilder()
+                          .setProtocolId(kRouteProtoId)
+                          .setRouteTable(kRouteTableId)
+                          .setType(RTN_BLACKHOLE)
+                          .build();
+
+  const auto before = nlSock->getRoutes(filter).get().value();
+
+  // add route
+  const auto route = RouteBuilder()
+                         .setDestination(network)
+                         .setProtocolId(kRouteProtoId)
+                         .setRouteTable(kRouteTableId)
+                         .setType(RTN_BLACKHOLE)
+                         .build();
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+  // verify route is added
+  bool found{false};
+  auto after = nlSock->getRoutes(filter).get().value();
+  for (const auto& r : after) {
+    if (r.getDestination() == network and r.getProtocolId() == kRouteProtoId and
+        r.getType() == RTN_BLACKHOLE and r.getRouteTable() == kRouteTableId) {
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found);
+
+  // delete route
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify route is deleted
+  after = nlSock->getRoutes(filter).get().value();
+  EXPECT_EQ(before.size(), after.size());
+}
+
 class NlMessageFixtureV4OrV6 : public NlMessageFixture,
                                public testing::WithParamInterface<bool> {};
 

@@ -58,12 +58,12 @@ RouteBuilder::getType() const {
 }
 
 RouteBuilder&
-RouteBuilder::setRouteTable(uint8_t routeTable) {
+RouteBuilder::setRouteTable(uint32_t routeTable) {
   routeTable_ = routeTable;
   return *this;
 }
 
-uint8_t
+uint32_t
 RouteBuilder::getRouteTable() const {
   return routeTable_;
 }
@@ -322,7 +322,7 @@ Route::getAdvMss() const {
   return advMss_;
 }
 
-uint8_t
+uint32_t
 Route::getRouteTable() const {
   return routeTable_;
 }

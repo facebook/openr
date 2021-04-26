@@ -172,9 +172,9 @@ class RouteBuilder {
   RouteBuilder& setType(uint8_t type = RTN_UNICAST);
   uint8_t getType() const;
 
-  // [REQUIRED] rtm routeTable_ related methods, default RT_TABLE_MAIN
-  RouteBuilder& setRouteTable(uint8_t routeTable = RT_TABLE_MAIN);
-  uint8_t getRouteTable() const;
+  // [REQUIRED] rtm/rta routeTable_ related methods, default RT_TABLE_MAIN
+  RouteBuilder& setRouteTable(uint32_t routeTable = RT_TABLE_MAIN);
+  uint32_t getRouteTable() const;
 
   // [REQUIRED] rtm protocolId_ related methods, default 99
   RouteBuilder& setProtocolId(uint8_t protocolId = DEFAULT_PROTOCOL_ID);
@@ -232,7 +232,7 @@ class RouteBuilder {
 
  private:
   uint8_t type_{RTN_UNICAST};
-  uint8_t routeTable_{RT_TABLE_MAIN};
+  uint32_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
   uint8_t scope_{RT_SCOPE_UNIVERSE};
   uint8_t family_{AF_UNSPEC};
@@ -267,7 +267,7 @@ class Route final {
 
   uint8_t getType() const;
 
-  uint8_t getRouteTable() const;
+  uint32_t getRouteTable() const;
 
   uint8_t getProtocolId() const;
 
@@ -295,7 +295,7 @@ class Route final {
 
  private:
   uint8_t type_{RTN_UNICAST};
-  uint8_t routeTable_{RT_TABLE_MAIN};
+  uint32_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
   uint8_t scope_{RT_SCOPE_UNIVERSE};
   uint8_t family_{AF_UNSPEC};

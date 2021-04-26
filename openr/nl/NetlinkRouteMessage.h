@@ -73,6 +73,9 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   // initiallize route message with default params
   void init(int type, uint32_t flags, const Route& route);
 
+  // initiallize get route message, with RTA_TABLE set
+  void initGet(uint32_t flags, const Route& route);
+
   // add a unicast route
   int addRoute(const Route& route);
 
@@ -141,6 +144,9 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
       const NextHop& path,
       const Route& route) const;
 
+  // Add attribute RTA_TABLE. MPLS does not allow the table attribute to be set
+  int addRtaTable(uint32_t tableId);
+
   // DO NOT REMOVE - debugging util functions
   static void showRtmMsg(const struct rtmsg* const hdr);
   static void showMultiPathAttributes(const struct rtattr* const rta);
@@ -164,7 +170,7 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   } __attribute__((__packed__));
 
   struct {
-    uint8_t table{0};
+    uint32_t table{0};
     uint8_t protocol{0};
     uint8_t type{0};
   } filters_;

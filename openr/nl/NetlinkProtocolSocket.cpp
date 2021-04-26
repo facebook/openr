@@ -618,7 +618,7 @@ NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
   auto future = routeMsg->getRoutesSemiFuture();
 
   // Initialize message fields to get all addresses
-  routeMsg->init(RTM_GETROUTE, 0, filter);
+  routeMsg->initGet(0, filter);
   notifQueue_.putMessage(std::move(routeMsg));
 
   return future;
