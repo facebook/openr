@@ -8,12 +8,7 @@ import click
 from openr.cli.clis.decision import DecisionRibPolicyCli, ReceivedRoutesCli
 from openr.cli.clis.fib import FibMplsRoutesCli, FibUnicastRoutesCli
 from openr.cli.clis.lm import LMAdjCli, LMLinksCli
-from openr.cli.clis.prefix_mgr import (
-    AdvertisedRoutesCli,
-    PrefilterAdvertisedRoutesCli,
-    PostfilterAdvertisedRoutesCli,
-    RejectedOnAdvertiseRoutesCli,
-)
+from openr.cli.clis.prefix_mgr import AdvertisedRoutesCli
 from openr.cli.commands import openr
 
 
@@ -26,15 +21,6 @@ class OpenrCli(object):
         self.openr.add_command(LMAdjCli().adj, name="neighbors")
         self.openr.add_command(LMLinksCli().links, name="interfaces")
         self.openr.add_command(ReceivedRoutesCli().show, name="received-routes")
-        self.openr.add_command(
-            PrefilterAdvertisedRoutesCli().show, name="prefilter-advertised"
-        )
-        self.openr.add_command(
-            PostfilterAdvertisedRoutesCli().show, name="postfilter-advertised"
-        )
-        self.openr.add_command(
-            RejectedOnAdvertiseRoutesCli().show, name="rejected-on-advertise"
-        )
         self.openr.add_command(VersionCli().version, name="version")
 
     @click.group()
