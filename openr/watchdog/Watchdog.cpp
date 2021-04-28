@@ -17,10 +17,10 @@ Watchdog::Watchdog(std::shared_ptr<const Config> config)
       interval_(*config->getWatchdogConfig().interval_s_ref()),
       threadTimeout_(*config->getWatchdogConfig().thread_timeout_s_ref()),
       maxMemoryMB_(*config->getWatchdogConfig().max_memory_mb_ref()),
-      previousStatus_(true) {
+      isDeadThreadDetected_(false) {
   // Schedule periodic timer for checking thread health
   watchdogTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    updateCounters();
+    monitorThreadStatus();
     monitorMemory();
     // Schedule next timer
     watchdogTimer_->scheduleTimeout(interval_);
@@ -52,8 +52,10 @@ Watchdog::monitorMemory() {
     return;
   }
   if (memInUse_.value() / 1e6 > maxMemoryMB_) {
-    LOG(WARNING) << "Memory usage critical:" << memInUse_.value() << " bytes,"
-                 << " Memory limit:" << maxMemoryMB_ << " MB";
+    LOG(WARNING) << fmt::format(
+        "[Mem Detector] Critical memory usage: {} bytes. Memory limit: {} MB.",
+        memInUse_.value(),
+        maxMemoryMB_);
     if (not memExceedTime_.has_value()) {
       memExceedTime_ = std::chrono::steady_clock::now();
       return;
@@ -61,10 +63,10 @@ Watchdog::monitorMemory() {
     // check for sustained critical memory usage
     if (std::chrono::steady_clock::now() - memExceedTime_.value() >
         Constants::kMemoryThresholdTime) {
-      std::string msg = folly::sformat(
-          "Memory limit exceeded the permitted limit."
-          " Mem used:{}."
-          " Mem Limit:{}",
+      const std::string msg = fmt::format(
+          "[Mem Detector] Memory limit exceeded the permitted limit."
+          " Mem used: {}."
+          " Mem Limit: {}",
           memInUse_.value(),
           maxMemoryMB_);
       fireCrash(msg);
@@ -77,45 +79,39 @@ Watchdog::monitorMemory() {
 }
 
 void
-Watchdog::updateCounters() {
-  VLOG(2) << "Checking thread aliveness counters...";
-
+Watchdog::monitorThreadStatus() {
   // Use steady_clock for watchdog as system_clock can change
   auto const& now = std::chrono::steady_clock::now();
   std::vector<std::string> stuckThreads;
-  for (auto const& kv : monitorEvbs_) {
-    auto const& name = kv.second;
-    auto const& lastTs = kv.first->getTimestamp();
+
+  for (auto const& [evb, name] : monitorEvbs_) {
+    auto const& lastTs = evb->getTimestamp();
     auto timeDiff =
         std::chrono::duration_cast<std::chrono::seconds>(now - lastTs);
     VLOG(4) << "Thread " << name << ", " << (now - lastTs).count()
             << " seconds ever since last thread activity";
 
     if (timeDiff > threadTimeout_) {
-      // fire a crash right now
-      LOG(WARNING) << "Watchdog: " << name << " thread detected to be dead";
+      LOG(WARNING) << fmt::format(
+          "[Dead Thread Detector] {} thread detected to be dead.", name);
       stuckThreads.emplace_back(name);
     }
   }
 
-  if (stuckThreads.size() and previousStatus_) {
-    LOG(WARNING) << "Watchdog: Waiting for one more round before crashing";
-  }
-
-  if (stuckThreads.size() and !previousStatus_) {
-    std::string msg = folly::sformat(
-        "OpenR DeadThreadDetector: Thread {} on {} is detected dead. "
-        "Triggering crash.",
+  if (stuckThreads.size() and isDeadThreadDetected_) {
+    // fire a crash right now
+    const std::string msg = fmt::format(
+        "[Dead Thread Detector] Thread {} on {} is dead. Triggering crash.",
         folly::join(", ", stuckThreads),
         myNodeName_);
     fireCrash(msg);
   }
 
-  if (!stuckThreads.size() and !previousStatus_) {
-    LOG(INFO) << "Watchdog: Threads seems to have recovered";
+  if ((not stuckThreads.size()) and isDeadThreadDetected_) {
+    LOG(INFO) << "[Dead Thread Detector] Threads seem to have recovered.";
   }
 
-  previousStatus_ = stuckThreads.size() == 0;
+  isDeadThreadDetected_ = (stuckThreads.size() ? true : false);
 }
 
 void

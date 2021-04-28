@@ -7,12 +7,7 @@
 
 #pragma once
 
-#include <set>
-#include <string>
-#include <unordered_map>
-
 #include <folly/io/async/AsyncTimeout.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrEventBase.h>
@@ -34,19 +29,24 @@ class Watchdog final : public OpenrEventBase {
   bool memoryLimitExceeded();
 
  private:
-  void updateCounters();
+  // monitor thread status in case they get stuck
+  void monitorThreadStatus();
 
   // monitor memory usage
   void monitorMemory();
 
   void fireCrash(const std::string& msg);
 
+  //
+  // Private vars for internal state
+  //
   const std::string myNodeName_;
 
   // Timer for checking aliveness periodically
   std::unique_ptr<folly::AsyncTimeout> watchdogTimer_{nullptr};
 
   // mapping of thread name to eventloop pointer
+  // TODO: remove name since OpenrEventBase contains name
   std::unordered_map<OpenrEventBase*, std::string> monitorEvbs_;
 
   // thread healthcheck interval
@@ -59,7 +59,7 @@ class Watchdog final : public OpenrEventBase {
   uint32_t maxMemoryMB_{0};
 
   // boolean to indicate previous failure
-  bool previousStatus_{true};
+  bool isDeadThreadDetected_{false};
 
   // amount of time memory usage sustained above memory limit
   std::optional<std::chrono::steady_clock::time_point> memExceedTime_;
