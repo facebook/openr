@@ -3,11 +3,13 @@ name: Documentation Autoformat check + Build
 on:
   push:
     paths:
+      - ".prettierrc.json"
       - "openr/docs/**"
       - "README.md"
       - "CONTRIBUTING.md"
   pull_request:
     paths:
+      - ".prettierrc.json"
       - "openr/docs/**"
       - "README.md"
       - "CONTRIBUTING.md"
