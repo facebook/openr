@@ -126,8 +126,6 @@ struct KvStoreParams {
 
   // ZMQ high water
   int zmqHwm;
-  // flag to enable periodic sync over ZMQ
-  bool enablePeriodicSync{true};
   // IP ToS
   std::optional<int> maybeIpTos;
   // how often to request full db sync from peers
@@ -149,8 +147,6 @@ struct KvStoreParams {
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
       int zmqhwm,
-      // flags for periodic sync
-      bool enablePeriodicSync,
       // IP QoS
       std::optional<int> maybeipTos,
       // how often to request full db sync from peers
@@ -168,7 +164,6 @@ struct KvStoreParams {
         logSampleQueue(logSampleQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
-        enablePeriodicSync(enablePeriodicSync),
         maybeIpTos(std::move(maybeipTos)),
         dbSyncInterval(dbsyncInterval),
         filters(std::move(filter)),
@@ -378,13 +373,12 @@ class KvStoreDb : public DualNode {
   void finalizeFullSync(
       const std::unordered_set<std::string>& keys, const std::string& senderId);
 
+  // [TO BE DEPRECATED]
   // process received KV_DUMP from one of our neighbor
   void processSyncResponse(
       const std::string& requestId, fbzmq::Message&& syncPubMsg) noexcept;
 
-  // randomly request sync from one connected neighbor
-  void requestSync();
-
+  // [TO BE DEPRECATED]
   // this will poll the sockets listening to the requests
   void attachCallbacks();
 
@@ -416,6 +410,7 @@ class KvStoreDb : public DualNode {
   // area identified of this KvStoreDb instance
   const std::string area_;
 
+  // [TO BE DEPRECATED]
   // zmq ROUTER socket for requesting full dumps from peers
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
 
@@ -507,13 +502,6 @@ class KvStoreDb : public DualNode {
 
   // timer to promote idle peers for initial syncing
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
-
-  // [TO BE DEPRECATED]
-  // timer for processing messages on peerSyncSock_
-  // TODO: This is hacky way to process messages which are pending on socket but
-  // ZMQ doesn't invoke the callback for them. This will go away once we migrate
-  // to thrift
-  std::unique_ptr<folly::AsyncTimeout> drainPeerSyncSockTimer_{nullptr};
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>

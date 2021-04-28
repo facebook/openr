@@ -146,6 +146,7 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
       }
     }
     ASSERT_TRUE(allInitialized);
+    LOG(INFO) << "All kvStore peers got initial synced.";
   }
 
   void
@@ -1013,128 +1014,143 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
 /**
  * Test to verify PEER_ADD/PEER_DEL and verify that keys are synchronized
  * to the neighbor.
- * 1. Start store0, store1 and store2
- * 2. Add store1 and store2 to store0
- * 3. Advertise keys in store1 and store2
- * 4. Verify that they appear in store0
- * 5. Update store1 peer definitions in store0
- * 6. Update keys in store1
- * 7. Verify that they appear in store0 (can only happen via full-sync)
- * 8. Verify PEER_DEL API
+ *
+ * Topology:
+ *
+ *      store0
+ *        ^
+ *   _____|_____
+ *   |         |
+ * store1   store2
+ *
+ * 1. Advertise keys in store1 and store2;
+ * 2. Verify that k-v appear in store0(happen via flooding);
+ * 3. Update keys in store0;
+ * 4. Verify that k-v NOT showing up in neither store1 and store2
+ * 5. Update store1's peer definition for store0
+ * 6. Verify that k-v injected in 3) shows up in store1(
+ *    i.e. can only happen via full-sync)
+ * 7. Verify PEER_DEL API
  */
 TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
+  // Start stores in their respective threads.
   auto store0 = createKvStore("store0");
   auto store1 = createKvStore("store1");
   auto store2 = createKvStore("store2");
+  const std::string key{"key"};
 
-  // Start stores in their respective threads.
   store0->run();
   store1->run();
   store2->run();
 
-  // Add peers to store0
-  EXPECT_TRUE(store0->addPeer(
-      kTestingAreaName, store1->getNodeId(), store1->getPeerSpec()));
-  EXPECT_TRUE(store0->addPeer(
-      kTestingAreaName, store2->getNodeId(), store2->getPeerSpec()));
+  EXPECT_TRUE(store1->addPeer(
+      kTestingAreaName, store0->getNodeId(), store0->getPeerSpec()));
+  EXPECT_TRUE(store2->addPeer(
+      kTestingAreaName, store0->getNodeId(), store0->getPeerSpec()));
 
+  // wait for full-sync
   waitForAllPeersInitialized();
+
   // map of peers we expect and dump peers to expect the results.
   std::unordered_map<std::string, thrift::PeerSpec> expectedPeers = {
-      {store1->getNodeId(),
-       store1->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
-      {store2->getNodeId(),
-       store2->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
+      {store0->getNodeId(),
+       store0->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
   };
-  EXPECT_EQ(expectedPeers, store0->getPeers(kTestingAreaName));
+  EXPECT_EQ(expectedPeers, store1->getPeers(kTestingAreaName));
+  EXPECT_EQ(expectedPeers, store2->getPeers(kTestingAreaName));
 
-  // Set key into store1 and make sure it appears in store0
-  LOG(INFO) << "Setting value in store1...";
-  thrift::Value thriftVal(
-      apache::thrift::FRAGILE,
-      1 /* version */,
-      "1.2.3.4" /* originatorId */,
-      "value1" /* value */,
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      0 /* hash */);
-  EXPECT_TRUE(store1->setKey(kTestingAreaName, "test", thriftVal));
-  // Update hash
-  thriftVal.hash_ref() = generateHash(
-      *thriftVal.version_ref(),
-      *thriftVal.originatorId_ref(),
-      thriftVal.value_ref());
+  //
+  // Step 1) and 2): advertise key from store1/store2 and verify
+  //
+  {
+    auto thriftVal = createThriftValue(
+        1 /* version */, "1.2.3.4" /* originatorId */, "value1" /* value */
+    );
+    EXPECT_TRUE(store1->setKey(kTestingAreaName, key, thriftVal));
+    // Update hash
+    thriftVal.hash_ref() = generateHash(
+        *thriftVal.version_ref(),
+        *thriftVal.originatorId_ref(),
+        thriftVal.value_ref());
 
-  // Receive publication from store0 for new key-update
-  LOG(INFO) << "Waiting for message from store0 on pub socket ...";
-  auto pub = store0->recvPublication();
-  EXPECT_EQ(1, pub.keyVals_ref()->size());
-  EXPECT_EQ(thriftVal, pub.keyVals_ref()["test"]);
+    // Receive publication from store0 for new key-update
+    auto pub = store0->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+    EXPECT_EQ(thriftVal, pub.keyVals_ref()[key]);
+  }
 
   // Now play the same trick with the other store
-  LOG(INFO) << "Setting value in store2...";
-  thriftVal = thrift::Value(
-      apache::thrift::FRAGILE,
-      2 /* version */,
-      "1.2.3.4" /* originatorId */,
-      "value2" /* value */,
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      0 /* hash */);
-  EXPECT_TRUE(store2->setKey(kTestingAreaName, "test", thriftVal));
-  // Update hash
-  thriftVal.hash_ref() = generateHash(
-      *thriftVal.version_ref(),
-      *thriftVal.originatorId_ref(),
-      thriftVal.value_ref());
+  {
+    auto thriftVal = createThriftValue(
+        2 /* version */, "1.2.3.4" /* originatorId */, "value2" /* value */
+    );
+    EXPECT_TRUE(store2->setKey(kTestingAreaName, key, thriftVal));
+    // Update hash
+    thriftVal.hash_ref() = generateHash(
+        *thriftVal.version_ref(),
+        *thriftVal.originatorId_ref(),
+        thriftVal.value_ref());
 
-  // Receive publication from store0 for new key-update
-  LOG(INFO) << "Waiting for message from store0...";
-  pub = store0->recvPublication();
-  EXPECT_EQ(1, pub.keyVals_ref()->size());
-  EXPECT_EQ(thriftVal, pub.keyVals_ref()["test"]);
+    // Receive publication from store0 for new key-update
+    auto pub = store0->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+    EXPECT_EQ(thriftVal, pub.keyVals_ref()[key]);
+  }
 
-  // Update store1 with same peer spec
-  EXPECT_TRUE(store0->addPeer(
-      kTestingAreaName, store1->getNodeId(), store1->getPeerSpec()));
-  waitForAllPeersInitialized();
-  EXPECT_EQ(expectedPeers, store0->getPeers(kTestingAreaName));
+  //
+  // Step 3) and 4): advertise from store0 and verify
+  //
+  {
+    auto thriftVal = createThriftValue(
+        3 /* version */, "1.2.3.4" /* originatorId */, "value3" /* value */
+    );
+    EXPECT_TRUE(store0->setKey(kTestingAreaName, key, thriftVal));
+    // Update hash
+    thriftVal.hash_ref() = generateHash(
+        *thriftVal.version_ref(),
+        *thriftVal.originatorId_ref(),
+        thriftVal.value_ref());
 
-  // Update key
-  // Set key into store1 and make sure it appears in store0
-  LOG(INFO) << "Updating value in store1 again ...";
-  thriftVal = thrift::Value(
-      apache::thrift::FRAGILE,
-      3 /* version */,
-      "1.2.3.4" /* originatorId */,
-      "value3" /* value */,
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      0 /* hash */);
-  EXPECT_TRUE(store1->setKey(kTestingAreaName, "test", thriftVal));
-  // Update hash
-  thriftVal.hash_ref() = generateHash(
-      *thriftVal.version_ref(),
-      *thriftVal.originatorId_ref(),
-      thriftVal.value_ref());
-  // Receive publication from store0 for new key-update
-  LOG(INFO) << "Waiting for message from store0 on pub socket ...";
-  pub = store0->recvPublication();
-  EXPECT_EQ(1, pub.keyVals_ref()->size());
-  EXPECT_EQ(thriftVal, pub.keyVals_ref()["test"]);
+    // store1/store2 should NOT have the key since no peer to flood
+    auto maybeVal1 = store1->getKey(kTestingAreaName, key);
+    CHECK(maybeVal1.has_value());
+    auto maybeVal2 = store2->getKey(kTestingAreaName, key);
+    CHECK(maybeVal2.has_value());
+    EXPECT_NE(3, *maybeVal1.value().version_ref());
+    EXPECT_NE(3, *maybeVal2.value().version_ref());
+  }
 
-  // Remove store1 and verify
-  LOG(INFO) << "Deleting the peers for store0...";
-  store0->delPeer(kTestingAreaName, "store1");
-  expectedPeers.clear();
-  expectedPeers[store2->getNodeId()] =
-      store2->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
-  EXPECT_EQ(expectedPeers, store0->getPeers(kTestingAreaName));
+  //
+  // Step 5) and 6): update store1 with same peer spec of store0
+  //
+  {
+    EXPECT_TRUE(store1->addPeer(
+        kTestingAreaName, store0->getNodeId(), store0->getPeerSpec()));
 
-  // Remove store2 and verify that there are no more peers
-  store0->delPeer(kTestingAreaName, "store2");
-  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers{};
-  EXPECT_EQ(emptyPeers, store0->getPeers(kTestingAreaName));
+    // wait for full-sync
+    waitForAllPeersInitialized();
+    EXPECT_EQ(expectedPeers, store1->getPeers(kTestingAreaName));
+
+    // store1 should have key update(full-sync with peer_spec change)
+    auto maybeVal1 = store1->getKey(kTestingAreaName, key);
+    CHECK(maybeVal1.has_value());
+    EXPECT_EQ(3, *maybeVal1.value().version_ref());
+
+    // store2 still NOT updated since there is no full-sync
+    auto maybeVal = store2->getKey(kTestingAreaName, key);
+    CHECK(maybeVal.has_value());
+    EXPECT_NE(3, *maybeVal.value().version_ref());
+  }
+
+  // Remove store0 and verify
+  {
+    expectedPeers.clear();
+    store1->delPeer(kTestingAreaName, store0->getNodeId());
+    store2->delPeer(kTestingAreaName, store0->getNodeId());
+
+    EXPECT_EQ(expectedPeers, store1->getPeers(kTestingAreaName));
+    EXPECT_EQ(expectedPeers, store2->getPeers(kTestingAreaName));
+  }
 }
 
 /**

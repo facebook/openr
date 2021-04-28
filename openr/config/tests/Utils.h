@@ -67,10 +67,7 @@ getBasicOpenrConfig(
   config.kvstore_config_ref() = kvstoreConfig;
   config.link_monitor_config_ref() = linkMonitorConfig;
   config.spark_config_ref() = sparkConfig;
-
   config.enable_rib_policy_ref() = true;
-  config.enable_kvstore_thrift_ref() = true;
-  config.enable_periodic_sync_ref() = true;
 
   if (areaCfg.empty()) {
     config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};

@@ -157,7 +157,6 @@ KvStore::KvStore(
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
-          config->isPeriodicSyncEnabled(),
           maybeIpTos,
           std::chrono::seconds(
               *config->getKvStoreConfig().sync_interval_s_ref()),
@@ -1153,8 +1152,18 @@ KvStoreDb::KvStoreDb(
   LOG(INFO) << "Starting kvstore DB instance for node " << nodeId << " area "
             << area;
 
+  // [TO BE DEPRECATED]
   // Attach socket callbacks/schedule events
   attachCallbacks();
+
+  // [TO BE DEPRECATED]
+  // Perform ZMQ full-sync if there are peers to sync with.
+  fullSyncTimer_ = folly::AsyncTimeout::make(
+      *evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
+
+  // Perform full-sync if there are peers to sync with.
+  thriftSyncTimer_ = folly::AsyncTimeout::make(
+      *evb_->getEvb(), [this]() noexcept { requestThriftPeerSync(); });
 
   // Hook up timer with cleanupTtlCountdownQueue(). The actual scheduling
   // happens within updateTtlCountdownQueue()
@@ -2128,8 +2137,9 @@ KvStoreDb::processRequestMsgHelper(
       if (thriftPub.tobeUpdatedKeys_ref().has_value()) {
         numMissingKeys = thriftPub.tobeUpdatedKeys_ref()->size();
       }
-      LOG(INFO) << "Processed full-sync request from peer " << requestId
-                << " with " << (*keyDumpParamsVal.keyValHashes_ref()).size()
+      LOG(INFO) << "[ZMQ Sync] Processed full-sync request from peer "
+                << requestId << " with "
+                << (*keyDumpParamsVal.keyValHashes_ref()).size()
                 << " keyValHashes item(s). Sending "
                 << thriftPub.keyVals_ref()->size() << " key-vals and "
                 << numMissingKeys << " missing keys";
@@ -2410,46 +2420,7 @@ KvStoreDb::processSyncResponse(
   }
 }
 
-// send sync request from one neighbor randomly
-void
-KvStoreDb::requestSync() {
-  SCOPE_EXIT {
-    auto period =
-        addJitter(std::chrono::milliseconds(kvParams_.dbSyncInterval));
-
-    // Schedule next sync with peers
-    requestSyncTimer_->scheduleTimeout(period);
-  };
-
-  if (peers_.empty()) {
-    return;
-  }
-
-  // Randomly select one neighbor to request full-dump from
-  int randomIndex = folly::Random::rand32() % peers_.size();
-  int index{0};
-  std::string randomNeighbor;
-
-  for (auto const& [peerName, _] : peers_) {
-    if (index++ == randomIndex) {
-      randomNeighbor = peerName;
-      break;
-    }
-  }
-
-  // Enqueue neighbor for full-sync (insert only if entry doesn't exists)
-  LOG(INFO) << "Enqueuing full-sync request for peer " << randomNeighbor;
-  peersToSyncWith_.emplace(
-      randomNeighbor,
-      ExponentialBackoff<std::chrono::milliseconds>(
-          Constants::kInitialBackoff, Constants::kMaxBackoff));
-
-  // initial full-sync request if peersToSyncWith_ was empty
-  if (not fullSyncTimer_->isScheduled()) {
-    fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-  }
-}
-
+// [TO BE DEPRECATED]
 // this will poll the sockets listening to the requests
 void
 KvStoreDb::attachCallbacks() {
@@ -2502,32 +2473,6 @@ KvStoreDb::attachCallbacks() {
         VLOG(3) << "KvStore: sync response received";
         drainPeerSyncSock();
       });
-
-  // Hacky timer to drain pending messages on peerSyncSock because of
-  // notification. This happens ONLY with zmq socket
-  drainPeerSyncSockTimer_ =
-      folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
-        drainPeerSyncSock();
-        drainPeerSyncSockTimer_->scheduleTimeout(std::chrono::seconds(1));
-      });
-  drainPeerSyncSockTimer_->scheduleTimeout(std::chrono::seconds(1));
-
-  // Perform ZMQ full-sync if there are peers to sync with.
-  fullSyncTimer_ = folly::AsyncTimeout::make(
-      *evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
-
-  if (kvParams_.enablePeriodicSync) {
-    // Define request sync timer
-    requestSyncTimer_ = folly::AsyncTimeout::make(
-        *evb_->getEvb(), [this]() noexcept { requestSync(); });
-
-    // Schedule periodic call to re-sync with one of our peer
-    requestSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-  }
-
-  // Define timer to scan peers in IDLE state to do initial syncing
-  thriftSyncTimer_ = folly::AsyncTimeout::make(
-      *evb_->getEvb(), [this]() noexcept { requestThriftPeerSync(); });
 }
 
 void
@@ -2770,7 +2715,7 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
 
   // flood-peers: SPT-peers + peers-who-does-not-support-dual
   std::unordered_set<std::string> floodPeers;
-  for (const auto& [peer, _] : peers_) {
+  for (const auto& [peer, _] : thriftPeers_) {
     if (floodToAll or sptPeers.count(peer) != 0) {
       floodPeers.emplace(peer);
     }
@@ -2840,7 +2785,7 @@ KvStoreDb::floodPublication(
 
   VLOG(2) << "Flood publication from: " << kvParams_.nodeId
           << " to peers with: " << keysToUpdate.size()
-          << " key-vals. Updated keys:  " << folly::join(",", keysToUpdate);
+          << " key-vals. Updated keys: " << folly::join(",", keysToUpdate);
 
   if (setFloodRoot and not senderId.has_value()) {
     // I'm the initiator, set flood-root-id
