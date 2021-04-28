@@ -162,7 +162,7 @@ startEventBase(
 
   // Add to watchdog
   if (watchdog) {
-    watchdog->addEvb(evb.get(), name);
+    watchdog->addEvb(evb.get());
   }
 
   // Emplace evb into ordered list of evbs. So that we can destroy
@@ -347,6 +347,7 @@ main(int argc, char** argv) {
 
   // Create Netlink Protocol object in a new thread
   nlEvb = std::make_unique<OpenrEventBase>();
+  nlEvb->setEvbName("NetlinkEvb");
   nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
       nlEvb->getEvb(), netlinkEventsQueue);
   allThreads.emplace_back([&]() {
@@ -359,7 +360,7 @@ main(int argc, char** argv) {
 
   // Add netlink eventbase to watchdog
   if (watchdog) {
-    watchdog->addEvb(nlEvb.get(), "NetlinkEvb");
+    watchdog->addEvb(nlEvb.get());
   }
 
   // Start NetlinkFibHandler if specified

@@ -24,7 +24,7 @@ class Watchdog final : public OpenrEventBase {
   Watchdog(Watchdog const&) = delete;
   Watchdog& operator=(Watchdog const&) = delete;
 
-  void addEvb(OpenrEventBase* evb, const std::string& name);
+  void addEvb(OpenrEventBase* evb);
 
   bool memoryLimitExceeded();
 
@@ -45,9 +45,8 @@ class Watchdog final : public OpenrEventBase {
   // Timer for checking aliveness periodically
   std::unique_ptr<folly::AsyncTimeout> watchdogTimer_{nullptr};
 
-  // mapping of thread name to eventloop pointer
-  // TODO: remove name since OpenrEventBase contains name
-  std::unordered_map<OpenrEventBase*, std::string> monitorEvbs_;
+  // Eventbase raw pointers
+  std::unordered_set<OpenrEventBase*> monitorEvbs_;
 
   // thread healthcheck interval
   std::chrono::seconds interval_;

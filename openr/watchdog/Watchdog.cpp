@@ -29,11 +29,11 @@ Watchdog::Watchdog(std::shared_ptr<const Config> config)
 }
 
 void
-Watchdog::addEvb(OpenrEventBase* evb, const std::string& name) {
+Watchdog::addEvb(OpenrEventBase* evb) {
   CHECK(evb);
-  getEvb()->runInEventBaseThreadAndWait([this, evb, name]() {
+  getEvb()->runInEventBaseThreadAndWait([this, evb]() {
     CHECK_EQ(monitorEvbs_.count(evb), 0);
-    monitorEvbs_.emplace(evb, name);
+    monitorEvbs_.emplace(evb);
   });
 }
 
@@ -84,7 +84,8 @@ Watchdog::monitorThreadStatus() {
   auto const& now = std::chrono::steady_clock::now();
   std::vector<std::string> stuckThreads;
 
-  for (auto const& [evb, name] : monitorEvbs_) {
+  for (auto const& evb : monitorEvbs_) {
+    auto const& name = evb->getEvbName();
     auto const& lastTs = evb->getTimestamp();
     auto timeDiff =
         std::chrono::duration_cast<std::chrono::seconds>(now - lastTs);
