@@ -23,7 +23,7 @@
 # -- Project information -----------------------------------------------------
 
 project = "Open/R"
-copyright = "2020, Facebook Inc."
+copyright = "2018-Present, Facebook Inc."
 author = "Facebook Inc."
 
 
@@ -33,7 +33,7 @@ author = "Facebook Inc."
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "recommonmark",
+    "myst_parser",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
