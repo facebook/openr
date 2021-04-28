@@ -415,6 +415,90 @@ TEST_F(
   }
 }
 
+TEST(KvStoreClientInternal, CounterReport) {
+  OpenrEventBase evb;
+  const std::string evbName{"testEvb"};
+  fbzmq::Context context;
+  folly::Baton waitBaton;
+
+  int scheduleAt{0};
+  const std::string key{"k1"};
+  const std::string val{"v1"};
+
+  // start kvstore for interaction
+  auto config = std::make_shared<Config>(getBasicOpenrConfig("node1"));
+  auto store = std::make_unique<KvStoreWrapper>(context, config);
+  store->run();
+
+  evb.setEvbName(evbName);
+  auto client = std::make_shared<KvStoreClientInternal>(
+      &evb,
+      store->getNodeId(),
+      store->getKvStore(),
+      false /* do NOT use throttle */);
+
+  evb.scheduleTimeout(
+      std::chrono::seconds(
+          scheduleAt += (1 + Constants::kCounterSubmitInterval.count())),
+      [&]() noexcept {
+        auto counters = fb303::fbData->getCounters();
+
+        // Verify the counter keys exist
+        ASSERT_TRUE(counters.count(
+            fmt::format("{}.kvstore_client.persisted_keys", evbName)));
+        ASSERT_TRUE(counters.count(
+            fmt::format("{}.kvstore_client.keys_to_advertise", evbName)));
+        ASSERT_TRUE(counters.count(
+            fmt::format("{}.kvstore_client.keys_to_delete", evbName)));
+        ASSERT_TRUE(counters.count(
+            fmt::format("{}.kvstore_client.key_callbacks", evbName)));
+        ASSERT_TRUE(
+            counters.count(fmt::format("{}.kvstore_client.backoffs", evbName)));
+        ASSERT_TRUE(counters.count(
+            fmt::format("{}.kvstore_client.key_ttl_backoffs", evbName)));
+
+        client->persistKey(kTestingAreaName, key, val, kTtl);
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::seconds(
+          scheduleAt += (1 + Constants::kCounterSubmitInterval.count())),
+      [&]() noexcept {
+        auto counters = fb303::fbData->getCounters();
+
+        // Verify counters
+        EXPECT_GE(
+            counters.at(
+                fmt::format("{}.kvstore_client.persisted_keys", evbName)),
+            0);
+        EXPECT_GE(
+            counters.at(fmt::format("{}.kvstore_client.backoffs", evbName)), 0);
+        EXPECT_GE(
+            counters.at(
+                fmt::format("{}.kvstore_client.key_ttl_backoffs", evbName)),
+            0);
+
+        // Synchronization primitive
+        waitBaton.post();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evbThread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
+
+  // Stop store
+  LOG(INFO) << "Stopping stores";
+  store->stop();
+  client.reset();
+
+  evb.stop();
+  evb.waitUntilStopped();
+  evbThread.join();
+}
+
 TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
   OpenrEventBase evb;
   fbzmq::Context context;

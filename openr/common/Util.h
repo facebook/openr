@@ -256,6 +256,7 @@ thrift::PeerSpec createPeerSpec(
     const std::string& thriftPeerAddr = "",
     const int32_t port = 0,
     const thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE);
+
 thrift::SparkNeighbor createSparkNeighbor(
     const std::string& nodeName,
     const thrift::BinaryAddress& v4Addr,

@@ -149,6 +149,7 @@ startEventBase(
   auto t = evbT.get();
   auto evb = std::unique_ptr<OpenrEventBase>(
       reinterpret_cast<OpenrEventBase*>(evbT.release()));
+  evb->setEvbName(name);
 
   // Start a thread
   allThreads.emplace_back(std::thread([evb = evb.get(), name]() noexcept {
@@ -312,7 +313,7 @@ main(int argc, char** argv) {
         allThreads,
         orderedEvbs,
         nullptr /* watchdog won't monitor itself */,
-        "Watchdog",
+        "watchdog",
         std::make_unique<Watchdog>(config));
   }
 
@@ -387,7 +388,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "ConfigStore",
+      "config_store",
       std::make_unique<PersistentStore>(FLAGS_config_store_filepath));
 
   // Start monitor Module
@@ -395,7 +396,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "Monitor",
+      "monitor",
       std::make_unique<openr::Monitor>(
           config,
           Constants::kEventLogCategory.toString(),
@@ -406,7 +407,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "KvStore",
+      "kvstore",
       std::make_unique<KvStore>(
           context,
           kvStoreUpdatesQueue,
@@ -425,7 +426,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "PrefixManager",
+      "prefix_manager",
       std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           prefixUpdatesQueue.getReader(),
@@ -440,7 +441,7 @@ main(int argc, char** argv) {
         allThreads,
         orderedEvbs,
         watchdog,
-        "PrefixAllocator",
+        "prefix_allocator",
         std::make_unique<PrefixAllocator>(
             AreaId{*config->getAreaIds().begin()},
             config,
@@ -457,7 +458,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "Spark",
+      "spark",
       std::make_unique<Spark>(
           maybeIpTos,
           interfaceUpdatesQueue.getReader(),
@@ -472,7 +473,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "LinkMonitor",
+      "link_monitor",
       std::make_unique<LinkMonitor>(
           config,
           nlSock.get(),
@@ -532,7 +533,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "Decision",
+      "decision",
       std::make_unique<Decision>(
           config,
           not FLAGS_enable_bgp_route_programming,
@@ -547,7 +548,7 @@ main(int argc, char** argv) {
       allThreads,
       orderedEvbs,
       watchdog,
-      "Fib",
+      "fib",
       std::make_unique<Fib>(
           config,
           *config->getConfig().fib_port_ref(),

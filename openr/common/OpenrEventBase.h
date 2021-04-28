@@ -113,6 +113,20 @@ class OpenrEventBase {
   void removeSocketFd(int socketFd);
   void removeSocket(uintptr_t socketPtr);
 
+  /**
+   * Eventbase name related APIs
+   */
+
+  std::string
+  getEvbName() {
+    return evbName_;
+  }
+
+  void
+  setEvbName(std::string name) {
+    evbName_ = name;
+  }
+
  private:
   /**
    * Event handler class for sockets and fds
@@ -158,6 +172,9 @@ class OpenrEventBase {
   // Timestamp
   std::atomic<std::chrono::steady_clock::duration::rep> timestamp_;
   std::unique_ptr<folly::AsyncTimeout> timeout_;
+
+  // Unique name to identify eventbase
+  std::string evbName_;
 };
 
 } // namespace openr

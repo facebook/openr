@@ -5,13 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStoreClientInternal.h"
-
+#include <fb303/ServiceData.h>
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 
-#include <folly/SharedMutex.h>
-#include <folly/String.h>
+namespace fb303 = facebook::fb303;
 
 namespace openr {
 
@@ -74,6 +73,7 @@ KvStoreClientInternal::~KvStoreClientInternal() {
   // - If EventBase is stopped or it is within the evb thread, run immediately;
   // - Otherwise, will wait the EventBase to run;
   eventBase_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
+    counterUpdateTimer_.reset();
     advertiseKeyValsTimer_.reset();
     ttlTimer_.reset();
     checkPersistKeyTimer_.reset();
@@ -124,6 +124,39 @@ KvStoreClientInternal::initTimers() {
         *eventBase_->getEvb(), [this]() noexcept { checkPersistKeyInStore(); });
     checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
   }
+
+  // Create counter update timer to update counters periodically
+  counterUpdateTimer_ =
+      folly::AsyncTimeout::make(*eventBase_->getEvb(), [this]() noexcept {
+        fb303::fbData->setCounter(
+            fmt::format(
+                "{}.kvstore_client.persisted_keys", eventBase_->getEvbName()),
+            getPersistedKeyCount());
+        fb303::fbData->setCounter(
+            fmt::format(
+                "{}.kvstore_client.keys_to_advertise",
+                eventBase_->getEvbName()),
+            getCachedKeysToAdvertiseCount());
+        fb303::fbData->setCounter(
+            fmt::format(
+                "{}.kvstore_client.keys_to_delete", eventBase_->getEvbName()),
+            getCachedKeysToDeleteCount());
+        fb303::fbData->setCounter(
+            fmt::format(
+                "{}.kvstore_client.key_callbacks", eventBase_->getEvbName()),
+            getKeyCallbackCount());
+        fb303::fbData->setCounter(
+            fmt::format("{}.kvstore_client.backoffs", eventBase_->getEvbName()),
+            getBackoffCount());
+        fb303::fbData->setCounter(
+            fmt::format(
+                "{}.kvstore_client.key_ttl_backoffs", eventBase_->getEvbName()),
+            getKeyTtlBackoffCount());
+
+        // Schedule next counters update
+        counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
+      });
+  counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 }
 
 void

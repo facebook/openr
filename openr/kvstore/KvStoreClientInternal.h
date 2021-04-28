@@ -155,6 +155,59 @@ class KvStoreClientInternal {
     return eventBase_;
   }
 
+  /*
+   * Counter-exposing related methods
+   */
+
+  // templated method to get stats for total number of keys from two-level map:
+  //
+  //  - T will be containers with key-val store-like structures. E.g.
+  //  std::unordered_map/std::map/etc.
+  //  - t will be containers which are able to be checked for size. E.g.
+  //    - std::unordered_set, std::unordered_map
+  //    - std::set, std::map
+  //    - std::vector
+  //    - etc.
+  template <typename T>
+  int64_t
+  getCount(const T& mp) {
+    int64_t count{0};
+    for (auto const& [_, t] : mp) {
+      count += t.size();
+    }
+    return count;
+  }
+
+  int64_t
+  getPersistedKeyCount() {
+    return getCount(persistedKeyVals_);
+  }
+
+  int64_t
+  getCachedKeysToAdvertiseCount() {
+    return getCount(keysToAdvertise_);
+  }
+
+  int64_t
+  getCachedKeysToDeleteCount() {
+    return getCount(clearedKeyVals_);
+  }
+
+  int64_t
+  getKeyCallbackCount() {
+    return getCount(keyCallbacks_);
+  }
+
+  int64_t
+  getBackoffCount() {
+    return getCount(backoffs_);
+  }
+
+  int64_t
+  getKeyTtlBackoffCount() {
+    return getCount(keyTtlBackoffs_);
+  }
+
  private:
   /**
    * Process timeout is called when timeout expires.
@@ -321,6 +374,9 @@ class KvStoreClientInternal {
 
   // Timer to advertise ttl updates for key-vals
   std::unique_ptr<folly::AsyncTimeout> ttlTimer_;
+
+  // Timer to periodically advertise counters
+  std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_;
 
   // prefix key filter to apply for key updates
   KvStoreFilters keyPrefixFilter_{{}, {}};
