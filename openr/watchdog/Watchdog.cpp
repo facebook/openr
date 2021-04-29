@@ -5,10 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "Watchdog.h"
+#include <fb303/ServiceData.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/watchdog/Watchdog.h>
+
+namespace fb303 = facebook::fb303;
 
 namespace openr {
 
@@ -20,8 +23,15 @@ Watchdog::Watchdog(std::shared_ptr<const Config> config)
       isDeadThreadDetected_(false) {
   // Schedule periodic timer for checking thread health
   watchdogTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    // check dead thread
     monitorThreadStatus();
+
+    // check overall memory usage
     monitorMemory();
+
+    // collect evb specific counters
+    updateThreadCounters();
+
     // Schedule next timer
     watchdogTimer_->scheduleTimeout(interval_);
   });
@@ -113,6 +123,18 @@ Watchdog::monitorThreadStatus() {
   }
 
   isDeadThreadDetected_ = (stuckThreads.size() ? true : false);
+}
+
+void
+Watchdog::updateThreadCounters() {
+  for (auto& evb : monitorEvbs_) {
+    // TODO: add thread allocated/de-allocated bytes stats
+
+    // Record eventbase's notification queue size to support memory check
+    fb303::fbData->setCounter(
+        fmt::format("watchdog.evb_queue_size.{}", evb->getEvbName()),
+        evb->getEvb()->getNotificationQueueSize());
+  }
 }
 
 void

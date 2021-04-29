@@ -648,6 +648,12 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/platform
   )
 
+  add_openr_test(WatchdogTest watchdog_test
+    SOURCES
+      openr/watchdog/tests/WatchdogTest.cpp
+    DESTINATION sbin/tests/openr/watchdog
+  )
+
   #
   # benchmarks
   #

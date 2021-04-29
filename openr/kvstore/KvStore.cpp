@@ -5,10 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStore.h"
-
 #include <fb303/ServiceData.h>
-#include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/GLog.h>
@@ -19,6 +16,7 @@
 #include <openr/common/EventLogger.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
+#include <openr/kvstore/KvStore.h>
 
 using namespace std::chrono;
 
@@ -968,7 +966,7 @@ KvStore::getCounters() {
 }
 
 std::map<std::string, int64_t>
-KvStore::getGlobalCounters() {
+KvStore::getGlobalCounters() const {
   std::map<std::string, int64_t> flatCounters;
   for (auto& [_, kvDb] : kvStoreDb_) {
     auto kvDbCounters = kvDb.getCounters();
@@ -983,10 +981,6 @@ KvStore::getGlobalCounters() {
           return flatCounters;
         });
   }
-  // Record eventbase's notification queue size for mem usage check
-  // ATTN: since all KvStoreDbs share the same eventbase, do NOT accumulate
-  // evb related counters inside individual KvStoreDb.
-  flatCounters["kvstore.evb_queue_size"] = getEvb()->getNotificationQueueSize();
   return flatCounters;
 }
 

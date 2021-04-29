@@ -7,17 +7,10 @@
 
 #pragma once
 
-#include <random>
-#include <string>
-#include <vector>
-
 #include <boost/functional/hash.hpp>
 #include <folly/FileUtil.h>
 #include <folly/IPAddress.h>
-#include <folly/Memory.h>
-#include <folly/Optional.h>
-#include <folly/ScopeGuard.h>
-#include <folly/String.h>
+#include <folly/memory/MallctlHelper.h>
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
@@ -494,6 +487,12 @@ void maybeUpdate(CompareResult& target, CompareResult update);
 CompareResult compareMetricVectors(
     thrift::MetricVector const& l, thrift::MetricVector const& r);
 } // namespace MetricVectorUtils
+
+namespace Memory {
+
+uint64_t getThreadBytesImpl(bool isAllocated);
+
+} // namespace Memory
 
 } // namespace openr
 

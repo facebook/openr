@@ -412,7 +412,6 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   auto counters = fb303::fbData->getCounters();
 
   // Verify the counter keys exist
-  ASSERT_TRUE(counters.count("kvstore.evb_queue_size"));
   ASSERT_TRUE(counters.count("kvstore.num_peers"));
   ASSERT_TRUE(counters.count("kvstore.cmd_peer_dump.count"));
   ASSERT_TRUE(counters.count("kvstore.cmd_peer_add.count"));

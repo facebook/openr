@@ -1122,4 +1122,20 @@ compareMetricVectors(
 }
 } // namespace MetricVectorUtils
 
+namespace Memory {
+
+uint64_t
+getThreadBytesImpl(bool isAllocated) {
+  uint64_t bytes{0};
+  const char* cmd = isAllocated ? "thread.allocated" : "thread.deallocated";
+  try {
+    folly::mallctlRead(cmd, &bytes);
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Failed to read thread allocated/de-allocated bytes: "
+               << ex.what();
+  }
+  return bytes;
+}
+
+} // namespace Memory
 } // namespace openr

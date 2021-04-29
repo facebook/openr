@@ -35,6 +35,10 @@ class Watchdog final : public OpenrEventBase {
   // monitor memory usage
   void monitorMemory();
 
+  // update per-eventbase related counters
+  void updateThreadCounters();
+
+  // force to abort, aka, crash process
   void fireCrash(const std::string& msg);
 
   //
