@@ -166,6 +166,20 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   virtual folly::SemiFuture<int> deleteLink(const openr::fbnl::Link& link);
 
   /**
+   * Add a rule
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> addRule(const openr::fbnl::Rule& rule);
+
+  /**
+   * Delete a rule
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> deleteRule(const openr::fbnl::Rule& rule);
+
+  /**
    * API to get interfaces from kernel
    */
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>

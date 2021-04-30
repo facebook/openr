@@ -46,9 +46,16 @@ class NetlinkRuleMessage final : public NetlinkMessageBase {
   // parse Netlink Rule message
   static Rule parseMessage(const struct nlmsghdr* nlh);
 
+  int addRule(const Rule& rule);
+
+  int deleteRule(const Rule& rule);
+
  private:
   // inherited class implementation
   void rcvdRule(Rule&& rule) override;
+
+  // add FRA attributs to rule message
+  int addRuleAttributes(const Rule& rule);
 
   //
   // Private variables for rtnetlink msg exchange

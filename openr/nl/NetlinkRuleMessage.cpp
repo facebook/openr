@@ -91,4 +91,57 @@ NetlinkRuleMessage::parseMessage(const struct nlmsghdr* nlmsg) {
   return rule;
 }
 
+int
+NetlinkRuleMessage::addRule(const Rule& rule) {
+  init(RTM_NEWRULE);
+
+  return addRuleAttributes(rule);
+}
+
+int
+NetlinkRuleMessage::deleteRule(const Rule& rule) {
+  init(RTM_DELRULE);
+
+  return addRuleAttributes(rule);
+}
+
+int
+NetlinkRuleMessage::addRuleAttributes(const Rule& rule) {
+  int status{0};
+
+  const uint32_t table = rule.getTable();
+  // set rulehdr fields
+  rulehdr_->table = table < 256 ? table : RT_TABLE_COMPAT;
+  rulehdr_->action = rule.getAction();
+  rulehdr_->family = rule.getFamily();
+
+  // add attributes
+  if ((status = addAttributes(
+           FRA_TABLE,
+           reinterpret_cast<const char*>(&table),
+           sizeof(uint32_t)))) {
+    return status;
+  }
+  if (rule.getFwmark()) {
+    const uint32_t fwmark = rule.getFwmark().value();
+    if ((status = addAttributes(
+             FRA_FWMARK,
+             reinterpret_cast<const char*>(&fwmark),
+             sizeof(uint32_t)))) {
+      return status;
+    }
+  }
+  if (rule.getPriority()) {
+    const uint32_t priority = rule.getPriority().value();
+    if ((status = addAttributes(
+             FRA_PRIORITY,
+             reinterpret_cast<const char*>(&priority),
+             sizeof(uint32_t)))) {
+      return status;
+    }
+  }
+
+  return status;
+}
+
 } // namespace openr::fbnl

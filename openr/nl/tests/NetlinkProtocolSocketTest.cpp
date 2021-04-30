@@ -2184,6 +2184,46 @@ TEST_F(NlMessageFixture, ParseRuleMessageTest) {
   EXPECT_THAT(rules, AllOf(Contains(rule1), Contains(rule2), Contains(rule3)));
 }
 
+/*
+ * Tests rule add/del API
+ * Add and delete a v4/v6 rule, verify the operations.
+ */
+TEST_F(NlMessageFixture, RuleAddDeleteTest) {
+  using namespace ::testing;
+
+  const auto before = nlSock->getAllRules().get().value();
+  uint32_t ackCount{0};
+  const Rule ruleV4(AF_INET, FR_ACT_TO_TBL, 1234, 4567, 33000);
+  const Rule ruleV6(AF_INET6, FR_ACT_TO_TBL, 2345, 6789, 33001);
+  EXPECT_THAT(before, AllOf(Not(Contains(ruleV4)), Not(Contains(ruleV6))));
+
+  // add v4 rule
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRule(ruleV4).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+  auto rules = nlSock->getAllRules().get().value();
+  EXPECT_THAT(rules, Contains(ruleV4));
+
+  // add v6 rule
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRule(ruleV6).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+  rules = nlSock->getAllRules().get().value();
+  EXPECT_THAT(rules, Contains(ruleV6));
+
+  // delete rules
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRule(ruleV4).get());
+  EXPECT_EQ(0, nlSock->deleteRule(ruleV6).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 2);
+  rules = nlSock->getAllRules().get().value();
+  EXPECT_THAT(rules, AllOf(Not(Contains(ruleV4)), Not(Contains(ruleV6))));
+  EXPECT_EQ(rules.size(), before.size());
+}
+
 class NlMessageFixtureV4OrV6 : public NlMessageFixture,
                                public testing::WithParamInterface<bool> {};
 

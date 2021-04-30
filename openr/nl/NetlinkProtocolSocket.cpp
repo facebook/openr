@@ -590,6 +590,38 @@ NetlinkProtocolSocket::deleteLink(const openr::fbnl::Link& link) {
   return future;
 }
 
+folly::SemiFuture<int>
+NetlinkProtocolSocket::addRule(const openr::fbnl::Rule& rule) {
+  VLOG(1) << "Netlink add rule. " << rule.str();
+  auto ruleMsg = std::make_unique<openr::fbnl::NetlinkRuleMessage>();
+  auto future = ruleMsg->getSemiFuture();
+
+  int status = ruleMsg->addRule(rule);
+  if (status != 0) {
+    ruleMsg->setReturnStatus(status);
+  } else {
+    notifQueue_.putMessage(std::move(ruleMsg));
+  }
+
+  return future;
+}
+
+folly::SemiFuture<int>
+NetlinkProtocolSocket::deleteRule(const openr::fbnl::Rule& rule) {
+  VLOG(1) << "Netlink delete rule. " << rule.str();
+  auto ruleMsg = std::make_unique<openr::fbnl::NetlinkRuleMessage>();
+  auto future = ruleMsg->getSemiFuture();
+
+  int status = ruleMsg->deleteRule(rule);
+  if (status != 0) {
+    ruleMsg->setReturnStatus(status);
+  } else {
+    notifQueue_.putMessage(std::move(ruleMsg));
+  }
+
+  return future;
+}
+
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
 NetlinkProtocolSocket::getAllLinks() {
   VLOG(1) << "Netlink get links";
