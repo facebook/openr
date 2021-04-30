@@ -331,40 +331,31 @@ main(int argc, char** argv) {
     waitForFibService(mainEvb, *config->getConfig().fib_port_ref());
   }
 
-  // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
-
-  std::unique_ptr<OpenrEventBase> nlEvb{nullptr};
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
   std::unique_ptr<std::thread> netlinkFibServerThread{nullptr};
 
-  thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
-      2 /* num of threads */, false /* task stats */);
-  thriftThreadMgr->setNamePrefix("ThriftCpuPool");
-  thriftThreadMgr->start();
-  CHECK(thriftThreadMgr);
-
   // Create Netlink Protocol object in a new thread
-  nlEvb = std::make_unique<OpenrEventBase>();
-  nlEvb->setEvbName("NetlinkEvb");
+  auto nlEvb = startEventBase(
+      allThreads,
+      orderedEvbs,
+      watchdog,
+      "netlink",
+      std::make_unique<OpenrEventBase>());
+
   nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
       nlEvb->getEvb(), netlinkEventsQueue);
-  allThreads.emplace_back([&]() {
-    LOG(INFO) << "Starting NetlinkEvb thread ...";
-    folly::setThreadName("openr-netlinkEvb");
-    nlEvb->getEvb()->loopForever();
-    LOG(INFO) << "NetlinkEvb thread got stopped.";
-  });
-  nlEvb->getEvb()->waitUntilRunning();
-
-  // Add netlink eventbase to watchdog
-  if (watchdog) {
-    watchdog->addEvb(nlEvb.get());
-  }
 
   // Start NetlinkFibHandler if specified
   if (config->isNetlinkFibHandlerEnabled()) {
+    // Create ThreadManager for thrift services
+    thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
+        2 /* num of threads */, false /* task stats */);
+    thriftThreadMgr->setNamePrefix("ThriftCpuPool");
+    thriftThreadMgr->start();
+    CHECK(thriftThreadMgr);
+
     netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
     netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
     netlinkFibServer->setThreadManager(thriftThreadMgr);
@@ -662,10 +653,6 @@ main(int argc, char** argv) {
   // stop bgp speaker
   if (config->isBgpPeeringEnabled()) {
     pluginStop();
-  }
-
-  if (nlEvb) {
-    nlEvb->getEvb()->terminateLoopSoon();
   }
 
   if (netlinkFibServer) {
