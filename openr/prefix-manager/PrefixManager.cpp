@@ -1032,7 +1032,10 @@ PrefixManager::processDecisionRouteUpdates(
     if (*prefixEntry.type_ref() == thrift::PrefixType::CONFIG) {
       // skip local-originated prefix as it won't be considered as
       // part of its own supporting routes.
-      continue;
+      auto originatedPrefixIt = originatedPrefixDb_.find(prefix);
+      if (originatedPrefixIt != originatedPrefixDb_.end()) {
+        continue;
+      }
     }
 
     // 1. append area stack
