@@ -500,7 +500,6 @@ main(int argc, char** argv) {
     sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
     sslContext->setNextProtocols(
         **apache::thrift::ThriftServer::defaultNextProtocols());
-    // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
     sslContext->clientVerification =
         folly::SSLContext::VerifyClientCertificate::IF_PRESENTED;
     sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
@@ -571,11 +570,17 @@ main(int argc, char** argv) {
   }
 
   // Create Open/R control handler
-  OpenrEventBase ctrlEvb;
+  auto ctrlEvb = startEventBase(
+      allThreads,
+      orderedEvbs,
+      watchdog,
+      "ctrl_evb",
+      std::make_unique<OpenrEventBase>());
+
   auto ctrlHandler = std::make_unique<openr::OpenrCtrlHandler>(
       config->getNodeName(),
       acceptableNamesSet,
-      &ctrlEvb,
+      ctrlEvb,
       decision,
       fib,
       kvStore,
@@ -585,14 +590,6 @@ main(int argc, char** argv) {
       prefixManager,
       spark,
       config);
-  // Starting openrCtrlEvb for thrift handler
-  std::thread ctrlEvbThread([&]() noexcept {
-    LOG(INFO) << "Starting openrCtrl eventbase...";
-    folly::setThreadName("openrCtrl");
-    ctrlEvb.run();
-    LOG(INFO) << "OpenrCtrl eventbase stopped...";
-  });
-  ctrlEvb.waitUntilRunning();
 
   CHECK(ctrlHandler);
   thriftCtrlServer->setInterface(std::move(ctrlHandler));
@@ -622,7 +619,7 @@ main(int argc, char** argv) {
   // Wait for main eventbase to stop
   mainEvbThread.join();
 
-  // Stop all threads (in reverse order of their creation)
+  // Close all queues for inter-module communications
   routeUpdatesQueue.close();
   interfaceUpdatesQueue.close();
   peerUpdatesQueue.close();
@@ -640,10 +637,7 @@ main(int argc, char** argv) {
   thriftCtrlServerThread.join();
   thriftCtrlServer.reset();
 
-  // Stop ctrlEvb
-  ctrlEvb.stop();
-  ctrlEvb.waitUntilStopped();
-
+  // Stop all threads (in reverse order of their creation)
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {
     (*riter)->stop();
@@ -667,13 +661,9 @@ main(int argc, char** argv) {
     thriftThreadMgr->stop();
   }
 
-  if (nlSock) {
-    nlSock.reset();
-  }
+  nlSock.reset();
 
-  // Wait for all threads to finish
-  ctrlEvbThread.join();
-
+  // Wait for all threads
   for (auto& t : allThreads) {
     t.join();
   }
