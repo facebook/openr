@@ -128,7 +128,16 @@ Watchdog::monitorThreadStatus() {
 void
 Watchdog::updateThreadCounters() {
   for (auto& evb : monitorEvbs_) {
-    // TODO: add thread allocated/de-allocated bytes stats
+    // Asynchronously fetch thread mem usage data inside each individual evb
+    evb->runInEventBaseThread([name = evb->getEvbName()]() {
+      auto allocBytes = memory::getThreadBytesImpl(true);
+      auto deallocBytes = memory::getThreadBytesImpl(false);
+      auto diff =
+          (allocBytes < deallocBytes ? 0 : (allocBytes - deallocBytes) / 1024);
+
+      fb303::fbData->setCounter(
+          fmt::format("watchdog.thread_mem_usage_kb.{}", name), diff);
+    });
 
     // Record eventbase's notification queue size to support memory check
     fb303::fbData->setCounter(

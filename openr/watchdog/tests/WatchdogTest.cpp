@@ -92,6 +92,8 @@ TEST_F(WatchdogTestFixture, CounterReport) {
         // Verify the counter keys exist
         ASSERT_TRUE(counters.count(
             fmt::format("watchdog.evb_queue_size.{}", dummyEvb->getEvbName())));
+        ASSERT_TRUE(counters.count(fmt::format(
+            "watchdog.thread_mem_usage_kb.{}", dummyEvb->getEvbName())));
 
         evb.stop();
       });

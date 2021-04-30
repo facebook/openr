@@ -1122,7 +1122,7 @@ compareMetricVectors(
 }
 } // namespace MetricVectorUtils
 
-namespace Memory {
+namespace memory {
 
 uint64_t
 getThreadBytesImpl(bool isAllocated) {
@@ -1137,5 +1137,5 @@ getThreadBytesImpl(bool isAllocated) {
   return bytes;
 }
 
-} // namespace Memory
+} // namespace memory
 } // namespace openr

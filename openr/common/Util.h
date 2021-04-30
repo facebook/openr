@@ -488,11 +488,11 @@ CompareResult compareMetricVectors(
     thrift::MetricVector const& l, thrift::MetricVector const& r);
 } // namespace MetricVectorUtils
 
-namespace Memory {
+namespace memory {
 
 uint64_t getThreadBytesImpl(bool isAllocated);
 
-} // namespace Memory
+} // namespace memory
 
 } // namespace openr
 
