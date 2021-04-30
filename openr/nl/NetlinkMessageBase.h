@@ -133,6 +133,11 @@ class NetlinkMessageBase {
     CHECK(false) << "Must be implemented by subclass";
   }
 
+  virtual void
+  rcvdRule(Rule&& /* rule */) {
+    CHECK(false) << "Must be implemented by subclass";
+  }
+
   /**
    * Get SemiFuture associated with the the associated netlink request. Upon
    * receipt of the ack from kernel, the value will be set.

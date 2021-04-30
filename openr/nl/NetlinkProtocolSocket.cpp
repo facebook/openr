@@ -375,6 +375,24 @@ NetlinkProtocolSocket::processMessage(
       }
     } break;
 
+    case RTM_DELRULE:
+    case RTM_NEWRULE: {
+      // process rule information received from netlink
+      auto rule = NetlinkRuleMessage::parseMessage(nlh);
+
+      if (nlSeqIt != nlSeqNumMap_.end()) {
+        // Extend message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
+        // Received rule in response to request
+        nlSeqIt->second->rcvdRule(std::move(rule));
+      } else {
+        // Rule notification
+        VLOG(2) << "Rule event. " << rule.str();
+        fbData->addStatValue("netlink.notifications.rule", 1, fb303::SUM);
+        netlinkEventsQueue_.push(rule);
+      }
+    } break;
+
     case NLMSG_ERROR: {
       const struct nlmsgerr* const ack =
           reinterpret_cast<struct nlmsgerr*>(NLMSG_DATA(nlh));
@@ -607,6 +625,19 @@ NetlinkProtocolSocket::getAllNeighbors() {
   // Initialize message fields to get all neighbors
   neighMsg->init(RTM_GETNEIGH, 0);
   notifQueue_.putMessage(std::move(neighMsg));
+
+  return future;
+}
+
+folly::SemiFuture<folly::Expected<std::vector<fbnl::Rule>, int>>
+NetlinkProtocolSocket::getAllRules() {
+  VLOG(1) << "Netlink get rules";
+  auto ruleMsg = std::make_unique<openr::fbnl::NetlinkRuleMessage>();
+  auto future = ruleMsg->getRulesSemiFuture();
+
+  // Initialize message fields to get all rules
+  ruleMsg->init(RTM_GETRULE);
+  notifQueue_.putMessage(std::move(ruleMsg));
 
   return future;
 }

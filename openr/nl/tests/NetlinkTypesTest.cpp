@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 extern "C" {
+#include <linux/fib_rules.h>
 #include <linux/rtnetlink.h>
 #include <net/if.h>
 }
@@ -631,6 +632,25 @@ TEST(NetlinkTypes, GreInfoCopyTest) {
   // Copy assignment operator
   greInfo2 = greInfo;
   EXPECT_EQ(greInfo, greInfo2);
+}
+
+TEST(NetlinkTypes, RuleTypeBaseTest) {
+  const uint32_t table = 1000;
+
+  Rule rule(AF_INET, FR_ACT_TO_TBL, table);
+  EXPECT_EQ(AF_INET, rule.getFamily());
+  EXPECT_EQ(FR_ACT_TO_TBL, rule.getAction());
+  EXPECT_EQ(table, rule.getTable());
+  EXPECT_FALSE(rule.getPriority().has_value());
+  EXPECT_FALSE(rule.getFwmark().has_value());
+
+  const uint32_t fwmark = 1234;
+  rule.setFwmark(fwmark);
+  EXPECT_EQ(fwmark, rule.getFwmark());
+
+  const uint32_t priority = 3456;
+  rule.setPriority(priority);
+  EXPECT_EQ(priority, rule.getPriority());
 }
 
 int

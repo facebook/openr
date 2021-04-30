@@ -593,4 +593,47 @@ class Link final {
 
 bool operator==(const Link& lhs, const Link& rhs);
 
+class Rule final {
+ public:
+  Rule(
+      uint16_t family,
+      uint8_t action,
+      uint32_t table,
+      std::optional<uint32_t> fwmark = std::nullopt,
+      std::optional<uint32_t> priority = std::nullopt);
+
+  uint16_t getFamily() const;
+
+  uint8_t getAction() const;
+
+  uint32_t getTable() const;
+
+  std::optional<uint32_t> getFwmark() const;
+
+  std::optional<uint32_t> getPriority() const;
+
+  // FRA_TABLE can override table
+  void setTable(uint32_t table);
+
+  // set methods for optional fields
+  void setFwmark(uint32_t fwmark);
+
+  void setPriority(uint32_t priority);
+
+  std::string str() const;
+
+ private:
+  uint16_t family_{AF_UNSPEC};
+  // FR_ACT_*
+  uint8_t action_{0};
+  // table id
+  uint32_t table_{0};
+
+  // optional attributs
+  std::optional<uint32_t> fwmark_;
+  std::optional<uint32_t> priority_;
+};
+
+bool operator==(const Rule& lhs, const Rule& rhs);
+
 } // namespace openr::fbnl

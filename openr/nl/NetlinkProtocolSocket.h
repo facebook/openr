@@ -20,12 +20,14 @@
 #include <openr/nl/NetlinkMessageBase.h>
 #include <openr/nl/NetlinkNeighborMessage.h>
 #include <openr/nl/NetlinkRouteMessage.h>
+#include <openr/nl/NetlinkRuleMessage.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr::fbnl {
 
-// Netlink event as union of LINK/ADDR/NEIGH event
-using NetlinkEvent = std::variant<fbnl::Link, fbnl::IfAddress, fbnl::Neighbor>;
+// Netlink event as union of LINK/ADDR/NEIGH/RULE event
+using NetlinkEvent =
+    std::variant<fbnl::Link, fbnl::IfAddress, fbnl::Neighbor, fbnl::Rule>;
 
 // Receive socket buffer for netlink socket
 constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
@@ -182,6 +184,12 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   getAllNeighbors();
 
   /**
+   * API to get rules from kernel
+   */
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Rule>, int>>
+  getAllRules();
+
+  /**
    * API to retrieve routes from kernel. Attributes specified in filter will be
    * used to selectively retrieve routes. Filter is supported on following
    * attributes. 0 will act as wildcard for querying routes.
@@ -246,7 +254,7 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // ensure thread safety of private member variables.
   folly::EventBase* evb_{nullptr};
 
-  // Queue to publish LINK/ADDR/NEIGHBOR update received from kernel
+  // Queue to publish LINK/ADDR/NEIGHBOR/RULE update received from kernel
   messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQueue_;
 
   // Notification queue for thread safe enqueuing of messages from external
@@ -285,10 +293,11 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   //    value of nlh->nlmsg_seq will set to 0.
   uint32_t nextNlSeqNum_{1};
 
-  // Netlink message queue. Every add/del/get call for route/addr/neighbor/link
-  // translates into one or more NetlinkMessages. These messages are first
-  // stored in the queue and sent to kernel in rate limiting fashion. When ack
-  // for in-flight messages is received, subsequent messages are sent.
+  // Netlink message queue. Every add/del/get call for
+  // route/addr/neighbor/link/rule translates into one or more NetlinkMessages.
+  // These messages are first stored in the queue and sent to kernel in rate
+  // limiting fashion. When ack for in-flight messages is received, subsequent
+  // messages are sent.
   std::queue<std::unique_ptr<NetlinkMessageBase>> msgQueue_;
 
   // Sequence number to NetlinkMesage request mapping. Each in-flight message

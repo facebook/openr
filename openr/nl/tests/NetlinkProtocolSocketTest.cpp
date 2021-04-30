@@ -17,6 +17,7 @@
 #include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -24,6 +25,7 @@
 #include <openr/nl/NetlinkProtocolSocket.h>
 
 extern "C" {
+#include <linux/fib_rules.h>
 #include <linux/rtnetlink.h>
 #include <net/if.h>
 #include <sys/socket.h>
@@ -2154,6 +2156,32 @@ TEST_F(NlMessageFixture, RouteTableIdTest) {
   // verify route is deleted
   after = nlSock->getRoutes(filter).get().value();
   EXPECT_EQ(before.size(), after.size());
+}
+
+/*
+ * Tests getAllRules API and validates parsed message
+ */
+TEST_F(NlMessageFixture, ParseRuleMessageTest) {
+  // Validates that rules contain the following three
+  //
+  // At startup time the kernel configures the default RPDB consisting
+  // of three rules:
+  // 1.     Priority: 0, Selector: match anything, Action: lookup
+  //       routing table local (ID 255).
+  // 2.     Priority: 32766, Selector: match anything, Action: lookup
+  //       routing table main (ID 254).
+  // 3.     Priority: 32767, Selector: match anything, Action: lookup
+  //       routing table default (ID 253).
+  // https://man7.org/linux/man-pages/man8/ip-rule.8.html
+  using namespace ::testing;
+
+  // priority 0 -> nullopt
+  const Rule rule1(AF_INET, FR_ACT_TO_TBL, RT_TABLE_LOCAL);
+  const Rule rule2(AF_INET, FR_ACT_TO_TBL, RT_TABLE_MAIN, std::nullopt, 32766);
+  const Rule rule3(
+      AF_INET, FR_ACT_TO_TBL, RT_TABLE_DEFAULT, std::nullopt, 32767);
+  const auto rules = nlSock->getAllRules().get().value();
+  EXPECT_THAT(rules, AllOf(Contains(rule1), Contains(rule2), Contains(rule3)));
 }
 
 class NlMessageFixtureV4OrV6 : public NlMessageFixture,

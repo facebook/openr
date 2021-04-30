@@ -206,6 +206,7 @@ add_library(openrlib
   openr/nl/NetlinkLinkMessage.cpp
   openr/nl/NetlinkNeighborMessage.cpp
   openr/nl/NetlinkRouteMessage.cpp
+  openr/nl/NetlinkRuleMessage.cpp
   openr/nl/NetlinkMessageBase.cpp
   openr/nl/NetlinkProtocolSocket.cpp
   openr/nl/NetlinkTypes.cpp

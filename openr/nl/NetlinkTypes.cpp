@@ -1203,4 +1203,79 @@ operator==(const Link& lhs, const Link& rhs) {
       lhs.getGreInfo() == rhs.getGreInfo());
 }
 
+/*==================================Rule======================================*/
+
+Rule::Rule(
+    uint16_t family,
+    uint8_t action,
+    uint32_t table,
+    std::optional<uint32_t> fwmark,
+    std::optional<uint32_t> priority)
+    : family_(family),
+      action_(action),
+      table_(table),
+      fwmark_(fwmark),
+      priority_(priority) {}
+
+uint16_t
+Rule::getFamily() const {
+  return family_;
+}
+
+uint8_t
+Rule::getAction() const {
+  return action_;
+}
+
+void
+Rule::setTable(uint32_t table) {
+  table_ = table;
+}
+
+uint32_t
+Rule::getTable() const {
+  return table_;
+}
+
+void
+Rule::setFwmark(uint32_t fwmark) {
+  fwmark_ = fwmark;
+}
+
+std::optional<uint32_t>
+Rule::getFwmark() const {
+  return fwmark_;
+}
+
+void
+Rule::setPriority(uint32_t priority) {
+  priority_ = priority;
+}
+
+std::optional<uint32_t>
+Rule::getPriority() const {
+  return priority_;
+}
+
+std::string
+Rule::str() const {
+  return fmt::format(
+      "rule family {}, action {}, table {}, fwmark {}, priority {}",
+      family_,
+      action_,
+      table_,
+      fwmark_ ? std::to_string(fwmark_.value()) : "n/a",
+      priority_ ? std::to_string(priority_.value()) : "n/a");
+}
+
+bool
+operator==(const Rule& lhs, const Rule& rhs) {
+  return (
+      lhs.getFamily() == rhs.getFamily() and
+      lhs.getAction() == rhs.getAction() and
+      lhs.getTable() == rhs.getTable() and
+      lhs.getFwmark() == rhs.getFwmark() and
+      lhs.getPriority() == rhs.getPriority());
+}
+
 } // namespace openr::fbnl
