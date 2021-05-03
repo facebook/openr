@@ -244,9 +244,7 @@ class PrefixManager final : public OpenrEventBase {
    * Util function to iterate through originatedPrefixDb_ for route
    * advertisement/withdrawn
    */
-  void processOriginatedPrefixes(
-      std::vector<PrefixEntry>& advertisedPrefixes,
-      std::vector<thrift::PrefixEntry>& withdrawnPrefixes);
+  void processOriginatedPrefixes();
 
   // process decision route update, inject routes to different areas
   void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);

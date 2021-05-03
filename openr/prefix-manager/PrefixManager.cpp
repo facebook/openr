@@ -228,13 +228,9 @@ PrefixManager::PrefixManager(
     // read originated prefixes from OpenrConfig
     buildOriginatedPrefixDb(*prefixes);
 
-    std::vector<PrefixEntry> advertisedPrefixes{};
-    std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
-    processOriginatedPrefixes(advertisedPrefixes, withdrawnPrefixes);
-
     // ATTN: consider min_supporting_route = 0, immediately advertise
     // originated routes to `KvStore`
-    advertisePrefixesImpl(advertisedPrefixes);
+    processOriginatedPrefixes();
   }
 }
 
@@ -965,10 +961,11 @@ PrefixManager::aggregatesToWithdraw(const folly::CIDRNetwork& prefix) {
 }
 
 void
-PrefixManager::processOriginatedPrefixes(
-    std::vector<PrefixEntry>& advertisedPrefixes,
-    std::vector<thrift::PrefixEntry>& withdrawnPrefixes) {
+PrefixManager::processOriginatedPrefixes() {
   DecisionRouteUpdate routeUpdatesOut;
+  std::vector<PrefixEntry> advertisedPrefixes{};
+  std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
+
   for (auto& [network, route] : originatedPrefixDb_) {
     if (route.shouldAdvertise()) {
       route.isAdvertised = true; // mark as advertised
@@ -1008,6 +1005,9 @@ PrefixManager::processOriginatedPrefixes(
     CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
   }
+  // advertise originated config routes to KvStore
+  advertisePrefixesImpl(advertisedPrefixes);
+  withdrawPrefixesImpl(withdrawnPrefixes);
 }
 
 void
@@ -1078,7 +1078,7 @@ PrefixManager::processDecisionRouteUpdates(
   }
 
   // Maybe advertise/withdrawn for local originated routes
-  processOriginatedPrefixes(advertisedPrefixes, withdrawnPrefixes);
+  processOriginatedPrefixes();
 
   // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
   // We want to keep processDecisionRouteUpdates() running as dynamic
