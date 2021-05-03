@@ -174,31 +174,35 @@ KvStore::KvStore(
   });
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 
-  // Prepare global command socket
-  prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
-      ZMQ_POLLIN,
-      [this](int) noexcept {
-        // Drain all available messages in loop
-        while (true) {
-          // NOTE: globalCmSock is connected with neighbor's peerSyncSock_.
-          // recvMultiple() will get a vector of fbzmq::Message which has:
-          //  1) requestIdMsg; 2) delimMsg; 3) kvStoreRequestMsg;
-          auto maybeReq = kvParams_.globalCmdSock.recvMultiple();
-          if (maybeReq.hasError() and maybeReq.error().errNum == EAGAIN) {
-            break;
-          }
+  // [TO BE DEPRECATED]
+  if (kvParams_.enableFloodOptimization) {
+    // Prepare global command socket
+    prepareSocket(
+        kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
+    addSocket(
+        fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
+        ZMQ_POLLIN,
+        [this](int) noexcept {
+          // Drain all available messages in loop
+          while (true) {
+            // NOTE: globalCmSock is connected with neighbor's peerSyncSock_.
+            // recvMultiple() will get a vector of fbzmq::Message which has:
+            //  1) requestIdMsg; 2) delimMsg; 3) kvStoreRequestMsg;
+            auto maybeReq = kvParams_.globalCmdSock.recvMultiple();
+            if (maybeReq.hasError() and maybeReq.error().errNum == EAGAIN) {
+              break;
+            }
 
-          if (maybeReq.hasError()) {
-            LOG(ERROR) << "failed reading messages from globalCmdSock: "
-                       << maybeReq.error();
-            continue;
-          }
+            if (maybeReq.hasError()) {
+              LOG(ERROR) << "failed reading messages from globalCmdSock: "
+                         << maybeReq.error();
+              continue;
+            }
 
-          processCmdSocketRequest(std::move(maybeReq).value());
-        } // while
-      });
+            processCmdSocketRequest(std::move(maybeReq).value());
+          } // while
+        });
+  }
 
   // Add reader to process peer updates from LinkMonitor
   addFiberTask([q = std::move(peerUpdatesQueue), this]() mutable noexcept {
@@ -474,14 +478,14 @@ KvStore::prepareSocket(
   for (const auto& [opt, val] : socketOptions) {
     auto rc = socket.setSockOpt(opt, &val, sizeof(val));
     if (rc.hasError()) {
-      LOG(FATAL) << "Error setting zmq opt: " << opt << "to " << val
+      LOG(ERROR) << "Error setting zmq opt: " << opt << "to " << val
                  << ". Error: " << rc.error();
     }
   }
 
   auto rc = socket.bind(fbzmq::SocketUrl{url});
   if (rc.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << url << "'. Error: " << rc.error();
+    LOG(ERROR) << "Error binding to URL '" << url << "'. Error: " << rc.error();
   }
 }
 
@@ -1146,14 +1150,16 @@ KvStoreDb::KvStoreDb(
   LOG(INFO) << "Starting kvstore DB instance for node " << nodeId << " area "
             << area;
 
-  // [TO BE DEPRECATED]
-  // Attach socket callbacks/schedule events
-  attachCallbacks();
+  if (kvParams_.enableFloodOptimization) {
+    // [TO BE DEPRECATED]
+    // Attach socket callbacks/schedule events
+    attachCallbacks();
 
-  // [TO BE DEPRECATED]
-  // Perform ZMQ full-sync if there are peers to sync with.
-  fullSyncTimer_ = folly::AsyncTimeout::make(
-      *evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
+    // [TO BE DEPRECATED]
+    // Perform ZMQ full-sync if there are peers to sync with.
+    fullSyncTimer_ = folly::AsyncTimeout::make(
+        *evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
+  }
 
   // Perform full-sync if there are peers to sync with.
   thriftSyncTimer_ = folly::AsyncTimeout::make(
@@ -1243,7 +1249,9 @@ KvStoreDb::~KvStoreDb() {
   });
 
   // remove ZMQ socket
-  evb_->removeSocket(fbzmq::RawZmqSocketPtr{*peerSyncSock_});
+  if (kvParams_.enableFloodOptimization) {
+    evb_->removeSocket(fbzmq::RawZmqSocketPtr{*peerSyncSock_});
+  }
 
   LOG(INFO) << "Successfully destructed KvStoreDb in area: " << area_;
 }
@@ -1764,97 +1772,94 @@ KvStoreDb::addPeers(
   // thrift peer addition
   addThriftPeers(peers);
 
-  // ZMQ peer addition
-  ++peerAddCounter_;
-  std::vector<std::string> dualPeersToAdd;
-  for (auto const& [peerName, newPeerSpec] : peers) {
-    auto const& newPeerCmdId = fmt::format(
-        Constants::kGlobalCmdLocalIdTemplate.toString(),
-        peerName,
-        peerAddCounter_);
+  // [TO BE DEPRECATED]
+  if (kvParams_.enableFloodOptimization) {
+    // ZMQ peer addition
+    ++peerAddCounter_;
+    std::vector<std::string> dualPeersToAdd;
+    for (auto const& [peerName, newPeerSpec] : peers) {
+      auto const& newPeerCmdId = fmt::format(
+          Constants::kGlobalCmdLocalIdTemplate.toString(),
+          peerName,
+          peerAddCounter_);
 
-    try {
-      auto it = peers_.find(peerName);
-      bool cmdUrlUpdated{false};
-      bool isNewPeer{false};
+      try {
+        auto it = peers_.find(peerName);
+        bool cmdUrlUpdated{false};
+        bool isNewPeer{false};
 
-      // add dual peers for both new-peer or update-peer event
-      if (kvParams_.enableFloodOptimization) {
+        // add dual peers for both new-peer or update-peer event
         dualPeersToAdd.emplace_back(peerName);
-      }
 
-      if (it != peers_.end()) {
-        LOG(INFO) << "Updating existing peer " << peerName;
+        if (it != peers_.end()) {
+          LOG(INFO) << "Updating existing peer " << peerName;
 
-        const auto& peerSpec = it->second.first;
+          const auto& peerSpec = it->second.first;
 
-        if (*peerSpec.cmdUrl_ref() != *newPeerSpec.cmdUrl_ref()) {
-          // case1: peer-spec updated (e.g parallel cases)
-          cmdUrlUpdated = true;
-          LOG(INFO) << "Disconnecting from " << *peerSpec.cmdUrl_ref()
-                    << " with id " << it->second.second;
-          const auto ret = peerSyncSock_.disconnect(
-              fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
-          if (ret.hasError()) {
-            LOG(FATAL) << "Error Disconnecting to URL '"
-                       << *peerSpec.cmdUrl_ref() << "' " << ret.error();
+          if (*peerSpec.cmdUrl_ref() != *newPeerSpec.cmdUrl_ref()) {
+            // case1: peer-spec updated (e.g parallel cases)
+            cmdUrlUpdated = true;
+            LOG(INFO) << "Disconnecting from " << *peerSpec.cmdUrl_ref()
+                      << " with id " << it->second.second;
+            const auto ret = peerSyncSock_.disconnect(
+                fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
+            if (ret.hasError()) {
+              LOG(ERROR) << "Error Disconnecting to URL '"
+                         << *peerSpec.cmdUrl_ref() << "' " << ret.error();
+            }
+            // Remove any pending expected response for old socket-id
+            latestSentPeerSync_.erase(it->second.second);
+            it->second.second = newPeerCmdId;
+          } else {
+            // case2. new peer came up (previsously shut down ungracefully)
+            LOG(WARNING) << "new peer " << peerName << ", previously "
+                         << "shutdown non-gracefully";
+            isNewPeer = true;
           }
-          // Remove any pending expected response for old socket-id
-          latestSentPeerSync_.erase(it->second.second);
-          it->second.second = newPeerCmdId;
+          // Update entry with new data
+          it->second.first = newPeerSpec;
         } else {
-          // case2. new peer came up (previsously shut down ungracefully)
-          LOG(WARNING) << "new peer " << peerName << ", previously "
-                       << "shutdown non-gracefully";
+          // case3. new peer came up
+          LOG(INFO) << "Adding new peer " << peerName;
           isNewPeer = true;
+          cmdUrlUpdated = true;
+          std::tie(it, std::ignore) = peers_.emplace(
+              peerName, std::make_pair(newPeerSpec, newPeerCmdId));
         }
-        // Update entry with new data
-        it->second.first = newPeerSpec;
-      } else {
-        // case3. new peer came up
-        LOG(INFO) << "Adding new peer " << peerName;
-        isNewPeer = true;
-        cmdUrlUpdated = true;
-        std::tie(it, std::ignore) =
-            peers_.emplace(peerName, std::make_pair(newPeerSpec, newPeerCmdId));
-      }
 
-      if (cmdUrlUpdated) {
-        CHECK(newPeerCmdId == it->second.second);
-        LOG(INFO) << "Connecting sync channel to " << *newPeerSpec.cmdUrl_ref()
-                  << " with id " << newPeerCmdId;
-        auto const optStatus = peerSyncSock_.setSockOpt(
-            ZMQ_CONNECT_RID, newPeerCmdId.data(), newPeerCmdId.size());
-        if (optStatus.hasError()) {
-          LOG(FATAL) << "Error setting ZMQ_CONNECT_RID with value "
-                     << newPeerCmdId;
+        if (cmdUrlUpdated) {
+          CHECK(newPeerCmdId == it->second.second);
+          LOG(INFO) << "Connecting sync channel to "
+                    << *newPeerSpec.cmdUrl_ref() << " with id " << newPeerCmdId;
+          auto const optStatus = peerSyncSock_.setSockOpt(
+              ZMQ_CONNECT_RID, newPeerCmdId.data(), newPeerCmdId.size());
+          if (optStatus.hasError()) {
+            LOG(ERROR) << "Error setting ZMQ_CONNECT_RID with value "
+                       << newPeerCmdId;
+          }
+          if (peerSyncSock_.connect(fbzmq::SocketUrl{*newPeerSpec.cmdUrl_ref()})
+                  .hasError()) {
+            LOG(ERROR) << "Error connecting to URL '"
+                       << *newPeerSpec.cmdUrl_ref() << "'";
+          }
         }
-        if (peerSyncSock_.connect(fbzmq::SocketUrl{*newPeerSpec.cmdUrl_ref()})
-                .hasError()) {
-          LOG(FATAL) << "Error connecting to URL '" << *newPeerSpec.cmdUrl_ref()
-                     << "'";
-        }
-      }
 
-      if (isNewPeer) {
-        if (kvParams_.enableFloodOptimization) {
+        if (isNewPeer) {
           // make sure let peer to unset-child for me for all roots first
           // after that, I'll be fed with proper dual-events and I'll be
           // chosing new nexthop if need.
           unsetChildAll(peerName);
         }
+      } catch (std::exception const& e) {
+        LOG(ERROR) << "Error connecting to: `" << peerName
+                   << "` reason: " << folly::exceptionStr(e);
       }
-    } catch (std::exception const& e) {
-      LOG(ERROR) << "Error connecting to: `" << peerName
-                 << "` reason: " << folly::exceptionStr(e);
     }
-  }
-  if (not fullSyncTimer_->isScheduled()) {
-    fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-  }
+    if (not fullSyncTimer_->isScheduled()) {
+      fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+    }
 
-  // process dual events if any
-  if (kvParams_.enableFloodOptimization) {
+    // process dual events if any
     for (const auto& peer : dualPeersToAdd) {
       LOG(INFO) << "dual peer up: " << peer;
       DualNode::peerUp(peer, 1 /* link-cost */); // use hop count as metric
@@ -1910,38 +1915,37 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
   // thrift peer deletion
   delThriftPeers(peers);
 
-  // ZMQ peer deletion
-  std::vector<std::string> dualPeersToRemove;
-  for (auto const& peerName : peers) {
-    // not currently subscribed
-    auto it = peers_.find(peerName);
-    if (it == peers_.end()) {
-      LOG(ERROR) << "Trying to delete non-existing peer '" << peerName << "'";
-      continue;
-    }
-
-    const auto& peerSpec = it->second.first;
-    if (kvParams_.enableFloodOptimization) {
-      dualPeersToRemove.emplace_back(peerName);
-    }
-
-    LOG(INFO) << "Detaching from: " << *peerSpec.cmdUrl_ref();
-    auto syncRes =
-        peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
-    if (syncRes.hasError()) {
-      LOG(ERROR) << "Failed to detach. " << syncRes.error();
-    }
-
-    peersToSyncWith_.erase(peerName);
-    auto const& peerCmdSocketId = it->second.second;
-    if (latestSentPeerSync_.count(peerCmdSocketId)) {
-      latestSentPeerSync_.erase(peerCmdSocketId);
-    }
-    peers_.erase(it);
-  }
-
-  // remove dual peers if any
+  // [TO BE DEPRECATED]
   if (kvParams_.enableFloodOptimization) {
+    // ZMQ peer deletion
+    std::vector<std::string> dualPeersToRemove;
+    for (auto const& peerName : peers) {
+      // not currently subscribed
+      auto it = peers_.find(peerName);
+      if (it == peers_.end()) {
+        LOG(ERROR) << "Trying to delete non-existing peer '" << peerName << "'";
+        continue;
+      }
+
+      const auto& peerSpec = it->second.first;
+      dualPeersToRemove.emplace_back(peerName);
+
+      LOG(INFO) << "Detaching from: " << *peerSpec.cmdUrl_ref();
+      auto syncRes =
+          peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
+      if (syncRes.hasError()) {
+        LOG(ERROR) << "Failed to detach. " << syncRes.error();
+      }
+
+      peersToSyncWith_.erase(peerName);
+      auto const& peerCmdSocketId = it->second.second;
+      if (latestSentPeerSync_.count(peerCmdSocketId)) {
+        latestSentPeerSync_.erase(peerCmdSocketId);
+      }
+      peers_.erase(it);
+    }
+
+    // remove dual peers if any
     for (const auto& peer : dualPeersToRemove) {
       LOG(INFO) << "dual peer down: " << peer;
       DualNode::peerDown(peer);
@@ -2423,13 +2427,13 @@ KvStoreDb::attachCallbacks() {
   const auto peersSyncSndHwm = peerSyncSock_.setSockOpt(
       ZMQ_SNDHWM, &kvParams_.zmqHwm, sizeof(kvParams_.zmqHwm));
   if (peersSyncSndHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
+    LOG(ERROR) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
                << peersSyncSndHwm.error();
   }
   const auto peerSyncRcvHwm = peerSyncSock_.setSockOpt(
       ZMQ_RCVHWM, &kvParams_.zmqHwm, sizeof(kvParams_.zmqHwm));
   if (peerSyncRcvHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
+    LOG(ERROR) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
                << peerSyncRcvHwm.error();
   }
 
@@ -2438,7 +2442,7 @@ KvStoreDb::attachCallbacks() {
   const auto peerSyncHandover =
       peerSyncSock_.setSockOpt(ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
   if (peerSyncHandover.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
+    LOG(ERROR) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
                << peerSyncHandover.error();
   }
 
@@ -2449,7 +2453,7 @@ KvStoreDb::attachCallbacks() {
       Constants::kKeepAliveCnt,
       Constants::kKeepAliveIntvl.count());
   if (peerSyncKeepAlive.hasError()) {
-    LOG(FATAL) << "Error setting KeepAlive " << peerSyncKeepAlive.error();
+    LOG(ERROR) << "Error setting KeepAlive " << peerSyncKeepAlive.error();
   }
 
   if (kvParams_.maybeIpTos.has_value()) {
@@ -2457,7 +2461,7 @@ KvStoreDb::attachCallbacks() {
     const auto peerSyncTos =
         peerSyncSock_.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
     if (peerSyncTos.hasError()) {
-      LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
+      LOG(ERROR) << "Error setting ZMQ_TOS to " << ipTos << " "
                  << peerSyncTos.error();
     }
   }
