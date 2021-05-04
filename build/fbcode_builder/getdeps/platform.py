@@ -8,6 +8,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import re
 import shlex
 import sys
+import platform
 
 
 def is_windows():
@@ -70,9 +71,17 @@ class HostType(object):
         self.distro = distro
         # The OS/distro version if known
         self.distrovers = distrovers
+        machine = platform.machine().lower()
+        if "arm" in machine or "aarch" in machine:
+            self.isarm = True
+        else:
+            self.isarm = False
 
     def is_windows(self):
         return self.ostype == "windows"
+
+    def is_arm(self):
+        return self.isarm
 
     def is_darwin(self):
         return self.ostype == "darwin"
