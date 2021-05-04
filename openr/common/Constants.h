@@ -215,7 +215,6 @@ class Constants {
   static constexpr folly::StringPiece kAdjDbMarker{"adj:"};
   static constexpr folly::StringPiece kPrefixDbMarker{"prefix:"};
   static constexpr folly::StringPiece kPrefixAllocMarker{"allocprefix:"};
-  static constexpr folly::StringPiece kFibTimeMarker{"fibtime:"};
   static constexpr folly::StringPiece kNodeLabelRangePrefix{"nodeLabel:"};
 
   static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{

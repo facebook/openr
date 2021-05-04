@@ -409,28 +409,22 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
     }
 
     try {
-      // adjacencyDb: update keys starting with "adj:"
       if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+        // adjacencyDb: update keys starting with "adj:"
         auto adjacencyDb = readThriftObjStr<thrift::AdjacencyDatabase>(
             rawVal.value_ref().value(), serializer_);
         auto& nodeName = adjacencyDb.get_thisNodeName();
-
-        // TODO - this should directly come from KvStore. Needed for
-        // compatibility between default and non-default areas
+        LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
         adjacencyDb.area_ref() = area;
 
-        LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyLinkStateChange(
             nodeName,
             areaLinkState.updateAdjacencyDatabase(
                 adjacencyDb, holdUpTtl, holdDownTtl),
             adjacencyDb.perfEvents_ref());
-        continue;
-      }
-
-      // prefixDb: update keys starting with "prefix:"
-      if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
+      } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
+        // prefixDb: update keys starting with "prefix:"
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
         if (1 != prefixDb.get_prefixEntries().size()) {
@@ -461,20 +455,6 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
                 ? prefixState_.deletePrefix(prefixKey)
                 : prefixState_.updatePrefix(prefixKey, entry),
             prefixDb.perfEvents_ref());
-        continue;
-      }
-
-      // update keys starting with "fibTime:"
-      if (key.find(Constants::kFibTimeMarker.toString()) == 0) {
-        try {
-          std::chrono::milliseconds fibTime{stoll(rawVal.value_ref().value())};
-          fibTimes_[getNodeNameFromKey(key)] = fibTime;
-        } catch (...) {
-          LOG(ERROR) << "Could not convert "
-                     << Constants::kFibTimeMarker.toString()
-                     << " value to int64";
-        }
-        continue;
       }
     } catch (const std::exception& e) {
       LOG(ERROR) << "Failed to deserialize info for key " << key
@@ -486,19 +466,14 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   for (const auto& key : *thriftPub.expiredKeys_ref()) {
     std::string nodeName = getNodeNameFromKey(key);
 
-    // adjacencyDb: delete keys starting with "adj:"
     if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+      // adjacencyDb: delete keys starting with "adj:"
       pendingUpdates_.applyLinkStateChange(
           nodeName,
           areaLinkState.deleteAdjacencyDatabase(nodeName),
           thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
-      continue;
-    }
-
-    // prefixDb: delete keys starting with "prefix:"
-    if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
-      VLOG(2) << "Deleting expired prefix key: " << key
-              << " of node: " << nodeName << " in area: " << area;
+    } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
+      // prefixDb: delete keys starting with "prefix:"
       auto maybePrefixKey = PrefixKey::fromStr(key);
       if (maybePrefixKey.hasError()) {
         LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
@@ -512,7 +487,6 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
       pendingUpdates_.applyPrefixStateChange(
           prefixState_.deletePrefix(prefixKey),
           thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
-      continue;
     }
   }
 }
@@ -629,15 +603,6 @@ Decision::rebuildRoutes(std::string const& event) {
 
   // send `DecisionRouteUpdate` to Fib/PrefixMgr
   routeUpdatesQueue_.push(std::move(update));
-}
-
-std::chrono::milliseconds
-Decision::getMaxFib() {
-  std::chrono::milliseconds maxFib{1};
-  for (auto& kv : fibTimes_) {
-    maxFib = std::max(maxFib, kv.second);
-  }
-  return maxFib;
 }
 
 void

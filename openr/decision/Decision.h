@@ -224,8 +224,6 @@ class Decision : public OpenrEventBase {
       DecisionRouteDb&& routeDb,
       std::optional<thrift::PerfEvents>&& perfEvents);
 
-  std::chrono::milliseconds getMaxFib();
-
   // node to prefix entries database for nodes advertising per prefix keys
   std::optional<thrift::PrefixDatabase> updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
@@ -251,10 +249,6 @@ class Decision : public OpenrEventBase {
 
   // global prefix state
   PrefixState prefixState_;
-
-  // For orderedFib prgramming, we keep track of the fib programming times
-  // across the network
-  std::unordered_map<std::string, std::chrono::milliseconds> fibTimes_;
 
   apache::thrift::CompactSerializer serializer_;
 
