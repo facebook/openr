@@ -78,7 +78,7 @@ locale.getpreferredencoding = getpreferredencoding
 )
 @click.pass_context
 def cli(ctx, *args, **kwargs):
-    """ Command line tools for Open/R. """
+    """Command line tools for Open/R."""
 
     # Default config options
     ctx.obj = OPTIONS
@@ -103,7 +103,7 @@ def get_breeze_cli():
 
 
 def main():
-    """ entry point for breeze """
+    """entry point for breeze"""
 
     # let the magic begin
     cli = get_breeze_cli()

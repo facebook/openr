@@ -66,7 +66,7 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
                 utils.print_route_db(route_db, prefixes, labels)
 
     def _get_all_nodes(self, client: OpenrCtrl.Client) -> set:
-        """ return all the nodes' name in the network """
+        """return all the nodes' name in the network"""
 
         def _parse(nodes, adj_db):
             nodes.add(adj_db.thisNodeName)
@@ -128,7 +128,7 @@ class PathCmd(OpenrCtrlCmd):
         self.print_paths(paths)
 
     def get_loopback_addr(self, node):
-        """ get node's loopback addr"""
+        """get node's loopback addr"""
 
         def _parse(loopback_set, prefix_db):
             for prefix_entry in prefix_db.prefixEntries:
@@ -172,7 +172,7 @@ class PathCmd(OpenrCtrlCmd):
         return prefix_set
 
     def get_if2node_map(self, adj_dbs):
-        """ create a map from interface to node """
+        """create a map from interface to node"""
 
         def _parse(if2node, adj_db):
             nexthop_dict = if2node[adj_db.thisNodeName]
@@ -187,7 +187,7 @@ class PathCmd(OpenrCtrlCmd):
         return if2node
 
     def get_lpm_route(self, route_db, dst_addr):
-        """ find the routes to the longest prefix matches of dst. """
+        """find the routes to the longest prefix matches of dst."""
 
         max_prefix_len = -1
         lpm_route = None
@@ -509,7 +509,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
     def print_db_delta_adj(
         self, key, value, kvstore_adj_node_names, decision_adj_dbs, json
     ):
-        """ Returns status code. 0 = success, 1 = failure"""
+        """Returns status code. 0 = success, 1 = failure"""
 
         kvstore_adj_db = deserialize_thrift_object(
             value.value, openr_types.AdjacencyDatabase
@@ -557,7 +557,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
     def print_db_delta_prefix(
         self, kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
     ):
-        """ Returns status code. 0 = success, 1 = failure"""
+        """Returns status code. 0 = success, 1 = failure"""
 
         prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
 
@@ -604,7 +604,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         db_type: str,
         json: bool,
     ) -> int:
-        """ Returns a status code, 0 = success, 1 = failure"""
+        """Returns a status code, 0 = success, 1 = failure"""
         a_minus_b = sorted(nodes_set_a - nodes_set_b)
         b_minus_a = sorted(nodes_set_b - nodes_set_a)
         return_code = 0

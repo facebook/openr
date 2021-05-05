@@ -21,7 +21,7 @@ class OpenrCtrlCmd(object):
     """
 
     def __init__(self, cli_opts: bunch.Bunch) -> None:
-        """ initialize the Config Store client """
+        """initialize the Config Store client"""
 
         self.cli_opts = cli_opts  # type: bunch.Bunch
         self.host = cli_opts.host

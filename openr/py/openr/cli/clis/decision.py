@@ -31,7 +31,7 @@ class DecisionCli(object):
     @click.group()
     @click.pass_context
     def decision(ctx):  # noqa: B902
-        """ CLI tool to peek into Decision module. """
+        """CLI tool to peek into Decision module."""
         pass
 
 
@@ -49,7 +49,7 @@ class PathCli(object):
     @click.option("--area", default=None, help="area identifier")
     @click.pass_obj
     def path(cli_opts, src, dst, max_hop, area):  # noqa: B902
-        """ path from src to dst """
+        """path from src to dst"""
 
         decision.PathCmd(cli_opts).run(src, dst, max_hop, area)
 
@@ -79,7 +79,7 @@ class DecisionRoutesComputedCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def routes(cli_opts, nodes, prefixes, labels, json):  # noqa: B902
-        """ Request the routing table from Decision module """
+        """Request the routing table from Decision module"""
 
         nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, labels, json)
@@ -109,7 +109,7 @@ class DecisionPrefixesCli(object):
         prefix: str,
         client_type: str,
     ) -> None:
-        """ show the prefixes from Decision module """
+        """show the prefixes from Decision module"""
 
         nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionPrefixesCmd(cli_opts).run(nodes, json, prefix, client_type)
@@ -136,7 +136,7 @@ class DecisionAdjCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def adj(cli_opts, nodes, areas, bidir, json):  # noqa: B902
-        """ dump the link-state adjacencies from Decision module """
+        """dump the link-state adjacencies from Decision module"""
 
         nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionAdjCmd(cli_opts).run(nodes, set(areas), bidir, json)

@@ -25,7 +25,7 @@ class PrefixMgrCli(object):
     @click.group()
     @click.pass_context
     def prefixmgr(ctx):  # noqa: B902
-        """ CLI tool to peek into Prefix Manager module. """
+        """CLI tool to peek into Prefix Manager module."""
         pass
 
 
@@ -40,7 +40,7 @@ class WithdrawCli(object):
     )
     @click.pass_obj
     def withdraw(cli_opts, prefixes: List[str], prefix_type: str):  # noqa: B902
-        """ Withdraw the prefixes being advertised from this node """
+        """Withdraw the prefixes being advertised from this node"""
 
         # pyre-fixme[6]: Expected `Bunch` for 1st param but got `WithdrawCli`.
         prefix_mgr.WithdrawCmd(cli_opts).run(prefixes, prefix_type)
@@ -62,7 +62,7 @@ class AdvertiseCli(object):
     )
     @click.pass_obj
     def advertise(cli_opts, prefixes, prefix_type, forwarding_type):  # noqa: B902
-        """ Advertise the prefixes from this node with specific type """
+        """Advertise the prefixes from this node with specific type"""
 
         prefix_mgr.AdvertiseCmd(cli_opts).run(prefixes, prefix_type, forwarding_type)
 
@@ -83,7 +83,7 @@ class SyncCli(object):
     )
     @click.pass_obj
     def sync(cli_opts, prefixes, prefix_type, forwarding_type):  # noqa: B902
-        """ Sync the prefixes from this node with specific type """
+        """Sync the prefixes from this node with specific type"""
 
         prefix_mgr.SyncCmd(cli_opts).run(prefixes, prefix_type, forwarding_type)
 

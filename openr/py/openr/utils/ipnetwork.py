@@ -15,7 +15,7 @@ from openr.Types import ttypes as openr_types
 
 
 def sprint_addr(addr):
-    """ binary ip addr -> string """
+    """binary ip addr -> string"""
 
     if not len(addr):
         return ""

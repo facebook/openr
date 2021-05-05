@@ -13,7 +13,7 @@ import tabulate
 
 
 def caption_fmt(caption):
-    """ Format a caption """
+    """Format a caption"""
 
     if caption:
         return "\n== {}  ==\n".format(caption)
@@ -27,7 +27,7 @@ def get_timestamp() -> str:
 
 
 def sprint_bytes(bytes: int) -> str:
-    """ Return formatted bytes. e.g. 12KB, 15.1MB """
+    """Return formatted bytes. e.g. 12KB, 15.1MB"""
 
     if bytes < 1024:
         return f"{bytes} B"

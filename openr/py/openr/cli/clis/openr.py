@@ -26,7 +26,7 @@ class OpenrCli(object):
     @click.group()
     @click.pass_context
     def openr(ctx):  # noqa: B902
-        """ CLI tool to peek into Openr information. """
+        """CLI tool to peek into Openr information."""
         pass
 
 

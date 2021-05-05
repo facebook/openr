@@ -23,7 +23,7 @@ from thrift.py3.client import ClientType
 
 class FibAgentCmd(object):
     def __init__(self, cli_opts):
-        """ initialize the Fib agent client """
+        """initialize the Fib agent client"""
         self.cli_opts = cli_opts
         try:
             self.client = utils.get_fib_agent_client(
@@ -94,7 +94,7 @@ class FibCountersCmd(FibAgentCmd):
             return 1
 
     def print_counters(self, counters, json_opt):
-        """ print the Fib counters """
+        """print the Fib counters"""
 
         with utils.get_openr_ctrl_client(self.cli_opts.host, self.cli_opts) as client:
             host_id = client.getMyNodeName()
@@ -344,7 +344,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
         delta_db: openr_types.RouteDatabaseDelta,
         prefixes: Optional[List[str]] = None,
     ) -> None:
-        """ print the RouteDatabaseDelta from Fib module """
+        """print the RouteDatabaseDelta from Fib module"""
 
         if len(delta_db.unicastRoutesToUpdate) != 0:
             utils.print_unicast_routes(
@@ -386,7 +386,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
         prefixes: Optional[List[str]] = None,
         labels: Optional[List[int]] = None,
     ) -> None:
-        """ print the routes from Fib module """
+        """print the routes from Fib module"""
 
         if (prefixes or not labels) and len(route_db.unicastRoutes) != 0:
             utils.print_unicast_routes(

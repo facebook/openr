@@ -18,7 +18,7 @@ class TechSupportCli(object):
     )
     @click.pass_context
     def tech_support(ctx, fib_agent_port, routes):  # noqa: B902
-        """ Extensive logging of Open/R's state for debugging """
+        """Extensive logging of Open/R's state for debugging"""
 
         """
         - Counters (FIB) and recent log samples

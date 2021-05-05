@@ -27,7 +27,7 @@ from openr.utils.consts import Consts
 
 class TechSupportCmd(object):
     def __init__(self, cli_opts):
-        """ initialize the tech support command """
+        """initialize the tech support command"""
         self.cli_opts = cli_opts
         # Keep short timeout
         self.cli_opts.timeout = 1000

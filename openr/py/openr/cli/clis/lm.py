@@ -40,7 +40,7 @@ class LMCli(object):
     @click.group()
     @click.pass_context
     def lm(ctx):  # noqa: B902
-        """ CLI tool to peek into Link Monitor module. """
+        """CLI tool to peek into Link Monitor module."""
         pass
 
 
@@ -55,7 +55,7 @@ class LMLinksCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def links(cli_opts, only_suppressed, json):  # noqa: B902
-        """ Dump all known links of the current host """
+        """Dump all known links of the current host"""
 
         lm.LMLinksCmd(cli_opts).run(only_suppressed, json)
 
@@ -65,7 +65,7 @@ class LMAdjCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def adj(cli_opts, json):  # noqa: B902
-        """ Dump all formed adjacencies of the current host """
+        """Dump all formed adjacencies of the current host"""
 
         nodes = parse_nodes(cli_opts, "")
         lm.LMAdjCmd(cli_opts).run(nodes, json)
@@ -76,7 +76,7 @@ class SetNodeOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def set_node_overload(cli_opts, yes):  # noqa: B902
-        """ Set overload bit to stop transit traffic through node. """
+        """Set overload bit to stop transit traffic through node."""
 
         lm.SetNodeOverloadCmd(cli_opts).run(yes)
 
@@ -86,7 +86,7 @@ class UnsetNodeOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def unset_node_overload(cli_opts, yes):  # noqa: B902
-        """ Unset overload bit to resume transit traffic through node. """
+        """Unset overload bit to resume transit traffic through node."""
 
         lm.UnsetNodeOverloadCmd(cli_opts).run(yes)
 
@@ -97,7 +97,7 @@ class SetLinkOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def set_link_overload(cli_opts, interface, yes):  # noqa: B902
-        """ Set overload bit for a link. Transit traffic will be drained. """
+        """Set overload bit for a link. Transit traffic will be drained."""
 
         lm.SetLinkOverloadCmd(cli_opts).run(interface, yes)
 
@@ -108,7 +108,7 @@ class UnsetLinkOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def unset_link_overload(cli_opts, interface, yes):  # noqa: B902
-        """ Unset overload bit for a link to allow transit traffic. """
+        """Unset overload bit for a link to allow transit traffic."""
 
         lm.UnsetLinkOverloadCmd(cli_opts).run(interface, yes)
 

@@ -37,7 +37,7 @@ class FibCli(object):
     @breeze_option("--client-id", type=int, help="FIB Client ID")
     @click.pass_context
     def fib(ctx, fib_agent_port, client_id):  # noqa: B902
-        """ CLI tool to peek into Fib module. """
+        """CLI tool to peek into Fib module."""
         pass
 
 
@@ -46,7 +46,7 @@ class FibCountersCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def counters(cli_opts, json):  # noqa: B902
-        """ Get various counters on fib agent """
+        """Get various counters on fib agent"""
 
         return_code = fib.FibCountersCmd(cli_opts).run(json)
         sys.exit(return_code)
@@ -82,7 +82,7 @@ class FibRoutesInstalledCli(object):
         client_id: int,
         json: bool,
     ):
-        """ Get and print all the routes on fib agent """
+        """Get and print all the routes on fib agent"""
 
         return_code = fib.FibRoutesInstalledCmd(cli_opts).run(
             prefixes, labels, json, client_id
@@ -96,7 +96,7 @@ class FibUnicastRoutesCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def routes(cli_opts, prefix_or_ip, json):  # noqa: B902
-        """ Request unicast routing table of the current host """
+        """Request unicast routing table of the current host"""
 
         fib.FibUnicastRoutesCmd(cli_opts).run(prefix_or_ip, json)
 
@@ -107,7 +107,7 @@ class FibMplsRoutesCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def routes(cli_opts, labels, json):  # noqa: B902
-        """ Request Mpls routing table of the current host """
+        """Request Mpls routing table of the current host"""
 
         fib.FibMplsRoutesCmd(cli_opts).run(labels, json)
 
@@ -118,7 +118,7 @@ class FibAddRoutesCli(object):
     @click.argument("nexthops")  # Comma separated list of nexthops
     @click.pass_obj
     def add_routes(cli_opts, prefixes, nexthops):  # noqa: B902
-        """ Add new routes in FIB """
+        """Add new routes in FIB"""
 
         fib.FibAddRoutesCmd(cli_opts).run(prefixes, nexthops)
 
@@ -128,7 +128,7 @@ class FibDelRoutesCli(object):
     @click.argument("prefixes")  # Comma separated list of prefixes
     @click.pass_obj
     def del_routes(cli_opts, prefixes):  # noqa: B902
-        """ Delete routes from FIB """
+        """Delete routes from FIB"""
 
         fib.FibDelRoutesCmd(cli_opts).run(prefixes)
 
@@ -139,7 +139,7 @@ class FibSyncRoutesCli(object):
     @click.argument("nexthops")  # Comma separated list of nexthops
     @click.pass_obj
     def sync_routes(cli_opts, prefixes, nexthops):  # noqa: B902
-        """ Re-program FIB with specified routes. Delete all old ones """
+        """Re-program FIB with specified routes. Delete all old ones"""
 
         fib.FibSyncRoutesCmd(cli_opts).run(prefixes, nexthops)
 
@@ -148,7 +148,7 @@ class FibValidateRoutesCli(object):
     @click.command()
     @click.pass_obj
     def validate(cli_opts):  # noqa: B902
-        """ Validator to check that all routes as computed by Decision """
+        """Validator to check that all routes as computed by Decision"""
 
         sys.exit(fib.FibValidateRoutesCmd(cli_opts).run(cli_opts))
 
@@ -178,6 +178,6 @@ class FibSnoopCli(object):
         initial_dump: bool,
         prefixes: List[str],
     ):
-        """ Snoop on fib streaming updates. """
+        """Snoop on fib streaming updates."""
 
         fib.FibSnoopCmd(cli_opts).run(duration, initial_dump, prefixes)

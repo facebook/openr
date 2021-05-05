@@ -52,7 +52,7 @@ class CountersCmd(MonitorCmd):
     def print_counters(
         self, client: OpenrCtrl.Client, resp: Dict, prefix: str, json: bool
     ) -> None:
-        """ print the Kv Store counters """
+        """print the Kv Store counters"""
 
         host_id = client.getMyNodeName()
         caption = "{}'s counters".format(host_id)
@@ -90,7 +90,7 @@ class LogCmd(MonitorCmd):
             )
 
     def print_log_data(self, resp, json_opt):
-        """ print the log data"""
+        """print the log data"""
 
         if json_opt:
             event_logs = []

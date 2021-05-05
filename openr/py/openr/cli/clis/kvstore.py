@@ -39,7 +39,7 @@ class KvStoreCli(object):
     @breeze_option("--area", type=str, help="area identifier")
     @click.pass_context
     def kvstore(ctx, area):  # noqa: B902
-        """ CLI tool to peek into KvStore module. """
+        """CLI tool to peek into KvStore module."""
         pass
 
 
@@ -67,7 +67,7 @@ class PrefixesCli(object):
         prefix: str,
         client_type: str,
     ) -> None:
-        """ show the prefixes in the network """
+        """show the prefixes in the network"""
 
         nodes = parse_nodes(cli_opts, nodes)
         kvstore.PrefixesCmd(cli_opts).run(nodes, json, prefix, client_type)
@@ -83,7 +83,7 @@ class KeysCli(object):
     )
     @click.pass_obj
     def keys(cli_opts, json, prefix, originator, ttl):  # noqa: B902
-        """ dump all available keys """
+        """dump all available keys"""
 
         kvstore.KeysCmd(cli_opts).run(json, prefix, originator, ttl)
 
@@ -93,7 +93,7 @@ class KeyValsCli(object):
     @click.argument("keys", nargs=-1, required=True)
     @click.pass_obj
     def keyvals(cli_opts, keys):  # noqa: B902
-        """ get values of input keys """
+        """get values of input keys"""
 
         kvstore.KeyValsCmd(cli_opts).run(keys)
 
@@ -102,7 +102,7 @@ class NodesCli(object):
     @click.command()
     @click.pass_obj
     def nodes(cli_opts):  # noqa: B902
-        """ show nodes info """
+        """show nodes info"""
 
         kvstore.NodesCmd(cli_opts).run()
 
@@ -120,7 +120,7 @@ class AdjCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def adj(cli_opts, nodes, bidir, json):  # noqa: B902
-        """ dump the link-state adjacencies """
+        """dump the link-state adjacencies"""
 
         nodes = parse_nodes(cli_opts, nodes)
         kvstore.AdjCmd(cli_opts).run(nodes, bidir, json)
@@ -131,7 +131,7 @@ class AreasCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def areas(cli_opts: Bunch, json) -> None:  # noqa: B902
-        """ get list of 'areas' configured """
+        """get list of 'areas' configured"""
         kvstore.Areas(cli_opts).run(json)
 
 
@@ -145,7 +145,7 @@ class FloodCli(object):
     )
     @click.pass_obj
     def flood(cli_opts: Bunch, roots: str) -> None:  # noqa: B902
-        """ dump the flooding-topology information """
+        """dump the flooding-topology information"""
 
         if roots is not None:
             # pyre-fixme[9]: roots has type `str`; used as `List[str]`.
@@ -164,7 +164,7 @@ class KvCompareCli(object):
     )
     @click.pass_obj
     def kv_compare(cli_opts, nodes):  # noqa: B902
-        """ get the kv store delta """
+        """get the kv store delta"""
 
         kvstore.KvCompareCmd(cli_opts).run(nodes)
 
@@ -173,7 +173,7 @@ class PeersCli(object):
     @click.command()
     @click.pass_obj
     def peers(cli_opts):  # noqa: B902
-        """ show the KV store peers of the node """
+        """show the KV store peers of the node"""
 
         kvstore.PeersCmd(cli_opts).run()
 
@@ -183,7 +183,7 @@ class EraseKeyCli(object):
     @click.argument("key")
     @click.pass_obj
     def erase_key(cli_opts, key):  # noqa: B902
-        """ erase key from kvstore """
+        """erase key from kvstore"""
 
         kvstore.EraseKeyCmd(cli_opts).run(key)
 
@@ -205,7 +205,7 @@ class SetKeyCli(object):
     )
     @click.pass_obj
     def set_key(cli_opts, key, value, originator, version, ttl):  # noqa: B902
-        """ Set a custom key into KvStore """
+        """Set a custom key into KvStore"""
 
         if ttl != Consts.CONST_TTL_INF:
             ttl = ttl * 1000
@@ -270,7 +270,7 @@ class AllocationsCli(object):
     @click.command()
     @click.pass_obj
     def list(cli_opts):  # noqa: B902
-        """ View static allocations set in KvStore """
+        """View static allocations set in KvStore"""
 
         kvstore.AllocationsListCmd(cli_opts).run()
 
@@ -279,7 +279,7 @@ class AllocationsCli(object):
     @click.argument("prefix", nargs=1, required=True)
     @click.pass_obj
     def set(cli_opts, node, prefix):  # noqa: B902
-        """ Set/Update prefix allocation for a certain node """
+        """Set/Update prefix allocation for a certain node"""
 
         kvstore.AllocationsSetCmd(cli_opts).run(node, prefix)
 
@@ -287,7 +287,7 @@ class AllocationsCli(object):
     @click.argument("node", nargs=1, required=True)
     @click.pass_obj
     def unset(cli_opts, node):  # noqa: B902
-        """ Unset prefix allocation for a certain node """
+        """Unset prefix allocation for a certain node"""
 
         kvstore.AllocationsUnsetCmd(cli_opts).run(node)
 
@@ -307,7 +307,7 @@ class SummaryCli(object):
     )
     @click.pass_obj
     def summary(cli_opts, area: List[str]) -> None:  # noqa: B902
-        """ show the KV store summary for each area """
+        """show the KV store summary for each area"""
 
         # pyre-fixme[6]: Expected `Bunch` for 1st param but got `SummaryCli`.
         kvstore.SummaryCmd(cli_opts).run(set(area))

@@ -253,7 +253,7 @@ def parse_prefix_database(
 
 
 def print_prefixes_table(resp, nodes, prefix, client_type, iter_func):
-    """ print prefixes """
+    """print prefixes"""
 
     rows = []
     prefix_maps = {}
@@ -321,7 +321,7 @@ def collate_prefix_keys(
 
 
 def prefix_entry_to_dict(prefix_entry):
-    """ convert prefixEntry from thrift instance into a dict in strings """
+    """convert prefixEntry from thrift instance into a dict in strings"""
 
     def _update(prefix_entry_dict, prefix_entry):
         # prefix and data need string conversion and metric_vector can be
@@ -344,7 +344,7 @@ def prefix_entry_to_dict(prefix_entry):
 
 
 def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
-    """ convert PrefixDatabase from thrift instance to a dictionary """
+    """convert PrefixDatabase from thrift instance to a dictionary"""
 
     if isinstance(prefix_db, openr_types.Value):
         prefix_db = deserialize_thrift_object(
@@ -360,7 +360,7 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
 
 
 def print_prefixes_json(resp, nodes, prefix, client_type, iter_func):
-    """ print prefixes in json """
+    """print prefixes in json"""
 
     prefixes_map = {}
     iter_func(
@@ -465,7 +465,7 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
 
 
 def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
-    """ convert adj db to dict """
+    """convert adj db to dict"""
 
     node_label, is_overloaded, adjacencies, area = dump_adj_db_full(
         adj_dbs, adj_db, bidir
@@ -475,7 +475,7 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
         return
 
     def adj_to_dict(adj):
-        """ convert adjacency from thrift instance into a dict in strings """
+        """convert adjacency from thrift instance into a dict in strings"""
 
         def _update(adj_dict, adj):
             # Only addrs need string conversion so we udpate them
@@ -789,7 +789,7 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
 
 
 def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
-    """ convert nextHop from thrift instance into a dict in strings """
+    """convert nextHop from thrift instance into a dict in strings"""
     if nextHop is None:
         # pyre-fixme[7]: Expected `Dict[str, typing.Any]` but got `None`.
         return None
@@ -809,7 +809,7 @@ def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, A
 
 
 def unicast_route_to_dict(route):
-    """ convert route from thrift instance into a dict in strings """
+    """convert route from thrift instance into a dict in strings"""
 
     def _update(route_dict, route):
         route_dict.update(
@@ -897,7 +897,7 @@ def print_route_db(
     # pyre-fixme[9]: labels has type `List[int]`; used as `None`.
     labels: List[int] = None,
 ) -> None:
-    """ print the routes from Decision/Fib module """
+    """print the routes from Decision/Fib module"""
 
     if prefixes or not labels:
         print_unicast_routes(
@@ -1242,7 +1242,7 @@ def dump_node_kvs(
 
 
 def print_allocations_table(alloc_str):
-    """ print static allocations """
+    """print static allocations"""
 
     rows = []
     allocations = deserialize_thrift_object(alloc_str, openr_types.StaticAllocation)

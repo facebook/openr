@@ -115,7 +115,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
     # pyre-fixme[9]: area has type `str`; used as `None`.
     def get_node_to_ips(self, client: OpenrCtrl.Client, area: str = None) -> Dict:
-        """ get the dict of all nodes to their IP in the network """
+        """get the dict of all nodes to their IP in the network"""
 
         node_dict = {}
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
@@ -246,7 +246,7 @@ class KvKeysCmd(KvStoreCmdBase):
     def print_kvstore_keys(
         self, resp: Dict[str, openr_types.Publication], ttl: bool, json: bool
     ) -> None:
-        """ print keys from raw publication from KvStore"""
+        """print keys from raw publication from KvStore"""
 
         # Export in json format if enabled
         if json:
@@ -341,7 +341,7 @@ class KvKeyValsCmd(KvStoreCmdBase):
         self.print_kvstore_values(resp)
 
     def deserialize_kvstore_publication(self, key, value):
-        """ classify kvstore prefix and return the corresponding deserialized obj """
+        """classify kvstore prefix and return the corresponding deserialized obj"""
 
         options = {
             Consts.PREFIX_DB_MARKER: openr_types.PrefixDatabase,
@@ -362,7 +362,7 @@ class KvKeyValsCmd(KvStoreCmdBase):
         # pyre-fixme[9]: area has type `str`; used as `None`.
         area: str = None,
     ) -> None:
-        """ print values from raw publication from KvStore"""
+        """print values from raw publication from KvStore"""
 
         rows = []
         for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
@@ -707,7 +707,7 @@ class KvCompareCmd(KvStoreCmdBase):
                 )
 
     def compare(self, our_kvs, other_kvs, our_node, other_node):
-        """ print kv delta """
+        """print kv delta"""
 
         print(
             printing.caption_fmt(
@@ -738,7 +738,7 @@ class KvCompareCmd(KvStoreCmdBase):
                 self.print_key_delta(key, other_node)
 
     def print_db_delta(self, key, our_kv_pub_db, value, other_val):
-        """ print db delta """
+        """print db delta"""
 
         if key.startswith(Consts.PREFIX_DB_MARKER):
             prefix_db = serializer.deserialize_thrift_object(
@@ -771,7 +771,7 @@ class KvCompareCmd(KvStoreCmdBase):
             )
 
     def print_key_delta(self, key, node):
-        """ print key delta """
+        """print key delta"""
 
         print(
             printing.render_vertical_table(
@@ -781,7 +781,7 @@ class KvCompareCmd(KvStoreCmdBase):
 
     # pyre-fixme[9]: area has type `str`; used as `None`.
     def dump_nodes_kvs(self, nodes: set, all_nodes_to_ips: Dict, area: str = None):
-        """ get the kvs of a set of nodes """
+        """get the kvs of a set of nodes"""
 
         kv_dict = {}
         for node in nodes:
@@ -802,7 +802,7 @@ class KvPeersCmd(KvStoreCmdBase):
         self.print_peers(client, {None: peers})
 
     def print_peers(self, client: OpenrCtrl.Client, peers_list: Dict[str, Any]) -> None:
-        """ print the Kv Store peers """
+        """print the Kv Store peers"""
 
         host_id = client.getMyNodeName()
         caption = "{}'s peers".format(host_id)

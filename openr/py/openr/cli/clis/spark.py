@@ -15,7 +15,7 @@ class SparkCli(object):
     @click.group()
     @click.pass_context
     def spark(ctx):  # noqa: B902
-        """ CLI tool to peek into Spark information. """
+        """CLI tool to peek into Spark information."""
         pass
 
 
