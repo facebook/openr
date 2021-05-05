@@ -636,9 +636,10 @@ struct OpenrConfig {
   16: LinkMonitorConfig link_monitor_config;
   17: SparkConfig spark_config;
 
-  # Watchdog
-  /** Enable watchdog thread to periodically check aliveness counters from each
-  Open/R thread, if unhealthy thread is detected, force crash Open/R. */
+  /**
+   * Enable watchdog thread to periodically check aliveness counters from each
+   * Open/R thread, if unhealthy thread is detected, force crash Open/R.
+   */
   18: optional bool enable_watchdog;
   19: optional WatchdogConfig watchdog_config;
 
@@ -778,6 +779,9 @@ struct OpenrConfig {
    * Config for segment routing.
    */
   56: optional SegmentRoutingConfig segment_routing_config;
+
+  # TODO: Temporary var to migrate new prefix key format
+  57: bool enable_new_prefix_format = 0;
 
   # vip thrift injection service
   90: optional bool enable_vip_service;

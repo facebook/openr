@@ -60,10 +60,6 @@ class PrefixState {
   // expired in KvStore. This will simplify logic in route computation where
   // we exclude unreachable nodes.
 
-  // TODO: Maintain shared_ptr for `thrift::PrefixEntry` within
-  // `PrefixEntries` to avoid data-copy for best metric selection and
-  // route re-distribution
-
   // Data structure to maintain mapping from:
   //  IpPrefix -> collection of originator(i.e. [node, area] combination)
   std::unordered_map<folly::CIDRNetwork, PrefixEntries> prefixes_;
