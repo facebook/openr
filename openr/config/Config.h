@@ -145,16 +145,6 @@ class Config {
   }
 
   bool
-  isKvStoreThriftEnabled() const {
-    return *config_.enable_kvstore_thrift_ref();
-  }
-
-  bool
-  isPeriodicSyncEnabled() const {
-    return *config_.enable_periodic_sync_ref();
-  }
-
-  bool
   isBestRouteSelectionEnabled() const {
     return *config_.enable_best_route_selection_ref();
   }

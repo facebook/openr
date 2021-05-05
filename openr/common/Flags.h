@@ -116,10 +116,6 @@ DECLARE_int32(spark2_hello_time_s);
 DECLARE_int32(spark2_hello_fastinit_time_ms);
 DECLARE_int32(spark2_heartbeat_time_s);
 
-// Flags used for KvStore over thrift stage roll-out
-DECLARE_bool(enable_kvstore_thrift);
-DECLARE_bool(enable_periodic_sync);
-
 DECLARE_bool(prefix_fwd_type_mpls);
 DECLARE_bool(prefix_algo_type_ksp2_ed_ecmp);
 

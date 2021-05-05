@@ -667,13 +667,6 @@ struct OpenrConfig {
   25: MonitorConfig monitor_config;
 
   /**
-   * KvStore thrift migration flags.
-   * TODO: It is temporary & will go away once migration is done.
-   */
-  26: bool enable_kvstore_thrift = 1;
-  27: bool enable_periodic_sync = 1;
-
-  /**
    * RFC5549 -- IPv4 reachability over IPv6 nexthop
    */
   28: optional bool v4_over_v6_nexthop;
