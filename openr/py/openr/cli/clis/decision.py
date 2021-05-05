@@ -8,6 +8,7 @@
 import sys
 from typing import Any, List, Optional
 
+import bunch
 import click
 from openr.cli.commands import decision
 from openr.cli.utils.utils import parse_nodes
@@ -205,7 +206,7 @@ class ReceivedRoutesCli(object):
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
     @click.pass_obj
     def show(
-        cli_opts,  # noqa: B902
+        cli_opts: bunch.Bunch,  # noqa: B902
         prefix: List[str],
         node: Optional[str],
         area: Optional[str],
@@ -215,6 +216,4 @@ class ReceivedRoutesCli(object):
         """
         Show routes this node is advertising. Will show all by default
         """
-
-        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `ReceivedRoutesCli`.
         decision.ReceivedRoutesCmd(cli_opts).run(prefix, node, area, json, detail)

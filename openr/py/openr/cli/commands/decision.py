@@ -22,7 +22,6 @@ from openr.utils.serializer import deserialize_thrift_object
 
 
 class DecisionPrefixesCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -30,6 +29,8 @@ class DecisionPrefixesCmd(OpenrCtrlCmd):
         json: bool,
         prefix: str,
         client_type: str,
+        *args,
+        **kwargs,
     ) -> None:
         prefix_dbs = client.getDecisionPrefixDbs()
         if json:
@@ -43,7 +44,6 @@ class DecisionPrefixesCmd(OpenrCtrlCmd):
 
 
 class DecisionRoutesComputedCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -51,6 +51,8 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
         prefixes: Any,
         labels: Any,
         json: bool,
+        *args,
+        **kwargs,
     ) -> None:
         if "all" in nodes:
             nodes = self._get_all_nodes(client)
@@ -79,9 +81,15 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
 
 
 class DecisionAdjCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, nodes: set, areas: set, bidir: bool, json: bool
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        areas: set,
+        bidir: bool,
+        json: bool,
+        *args,
+        **kwargs,
     ) -> None:
 
         adj_dbs = client.getDecisionAdjacenciesFiltered(
@@ -101,9 +109,15 @@ class DecisionAdjCmd(OpenrCtrlCmd):
 
 
 class PathCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int, area: str
+        self,
+        client: OpenrCtrl.Client,
+        src: str,
+        dst: str,
+        max_hop: int,
+        area: str,
+        *args,
+        **kwargs,
     ) -> None:
         if not src or not dst:
             host_id = client.getMyNodeName()
@@ -439,9 +453,9 @@ class PathCmd(OpenrCtrlCmd):
 
 
 class DecisionValidateCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    # pyre-fixme[9]: area has type `str`; used as `None`.
-    def _run(self, client: OpenrCtrl.Client, json=False, area: str = None) -> None:
+    def _run(
+        self, client: OpenrCtrl.Client, json=False, area: str = "", *args, **kwargs
+    ) -> None:
         """Returns a status code. 0 = success, 1 = failure"""
         (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
             client, area
@@ -667,15 +681,13 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
 
 class DecisionRibPolicyCmd(OpenrCtrlCmd):
-
     # @override
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client):
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         policy = None
         try:
             policy = client.getRibPolicy()
         except ctrl_types.OpenrError as e:
-            print(f"Error: {e.message}", file=sys.stderr)
+            print("Error: ", str(e), "\nSystem standard error: ", sys.stderr)
             return
 
         # Convert the prefixes to readable format
@@ -713,9 +725,7 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
 
 
 class ReceivedRoutesCmd(OpenrCtrlCmd):
-
     # @override
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -724,6 +734,8 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         area: Optional[str],
         json: bool,
         detailed: bool,
+        *args,
+        **kwargs,
     ) -> None:
 
         # Get data
