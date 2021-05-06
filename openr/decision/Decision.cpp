@@ -474,6 +474,7 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
           thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
     } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
       // prefixDb: delete keys starting with "prefix:"
+      // TODO: avoid decoding from string
       auto maybePrefixKey = PrefixKey::fromStr(key);
       if (maybePrefixKey.hasError()) {
         LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";

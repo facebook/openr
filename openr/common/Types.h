@@ -332,7 +332,7 @@ class RegexSet {
  */
 class PrefixKey {
  public:
-  // constructor using IP address, type and and subtype
+  // constructor using node, prefix and area
   PrefixKey(
       std::string const& node,
       folly::CIDRNetwork const& prefix,
@@ -342,23 +342,31 @@ class PrefixKey {
   static folly::Expected<PrefixKey, std::string> fromStr(
       const std::string& key);
 
+  // construct PrefixKey object from a give key string
+  static folly::Expected<PrefixKey, std::string> fromStrV2(
+      const std::string& key, const std::string& area);
+
   NodeAndArea const& getNodeAndArea() const;
 
   // return node name
   std::string const& getNodeName() const;
 
-  // return the CIDR network address
-  folly::CIDRNetwork const& getCIDRNetwork() const;
-
   // return prefix sub type
   std::string const& getPrefixArea() const;
 
-  // return prefix key string to be used to flood to kvstore
+  // return the CIDR network address
+  folly::CIDRNetwork const& getCIDRNetwork() const;
+
+  // return raw prefix key string from kvstore
   std::string const& getPrefixKey() const;
+
+  // return raw prefix key string v2 from kvstore
+  std::string const& getPrefixKeyStr() const;
 
   // return thrift::IpPrefix
   thrift::IpPrefix getIpPrefix() const;
 
+  // TODO: deprecate after migration
   static const RE2&
   getPrefixRE2() {
     static const RE2 prefixKeyPattern{fmt::format(
@@ -368,6 +376,16 @@ class PrefixKey {
         "(?P<plen>[\\d]{{1,3}})\\]",
         Constants::kPrefixDbMarker.toString())};
     return prefixKeyPattern;
+  }
+
+  static const RE2&
+  getPrefixRE2V2() {
+    static const RE2 prefixKeyPatternV2{fmt::format(
+        "{}(?P<node>[a-zA-Z\\d\\.\\-\\_]+):"
+        "\\[(?P<IPAddr>[a-fA-F\\d\\.\\:]+)/"
+        "(?P<plen>[\\d]{{1,3}})\\]",
+        Constants::kPrefixDbMarker.toString())};
+    return prefixKeyPatternV2;
   }
 
   bool
@@ -382,8 +400,9 @@ class PrefixKey {
   // IP address
   folly::CIDRNetwork const prefix_;
 
-  // key string used for KvStore
+  // raw key string from KvStore
   std::string const prefixKeyString_;
+  std::string const prefixKeyStringV2_;
 };
 
 } // namespace openr

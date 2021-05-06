@@ -53,6 +53,12 @@ PrefixKey::PrefixKey(
           node,
           area,
           prefix_.first.str(),
+          prefix_.second)),
+      prefixKeyStringV2_(fmt::format(
+          "{}{}:[{}/{}]",
+          Constants::kPrefixDbMarker.toString(),
+          node,
+          prefix_.first.str(),
           prefix_.second)) {}
 
 folly::Expected<PrefixKey, std::string>
@@ -77,6 +83,26 @@ PrefixKey::fromStr(const std::string& key) {
   return PrefixKey(node, ipaddress, area);
 }
 
+folly::Expected<PrefixKey, std::string>
+PrefixKey::fromStrV2(const std::string& key, const std::string& area) {
+  int plen{0};
+  std::string node{};
+  std::string ipStr{};
+  folly::CIDRNetwork ipAddress;
+  auto patt = RE2::FullMatch(key, getPrefixRE2V2(), &node, &ipStr, &plen);
+  if (!patt) {
+    return folly::makeUnexpected(fmt::format("Invalid key format {}", key));
+  }
+
+  try {
+    ipAddress =
+        folly::IPAddress::createNetwork(fmt::format("{}/{}", ipStr, plen));
+  } catch (const folly::IPAddressFormatException& e) {
+    LOG(INFO) << "Exception in converting to Prefix. " << e.what();
+    return folly::makeUnexpected(std::string("Invalid IP address in key"));
+  }
+  return PrefixKey(node, ipAddress, area);
+}
 NodeAndArea const&
 PrefixKey::getNodeAndArea() const {
   return nodeAndArea_;
@@ -87,19 +113,25 @@ PrefixKey::getNodeName() const {
   return nodeAndArea_.first;
 };
 
+std::string const&
+PrefixKey::getPrefixArea() const {
+  return nodeAndArea_.second;
+}
+
 folly::CIDRNetwork const&
 PrefixKey::getCIDRNetwork() const {
   return prefix_;
 }
 
+// TODO: to be derepcated
 std::string const&
 PrefixKey::getPrefixKey() const {
   return prefixKeyString_;
 }
 
 std::string const&
-PrefixKey::getPrefixArea() const {
-  return nodeAndArea_.second;
+PrefixKey::getPrefixKeyStr() const {
+  return prefixKeyStringV2_;
 }
 
 thrift::IpPrefix
