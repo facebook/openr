@@ -170,7 +170,8 @@ class SpfSolver {
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState);
 
-  // Given prefixes and the nodes who announce it, get the kspf routes.
+  // Given prefixes and the nodes who announce it, get the kspf2 routes, aka,
+  // shortest paths and second shortest paths.
   std::optional<RibUnicastEntry> selectBestPathsKsp2(
       const std::string& myNodeName,
       const folly::CIDRNetwork& prefix,

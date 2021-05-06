@@ -194,6 +194,18 @@ SpfSolver::createRouteForPrefix(
     folly::CIDRNetwork const& prefix) {
   fb303::fbData->addStatValue("decision.get_route_for_prefix", 1, fb303::COUNT);
 
+  // Sanity check for V4 prefixes
+  const bool isV4Prefix = prefix.first.isV4();
+  if (isV4Prefix and (not enableV4_) and (not v4OverV6Nexthop_)) {
+    LOG(WARNING) << "Received v4 prefix "
+                 << folly::IPAddress::networkToString(prefix)
+                 << " while v4 is not enabled, and "
+                 << "we are not allowing v4 prefix over v6 nexthop.";
+    fb303::fbData->addStatValue(
+        "decision.skipped_unicast_route", 1, fb303::COUNT);
+    return std::nullopt;
+  }
+
   auto search = prefixState.prefixes().find(prefix);
   if (search == prefixState.prefixes().end()) {
     return std::nullopt;
@@ -215,6 +227,7 @@ SpfSolver::createRouteForPrefix(
     // Delete entries of unreachable nodes from prefixEntries
     for (auto it = prefixEntries.cbegin(); it != prefixEntries.cend();) {
       const auto& [prefixNode, prefixArea] = it->first;
+      // Only check reachability within the area that prefixNode belongs to.
       if (area != prefixArea || mySpfResult.count(prefixNode)) {
         ++it; // retain
       } else {
@@ -231,22 +244,11 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // Sanity check for V4 prefixes
-  const bool isV4Prefix = prefix.first.isV4();
-  if (isV4Prefix && !enableV4_ && !v4OverV6Nexthop_) {
-    LOG(WARNING) << "Received v4 prefix "
-                 << folly::IPAddress::networkToString(prefix)
-                 << " while v4 is not enabled, and "
-                 << "we are not allowing v4 prefix over v6 nexthop.";
-    fb303::fbData->addStatValue(
-        "decision.skipped_unicast_route", 1, fb303::COUNT);
-    return std::nullopt;
-  }
-
   // TODO: These variables are deprecated and will go away soon
   bool hasBGP = false, hasNonBGP = false, missingMv = false;
 
-  // Does the current node advertises the prefix entry with prepend label
+  // Boolean flag indicating whether current node advertises the prefix entry
+  // with prepend label.
   bool hasSelfPrependLabel{true};
 
   // TODO: With new PrefixMetrics we no longer treat routes differently based
@@ -297,7 +299,7 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
   if (bestRouteSelectionResult.allNodeAreas.empty()) {
-    LOG(WARNING) << "No route to BGP prefix "
+    LOG(WARNING) << "No route to prefix "
                  << folly::IPAddress::networkToString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
@@ -306,9 +308,17 @@ SpfSolver::createRouteForPrefix(
   // Set best route selection in prefix state
   bestRoutesCache_.insert_or_assign(prefix, bestRouteSelectionResult);
 
-  // Skip adding route for prefixes advertised by this node. The originated
-  // routes are already programmed on the system e.g. re-distributed from
-  // other area, re-distributed from other protocols, interface-subnets etc.
+  // Skip adding route for one prefix advertised by current node in all
+  // following scenarios:
+  // - Scenario1: The node has routes of fine-granularity prefixes
+  //   (e.g., 10.0.0.0/25 and 10.0.0.128/25) programmed locally. It originates
+  //   the aggregated prefix (e.g., 10.0.0.0/24) to attract traffic.
+  // - Scenario2: The node locates in multi areas and the prefix is
+  //   distributed cross areas (e.g., from previous area1 to current area2). IP
+  //   routes for the prefix were programmed when OpenR handled the prefix in
+  //   previous area1.
+  // Other scenarios: re-distributed from other protocols (unclear),
+  //   interface-subnets, etc;
   //
   // TODO: We program self advertise prefix only iff, we're advertising our
   // prefix-entry with the prepend label. Once we support multi-area routing,
@@ -441,9 +451,7 @@ SpfSolver::buildRouteDb(
             createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
         labelToNode.erase(topLabel);
         labelToNode.emplace(
-            topLabel,
-            std::make_pair(
-                *adjDb.thisNodeName_ref(), RibMplsEntry(topLabel, {nh})));
+            topLabel, std::make_pair(myNodeName, RibMplsEntry(topLabel, {nh})));
         continue;
       }
 
@@ -475,9 +483,9 @@ SpfSolver::buildRouteDb(
                   getNextHopsThrift(
                       myNodeName,
                       {{adjDb.thisNodeName_ref().value(), area}},
-                      false,
+                      false /* isV4 */,
                       v4OverV6Nexthop_,
-                      false,
+                      false /* perDestination */,
                       metricNhs.first,
                       metricNhs.second,
                       topLabel,
@@ -668,10 +676,9 @@ SpfSolver::selectBestPathsSpf(
   // complete support of multi-area setup, we can delete the following code
   // block.
   auto filteredBestNodeAreas = bestRouteSelectionResult.allNodeAreas;
-  if (bestRouteSelectionResult.hasNode(myNodeName) && perDestination) {
+  if (bestRouteSelectionResult.hasNode(myNodeName) and perDestination) {
     for (const auto& [nodeAndArea, prefixEntry] : prefixEntries) {
-      if (perDestination && nodeAndArea.first == myNodeName &&
-          prefixEntry->prependLabel_ref()) {
+      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel_ref()) {
         filteredBestNodeAreas.erase(nodeAndArea);
         break;
       }
@@ -702,7 +709,7 @@ SpfSolver::selectBestPathsSpf(
           perDestination,
           nextHopsWithMetric.first,
           nextHopsWithMetric.second,
-          std::nullopt,
+          std::nullopt /* swapLabel */,
           areaLinkStates,
           prefixEntries));
 }
@@ -736,7 +743,7 @@ SpfSolver::selectBestPathsKsp2(
     // find shortest and sec shortest routes towards each node.
     for (const auto& [node, bestArea] : bestRouteSelectionResult.allNodeAreas) {
       // if ourself is considered as ECMP nodes.
-      if (node == myNodeName && bestArea == area) {
+      if (node == myNodeName and bestArea == area) {
         continue;
       }
       for (auto const& path : linkState.getKthPaths(myNodeName, node, 1)) {
@@ -793,7 +800,15 @@ SpfSolver::selectBestPathsKsp2(
                                .nodeLabel_ref());
       }
       labels.pop_back(); // Remove first node's label to respect PHP
-      auto& prefixEntry = prefixEntries.at({nextNodeName, area});
+
+      // TODO: node labels and prepend labels are not expected to be pushed at
+      // the same time for the same prefix. This function only handles node
+      // label, prepend label logic locates in selectBestPathsSpf() and
+      // getNextHopsThrift(). Thus, removing prepend label handling logic here.
+
+      // Add prepend label of last node in the path.
+      auto lastNodeInPath = nextNodeName;
+      auto& prefixEntry = prefixEntries.at({lastNodeInPath, area});
       if (prefixEntry->prependLabel_ref()) {
         // add prepend label to bottom of the stack
         labels.push_front(prefixEntry->prependLabel_ref().value());
@@ -845,7 +860,7 @@ SpfSolver::addBestPaths(
   // min-nexthop requirement is not met.
   auto minNextHop =
       getMinNextHopThreshold(bestRouteSelectionResult, prefixEntries);
-  if (minNextHop.has_value() && minNextHop.value() > nextHops.size()) {
+  if (minNextHop.has_value() and minNextHop.value() > nextHops.size()) {
     LOG(WARNING) << "Ignore programming of route to "
                  << folly::IPAddress::networkToString(prefixThrift)
                  << " because of min-nexthop requirement. "
@@ -986,6 +1001,11 @@ SpfSolver::getNextHopsThrift(
     std::optional<int32_t> swapLabel,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
     PrefixEntries const& prefixEntries) const {
+  // Note: perDestination flag determines the next-hop search range by whether
+  // filtering those not-in dstNodeAreas or not.
+  // TODO: Reorg this function to make the logic cleaner, and cleanup unused
+  // code.
+
   CHECK(not nextHopNodes.empty());
 
   std::unordered_set<thrift::NextHopThrift> nextHops;
@@ -1027,18 +1047,18 @@ SpfSolver::getNextHopsThrift(
         if (swapLabel.has_value()) {
           CHECK(not mplsAction.has_value());
           bool isNextHopAlsoDst = dstNodeAreas.count({neighborNode, area});
+          // TODO: cleanup since isNextHopAlsoDst==True in current code path.
           mplsAction = createMplsAction(
               isNextHopAlsoDst ? thrift::MplsActionCode::PHP
                                : thrift::MplsActionCode::SWAP,
               isNextHopAlsoDst ? std::nullopt : swapLabel);
         }
 
-        // Create associated mpls action if dest node is not empty and
-        // destination is not our neighbor
+        // Create associated mpls action if dest node is not empty
         if (not dstNode.empty()) {
           std::vector<int32_t> pushLabels;
 
-          // Add prepend label if any
+          // Add destination prepend label if any.
           auto& dstPrefixEntry = prefixEntries.at({dstNode, area});
           if (dstPrefixEntry->prependLabel_ref()) {
             pushLabels.emplace_back(dstPrefixEntry->prependLabel_ref().value());
@@ -1046,6 +1066,11 @@ SpfSolver::getNextHopsThrift(
               continue;
             }
           }
+
+          // TODO: node label and prepend label are not expected to be pushed at
+          // the same time for the same prefix. This function only handles
+          // prepend label, node label logic locates in selectBestPathsKsp2().
+          // Thus, removing node label handling logic here.
 
           // Add destination node label if it is not neighbor node
           if (dstNode != neighborNode) {
