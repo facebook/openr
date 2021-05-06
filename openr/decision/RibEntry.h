@@ -13,6 +13,7 @@
 
 #include <folly/IPAddress.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl.h>
 #include <openr/if/gen-cpp2/Types_types.h>
@@ -93,8 +94,20 @@ struct RibUnicastEntry : RibEntry {
   }
 };
 
+// RibMplsEntry defines the prefixes and associated MPLS label used in MPLS
+// protocol to forward traffic targeting the prefixes.
+//
+// It is generated in BgpSpeaker, passed to Decision, SpfSolver, and Sequencer,
+// which coordinates the local programming of the MPLS label and advertisement
+// of prefixes to peers through PrefixManager.
 struct RibMplsEntry : RibEntry {
+  // The MPLS label.
   int32_t label{0};
+  // Prefixes with prepend label set as above MPLS label.
+  // Peers who receive the prefix updates from current node should 1) PUSH the
+  // label for packets targeting the prefixes, then 2) send them to current
+  // node.
+  std::vector<PrefixEvent> prefixesWithTheLabel;
 
   explicit RibMplsEntry(int32_t label) : label(label) {}
 
