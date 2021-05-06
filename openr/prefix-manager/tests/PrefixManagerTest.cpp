@@ -2206,6 +2206,298 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
   baton.reset();
 }
 
+class RouteOriginationSingleAreaFixture : public RouteOriginationFixture {
+ public:
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = minSupportingRouteV4_;
+    originatedPrefixV4.install_to_fib_ref() = true;
+    originatedPrefixV6.prefix_ref() = v6Prefix_;
+    originatedPrefixV6.minimum_supporting_routes_ref() = minSupportingRouteV6_;
+    originatedPrefixV6.install_to_fib_ref() = false;
+
+    // create a single area config
+    auto A = createAreaConfig("A", {"RSW.*"}, {".*"});
+    auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A});
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
+    return tConfig;
+  }
+};
+
+TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
+  // RQueue interface to read route updates sent by PrefixManager to
+  // Decision. This queue is expressly used for originated routes
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+  auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
+
+  // dummy nexthop
+  auto nh_3 = createNextHop(toBinaryAddress("fe80::1"));
+  nh_3.area_ref().reset(); // empty area
+
+  // supporting V4 prefix and related structs
+  const std::string v4Prefix_1 = "192.108.0.8/30";
+  const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
+  const auto prefixEntryV4_1 =
+      createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
+  auto unicastEntryV4_1 = RibUnicastEntry(
+      v4Network_1,
+      {nh_v4},
+      prefixEntryV4_1,
+      thrift::Types_constants::kDefaultArea());
+
+  // supporting V6 prefix #1 and related RIB structs
+  const std::string v6Prefix_1 = "2001:1:2:3::1/70";
+  const auto v6Network_1 = folly::IPAddress::createNetwork(v6Prefix_1);
+  const auto prefixEntryV6_1 =
+      createPrefixEntry(toIpPrefix(v6Prefix_1), thrift::PrefixType::DEFAULT);
+  auto unicastEntryV6_1 = RibUnicastEntry(
+      v6Network_1,
+      {nh_v6},
+      prefixEntryV6_1,
+      thrift::Types_constants::kDefaultArea());
+
+  // supporting V6 prefix #2 and related RIB structs
+  const std::string v6Prefix_2 = "2001:1:2:3::1/120";
+  const auto v6Network_2 = folly::IPAddress::createNetwork(v6Prefix_2);
+  const auto prefixEntryV6_2 =
+      createPrefixEntry(toIpPrefix(v6Prefix_2), thrift::PrefixType::RIB);
+  auto unicastEntryV6_2 = RibUnicastEntry(
+      v6Network_2,
+      {nh_v6, nh_3},
+      prefixEntryV6_2,
+      thrift::Types_constants::kDefaultArea());
+
+  // Originated prefixes have specific thrift::PrefixType::CONFIG
+  const auto bestPrefixEntryV4_ =
+      createPrefixEntry(toIpPrefix(v4Prefix_), thrift::PrefixType::CONFIG);
+  const auto bestPrefixEntryV6_ =
+      createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
+
+  //
+  // This test case tests the following:
+  //  - originated prefix whose supporting routes passed across threshold
+  //    will be advertised (v4, and eventually v6);
+  //  - otherwise it will NOT be advertised (initially v6);
+  //  - Route Advertisement to KvStore happens with single area configured
+  //
+  // Steps, briefly:
+  //
+  // 1. Inject the following into the routeUpdatesQueue (simulating Decision to
+  //    Prefixmgr interaction):
+  //    - 1st supporting route for v4Prefix_;
+  //    - 1st supporting route for v6Prefix_;
+  // Verification:
+  //    a. v4Prefix_ will be sent to Decision on staticRouteUpdatesQueue (since
+  //       the install_to_fib bit is set for v4Prefix_)
+  //    b. v6Prefix_ will NOT be sent to Decision on staticRouteUpdatesQueue
+  //       (since min_supporting_route is not met for v6Prefix_, plus the
+  //       install_to_fib bit is NOT set for v6Prefix_)
+  //    c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
+  //    d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
+  //    e. Config values and supporting routes count is as expected for both
+  //       v4Prefix_ and v6Prefix_
+  //
+  // 2. Inject the following into the routeUpdatesQueue (simulating Decision to
+  //    Prefixmgr interaction):
+  //    - 2nd supporting route for v6Prefix_;
+  // Verification:
+  //    a. v6Prefix_ will STILL NOT be sent to Decision on
+  //       staticRouteUpdatesQueue since, while min_supporting_route is now met
+  //       for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
+  //    b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
+  //    c. Config values and supporting routes count is as expected for both
+  //       v4Prefix_ and v6Prefix_
+  //
+  // 3. Withdraw 1 supporting route from both v4Prefix_ and v6Prefix_
+  //    - this will break the min_supporting_routes condition for both
+  //      the prefixes.
+  // Verification:
+  //    a. delete only for the v4Prefix_ gets sent to Decision
+  //    b. Both prefixes will be withdrawn from KvStore
+  //    c. Supporting routes count for both prefixes will decrement by 1
+
+  // Step 1 - inject 1 v4 and 1 v6 supporting prefix into routeUpdatesQueue
+  DecisionRouteUpdate routeUpdate;
+  routeUpdate.addRouteToUpdate(unicastEntryV4_1);
+  routeUpdate.addRouteToUpdate(unicastEntryV6_1);
+  routeUpdatesQueue.push(std::move(routeUpdate));
+
+  // Verify 1a and 1b: PrefixManager -> Decision staticRouteupdate
+  {
+    auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+    // 1a. v4 route update received
+    EXPECT_TRUE(update.has_value());
+
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    // verify thrift::NextHopThrift struct
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(1));
+    EXPECT_THAT(
+        nhs,
+        testing::UnorderedElementsAre(createNextHop(
+            toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()))));
+
+    // 1b. no v6 route update received
+    EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
+                     .has_value());
+  }
+
+  // Verify 1c and 1d: PrefixManager -> KvStore update
+  {
+    // v4Prefix_ is advertised to ALL areas configured, while v6Prefix_ is NOT
+    std::unordered_map<std::string, thrift::PrefixEntry> exp({
+        {keyStrAV4_, bestPrefixEntryV4_},
+    });
+    std::unordered_set<std::string> expDeleted{};
+
+    // wait for condition to be met for KvStore publication
+    waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+  }
+
+  // Verify 1e: Via PrefixManager's public API, verify the values for # of
+  //  supporting routes for both the v4Prefix_ (1) and v6Orefix_(1)
+  {
+    auto mp = getOriginatedPrefixDb();
+    auto& prefixEntryV4 = mp.at(v4Prefix_);
+    auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+    // v4Prefix - advertised, v6Prefix - NOT advertised
+    EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == true and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+    EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == false and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+
+    EXPECT_THAT(
+        *prefixEntryV4.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v4Network_1)));
+    EXPECT_THAT(
+        *prefixEntryV6.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v6Network_1)));
+  }
+
+  // Step 2 - inject 1 v6 supporting prefix into routeUpdatesQueue
+  routeUpdate.addRouteToUpdate(unicastEntryV6_2);
+  routeUpdatesQueue.push(std::move(routeUpdate));
+
+  // Verify 2a: PrefixManager -> Decision staticRouteUpdate
+  {
+    // 2a. NO v6 route update received
+    auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+    EXPECT_FALSE(update.has_value());
+  }
+
+  // Verify 2b: PrefixManager -> KvStore update
+  {
+    // v6Prefix_ is advertised to the SINGLE area configured
+    std::unordered_map<std::string, thrift::PrefixEntry> exp({
+        {keyStrAV6_, bestPrefixEntryV6_},
+    });
+    std::unordered_set<std::string> expDeleted{};
+
+    // 2b. wait for condition to be met for KvStore publication
+    waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+  }
+
+  // Verify 2c: Via PrefixManager's public API, verify the values for # of
+  //  supporting routes for both the v4Prefix_ (1) and v6Orefix_(2 now)
+  {
+    auto mp = getOriginatedPrefixDb();
+    auto& prefixEntryV4 = mp.at(v4Prefix_);
+    auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+    // v4Prefix - advertised, v6Prefix - advertised
+    EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == true and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+    EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == true and
+                      i.supporting_prefixes_ref()->size() == 2;
+                }));
+
+    EXPECT_THAT(
+        *prefixEntryV4.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v4Network_1)));
+    EXPECT_THAT(
+        *prefixEntryV6.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v6Network_1),
+            folly::IPAddress::networkToString(v6Network_2)));
+  }
+
+  // Step 3 - withdraw 1 v4 and 1 v6 supporting prefix
+  routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
+  routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
+  routeUpdatesQueue.push(std::move(routeUpdate));
+
+  // Verify 3a PrefixManager -> Decision staticRouteupdate
+  {
+    // ONLY v4 route withdrawn updates are sent to Decision
+    auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+    EXPECT_TRUE(update.has_value());
+
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(0));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(
+        deletedRoutes, testing::UnorderedElementsAre(toIpPrefix(v4Prefix_)));
+  }
+
+  // Verify 3b: PrefixManager -> KvStore update: both prefixes withdrawn
+  {
+    // both v4Prefix_ + v6Prefix_ are withdrawn from the single area configured
+    std::unordered_set<std::string> expDeleted{
+        keyStrAV4_,
+        keyStrAV6_,
+    };
+    std::unordered_map<std::string, thrift::PrefixEntry> exp{};
+
+    waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+  }
+
+  // Verify 3c: Via PrefixManager's public API, verify that that supporting
+  // routes count for v6Prefix_ is now 1 (and 0 for v4Prefix_)
+  {
+    auto mp = getOriginatedPrefixDb();
+    auto& prefixEntryV4 = mp.at(v4Prefix_);
+    auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+    // v4Prefix - withdrawn, v6Prefix - withdrawn
+    EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == false and
+                      i.supporting_prefixes_ref()->size() == 0;
+                }));
+    EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == false and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+
+    EXPECT_THAT(
+        *prefixEntryV6.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v6Network_2)));
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
