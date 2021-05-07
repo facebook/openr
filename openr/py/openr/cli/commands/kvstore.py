@@ -1465,9 +1465,8 @@ class SummaryCmd(KvStoreCmdBase):
     ) -> openr_types.KvStoreAreaSummary:
         global_summary = openr_types.KvStoreAreaSummary()
         global_summary.area = "ALL" + self._get_area_str()
-        # pyre-fixme[35]: Target cannot be annotated.
-        # pyre-fixme[11]: Annotation `peerSpec` is not defined as a type.
-        global_summary.peersMap: Dict[str, openr_types.peerSpec] = {}
+        # peersMap's type: Dict[str, openr_types.PeerSpec]
+        global_summary.peersMap = {}
         # create a map of unique total peers for this node
         for s in summaries:
             for peer, peerSpec in s.peersMap.items():

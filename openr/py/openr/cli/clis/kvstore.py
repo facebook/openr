@@ -293,14 +293,14 @@ class AllocationsCli(object):
 
 
 class SummaryCli(object):
+    default_area_list: List[str] = []
+
     @click.command()
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `[]` to
-    #  decorator factory `click.option`.
     @click.option(
         "--area",
         "-a",
         multiple=True,
-        default=[],
+        default=default_area_list,
         help="Dump summaries for the given list of areas. Default will dump "
         "summaries for all areas. Multiple areas can be provided by repeatedly using "
         "either of the two valid flags: -a or --areas",
