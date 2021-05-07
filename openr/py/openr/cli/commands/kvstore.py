@@ -282,9 +282,9 @@ class KvKeysCmd(KvStoreCmdBase):
                 kv_size = 32 + len(key) + len(value.originatorId) + len(value.value)
                 db_bytes += kv_size
 
-                # pyre-fixme[58]: `>` is not supported for operand types
-                #  `Optional[int]` and `int`.
-                hash_offset = "+" if value.hash > 0 else ""
+                hash_num = value.hash
+                hash_offset = "+" if hash_num is not None and hash_num > 0 else ""
+
                 row = [
                     key,
                     value.originatorId,
