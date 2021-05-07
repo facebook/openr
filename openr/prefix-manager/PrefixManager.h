@@ -10,9 +10,11 @@
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 #include <folly/futures/Future.h>
+#include "openr/if/gen-cpp2/Network_types.h"
 
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
@@ -53,8 +55,6 @@ class PrefixManagerPendingUpdates {
 
 class PrefixManager final : public OpenrEventBase {
  public:
-  struct PrefixEntry; // Forward declaration
-
   PrefixManager(
       // producer queue
       messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
@@ -150,33 +150,6 @@ class PrefixManager final : public OpenrEventBase {
       apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
       folly::CIDRNetwork const& prefix,
       std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries);
-
-  // prefix entry with their destination areas
-  // if dstAreas become empty, entry should be withdrawn
-  struct PrefixEntry {
-    std::shared_ptr<thrift::PrefixEntry> tPrefixEntry;
-    std::unordered_set<std::string> dstAreas;
-    folly::CIDRNetwork network;
-
-    PrefixEntry() = default;
-    PrefixEntry(
-        std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
-        std::unordered_set<std::string>&& dstAreas)
-        : tPrefixEntry(std::move(tPrefixEntryIn)),
-          dstAreas(std::move(dstAreas)),
-          network(toIPNetwork(*tPrefixEntry->prefix_ref())) {}
-
-    apache::thrift::field_ref<const thrift::PrefixMetrics&>
-    metrics_ref() const& {
-      return tPrefixEntry->metrics_ref();
-    }
-
-    bool
-    operator==(const PrefixEntry& other) const {
-      return *tPrefixEntry == *other.tPrefixEntry &&
-          dstAreas == other.dstAreas && network == other.network;
-    }
-  };
 
  private:
   /*

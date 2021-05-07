@@ -974,7 +974,7 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
  */
 TEST(PrefixManager, FilterAdvertisedRoutes) {
   std::vector<thrift::AdvertisedRouteDetail> routes;
-  std::unordered_map<thrift::PrefixType, PrefixManager::PrefixEntry> entries;
+  std::unordered_map<thrift::PrefixType, PrefixEntry> entries;
   thrift::AdvertisedRouteFilter filter;
   PrefixManager::filterAndAddAdvertisedRoute(
       routes, filter.prefixType_ref(), folly::CIDRNetwork(), entries);

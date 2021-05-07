@@ -130,6 +130,53 @@ enum class PrefixEventType {
 };
 
 /**
+ * Prefix entry with their destination areas and nexthops
+ * if dstAreas become empty, entry should be withdrawn.
+ */
+struct PrefixEntry {
+  /**
+   * Prefix attributes that needs to be advertised to KvStore. Area may copy &
+   * modify these attributes before advertisement.
+   */
+  std::shared_ptr<thrift::PrefixEntry> tPrefixEntry;
+  /**
+   * Set of area IDs to which this prefix should be advertised. Leave empty to
+   * advertise to all configured areas
+   */
+  std::unordered_set<std::string> dstAreas;
+  /**
+   * CIDR network of the prefix
+   */
+  folly::CIDRNetwork network;
+  /**
+   * Optional list of next-hops that should be programmed if this route
+   * qualifies for advertisement to KvStore.
+   * - Null would indicate no programming
+   * - An empty list could indicate a NULL route programming
+   */
+  std::optional<std::vector<thrift::NextHopThrift>> nexthops;
+
+  PrefixEntry() = default;
+  PrefixEntry(
+      std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
+      std::unordered_set<std::string>&& dstAreas)
+      : tPrefixEntry(std::move(tPrefixEntryIn)),
+        dstAreas(std::move(dstAreas)),
+        network(toIPNetwork(*tPrefixEntry->prefix_ref())) {}
+
+  apache::thrift::field_ref<const thrift::PrefixMetrics&>
+  metrics_ref() const& {
+    return tPrefixEntry->metrics_ref();
+  }
+
+  bool
+  operator==(const PrefixEntry& other) const {
+    return *tPrefixEntry == *other.tPrefixEntry && dstAreas == other.dstAreas &&
+        network == other.network;
+  }
+};
+
+/**
  * Request for advertising, updating or withdrawing route advertisements to
  * PrefixManager. Only used for inter module (within a process) communication.
  */
@@ -148,6 +195,11 @@ struct PrefixEvent {
    * List of prefix-entries to advertise or withdraw
    */
   std::vector<thrift::PrefixEntry> prefixes{};
+
+  /**
+   * List of PrefixEntry to advertise or withdraw
+   */
+  std::vector<PrefixEntry> prefixEntries{};
 
   /**
    * Destination areas to inject prefixes to
