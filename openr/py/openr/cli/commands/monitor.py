@@ -42,9 +42,13 @@ class MonitorCmd(OpenrCtrlCmd):
 
 
 class CountersCmd(MonitorCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, prefix: str = "", json: bool = False
+        self,
+        client: OpenrCtrl.Client,
+        prefix: str = "",
+        json: bool = False,
+        *args,
+        **kwargs,
     ) -> None:
         resp = client.getCounters()
         self.print_counters(client, resp, prefix, json)
@@ -76,8 +80,13 @@ class CountersCmd(MonitorCmd):
 
 
 class LogCmd(MonitorCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, json_opt: bool = False) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        json_opt: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
         try:
             resp = client.getEventLogs()
             self.print_log_data(resp, json_opt)
@@ -104,8 +113,12 @@ class LogCmd(MonitorCmd):
 
 
 class StatisticsCmd(MonitorCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         stats_templates = [
             {
                 "title": "KvStore Stats",

@@ -5,11 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Coroutine
 
 import bunch
 from openr.clients.openr_client import get_openr_ctrl_client
-from openr.OpenrCtrl import OpenrCtrl
 from openr.Types import ttypes as openr_types
 from openr.utils import printing
 from openr.utils.consts import Consts
@@ -36,9 +35,14 @@ class OpenrCtrlCmd(object):
         with get_openr_ctrl_client(self.host, self.cli_opts) as client:
             self._run(client, *args, **kwargs)
 
-    def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:
+    def _run(self, client: Any, *args, **kwargs) -> Optional[Coroutine]:
         """
-        To be implemented by sub-command
+        To be implemented by sub-command.
+        @param: client - Client to connect to the Open/R server.
+                         Set it to `Any` type here for the overridden method to choose the type in its parameter.
+                         Currently, we have two types of the clients:
+                                1. OpenrCtrl.Client for common APIs;
+                                2. OpenrCtrlCpp client which implements stream APIs.
         """
 
         raise NotImplementedError

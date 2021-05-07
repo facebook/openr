@@ -43,9 +43,13 @@ class FibAgentCmd(object):
 
 
 class FibUnicastRoutesCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, prefix_or_ip: List[str], json: bool
+        self,
+        client: OpenrCtrl.Client,
+        prefix_or_ip: List[str],
+        json: bool,
+        *args,
+        **kwargs,
     ) -> None:
         unicast_route_list = client.getUnicastRoutesFiltered(prefix_or_ip)
         host_name = client.getMyNodeName()
@@ -65,8 +69,14 @@ class FibUnicastRoutesCmd(OpenrCtrlCmd):
 
 
 class FibMplsRoutesCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, labels: List[int], json: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        labels: List[int],
+        json: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         int_label_filters = [int(label) for label in labels]
         mpls_route_list = client.getMplsRoutesFiltered(int_label_filters)
         host_name = client.getMyNodeName()
@@ -424,14 +434,14 @@ class FibSnoopCmd(OpenrCtrlCmd):
         loop.run_until_complete(_wrapper())
         loop.close()
 
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    # pyre-fixme[15]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient,
         duration: int,
         initial_dump: bool,
         prefixes: List[str],
+        *args,
+        **kwargs,
     ) -> None:
 
         # pyre-fixme[23]: Unable to unpack `ResponseAndClientBufferedStream__Types_Ro...

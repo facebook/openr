@@ -54,9 +54,13 @@ class PrefixMgrCmd(OpenrCtrlCmd):
 
 
 class WithdrawCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, prefixes: List[str], prefix_type: str
+        self,
+        client: OpenrCtrl.Client,
+        prefixes: List[str],
+        prefix_type: str,
+        *args,
+        **kwargs,
     ) -> None:
         tprefixes = self.to_thrift_prefixes(
             prefixes, self.to_thrift_prefix_type(prefix_type)
@@ -66,13 +70,14 @@ class WithdrawCmd(PrefixMgrCmd):
 
 
 class AdvertiseCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
         prefixes: List[str],
         prefix_type: str,
         forwarding_type: str,
+        *args,
+        **kwargs,
     ) -> None:
         tprefixes = self.to_thrift_prefixes(
             prefixes,
@@ -84,13 +89,14 @@ class AdvertiseCmd(PrefixMgrCmd):
 
 
 class SyncCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
         prefixes: List[str],
         prefix_type: str,
         forwarding_type: str,
+        *args,
+        **kwargs,
     ) -> None:
         tprefix_type = self.to_thrift_prefix_type(prefix_type)
         tprefixes = self.to_thrift_prefixes(
@@ -101,8 +107,12 @@ class SyncCmd(PrefixMgrCmd):
 
 
 class ViewCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         prefixes = client.getPrefixes()
         rows = []
         for prefix_entry in prefixes:
@@ -124,7 +134,6 @@ class ViewCmd(PrefixMgrCmd):
 class AdvertisedRoutesCmd(PrefixMgrCmd):
 
     # @override
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -132,6 +141,8 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         prefix_type: Optional[str],
         json: bool,
         detailed: bool,
+        *args,
+        **kwargs,
     ) -> None:
 
         # Get data
@@ -179,10 +190,11 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
 
 
 class OriginatedRoutesCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
     ) -> None:
 
         # Get data
@@ -237,7 +249,6 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
 class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
 
     # @override
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -247,6 +258,8 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         prefix_type: Optional[str],
         json: bool,
         detailed: bool,
+        *args,
+        **kwargs,
     ) -> None:
 
         # Get data

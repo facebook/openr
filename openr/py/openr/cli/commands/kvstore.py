@@ -166,7 +166,6 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
 
 class KvPrefixesCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -174,6 +173,8 @@ class KvPrefixesCmd(KvStoreCmdBase):
         json: bool,
         prefix: str,
         client_type: str,
+        *args,
+        **kwargs,
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
@@ -211,6 +212,8 @@ class PrefixesCmd(KvPrefixesCmd):
         json: bool,
         prefix: str = "",
         client_type: str = "",
+        *args,
+        **kwargs,
     ) -> None:
         # pyre-fixme[16]: `PrefixesCmd` has no attribute `area_feature`.
         if not self.area_feature:
@@ -226,7 +229,6 @@ class PrefixesCmd(KvPrefixesCmd):
 
 
 class KvKeysCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -234,6 +236,8 @@ class KvKeysCmd(KvStoreCmdBase):
         prefix: Any,
         originator: Any = None,
         ttl: bool = False,
+        *args,
+        **kwargs,
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(
             prefix, [originator] if originator else None
@@ -315,6 +319,8 @@ class KeysCmd(KvKeysCmd):
         prefix: Any,
         originator: Any = None,
         ttl: bool = False,
+        *args,
+        **kwargs,
     ) -> None:
         # pyre-fixme[16]: `KeysCmd` has no attribute `area_feature`.
         if not self.area_feature:
@@ -335,8 +341,13 @@ class KeysCmd(KvKeysCmd):
 
 
 class KvKeyValsCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, keys: List[str]) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        keys: List[str],
+        *args,
+        **kwargs,
+    ) -> None:
         resp = client.getKvStoreKeyVals(keys)
         self.print_kvstore_values(resp)
 
@@ -398,7 +409,13 @@ class KvKeyValsCmd(KvStoreCmdBase):
 
 
 class KeyValsCmd(KvKeyValsCmd):
-    def _run(self, client: OpenrCtrl.Client, keys: List[str]) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        keys: List[str],
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[16]: `KeyValsCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, keys)
@@ -412,8 +429,12 @@ class KeyValsCmd(KvKeyValsCmd):
 
 
 class KvNodesCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         prefix_keys = client.getKvStoreKeyValsFiltered(
             self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         )
@@ -508,7 +529,12 @@ class KvNodesCmd(KvStoreCmdBase):
 
 
 class NodesCmd(KvNodesCmd):
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[16]: `NodesCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
@@ -538,9 +564,14 @@ class NodesCmd(KvNodesCmd):
 
 
 class KvAdjCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        bidir: bool,
+        json: bool,
+        *args,
+        **kwargs,
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
@@ -580,7 +611,13 @@ class KvAdjCmd(KvStoreCmdBase):
 
 class AdjCmd(KvAdjCmd):
     def _run(
-        self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        bidir: bool,
+        json: bool,
+        *args,
+        **kwargs,
     ) -> None:
         # pyre-fixme[16]: `AdjCmd` has no attribute `area_feature`.
         if not self.area_feature:
@@ -598,8 +635,13 @@ class AdjCmd(KvAdjCmd):
 
 
 class Areas(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, in_json: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        in_json: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[16]: `Areas` has no attribute `area_feature`.
         if not self.area_feature:
             return
@@ -612,15 +654,26 @@ class Areas(KvStoreCmdBase):
 
 
 class KvFloodCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, roots: List[str]) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        roots: List[str],
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[20]: Argument `area` expected.
         spt_infos = client.getSpanningTreeInfos()
         utils.print_spt_infos(spt_infos, roots)
 
 
 class FloodCmd(KvFloodCmd):
-    def _run(self, client: OpenrCtrl.Client, roots: List[str]) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        roots: List[str],
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[16]: `FloodCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, roots)
@@ -633,9 +686,14 @@ class FloodCmd(KvFloodCmd):
 
 
 class KvShowAdjNodeCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, nodes: set, node: Any, interface: Any
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        node: Any,
+        interface: Any,
+        *args,
+        **kwargs,
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
@@ -651,7 +709,13 @@ class KvShowAdjNodeCmd(KvStoreCmdBase):
 
 class ShowAdjNodeCmd(KvShowAdjNodeCmd):
     def _run(
-        self, client: OpenrCtrl.Client, nodes: set, node: Any, interface: Any
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        node: Any,
+        interface: Any,
+        *args,
+        **kwargs,
     ) -> None:
         # pyre-fixme[16]: `ShowAdjNodeCmd` has no attribute `area_feature`.
         if not self.area_feature:
@@ -670,8 +734,13 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
 
 
 class KvCompareCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, nodes: set) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        *args,
+        **kwargs,
+    ) -> None:
         area = self.get_area_id()
 
         all_nodes_to_ips = self.get_node_to_ips(client, area)
@@ -794,8 +863,12 @@ class KvCompareCmd(KvStoreCmdBase):
 
 
 class KvPeersCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         peers = client.getKvStorePeers()
         # pyre-fixme[6]: Expected `Dict[str, typing.Any]` for 2nd param but got
         #  `Dict[None, Dict[str, openr_types.PeerSpec]]`.
@@ -819,7 +892,12 @@ class KvPeersCmd(KvStoreCmdBase):
 
 
 class PeersCmd(KvPeersCmd):
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[16]: `PeersCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
@@ -832,8 +910,13 @@ class PeersCmd(KvPeersCmd):
 
 
 class EraseKeyCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, key: str) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        key: str,
+        *args,
+        **kwargs,
+    ) -> None:
         area = self.get_area_id()
         publication = None
         if area is None:
@@ -867,7 +950,6 @@ class EraseKeyCmd(KvStoreCmdBase):
 
 
 class SetKeyCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -876,6 +958,8 @@ class SetKeyCmd(KvStoreCmdBase):
         originator: str,
         version: Any,
         ttl: int,
+        *args,
+        **kwargs,
     ) -> None:
         area = self.get_area_id()
         val = openr_types.Value()
@@ -923,8 +1007,13 @@ class SetKeyCmd(KvStoreCmdBase):
 
 
 class KvSignatureCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, prefix: str) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        prefix: str,
+        *args,
+        **kwargs,
+    ) -> None:
         area = self.get_area_id()
         keyDumpParams = self.buildKvStoreKeyDumpParams(prefix)
         resp = None
@@ -960,8 +1049,6 @@ class SnoopCmd(KvStoreCmdBase):
         loop.run_until_complete(_wrapper())
         loop.close()
 
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    # pyre-fixme[15]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient,
@@ -971,6 +1058,8 @@ class SnoopCmd(KvStoreCmdBase):
         duration: int,
         originator_ids: Optional[List[str]],
         match_all: bool = True,
+        *args,
+        **kwargs,
     ) -> None:
         # TODO: Fix area specifier for snoop. Intentionally setting to None to
         # snoop across all area once. It will be easier when we migrate all the
@@ -1189,8 +1278,12 @@ class SnoopCmd(KvStoreCmdBase):
 
 
 class KvAllocationsListCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
         resp = client.getKvStoreKeyVals([key])
         self.print_allocations(key, resp.keyVals)
@@ -1214,7 +1307,12 @@ class KvAllocationsListCmd(KvStoreCmdBase):
 
 
 class AllocationsListCmd(KvAllocationsListCmd):
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[16]: `AllocationsListCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
@@ -1228,8 +1326,14 @@ class AllocationsListCmd(KvAllocationsListCmd):
 
 
 class AllocationsSetCmd(SetKeyCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `SetKeyCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, node_name: str, prefix_str: str) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        node_name: str,
+        prefix_str: str,
+        *args,
+        **kwargs,
+    ) -> None:
         area = self.get_area_id()
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
 
@@ -1269,8 +1373,13 @@ class AllocationsSetCmd(SetKeyCmd):
 
 
 class AllocationsUnsetCmd(SetKeyCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `SetKeyCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, node_name: str) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        node_name: str,
+        *args,
+        **kwargs,
+    ) -> None:
         area = self.get_area_id()
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
 
@@ -1399,8 +1508,13 @@ class SummaryCmd(KvStoreCmdBase):
 
         return global_output + output
 
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, input_areas: Set[str]) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        input_areas: Set[str],
+        *args,
+        **kwargs,
+    ) -> None:
         # pyre-fixme[16]: `SummaryCmd` has no attribute `areas`.
         areaSet = set(self.areas)
         # get per-area Summary list from KvStore for all areas

@@ -20,16 +20,14 @@ from openr.utils.serializer import deserialize_thrift_object
 
 
 class ConfigShowCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client):
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         resp = client.getRunningConfig()
         config = json.loads(resp)
         utils.print_json(config)
 
 
 class ConfigDryRunCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, file: str):
+    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs):
         try:
             file_conf = client.dryrunConfig(file)
         except OpenrError as ex:
@@ -41,8 +39,7 @@ class ConfigDryRunCmd(OpenrCtrlCmd):
 
 
 class ConfigCompareCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, file: str):
+    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs):
         running_conf = client.getRunningConfig()
 
         try:
@@ -77,8 +74,7 @@ class ConfigStoreCmdBase(OpenrCtrlCmd):
 
 
 class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client):
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         (prefix_alloc_blob, exception_str) = self.getConfigWrapper(
             client, Consts.PREFIX_ALLOC_KEY
         )
@@ -110,8 +106,7 @@ class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
 
 
 class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:
         # After link-monitor thread starts, it will hold for
         # "adjHoldUntilTimePoint_" time before populate config information.
         # During this short time-period, Exception can be hit if dump cmd
@@ -158,8 +153,7 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
 
 
 class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:
         (prefix_mgr_config_blob, exception_str) = self.getConfigWrapper(
             client, Consts.PREFIX_MGR_KEY
         )
@@ -180,15 +174,15 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
 
 
 class ConfigEraseCmd(ConfigStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, key: str) -> None:
+    def _run(self, client: OpenrCtrl.Client, key: str, *args, **kwargs) -> None:
         client.eraseConfigKey(key)
         print("Key:{} erased".format(key))
 
 
 class ConfigStoreCmd(ConfigStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, key: str, value: str) -> None:
+    def _run(
+        self, client: OpenrCtrl.Client, key: str, value: str, *args, **kwargs
+    ) -> None:
         # pyre-fixme[6]: Expected `bytes` for 2nd param but got `str`.
         client.setConfigKey(key, value)
         print("Key:{}, value:{} stored".format(key, value))

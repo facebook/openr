@@ -144,45 +144,77 @@ class LMCmdBase(OpenrCtrlCmd):
 
 
 class SetNodeOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        yes: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_node_overload_bit(client, True, yes)
 
 
 class UnsetNodeOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        yes: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_node_overload_bit(client, False, yes)
 
 
 class SetLinkOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_link_overload_bit(client, True, interface, yes)
 
 
 class UnsetLinkOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_link_overload_bit(client, False, interface, yes)
 
 
 class SetLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, interface: str, metric: str, yes: bool
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        metric: str,
+        yes: bool,
+        *args,
+        **kwargs,
     ) -> None:
         self.toggle_link_metric(client, True, interface, int(metric), yes)
 
 
 class UnsetLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_link_metric(client, False, interface, 0, yes)
 
 
 class SetAdjMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -190,21 +222,34 @@ class SetAdjMetricCmd(LMCmdBase):
         interface: str,
         metric: str,
         yes: bool,
+        *args,
+        **kwargs,
     ) -> None:
         client.setAdjacencyMetric(interface, node, int(metric))
 
 
 class UnsetAdjMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     def _run(
-        self, client: OpenrCtrl.Client, node: str, interface: str, yes: bool
+        self,
+        client: OpenrCtrl.Client,
+        node: str,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
     ) -> None:
         client.unsetAdjacencyMetric(interface, node)
 
 
 class LMAdjCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, nodes: set, json: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         adj_db = client.getLinkMonitorAdjacencies()
 
         # adj_dbs is built with ONLY one single (node, adjDb). Ignpre bidir option
@@ -218,8 +263,14 @@ class LMAdjCmd(LMCmdBase):
 
 
 class LMLinksCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    def _run(self, client: OpenrCtrl.Client, only_suppressed: bool, json: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        only_suppressed: bool,
+        json: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         links = client.getInterfaces()
         if only_suppressed:
             links.interfaceDetails = {
