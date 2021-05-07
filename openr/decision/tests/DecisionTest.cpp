@@ -452,6 +452,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -493,6 +494,7 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -529,6 +531,7 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -565,6 +568,7 @@ TEST(ShortestPathTest, UnknownNode) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -590,6 +594,7 @@ TEST(SpfSolver, AdjacencyUpdate) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -729,6 +734,7 @@ TEST(MplsRoutes, BasicTest) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -777,6 +783,7 @@ TEST(BGPRedistribution, BasicOperation) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -965,6 +972,7 @@ TEST(BGPRedistribution, IgpMetric) {
   SpfSolver spfSolver(
       nodeName,
       false /* enableV4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* enableOrderedFib */,
       false /* bgpDryRun */);
@@ -1126,6 +1134,7 @@ TEST(Decision, BestRouteSelection) {
   SpfSolver spfSolver(
       nodeName,
       false /* enableV4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* bgpDryRun */,
       true /* enableBestRouteSelection */);
@@ -1281,6 +1290,7 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -1339,6 +1349,7 @@ TEST(ConnectivityTest, OverloadNodeTest) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -1440,6 +1451,7 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   SpfSolver spfSolver(
       nodeName,
       false /* disable v4 */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       false /* disable LFA */);
 
@@ -1574,12 +1586,13 @@ class SimpleRingMeshTopologyFixture
   CustomSetUp(
       bool calculateLfas,
       bool useKsp2Ed,
+      bool useNodeSegmentLabel,
       bool useAdjLabel,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(
-        nodeName, v4Enabled, useAdjLabel, calculateLfas);
+        nodeName, v4Enabled, useNodeSegmentLabel, useAdjLabel, calculateLfas);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13, adj14}, 1);
     adjacencyDb2 = createAdjDb("2", {adj21, adj23, adj24}, 2);
     adjacencyDb3 = createAdjDb("3", {adj31, adj32, adj34}, 3);
@@ -1680,6 +1693,7 @@ TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
   CustomSetUp(
       false /* multipath - ignored */,
       true /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */,
       std::get<1>(GetParam()));
   auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
@@ -1772,12 +1786,13 @@ class SimpleRingTopologyFixture
   CustomSetUp(
       bool calculateLfas,
       bool useKsp2Ed,
+      bool useNodeSegmentLabel,
       bool useAdjLabels,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(
-        nodeName, v4Enabled, useAdjLabels, calculateLfas);
+        nodeName, v4Enabled, useNodeSegmentLabel, useAdjLabels, calculateLfas);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
     adjacencyDb2 = createAdjDb("2", {adj21, adj24}, 2);
     adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
@@ -1898,6 +1913,7 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
   CustomSetUp(
       false /* disable LFA */,
       false /* useKsp2Ed */,
+      true /* use node segment label */,
       true /* use adj labels */);
   fb303::fbData->resetAllData();
   auto routeMap = getRouteMap(
@@ -2041,6 +2057,7 @@ TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
   CustomSetUp(
       false /* disable LFA */,
       false /* useKsp2Ed */,
+      true /* use node segment label */,
       true /* use adj labels */);
   fb303::fbData->resetAllData();
   // make node1's mpls label same as node2.
@@ -2095,7 +2112,11 @@ TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
 //
 TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
   CustomSetUp(
-      true /* multipath */, false /* useKsp2Ed */, true /* use adj labels */);
+      true /* multipath */,
+      false /* useKsp2Ed */,
+      true
+      /* use node segment label */,
+      true /* use adj labels */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
@@ -2237,6 +2258,7 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   CustomSetUp(
       false /* multipath - ignored */,
       true /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */,
       std::get<1>(GetParam()));
 
@@ -2407,6 +2429,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
   CustomSetUp(
       true /* multipath - ignored */,
       true /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */,
       std::get<1>(GetParam()));
   fb303::fbData->resetAllData();
@@ -2612,6 +2635,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   CustomSetUp(
       true /* multipath - ignored */,
       true /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */,
       thrift::PrefixType::BGP,
       true);
@@ -2807,6 +2831,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   CustomSetUp(
       true /* multipath - ignored */,
       true /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */,
       thrift::PrefixType::BGP,
       true);
@@ -2931,6 +2956,7 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
   CustomSetUp(
       true /* multipath */,
       false /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */);
   // Advertise default prefixes from node-1 and node-4
   auto defaultRoutePrefix = v4Enabled ? "0.0.0.0/0" : "::/0";
@@ -2987,6 +3013,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
   CustomSetUp(
       true /* multipath */,
       false /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */);
   adjacencyDb2.isOverloaded_ref() = true;
   adjacencyDb3.isOverloaded_ref() = true;
@@ -3109,6 +3136,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
   CustomSetUp(
       true /* multipath */,
       false /* useKsp2Ed */,
+      true /* enable node segment label */,
       true /* enable adj labels */);
   adjacencyDb3.adjacencies_ref()[0].isOverloaded_ref() =
       true; // make adj31 overloaded
@@ -3318,11 +3346,12 @@ class ParallelAdjRingTopologyFixture
   CustomSetUp(
       bool calculateLfas,
       bool useKsp2Ed,
-      bool userAdjLabels,
+      bool useNodeSegmentLabel,
+      bool useAdjLabels,
       std::optional<thrift::PrefixType> prefixType = std::nullopt) {
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(
-        nodeName, false, userAdjLabels, calculateLfas);
+        nodeName, false, useNodeSegmentLabel, useAdjLabels, calculateLfas);
     // R1 -> R2
     adj12_1 =
         createAdjacency("2", "2/1", "1/1", "fe80::2:1", "192.168.2.1", 11, 201);
@@ -3434,6 +3463,7 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
   CustomSetUp(
       false /* shortest path */,
       false /* useKsp2Ed */,
+      true /* enable segment label */,
       true /* enable adj labels */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
@@ -3571,6 +3601,7 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
   CustomSetUp(
       true /* multipath */,
       false /* useKsp2Ed */,
+      true /* enable segment label */,
       true /* enable adj labels */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
@@ -3722,6 +3753,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   CustomSetUp(
       true /* multipath, ignored */,
       true /* useKsp2Ed */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       prefixType);
 
@@ -3909,6 +3941,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   CustomSetUp(
       true /* multipath, ignored */,
       true /* useKsp2Ed */,
+      true /* enable segment label */,
       true /* enable adj labels */,
       thrift::PrefixType::BGP);
 
@@ -4105,7 +4138,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
  */
 TEST(DecisionTest, Ip2MplsRoutes) {
   std::string nodeName("1");
-  auto spfSolver = std::make_unique<SpfSolver>(nodeName, false, true, true);
+  auto spfSolver =
+      std::make_unique<SpfSolver>(nodeName, false, true, true, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -4473,7 +4507,13 @@ createGrid(LinkState& linkState, PrefixState& prefixState, int n) {
 
 class GridTopologyFixture : public ::testing::TestWithParam<int> {
  public:
-  GridTopologyFixture() : spfSolver(nodeName, false, true, false) {}
+  GridTopologyFixture()
+      : spfSolver(
+            nodeName,
+            false,
+            true /* enable node segment label */,
+            true /* enable adj segment labels */,
+            false) {}
 
  protected:
   void
@@ -4567,7 +4607,7 @@ TEST(GridTopology, StressTest) {
     return;
   }
   std::string nodeName("1");
-  SpfSolver spfSolver(nodeName, false, true, true);
+  SpfSolver spfSolver(nodeName, false, true, true, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -6833,7 +6873,7 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
         "domain", // domainName
         {}, // areaCfg
         true, // enableV4
-        false, // enableSegmentRouting
+        true, // enableSegmentRouting (so that adj segment label is enabled)
         true, // dryrun
         true // enableV4OverV6Nexthop
     );
@@ -6956,7 +6996,7 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
         "domain", // domainName
         {}, // areaCfg
         false, // enableV4
-        false, // enableSegmentRouting
+        true, // enableSegmentRouting
         true, // dryrun
         true // enableV4OverV6Nexthop
     );

@@ -120,6 +120,16 @@ class Config {
   }
 
   bool
+  isNodeSegmentLabelEnabled() const {
+    // TODO
+    // Once segment_routing_config gets added, the
+    // this check will be replaced with a logic
+    // which checks if node segment label is
+    // configured.
+    return isSegmentRoutingEnabled();
+  }
+
+  bool
   isAdjacencyLabelsEnabled() const {
     // TODO
     // Once segment_routing_config gets added, the

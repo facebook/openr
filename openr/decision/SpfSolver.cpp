@@ -73,12 +73,14 @@ DecisionRouteDb::update(DecisionRouteUpdate const& update) {
 SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
+    bool enableNodeSegmentLabel,
     bool enableAdjacencyLabels,
     bool bgpDryRun,
     bool enableBestRouteSelection,
     bool v4OverV6Nexthop)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
+      enableNodeSegmentLabel_(enableNodeSegmentLabel),
       enableAdjacencyLabels_(enableAdjacencyLabels),
       bgpDryRun_(bgpDryRun),
       enableBestRouteSelection_(enableBestRouteSelection),
@@ -410,91 +412,100 @@ SpfSolver::buildRouteDb(
   //
   // Create MPLS routes for all nodeLabel
   //
-  std::unordered_map<int32_t, std::pair<std::string, RibMplsEntry>> labelToNode;
-  for (const auto& [area, linkState] : areaLinkStates) {
-    for (const auto& [_, adjDb] : linkState.getAdjacencyDatabases()) {
-      const auto topLabel = *adjDb.nodeLabel_ref();
-      // Top label is not set => Non-SR mode
-      if (topLabel == 0) {
-        continue;
-      }
-      // If mpls label is not valid then ignore it
-      if (not isMplsLabelValid(topLabel)) {
-        LOG(ERROR) << "Ignoring invalid node label " << topLabel << " of node "
-                   << *adjDb.thisNodeName_ref();
-        fb303::fbData->addStatValue(
-            "decision.skipped_mpls_route", 1, fb303::COUNT);
-        continue;
-      }
-
-      // There can be a temporary collision in node label allocation. Usually
-      // happens when two segmented networks allocating labels from the same
-      // range join together. In case of such conflict we respect the node label
-      // of bigger node-ID
-      auto iter = labelToNode.find(topLabel);
-      if (iter != labelToNode.end()) {
-        LOG(INFO) << "Found duplicate label " << topLabel << "from "
-                  << iter->second.first << " " << *adjDb.thisNodeName_ref();
-        fb303::fbData->addStatValue(
-            "decision.duplicate_node_label", 1, fb303::COUNT);
-        if (iter->second.first < *adjDb.thisNodeName_ref()) {
+  if (enableNodeSegmentLabel_) {
+    std::unordered_map<int32_t, std::pair<std::string, RibMplsEntry>>
+        labelToNode;
+    for (const auto& [area, linkState] : areaLinkStates) {
+      for (const auto& [_, adjDb] : linkState.getAdjacencyDatabases()) {
+        const auto topLabel = *adjDb.nodeLabel_ref();
+        const auto& nodeName = *adjDb.thisNodeName_ref();
+        // Top label is not set => Non-SR mode
+        if (topLabel == 0) {
+          LOG(INFO) << "Ignoring node label " << topLabel << " of node "
+                    << nodeName;
+          fb303::fbData->addStatValue(
+              "decision.skipped_mpls_route", 1, fb303::COUNT);
           continue;
         }
-      }
+        // If mpls label is not valid then ignore it
+        if (not isMplsLabelValid(topLabel)) {
+          LOG(ERROR) << "Ignoring invalid node label " << topLabel
+                     << " of node " << nodeName;
+          fb303::fbData->addStatValue(
+              "decision.skipped_mpls_route", 1, fb303::COUNT);
+          continue;
+        }
 
-      // Install POP_AND_LOOKUP for next layer
-      if (*adjDb.thisNodeName_ref() == myNodeName) {
-        thrift::NextHopThrift nh;
-        nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
-        nh.area_ref() = area;
-        nh.mplsAction_ref() =
-            createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+        // There can be a temporary collision in node label allocation. Usually
+        // happens when two segmented networks allocating labels from the same
+        // range join together. In case of such conflict we respect the node
+        // label of bigger node-ID
+        auto iter = labelToNode.find(topLabel);
+        if (iter != labelToNode.end()) {
+          LOG(INFO) << "Found duplicate label " << topLabel << "from "
+                    << iter->second.first << " " << nodeName;
+          fb303::fbData->addStatValue(
+              "decision.duplicate_node_label", 1, fb303::COUNT);
+          if (iter->second.first < nodeName) {
+            continue;
+          }
+        }
+
+        // Install POP_AND_LOOKUP for next layer
+        if (*adjDb.thisNodeName_ref() == myNodeName) {
+          thrift::NextHopThrift nh;
+          nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
+          nh.area_ref() = area;
+          nh.mplsAction_ref() =
+              createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+          labelToNode.erase(topLabel);
+          labelToNode.emplace(
+              topLabel,
+              std::make_pair(myNodeName, RibMplsEntry(topLabel, {nh})));
+          continue;
+        }
+
+        // Get best nexthop towards the node
+        auto metricNhs = getNextHopsWithMetric(
+            myNodeName,
+            {{adjDb.thisNodeName_ref().value(), area}},
+            false,
+            areaLinkStates);
+        if (metricNhs.second.empty()) {
+          LOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
+                       << " of node " << nodeName;
+          fb303::fbData->addStatValue(
+              "decision.no_route_to_label", 1, fb303::COUNT);
+          continue;
+        }
+
+        // Create nexthops with appropriate MplsAction (PHP and SWAP). Note that
+        // all nexthops are valid for routing without loops. Fib is responsible
+        // for installing these routes by making sure it programs least cost
+        // nexthops first and of same action type (based on HW limitations)
         labelToNode.erase(topLabel);
         labelToNode.emplace(
-            topLabel, std::make_pair(myNodeName, RibMplsEntry(topLabel, {nh})));
-        continue;
+            topLabel,
+            std::make_pair(
+                adjDb.thisNodeName_ref().value(),
+                RibMplsEntry(
+                    topLabel,
+                    getNextHopsThrift(
+                        myNodeName,
+                        {{adjDb.thisNodeName_ref().value(), area}},
+                        false /* isV4 */,
+                        v4OverV6Nexthop_,
+                        false /* perDestination */,
+                        metricNhs.first,
+                        metricNhs.second,
+                        topLabel,
+                        areaLinkStates))));
       }
-
-      // Get best nexthop towards the node
-      auto metricNhs = getNextHopsWithMetric(
-          myNodeName,
-          {{adjDb.thisNodeName_ref().value(), area}},
-          false,
-          areaLinkStates);
-      if (metricNhs.second.empty()) {
-        LOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
-                     << " of node " << *adjDb.thisNodeName_ref();
-        fb303::fbData->addStatValue(
-            "decision.no_route_to_label", 1, fb303::COUNT);
-        continue;
-      }
-
-      // Create nexthops with appropriate MplsAction (PHP and SWAP). Note that
-      // all nexthops are valid for routing without loops. Fib is responsible
-      // for installing these routes by making sure it programs least cost
-      // nexthops first and of same action type (based on HW limitations)
-      labelToNode.erase(topLabel);
-      labelToNode.emplace(
-          topLabel,
-          std::make_pair(
-              adjDb.thisNodeName_ref().value(),
-              RibMplsEntry(
-                  topLabel,
-                  getNextHopsThrift(
-                      myNodeName,
-                      {{adjDb.thisNodeName_ref().value(), area}},
-                      false /* isV4 */,
-                      v4OverV6Nexthop_,
-                      false /* perDestination */,
-                      metricNhs.first,
-                      metricNhs.second,
-                      topLabel,
-                      areaLinkStates))));
     }
-  }
 
-  for (auto& [_, nodeToEntry] : labelToNode) {
-    routeDb.addMplsRoute(std::move(nodeToEntry.second));
+    for (auto& [_, nodeToEntry] : labelToNode) {
+      routeDb.addMplsRoute(std::move(nodeToEntry.second));
+    }
   }
 
   //

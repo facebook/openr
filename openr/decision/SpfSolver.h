@@ -106,6 +106,7 @@ class SpfSolver {
   SpfSolver(
       const std::string& myNodeName,
       bool enableV4,
+      bool enableNodeSegmentLabel,
       bool enableAdjacencyLabels,
       bool bgpDryRun = false,
       bool enableBestRouteSelection = false,
@@ -266,6 +267,8 @@ class SpfSolver {
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
   // nexthops to Fib module for programming. Else it will just drop them.
   const bool enableV4_{false};
+
+  const bool enableNodeSegmentLabel_{true};
 
   const bool enableAdjacencyLabels_{true};
 
