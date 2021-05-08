@@ -730,13 +730,14 @@ Fib::createFibClient(
   socket = newSocket.get();
 
   // Create channel and set timeout
-  auto channel =
-      apache::thrift::HeaderClientChannel::newChannel(std::move(newSocket));
+  auto channel = apache::thrift::HeaderClientChannel::newChannel(
+      std::move(newSocket),
+      apache::thrift::HeaderClientChannel::Options().setClientType(
+          THRIFT_FRAMED_DEPRECATED));
   channel->setTimeout(Constants::kPlatformRoutesProcTimeout.count());
 
   // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
   channel->setProtocolId(apache::thrift::protocol::T_BINARY_PROTOCOL);
-  channel->setClientType(THRIFT_FRAMED_DEPRECATED);
 
   // Reset client_
   client = std::make_unique<thrift::FibServiceAsyncClient>(std::move(channel));
