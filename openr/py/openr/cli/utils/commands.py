@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Any, Callable, Dict, List, Optional, Coroutine
+from typing import Any, Callable, Dict, Set, Optional, Coroutine
 
 import bunch
 from openr.clients.openr_client import get_openr_ctrl_client
@@ -111,25 +111,16 @@ class OpenrCtrlCmd(object):
     def buildKvStoreKeyDumpParams(
         self,
         prefix: str = Consts.ALL_DB_MARKER,
-        originator_ids: Optional[List[str]] = None,
+        originator_ids: Optional[Set[str]] = None,
         keyval_hash: Optional[Dict[str, openr_types.Value]] = None,
     ) -> openr_types.KeyDumpParams:
         """
         Build KeyDumpParams based on input parameter list
         """
         params = openr_types.KeyDumpParams(prefix)
-        # pyre-fixme[8]: Attribute has type `Optional[typing.Set[str]]`; used as
-        #  `List[Variable[_T]]`.
-        params.originatorIds = []
-        params.keyValHashes = None
+        params.originatorIds = originator_ids if originator_ids else None
+        params.keyValHashes = keyval_hash if keyval_hash else None
         if prefix:
             params.keys = [prefix]
-
-        if originator_ids:
-            # pyre-fixme[8]: Attribute has type `Optional[typing.Set[str]]`; used as
-            #  `List[str]`.
-            params.originatorIds = originator_ids
-        if keyval_hash:
-            params.keyValHashes = keyval_hash
 
         return params

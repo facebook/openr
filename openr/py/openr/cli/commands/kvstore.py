@@ -240,7 +240,7 @@ class KvKeysCmd(KvStoreCmdBase):
         **kwargs,
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(
-            prefix, [originator] if originator else None
+            prefix, {originator} if originator else None
         )
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         # pyre-fixme[6]: Expected `Dict[str, openr_types.Publication]` for 1st param
@@ -328,7 +328,7 @@ class KeysCmd(KvKeysCmd):
             return
 
         keyDumpParams = self.buildKvStoreKeyDumpParams(
-            prefix, [originator] if originator else None
+            prefix, {originator} if originator else None
         )
 
         area_kv = {}
