@@ -524,12 +524,8 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
   // update static MPLS routes
   if (routeUpdate.mplsRoutesToUpdate.size() or
       routeUpdate.mplsRoutesToDelete.size()) {
-    std::vector<thrift::MplsRoute> mplsRoutesToUpdate{};
-    for (const auto& ribMplsEntry : routeUpdate.mplsRoutesToUpdate) {
-      mplsRoutesToUpdate.emplace_back(ribMplsEntry.toThrift());
-    }
     spfSolver_->updateStaticMplsRoutes(
-        mplsRoutesToUpdate, routeUpdate.mplsRoutesToDelete);
+        routeUpdate.mplsRoutesToUpdate, routeUpdate.mplsRoutesToDelete);
     pendingUpdates_.setNeedsFullRebuild(); // Mark for full DB rebuild
   }
   rebuildRoutesDebounced_();

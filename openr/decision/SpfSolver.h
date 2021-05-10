@@ -18,8 +18,7 @@
 
 namespace openr {
 
-using StaticMplsRoutes =
-    std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>;
+using StaticMplsRoutes = std::unordered_map<int32_t, RibMplsEntry>;
 using StaticUnicastRoutes =
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>;
 
@@ -122,7 +121,7 @@ class SpfSolver {
       const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
 
   void updateStaticMplsRoutes(
-      const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
+      const std::vector<RibMplsEntry>& mplsRoutesToUpdate,
       const std::vector<int32_t>& mplsRoutesToDelete);
 
   // Build route database using given prefix and link states for a given

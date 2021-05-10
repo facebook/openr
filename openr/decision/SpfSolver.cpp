@@ -5,7 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/decision/SpfSolver.h"
+#include <openr/decision/RibEntry.h>
+#include <openr/decision/SpfSolver.h>
 
 #include <fb303/ServiceData.h>
 
@@ -141,19 +142,18 @@ SpfSolver::updateStaticUnicastRoutes(
 
 void
 SpfSolver::updateStaticMplsRoutes(
-    const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate,
+    const std::vector<RibMplsEntry>& mplsRoutesToUpdate,
     const std::vector<int32_t>& mplsRoutesToDelete) {
   // Process MPLS routes to add or update
   LOG_IF(INFO, mplsRoutesToUpdate.size())
       << "Adding/Updating " << mplsRoutesToUpdate.size()
       << " static mpls routes.";
   for (const auto& mplsRoute : mplsRoutesToUpdate) {
-    const auto topLabel = *mplsRoute.topLabel_ref();
-    staticMplsRoutes_.insert_or_assign(topLabel, *mplsRoute.nextHops_ref());
+    staticMplsRoutes_.insert_or_assign(mplsRoute.label, mplsRoute);
 
-    VLOG(1) << "> " << std::to_string(topLabel)
-            << ", NextHopsCount = " << mplsRoute.nextHops_ref()->size();
-    for (auto const& nh : *mplsRoute.nextHops_ref()) {
+    VLOG(1) << "> " << mplsRoute.label
+            << ", NextHopsCount = " << mplsRoute.nexthops.size();
+    for (auto const& nh : mplsRoute.nexthops) {
       VLOG(2) << " via " << toString(nh);
     }
   }
@@ -544,10 +544,8 @@ SpfSolver::buildRouteDb(
   //
   // Add MPLS static routes
   //
-  for (const auto& [topLabel, nhs] : staticMplsRoutes_) {
-    routeDb.addMplsRoute(RibMplsEntry(
-        topLabel,
-        std::unordered_set<thrift::NextHopThrift>{nhs.cbegin(), nhs.cend()}));
+  for (const auto& [_, mplsEntry] : staticMplsRoutes_) {
+    routeDb.addMplsRoute(RibMplsEntry(mplsEntry));
   }
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -900,7 +898,7 @@ SpfSolver::addBestPaths(
     // Add static next-hops
     auto routeIter = staticMplsRoutes_.find(prependLabel.value());
     if (routeIter != staticMplsRoutes_.end()) {
-      for (const auto& nh : routeIter->second) {
+      for (const auto& nh : routeIter->second.nexthops) {
         nextHops.emplace(createNextHop(
             nh.address_ref().value(), std::nullopt, 0, std::nullopt));
       }

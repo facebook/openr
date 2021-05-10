@@ -2376,17 +2376,12 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   const auto nh1Addr = toBinaryAddress("1.1.1.1");
   const auto nh2Addr = toBinaryAddress("2.2.2.2");
   const auto phpAction = createMplsAction(thrift::MplsActionCode::PHP);
-  std::vector<thrift::NextHopThrift> staticNextHops{
+  std::unordered_set<thrift::NextHopThrift> staticNextHops{
       createNextHop(nh1Addr, std::nullopt, 0, phpAction),
       createNextHop(nh2Addr, std::nullopt, 0, phpAction)};
-  staticNextHops.at(0).area_ref().reset();
-  staticNextHops.at(1).area_ref().reset();
-  thrift::RouteDatabaseDelta routesDelta;
-  routesDelta.mplsRoutesToUpdate_ref() = {
-      createMplsRoute(prependLabel, staticNextHops)};
-  spfSolver->updateStaticMplsRoutes(
-      *routesDelta.mplsRoutesToUpdate_ref(),
-      *routesDelta.mplsRoutesToDelete_ref());
+  std::vector<RibMplsEntry> mplsRoutesToUpdate{
+      RibMplsEntry(prependLabel, staticNextHops)};
+  spfSolver->updateStaticMplsRoutes(mplsRoutesToUpdate, {});
 
   // Get and verify next-hops. Both node1 & node4 will report static next-hops
   // NOTE: PUSH action is removed.
@@ -2805,14 +2800,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   thrift::NextHopThrift nh;
   *nh.address_ref() = toBinaryAddress("1.1.1.1");
   nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
-  thrift::MplsRoute staticMplsRoute;
-  staticMplsRoute.topLabel_ref() = staticMplsRouteLabel;
-  staticMplsRoute.nextHops_ref()->emplace_back(nh);
-  thrift::RouteDatabaseDelta routesDelta;
-  routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
   spfSolver->updateStaticMplsRoutes(
-      *routesDelta.mplsRoutesToUpdate_ref(),
-      *routesDelta.mplsRoutesToDelete_ref());
+      {RibMplsEntry(staticMplsRouteLabel, {nh})}, {});
 
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -2917,14 +2906,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   thrift::NextHopThrift nh;
   *nh.address_ref() = toBinaryAddress("1.1.1.1");
   nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
-  thrift::MplsRoute staticMplsRoute;
-  staticMplsRoute.topLabel_ref() = staticMplsRouteLabel;
-  staticMplsRoute.nextHops_ref()->emplace_back(nh);
-  thrift::RouteDatabaseDelta routesDelta;
-  routesDelta.mplsRoutesToUpdate_ref() = {staticMplsRoute};
   spfSolver->updateStaticMplsRoutes(
-      *routesDelta.mplsRoutesToUpdate_ref(),
-      *routesDelta.mplsRoutesToDelete_ref());
+      {RibMplsEntry(staticMplsRouteLabel, {nh})}, {});
 
   auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
