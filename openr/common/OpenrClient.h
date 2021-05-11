@@ -22,16 +22,11 @@ namespace openr {
 namespace detail {
 
 static void
-setCompressionTransform(apache::thrift::HeaderClientChannel* channel) {
+setCompressionTransform(apache::thrift::ClientChannel* channel) {
   CHECK(channel);
   apache::thrift::CompressionConfig compressionConfig;
   compressionConfig.codecConfig_ref().ensure().set_zstdConfig();
   channel->setDesiredCompressionConfig(compressionConfig);
-}
-
-static void
-setCompressionTransform(apache::thrift::RocketClientChannel* /*channel*/) {
-  CHECK(false) << "Transform is not supported on rocket client channel";
 }
 
 /*
@@ -152,9 +147,7 @@ getOpenrCtrlSecureClient(
 
     // Enable compression for efficient transport when available. This will
     // incur CPU cost but it is insignificant for usual queries.
-    if (typeid(ClientChannel) == typeid(apache::thrift::HeaderClientChannel)) {
-      detail::setCompressionTransform(channel.get());
-    }
+    detail::setCompressionTransform(channel.get());
 
     // Create client
     client =
