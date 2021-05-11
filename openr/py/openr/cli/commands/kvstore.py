@@ -653,7 +653,7 @@ class Areas(KvStoreCmdBase):
             print(f"Areas configured: {self.areas}")
 
 
-class KvFloodCmd(KvStoreCmdBase):
+class FloodCmd(KvStoreCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -661,24 +661,6 @@ class KvFloodCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[20]: Argument `area` expected.
-        spt_infos = client.getSpanningTreeInfos()
-        utils.print_spt_infos(spt_infos, roots)
-
-
-class FloodCmd(KvFloodCmd):
-    def _run(
-        self,
-        client: OpenrCtrl.Client,
-        roots: List[str],
-        *args,
-        **kwargs,
-    ) -> None:
-        # pyre-fixme[16]: `FloodCmd` has no attribute `area_feature`.
-        if not self.area_feature:
-            super()._run(client, roots)
-            return
-
         # pyre-fixme[16]: `FloodCmd` has no attribute `areas`.
         for area in self.areas:
             spt_infos = client.getSpanningTreeInfos(area)
@@ -697,8 +679,7 @@ class KvShowAdjNodeCmd(KvStoreCmdBase):
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        # pyre-fixme[20]: Argument `interface` expected.
-        self.printAdjNode(publication, nodes)
+        self.printAdjNode(publication, nodes, node, interface)
 
     def printAdjNode(self, publication, nodes, node, interface):
         adjs_map = utils.adj_dbs_to_dict(
@@ -719,8 +700,7 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
     ) -> None:
         # pyre-fixme[16]: `ShowAdjNodeCmd` has no attribute `area_feature`.
         if not self.area_feature:
-            # pyre-fixme[20]: Argument `interface` expected.
-            super()._run(client, nodes, interface)
+            super()._run(client, nodes, node, interface, args, kwargs)
             return
 
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
@@ -918,11 +898,7 @@ class EraseKeyCmd(KvStoreCmdBase):
         **kwargs,
     ) -> None:
         area = self.get_area_id()
-        publication = None
-        if area is None:
-            publication = client.getKvStoreKeyVals([key])
-        else:
-            publication = client.getKvStoreKeyValsArea([key], area)
+        publication = client.getKvStoreKeyValsArea([key], area)
         keyVals = publication.keyVals
 
         if key not in keyVals:
@@ -940,11 +916,7 @@ class EraseKeyCmd(KvStoreCmdBase):
 
         print(keyVals)
 
-        if area is None:
-            # pyre-fixme[20]: Argument `area` expected.
-            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals))
-        else:
-            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
+        client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
 
         print("Success: key {} will be erased soon from all KvStores.".format(key))
 
@@ -990,11 +962,7 @@ class SetKeyCmd(KvStoreCmdBase):
 
         # Advertise publication back to KvStore
         keyVals = {key: val}
-        if area is None:
-            # pyre-fixme[20]: Argument `area` expected.
-            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals))
-        else:
-            client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
+        client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
         print(
             "Success: Set key {} with version {} and ttl {} successfully"
             " in KvStore. This does not guarantee that value is updated"
