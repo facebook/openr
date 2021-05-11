@@ -692,25 +692,22 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
 
         # Convert the prefixes to readable format
         assert policy is not None
-        for stmt in policy.statements:
-            if stmt.matcher.prefixes:
-                stmt.matcher.prefixes = [
-                    ipnetwork.sprint_prefix(p)
-                    # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
-                    for p in stmt.matcher.prefixes
-                ]
 
         # NOTE: We don't do explicit effor to print policy in
         print("> RibPolicy")
         print(f"  Validity: {policy.ttl_secs}s")
         for stmt in policy.statements:
-            prefixes = stmt.matcher.prefixes or []
+            prefixes: List[str] = []
+            if stmt.matcher.prefixes:
+                prefixes = [
+                    ipnetwork.sprint_prefix(p)
+                    # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
+                    for p in stmt.matcher.prefixes
+                ]
             tags = stmt.matcher.tags or []
             action = stmt.action.set_weight or ctrl_types.RibRouteActionWeight()
             print(f"  Statement: {stmt.name}")
             if prefixes:
-                # pyre-fixme[6]: Expected `Iterable[str]` for 1st param but got
-                #  `Union[List[typing.Any], List[network_types.IpPrefix]]`.
                 print(f"    Prefix Match List: {', '.join(prefixes)}")
             if tags:
                 print(f"    Tags Match List: {', '.join(tags)}")

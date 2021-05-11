@@ -209,8 +209,8 @@ def alloc_prefix_to_loopback_ip_str(prefix):
 
 
 def parse_prefix_database(
-    prefix_filter: str,
-    client_type_filter: str,
+    prefix_filter: Optional[Union[network_types.IpPrefix, str]],
+    client_type_filter: Optional[Union[network_types.PrefixType, str]],
     prefix_dbs: Dict[str, openr_types.PrefixDatabase],
     prefix_db: Any,
 ):
@@ -220,14 +220,16 @@ def parse_prefix_database(
     """
     if client_type_filter:
         _TYPES = network_types.PrefixType._NAMES_TO_VALUES
-        # pyre-fixme[9]: client_type_filter has type `str`; used as
-        #  `Optional[network_types.PrefixType]`.
-        client_type_filter = _TYPES.get(client_type_filter.upper(), None)
-        if client_type_filter is None:
-            raise Exception(f"Unknown client type. Use one of {list(_TYPES.keys())}")
+        if isinstance(client_type_filter, str):
+            client_type_filter = _TYPES.get(client_type_filter.upper(), None)
+            if client_type_filter is None:
+                raise Exception(
+                    f"Unknown client type. Use one of {list(_TYPES.keys())}"
+                )
+
     if prefix_filter:
-        # pyre-fixme[9]: prefix_filter has type `str`; used as `IpPrefix`.
-        prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
+        if isinstance(prefix_filter, str):
+            prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
 
     if isinstance(prefix_db, openr_types.Value):
         prefix_db = deserialize_thrift_object(
@@ -849,10 +851,8 @@ def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
 
 def print_routes_json(
     route_db_dict,
-    # pyre-fixme[9]: prefixes has type `List[str]`; used as `None`.
-    prefixes: List[str] = None,
-    # pyre-fixme[9]: labels has type `List[int]`; used as `None`.
-    labels: List[int] = None,
+    prefixes: Optional[List[str]] = None,
+    labels: Optional[List[int]] = None,
 ):
     """
     Print json representation of routes. Takes prefixes and labels to
@@ -892,10 +892,8 @@ def print_routes_json(
 
 def print_route_db(
     route_db: openr_types.RouteDatabase,
-    # pyre-fixme[9]: prefixes has type `List[str]`; used as `None`.
-    prefixes: List[str] = None,
-    # pyre-fixme[9]: labels has type `List[int]`; used as `None`.
-    labels: List[int] = None,
+    prefixes: Optional[List[str]] = None,
+    labels: Optional[List[int]] = None,
 ) -> None:
     """print the routes from Decision/Fib module"""
 

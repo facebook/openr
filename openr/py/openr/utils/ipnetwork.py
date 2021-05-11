@@ -23,7 +23,7 @@ def sprint_addr(addr):
     return str(ipaddress.ip_address(addr))
 
 
-def sprint_prefix(prefix):
+def sprint_prefix(prefix) -> str:
     """
     :param prefix: network_types.IpPrefix representing an CIDR network
 
