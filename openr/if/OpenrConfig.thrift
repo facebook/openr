@@ -776,6 +776,14 @@ struct OpenrConfig {
   # TODO: Temporary var to migrate new prefix key format
   57: bool enable_new_prefix_format = 0;
 
+  /**
+   * Temporary var to enable route program ordering, aka, to-add routes should
+   * be programmed at originator ahead of being advertised to peers; Reverse
+   * order applies to to-withdraw routes.
+   * TODO: Deprecate after T78007837 is resolved.
+  */
+  58: bool enable_route_program_ordering = false;
+
   # vip thrift injection service
   90: optional bool enable_vip_service;
 
