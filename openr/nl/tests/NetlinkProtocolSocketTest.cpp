@@ -2224,6 +2224,47 @@ TEST_F(NlMessageFixture, RuleAddDeleteTest) {
   EXPECT_EQ(rules.size(), before.size());
 }
 
+/*
+ * Validate unicast routes with with 1 push label next-hop, empty gateway
+ */
+TEST_F(NlMessageFixture, SingleRouteWithLabelNexthopEmptyGateway) {
+  uint32_t ackCount{0};
+  std::vector<NextHop> paths;
+  folly::CIDRNetwork ipPrefix = folly::IPAddress::createNetwork("192.0.2.0/24");
+
+  const auto nexthop = NextHopBuilder()
+                           .setIfIndex(ifIndexY)
+                           .setLabelAction(openr::thrift::MplsActionCode::PUSH)
+                           .setPushLabels({outLabel1})
+                           .build();
+  const auto route = RouteBuilder()
+                         .setDestination(ipPrefix)
+                         .addNextHop(nexthop)
+                         .setScope(RT_SCOPE_LINK)
+                         .setFlags(0)
+                         .setProtocolId(3) // boot
+                         .setValid(true)
+                         .build();
+
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify getAllRoutes
+  auto kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
+
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
+}
+
 class NlMessageFixtureV4OrV6 : public NlMessageFixture,
                                public testing::WithParamInterface<bool> {};
 

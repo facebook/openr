@@ -370,18 +370,17 @@ NetlinkRouteMessage::addPushNexthop(
 
   // RTA_GATEWAY
   auto const via = path.getGateway();
-  if (!via.has_value()) {
-    LOG(ERROR) << "Nexthop IP not provided";
-    return EINVAL;
-  }
-  if (addSubAttributes(
-          rta, RTA_GATEWAY, via.value().bytes(), via.value().byteCount()) ==
-      nullptr) {
-    return ENOBUFS;
-  };
+  if (via.has_value()) {
+    if (addSubAttributes(
+            rta, RTA_GATEWAY, via.value().bytes(), via.value().byteCount()) ==
+        nullptr) {
+      return ENOBUFS;
+    };
 
-  // update length in rtnexthop
-  rtnh->rtnh_len += via.value().byteCount() + sizeof(struct rtattr);
+    // update length in rtnexthop
+    rtnh->rtnh_len += via.value().byteCount() + sizeof(struct rtattr);
+  }
+
   return 0;
 }
 
