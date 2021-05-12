@@ -809,11 +809,14 @@ SpfSolver::selectBestPathsKsp2(
                                .nodeLabel_ref());
       }
       labels.pop_back(); // Remove first node's label to respect PHP
-
-      // TODO: node labels and prepend labels are not expected to be pushed at
-      // the same time for the same prefix. This function only handles node
-      // label, prepend label logic locates in selectBestPathsSpf() and
-      // getNextHopsThrift(). Thus, removing prepend label handling logic here.
+      int labelZeroCount = std::count(labels.begin(), labels.end(), 0);
+      if (labelZeroCount != 0) {
+        LOG(WARNING) << "Ignore the path for <"
+                     << folly::IPAddress::networkToString(prefix)
+                     << "> since it has " << labelZeroCount
+                     << " nodes with nodeLabel-0";
+        continue;
+      }
 
       // Add prepend label of last node in the path.
       auto lastNodeInPath = nextNodeName;
@@ -1056,7 +1059,6 @@ SpfSolver::getNextHopsThrift(
         if (swapLabel.has_value()) {
           CHECK(not mplsAction.has_value());
           bool isNextHopAlsoDst = dstNodeAreas.count({neighborNode, area});
-          // TODO: cleanup since isNextHopAlsoDst==True in current code path.
           mplsAction = createMplsAction(
               isNextHopAlsoDst ? thrift::MplsActionCode::PHP
                                : thrift::MplsActionCode::SWAP,
@@ -1075,11 +1077,6 @@ SpfSolver::getNextHopsThrift(
               continue;
             }
           }
-
-          // TODO: node label and prepend label are not expected to be pushed at
-          // the same time for the same prefix. This function only handles
-          // prepend label, node label logic locates in selectBestPathsKsp2().
-          // Thus, removing node label handling logic here.
 
           // Add destination node label if it is not neighbor node
           if (dstNode != neighborNode) {
