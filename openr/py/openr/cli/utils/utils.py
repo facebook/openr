@@ -1439,8 +1439,7 @@ def compare_route_db(
     route_type: str,
     sources: List[str],
     quiet: bool = False,
-    # pyre-fixme[31]: Expression `List[str])` is not a valid type.
-) -> (bool, List[str]):
+) -> Tuple[bool, List[str]]:
 
     extra_routes_in_a = routes_difference(routes_a, routes_b, route_type)
     extra_routes_in_b = routes_difference(routes_b, routes_a, route_type)
@@ -1809,8 +1808,7 @@ def get_routes_json(
 
 def get_routes(
     route_db: openr_types.RouteDatabase,
-    # pyre-fixme[31]: Expression `MplsRoute])` is not a valid type.
-) -> (List[network_types.UnicastRoute], List[network_types.MplsRoute]):
+) -> Tuple[List[network_types.UnicastRoute], List[network_types.MplsRoute]]:
     """
     Find all routes for each prefix in routeDb
 
