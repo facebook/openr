@@ -505,14 +505,21 @@ main(int argc, char** argv) {
     sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
   }
 
+  auto pluginArgs = PluginArgs{
+      prefixUpdatesQueue,
+      staticRouteUpdatesQueue,
+      routeUpdatesQueue.getReader(),
+      config,
+      sslContext};
+
   // Create bgp speaker module
   if (config->isBgpPeeringEnabled()) {
-    pluginStart(PluginArgs{
-        prefixUpdatesQueue,
-        staticRouteUpdatesQueue,
-        routeUpdatesQueue.getReader(),
-        config,
-        sslContext});
+    pluginStart(pluginArgs);
+  }
+
+  // Create vip service module
+  if (config->isVipServiceEnabled()) {
+    vipPluginStart(pluginArgs);
   }
 
   // Wait for the above three modules to start and run before running
@@ -647,6 +654,10 @@ main(int argc, char** argv) {
   // stop bgp speaker
   if (config->isBgpPeeringEnabled()) {
     pluginStop();
+  }
+
+  if (config->isVipServiceEnabled()) {
+    vipPluginStop();
   }
 
   if (netlinkFibServer) {

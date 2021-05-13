@@ -488,6 +488,13 @@ Config::populateInternalDb() {
     }
   }
 
+  // To avoid bgp and vip service advertise the same prefixes,
+  // bgp speaker and vip service shouldn't co-exist
+  if (isBgpPeeringEnabled() && isVipServiceEnabled()) {
+    throw std::invalid_argument(
+        "Bgp Peering and Vip Service can not be both enabled");
+  }
+
   //
   // watchdog
   //

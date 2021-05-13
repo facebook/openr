@@ -30,4 +30,6 @@ struct PluginArgs {
 
 void pluginStart(const PluginArgs& /* pluginArgs */);
 void pluginStop();
+void vipPluginStart(const PluginArgs& /* PluginArgs */);
+void vipPluginStop();
 } // namespace openr

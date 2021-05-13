@@ -17,4 +17,14 @@ void
 pluginStop() {
   return;
 }
+
+void
+vipPluginStart(const PluginArgs& /* pluginArgs*/) {
+  return;
+}
+
+void
+vipPluginStop() {
+  return;
+}
 } // namespace openr
