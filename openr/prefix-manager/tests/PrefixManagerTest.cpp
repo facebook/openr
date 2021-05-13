@@ -12,8 +12,10 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
@@ -50,6 +52,7 @@ const auto prefixEntry6 =
 const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::BGP);
 const auto prefixEntry8 =
     createPrefixEntry(addr8, thrift::PrefixType::PREFIX_ALLOCATOR);
+const auto prefixEntry9 = createPrefixEntry(addr9, thrift::PrefixType::VIP);
 
 } // namespace
 
@@ -197,6 +200,7 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry6}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry7}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry8}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry9}).get());
 
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
   EXPECT_TRUE(
@@ -214,6 +218,7 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry6}).get());
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry8}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry9}).get());
 
   EXPECT_FALSE(
       prefixManager
@@ -278,6 +283,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         prefixManager->advertisePrefixes({prefixEntry6}).get();
         prefixManager->advertisePrefixes({prefixEntry7}).get();
         prefixManager->advertisePrefixes({prefixEntry8}).get();
+        prefixManager->advertisePrefixes({prefixEntry9}).get();
       });
 
   evb.scheduleTimeout(
@@ -301,7 +307,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         EXPECT_TRUE(maybeValue2.has_value());
         auto db2 = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value_ref().value(), serializer);
-        EXPECT_EQ(7, getNumPrefixes(prefixDbMarker));
+        EXPECT_EQ(8, getNumPrefixes(prefixDbMarker));
         // now make a change and check again
         prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT)
             .get();
@@ -316,7 +322,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         EXPECT_TRUE(maybeValue3.has_value());
         auto db3 = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue3.value().value_ref().value(), serializer);
-        EXPECT_EQ(5, getNumPrefixes(prefixDbMarker));
+        EXPECT_EQ(6, getNumPrefixes(prefixDbMarker));
 
         evb.stop();
       });
@@ -560,7 +566,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
       });
 
   // increment the key version in kvstore and set empty value. `PrefixManager`
-  // will detect value changed, and retain the value present in peristent DB,
+  // will detect value changed, and retain the value present in persistent DB,
   // and advertise with higher key version.
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
@@ -749,11 +755,12 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   prefixManager->advertisePrefixes({prefixEntry5});
   prefixManager->advertisePrefixes({prefixEntry6});
   prefixManager->advertisePrefixes({prefixEntry7});
+  prefixManager->advertisePrefixes({prefixEntry9});
 
   auto resp1 = prefixManager->getPrefixes().get();
   ASSERT_TRUE(resp1);
   auto& prefixes1 = *resp1;
-  EXPECT_EQ(7, prefixes1.size());
+  EXPECT_EQ(8, prefixes1.size());
   EXPECT_NE(
       std::find(prefixes1.cbegin(), prefixes1.cend(), prefixEntry4),
       prefixes1.cend());
@@ -781,6 +788,22 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
       prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
   EXPECT_TRUE(resp4);
   EXPECT_EQ(0, resp4->size());
+
+  auto resp5 = prefixManager->getPrefixesByType(thrift::PrefixType::VIP).get();
+  ASSERT_TRUE(resp5);
+  auto& prefixes5 = *resp5;
+  EXPECT_EQ(1, prefixes5.size());
+  EXPECT_NE(
+      std::find(prefixes5.cbegin(), prefixes5.cend(), prefixEntry9),
+      prefixes5.cend());
+
+  auto resp6 =
+      prefixManager->withdrawPrefixesByType(thrift::PrefixType::VIP).get();
+  EXPECT_TRUE(resp6);
+
+  auto resp7 = prefixManager->getPrefixesByType(thrift::PrefixType::VIP).get();
+  EXPECT_TRUE(resp7);
+  EXPECT_EQ(0, resp7->size());
 }
 
 TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
@@ -853,6 +876,52 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     // Send update request in queue
     PrefixEvent event(
         PrefixEventType::WITHDRAW_PREFIXES, std::nullopt, {prefixEntry3});
+    prefixUpdatesQueue.push(std::move(event));
+
+    // Wait for update in KvStore (PrefixManager has processed the update)
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+    // Verify
+    auto prefixes = prefixManager->getPrefixes().get();
+    EXPECT_EQ(0, prefixes->size());
+  }
+
+  // Test VIP prefixes add and withdraw
+  // Add prefixEntry9 with 2 nexthops, withdraw 1 nexthop, then withdraw the
+  // other one
+  PrefixEntry cPrefixEntry(
+      std::make_shared<thrift::PrefixEntry>(prefixEntry9), {});
+  std::unordered_set<thrift::NextHopThrift> nexthops;
+  nexthops.insert(createNextHop(toBinaryAddress("::1")));
+  nexthops.insert(createNextHop(toBinaryAddress("::2")));
+  cPrefixEntry.nexthops = nexthops;
+
+  // ADD_PREFIXES
+  {
+    // Send update request in queue
+    PrefixEvent event(
+        PrefixEventType::ADD_PREFIXES, thrift::PrefixType::VIP, {}, {});
+    event.prefixEntries.push_back(cPrefixEntry);
+    prefixUpdatesQueue.push(std::move(event));
+
+    // Wait for update in KvStore
+    // ATTN: both prefixes should be updated via throttle
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+    // Verify
+    auto prefixes = prefixManager->getPrefixes().get();
+    EXPECT_EQ(1, prefixes->size());
+    EXPECT_THAT(*prefixes, testing::Contains(prefixEntry9));
+  }
+
+  // WITHDRAW_PREFIXES
+  {
+    // Send update request in queue
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES, thrift::PrefixType::VIP, {}, {});
+    event.prefixEntries.push_back(cPrefixEntry);
     prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
@@ -964,6 +1033,16 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixType_ref() = thrift::PrefixType::BGP;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+
+  //
+  // Filter on non-existing type (VIP)
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixType_ref() = thrift::PrefixType::VIP;
     auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
     ASSERT_EQ(0, routes->size());
   }

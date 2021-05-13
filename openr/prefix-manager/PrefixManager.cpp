@@ -10,6 +10,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <optional>
 #ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
@@ -106,9 +107,11 @@ PrefixManager::PrefixManager(
       switch (update.eventType) {
       case PrefixEventType::ADD_PREFIXES:
         advertisePrefixesImpl(std::move(update.prefixes), dstAreas);
+        advertisePrefixesImpl(std::move(update.prefixEntries), dstAreas);
         break;
       case PrefixEventType::WITHDRAW_PREFIXES:
         withdrawPrefixesImpl(update.prefixes);
+        withdrawPrefixEntriesImpl(update.prefixEntries);
         break;
       case PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE:
         CHECK(update.type.has_value());
@@ -181,7 +184,8 @@ PrefixManager::PrefixManager(
 
           // populate advertisedKeys_ collection to make sure we can find
           // key when clear key from `KvStore`
-          advertisedKeys_[network].emplace(key);
+          advertisedKeys_[network].keys.emplace(key);
+          ;
 
           // Populate pendingState to check keys
           folly::small_vector<folly::CIDRNetwork> changed{network};
@@ -209,7 +213,7 @@ PrefixManager::PrefixManager(
       // populate advertisedKeys_ collection to make sure we can find
       // key when clear key from `KvStore`
       auto& network = prefixKey->getCIDRNetwork();
-      advertisedKeys_[network].emplace(prefixStr);
+      advertisedKeys_[network].keys.emplace(prefixStr);
 
       // Populate pendingState to check keys
       changed.emplace_back(network);
@@ -254,6 +258,36 @@ PrefixManager::stop() {
   OpenrEventBase::stop();
 }
 
+thrift::PrefixEntry
+PrefixManager::toPrefixEntryThrift(
+    const thrift::OriginatedPrefix& prefix, const thrift::PrefixType& tType) {
+  // Populate PrefixMetric struct
+  thrift::PrefixMetrics metrics;
+  if (auto pref = prefix.path_preference_ref()) {
+    metrics.path_preference_ref() = *pref;
+  }
+  if (auto pref = prefix.source_preference_ref()) {
+    metrics.source_preference_ref() = *pref;
+  }
+
+  // Populate PrefixEntry struct
+  thrift::PrefixEntry entry;
+  entry.prefix_ref() =
+      toIpPrefix(folly::IPAddress::createNetwork(*prefix.prefix_ref()));
+  entry.metrics_ref() = std::move(metrics);
+  // ATTN: local-originated prefix has unique type CONFIG
+  //      to be differentiated from others.
+  entry.type_ref() = tType;
+  // ATTN: `area_stack` will be explicitly set to empty
+  //      as there is no "cross-area" behavior for local
+  //      originated prefixes.
+  CHECK(entry.area_stack_ref()->empty());
+  if (auto tags = prefix.tags_ref()) {
+    entry.tags_ref() = *tags;
+  }
+  return entry;
+}
+
 void
 PrefixManager::buildOriginatedPrefixDb(
     const std::vector<thrift::OriginatedPrefix>& prefixes) {
@@ -263,29 +297,7 @@ PrefixManager::buildOriginatedPrefixDb(
         ? Constants::kLocalRouteNexthopV4.toString()
         : Constants::kLocalRouteNexthopV6.toString();
 
-    // Populate PrefixMetric struct
-    thrift::PrefixMetrics metrics;
-    if (auto pref = prefix.path_preference_ref()) {
-      metrics.path_preference_ref() = *pref;
-    }
-    if (auto pref = prefix.source_preference_ref()) {
-      metrics.source_preference_ref() = *pref;
-    }
-
-    // Populate PrefixEntry struct
-    thrift::PrefixEntry entry;
-    entry.prefix_ref() = toIpPrefix(network);
-    entry.metrics_ref() = std::move(metrics);
-    // ATTN: local-originated prefix has unique type CONFIG
-    //      to be differentiated from others.
-    entry.type_ref() = thrift::PrefixType::CONFIG;
-    // ATTN: `area_stack` will be explicitly set to empty
-    //      as there is no "cross-area" behavior for local
-    //      originated prefixes.
-    CHECK(entry.area_stack_ref()->empty());
-    if (auto tags = prefix.tags_ref()) {
-      entry.tags_ref() = *tags;
-    }
+    auto entry = toPrefixEntryThrift(prefix, thrift::PrefixType::CONFIG);
 
     // Populate RibUnicastEntry struct
     // ATTN: AREA field is empty for NHs
@@ -402,7 +414,7 @@ PrefixManager::syncKvStore() {
       << "[KvStore Sync] Syncing "
       << pendingUpdates_.getChangedPrefixes().size()
       << " changed prefixes. Total prefixes advertised: " << prefixMap_.size();
-
+  DecisionRouteUpdate routeUpdatesOut;
   // iterate over `pendingUpdates_` to advertise/withdraw incremental changes
   for (auto const& network : pendingUpdates_.getChangedPrefixes()) {
     auto it = prefixMap_.find(network);
@@ -415,7 +427,10 @@ PrefixManager::syncKvStore() {
       //  marker        nodeId      areaId        prefixStr
       auto keysIt = advertisedKeys_.find(network);
       if (keysIt != advertisedKeys_.end()) {
-        deleteKvStoreKeyHelper(keysIt->second);
+        deleteKvStoreKeyHelper(keysIt->second.keys);
+        if (keysIt->second.installedToFib) {
+          routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
+        }
         advertisedKeys_.erase(keysIt);
       }
     } else {
@@ -444,7 +459,7 @@ PrefixManager::syncKvStore() {
         // whatever left in `advertisedKeys_` will be the delta to
         // be removed.
         for (const auto& key : newKeys) {
-          keysIt->second.erase(key);
+          keysIt->second.keys.erase(key);
         }
 
         // remove keys which are no longer advertised
@@ -452,12 +467,36 @@ PrefixManager::syncKvStore() {
         // t0: prefix_1 => {area_1, area_2}
         // t1: prefix_1 => {area_1, area_3}
         //     (prefix_1, area_2) will be removed
-        deleteKvStoreKeyHelper(keysIt->second);
+        deleteKvStoreKeyHelper(keysIt->second.keys);
       }
 
       // override `advertisedKeys_` for next-round syncing
-      advertisedKeys_[network] = std::move(newKeys);
+      advertisedKeys_[network].keys = std::move(newKeys);
+      // propogate route update to `KvStore` and `Decision`(if necessary)
+      if (bestEntry.shouldInstall()) {
+        advertisedKeys_[network].installedToFib = true;
+        // Populate RibUnicastEntry struct
+        // ATTN: AREA field is empty for NHs
+        // if shouldInstall() is true, nexthops is guaranteed to have value.
+        RibUnicastEntry unicastEntry(network, bestEntry.nexthops.value());
+        unicastEntry.bestPrefixEntry = *bestEntry.tPrefixEntry;
+        routeUpdatesOut.addRouteToUpdate(std::move(unicastEntry));
+      } else {
+        // if was installed to fib, but now lose in tie break, withdraw from
+        // fib.
+        if (advertisedKeys_[network].installedToFib) {
+          routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
+          advertisedKeys_[network].installedToFib = false;
+        }
+      }
     }
+  }
+  // push originatedRoutes update via replicate queue
+  if (routeUpdatesOut.unicastRoutesToUpdate.size() or
+      routeUpdatesOut.unicastRoutesToDelete.size()) {
+    CHECK(routeUpdatesOut.mplsRoutesToUpdate.empty());
+    CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
+    staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
   }
 
   VLOG(1) << "[KvStore Sync] Done syncing: "
@@ -778,12 +817,34 @@ bool
 PrefixManager::advertisePrefixesImpl(
     std::vector<thrift::PrefixEntry>&& tPrefixEntries,
     const std::unordered_set<std::string>& dstAreas) {
+  if (tPrefixEntries.empty()) {
+    return false;
+  }
   std::vector<PrefixEntry> toAddOrUpdate;
   for (auto& tPrefixEntry : tPrefixEntries) {
     auto dstAreasCp = dstAreas;
     toAddOrUpdate.emplace_back(
         std::make_shared<thrift::PrefixEntry>(std::move(tPrefixEntry)),
         std::move(dstAreasCp));
+  }
+  return advertisePrefixesImpl(toAddOrUpdate);
+}
+
+bool
+PrefixManager::advertisePrefixesImpl(
+    std::vector<PrefixEntry>&& prefixEntries,
+    const std::unordered_set<std::string>& dstAreas) {
+  if (prefixEntries.empty()) {
+    return false;
+  }
+
+  std::vector<PrefixEntry> toAddOrUpdate;
+  for (auto& prefixEntry : prefixEntries) {
+    auto dstAreasCp = dstAreas;
+    prefixEntry.dstAreas = std::move(dstAreasCp);
+
+    // Create PrefixEntry and set unicastRotues
+    toAddOrUpdate.push_back(std::move(prefixEntry));
   }
   return advertisePrefixesImpl(toAddOrUpdate);
 }
@@ -829,6 +890,9 @@ PrefixManager::advertisePrefixesImpl(
 bool
 PrefixManager::withdrawPrefixesImpl(
     const std::vector<thrift::PrefixEntry>& tPrefixEntries) {
+  if (tPrefixEntries.empty()) {
+    return false;
+  }
   folly::small_vector<folly::CIDRNetwork> changed{};
 
   for (const auto& prefixEntry : tPrefixEntries) {
@@ -845,6 +909,42 @@ PrefixManager::withdrawPrefixesImpl(
       // clean up data structure
       if (typeIt->second.empty()) {
         prefixMap_.erase(prefixCidr);
+      }
+    }
+  }
+
+  bool updated = (not changed.empty()) ? true : false;
+  if (updated) {
+    // store pendingUpdate for batch processing
+    pendingUpdates_.applyPrefixChange(changed);
+
+    // schedule `syncKvStore` after throttled timeout
+    syncKvStoreThrottled_->operator()();
+  }
+
+  return updated;
+}
+
+bool
+PrefixManager::withdrawPrefixEntriesImpl(
+    const std::vector<PrefixEntry>& prefixEntries) {
+  if (prefixEntries.empty()) {
+    return false;
+  }
+  folly::small_vector<folly::CIDRNetwork> changed{};
+
+  for (const auto& prefixEntry : prefixEntries) {
+    const auto& type = *prefixEntry.tPrefixEntry->type_ref();
+
+    // iterator usage to avoid multiple times of map access
+    auto typeIt = prefixMap_.find(prefixEntry.network);
+
+    // ONLY populate changed collection when successfully erased key
+    if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
+      changed.emplace_back(prefixEntry.network);
+      // clean up data structure
+      if (typeIt->second.empty()) {
+        prefixMap_.erase(prefixEntry.network);
       }
     }
   }
@@ -962,48 +1062,32 @@ PrefixManager::aggregatesToWithdraw(const folly::CIDRNetwork& prefix) {
 
 void
 PrefixManager::processOriginatedPrefixes() {
-  DecisionRouteUpdate routeUpdatesOut;
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
 
   for (auto& [network, route] : originatedPrefixDb_) {
     if (route.shouldAdvertise()) {
       route.isAdvertised = true; // mark as advertised
-
-      // propogate route update to `KvStore` and `Decision`(if necessary)
-      if (route.shouldInstall()) {
-        routeUpdatesOut.addRouteToUpdate(route.unicastEntry);
-      }
       advertisedPrefixes.emplace_back(
           std::make_shared<thrift::PrefixEntry>(
               route.unicastEntry.bestPrefixEntry),
           allAreaIds());
-
-      VLOG(1) << "[Route Origination] Advertising originated route "
-              << folly::IPAddress::networkToString(network);
+      if (route.originatedPrefix.install_to_fib_ref().has_value() &&
+          *route.originatedPrefix.install_to_fib_ref()) {
+        advertisedPrefixes.back().nexthops = route.unicastEntry.nexthops;
+      }
+      LOG(INFO) << "[Route Origination] Advertising originated route "
+                << folly::IPAddress::networkToString(network);
     }
 
     if (route.shouldWithdraw()) {
       route.isAdvertised = false; // mark as withdrawn
-
-      // propogate route deletion to `KvStore` and `Decision`(if necessary)
-      if (route.shouldInstall()) {
-        routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
-      }
       withdrawnPrefixes.emplace_back(
           createPrefixEntry(toIpPrefix(network), thrift::PrefixType::CONFIG));
 
       VLOG(1) << "[Route Origination] Withdrawing originated route "
               << folly::IPAddress::networkToString(network);
     }
-  }
-
-  // push originatedRoutes update via replicate queue
-  if (routeUpdatesOut.unicastRoutesToUpdate.size() or
-      routeUpdatesOut.unicastRoutesToDelete.size()) {
-    CHECK(routeUpdatesOut.mplsRoutesToUpdate.empty());
-    CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
-    staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
   }
   // advertise originated config routes to KvStore
   advertisePrefixesImpl(advertisedPrefixes);

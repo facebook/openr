@@ -127,6 +127,13 @@ class PrefixManager final : public OpenrEventBase {
       std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries,
       apache::thrift::optional_field_ref<thrift::PrefixType&> const&
           typeFilter);
+  /**
+   * Util function to convert thrift::OriginatedPrefix to thrift::PrefixEntry
+   * @param prefix: the OriginatedPrefix to be converted
+   * @param tType: type of this prefix, can be CONFIG or VIP
+   */
+  thrift::PrefixEntry toPrefixEntryThrift(
+      const thrift::OriginatedPrefix& prefix, const thrift::PrefixType& tType);
 
   /*
    * Dump post filter (policy) routes for given area.
@@ -165,9 +172,13 @@ class PrefixManager final : public OpenrEventBase {
   bool advertisePrefixesImpl(
       std::vector<thrift::PrefixEntry>&& tPrefixEntries,
       const std::unordered_set<std::string>& dstAreas);
+  bool advertisePrefixesImpl(
+      std::vector<PrefixEntry>&& tPrefixEntries,
+      const std::unordered_set<std::string>& dstAreas);
   bool advertisePrefixesImpl(const std::vector<PrefixEntry>& prefixEntries);
   bool withdrawPrefixesImpl(
       const std::vector<thrift::PrefixEntry>& tPrefixEntries);
+  bool withdrawPrefixEntriesImpl(const std::vector<PrefixEntry>& prefixEntries);
   bool withdrawPrefixesByTypeImpl(thrift::PrefixType type);
   bool syncPrefixesByTypeImpl(
       thrift::PrefixType type,
@@ -271,9 +282,11 @@ class PrefixManager final : public OpenrEventBase {
   // `PrefixManager` will advertise prefixes based on best-route-selection
   // process. With multi-area support, one prefixes will map to multiple
   // key-advertisement in `KvStore`.
-  std::unordered_map<folly::CIDRNetwork, std::unordered_set<std::string>>
-      advertisedKeys_{};
-
+  struct AdervertiseStatus {
+    bool installedToFib{false};
+    std::unordered_set<std::string> keys;
+  };
+  std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> advertisedKeys_{};
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
 

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <openr/if/gen-cpp2/Network_types.h>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -154,7 +155,7 @@ struct PrefixEntry {
    * - Null would indicate no programming
    * - An empty list could indicate a NULL route programming
    */
-  std::optional<std::vector<thrift::NextHopThrift>> nexthops;
+  std::optional<std::unordered_set<thrift::NextHopThrift>> nexthops;
 
   PrefixEntry() = default;
   PrefixEntry(
@@ -167,6 +168,16 @@ struct PrefixEntry {
   apache::thrift::field_ref<const thrift::PrefixMetrics&>
   metrics_ref() const& {
     return tPrefixEntry->metrics_ref();
+  }
+
+  /*
+   * Util function for route-agg check
+   * Note that route will only be installed to fib when both installToFib is set
+   * to true and has valid nexthops.
+   */
+  bool
+  shouldInstall() const {
+    return nexthops.has_value();
   }
 
   bool
@@ -207,23 +218,15 @@ struct PrefixEvent {
    */
   std::unordered_set<std::string> dstAreas{};
 
-  /**
-   * List of originatedPrefix-entries to advertise or withdraw.
-   * Support `min_supporting_route` and `install_to_fib` features.
-   */
-  std::vector<thrift::OriginatedPrefix> originatedPrefixes{};
-
   explicit PrefixEvent(
       const PrefixEventType& eventType,
       const std::optional<thrift::PrefixType>& type = std::nullopt,
       std::vector<thrift::PrefixEntry> prefixes = {},
-      std::unordered_set<std::string> dstAreas = {},
-      std::vector<thrift::OriginatedPrefix> originatedPrefixes = {})
+      std::unordered_set<std::string> dstAreas = {})
       : eventType(eventType),
         type(type),
         prefixes(std::move(prefixes)),
-        dstAreas(std::move(dstAreas)),
-        originatedPrefixes(std::move(originatedPrefixes)) {}
+        dstAreas(std::move(dstAreas)) {}
 };
 
 /**
