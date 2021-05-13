@@ -128,8 +128,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
     def run(
         self,
         prefixes: List[str],
-        # pyre-fixme[9]: labels has type `List[int]`; used as `Tuple[]`.
-        labels: List[int] = (),
+        labels: Optional[List[int]] = None,
         json_opt: bool = False,
         client_id: Optional[int] = None,
     ):
