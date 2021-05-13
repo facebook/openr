@@ -282,7 +282,6 @@ TEST(UtilTest, PrefixKeyTest) {
       EXPECT_EQ(prefixStr.value().getNodeName(), keys.node);
       EXPECT_EQ(prefixStr.value().getCIDRNetwork(), keys.ipaddr);
       EXPECT_EQ(prefixStr.value().getPrefixArea(), keys.area);
-      EXPECT_EQ(prefixStr.value().getIpPrefix(), keys.ipPrefix);
     } else {
       EXPECT_FALSE(prefixStr.hasValue());
     }

@@ -103,40 +103,5 @@ PrefixKey::fromStrV2(const std::string& key, const std::string& area) {
   }
   return PrefixKey(node, ipAddress, area);
 }
-NodeAndArea const&
-PrefixKey::getNodeAndArea() const {
-  return nodeAndArea_;
-}
-
-std::string const&
-PrefixKey::getNodeName() const {
-  return nodeAndArea_.first;
-};
-
-std::string const&
-PrefixKey::getPrefixArea() const {
-  return nodeAndArea_.second;
-}
-
-folly::CIDRNetwork const&
-PrefixKey::getCIDRNetwork() const {
-  return prefix_;
-}
-
-// TODO: to be derepcated
-std::string const&
-PrefixKey::getPrefixKey() const {
-  return prefixKeyString_;
-}
-
-std::string const&
-PrefixKey::getPrefixKeyStr() const {
-  return prefixKeyStringV2_;
-}
-
-thrift::IpPrefix
-PrefixKey::getIpPrefix() const {
-  return toIpPrefix(prefix_);
-}
 
 } // namespace openr

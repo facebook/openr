@@ -33,7 +33,7 @@ class PrefixStateTestFixture : public ::testing::Test {
       std::string nodeName = std::to_string(i);
       for (auto const& [key, entry] : createPrefixDbForNode(nodeName, i)) {
         EXPECT_FALSE(state_.updatePrefix(key, *entry).empty());
-        initialEntries_[toIPNetwork(key.getIpPrefix())].emplace(
+        initialEntries_[key.getCIDRNetwork()].emplace(
             std::piecewise_construct,
             std::forward_as_tuple(key.getNodeName(), key.getPrefixArea()),
             std::forward_as_tuple(entry));
@@ -88,7 +88,7 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
   entry->type_ref() = thrift::PrefixType::BREEZE;
   EXPECT_THAT(
       state_.updatePrefix(key, *entry),
-      testing::UnorderedElementsAre(toIPNetwork(key.getIpPrefix())));
+      testing::UnorderedElementsAre(key.getCIDRNetwork()));
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
       *state_.prefixes().at(toIPNetwork(entry->get_prefix())).at(nodeArea),
@@ -97,7 +97,7 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
   entry->forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_THAT(
       state_.updatePrefix(key, *entry),
-      testing::UnorderedElementsAre(toIPNetwork(key.getIpPrefix())));
+      testing::UnorderedElementsAre(key.getCIDRNetwork()));
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
       *state_.prefixes().at(toIPNetwork(entry->get_prefix())).at(nodeArea),

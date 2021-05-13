@@ -18,7 +18,7 @@ PrefixState::updatePrefix(
     PrefixKey const& key, thrift::PrefixEntry const& entry) {
   std::unordered_set<folly::CIDRNetwork> changed;
 
-  auto [it, inserted] = prefixes_[toIPNetwork(key.getIpPrefix())].emplace(
+  auto [it, inserted] = prefixes_[key.getCIDRNetwork()].emplace(
       key.getNodeAndArea(), std::make_shared<thrift::PrefixEntry>(entry));
 
   // Skip rest of code, if prefix exists and has no change
@@ -29,7 +29,7 @@ PrefixState::updatePrefix(
   if (not inserted) {
     it->second = std::make_shared<thrift::PrefixEntry>(entry);
   }
-  changed.insert(toIPNetwork(key.getIpPrefix()));
+  changed.insert(key.getCIDRNetwork());
 
   VLOG(1) << "[ROUTE ADVERTISEMENT] "
           << "Area: " << key.getPrefixArea() << ", Node: " << key.getNodeName()
@@ -40,13 +40,13 @@ PrefixState::updatePrefix(
 std::unordered_set<folly::CIDRNetwork>
 PrefixState::deletePrefix(PrefixKey const& key) {
   std::unordered_set<folly::CIDRNetwork> changed;
-  auto search = prefixes_.find(toIPNetwork(key.getIpPrefix()));
+  auto search = prefixes_.find(key.getCIDRNetwork());
   if (search != prefixes_.end() && search->second.erase(key.getNodeAndArea())) {
-    changed.insert(toIPNetwork(key.getIpPrefix()));
+    changed.insert(key.getCIDRNetwork());
     VLOG(1) << "[ROUTE WITHDRAW] "
             << "Area: " << key.getPrefixArea()
             << ", Node: " << key.getNodeName() << ", "
-            << toString(key.getIpPrefix());
+            << folly::IPAddress::networkToString(key.getCIDRNetwork());
     // clean up data structures
     if (search->second.empty()) {
       prefixes_.erase(search);

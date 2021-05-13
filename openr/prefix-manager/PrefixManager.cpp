@@ -380,7 +380,7 @@ PrefixManager::deleteKvStoreKeyHelper(
     CHECK(prefixKey.hasValue());
 
     thrift::PrefixEntry entry;
-    entry.prefix_ref() = prefixKey.value().getIpPrefix();
+    entry.prefix_ref() = toIpPrefix(prefixKey->getCIDRNetwork());
     deletedPrefixDb.prefixEntries_ref() = {entry};
     VLOG(1) << "[Prefix Withdraw] "
             << "Area: " << prefixKey->getPrefixArea() << ", "

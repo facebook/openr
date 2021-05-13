@@ -398,26 +398,6 @@ class PrefixKey {
   static folly::Expected<PrefixKey, std::string> fromStrV2(
       const std::string& key, const std::string& area);
 
-  NodeAndArea const& getNodeAndArea() const;
-
-  // return node name
-  std::string const& getNodeName() const;
-
-  // return prefix sub type
-  std::string const& getPrefixArea() const;
-
-  // return the CIDR network address
-  folly::CIDRNetwork const& getCIDRNetwork() const;
-
-  // return raw prefix key string from kvstore
-  std::string const& getPrefixKey() const;
-
-  // return raw prefix key string v2 from kvstore
-  std::string const& getPrefixKeyStr() const;
-
-  // return thrift::IpPrefix
-  thrift::IpPrefix getIpPrefix() const;
-
   // TODO: deprecate after migration
   static const RE2&
   getPrefixRE2() {
@@ -438,6 +418,42 @@ class PrefixKey {
         "(?P<plen>[\\d]{{1,3}})\\]",
         Constants::kPrefixDbMarker.toString())};
     return prefixKeyPatternV2;
+  }
+
+  // return node name and area pair
+  inline NodeAndArea const&
+  getNodeAndArea() const {
+    return nodeAndArea_;
+  }
+
+  // return node name
+  inline std::string const&
+  getNodeName() const {
+    return nodeAndArea_.first;
+  }
+
+  // return prefix sub type
+  inline std::string const&
+  getPrefixArea() const {
+    return nodeAndArea_.second;
+  }
+
+  // return the CIDR network address
+  inline folly::CIDRNetwork const&
+  getCIDRNetwork() const {
+    return prefix_;
+  }
+
+  // return raw prefix key string from kvstore
+  inline std::string const&
+  getPrefixKey() const {
+    return prefixKeyString_;
+  }
+
+  // return raw prefix key string v2 from kvstore
+  inline std::string const&
+  getPrefixKeyStr() const {
+    return prefixKeyStringV2_;
   }
 
   bool
