@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <openr/common/Constants.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
@@ -39,7 +40,8 @@ getBasicOpenrConfig(
     bool enableV4 = true,
     bool enableSegmentRouting = false,
     bool dryrun = true,
-    bool enableV4OverV6Nexthop = false) {
+    bool enableV4OverV6Nexthop = false,
+    bool enableAdjLabels = false) {
   openr::thrift::LinkMonitorConfig linkMonitorConfig;
   linkMonitorConfig.include_interface_regexes_ref() =
       std::vector<std::string>{".*"};
@@ -73,6 +75,21 @@ getBasicOpenrConfig(
     config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};
   } else {
     config.areas_ref() = areaCfg;
+  }
+
+  if (enableAdjLabels) {
+    openr::thrift::SegmentRoutingConfig srConfig;
+    openr::thrift::SegmentRoutingAdjLabelType sr_adj_label_type;
+    openr::thrift::SegmentRoutingAdjLabel sr_adj_label;
+    openr::thrift::LabelRange lr;
+
+    lr.start_label_ref() = openr::Constants::kSrLocalRange.first;
+    lr.end_label_ref() = openr::Constants::kSrLocalRange.second;
+    sr_adj_label_type = openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
+    sr_adj_label.sr_adj_label_type_ref() = sr_adj_label_type;
+    sr_adj_label.adj_label_range_ref() = lr;
+    srConfig.sr_adj_label_ref() = sr_adj_label;
+    config.segment_routing_config_ref() = srConfig;
   }
 
   return config;

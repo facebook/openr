@@ -6,6 +6,7 @@
  */
 
 #include <memory>
+#include "openr/if/gen-cpp2/OpenrConfig_types.h"
 
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
@@ -4649,6 +4650,20 @@ class DecisionTestFixture : public ::testing::Test {
     // set coldstart to be longer than debounce time
     tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
     tConfig.enable_segment_routing_ref() = true;
+
+    openr::thrift::SegmentRoutingConfig srConfig;
+    openr::thrift::SegmentRoutingAdjLabelType sr_adj_label_type;
+    openr::thrift::SegmentRoutingAdjLabel sr_adj_label;
+    openr::thrift::LabelRange lr;
+
+    lr.start_label_ref() = Constants::kSrLocalRange.first;
+    lr.end_label_ref() = Constants::kSrLocalRange.second;
+    sr_adj_label_type = openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
+    sr_adj_label.sr_adj_label_type_ref() = sr_adj_label_type;
+    sr_adj_label.adj_label_range_ref() = lr;
+    srConfig.sr_adj_label_ref() = sr_adj_label;
+    tConfig.segment_routing_config_ref() = srConfig;
+
     return tConfig;
   }
 

@@ -963,12 +963,26 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   const std::string nodeName2 = "node-2";
   const std::string nodeName3 = "node-3";
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
-  tConfig1.enable_segment_routing_ref() = true;
+  auto tConfig1 = getBasicOpenrConfig(
+      nodeName1,
+      kDomainName,
+      {},
+      true /* enable v4 */,
+      true /* enable segment routing */,
+      true /* dryrun */,
+      false /* enable v4 over v6 nh */,
+      true /* enable adj labels */);
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
-  tConfig2.enable_segment_routing_ref() = true;
+  auto tConfig2 = getBasicOpenrConfig(
+      nodeName2,
+      kDomainName,
+      {},
+      true /* enable v4 */,
+      true /* enable segment routing */,
+      true /* dryrun */,
+      false /* enable v4 over v6 nh */,
+      true /* enable adj labels */);
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark(nodeName1, config1);
@@ -994,8 +1008,16 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   // add third instance
   LOG(INFO) << "Creating and starting " << nodeName3;
 
-  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
-  tConfig3.enable_segment_routing_ref() = true;
+  auto tConfig3 = getBasicOpenrConfig(
+      nodeName3,
+      kDomainName,
+      {},
+      true /* enable v4 */,
+      true /* enable segment routing */,
+      true /* dryrun */,
+      false /* enable v4 over v6 nh */,
+      true /* enable adj labels */);
+
   auto config3 = std::make_shared<Config>(tConfig3);
 
   auto node3 = createSpark(nodeName3, config3);

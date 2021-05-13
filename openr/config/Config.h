@@ -131,12 +131,14 @@ class Config {
 
   bool
   isAdjacencyLabelsEnabled() const {
-    // TODO
-    // Once segment_routing_config gets added, the
-    // this check will be replaced with a logic
-    // which checks if adj segment ids stanza is
-    // configured.
-    return isSegmentRoutingEnabled();
+    if (isSegmentRoutingEnabled() &&
+        getConfig().segment_routing_config_ref().has_value()) {
+      const auto& srConfig = getSegmentRoutingConfig();
+      return srConfig.sr_adj_label_ref().has_value() &&
+          srConfig.sr_adj_label_ref()->sr_adj_label_type_ref() !=
+          thrift::SegmentRoutingAdjLabelType::DISABLED;
+    }
+    return false;
   }
 
   bool
