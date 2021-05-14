@@ -189,6 +189,13 @@ struct MonitorConfig {
   2: bool enable_event_log_submission = true;
 }
 
+struct MemoryProfilingConfig {
+  /** Knob to enable or disable memory profiling.
+      If enabled, it will dump the heap profile every heap_dump_interval_s second. */
+  1: bool enable_memory_profiling = false;
+  2: i32 heap_dump_interval_s = 300;
+}
+
 enum VerifyClientType {
   // Request a cert and verify it. Fail if verification fails or no
   // cert is presented
@@ -719,6 +726,11 @@ struct OpenrConfig {
   * File path where to persist internal state across restart.
   */
   37: string persistent_config_store_path = "/tmp/openr_persistent_config_store.bin";
+
+  /**
+  * Config for periodically dumping the heap memory profile of Open/R process.
+  */
+  38: optional MemoryProfilingConfig memory_profiling_config;
 
   /**
    * This knob is meant for migrating BGP config routes to Open/R-originated.
