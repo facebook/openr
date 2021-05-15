@@ -791,10 +791,11 @@ struct OpenrConfig {
   /**
    * Temporary var to enable route program ordering, aka, to-add routes should
    * be programmed at originator ahead of being advertised to peers; Reverse
-   * order applies to to-withdraw routes.
+   * order applies to to-withdraw routes. Name the flag as enable_fib_ack since
+   * FIB-ACK is required to signal the completion of local programming.
    * TODO: Deprecate after T78007837 is resolved.
   */
-  58: bool enable_route_program_ordering = false;
+  58: bool enable_fib_ack = false;
 
   # vip thrift injection service
   90: optional bool enable_vip_service;
