@@ -450,7 +450,10 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
         // construct new prefix key with local publication area id
         PrefixKey prefixKey(
-            prefixDb.get_thisNodeName(), toIPNetwork(entry.get_prefix()), area);
+            prefixDb.get_thisNodeName(),
+            toIPNetwork(entry.get_prefix()),
+            area,
+            PrefixKey::isPrefixKeyV2Str(key));
 
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
@@ -467,6 +470,8 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   }
 
   // LSDB deletion
+  // TODO: avoid decoding from string by injecting data-structures
+  // instead of raw strings into `expiredKeys` collection
   for (const auto& key : *thriftPub.expiredKeys_ref()) {
     std::string nodeName = getNodeNameFromKey(key);
 
@@ -479,16 +484,31 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
     } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
       // prefixDb: delete keys starting with "prefix:"
       // TODO: avoid decoding from string
-      auto maybePrefixKey = PrefixKey::fromStr(key);
-      if (maybePrefixKey.hasError()) {
-        LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
-        continue;
+      std::string node{};
+      folly::CIDRNetwork network{};
+      bool isPrefixKeyV2 = PrefixKey::isPrefixKeyV2Str(key);
+      if (isPrefixKeyV2) {
+        auto maybePrefixKeyV2 = PrefixKey::fromStrV2(key, area);
+        if (maybePrefixKeyV2.hasError()) {
+          // this is bad format of key.
+          LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
+          continue;
+        }
+        node = maybePrefixKeyV2.value().getNodeName();
+        network = maybePrefixKeyV2.value().getCIDRNetwork();
+      } else {
+        auto maybePrefixKey = PrefixKey::fromStr(key);
+        if (maybePrefixKey.hasError()) {
+          // this is bad format of key.
+          LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
+          continue;
+        }
+        node = maybePrefixKey.value().getNodeName();
+        network = maybePrefixKey.value().getCIDRNetwork();
       }
+
       // construct new prefix key with local publication area id
-      PrefixKey prefixKey(
-          maybePrefixKey.value().getNodeName(),
-          maybePrefixKey.value().getCIDRNetwork(),
-          area);
+      PrefixKey prefixKey(node, network, area, isPrefixKeyV2);
       pendingUpdates_.applyPrefixStateChange(
           prefixState_.deletePrefix(prefixKey),
           thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events

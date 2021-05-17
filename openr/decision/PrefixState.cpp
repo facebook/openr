@@ -21,6 +21,11 @@ PrefixState::updatePrefix(
   auto [it, inserted] = prefixes_[key.getCIDRNetwork()].emplace(
       key.getNodeAndArea(), std::make_shared<thrift::PrefixEntry>(entry));
 
+  // Update v2 format prefix key collection
+  if (key.isPrefixKeyV2()) {
+    prefixKeyV2_.insert(key);
+  }
+
   // Skip rest of code, if prefix exists and has no change
   if (not inserted && *it->second == entry) {
     return changed;
@@ -40,8 +45,21 @@ PrefixState::updatePrefix(
 std::unordered_set<folly::CIDRNetwork>
 PrefixState::deletePrefix(PrefixKey const& key) {
   std::unordered_set<folly::CIDRNetwork> changed;
+
+  if ((not key.isPrefixKeyV2()) and prefixKeyV2_.count(key)) {
+    LOG(INFO) << "Skip withdraw prefix: "
+              << folly::IPAddress::networkToString(key.getCIDRNetwork())
+              << " since prefix key with v2 format received.";
+    return changed;
+  }
+
+  if (key.isPrefixKeyV2()) {
+    prefixKeyV2_.erase(key);
+  }
+
   auto search = prefixes_.find(key.getCIDRNetwork());
-  if (search != prefixes_.end() && search->second.erase(key.getNodeAndArea())) {
+  if (search != prefixes_.end() and
+      search->second.erase(key.getNodeAndArea())) {
     changed.insert(key.getCIDRNetwork());
     VLOG(1) << "[ROUTE WITHDRAW] "
             << "Area: " << key.getPrefixArea()

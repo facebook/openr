@@ -391,7 +391,11 @@ class PrefixKey {
   PrefixKey(
       std::string const& node,
       folly::CIDRNetwork const& prefix,
-      const std::string& area);
+      const std::string& area,
+      bool isPrefixKeyV2 = false);
+
+  // Util function to check string is with v1 or v2 format of prefix key
+  static bool isPrefixKeyV2Str(const std::string& key);
 
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStr(
@@ -459,6 +463,12 @@ class PrefixKey {
     return prefixKeyStringV2_;
   }
 
+  // return v2 format flag
+  inline bool
+  isPrefixKeyV2() const {
+    return isPrefixKeyV2_;
+  }
+
   bool
   operator==(openr::PrefixKey const& other) const {
     return prefix_ == other.prefix_ && nodeAndArea_ == other.nodeAndArea_;
@@ -470,6 +480,9 @@ class PrefixKey {
 
   // IP address
   folly::CIDRNetwork const prefix_;
+
+  // flag to indicate v2 format
+  const bool isPrefixKeyV2_;
 
   // raw key string from KvStore
   std::string const prefixKeyString_;

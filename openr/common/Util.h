@@ -348,14 +348,16 @@ std::pair<std::string, thrift::Value> createPrefixKeyValue(
     const int64_t version,
     const thrift::PrefixEntry& prefixEntry,
     const std::string& area = kTestingAreaName,
-    bool withdraw = false);
+    bool withdraw = false,
+    bool isPrefixKeyV2 = false);
 
 std::pair<std::string, thrift::Value> createPrefixKeyValue(
     const std::string& nodeName,
     const int64_t version,
     thrift::IpPrefix const& prefix,
     const std::string& area = kTestingAreaName,
-    bool withdraw = false);
+    bool withdraw = false,
+    bool isPrefixKeyV2 = false);
 
 thrift::Publication createThriftPublication(
     const std::unordered_map<std::string, thrift::Value>& kv,

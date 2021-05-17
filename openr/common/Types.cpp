@@ -44,9 +44,11 @@ RegexSet::match(std::string const& key) const {
 PrefixKey::PrefixKey(
     std::string const& node,
     folly::CIDRNetwork const& prefix,
-    const std::string& area)
+    const std::string& area,
+    bool isPrefixKeyV2)
     : nodeAndArea_(node, area),
       prefix_(prefix),
+      isPrefixKeyV2_(isPrefixKeyV2),
       prefixKeyString_(fmt::format(
           "{}{}:{}:[{}/{}]",
           Constants::kPrefixDbMarker.toString(),
@@ -60,6 +62,20 @@ PrefixKey::PrefixKey(
           node,
           prefix_.first.str(),
           prefix_.second)) {}
+
+bool
+PrefixKey::isPrefixKeyV2Str(const std::string& key) {
+  int64_t plen{0};
+  std::string node{};
+  std::string ipStr{};
+  folly::CIDRNetwork ipAddress;
+  auto patt =
+      RE2::FullMatch(key, PrefixKey::getPrefixRE2(), &node, &ipStr, &plen);
+  auto pattV2 =
+      RE2::FullMatch(key, PrefixKey::getPrefixRE2V2(), &node, &ipStr, &plen);
+
+  return (not patt) and pattV2;
+}
 
 folly::Expected<PrefixKey, std::string>
 PrefixKey::fromStr(const std::string& key) {
@@ -80,7 +96,7 @@ PrefixKey::fromStr(const std::string& key) {
     LOG(INFO) << "Exception in converting to Prefix. " << e.what();
     return folly::makeUnexpected(std::string("Invalid IP address in key"));
   }
-  return PrefixKey(node, ipaddress, area);
+  return PrefixKey(node, ipaddress, area, false);
 }
 
 folly::Expected<PrefixKey, std::string>
@@ -101,7 +117,7 @@ PrefixKey::fromStrV2(const std::string& key, const std::string& area) {
     LOG(INFO) << "Exception in converting to Prefix. " << e.what();
     return folly::makeUnexpected(std::string("Invalid IP address in key"));
   }
-  return PrefixKey(node, ipAddress, area);
+  return PrefixKey(node, ipAddress, area, true);
 }
 
 } // namespace openr

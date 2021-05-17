@@ -4677,6 +4677,34 @@ class DecisionTestFixture : public ::testing::Test {
   // member methods
   //
 
+  void
+  verifyReceivedRoutes(const folly::CIDRNetwork& network, bool isRemoved) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (true) {
+      auto endTime = std::chrono::steady_clock::now();
+      if (endTime - startTime > debounceTimeoutMax) {
+        ASSERT_TRUE(0) << fmt::format(
+            "Timeout verifying prefix: {} in prefix-state. Time limit: {}",
+            folly::IPAddress::networkToString(network),
+            debounceTimeoutMax.count());
+      }
+
+      // Expect best route selection to be populated in route-details for addr2
+      thrift::ReceivedRouteFilter filter;
+      filter.prefixes_ref() =
+          std::vector<thrift::IpPrefix>({toIpPrefix(network)});
+      auto routes = decision->getReceivedRoutesFiltered(filter).get();
+      if ((not isRemoved) and routes->size()) {
+        return;
+      }
+      if (isRemoved and routes->empty()) {
+        return;
+      }
+      // yield CPU
+      std::this_thread::yield();
+    }
+  }
+
   std::unordered_map<std::string, thrift::RouteDatabase>
   dumpRouteDb(const vector<string>& allNodes) {
     std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
@@ -4778,29 +4806,6 @@ class DecisionTestFixture : public ::testing::Test {
         node, version, createPrefixDb(node, prefixEntries, area));
   }
 
-  std::unordered_map<std::string, thrift::Value>
-  createPerPrefixKeyValue(
-      const string& node,
-      int64_t version,
-      const vector<thrift::IpPrefix>& prefixes) {
-    std::unordered_map<std::string, thrift::Value> keyVal{};
-    for (const auto& prefix : prefixes) {
-      const auto prefixKey = PrefixKey(
-          node,
-          folly::IPAddress::createNetwork(toString(prefix)),
-          kTestingAreaName);
-      keyVal[prefixKey.getPrefixKey()] = createThriftValue(
-          version,
-          node,
-          writeThriftObjStr(
-              createPrefixDb(node, {createPrefixEntry(prefix)}), serializer),
-          Constants::kTtlInfinity /* ttl */,
-          0 /* ttl version */,
-          0 /* hash */);
-    }
-    return keyVal;
-  }
-
   /**
    * Check whether two DecisionRouteUpdates to be equal
    */
@@ -4849,6 +4854,144 @@ class DecisionTestFixture : public ::testing::Test {
   std::unique_ptr<std::thread> decisionThread{nullptr};
 };
 
+/*
+ * This is for backward compatibility test with prefix key format
+ * migration.
+ *
+ * Topology:
+ *
+ * 1 ---- 2 (advertising prefix with both v1 and v2)
+ *
+ * 1) publish prefix keys with format v1;
+ * 2) expire prefx keys with format v1 and verify it is gone;
+ * 3) publish prefix keys with format v2;
+ * 4) expire prefix keys with format v2 and verify it is gone;
+ * 5) publish prefix keys with format v1 + v2;
+ * 6) expire prefix keys with format v1 and verify it still exists;
+ * 7) expire prefix keys with format v2 and verify it is gone;
+ */
+TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
+  //
+  // Step1: prefix-key with v1 format ONLY
+  //
+  {
+    // publish initial link-state + prefix-state
+    // ATTN: need bi-direction adjacency for decision to calculate route
+    auto publication = createThriftPublication(
+        /* prefix key format v1 */
+        {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+         {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+         createPrefixKeyValue("2", 1, addr1)},
+        /* expired-keys */
+        {});
+    sendKvPublication(publication);
+
+    // verify prefix-state
+    verifyReceivedRoutes(toIPNetwork(addr1), false);
+  }
+
+  //
+  // Step2: v1 format prefix key expiration
+  //
+  {
+    // prefix key with v1 format expired
+    auto publication = createThriftPublication(
+        /* no prefix key update */
+        {},
+        /* expired-keys */
+        {createPrefixKeyValue("2", 1, addr1).first});
+    sendKvPublication(publication);
+
+    // verify prefix-state gets cleared
+    verifyReceivedRoutes(toIPNetwork(addr1), true);
+  }
+
+  //
+  // Step3: prefix-key with v2 format ONLY
+  //
+  {
+    // publish initial prefix-state
+    auto publication = createThriftPublication(
+        /* prefix key format v2 */
+        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)},
+        /* expired-keys */
+        {});
+    sendKvPublication(publication);
+
+    // verify prefix-state
+    verifyReceivedRoutes(toIPNetwork(addr1), false);
+  }
+
+  //
+  // Step4: v2 format prefix key expiration
+  //
+  {
+    // prefix key with v2 format expired
+    auto publication = createThriftPublication(
+        /* no prefix key update */
+        {},
+        /* expired-keys */
+        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)
+             .first});
+    sendKvPublication(publication);
+
+    // verify prefix-state NOT get cleared
+    verifyReceivedRoutes(toIPNetwork(addr1), true);
+  }
+
+  //
+  // Step5: prefix-key with v1 + v2 format
+  //
+  {
+    // publish initial prefix-state
+    auto publication = createThriftPublication(
+        {/* prefix key format v1 */
+         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, false),
+         /* prefix key format v2 */
+         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)},
+        /* expired-keys */
+        {});
+    sendKvPublication(publication);
+
+    // verify prefix-state
+    verifyReceivedRoutes(toIPNetwork(addr1), false);
+  }
+
+  //
+  // Step6: v1 format prefix key expiration
+  // ATTN: prefix will NOT retire since we have received format v2
+  //
+  {
+    // prefix key with v1 format expired
+    auto publication = createThriftPublication(
+        /* no prefix key update */
+        {},
+        /* expired-keys */
+        {createPrefixKeyValue("2", 1, addr1).first});
+    sendKvPublication(publication);
+
+    // verify prefix-state NOT get cleared
+    verifyReceivedRoutes(toIPNetwork(addr1), false);
+  }
+
+  //
+  // Step7: v2 format prefix key expiration
+  //
+  {
+    // prefix key with v1 format expired
+    auto publication = createThriftPublication(
+        /* no prefix key update */
+        {},
+        /* expired-keys */
+        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)
+             .first});
+    sendKvPublication(publication);
+
+    // verify prefix-state NOT get cleared
+    verifyReceivedRoutes(toIPNetwork(addr1), true);
+  }
+}
+
 // The following topology is used:
 //
 // 1---2---3
@@ -4856,7 +4999,6 @@ class DecisionTestFixture : public ::testing::Test {
 // We upload the link 1---2 with the initial sync and later publish
 // the 2---3 link information. We then request the full routing dump
 // from the decision process via respective socket.
-//
 
 TEST_F(DecisionTestFixture, BasicOperations) {
   //

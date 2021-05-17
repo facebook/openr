@@ -749,11 +749,12 @@ createPrefixKeyValue(
     const int64_t version,
     const thrift::PrefixEntry& prefixEntry,
     const std::string& area,
-    bool withdraw) {
+    bool withdraw,
+    bool isPrefixKeyV2) {
   apache::thrift::CompactSerializer serializer;
   auto [key, db] = createPrefixKeyAndDb(nodeName, prefixEntry, area, withdraw);
   return {
-      key.getPrefixKey(),
+      isPrefixKeyV2 ? key.getPrefixKeyStr() : key.getPrefixKey(),
       createThriftValue(
           version, nodeName, writeThriftObjStr(std::move(db), serializer))};
 }
@@ -764,9 +765,15 @@ createPrefixKeyValue(
     const int64_t version,
     thrift::IpPrefix const& prefix,
     const std::string& area,
-    bool withdraw) {
+    bool withdraw,
+    bool isPrefixKeyV2) {
   return createPrefixKeyValue(
-      nodeName, version, createPrefixEntry(prefix), area, withdraw);
+      nodeName,
+      version,
+      createPrefixEntry(prefix),
+      area,
+      withdraw,
+      isPrefixKeyV2);
 }
 
 thrift::Publication

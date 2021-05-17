@@ -63,5 +63,8 @@ class PrefixState {
   // Data structure to maintain mapping from:
   //  IpPrefix -> collection of originator(i.e. [node, area] combination)
   std::unordered_map<folly::CIDRNetwork, PrefixEntries> prefixes_;
+
+  // Local cache for v2 format of prefix keys
+  std::unordered_set<PrefixKey> prefixKeyV2_;
 };
 } // namespace openr
