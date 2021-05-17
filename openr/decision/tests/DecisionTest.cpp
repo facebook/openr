@@ -4619,8 +4619,6 @@ class DecisionTestFixture : public ::testing::Test {
     decision = make_shared<Decision>(
         config,
         false, /* bgpDryRun */
-        debounceTimeoutMin,
-        debounceTimeoutMax,
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
@@ -4647,6 +4645,14 @@ class DecisionTestFixture : public ::testing::Test {
   virtual openr::thrift::OpenrConfig
   createConfig() {
     auto tConfig = getBasicOpenrConfig("1");
+
+    // timeout to wait until decision debounce
+    // (i.e. spf recalculation, route rebuild) finished
+    tConfig.decision_config_ref()->debounce_min_ms_ref() =
+        debounceTimeoutMin.count();
+    tConfig.decision_config_ref()->debounce_max_ms_ref() =
+        debounceTimeoutMax.count();
+
     // set coldstart to be longer than debounce time
     tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
     tConfig.enable_segment_routing_ref() = true;
@@ -5923,6 +5929,10 @@ TEST(Decision, RibPolicyFeatureKnob) {
   auto tConfig = getBasicOpenrConfig("1");
   tConfig.enable_rib_policy_ref() = false; // Disable rib_policy feature
   auto config = std::make_shared<Config>(tConfig);
+  tConfig.decision_config_ref()->debounce_min_ms_ref() =
+      debounceTimeoutMin.count();
+  tConfig.decision_config_ref()->debounce_max_ms_ref() =
+      debounceTimeoutMax.count();
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
@@ -5931,8 +5941,6 @@ TEST(Decision, RibPolicyFeatureKnob) {
   auto decision = std::make_unique<Decision>(
       config,
       false, /* bgpDryRun */
-      debounceTimeoutMin,
-      debounceTimeoutMax,
       kvStoreUpdatesQueue.getReader(),
       staticRouteUpdatesQueue.getReader(),
       routeUpdatesQueue);
@@ -6877,6 +6885,10 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
     );
     // set coldstart to be longer than debounce time
     tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
+    tConfig.decision_config_ref()->debounce_min_ms_ref() =
+        debounceTimeoutMin.count();
+    tConfig.decision_config_ref()->debounce_max_ms_ref() =
+        debounceTimeoutMax.count();
 
     tConfig_ = tConfig;
     return tConfig;
@@ -7000,6 +7012,10 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
     );
     // set coldstart to be longer than debounce time
     tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
+    tConfig.decision_config_ref()->debounce_min_ms_ref() =
+        debounceTimeoutMin.count();
+    tConfig.decision_config_ref()->debounce_max_ms_ref() =
+        debounceTimeoutMax.count();
 
     tConfig_ = tConfig;
     return tConfig;

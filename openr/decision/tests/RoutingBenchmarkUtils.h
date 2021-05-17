@@ -75,13 +75,14 @@ class DecisionWrapper {
  public:
   explicit DecisionWrapper(const std::string& nodeName) {
     auto tConfig = getBasicOpenrConfig(nodeName);
+    // decision config
+    tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
+    tConfig.decision_config_ref()->debounce_max_ms_ref() = 500;
     config = std::make_shared<Config>(tConfig);
 
     decision = std::make_shared<Decision>(
         config,
         false, /* bgpDryRun */
-        std::chrono::milliseconds(10),
-        std::chrono::milliseconds(500),
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);

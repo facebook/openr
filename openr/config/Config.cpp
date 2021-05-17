@@ -201,6 +201,18 @@ Config::populateInternalDb() {
   }
 
   //
+  // Decision
+  //
+  const auto& decisionConfig = *config_.decision_config_ref();
+  if (*decisionConfig.debounce_min_ms_ref() >
+      *decisionConfig.debounce_max_ms_ref()) {
+    throw std::invalid_argument(fmt::format(
+        "decision_config.debounce_min_ms ({}) should be <= decision_config.debounce_max_ms ({})",
+        *decisionConfig.debounce_min_ms_ref(),
+        *decisionConfig.debounce_max_ms_ref()));
+  }
+
+  //
   // Spark
   //
   const auto& sparkConfig = *config_.spark_config_ref();

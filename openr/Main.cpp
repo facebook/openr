@@ -535,8 +535,6 @@ main(int argc, char** argv) {
       std::make_unique<Decision>(
           config,
           not FLAGS_enable_bgp_route_programming,
-          std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
-          std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
           kvStoreUpdatesQueue.getReader(),
           std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));

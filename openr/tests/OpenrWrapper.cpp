@@ -55,6 +55,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   lmConf.use_rtt_metric_ref() = false;
   lmConf.include_interface_regexes_ref() = {".*"};
 
+  // decision config
+  tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
+  tConfig.decision_config_ref()->debounce_max_ms_ref() = 250;
+
   // prefix allocation config
   tConfig.enable_prefix_allocation_ref() = true;
   thrift::PrefixAllocationConfig pfxAllocationConf;
@@ -209,8 +213,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   decision_ = std::make_unique<Decision>(
       config_,
       false, // bgpDryRun
-      std::chrono::milliseconds(10),
-      std::chrono::milliseconds(250),
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       routeUpdatesQueue_);

@@ -141,8 +141,6 @@ class Decision : public OpenrEventBase {
   Decision(
       std::shared_ptr<const Config> config,
       bool bgpDryRun,
-      std::chrono::milliseconds debounceMinDur,
-      std::chrono::milliseconds debounceMaxDur,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);

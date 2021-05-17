@@ -57,6 +57,10 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* enableV4 */,
         true /* enableSegmentRouting */);
 
+    // decision config
+    tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
+    tConfig.decision_config_ref()->debounce_max_ms_ref() = 500;
+
     // kvstore config
     tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.kvstore_config_ref()->enable_flood_optimization_ref() = true;
@@ -85,8 +89,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     decision = std::make_shared<Decision>(
         config,
         false, /* bgpDryRun */
-        std::chrono::milliseconds(10),
-        std::chrono::milliseconds(500),
         kvStoreWrapper_->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         routeUpdatesQueue_);

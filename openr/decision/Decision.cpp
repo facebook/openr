@@ -111,8 +111,6 @@ Decision::Decision(
     std::shared_ptr<const Config> config,
     // TODO: migrate argument list flags to OpenrConfig
     bool bgpDryRun,
-    std::chrono::milliseconds debounceMinDur,
-    std::chrono::milliseconds debounceMaxDur,
     // consumer queue
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
@@ -123,9 +121,14 @@ Decision::Decision(
       myNodeName_(*config->getConfig().node_name_ref()),
       pendingUpdates_(*config->getConfig().node_name_ref()),
       rebuildRoutesDebounced_(
-          getEvb(), debounceMinDur, debounceMaxDur, [this]() noexcept {
-            rebuildRoutes("DECISION_DEBOUNCE");
-          }) {
+          getEvb(),
+          std::chrono::milliseconds(*config->getConfig()
+                                         .decision_config_ref()
+                                         ->debounce_min_ms_ref()),
+          std::chrono::milliseconds(*config->getConfig()
+                                         .decision_config_ref()
+                                         ->debounce_max_ms_ref()),
+          [this]() noexcept { rebuildRoutes("DECISION_DEBOUNCE"); }) {
   spfSolver_ = std::make_unique<SpfSolver>(
       config->getNodeName(),
       config->isV4Enabled(),
