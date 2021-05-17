@@ -14,7 +14,7 @@ from openr.OpenrConfig import ttypes as openr_config_types
 from openr.Types import ttypes as openr_types
 
 
-def sprint_addr(addr):
+def sprint_addr(addr) -> str:
     """binary ip addr -> string"""
 
     if not len(addr):
@@ -34,8 +34,9 @@ def sprint_prefix(prefix) -> str:
     return "{}/{}".format(sprint_addr(prefix.prefixAddress.addr), prefix.prefixLength)
 
 
-# pyre-fixme[9]: if_index has type `str`; used as `None`.
-def ip_str_to_addr(addr_str: str, if_index: str = None) -> network_types.BinaryAddress:
+def ip_str_to_addr(
+    addr_str: str, if_index: Optional[str] = None
+) -> network_types.BinaryAddress:
     """
     :param addr_str: ip address in string representation
 
@@ -221,7 +222,7 @@ def is_link_local(addr):
     return ipaddress.ip_network(addr).is_link_local
 
 
-def is_subnet_of(a, b):
+def is_subnet_of(a, b) -> bool:
     """
     Check if network-b is subnet of network-a
     """
@@ -232,7 +233,7 @@ def is_subnet_of(a, b):
     return a.prefixlen >= b.prefixlen
 
 
-def contain_any_prefix(prefix, ip_networks):
+def contain_any_prefix(prefix, ip_networks) -> bool:
     """
     Utility function to check if prefix contain any of the prefixes/ips
 

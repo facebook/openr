@@ -7,7 +7,7 @@
 
 import datetime
 from builtins import range
-from typing import Iterable
+from typing import Iterable, Union
 
 import tabulate
 
@@ -26,20 +26,17 @@ def get_timestamp() -> str:
     )
 
 
-def sprint_bytes(bytes: int) -> str:
+def sprint_bytes(bytes: Union[int, float]) -> str:
     """Return formatted bytes. e.g. 12KB, 15.1MB"""
 
     if bytes < 1024:
         return f"{bytes} B"
-    # pyre-fixme[9]: bytes has type `int`; used as `float`.
     bytes /= 1024
     if bytes < 1024:
         return f"{bytes:.2f} KB"
-    # pyre-fixme[9]: bytes has type `int`; used as `float`.
     bytes /= 1024
     if bytes < 1024:
         return f"{bytes:.2f} MB"
-    # pyre-fixme[9]: bytes has type `int`; used as `float`.
     bytes /= 1024
     return f"{bytes:.2f} GB"
 
