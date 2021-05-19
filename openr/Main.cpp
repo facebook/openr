@@ -582,7 +582,7 @@ main(int argc, char** argv) {
       "ctrl_evb",
       std::make_unique<OpenrEventBase>());
 
-  auto ctrlHandler = std::make_unique<openr::OpenrCtrlHandler>(
+  auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
       config->getNodeName(),
       acceptableNamesSet,
       ctrlEvb,
@@ -597,7 +597,7 @@ main(int argc, char** argv) {
       config);
 
   CHECK(ctrlHandler);
-  thriftCtrlServer->setInterface(std::move(ctrlHandler));
+  thriftCtrlServer->setInterface(ctrlHandler);
   thriftCtrlServer->setNumIOWorkerThreads(1);
   // Intentionally kept this as (1). If you're changing to higher number please
   // address thread safety for private member variables in OpenrCtrlHandler
@@ -637,10 +637,14 @@ main(int argc, char** argv) {
   netlinkEventsQueue.close();
   logSampleQueue.close();
 
-  // Stop & destroy thrift server.
+  // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
   thriftCtrlServer->stop();
   thriftCtrlServerThread.join();
   thriftCtrlServer.reset();
+
+  // Destroy ctrlHandler
+  CHECK(ctrlHandler.unique()) << "Unexpected ownership of ctrlHandler pointer";
+  ctrlHandler.reset();
 
   // Stop all threads (in reverse order of their creation)
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
