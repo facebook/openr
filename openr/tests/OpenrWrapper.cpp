@@ -203,6 +203,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       staticRoutesQueue_,
       prefixUpdatesQueue_.getReader(),
       routeUpdatesQueue_.getReader(),
+      programmedRoutesQueue_.getReader(),
       config_,
       kvStore_.get(),
       std::chrono::seconds(0));
@@ -227,6 +228,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       routeUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       fibUpdatesQueue_,
+      programmedRoutesQueue_,
       logSampleQueue_);
 
   //
@@ -361,6 +363,7 @@ void
 OpenrWrapper<Serializer>::stop() {
   // Close all queues
   routeUpdatesQueue_.close();
+  programmedRoutesQueue_.close();
   peerUpdatesQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();

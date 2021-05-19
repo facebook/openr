@@ -61,6 +61,7 @@ class PrefixManager final : public OpenrEventBase {
       // consumer queue
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
+      messaging::RQueue<DecisionRouteUpdate> programmedRoutesQueue,
       // config
       std::shared_ptr<const Config> config,
       // raw ptr for modules

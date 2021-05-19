@@ -95,6 +95,7 @@ class FibWrapper {
         routeUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         fibUpdatesQueue,
+        programmedRoutesQueue,
         logSampleQueue);
 
     fibThread = std::make_unique<std::thread>([this]() {
@@ -130,6 +131,7 @@ class FibWrapper {
   ~FibWrapper() {
     LOG(INFO) << "Closing queues";
     fibUpdatesQueue.close();
+    programmedRoutesQueue.close();
     routeUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     logSampleQueue.close();
@@ -187,6 +189,7 @@ class FibWrapper {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue;
   messaging::ReplicateQueue<LogSample> logSampleQueue;
 
   // ctrlEvb for openrCtrlHandler instantiation

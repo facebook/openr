@@ -218,6 +218,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         staticRouteUpdatesQueue,
         prefixUpdatesQueue.getReader(),
         routeUpdatesQueue.getReader(),
+        programmedRoutesQueue.getReader(),
         config,
         kvStoreWrapper->getKvStore(),
         std::chrono::seconds(0));
@@ -241,6 +242,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
     kvStoreSyncEventsQueue.close();
     prefixUpdatesQueue.close();
     routeUpdatesQueue.close();
+    programmedRoutesQueue.close();
+    staticRouteUpdatesQueue.close();
     logSampleQueue.close();
     nlSock->closeQueue();
     kvStoreWrapper->closeQueue();
@@ -558,6 +561,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue;
   messaging::RQueue<InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;

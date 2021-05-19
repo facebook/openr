@@ -112,6 +112,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         staticRouteUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
         routeUpdatesQueue_.getReader(),
+        programmedRoutesQueue_.getReader(),
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -127,6 +128,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     routeUpdatesQueue_.close();
+    programmedRoutesQueue_.close();
     logSampleQueue_.close();
     kvStoreWrapper_->closeQueue();
 
@@ -188,6 +190,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue_;
 
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
@@ -275,6 +278,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         numAllocators};
     std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>> routeQueues{
         numAllocators};
+    std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>>
+        programmedRoutesQueues{numAllocators};
     messaging::ReplicateQueue<LogSample> logSampleQueue;
     messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
     std::vector<std::unique_ptr<PrefixAllocator>> allocators;
@@ -433,6 +438,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           staticRouteUpdatesQueue,
           prefixQueues.at(i).getReader(),
           routeQueues.at(i).getReader(),
+          programmedRoutesQueues.at(i).getReader(),
           currConfig,
           store->getKvStore(),
           std::chrono::seconds(0));
@@ -504,6 +510,9 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       queue.close();
     }
     for (auto& queue : routeQueues) {
+      queue.close();
+    }
+    for (auto& queue : programmedRoutesQueues) {
       queue.close();
     }
     staticRouteUpdatesQueue.close();

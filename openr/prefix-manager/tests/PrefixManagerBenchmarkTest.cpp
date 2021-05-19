@@ -40,6 +40,7 @@ class PrefixManagerBenchmarkTestFixture {
         staticRouteUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
         routeUpdatesQueue_.getReader(),
+        programmedRoutesQueue_.getReader(),
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds{0} /* no delay for initial dump */);
@@ -53,6 +54,7 @@ class PrefixManagerBenchmarkTestFixture {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     routeUpdatesQueue_.close();
+    programmedRoutesQueue_.close();
     kvStoreWrapper_->closeQueue();
 
     prefixManager_->stop();
@@ -134,6 +136,7 @@ class PrefixManagerBenchmarkTestFixture {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue_;
 
   std::shared_ptr<Config> config_;
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;

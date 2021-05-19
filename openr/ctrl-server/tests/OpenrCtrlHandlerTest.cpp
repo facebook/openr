@@ -102,6 +102,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         fibUpdatesQueue_,
+        programmedRoutesQueue_,
         logSampleQueue_);
     fibThread_ = std::thread([&]() { fib->run(); });
 
@@ -110,6 +111,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         staticRoutesUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
         routeUpdatesQueue_.getReader(),
+        programmedRoutesQueue_.getReader(),
         config,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -228,6 +230,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue_;
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
