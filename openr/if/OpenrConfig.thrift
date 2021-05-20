@@ -78,6 +78,11 @@ struct KvstoreConfig {
   * are low, having low value makes more sense. Defaults to 65536.
   */
   101: i32 zmq_hwm = 65536;
+
+  /*
+   * Temp var to enable dual msg exchange over thrift channel.
+   */
+  200: bool enable_thrift_dual_msg = false;
 } (cpp.minimize_padding)
 
 struct DecisionConfig {

@@ -136,11 +136,13 @@ struct KvStoreParams {
   std::optional<thrift::KvstoreFloodRate> floodRate;
   // TTL decrement factor
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
+  // DUAL related config knob
   bool enableFloodOptimization{false};
   bool isFloodRoot{false};
+  bool enableThriftDualMsg{false};
 
   KvStoreParams(
-      std::string nodeid,
+      std::string nodeId,
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
@@ -148,7 +150,7 @@ struct KvStoreParams {
       // ZMQ high water mark
       int zmqhwm,
       // IP QoS
-      std::optional<int> maybeipTos,
+      std::optional<int> maybeIpTos,
       // how often to request full db sync from peers
       std::chrono::seconds dbsyncInterval,
       std::optional<KvStoreFilters> filter,
@@ -156,21 +158,24 @@ struct KvStoreParams {
       std::optional<thrift::KvstoreFloodRate> floodrate,
       // TTL decrement factor
       std::chrono::milliseconds ttldecr,
+      // DUAL related config knob
       bool enableFloodOptimization,
-      bool isfloodRoot)
-      : nodeId(nodeid),
+      bool isFloodRoot,
+      bool enableThriftDualMsg)
+      : nodeId(nodeId),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         kvStoreSyncEventsQueue(kvStoreSyncEventsQueue),
         logSampleQueue(logSampleQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
-        maybeIpTos(std::move(maybeipTos)),
+        maybeIpTos(std::move(maybeIpTos)),
         dbSyncInterval(dbsyncInterval),
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
         enableFloodOptimization(enableFloodOptimization),
-        isFloodRoot(isfloodRoot) {}
+        isFloodRoot(isFloodRoot),
+        enableThriftDualMsg(enableThriftDualMsg) {}
 };
 
 // The class represents a KV Store DB and stores KV pairs in internal map.
