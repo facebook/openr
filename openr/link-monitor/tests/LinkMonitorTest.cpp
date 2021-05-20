@@ -306,6 +306,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     // link monitor config
     auto& lmConf = *tConfig.link_monitor_config_ref();
+    lmConf.enable_perf_measurement_ref() = false;
     lmConf.linkflap_initial_backoff_ms_ref() = flapInitalBackoff.count();
     lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
     lmConf.use_rtt_metric_ref() = false;
@@ -314,6 +315,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     *lmConf.redistribute_interface_regexes_ref() = {"loopback"};
 
     tConfig.enable_new_gr_behavior_ref() = true;
+    tConfig.assume_drained_ref() = false;
     return tConfig;
   }
 
@@ -326,15 +328,12 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   void
   createLinkMonitor(
-      std::shared_ptr<Config> config,
-      bool assumeDrained = false,
-      bool overrideDrainState = false) {
+      std::shared_ptr<Config> config, bool overrideDrainState = false) {
     linkMonitor = std::make_unique<LinkMonitor>(
         config,
         nlSock.get(),
         kvStoreWrapper->getKvStore(),
         configStore.get(),
-        false /* enable perf measurement */,
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
@@ -342,7 +341,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
-        assumeDrained,
         overrideDrainState,
         std::chrono::seconds(1) /* adjHoldTime */
     );
@@ -626,8 +624,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   kvStoreSyncEventsQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
-  createLinkMonitor(
-      config, false /*assumeDrained*/, false /*overrideDrainState*/);
+  createLinkMonitor(config, false /*overrideDrainState*/);
   // checkNextAdjPub("adj:node-1");
 
   res = linkMonitor->getInterfaces().get();
@@ -645,8 +642,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   kvStoreSyncEventsQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
-  createLinkMonitor(
-      config, false /*assumeDrained*/, true /*overrideDrainState*/);
+  createLinkMonitor(config, true /*overrideDrainState*/);
 
   res = linkMonitor->getInterfaces().get();
   ASSERT_NE(nullptr, res);
@@ -1979,7 +1975,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         nlSock.get(),
         kvStoreWrapper->getKvStore(),
         configStore.get(),
-        false /* enable perf measurement */,
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
@@ -1987,7 +1982,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
-        false, /* assumeDrained */
         false, /* overrideDrainState */
         std::chrono::seconds(1));
     linkMonitors.emplace_back(std::move(lm));

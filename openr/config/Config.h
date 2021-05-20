@@ -7,6 +7,13 @@
 
 #pragma once
 
+#if __has_include("filesystem")
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <folly/IPAddress.h>
 #include <openr/common/MplsUtil.h>
 #include <re2/re2.h>
@@ -344,6 +351,19 @@ class Config {
   bool
   isVipServiceEnabled() const {
     return config_.enable_vip_service_ref().value_or(false);
+  }
+
+  //
+  // Drain state
+  //
+  bool
+  isAssumeDrained() const {
+    auto undrainedFlagPath = config_.undrained_flag_path_ref();
+    // Do not assume drain if the undrained_flag_path is set and the file exists
+    if (undrainedFlagPath && fs::exists(*undrainedFlagPath)) {
+      return false;
+    }
+    return *config_.assume_drained_ref();
   }
 
  private:

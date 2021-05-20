@@ -54,6 +54,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
   lmConf.use_rtt_metric_ref() = false;
   lmConf.include_interface_regexes_ref() = {".*"};
+  lmConf.enable_perf_measurement_ref() = false;
+  tConfig.assume_drained_ref() = false;
 
   // decision config
   tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
@@ -176,7 +178,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nlSock_.get(),
       kvStore_.get(),
       configStore_.get(),
-      false /* enable perf measurement */,
       interfaceUpdatesQueue_,
       prefixUpdatesQueue_,
       peerUpdatesQueue_,
@@ -184,7 +185,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       neighborUpdatesQueue_.getReader(),
       kvStoreSyncEventsQueue_.getReader(),
       nlSock_->getReader(),
-      false, /* assumeDrained */
       false, /* overrideDrainState */
       linkMonitorAdjHoldTime);
 

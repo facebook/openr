@@ -71,6 +71,9 @@ class OpenrCtrlFixture : public ::testing::Test {
     lmConf.linkflap_max_backoff_ms_ref() = 8;
     lmConf.use_rtt_metric_ref() = false;
     *lmConf.include_interface_regexes_ref() = {"po.*"};
+    lmConf.enable_perf_measurement_ref() = false;
+    tConfig.assume_drained_ref() = false;
+
     config = std::make_shared<Config>(tConfig);
 
     // Create PersistentStore
@@ -133,7 +136,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         nlSock_.get(),
         kvStoreWrapper_->getKvStore(),
         persistentStore.get(),
-        false /* enable perf measurement */,
         interfaceUpdatesQueue_,
         prefixUpdatesQueue_,
         peerUpdatesQueue_,
@@ -141,7 +143,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         neighborUpdatesQueue_.getReader(),
         kvStoreWrapper_->getInitialSyncEventsReader(),
         nlSock_->getReader(),
-        false, /* assumeDrained */
         false, /* overrideDrainState */
         std::chrono::seconds(1));
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });

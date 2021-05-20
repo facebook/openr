@@ -101,8 +101,6 @@ class LinkMonitor final : public OpenrEventBase {
       fbnl::NetlinkProtocolSocket* nlSock,
       KvStore* kvstore,
       PersistentStore* configStore,
-      // enable convergence performance measurement for Adjacencies update
-      bool enablePerfMeasurement,
       // producer queue
       messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
@@ -112,9 +110,6 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
       messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
-      // if set, we will assume drained if no drain state is found in the
-      // persitentStore
-      bool assumeDrained,
       // if set, we will override drain state from persistent store with
       // assumeDrained value
       bool overrideDrainState,

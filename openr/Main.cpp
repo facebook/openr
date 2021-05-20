@@ -473,7 +473,6 @@ main(int argc, char** argv) {
           nlSock.get(),
           kvStore,
           configStore,
-          FLAGS_enable_perf_measurement,
           interfaceUpdatesQueue,
           prefixUpdatesQueue,
           peerUpdatesQueue,
@@ -481,7 +480,6 @@ main(int argc, char** argv) {
           neighborUpdatesQueue.getReader(),
           kvStoreSyncEventsQueue.getReader(),
           netlinkEventsQueue.getReader(),
-          FLAGS_assume_drained,
           FLAGS_override_drain_state,
           initialAdjHoldTime));
 

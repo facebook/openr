@@ -70,6 +70,7 @@ getBasicOpenrConfig(
   config.link_monitor_config_ref() = linkMonitorConfig;
   config.spark_config_ref() = sparkConfig;
   config.enable_rib_policy_ref() = true;
+  config.assume_drained_ref() = false;
 
   if (areaCfg.empty()) {
     config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};

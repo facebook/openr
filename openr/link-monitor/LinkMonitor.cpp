@@ -63,7 +63,6 @@ LinkMonitor::LinkMonitor(
     fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
     PersistentStore* configStore,
-    bool enablePerfMeasurement,
     messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
@@ -71,11 +70,11 @@ LinkMonitor::LinkMonitor(
     messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
-    bool assumeDrained,
     bool overrideDrainState,
     std::chrono::seconds adjHoldTime)
     : nodeId_(config->getNodeName()),
-      enablePerfMeasurement_(enablePerfMeasurement),
+      enablePerfMeasurement_(
+          config->getLinkMonitorConfig().get_enable_perf_measurement()),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
@@ -131,6 +130,9 @@ LinkMonitor::LinkMonitor(
   LOG(INFO) << "Loading link-monitor state";
   auto state =
       configStore_->loadThriftObj<thrift::LinkMonitorState>(kConfigKey).get();
+  // If assumeDrained is set, we will assume drained if no drain state
+  // is found in the persitentStore
+  auto assumeDrained = config->isAssumeDrained();
   if (state.hasValue()) {
     LOG(INFO) << "Successfully loaded link-monitor state from disk.";
     state_ = state.value();
