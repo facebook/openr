@@ -87,3 +87,33 @@ can be configured via OpenrConfig.
 Open/R exposes Thrift RPC APIs for remote network operations e.g. retrieving
 network state or issuing drain/undrain commands. These are miscellaneous packets
 and not Open/R specific. `Internet Protocol` can be IPv4 or IPv6.
+
+## FBOSS's SwitchAgent - Control Plane IO & WARM boot
+
+---
+
+FBOSS is an open-sourced switch operating system. Open/R is natively supported
+on FBOSS. FBOSS's `SwitchAgent` is a core service that supports Control Plane IO
+so that protocols such as Open/R can talk to peer Open/R instances inband for
+their functioning. `SwitchAgent` does so by creating a TUN interface on Linux
+corresponding to each VLAN of the host. The VLAN status (UP/DOWN) is reflected
+on this Linux interface as well. The interfaces are named with the `fboss`
+prefix e.g. `fboss4001`. FBOSS's `SwitchAgent` holds an FD to these VLAN so that
+it can multiplex packets between physical VLANs & their Linux counterpart.
+
+Open/R uses the `netlink` protocol to subscribe links from Linux. And creates
+UDP/TCP sockets to send/receive packets to/from these interfaces.
+
+This means Open/R can function if and only if SwitchAgent is functioning on the
+system. Both Open/R & SwitchAgent support WARM mode for service upgrades, we
+term it as Graceful Restart (GR). However, when SwitchAgent is undergoing
+restart the Open/R GR would be broken because all Linux interfaces would go down
+and Control Plane IO will be halted. To overcome this, we first intend to wrap
+SwitchAgent WARM restart with Open/R's Graceful restart.
+
+This is achieved by `systemd`'s `BindsTo`, `After`, and `WantedBy` directives of
+Open/R's service spec. This will automatically bring down Open/R before
+SwitchAgent goes down and brings up Open/R after SwitchAgent comes up. In rare
+cases when SwitchAgent is crashing in a loop, you may also see Open/R restarting
+in a loop. In such cases `systemd` logs from `/var/log/messages` would be
+helpful in identifying service restart sequence & possible cause.
