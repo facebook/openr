@@ -754,7 +754,7 @@ createPrefixKeyValue(
   apache::thrift::CompactSerializer serializer;
   auto [key, db] = createPrefixKeyAndDb(nodeName, prefixEntry, area, withdraw);
   return {
-      isPrefixKeyV2 ? key.getPrefixKeyStr() : key.getPrefixKey(),
+      isPrefixKeyV2 ? key.getPrefixKeyV2() : key.getPrefixKey(),
       createThriftValue(
           version, nodeName, writeThriftObjStr(std::move(db), serializer))};
 }

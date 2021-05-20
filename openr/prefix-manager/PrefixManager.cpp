@@ -55,7 +55,9 @@ PrefixManager::PrefixManager(
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       kvStore_(kvStore),
       preferOpenrOriginatedRoutes_(
-          *config->getConfig().prefer_openr_originated_routes_ref()) {
+          config->getConfig().get_prefer_openr_originated_routes()),
+      enableNewPrefixFormat_(
+          config->getConfig().get_enable_new_prefix_format()) {
   CHECK(kvStore_);
   CHECK(config);
 
@@ -157,13 +159,15 @@ PrefixManager::PrefixManager(
   // register kvstore publication callback
   // ATTN: in case of receiving update from `KvStore` for keys we didn't
   // persist, subscribe update to delete this key.
-  const std::string keyPrefix = Constants::kPrefixDbMarker.toString() + nodeId_;
+  const auto keyPrefix =
+      fmt::format("{}{}:", Constants::kPrefixDbMarker.toString(), nodeId_);
   kvStoreClient_->subscribeKeyFilter(
       // TODO: by default keyMatch option is OR. Change to leverage originatorId
       // for subscription instead of checking nodeId internally
       KvStoreFilters({keyPrefix}, {} /* originatorIds */),
       [this](
-          const std::string& key, std::optional<thrift::Value> val) noexcept {
+          const std::string& prefixStr,
+          std::optional<thrift::Value> val) noexcept {
         // Ignore update if:
         //  1) val is std::nullopt;
         //  2) val has no value field inside `thrift::Value`(e.g. ttl update)
@@ -171,22 +175,32 @@ PrefixManager::PrefixManager(
           return;
         }
 
-        // Ignore update if key is NOT with per-prefix-key format
         // TODO: avoid decoding keys
-        auto prefixKey = PrefixKey::fromStr(key);
-        CHECK(prefixKey.hasValue());
+        folly::CIDRNetwork network;
+        if (enableNewPrefixFormat_) {
+          if (not PrefixKey::isPrefixKeyV2Str(prefixStr)) {
+            // ATTN: local prefixMgr will received previously advertised keys
+            // with old prefix key format. Ignore them.
+            LOG(INFO) << "Skip processing old format of prefix key: "
+                      << prefixStr;
+            return;
+          }
+          auto prefixKeyV2 = PrefixKey::fromStrV2(prefixStr);
+          network = prefixKeyV2->getCIDRNetwork();
+        } else {
+          auto prefixKey = PrefixKey::fromStr(prefixStr);
+          network = prefixKey->getCIDRNetwork();
+        }
 
         const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             *val.value().value_ref(), serializer_);
-        const auto& network = prefixKey->getCIDRNetwork();
         if ((not *prefixDb.deletePrefix_ref()) and
             nodeId_ == *prefixDb.thisNodeName_ref()) {
-          VLOG(2) << "Learning previously announced prefix: " << key;
+          VLOG(2) << "Learning previously announced prefix: " << prefixStr;
 
           // populate advertisedKeys_ collection to make sure we can find
           // key when clear key from `KvStore`
-          advertisedKeys_[network].keys.emplace(key);
-          ;
+          advertisedKeys_[network].keys.emplace(prefixStr);
 
           // Populate pendingState to check keys
           folly::small_vector<folly::CIDRNetwork> changed{network};
@@ -208,12 +222,23 @@ PrefixManager::PrefixManager(
 
     folly::small_vector<folly::CIDRNetwork> changed;
     for (auto const& [prefixStr, _] : result.value()) {
-      auto prefixKey = PrefixKey::fromStr(prefixStr);
-      CHECK(prefixKey.hasValue());
+      // TODO: avoid decoding keys
+      folly::CIDRNetwork network;
+      if (enableNewPrefixFormat_) {
+        if (not PrefixKey::isPrefixKeyV2Str(prefixStr)) {
+          // ATTN: local prefixMgr will received previously advertised keys
+          // with old prefix key format. Ignore them.
+          continue;
+        }
+        auto prefixKeyV2 = PrefixKey::fromStrV2(prefixStr);
+        network = prefixKeyV2->getCIDRNetwork();
+      } else {
+        auto prefixKey = PrefixKey::fromStr(prefixStr);
+        network = prefixKey->getCIDRNetwork();
+      }
 
       // populate advertisedKeys_ collection to make sure we can find
       // key when clear key from `KvStore`
-      auto& network = prefixKey->getCIDRNetwork();
       advertisedKeys_[network].keys.emplace(prefixStr);
 
       // Populate pendingState to check keys
@@ -360,21 +385,23 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
       postPolicyTPrefixEntry = tPrefixEntry;
     }
 
-    const auto prefixKey =
-        PrefixKey(nodeId_, entry.network, toArea).getPrefixKey();
+    const auto prefixKey = PrefixKey(nodeId_, entry.network, toArea);
+    const auto prefixKeyStr = enableNewPrefixFormat_
+        ? prefixKey.getPrefixKeyV2()
+        : prefixKey.getPrefixKey();
     auto prefixDb = createPrefixDb(nodeId_, {*postPolicyTPrefixEntry}, toArea);
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     // advertise key to `KvStore`
     bool changed = kvStoreClient_->persistKey(
-        AreaId{toArea}, prefixKey, prefixDbStr, ttlKeyInKvStore_);
+        AreaId{toArea}, prefixKeyStr, prefixDbStr, ttlKeyInKvStore_);
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
     VLOG_IF(1, changed) << "[Prefix Advertisement] "
                         << "Area: " << toArea << ", "
                         << "Type: " << toString(type) << ", "
                         << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
-    prefixKeys.emplace(prefixKey);
+    prefixKeys.emplace(prefixKeyStr);
   }
   return prefixKeys;
 }

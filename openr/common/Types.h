@@ -403,7 +403,8 @@ class PrefixKey {
 
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStrV2(
-      const std::string& key, const std::string& area);
+      const std::string& key,
+      const std::string& area = thrift::Types_constants::kDefaultArea());
 
   // TODO: deprecate after migration
   static const RE2&
@@ -459,7 +460,7 @@ class PrefixKey {
 
   // return raw prefix key string v2 from kvstore
   inline std::string const&
-  getPrefixKeyStr() const {
+  getPrefixKeyV2() const {
     return prefixKeyStringV2_;
   }
 

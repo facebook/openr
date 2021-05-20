@@ -109,7 +109,7 @@ TEST(TypesTest, fromStrV2Test) {
   EXPECT_EQ(
       fmt::format(
           "{}{}:[{}]", Constants::kPrefixDbMarker.toString(), nodeName, prefix),
-      maybePrefixKey.value().getPrefixKeyStr());
+      maybePrefixKey.value().getPrefixKeyV2());
 
   EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadFormat).hasError());
   EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadType).hasError());

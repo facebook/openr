@@ -352,10 +352,16 @@ class PrefixManager final : public OpenrEventBase {
     }
   };
 
-  /* prefer local originated prefix over BGP originated prefix
+  /*
+   * prefer local originated prefix over BGP originated prefix
    * Turned on/off via thrift::OpenrConfig::prefer_openr_originated_config
    */
   bool preferOpenrOriginatedRoutes_{false};
+
+  /*
+   * TODO: temp flag to indicate usage of new prefix key format
+   */
+  bool enableNewPrefixFormat_{false};
 
   /*
    * prefixes to be originated from prefix-manager
