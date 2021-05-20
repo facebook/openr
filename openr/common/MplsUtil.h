@@ -10,12 +10,12 @@
 namespace openr {
 
 /**
- * Validates that label is 20 bit only and other bits are not set
+ * Validates that non-zero label is 20 bit only and other bits are not set
  * XXX: We can do more validation - e.g. reserved range, global vs local range
  */
 inline bool
 isMplsLabelValid(int32_t mplsLabel) {
-  return (mplsLabel & 0xfff00000) == 0;
+  return (mplsLabel & 0xfff00000) == 0 and mplsLabel != 0;
 }
 
 } // namespace openr

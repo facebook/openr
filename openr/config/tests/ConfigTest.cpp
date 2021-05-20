@@ -78,9 +78,10 @@ getSegmentRoutingConfig() {
   // prepend labels
   lrp4.start_label_ref() = openr::Constants::kSrV4StaticMplsRouteRange.first;
   lrp4.end_label_ref() = openr::Constants::kSrV4StaticMplsRouteRange.second;
-
   lrp6.start_label_ref() = openr::Constants::kSrV6StaticMplsRouteRange.first;
   lrp6.end_label_ref() = openr::Constants::kSrV6StaticMplsRouteRange.second;
+  prepend_labels.v4_ref() = lrp4;
+  prepend_labels.v6_ref() = lrp6;
 
   // node segment label range
   openr::thrift::LabelRange node_segment_label_range;

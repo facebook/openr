@@ -800,23 +800,26 @@ SpfSolver::selectBestPathsKsp2(
       // if self node is one of it's ecmp, it means this prefix is anycast and
       // we need to add prepend label which is static MPLS route the destination
       // prepared.
+      std::vector<std::string> invalidNodes;
       auto nextNodeName = myNodeName;
       for (auto& link : path) {
         cost += link->getMetricFromNode(nextNodeName);
         nextNodeName = link->getOtherNodeName(nextNodeName);
-        labels.push_front(*linkState.getAdjacencyDatabases()
-                               .at(nextNodeName)
-                               .nodeLabel_ref());
+        auto& adjDb = linkState.getAdjacencyDatabases().at(nextNodeName);
+        labels.push_front(adjDb.get_nodeLabel());
+        if (not isMplsLabelValid(adjDb.get_nodeLabel())) {
+          invalidNodes.emplace_back(adjDb.get_thisNodeName());
+        }
       }
-      labels.pop_back(); // Remove first node's label to respect PHP
-      int labelZeroCount = std::count(labels.begin(), labels.end(), 0);
-      if (labelZeroCount != 0) {
-        LOG(WARNING) << "Ignore the path for <"
-                     << folly::IPAddress::networkToString(prefix)
-                     << "> since it has " << labelZeroCount
-                     << " nodes with nodeLabel-0";
+      // Ignore paths including nodes with invalid node labels.
+      if (invalidNodes.size() > 0) {
+        LOG(WARNING) << fmt::format(
+            "Ignore path for {} through [{}] because of invalid node label.",
+            folly::IPAddress::networkToString(prefix),
+            folly::join(", ", invalidNodes));
         continue;
       }
+      labels.pop_back(); // Remove first node's label to respect PHP
 
       // Add prepend label of last node in the path.
       auto lastNodeInPath = nextNodeName;

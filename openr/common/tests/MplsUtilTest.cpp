@@ -16,7 +16,6 @@ using namespace std;
 using namespace openr;
 
 TEST(UtilTest, MplsUtilTest) {
-  EXPECT_TRUE(isMplsLabelValid(0));
   EXPECT_TRUE(isMplsLabelValid(1132));
   EXPECT_TRUE(isMplsLabelValid((1 << 20) - 1));
   EXPECT_FALSE(isMplsLabelValid(1 << 20));
