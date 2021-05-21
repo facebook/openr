@@ -493,6 +493,21 @@ Config::populateInternalDb() {
     //     "enable_bgp_peering = true, but bgp_translation_config is empty");
   }
 
+  if (isBgpPeeringEnabled() and config_.bgp_config_ref()) {
+    // Identify if BGP Add Path is enabled for local peering or not
+    for (const auto& peer : *config_.bgp_config_ref()->peers_ref()) {
+      if (folly::IPAddress(peer.peer_addr_ref().value()).isLoopback() and
+          peer.add_path_ref() and
+          *peer.add_path_ref() == thrift::AddPath::RECEIVE and
+          not isSegmentRoutingEnabled()) {
+        // TODO
+        // Additionally check later if prepend label range is also convered.
+        throw std::invalid_argument(
+            "segment routing should be congfigured when BGP add_path is configured");
+      }
+    }
+  }
+
   //
   // BGP Translation Config
   //

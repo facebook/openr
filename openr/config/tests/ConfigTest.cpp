@@ -8,6 +8,7 @@
 #include <openr/common/Constants.h>
 #include <thread>
 #include <utility>
+#include "openr/if/gen-cpp2/BgpConfig_types.h"
 #include "openr/if/gen-cpp2/OpenrConfig_types.h"
 
 #include <folly/FileUtil.h>
@@ -806,6 +807,22 @@ TEST(ConfigTest, SegmentRoutingConfig) {
   EXPECT_EQ(
       *config.getAdjSegmentLabels().sr_adj_label_type_ref(),
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX);
+}
+
+TEST(ConfigTest, AddPathConfig) {
+  auto tConfig = getBasicOpenrConfig();
+  thrift::BgpConfig bgpConfig;
+  thrift::BgpPeer bgpPeer;
+  bgpPeer.add_path_ref() = thrift::AddPath::RECEIVE;
+  bgpPeer.peer_addr_ref() = "::1";
+  bgpConfig.peers_ref() = {bgpPeer};
+  tConfig.enable_bgp_peering_ref() = true;
+  tConfig.enable_segment_routing_ref() = false;
+  tConfig.bgp_config_ref() = bgpConfig;
+  EXPECT_THROW((Config(tConfig)), std::invalid_argument);
+
+  tConfig.enable_segment_routing_ref() = true;
+  EXPECT_NO_THROW((Config(tConfig)));
 }
 
 } // namespace openr
