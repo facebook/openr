@@ -11,6 +11,7 @@ GETDEPS="$(dirname "$0")/fbcode_builder/getdeps.py"
 INSTALL_PREFIX="/opt/facebook"
 PYTHON3=$(command -v python3)
 PIP3=$(command -v pip3)
+EXTRA_CMAKE_DEFINES='{"CMAKE_POSITION_INDEPENDENT_CODE": "ON"}'
 
 errorCheck() {
   return_code=$?

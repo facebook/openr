@@ -10,7 +10,8 @@ source "$(dirname "$0")/common.sh"
 # "$PYTHON3" "$GETDEPS" --allow-system-packages install-system-deps --recursive openr
 # errorCheck "Failed to install-system-deps for openr"
 
-"$PYTHON3" "$GETDEPS" --allow-system-packages build --no-tests --install-prefix "$INSTALL_PREFIX" openr
+"$PYTHON3" "$GETDEPS" --allow-system-packages build --no-tests --install-prefix "$INSTALL_PREFIX" \
+--extra-cmake-defines "$EXTRA_CMAKE_DEFINES" openr
 errorCheck "Failed to build openr"
 
 # TODO: Maybe fix src-dir to be absolute reference to dirname $0's parent

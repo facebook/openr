@@ -1,5 +1,6 @@
 FROM ubuntu:20.04
 
+
 # Install tools needed for development
 RUN apt update && \
     apt upgrade --yes && \
@@ -15,10 +16,18 @@ COPY example_openr.conf /etc/openr.conf
 # Build OpenR + Dependencies via cmake
 RUN cd /src && build/build_openr.sh && chmod 644 /etc/openr.conf
 RUN mkdir /opt/bin && cp /src/build/docker_openr_helper.sh /opt/bin
+
 # Install `breeze` OpenR CLI
+RUN apt install g++-10 --yes  # We need g++-10 or higher for coroutines which are used in folly::coro
+# TODO Move these files into build/
+COPY cython_compile.py /src/build/cython_compile.py
+RUN git clone https://github.com/cython/cython
+COPY setup.py /src/openr/py/setup.py
 RUN cd /src && build/build_breeze.sh
+RUN cp -r /src/build/lib.linux-x86_64-3.8 /breeze-build
 
 # Cleanup all we can to keep container as lean as possible
+# TODO: We can use Dockerfile stages instead
 RUN apt remove --yes build-essential git libssl-dev m4 && \
     apt autoremove --yes && \
     rm -rf /src /tmp/* /var/lib/apt/lists/*
