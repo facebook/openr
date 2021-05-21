@@ -85,6 +85,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   monitorConf.enable_event_log_submission_ref() = false;
   tConfig.monitor_config_ref() = std::move(monitorConf);
 
+  // persistent config-store config
+  tConfig.persistent_config_store_path_ref() =
+      folly::sformat("/tmp/{}_openr_config_store.bin", nodeId_);
+
   config_ = std::make_shared<Config>(tConfig);
 
   // create MockNetlinkProtocolSocket
@@ -95,8 +99,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   nlEventsInjector_ = std::make_shared<NetlinkEventsInjector>(nlSock_.get());
 
   // create and start config-store thread
-  configStore_ = std::make_unique<PersistentStore>(
-      folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_));
+  configStore_ = std::make_unique<PersistentStore>(config_);
   std::thread configStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " ConfigStore running.";
     configStore_->run();
@@ -113,9 +116,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       peerUpdatesQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
-      config_,
-      std::nullopt, /* ip-tos */
-      Constants::kHighWaterMark /* zmq hwm */);
+      config_);
   std::thread kvStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " KvStore running.";
     kvStore_->run();
@@ -162,7 +163,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create spark
   //
   spark_ = std::make_unique<Spark>(
-      std::nullopt, // ip-tos
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       KvStoreCmdPort{0},

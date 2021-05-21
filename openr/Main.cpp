@@ -249,14 +249,6 @@ main(int argc, char** argv) {
       (Constants::kSrGlobalRange.first > Constants::kSrLocalRange.second))
       << "Overlapping global/local segment routing label space.";
 
-  // Prepare IP-TOS value from flag and do sanity checks
-  std::optional<int> maybeIpTos{0};
-  if (FLAGS_ip_tos != 0) {
-    CHECK_LE(0, FLAGS_ip_tos) << "ip_tos must be greater than 0";
-    CHECK_GE(256, FLAGS_ip_tos) << "ip_tos must be less than 256";
-    maybeIpTos = FLAGS_ip_tos;
-  }
-
   // Reference to spark config
   const auto& sparkConf = config->getSparkConfig();
 
@@ -382,7 +374,7 @@ main(int argc, char** argv) {
       orderedEvbs,
       watchdog,
       "config_store",
-      std::make_unique<PersistentStore>(FLAGS_config_store_filepath));
+      std::make_unique<PersistentStore>(config));
 
   // Start monitor Module
   auto monitor = startEventBase(
@@ -411,9 +403,7 @@ main(int argc, char** argv) {
               "tcp://{}:{}",
               *config->getConfig().listen_addr_ref(),
               FLAGS_kvstore_rep_port)},
-          config,
-          maybeIpTos,
-          FLAGS_kvstore_zmq_hwm));
+          config));
 
   auto prefixManager = startEventBase(
       allThreads,
@@ -454,7 +444,6 @@ main(int argc, char** argv) {
       watchdog,
       "spark",
       std::make_unique<Spark>(
-          maybeIpTos,
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},

@@ -195,9 +195,12 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // spin up netlinkEventsInjector to inject LINK/ADDR events
     nlEventsInjector = std::make_shared<NetlinkEventsInjector>(nlSock.get());
 
+    // create config
+    config = std::make_shared<Config>(
+        getTestOpenrConfig(areas, flapInitalBackoff, flapMaxBackoff));
+
     // spin up a config store
-    configStore =
-        std::make_unique<PersistentStore>(kConfigStorePath, true /* dryrun */);
+    configStore = std::make_unique<PersistentStore>(config, true /* dryrun */);
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";
@@ -205,10 +208,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
       LOG(INFO) << "ConfigStore thread finishing";
     });
     configStore->waitUntilRunning();
-
-    // create config
-    config = std::make_shared<Config>(
-        getTestOpenrConfig(areas, flapInitalBackoff, flapMaxBackoff));
 
     // spin up a kvstore
     createKvStore(config);
@@ -316,6 +315,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     tConfig.enable_new_gr_behavior_ref() = true;
     tConfig.assume_drained_ref() = false;
+    tConfig.persistent_config_store_path_ref() = kConfigStorePath;
+
     return tConfig;
   }
 

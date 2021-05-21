@@ -24,6 +24,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
+#include <openr/config/Config.h>
 
 namespace {
 constexpr folly::StringPiece kTlvFormatMarker{"TlvFormatMarker"};
@@ -53,8 +54,8 @@ struct PersistentObject {
  */
 class PersistentStore : public OpenrEventBase {
  public:
-  PersistentStore(
-      const std::string& storageFilePath,
+  explicit PersistentStore(
+      std::shared_ptr<const Config> config,
       bool dryrun = false,
       bool periodicallySaveToDisk = true);
 

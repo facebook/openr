@@ -690,7 +690,8 @@ struct OpenrConfig {
 
   /**
    * Mark control plane traffic with specified IP-TOS value.
-   * Valid range (0, 256)
+   * Valid range (0, 256) for making.
+   * Set this to 0 if you don't want to mark packets.
    */
   30: optional i32 ip_tos;
 

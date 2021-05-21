@@ -222,7 +222,6 @@ Spark::SparkNeighbor::SparkNeighbor(
 }
 
 Spark::Spark(
-    std::optional<int> maybeIpTos,
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<NeighborEvent>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
@@ -296,7 +295,7 @@ Spark::Spark(
   });
 
   // Initialize UDP socket for neighbor discovery
-  prepareSocket(maybeIpTos);
+  prepareSocket();
 
   // Initialize some stat keys
   fb303::fbData->addStatExportType(
@@ -341,7 +340,7 @@ Spark::stop() {
 }
 
 void
-Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
+Spark::prepareSocket() noexcept {
   int fd = ioProvider_->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   mcastFd_ = fd;
   LOG(INFO) << "Created UDP socket for neighbor discovery. fd: " << mcastFd_;
@@ -387,8 +386,8 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   }
 
   // Set ip-tos
-  if (maybeIpTos) {
-    const int ipTos = *maybeIpTos;
+  if (config_->getConfig().ip_tos_ref().has_value()) {
+    int ipTos = config_->getConfig().ip_tos_ref().value();
     if (ioProvider_->setsockopt(
             fd, IPPROTO_IPV6, IPV6_TCLASS, &ipTos, sizeof(int)) != 0) {
       LOG(FATAL) << "Failed setting ip-tos value on socket. Error: "

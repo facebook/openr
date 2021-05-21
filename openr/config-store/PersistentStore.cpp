@@ -13,6 +13,7 @@
 #include <folly/io/IOBuf.h>
 
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 
 using std::exception;
 
@@ -25,10 +26,11 @@ static const long kDbFlushRatio = 10000;
 namespace openr {
 
 PersistentStore::PersistentStore(
-    const std::string& storageFilePath,
+    std::shared_ptr<const Config> config,
     bool dryrun,
     bool periodicallySaveToDisk)
-    : storageFilePath_(storageFilePath), dryrun_(dryrun) {
+    : storageFilePath_(config->getConfig().get_persistent_config_store_path()),
+      dryrun_(dryrun) {
   if (periodicallySaveToDisk) {
     // Create timer and backoff mechanism only if backoff is requested
     saveDbTimerBackoff_ =

@@ -149,8 +149,6 @@ struct KvStoreParams {
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
       int zmqhwm,
-      // IP QoS
-      std::optional<int> maybeIpTos,
       // how often to request full db sync from peers
       std::chrono::seconds dbsyncInterval,
       std::optional<KvStoreFilters> filter,
@@ -168,7 +166,6 @@ struct KvStoreParams {
         logSampleQueue(logSampleQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
-        maybeIpTos(std::move(maybeIpTos)),
         dbSyncInterval(dbsyncInterval),
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
@@ -550,11 +547,7 @@ class KvStore final : public OpenrEventBase {
       // the url to receive command from peer instances
       KvStoreGlobalCmdUrl globalCmdUrl,
       // openr config
-      std::shared_ptr<const Config> config,
-      // IP TOS value to set on sockets using TCP
-      std::optional<int> ipTos,
-      // ZMQ high water mark
-      int zmqHwm = Constants::kHighWaterMark);
+      std::shared_ptr<const Config> config);
 
   ~KvStore() override = default;
 

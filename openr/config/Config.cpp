@@ -187,6 +187,14 @@ Config::populateInternalDb() {
         "prefix_forwarding_type must be set to SR_MPLS for KSP2_ED_ECMP");
   }
 
+  // IP-TOS checking
+  if (const auto& ipTos = config_.ip_tos_ref()) {
+    if (*ipTos < 0 or *ipTos >= 256) {
+      throw std::out_of_range(
+          "ip_tos must be greater or equal to 0 and less than 256");
+    }
+  }
+
   //
   // Kvstore
   //

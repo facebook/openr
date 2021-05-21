@@ -65,6 +65,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.kvstore_config_ref()->enable_flood_optimization_ref() = true;
     tConfig.kvstore_config_ref()->is_flood_root_ref() = true;
+
     // link monitor config
     auto& lmConf = *tConfig.link_monitor_config_ref();
     lmConf.linkflap_initial_backoff_ms_ref() = 1;
@@ -74,14 +75,18 @@ class OpenrCtrlFixture : public ::testing::Test {
     lmConf.enable_perf_measurement_ref() = false;
     tConfig.assume_drained_ref() = false;
 
+    // persistent config-store config
+    std::string const configStoreFile = "/tmp/openr-ctrl-handler-test.bin";
+    tConfig.persistent_config_store_path_ref() = configStoreFile;
+
+    // ip_tos config
+    tConfig.ip_tos_ref() = 192;
+
     config = std::make_shared<Config>(tConfig);
 
-    // Create PersistentStore
-    std::string const configStoreFile = "/tmp/openr-ctrl-handler-test.bin";
-    // start fresh
+    // Create the PersistentStore and start fresh
     std::remove(configStoreFile.data());
-    persistentStore =
-        std::make_unique<PersistentStore>(configStoreFile, true /* dryrun */);
+    persistentStore = std::make_unique<PersistentStore>(config);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module

@@ -65,6 +65,7 @@ getBasicOpenrConfig(
   config.v4_over_v6_nexthop_ref() = enableV4OverV6Nexthop;
   config.enable_segment_routing_ref() = enableSegmentRouting;
   config.dryrun_ref() = dryrun;
+  config.ip_tos_ref() = 192;
 
   config.kvstore_config_ref() = kvstoreConfig;
   config.link_monitor_config_ref() = linkMonitorConfig;

@@ -55,6 +55,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
     pfxAllocationConf.prefix_allocation_mode_ref() = mode;
 
     tConfig.prefix_allocation_config_ref() = pfxAllocationConf;
+    tConfig.persistent_config_store_path_ref() =
+        folly::sformat("/tmp/openr.{}", tid);
     config_ = std::make_shared<Config>(tConfig);
 
     // Start KvStore and attach a client to it
@@ -66,9 +68,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
     });
 
     // Start persistent config store
-    tempFileName_ = folly::sformat("/tmp/openr.{}", tid);
     configStore_ =
-        std::make_unique<PersistentStore>(tempFileName_, true /* dryrun */);
+        std::make_unique<PersistentStore>(config_, true /* dryrun */);
     threads_.emplace_back([&]() noexcept { configStore_->run(); });
     configStore_->waitUntilRunning();
 
@@ -401,18 +402,26 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // get a unique temp file name
       auto tempFileName = folly::sformat("/tmp/openr.{}.{}", tid, i);
+      auto tConfig1 = getBasicOpenrConfig();
+      tConfig1.persistent_config_store_path_ref() = tempFileName;
+      auto config1 = std::make_shared<Config>(tConfig1);
       tempFileNames_.emplace_back(tempFileName);
 
       // spin up config store server for this allocator
-      auto configStore = std::make_unique<PersistentStore>(tempFileName);
+      auto configStore = std::make_unique<PersistentStore>(config1);
       threads.emplace_back([&configStore]() noexcept { configStore->run(); });
       configStore->waitUntilRunning();
 
       // Temporary config store for PrefixManager so that they are not being
       // used
       tempFileName = folly::sformat("/tmp/openr.{}.{}.{}", tid, round, i);
+      auto tConfig2 = getBasicOpenrConfig();
+      tConfig.persistent_config_store_path_ref() = tempFileName;
+      auto config2 = std::make_shared<Config>(tConfig2);
       tempFileNames_.emplace_back(tempFileName);
-      auto tempConfigStore = std::make_unique<PersistentStore>(tempFileName);
+
+      // spin up config store server for this allocator
+      auto tempConfigStore = std::make_unique<PersistentStore>(config2);
       threads.emplace_back(
           [&tempConfigStore]() noexcept { tempConfigStore->run(); });
       tempConfigStore->waitUntilRunning();

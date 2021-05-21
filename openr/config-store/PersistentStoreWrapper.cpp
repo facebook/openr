@@ -5,14 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/config-store/PersistentStoreWrapper.h"
+#include <openr/config-store/PersistentStoreWrapper.h>
+#include <openr/config/tests/Utils.h>
 
 namespace openr {
 
 PersistentStoreWrapper::PersistentStoreWrapper(const unsigned long tid)
-    : filePath(folly::sformat("/tmp/aq_persistent_store_test_{}", tid)) {
+    : filePath(folly::sformat("/tmp/openr_persistent_store_test_{}", tid)) {
   VLOG(1) << "PersistentStoreWrapper: Creating PersistentStore.";
-  store_ = std::make_unique<PersistentStore>(filePath);
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.persistent_config_store_path_ref() = filePath;
+  auto config = std::make_shared<Config>(tConfig);
+  store_ = std::make_unique<PersistentStore>(config);
 }
 
 void

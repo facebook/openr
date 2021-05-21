@@ -140,9 +140,7 @@ KvStore::KvStore(
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
-    std::shared_ptr<const Config> config,
-    std::optional<int> maybeIpTos,
-    int zmqHwm)
+    std::shared_ptr<const Config> config)
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
@@ -154,8 +152,7 @@ KvStore::KvStore(
                   fmt::format("{}::TCP::CMD", config->getNodeName())},
               folly::none,
               fbzmq::NonblockingFlag{true}),
-          zmqHwm,
-          maybeIpTos,
+          config->getKvStoreConfig().get_zmq_hwm(),
           std::chrono::seconds(
               *config->getKvStoreConfig().sync_interval_s_ref()),
           getKvStoreFilters(config),
@@ -174,6 +171,14 @@ KvStore::KvStore(
     counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
+
+  // Get optional ip_tos from the config
+  std::optional<int> maybeIpTos = std::nullopt;
+  auto ipTosConfig = config->getConfig().ip_tos_ref();
+  if (ipTosConfig.has_value()) {
+    maybeIpTos = ipTosConfig.value();
+  }
+  kvParams_.maybeIpTos = maybeIpTos;
 
   // [TO BE DEPRECATED]
   if (kvParams_.enableFloodOptimization) {

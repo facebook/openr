@@ -22,7 +22,6 @@ SparkWrapper::SparkWrapper(
   // here).
   spark_ = isRateLimitEnabled
       ? std::make_shared<Spark>(
-            std::nullopt /* ip-tos */,
             interfaceUpdatesQueue_.getReader(),
             neighborUpdatesQueue_,
             KvStoreCmdPort{10002},
@@ -32,7 +31,6 @@ SparkWrapper::SparkWrapper(
             version,
             std::nullopt) // no Spark receive rate-limit, for testing
       : std::make_shared<Spark>(
-            std::nullopt /* ip-tos */,
             interfaceUpdatesQueue_.getReader(),
             neighborUpdatesQueue_,
             KvStoreCmdPort{10002},

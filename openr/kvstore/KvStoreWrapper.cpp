@@ -12,13 +12,6 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
-
-namespace {
-
-const int kSocketHwm = 99999;
-
-} // anonymous namespace
-
 namespace openr {
 
 KvStoreWrapper::KvStoreWrapper(
@@ -37,9 +30,7 @@ KvStoreWrapper::KvStoreWrapper(
                                    : dummyPeerUpdatesQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{globalCmdUrl},
-      config_,
-      std::nullopt /* ip-tos */,
-      Constants::kHighWaterMark);
+      config_);
 
   // we need to spin up a thrift server for KvStore clients to connect to. See
   // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update

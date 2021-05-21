@@ -77,7 +77,6 @@ class Spark final : public OpenrEventBase {
 
  public:
   Spark(
-      std::optional<int> ipTos,
       // consumer Queue
       messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
       // producer Queue
@@ -144,7 +143,7 @@ class Spark final : public OpenrEventBase {
   Spark& operator=(Spark const&) = delete;
 
   // Initializes UDP socket for multicast neighbor discovery
-  void prepareSocket(std::optional<int> maybeIpTos) noexcept;
+  void prepareSocket() noexcept;
 
   // check neighbor's hello packet; return true if packet is valid and
   // passed the following checks:
