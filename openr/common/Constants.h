@@ -56,7 +56,7 @@ class Constants {
 
   // Segment Routing namespace constants. Local and Global ranges are exclusive
   static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrGlobalRange{101, 49999};
+      kSrGlobalRange{101, 999};
   static constexpr std::pair<int32_t /* low */, int32_t /* high */>
       kSrLocalRange{50000, 59999};
   static constexpr std::pair<int32_t /* low */, int32_t /* high */>
