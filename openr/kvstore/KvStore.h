@@ -426,6 +426,11 @@ class KvStoreDb : public DualNode {
         const std::string& nodeName,
         const thrift::PeerSpec& ps,
         const ExponentialBackoff<std::chrono::milliseconds>& expBackoff);
+
+    // util function to create thrift client
+    bool getOrCreateThriftClient(
+        OpenrEventBase* evb, std::optional<int> maybeIpTos);
+
     // node name
     const std::string nodeName;
 

@@ -1081,6 +1081,13 @@ KvStoreDb::getNextState(
   return nextState.value();
 }
 
+//
+// KvStorePeer is the struct representing peer information including:
+//  - thrift client;
+//  - peerSpec;
+//  - backoff;
+//  - etc.
+//
 KvStoreDb::KvStorePeer::KvStorePeer(
     const std::string& nodeName,
     const thrift::PeerSpec& ps,
@@ -1091,6 +1098,55 @@ KvStoreDb::KvStorePeer::KvStorePeer(
   CHECK(not this->peerSpec.peerAddr_ref()->empty());
   CHECK(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
+}
+
+bool
+KvStoreDb::KvStorePeer::getOrCreateThriftClient(
+    OpenrEventBase* evb, std::optional<int> maybeIpTos) {
+  // use the existing thrift client if any
+  if (client) {
+    return true;
+  }
+
+  try {
+    LOG(INFO) << "[Thrift Sync] Creating thrift client with addr: "
+              << peerSpec.get_peerAddr()
+              << ", port: " << peerSpec.get_ctrlPort()
+              << ", peerName: " << nodeName;
+
+    // TODO: migrate to secure thrift connection
+    auto thriftClient = getOpenrCtrlPlainTextClient(
+        *(evb->getEvb()),
+        folly::IPAddress(peerSpec.get_peerAddr()), /* v6LinkLocal */
+        peerSpec.get_ctrlPort(), /* port to establish TCP connection */
+        Constants::kServiceConnTimeout, /* client connection timeout */
+        Constants::kServiceProcTimeout, /* request processing timeout */
+        folly::AsyncSocket::anyAddress(), /* bindAddress */
+        maybeIpTos /* IP_TOS value for control plane */);
+    client = std::move(thriftClient);
+
+    // schedule periodic keepAlive time with 20% jitter variance
+    auto period = addJitter<std::chrono::seconds>(
+        Constants::kThriftClientKeepAliveInterval, 20.0);
+    keepAliveTimer->scheduleTimeout(period);
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "[Thrift Sync] Failed creating thrift client with addr: "
+               << peerSpec.get_peerAddr()
+               << ", port: " << peerSpec.get_ctrlPort()
+               << ", peerName: " << nodeName
+               << ". Exception: " << folly::exceptionStr(e);
+
+    // record telemetry for thrift calls
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.num_client_connection_failure", 1, fb303::COUNT);
+
+    // clean up state for next round of scanning
+    keepAliveTimer->cancelTimeout();
+    client.reset();
+    expBackoff.reportError(); // apply exponential backoff
+    return false;
+  }
+  return true;
 }
 
 //
@@ -1197,6 +1253,10 @@ KvStoreDb::KvStoreDb(
       "kvstore.thrift.num_finalized_sync_success", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_finalized_sync_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_dual_msg_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_dual_msg_failure", fb303::COUNT);
 
   fb303::fbData->addStatExportType(
       "kvstore.thrift.full_sync_duration_ms", fb303::AVG);
@@ -1204,6 +1264,8 @@ KvStoreDb::KvStoreDb(
       "kvstore.thrift.flood_pub_duration_ms", fb303::AVG);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.finalized_sync_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.dual_msg_duration_ms", fb303::AVG);
 
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_missing_keys", fb303::SUM);
@@ -1464,41 +1526,7 @@ KvStoreDb::requestThriftPeerSync() {
     }
 
     // create thrift client and do backoff if can't go through
-    try {
-      LOG(INFO) << "[Thrift Sync] Creating kvstore thrift client with addr: "
-                << *peerSpec.peerAddr_ref()
-                << ", port: " << *peerSpec.ctrlPort_ref()
-                << ", peerName: " << peerName;
-
-      // TODO: migrate to secure thrift connection
-      auto client = getOpenrCtrlPlainTextClient(
-          *(evb_->getEvb()),
-          folly::IPAddress(*peerSpec.peerAddr_ref()), /* v6LinkLocal%iface
-                                                       */
-          *peerSpec.ctrlPort_ref(), /* port to establish TCP connection */
-          Constants::kServiceConnTimeout, /* client connection timeout */
-          Constants::kServiceProcTimeout, /* request processing timeout */
-          folly::AsyncSocket::anyAddress(), /* bindAddress */
-          kvParams_.maybeIpTos /* IP_TOS value for control plane */);
-      thriftPeer.client = std::move(client);
-
-      // schedule periodic keepAlive time with 20% jitter variance
-      auto period = addJitter<std::chrono::seconds>(
-          Constants::kThriftClientKeepAliveInterval, 20.0);
-      thriftPeer.keepAliveTimer->scheduleTimeout(period);
-    } catch (std::exception const& e) {
-      LOG(ERROR) << "[Thrift Sync] Failed to connect to node: " << peerName
-                 << "  with addr: " << *peerSpec.peerAddr_ref()
-                 << ". Exception: " << folly::exceptionStr(e);
-
-      // record telemetry for thrift calls
-      fb303::fbData->addStatValue(
-          "kvstore.thrift.num_client_connection_failure", 1, fb303::COUNT);
-
-      // clean up state for next round of scanning
-      thriftPeer.keepAliveTimer->cancelTimeout();
-      thriftPeer.client.reset();
-      thriftPeer.expBackoff.reportError(); // apply exponential backoff
+    if (not thriftPeer.getOrCreateThriftClient(evb_, kvParams_.maybeIpTos)) {
       timeout =
           std::min(timeout, thriftPeer.expBackoff.getTimeRemainingUntilRetry());
       continue;
@@ -1763,6 +1791,10 @@ KvStoreDb::addThriftPeers(
           });
       thriftPeers_.emplace(name, std::move(peer));
     }
+
+    // create thrift client and do backoff if can't go through
+    auto& thriftPeer = thriftPeers_.at(peerName);
+    thriftPeer.getOrCreateThriftClient(evb_, kvParams_.maybeIpTos);
   } // for loop
 
   // kick off thriftSyncTimer_ if not yet to asyc process full-sync
@@ -2268,11 +2300,52 @@ KvStoreDb::sendTopoSetCmd(
   request.floodTopoSetParams_ref() = setParams;
   request.area_ref() = area_;
 
-  const auto ret = sendMessageToPeer(dstCmdSocketId, request);
-  if (ret.hasError()) {
-    LOG(ERROR) << rootId << ": failed to " << (setChild ? "set" : "unset")
-               << " spt-parent " << peerName << ", error: " << ret.error();
-    collectSendFailureStats(ret.error(), dstCmdSocketId);
+  if (kvParams_.enableThriftDualMsg) {
+    auto peerIt = thriftPeers_.find(peerName);
+    if (peerIt == thriftPeers_.end() or (not peerIt->second.client)) {
+      LOG(ERROR) << "Invalid dual peer: " << peerName
+                 << " to set topo cmd. Skip it.";
+      return;
+    }
+    auto& client = peerIt->second.client;
+    auto startTime = std::chrono::steady_clock::now();
+    auto sf = client->semifuture_updateFloodTopologyChild(setParams, area_);
+    std::move(sf)
+        .via(evb_->getEvb())
+        .thenValue([startTime](folly::Unit&&) {
+          auto endTime = std::chrono::steady_clock::now();
+          auto timeDelta =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endTime - startTime);
+
+          // record telemetry for thrift calls
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.num_dual_msg_success", 1, fb303::COUNT);
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.dual_msg_duration_ms",
+              timeDelta.count(),
+              fb303::AVG);
+        })
+        .thenError(
+            [this, peerName, startTime](const folly::exception_wrapper& ew) {
+              // state transition to IDLE
+              auto endTime = std::chrono::steady_clock::now();
+              auto timeDelta =
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      endTime - startTime);
+              processThriftFailure(peerName, ew.what(), timeDelta);
+
+              // record telemetry for thrift calls
+              fb303::fbData->addStatValue(
+                  "kvstore.thrift.num_dual_msg_failure", 1, fb303::COUNT);
+            });
+  } else {
+    const auto ret = sendMessageToPeer(dstCmdSocketId, request);
+    if (ret.hasError()) {
+      LOG(ERROR) << rootId << ": failed to " << (setChild ? "set" : "unset")
+                 << " spt-parent " << peerName << ", error: " << ret.error();
+      collectSendFailureStats(ret.error(), dstCmdSocketId);
+    }
   }
 }
 
@@ -2988,27 +3061,71 @@ KvStoreDb::logKvEvent(const std::string& event, const std::string& key) {
 bool
 KvStoreDb::sendDualMessages(
     const std::string& neighbor, const thrift::DualMessages& msgs) noexcept {
-  if (peers_.count(neighbor) == 0) {
-    LOG(ERROR) << "fail to send dual messages to " << neighbor << ", not exist";
-    return false;
-  }
-  const auto& neighborCmdSocketId = peers_.at(neighbor).second;
-  thrift::KvStoreRequest dualRequest;
-  dualRequest.cmd_ref() = thrift::Command::DUAL;
-  dualRequest.dualMessages_ref() = msgs;
-  dualRequest.area_ref() = area_;
-  const auto ret = sendMessageToPeer(neighborCmdSocketId, dualRequest);
-  // NOTE: we rely on zmq (on top of tcp) to reliably deliver message,
-  // if we switch to other protocols, we need to make sure its reliability.
-  // Due to zmq async fashion, in case of failure (means the other side
-  // is going down), it's ok to lose this pending message since later on,
-  // neighor will inform us it's gone. and we will delete it from our dual
-  // peers.
-  if (ret.hasError()) {
-    LOG(ERROR) << "failed to send dual messages to " << neighbor << " using id "
-               << neighborCmdSocketId << ", error: " << ret.error();
-    collectSendFailureStats(ret.error(), neighborCmdSocketId);
-    return false;
+  if (kvParams_.enableThriftDualMsg) {
+    auto peerIt = thriftPeers_.find(neighbor);
+    if (peerIt == thriftPeers_.end() or (not peerIt->second.client)) {
+      LOG(ERROR) << "Invalid dual peer: " << neighbor
+                 << " to set topo cmd. Skip it.";
+      return false;
+    }
+
+    auto& client = peerIt->second.client;
+    auto startTime = std::chrono::steady_clock::now();
+    auto sf = client->semifuture_processKvStoreDualMessage(msgs, area_);
+    std::move(sf)
+        .via(evb_->getEvb())
+        .thenValue([startTime](folly::Unit&&) {
+          auto endTime = std::chrono::steady_clock::now();
+          auto timeDelta =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endTime - startTime);
+
+          // record telemetry for thrift calls
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.num_dual_msg_success", 1, fb303::COUNT);
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.dual_msg_duration_ms",
+              timeDelta.count(),
+              fb303::AVG);
+        })
+        .thenError(
+            [this, neighbor, startTime](const folly::exception_wrapper& ew) {
+              // state transition to IDLE
+              auto endTime = std::chrono::steady_clock::now();
+              auto timeDelta =
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      endTime - startTime);
+              processThriftFailure(neighbor, ew.what(), timeDelta);
+
+              // record telemetry for thrift calls
+              fb303::fbData->addStatValue(
+                  "kvstore.thrift.num_dual_msg_failure", 1, fb303::COUNT);
+            });
+  } else {
+    if (peers_.count(neighbor) == 0) {
+      LOG(ERROR) << "fail to send dual messages to " << neighbor
+                 << ", not exist";
+      return false;
+    }
+    const auto& neighborCmdSocketId = peers_.at(neighbor).second;
+    thrift::KvStoreRequest dualRequest;
+    dualRequest.cmd_ref() = thrift::Command::DUAL;
+    dualRequest.dualMessages_ref() = msgs;
+    dualRequest.area_ref() = area_;
+    const auto ret = sendMessageToPeer(neighborCmdSocketId, dualRequest);
+    // NOTE: we rely on zmq (on top of tcp) to reliably deliver message,
+    // if we switch to other protocols, we need to make sure its reliability.
+    // Due to zmq async fashion, in case of failure (means the other side
+    // is going down), it's ok to lose this pending message since later on,
+    // neighor will inform us it's gone. and we will delete it from our dual
+    // peers.
+    if (ret.hasError()) {
+      LOG(ERROR) << "failed to send dual messages to " << neighbor
+                 << " using id " << neighborCmdSocketId
+                 << ", error: " << ret.error();
+      collectSendFailureStats(ret.error(), neighborCmdSocketId);
+      return false;
+    }
   }
   return true;
 }

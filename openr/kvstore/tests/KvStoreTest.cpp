@@ -77,6 +77,7 @@ thrift::KvstoreConfig
 getTestKvConf() {
   thrift::KvstoreConfig kvConf;
   kvConf.sync_interval_s_ref() = kDbSyncInterval.count();
+  kvConf.enable_thrift_dual_msg_ref() = true;
   return kvConf;
 }
 
