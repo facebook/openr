@@ -118,7 +118,7 @@ Note: the `build_openr.sh` script will run this step for you
 - Manually you can drive `getdeps.py` to install elsewhere
   - refer to `build_openr.sh`
 
-#### Installing Python Libraries
+#### Installing Python Libraries + CLI
 
 You will need python `pip` or `setuptools` to build and install python modules.
 All library dependencies will be automatically installed except the
@@ -137,10 +137,9 @@ sudo python setup.py install
 ### Docker Building / Usage
 
 OpenR now has a `Dockerfile`. It uses `gendeps.py` to build all dependencies + OpenR.
-It also installs the OpenR CLI `breeze` into the container.
 
 ```console
- docker build --network host .
+docker build --network host .
 ```
 
 #### Running
