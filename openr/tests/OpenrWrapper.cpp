@@ -213,7 +213,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   decision_ = std::make_unique<Decision>(
       config_,
-      false, // bgpDryRun
+      true, // enableBgpRouteProgramming
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       routeUpdatesQueue_);

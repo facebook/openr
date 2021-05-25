@@ -94,7 +94,7 @@ struct DecisionConfig {
   2: i32 debounce_max_ms = 250;
 
   /** Knob to enable/disable BGP route programming. */
-  101: bool enable_bgp_dryrun = false;
+  101: bool enable_bgp_route_programming = true;
 }
 
 struct LinkMonitorConfig {

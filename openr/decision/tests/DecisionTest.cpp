@@ -976,7 +976,7 @@ TEST(BGPRedistribution, IgpMetric) {
       true /* enable segment label */,
       true /* enable adj labels */,
       false /* enableOrderedFib */,
-      false /* bgpDryRun */);
+      true /* enableBgpRouteProgramming */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -1137,7 +1137,7 @@ TEST(Decision, BestRouteSelection) {
       false /* enableV4 */,
       true /* enable segment label */,
       true /* enable adj labels */,
-      false /* bgpDryRun */,
+      true /* enableBgpRouteProgramming */,
       true /* enableBestRouteSelection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
@@ -4618,7 +4618,7 @@ class DecisionTestFixture : public ::testing::Test {
 
     decision = make_shared<Decision>(
         config,
-        false, /* bgpDryRun */
+        true, /* enableBgpRouteProgramming */
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
@@ -6082,7 +6082,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   auto decision = std::make_unique<Decision>(
       config,
-      false, /* bgpDryRun */
+      true, /* enableBgpRouteProgramming */
       kvStoreUpdatesQueue.getReader(),
       staticRouteUpdatesQueue.getReader(),
       routeUpdatesQueue);
@@ -7022,7 +7022,7 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
         {}, // areaCfg
         true, // enableV4
         true, // enableSegmentRouting (so that adj segment label is enabled)
-        true, // dryrun
+        false, // enableBgpRouteProgramming
         true // enableV4OverV6Nexthop
     );
     // set coldstart to be longer than debounce time
@@ -7149,7 +7149,7 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
         {}, // areaCfg
         false, // enableV4
         true, // enableSegmentRouting
-        true, // dryrun
+        false, // enableBgpRouteProgramming
         true // enableV4OverV6Nexthop
     );
     // set coldstart to be longer than debounce time

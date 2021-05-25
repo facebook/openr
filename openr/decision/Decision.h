@@ -140,7 +140,7 @@ class Decision : public OpenrEventBase {
  public:
   Decision(
       std::shared_ptr<const Config> config,
-      bool bgpDryRun,
+      bool enableBgpRouteProgramming,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);

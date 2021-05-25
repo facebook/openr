@@ -76,14 +76,14 @@ SpfSolver::SpfSolver(
     bool enableV4,
     bool enableNodeSegmentLabel,
     bool enableAdjacencyLabels,
-    bool bgpDryRun,
+    bool enableBgpRouteProgramming,
     bool enableBestRouteSelection,
     bool v4OverV6Nexthop)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
       enableAdjacencyLabels_(enableAdjacencyLabels),
-      bgpDryRun_(bgpDryRun),
+      enableBgpRouteProgramming_(enableBgpRouteProgramming),
       enableBestRouteSelection_(enableBestRouteSelection),
       v4OverV6Nexthop_(v4OverV6Nexthop) {
   // Initialize stat keys
@@ -920,7 +920,7 @@ SpfSolver::addBestPaths(
       std::move(nextHops),
       *(prefixEntries.at(bestRouteSelectionResult.bestNodeArea)),
       bestRouteSelectionResult.bestNodeArea.second,
-      isBgp & bgpDryRun_); // doNotInstall
+      isBgp & (not enableBgpRouteProgramming_)); // doNotInstall
 }
 
 std::pair<Metric, std::unordered_set<std::string>>

@@ -107,7 +107,7 @@ class SpfSolver {
       bool enableV4,
       bool enableNodeSegmentLabel,
       bool enableAdjacencyLabels,
-      bool bgpDryRun = false,
+      bool enableBgpRouteProgramming = false,
       bool enableBestRouteSelection = false,
       bool v4OverV6Nexthop = false);
   ~SpfSolver();
@@ -271,7 +271,7 @@ class SpfSolver {
 
   const bool enableAdjacencyLabels_{true};
 
-  const bool bgpDryRun_{false};
+  const bool enableBgpRouteProgramming_{false};
 
   const bool enableBestRouteSelection_{false};
 

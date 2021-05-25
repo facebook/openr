@@ -523,7 +523,7 @@ main(int argc, char** argv) {
       "decision",
       std::make_unique<Decision>(
           config,
-          not FLAGS_enable_bgp_route_programming,
+          FLAGS_enable_bgp_route_programming,
           kvStoreUpdatesQueue.getReader(),
           std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));

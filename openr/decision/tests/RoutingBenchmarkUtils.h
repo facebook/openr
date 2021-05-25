@@ -82,7 +82,7 @@ class DecisionWrapper {
 
     decision = std::make_shared<Decision>(
         config,
-        false, /* bgpDryRun */
+        true, /* enableBgpRouteProgramming */
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
