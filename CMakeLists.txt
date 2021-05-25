@@ -35,8 +35,10 @@ set(
 include(FBThriftCppLibrary)
 include(FBGenCMakeBuildInfo)
 
+set(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system thread context filesystem program_options regex)
+
 find_library(ASYNC async PATHS)
-find_package(Boost REQUIRED COMPONENTS system context)
+find_package(Boost REQUIRED COMPONENTS ${REQ_BOOST_COMPONENTS})
 find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
 find_package(fbzmq REQUIRED)
