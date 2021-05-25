@@ -1156,6 +1156,11 @@ PrefixManager::processDecisionRouteUpdates(
     ++(*prefixEntry.metrics_ref()->distance_ref());
     // 3. normalize to RIB routes
     prefixEntry.type_ref() = thrift::PrefixType::RIB;
+    // 4. Avoid leaking prepend labels into other areas.
+    // Today prefixes with prepend label are produced in BgpSpeaker and arrive
+    // at prefixUpdatesQueue. Prefixes extracted from decisionRouteUpdate are
+    // for the purposes of redistribution from one area to another.
+    prefixEntry.prependLabel_ref().reset();
 
     // populate routes to be advertised to KvStore
     auto dstAreas = allAreaIds();

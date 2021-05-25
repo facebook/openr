@@ -1142,6 +1142,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   prefixEntry1A.area_stack_ref() = {"65000"};
   prefixEntry1A.metrics_ref()->distance_ref() = 1;
   prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
+  prefixEntry1A.prependLabel_ref() = 70000;
   auto unicast1A = RibUnicastEntry(
       toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, "A", false);
   // expected kvstore announcement to other area, append "A" in area stack
@@ -1149,6 +1150,8 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   expectedPrefixEntry1A.area_stack_ref()->push_back("A");
   ++*expectedPrefixEntry1A.metrics_ref()->distance_ref();
   expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
+  // Prepend label is not expected to be leak into other areas.
+  expectedPrefixEntry1A.prependLabel_ref().reset();
 
   {
     DecisionRouteUpdate routeUpdate;
@@ -1179,6 +1182,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   prefixEntry1B.area_stack_ref() = {"65000"}; // previous area stack
   prefixEntry1B.metrics_ref()->distance_ref() = 1;
   prefixEntry1B.metrics_ref()->source_preference_ref() = 100;
+  prefixEntry1B.prependLabel_ref() = 70001;
   auto unicast1B = RibUnicastEntry(
       toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, "B", false);
   // expected kvstore announcement to other area, append "B" in area stack
@@ -1186,6 +1190,8 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   expectedPrefixEntry1B.area_stack_ref()->push_back("B");
   ++*expectedPrefixEntry1B.metrics_ref()->distance_ref();
   expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
+  // Prepend label is not expected to be leak into other areas.
+  expectedPrefixEntry1B.prependLabel_ref().reset();
 
   {
     DecisionRouteUpdate routeUpdate;
