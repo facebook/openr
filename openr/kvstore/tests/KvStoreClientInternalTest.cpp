@@ -1242,19 +1242,9 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   });
   /* test for expired keys update */
   int keyExpKeyCbCnt{0}; /* expired key call back count specific to a key */
-  int keyExpCbCnt{0}; /* expired key call back count */
   evb.scheduleTimeout(std::chrono::milliseconds(20), [&]() noexcept {
     thrift::Value keyExpVal{
         apache::thrift::FRAGILE, 1, nodeId, "test_key_exp_val", 1, 500, 0};
-
-    client2->setKvCallback(
-        [&](const std::string& key,
-            std::optional<thrift::Value> thriftVal) noexcept {
-          if (!thriftVal.has_value()) {
-            EXPECT_EQ("test_key_exp", key);
-            keyExpCbCnt++;
-          }
-        });
 
     client2->subscribeKey(
         kTestingAreaName,
@@ -1285,7 +1275,6 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   EXPECT_LE(1, key2CbCnt); // from two clients in out of order. However values
                            // are going to be same.
   EXPECT_EQ(0, key2CbCntClient2);
-  EXPECT_EQ(1, keyExpCbCnt);
   EXPECT_EQ(1, keyExpKeyCbCnt);
   EXPECT_EQ(1, keyExpKeySubCbCnt);
 

@@ -19,9 +19,11 @@ KvStoreAgent::KvStoreAgent(std::string nodeId, KvStore* kvStore)
   kvStoreClient_ =
       std::make_unique<KvStoreClientInternal>(this, nodeId, kvStore_);
 
-  // set a call back so we can keep track of other keys with the prefix we
-  // care about
-  kvStoreClient_->setKvCallback(
+  // subscribe to prefixes of this specific node that we care about
+  const auto keyPrefix =
+      fmt::format("{}{}:", Constants::kPrefixDbMarker.toString(), nodeId);
+  kvStoreClient_->subscribeKeyFilter(
+      KvStoreFilters({keyPrefix}, {} /* originatorIds */),
       [this, nodeId](
           const std::string& key, const std::optional<thrift::Value>& value) {
         if (0 == key.find(agentKeyPrefix) &&

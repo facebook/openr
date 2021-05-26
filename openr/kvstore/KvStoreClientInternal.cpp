@@ -631,13 +631,6 @@ KvStoreClientInternal::unsubscribeKey(
 }
 
 void
-KvStoreClientInternal::setKvCallback(KeyCallback callback) {
-  CHECK(eventBase_->getEvb()->isInEventBaseThread());
-
-  kvCallback_ = std::move(callback);
-}
-
-void
 KvStoreClientInternal::processExpiredKeys(
     thrift::Publication const& publication) {
   auto const& expiredKeys = *publication.expiredKeys_ref();
@@ -645,10 +638,6 @@ KvStoreClientInternal::processExpiredKeys(
   // NOTE: default construct empty map if it didn't exist
   auto& callbacks = keyCallbacks_[AreaId{publication.get_area()}];
   for (auto const& key : expiredKeys) {
-    /* callback registered by the thread */
-    if (kvCallback_) {
-      kvCallback_(key, std::nullopt);
-    }
     /* key specific registered callback */
     auto cb = callbacks.find(key);
     if (cb != callbacks.end()) {
@@ -673,10 +662,6 @@ KvStoreClientInternal::processPublication(
     if (not rcvdValue.value_ref()) {
       // ignore TTL update
       continue;
-    }
-
-    if (kvCallback_) {
-      kvCallback_(key, rcvdValue);
     }
 
     // Update local keyVals as per need

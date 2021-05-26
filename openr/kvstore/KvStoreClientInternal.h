@@ -31,7 +31,7 @@ using namespace std::chrono_literals;
 /**
  * This class abstracts out many client side operations of KvStore into very
  * simple APIs to use.
- * 1. Advertise key/value into local KvStore authoratitively :)
+ * 1. Advertise key/value into local KvStore authoritatively :)
  * 2. Access content of KvStore (key-vals, peers)
  *
  * This client also allows you to do complex stuff with KvStore with simple
@@ -140,9 +140,6 @@ class KvStoreClientInternal {
       bool fetchInitValue = false);
   void unsubscribeKey(AreaId const& area, std::string const& key);
 
-  // Set callback for all kv publications
-  void setKvCallback(KeyCallback callback);
-
   /**
    * API to register callback for given key filter. Subscribing again
    * will overwrite the existing filter
@@ -209,11 +206,6 @@ class KvStoreClientInternal {
   }
 
  private:
-  /**
-   * Process timeout is called when timeout expires.
-   */
-  void processTimeout();
-
   /**
    * Function to process received publication over SUB channel which are
    * changes of KvStore. It re-advertises the keys with higher version number
@@ -340,9 +332,6 @@ class KvStoreClientInternal {
       AreaId,
       std::unordered_map<std::string /* key */, KeyCallback>>
       keyCallbacks_;
-
-  // callback for every key published
-  KeyCallback kvCallback_{nullptr};
 
   // callback for updates from keys filtered with provided filter
   KeyCallback keyPrefixFilterCallback_{nullptr};
