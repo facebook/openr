@@ -44,7 +44,6 @@ PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
-    messaging::RQueue<DecisionRouteUpdate> programmedRoutesQueue,
     std::shared_ptr<const Config> config,
     KvStore* kvStore,
     const std::chrono::seconds& initialDumpTime)

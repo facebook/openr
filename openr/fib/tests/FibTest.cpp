@@ -322,7 +322,6 @@ class FibTestFixture : public ::testing::Test {
         routeUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         fibUpdatesQueue,
-        programmedRoutesQueue,
         logSampleQueue);
 
     fibThread_ = std::make_unique<std::thread>([this]() {
@@ -359,7 +358,6 @@ class FibTestFixture : public ::testing::Test {
   TearDown() override {
     LOG(INFO) << "Closing queues";
     fibUpdatesQueue.close();
-    programmedRoutesQueue.close();
     routeUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     logSampleQueue.close();
@@ -508,7 +506,6 @@ class FibTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue;
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
   // ctrlEvb for openrCtrlHandler instantiation

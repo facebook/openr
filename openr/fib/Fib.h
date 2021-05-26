@@ -53,7 +53,6 @@ class Fib final : public OpenrEventBase {
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
-      messaging::ReplicateQueue<DecisionRouteUpdate>& programmedRoutesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue);
 
   /**
@@ -250,9 +249,6 @@ class Fib final : public OpenrEventBase {
 
   // Queues to publish fib updates (Fib streaming)
   messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue_;
-
-  // Queues to publish programmed IP/label routes
-  messaging::ReplicateQueue<DecisionRouteUpdate>& programmedRoutesQueue_;
 
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.

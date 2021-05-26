@@ -164,7 +164,6 @@ class OpenrWrapper {
   int kvStoreGlobalCmdPort_{0};
   const std::string kvStoreGlobalCmdUrl_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
-  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue_;
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue_;

@@ -285,7 +285,6 @@ main(int argc, char** argv) {
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
-  ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
 
@@ -414,7 +413,6 @@ main(int argc, char** argv) {
           staticRouteUpdatesQueue,
           prefixUpdatesQueue.getReader(),
           routeUpdatesQueue.getReader(),
-          programmedRoutesQueue.getReader(),
           config,
           kvStore,
           initialPrefixHoldTime));
@@ -541,7 +539,6 @@ main(int argc, char** argv) {
           routeUpdatesQueue.getReader(),
           std::move(fibStaticRouteUpdatesQueueReader),
           fibUpdatesQueue,
-          programmedRoutesQueue,
           logSampleQueue));
 
   // Start OpenrCtrl thrift server

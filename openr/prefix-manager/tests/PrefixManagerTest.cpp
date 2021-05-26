@@ -73,7 +73,6 @@ class PrefixManagerTestFixture : public testing::Test {
         staticRouteUpdatesQueue,
         prefixUpdatesQueue.getReader(),
         routeUpdatesQueue.getReader(),
-        programmedRoutesQueue.getReader(),
         config,
         kvStoreWrapper->getKvStore(),
         std::chrono::seconds{0});
@@ -92,7 +91,6 @@ class PrefixManagerTestFixture : public testing::Test {
     prefixUpdatesQueue.close();
     routeUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
-    programmedRoutesQueue.close();
     kvStoreWrapper->closeQueue();
 
     // cleanup kvStoreClient
@@ -156,7 +154,6 @@ class PrefixManagerTestFixture : public testing::Test {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> programmedRoutesQueue;
 
   // Create the serializer for write/read
   CompactSerializer serializer;
@@ -677,7 +674,6 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       staticRouteUpdatesQueue,
       prefixUpdatesQueue.getReader(),
       routeUpdatesQueue.getReader(),
-      programmedRoutesQueue.getReader(),
       config,
       kvStoreWrapper->getKvStore(),
       std::chrono::seconds(0));
@@ -746,7 +742,6 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   // cleanup
   prefixUpdatesQueue.close();
   routeUpdatesQueue.close();
-  programmedRoutesQueue.close();
   kvStoreWrapper->closeQueue();
   prefixManager2->stop();
   prefixManagerThread2->join();

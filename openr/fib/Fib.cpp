@@ -30,7 +30,6 @@ Fib::Fib(
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
-    messaging::ReplicateQueue<DecisionRouteUpdate>& programmedRoutesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
@@ -39,7 +38,6 @@ Fib::Fib(
       syncStaticRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       fibUpdatesQueue_(fibUpdatesQueue),
-      programmedRoutesQueue_(programmedRoutesQueue),
       logSampleQueue_(logSampleQueue) {
   auto tConfig = config->getConfig();
 
