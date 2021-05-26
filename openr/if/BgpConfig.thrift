@@ -92,6 +92,8 @@ struct PeerGroup {
   30: optional bool enable_stateful_ha;
 
   31: optional AddPath add_path;
+  /* Advertising ipv4 nlri over v6 nexthop # RFC-5549 */
+  32: optional bool v4_over_v6_nexthop;
 } (cpp.minimize_padding)
 
 /**
@@ -196,6 +198,9 @@ struct BgpPeer {
 
   /* Enable stateful HA to preserve preIn during restart */
   29: optional bool enable_stateful_ha;
+
+  /* Advertising ipv4 nlri over v6 nexthop # RFC-5549 */
+  31: optional bool v4_over_v6_nexthop;
 
   /**
    * Peer Group name. peer config overwrites peer group config
