@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/dual/Dual.h"
+#include <openr/dual/Dual.h>
 
 namespace openr {
 
@@ -88,9 +88,8 @@ Dual::getMinDistance() {
     return 0;
   }
   int64_t dmin = std::numeric_limits<int64_t>::max();
-  for (const auto& kv : localDistances_) {
-    const auto& ld = kv.second;
-    const auto& rd = info_.neighborInfos[kv.first].reportDistance;
+  for (const auto& [neighbor, ld] : localDistances_) {
+    const auto& rd = info_.neighborInfos[neighbor].reportDistance;
     dmin = std::min(dmin, addDistances(ld, rd));
   }
   return dmin;
@@ -122,9 +121,7 @@ Dual::routeAffected() {
   }
 
   std::unordered_set<std::string> nexthops;
-  for (const auto& kv : localDistances_) {
-    const auto& neighbor = kv.first;
-    const auto& ld = kv.second;
+  for (const auto& [neighbor, ld] : localDistances_) {
     const auto& rd = info_.neighborInfos[neighbor].reportDistance;
     int64_t d = addDistances(ld, rd);
     if (d == dmin) {
@@ -149,9 +146,7 @@ bool
 Dual::meetFeasibleCondition(std::string& nexthop, int64_t& distance) {
   int64_t dmin = getMinDistance();
   // find feasible nexthop according to SNC(source node condition)
-  for (const auto& kv : localDistances_) {
-    const auto& neighbor = kv.first;
-    const auto& ld = kv.second;
+  for (const auto& [neighbor, ld] : localDistances_) {
     if (ld == std::numeric_limits<int64_t>::max()) {
       // skip down neighbor
       continue;
@@ -176,9 +171,8 @@ Dual::floodUpdates(
   msg.distance_ref() = info_.reportDistance;
   msg.type_ref() = thrift::DualMessageType::UPDATE;
 
-  for (const auto& kv : localDistances_) {
-    const auto& neighbor = kv.first;
-    if (kv.second == std::numeric_limits<int64_t>::max()) {
+  for (const auto& [neighbor, ld] : localDistances_) {
+    if (ld == std::numeric_limits<int64_t>::max()) {
       // skip down neighbor
       continue;
     }
@@ -229,9 +223,8 @@ Dual::diffusingComputation(
   msg.distance_ref() = info_.reportDistance;
   msg.type_ref() = thrift::DualMessageType::QUERY;
 
-  for (const auto& kv : localDistances_) {
-    const auto& neighbor = kv.first;
-    if (kv.second == std::numeric_limits<int64_t>::max()) {
+  for (const auto& [neighbor, ld] : localDistances_) {
+    if (ld == std::numeric_limits<int64_t>::max()) {
       // skip down neighbor
       continue;
     }
@@ -295,9 +288,7 @@ Dual::tryLocalOrDiffusing(
 std::string
 Dual::getStatusString() const noexcept {
   std::vector<std::string> counterStrs;
-  for (const auto& kv : counters_) {
-    const auto& neighbor = kv.first;
-    const auto& counters = kv.second;
+  for (const auto& [neighbor, counters] : counters_) {
     counterStrs.emplace_back(folly::sformat(
         "{}: Q ({}, {}), R ({}, {}), U ({}, {}), total ({}, {})",
         neighbor,
@@ -501,32 +492,6 @@ Dual::peerDown(
 }
 
 void
-Dual::peerCostChange(
-    const std::string& neighbor,
-    int64_t cost,
-    std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
-  LOG(INFO) << rootId << "::" << nodeId << ": LINK COST event from ("
-            << neighbor << ", " << cost << ")";
-  DualEvent event = cost > localDistances_[neighbor] ? DualEvent::INCREASE_D
-                                                     : DualEvent::OTHERS;
-  // update local-distance
-  localDistances_[neighbor] = cost;
-
-  if (info_.sm.state == DualState::PASSIVE) {
-    // passive
-    tryLocalOrDiffusing(event, false, msgsToSend);
-  } else {
-    // active
-    // only update d while leaving rd, fd as-is
-    if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
-      info_.distance = addDistances(
-          cost, info_.neighborInfos[*info_.nexthop].reportDistance);
-    }
-    info_.sm.processEvent(event);
-  }
-}
-
-void
 Dual::processUpdate(
     const std::string& neighbor,
     const thrift::DualMessage& update,
@@ -681,9 +646,7 @@ Dual::processReply(
   int64_t d;
   int64_t dmin = std::numeric_limits<int64_t>::max();
   std::optional<std::string> newNh{std::nullopt};
-  for (const auto& kv : localDistances_) {
-    const auto& nb = kv.first;
-    const auto& ld = kv.second;
+  for (const auto& [nb, ld] : localDistances_) {
     const auto& rd = info_.neighborInfos[nb].reportDistance;
     d = addDistances(ld, rd);
     if (d < dmin) {
@@ -729,9 +692,8 @@ DualNode::peerUp(const std::string& neighbor, int64_t cost) {
   localDistances_[neighbor] = cost;
 
   std::unordered_map<std::string, thrift::DualMessages> msgsToSend;
-
-  for (auto& kv : duals_) {
-    kv.second.peerUp(neighbor, cost, msgsToSend);
+  for (auto& [_, dual] : duals_) {
+    dual.peerUp(neighbor, cost, msgsToSend);
   }
 
   sendAllDualMessages(msgsToSend);
@@ -745,23 +707,8 @@ DualNode::peerDown(const std::string& neighbor) {
   clearCounters(neighbor);
 
   std::unordered_map<std::string, thrift::DualMessages> msgsToSend;
-
-  for (auto& kv : duals_) {
-    kv.second.peerDown(neighbor, msgsToSend);
-  }
-
-  sendAllDualMessages(msgsToSend);
-}
-
-void
-DualNode::peerCostChange(const std::string& neighbor, int64_t cost) {
-  // update local-distance
-  localDistances_[neighbor] = cost;
-
-  std::unordered_map<std::string, thrift::DualMessages> msgsToSend;
-
-  for (auto& kv : duals_) {
-    kv.second.peerCostChange(neighbor, cost, msgsToSend);
+  for (auto& [_, dual] : duals_) {
+    dual.peerDown(neighbor, msgsToSend);
   }
 
   sendAllDualMessages(msgsToSend);

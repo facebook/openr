@@ -91,14 +91,6 @@ class Dual {
       const std::string& neighbor,
       std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
 
-  // peer cost change event
-  // input: (neighbor-id, new-link-metric)
-  // output: map<neighbor-id: dual-messages-to-send>
-  void peerCostChange(
-      const std::string& neighbor,
-      int64_t cost,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
-
   // process a DUAL update message
   // input: (neighbor-id, a update dual-message)
   // output: map<neighbor-id: dual-messages-to-send>
@@ -299,7 +291,6 @@ class Dual {
  * User need to hook up and feed following input events to DualNode properly
  * - peerUp()
  * - peerDown()
- * - peerCostChange()
  * - processDualMessages()
  * and use following getter() to retrieve route-info or status-string
  * - getInfo(s)
@@ -337,9 +328,6 @@ class DualNode {
 
   // peer down from neighbor
   void peerDown(const std::string& neighbor);
-
-  // peer cost change from neighbor
-  void peerCostChange(const std::string& neighbor, int64_t cost);
 
   // process dual messages
   void processDualMessages(const thrift::DualMessages& messages);
