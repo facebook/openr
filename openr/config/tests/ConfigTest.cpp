@@ -69,7 +69,6 @@ getAreaConfig(const std::string& areaId) {
 openr::thrift::SegmentRoutingConfig
 getSegmentRoutingConfig() {
   openr::thrift::SegmentRoutingConfig segment_routing_config;
-  openr::thrift::SegmentRoutingNodeLabel node_segment_label;
   openr::thrift::SegmentRoutingAdjLabel adj_segment_label;
   openr::thrift::MplsLabelRanges prepend_labels;
 
@@ -84,19 +83,6 @@ getSegmentRoutingConfig() {
   prepend_labels.v4_ref() = lrp4;
   prepend_labels.v6_ref() = lrp6;
 
-  // node segment label range
-  openr::thrift::LabelRange node_segment_label_range;
-
-  node_segment_label_range.start_label_ref() =
-      openr::Constants::kSrGlobalRange.first;
-  node_segment_label_range.end_label_ref() =
-      openr::Constants::kSrGlobalRange.second;
-  node_segment_label.node_segment_label_range_ref() = node_segment_label_range;
-
-  // Type is AUTO
-  node_segment_label.sr_node_label_type_ref() =
-      openr::thrift::SegmentRoutingNodeLabelType::AUTO;
-
   // adj segment label range
   openr::thrift::LabelRange adj_label_range;
   adj_label_range.start_label_ref() = openr::Constants::kSrLocalRange.first;
@@ -106,7 +92,6 @@ getSegmentRoutingConfig() {
   adj_segment_label.adj_label_range_ref() = adj_label_range;
 
   // segment routing config
-  segment_routing_config.sr_node_label_ref() = node_segment_label;
   segment_routing_config.sr_adj_label_ref() = adj_segment_label;
   segment_routing_config.prepend_label_ranges_ref() = prepend_labels;
 
@@ -285,6 +270,59 @@ TEST(ConfigTest, PopulateAreaConfig) {
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto conf = getBasicOpenrConfig("node-1", "domain", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
+  }
+
+  // area segment node label
+  {
+    auto confAreaPolicy = getBasicOpenrConfig();
+    openr::thrift::AreaConfig areaConfig = getAreaConfig("1");
+
+    openr::thrift::SegmentRoutingNodeLabel node_segment_label;
+    areaConfig.area_sr_node_label_ref() = node_segment_label;
+    confAreaPolicy.areas_ref()->emplace_back(areaConfig);
+
+    // Area config with incomplete segment node label config
+    EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
+
+    openr::thrift::LabelRange node_segment_label_range;
+    node_segment_label_range.start_label_ref() =
+        openr::Constants::kSrGlobalRange.first;
+    node_segment_label_range.end_label_ref() =
+        openr::Constants::kSrGlobalRange.second;
+    node_segment_label.node_segment_label_range_ref() =
+        node_segment_label_range;
+
+    // Type is AUTO
+    node_segment_label.sr_node_label_type_ref() =
+        openr::thrift::SegmentRoutingNodeLabelType::AUTO;
+
+    for (auto& areaConf : *confAreaPolicy.areas_ref()) {
+      areaConf.area_sr_node_label_ref() = node_segment_label;
+    }
+
+    // valid node segment label config
+    EXPECT_NO_THROW((Config(confAreaPolicy)));
+
+    // invalid label range and type is AUTO
+    node_segment_label_range.end_label_ref() =
+        openr::Constants::kSrGlobalRange.first;
+    node_segment_label_range.start_label_ref() =
+        openr::Constants::kSrGlobalRange.second;
+    node_segment_label.node_segment_label_range_ref() =
+        node_segment_label_range;
+    for (auto& areaConf : *confAreaPolicy.areas_ref()) {
+      areaConf.area_sr_node_label_ref() = node_segment_label;
+    }
+    EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
+
+    // Type is STATIC but no static label provided
+    node_segment_label.sr_node_label_type_ref() =
+        openr::thrift::SegmentRoutingNodeLabelType::STATIC;
+    for (auto& areaConf : *confAreaPolicy.areas_ref()) {
+      areaConf.area_sr_node_label_ref() = node_segment_label;
+    }
+
+    EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
   }
 }
 
@@ -799,11 +837,6 @@ TEST(ConfigTest, SegmentRoutingConfig) {
 
   // getSegmentRoutingConfig
   EXPECT_EQ(srConf, config.getSegmentRoutingConfig());
-
-  EXPECT_EQ(
-      *config.getNodeSegmentLabel().sr_node_label_type_ref(),
-      openr::thrift::SegmentRoutingNodeLabelType::AUTO);
-
   EXPECT_EQ(
       *config.getAdjSegmentLabels().sr_adj_label_type_ref(),
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX);
