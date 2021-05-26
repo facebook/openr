@@ -18,9 +18,27 @@
 
 namespace openr {
 
-// Route updates published by Decision
-// consumed by PrefixManager, BgpSpeaker, Fib.
+/*
+ * Generic structure to represent a route update. There are various sources and
+ * consumers of route updates,
+ * - Decision produces routes updates, consumed by Fib;
+ * - Fib produces programmed routes, consumed by PrefixManager/BgpSpeaker;
+ * - BgpSpeaker produces static MPLS prepend label routes, consumed by Decision;
+ * - PrefixManager produces static unicast routes, consumed by Decision.
+ */
 struct DecisionRouteUpdate {
+  enum Type {
+    // Default value.
+    // [Not recommended] Producer and consumer have implicit signal indicating
+    // route updates are incremental or from full sync.
+    DEFAULT,
+    // Incremental route updates.
+    INCREMENTAL,
+    // Route updates from full sync.
+    FULL_SYNC
+  };
+
+  Type type;
   std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutesToUpdate;
   std::vector<folly::CIDRNetwork> unicastRoutesToDelete;
