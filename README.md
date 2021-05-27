@@ -12,7 +12,7 @@ its adoption in other networks, including Facebook's new WAN network, Express Ba
 
 ---
 
-Please refer to our extensive [Documentation](https://openr.readthedocs.io/en/latest/) to get started with OpenR.
+Please refer to our extensive [Documentation](https://openr.readthedocs.io/) to get started with OpenR.
 
 ## Library Examples
 
