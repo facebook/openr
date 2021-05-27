@@ -246,22 +246,13 @@ LinkMonitor::LinkMonitor(
     } else {
       fb303::fbData->addStatValue(
           "link_monitor.thrift.failure.getAllLinks", 1, fb303::SUM);
-
-      if (ifIndexToName_.empty()) {
-        // initial sync failed, immediately file re-sync
-        // instead of applying exponetial backoff
-        LOG(ERROR) << "Initial interfaceDb sync failed, re-sync immediately";
-
-        interfaceDbSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-      } else {
-        // Apply exponential backoff and schedule next run
-        expBackoff_.reportError();
-        interfaceDbSyncTimer_->scheduleTimeout(
-            expBackoff_.getTimeRemainingUntilRetry());
-        LOG(ERROR)
-            << "InterfaceDb Sync failed, apply exponential backoff and retry in "
-            << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
-      }
+      // Apply exponential backoff and schedule next run
+      expBackoff_.reportError();
+      interfaceDbSyncTimer_->scheduleTimeout(
+          expBackoff_.getTimeRemainingUntilRetry());
+      LOG(ERROR)
+          << "InterfaceDb Sync failed, apply exponential backoff and retry in "
+          << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
     }
   });
 
@@ -923,7 +914,7 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
 
 bool
 LinkMonitor::syncInterfaces() {
-  VLOG(2) << "Syncing Interface DB from Netlink Platform";
+  VLOG(1) << "Syncing Interface DB from Netlink Platform";
 
   // Retrieve latest link snapshot from NetlinkProtocolSocket
   InterfaceDatabase ifDb;
@@ -932,6 +923,14 @@ LinkMonitor::syncInterfaces() {
   } catch (const std::exception& e) {
     LOG(ERROR) << "Failed to sync linkDb from NetlinkProtocolSocket. Error: "
                << folly::exceptionStr(e);
+    return false;
+  }
+
+  LOG(INFO)
+      << fmt::format("Retrieved {} links from system Netlink.", ifDb.size());
+
+  if (ifDb.empty()) {
+    LOG(ERROR) << "No interface found.";
     return false;
   }
 
