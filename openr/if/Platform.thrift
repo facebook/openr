@@ -41,7 +41,6 @@ enum SwitchRunState {
   UNINITIALIZED = 0,
   INITIALIZED = 1,
   CONFIGURED = 2,
-  FIB_SYNCED = 3,
   EXITING = 4,
 }
 

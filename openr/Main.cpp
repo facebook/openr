@@ -107,14 +107,10 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
 
   // Block until the Fib client is ALIVE, AND switch is ready to accept
-  // route updates (aka, of CONFIGURED or FIB_SYNCED state).
+  // route updates (aka, of CONFIGURED state).
   while (mainEvb.isRunning() and
          (facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus or
-          (thrift::SwitchRunState::CONFIGURED != switchState and
-           thrift::SwitchRunState::FIB_SYNCED != switchState))) {
-    // TODO: As indicated in T87145565, FIB_SYNCED state will be deprecated in
-    // Fib wedge agent. If that happens, above condition checking FIB_SYNCED
-    // state could be removed.
+          (thrift::SwitchRunState::CONFIGURED != switchState))) {
     openr::Fib::createFibClient(evb, socket, client, port);
     try {
       fibStatus = client->sync_getStatus();
