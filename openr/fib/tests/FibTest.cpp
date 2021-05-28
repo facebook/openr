@@ -11,12 +11,12 @@
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
-#include "openr/if/gen-cpp2/Network_types.h"
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
+#include <openr/decision/RouteUpdate.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
@@ -284,6 +284,48 @@ checkEqualRouteDatabaseDeltaDetailUnicast(
   return lhsRoutesToDelete == rhsRoutesToDelete;
 }
 
+bool
+checkEqualDecisionRouteUpdate(
+    const DecisionRouteUpdate& lhs, const DecisionRouteUpdate& rhs) {
+  // Check unicast and MPLS routes are the same (assuming no dups in the
+  // vectors). perfEvents is not considered here.
+
+  if (lhs.unicastRoutesToUpdate.size() != rhs.unicastRoutesToUpdate.size() or
+      lhs.unicastRoutesToDelete.size() != rhs.unicastRoutesToDelete.size() or
+      lhs.mplsRoutesToUpdate.size() != rhs.mplsRoutesToUpdate.size() or
+      lhs.mplsRoutesToDelete.size() != rhs.mplsRoutesToDelete.size()) {
+    return false;
+  }
+
+  if (lhs.unicastRoutesToUpdate != rhs.unicastRoutesToUpdate or
+      std::unordered_set(
+          lhs.unicastRoutesToDelete.begin(), lhs.unicastRoutesToDelete.end()) !=
+          std::unordered_set(
+              rhs.unicastRoutesToDelete.begin(),
+              rhs.unicastRoutesToDelete.end()) or
+      std::unordered_set(
+          lhs.mplsRoutesToDelete.begin(), lhs.mplsRoutesToDelete.end()) !=
+          std::unordered_set(
+              rhs.mplsRoutesToDelete.begin(), rhs.mplsRoutesToDelete.end())) {
+    LOG(INFO) << "unicast update/delete, or mpls delete, not the same.";
+    return false;
+  }
+  // check mplsRoutesToUpdate.
+  std::unordered_map<uint32_t, RibMplsEntry> lMplsRouteMap;
+  std::unordered_map<uint32_t, RibMplsEntry> rMplsRouteMap;
+  for (auto& mplsRoute : lhs.mplsRoutesToUpdate) {
+    lMplsRouteMap.insert({mplsRoute.label, mplsRoute});
+  }
+  for (auto& mplsRoute : rhs.mplsRoutesToUpdate) {
+    rMplsRouteMap.insert({mplsRoute.label, mplsRoute});
+  }
+  if (lMplsRouteMap != rMplsRouteMap) {
+    return false;
+    LOG(INFO) << "mpls route not the same.";
+  }
+  return lhs.type == rhs.type;
+}
+
 class FibTestFixture : public ::testing::Test {
  public:
   explicit FibTestFixture(bool waitOnDecision = false)
@@ -321,7 +363,7 @@ class FibTestFixture : public ::testing::Test {
         std::chrono::seconds(2), /* coldStartDuration */
         routeUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
-        fibUpdatesQueue,
+        fibRouteUpdatesQueue,
         logSampleQueue);
 
     fibThread_ = std::make_unique<std::thread>([this]() {
@@ -357,7 +399,7 @@ class FibTestFixture : public ::testing::Test {
   void
   TearDown() override {
     LOG(INFO) << "Closing queues";
-    fibUpdatesQueue.close();
+    fibRouteUpdatesQueue.close();
     routeUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     logSampleQueue.close();
@@ -505,8 +547,10 @@ class FibTestFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
+  messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader =
+      fibRouteUpdatesQueue.getReader();
 
   // ctrlEvb for openrCtrlHandler instantiation
   OpenrEventBase evb_;
@@ -530,100 +574,109 @@ class FibTestFixture : public ::testing::Test {
 // Case 3: Verify delta unicast route addition is published.
 // Case 4: Verify delta unicast route deletion is published.
 TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
-  {
-    std::atomic<int> received{0};
+  std::atomic<int> received{0};
 
-    // Case 1: Verify initial full dump is received properly.
-    // Mimic decision publishing RouteDatabase (Full initial dump)
-    DecisionRouteUpdate routeUpdate1;
-    routeUpdate1.unicastRoutesToUpdate.emplace(
-        toIPNetwork(prefix1),
-        RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
-    routeUpdatesQueue.push(std::move(routeUpdate1));
+  // Case 1: Verify initial full dump is received properly.
+  // Mimic decision publishing RouteDatabase (Full initial dump)
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix1),
+      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
+  routeUpdatesQueue.push(routeUpdate1);
 
-    // Start the streaming after OpenrCtrlHandler consumes initial route update.
-    waitForInitialUpdate();
-    auto responseAndSubscription =
-        handler_->semifuture_subscribeAndGetFib().get();
+  // Start the streaming after OpenrCtrlHandler consumes initial route update.
+  waitForInitialUpdate();
+  auto responseAndSubscription =
+      handler_->semifuture_subscribeAndGetFib().get();
 
-    thrift::RouteDatabase routeDbExpected1;
-    (*routeDbExpected1.unicastRoutes_ref())
-        .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
-    EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
-        routeDbExpected1, responseAndSubscription.response));
+  thrift::RouteDatabase routeDbExpected1;
+  (*routeDbExpected1.unicastRoutes_ref())
+      .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
+      routeDbExpected1, responseAndSubscription.response));
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate1.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate1, fibRouteUpdatesQueueReader.get().value()));
 
-    // Case 2: Verify doNotInstall route is not published.
-    // Mimic decision publishing doNotInstall (incremental)
-    // No streaming update is expected from fib
-    DecisionRouteUpdate routeUpdate2;
-    auto ribUnicastEntry =
-        RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1, path1_2_2});
-    ribUnicastEntry.doNotInstall = true;
-    routeUpdate2.unicastRoutesToUpdate.emplace(
-        toIPNetwork(prefix2), ribUnicastEntry);
+  // Case 2: Verify doNotInstall route is not published.
+  // Mimic decision publishing doNotInstall (incremental)
+  // No streaming update is expected from fib
+  DecisionRouteUpdate routeUpdate2;
+  auto ribUnicastEntry =
+      RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1, path1_2_2});
+  ribUnicastEntry.doNotInstall = true;
+  routeUpdate2.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix2), ribUnicastEntry);
 
-    // Case 3: Verify delta unicast route addition is published.
-    // Mimic decision publishing unicast route addition (incremental)
-    thrift::RouteDatabaseDelta routeDbExpected3;
-    (*routeDbExpected3.unicastRoutesToUpdate_ref())
-        .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
-    DecisionRouteUpdate routeUpdate3;
-    routeUpdate3.unicastRoutesToUpdate.emplace(
-        toIPNetwork(prefix3),
-        RibUnicastEntry(toIPNetwork(prefix3), {path1_2_1, path1_2_2}));
+  // Case 3: Verify delta unicast route addition is published.
+  // Mimic decision publishing unicast route addition (incremental)
+  thrift::RouteDatabaseDelta routeDbExpected3;
+  (*routeDbExpected3.unicastRoutesToUpdate_ref())
+      .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
+  DecisionRouteUpdate routeUpdate3;
+  routeUpdate3.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix3),
+      RibUnicastEntry(toIPNetwork(prefix3), {path1_2_1, path1_2_2}));
 
-    // Case 4: Verify delta unicast route deletion is published.
-    thrift::RouteDatabaseDelta routeDbExpected4;
-    (*routeDbExpected4.unicastRoutesToDelete_ref()) = {prefix3};
-    DecisionRouteUpdate routeUpdate4;
-    routeUpdate4.unicastRoutesToDelete = {toIPNetwork(prefix3)};
+  // Case 4: Verify delta unicast route deletion is published.
+  thrift::RouteDatabaseDelta routeDbExpected4;
+  (*routeDbExpected4.unicastRoutesToDelete_ref()) = {prefix3};
+  DecisionRouteUpdate routeUpdate4;
+  routeUpdate4.unicastRoutesToDelete = {toIPNetwork(prefix3)};
 
-    auto subscription =
-        std::move(responseAndSubscription.stream)
-            .toClientStreamUnsafeDoNotUse()
-            .subscribeExTry(
-                folly::getEventBase(),
-                [&received, &routeDbExpected3, &routeDbExpected4](auto&& t) {
-                  if (not t.hasValue()) {
-                    return;
-                  }
+  auto subscription =
+      std::move(responseAndSubscription.stream)
+          .toClientStreamUnsafeDoNotUse()
+          .subscribeExTry(
+              folly::getEventBase(),
+              [&received, &routeDbExpected3, &routeDbExpected4](auto&& t) {
+                if (not t.hasValue()) {
+                  return;
+                }
 
-                  auto& deltaUpdate = *t;
-                  if (received == 0) {
-                    // NOTE: due to donotinstall logic routeUpdate2 get's
-                    // suppressed and we directly receive routeUpdate3
-                    // notification
-                    EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
-                        routeDbExpected3, deltaUpdate));
-                  } else if (received == 1) {
-                    EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
-                        routeDbExpected4, deltaUpdate));
-                  } else {
-                    // Not expected to reach here.
-                    FAIL() << "Unexpected stream update";
-                  }
-                  received++;
-                });
+                auto& deltaUpdate = *t;
+                if (received == 0) {
+                  // NOTE: due to donotinstall logic routeUpdate2 get's
+                  // suppressed and we directly receive routeUpdate3
+                  // notification
+                  EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
+                      routeDbExpected3, deltaUpdate));
+                } else if (received == 1) {
+                  EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
+                      routeDbExpected4, deltaUpdate));
+                } else {
+                  // Not expected to reach here.
+                  FAIL() << "Unexpected stream update";
+                }
+                received++;
+              });
 
-    EXPECT_EQ(1, handler_->getNumFibPublishers());
+  EXPECT_EQ(1, handler_->getNumFibPublishers());
 
-    routeUpdatesQueue.push(std::move(routeUpdate2));
-    routeUpdatesQueue.push(std::move(routeUpdate3));
-    routeUpdatesQueue.push(std::move(routeUpdate4));
+  routeUpdatesQueue.push(std::move(routeUpdate2));
+  routeUpdatesQueue.push(routeUpdate3);
+  routeUpdatesQueue.push(routeUpdate4);
+  // routeUpdate2 is not installed thus not sent to fibRouteUpdatesQueue.
+  routeUpdate3.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate3, fibRouteUpdatesQueueReader.get().value()));
+  routeUpdate4.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate4, fibRouteUpdatesQueueReader.get().value()));
 
-    // Check we should receive 2 updates
-    while (received < 2) {
-      std::this_thread::yield();
-    }
+  // Check we should receive 2 updates
+  while (received < 2) {
+    std::this_thread::yield();
+  }
 
-    // Cancel subscription
-    subscription.cancel();
-    std::move(subscription).detach();
+  // Cancel subscription
+  subscription.cancel();
+  std::move(subscription).detach();
 
-    // Wait until publisher is destroyed
-    while (handler_->getNumFibPublishers() != 0) {
-      std::this_thread::yield();
-    }
+  // Wait until publisher is destroyed
+  while (handler_->getNumFibPublishers() != 0) {
+    std::this_thread::yield();
   }
 }
 
@@ -631,90 +684,96 @@ TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
 // Case 1: Verify initial full dump is received properly by both the clients.
 // Case 2: Verify delta unicast route addition is received by both the clients.
 TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
-  {
-    std::atomic<int> received_1{0};
-    std::atomic<int> received_2{0};
+  std::atomic<int> received_1{0};
+  std::atomic<int> received_2{0};
 
-    // Case 1: Verify initial full dump is received properly.
-    // Mimic decision publishing RouteDatabase (Full initial dump)
-    thrift::RouteDatabase routeDbExpected1;
-    (*routeDbExpected1.unicastRoutes_ref())
-        .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
-    DecisionRouteUpdate routeUpdate1;
-    routeUpdate1.unicastRoutesToUpdate.emplace(
-        toIPNetwork(prefix1),
-        RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
-    routeUpdatesQueue.push(std::move(routeUpdate1));
+  // Case 1: Verify initial full dump is received properly.
+  // Mimic decision publishing RouteDatabase (Full initial dump)
+  thrift::RouteDatabase routeDbExpected1;
+  (*routeDbExpected1.unicastRoutes_ref())
+      .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix1),
+      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
+  routeUpdatesQueue.push(routeUpdate1);
 
-    // Start the streaming after OpenrCtrlHandler consumes initial route update.
-    waitForInitialUpdate();
-    auto responseAndSubscription_1 =
-        handler_->semifuture_subscribeAndGetFib().get();
-    auto responseAndSubscription_2 =
-        handler_->semifuture_subscribeAndGetFib().get();
+  // Start the streaming after OpenrCtrlHandler consumes initial route update.
+  waitForInitialUpdate();
+  auto responseAndSubscription_1 =
+      handler_->semifuture_subscribeAndGetFib().get();
+  auto responseAndSubscription_2 =
+      handler_->semifuture_subscribeAndGetFib().get();
 
-    EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
-        routeDbExpected1, responseAndSubscription_1.response));
-    EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
-        routeDbExpected1, responseAndSubscription_2.response));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
+      routeDbExpected1, responseAndSubscription_1.response));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
+      routeDbExpected1, responseAndSubscription_2.response));
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate1.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate1, fibRouteUpdatesQueueReader.get().value()));
 
-    // Case 2: Verify delta unicast route addition is published.
-    // Mimic decision publishing unicast route addition (incremental)
-    thrift::RouteDatabaseDelta routeDbExpected2;
-    (*routeDbExpected2.unicastRoutesToUpdate_ref())
-        .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
-    DecisionRouteUpdate routeUpdate2;
-    routeUpdate2.unicastRoutesToUpdate.emplace(
-        toIPNetwork(prefix3),
-        RibUnicastEntry(toIPNetwork(prefix3), {path1_2_1, path1_2_2}));
+  // Case 2: Verify delta unicast route addition is published.
+  // Mimic decision publishing unicast route addition (incremental)
+  thrift::RouteDatabaseDelta routeDbExpected2;
+  (*routeDbExpected2.unicastRoutesToUpdate_ref())
+      .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
+  DecisionRouteUpdate routeUpdate2;
+  routeUpdate2.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix3),
+      RibUnicastEntry(toIPNetwork(prefix3), {path1_2_1, path1_2_2}));
 
-    auto subscription_1 =
-        std::move(responseAndSubscription_1.stream)
-            .toClientStreamUnsafeDoNotUse()
-            .subscribeExTry(
-                folly::getEventBase(),
-                [&received_1, &routeDbExpected2](auto&& t) {
-                  if (not t.hasValue()) {
-                    return;
-                  }
-                  EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
-                      routeDbExpected2, *t));
-                  received_1++;
-                });
+  auto subscription_1 =
+      std::move(responseAndSubscription_1.stream)
+          .toClientStreamUnsafeDoNotUse()
+          .subscribeExTry(
+              folly::getEventBase(),
+              [&received_1, &routeDbExpected2](auto&& t) {
+                if (not t.hasValue()) {
+                  return;
+                }
+                EXPECT_TRUE(
+                    checkEqualRouteDatabaseDeltaUnicast(routeDbExpected2, *t));
+                received_1++;
+              });
 
-    auto subscription_2 =
-        std::move(responseAndSubscription_2.stream)
-            .toClientStreamUnsafeDoNotUse()
-            .subscribeExTry(
-                folly::getEventBase(),
-                [&received_2, &routeDbExpected2](auto&& t) {
-                  if (not t.hasValue()) {
-                    return;
-                  }
-                  EXPECT_TRUE(checkEqualRouteDatabaseDeltaUnicast(
-                      routeDbExpected2, *t));
-                  received_2++;
-                });
+  auto subscription_2 =
+      std::move(responseAndSubscription_2.stream)
+          .toClientStreamUnsafeDoNotUse()
+          .subscribeExTry(
+              folly::getEventBase(),
+              [&received_2, &routeDbExpected2](auto&& t) {
+                if (not t.hasValue()) {
+                  return;
+                }
+                EXPECT_TRUE(
+                    checkEqualRouteDatabaseDeltaUnicast(routeDbExpected2, *t));
+                received_2++;
+              });
 
-    EXPECT_EQ(2, handler_->getNumFibPublishers());
+  EXPECT_EQ(2, handler_->getNumFibPublishers());
 
-    routeUpdatesQueue.push(std::move(routeUpdate2));
+  routeUpdatesQueue.push(routeUpdate2);
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate2.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate2, fibRouteUpdatesQueueReader.get().value()));
 
-    // Check we should receive 1 updates for each client
-    while ((received_1 < 1) || (received_2 < 1)) {
-      std::this_thread::yield();
-    }
+  // Check we should receive 1 updates for each client
+  while ((received_1 < 1) || (received_2 < 1)) {
+    std::this_thread::yield();
+  }
 
-    // Cancel subscription
-    subscription_1.cancel();
-    std::move(subscription_1).detach();
-    subscription_2.cancel();
-    std::move(subscription_2).detach();
+  // Cancel subscription
+  subscription_1.cancel();
+  std::move(subscription_1).detach();
+  subscription_2.cancel();
+  std::move(subscription_2).detach();
 
-    // Wait until publisher is destroyed
-    while (handler_->getNumFibPublishers() != 0) {
-      std::this_thread::yield();
-    }
+  // Wait until publisher is destroyed
+  while (handler_->getNumFibPublishers() != 0) {
+    std::this_thread::yield();
   }
 }
 
@@ -722,81 +781,86 @@ TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
 // Case 1: Verify initial full dump is received properly.
 // Case 2: Verify delta unicast route addition is published.
 TEST_F(FibTestFixture, fibDetailStreaming) {
-  {
-    std::atomic<int> received{0};
+  std::atomic<int> received{0};
 
-    // Case 1: Verify initial full dump is received properly.
-    // Mimic decision publishing RouteDatabaseDetail (Full initial dump)
-    thrift::RouteDatabaseDetail routeDbExpected1;
-    (*routeDbExpected1.unicastRoutes_ref())
-        .emplace_back(createUnicastRouteDetail(
-            prefix1, {path1_2_1, path1_2_2}, bestRoute1));
-    DecisionRouteUpdate routeUpdate1;
+  // Case 1: Verify initial full dump is received properly.
+  // Mimic decision publishing RouteDatabaseDetail (Full initial dump)
+  thrift::RouteDatabaseDetail routeDbExpected1;
+  (*routeDbExpected1.unicastRoutes_ref())
+      .emplace_back(createUnicastRouteDetail(
+          prefix1, {path1_2_1, path1_2_2}, bestRoute1));
+  DecisionRouteUpdate routeUpdate1;
 
-    routeUpdate1.unicastRoutesToUpdate.emplace(
-        toIPNetwork(prefix1),
-        RibUnicastEntry(
-            toIPNetwork(prefix1), {path1_2_1, path1_2_2}, bestRoute1, "0"));
-    routeUpdatesQueue.push(std::move(routeUpdate1));
+  routeUpdate1.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix1),
+      RibUnicastEntry(
+          toIPNetwork(prefix1), {path1_2_1, path1_2_2}, bestRoute1, "0"));
+  routeUpdatesQueue.push(routeUpdate1);
 
-    // Start the streaming after OpenrCtrlHandler consumes initial route update.
-    wait_for_initial_detail_update();
-    auto responseAndSubscription =
-        handler_->semifuture_subscribeAndGetFibDetail().get();
+  // Start the streaming after OpenrCtrlHandler consumes initial route update.
+  wait_for_initial_detail_update();
+  auto responseAndSubscription =
+      handler_->semifuture_subscribeAndGetFibDetail().get();
 
-    EXPECT_TRUE(checkEqualRouteDatabaseUnicastDetail(
-        routeDbExpected1, responseAndSubscription.response));
+  EXPECT_TRUE(checkEqualRouteDatabaseUnicastDetail(
+      routeDbExpected1, responseAndSubscription.response));
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate1.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate1, fibRouteUpdatesQueueReader.get().value()));
 
-    // Verify delta unicast route addition is published.
-    // Mimic decision publishing unicast route addition (incremental)
-    thrift::RouteDatabaseDeltaDetail routeDbExpected2;
-    (*routeDbExpected2.unicastRoutesToUpdate_ref())
-        .emplace_back(createUnicastRouteDetail(
-            prefix3, {path1_2_1, path1_2_2}, bestRoute3));
-    DecisionRouteUpdate routeUpdate2;
-    routeUpdate2.unicastRoutesToUpdate.emplace(
-        toIPNetwork(prefix3),
-        RibUnicastEntry(
-            toIPNetwork(prefix3), {path1_2_1, path1_2_2}, bestRoute3, "0"));
+  // Verify delta unicast route addition is published.
+  // Mimic decision publishing unicast route addition (incremental)
+  thrift::RouteDatabaseDeltaDetail routeDbExpected2;
+  (*routeDbExpected2.unicastRoutesToUpdate_ref())
+      .emplace_back(createUnicastRouteDetail(
+          prefix3, {path1_2_1, path1_2_2}, bestRoute3));
+  DecisionRouteUpdate routeUpdate2;
+  routeUpdate2.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix3),
+      RibUnicastEntry(
+          toIPNetwork(prefix3), {path1_2_1, path1_2_2}, bestRoute3, "0"));
 
-    auto subscription =
-        std::move(responseAndSubscription.stream)
-            .toClientStreamUnsafeDoNotUse()
-            .subscribeExTry(
-                folly::getEventBase(),
-                [&received, &routeDbExpected2](auto&& t) {
-                  if (not t.hasValue()) {
-                    return;
-                  }
+  auto subscription =
+      std::move(responseAndSubscription.stream)
+          .toClientStreamUnsafeDoNotUse()
+          .subscribeExTry(
+              folly::getEventBase(), [&received, &routeDbExpected2](auto&& t) {
+                if (not t.hasValue()) {
+                  return;
+                }
 
-                  auto& deltaUpdate = *t;
-                  if (received == 0) {
-                    EXPECT_TRUE(checkEqualRouteDatabaseDeltaDetailUnicast(
-                        routeDbExpected2, deltaUpdate));
-                  } else {
-                    // Not expected to reach here.
-                    FAIL() << "Unexpected stream update";
-                  }
-                  received++;
-                });
+                auto& deltaUpdate = *t;
+                if (received == 0) {
+                  EXPECT_TRUE(checkEqualRouteDatabaseDeltaDetailUnicast(
+                      routeDbExpected2, deltaUpdate));
+                } else {
+                  // Not expected to reach here.
+                  FAIL() << "Unexpected stream update";
+                }
+                received++;
+              });
 
-    EXPECT_EQ(1, handler_->getNumFibDetailPublishers());
+  EXPECT_EQ(1, handler_->getNumFibDetailPublishers());
 
-    routeUpdatesQueue.push(std::move(routeUpdate2));
+  routeUpdatesQueue.push(routeUpdate2);
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate2.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate2, fibRouteUpdatesQueueReader.get().value()));
 
-    // Check we should received 1 update
-    while (received < 1) {
-      std::this_thread::yield();
-    }
+  // Check we should received 1 update
+  while (received < 1) {
+    std::this_thread::yield();
+  }
 
-    // Cancel subscription
-    subscription.cancel();
-    std::move(subscription).detach();
+  // Cancel subscription
+  subscription.cancel();
+  std::move(subscription).detach();
 
-    // Wait until publisher is destroyed
-    while (handler_->getNumFibDetailPublishers() != 0) {
-      std::this_thread::yield();
-    }
+  // Wait until publisher is destroyed
+  while (handler_->getNumFibDetailPublishers() != 0) {
+    std::this_thread::yield();
   }
 }
 
@@ -824,16 +888,18 @@ TEST_F(FibTestFixture, processRouteDb) {
   routeDetailDb.unicastRoutes_ref()->emplace_back(
       createUnicastRouteDetail(prefix2, {path1_2_1, path1_2_2}, bestRoute2));
 
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(RibUnicastEntry(
-        toIPNetwork(prefix2), {path1_2_1, path1_2_2}, bestRoute2, "0"));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.addRouteToUpdate(RibUnicastEntry(
+      toIPNetwork(prefix2), {path1_2_1, path1_2_2}, bestRoute2, "0"));
+  routeUpdatesQueue.push(routeUpdate1);
 
   int64_t countAdd = mockFibHandler_->getAddRoutesCount();
   // add routes
   mockFibHandler_->waitForUpdateUnicastRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate1.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate1, fibRouteUpdatesQueueReader.get().value()));
 
   EXPECT_EQ(mockFibHandler_->getAddRoutesCount(), 1);
   EXPECT_EQ(mockFibHandler_->getDelRoutesCount(), 0);
@@ -854,15 +920,18 @@ TEST_F(FibTestFixture, processRouteDb) {
           toIPNetwork(prefix3), {path1_3_1, path1_3_2}, bestRoute3, "0")
           .toThriftDetail());
 
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(RibUnicastEntry(
-        toIPNetwork(prefix3), {path1_3_1, path1_3_2}, bestRoute3, "0"));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
+  DecisionRouteUpdate routeUpdate2;
+  routeUpdate2.addRouteToUpdate(RibUnicastEntry(
+      toIPNetwork(prefix3), {path1_3_1, path1_3_2}, bestRoute3, "0"));
+  routeUpdatesQueue.push(routeUpdate2);
 
   // syncFib debounce
   mockFibHandler_->waitForUpdateUnicastRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate2.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate2, fibRouteUpdatesQueueReader.get().value()));
+
   EXPECT_GT(mockFibHandler_->getAddRoutesCount(), countAdd);
   EXPECT_EQ(mockFibHandler_->getDelRoutesCount(), countDel);
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
@@ -884,16 +953,19 @@ TEST_F(FibTestFixture, processRouteDb) {
   routeDetailDb.unicastRoutes_ref()->emplace_back(
       createUnicastRouteDetail(prefix3, {path1_3_2}, bestRoute3));
 
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(RibUnicastEntry(
-        toIPNetwork(prefix2), {path1_2_2, path1_2_3}, bestRoute2, "0"));
-    routeUpdate.addRouteToUpdate(
-        RibUnicastEntry(toIPNetwork(prefix3), {path1_3_2}, bestRoute3, "0"));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
+  DecisionRouteUpdate routeUpdate3;
+  routeUpdate3.addRouteToUpdate(RibUnicastEntry(
+      toIPNetwork(prefix2), {path1_2_2, path1_2_3}, bestRoute2, "0"));
+  routeUpdate3.addRouteToUpdate(
+      RibUnicastEntry(toIPNetwork(prefix3), {path1_3_2}, bestRoute3, "0"));
+  routeUpdatesQueue.push(routeUpdate3);
   // syncFib debounce
   mockFibHandler_->waitForUpdateUnicastRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate3.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate3, fibRouteUpdatesQueueReader.get().value()));
+
   EXPECT_GT(mockFibHandler_->getAddRoutesCount(), countAdd);
   EXPECT_EQ(mockFibHandler_->getDelRoutesCount(), countDel);
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
@@ -917,24 +989,26 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   mockFibHandler_->waitForSyncMplsFib();
 
   // Mimic decision pub sock publishing RouteDatabaseDelta
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(
-        RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
-    routeUpdate.addRouteToUpdate(
-        RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label2, {mpls_path1_2_2}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label3, {mpls_path1_2_1}));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.addRouteToUpdate(
+      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
+  routeUpdate1.addRouteToUpdate(
+      RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}));
+  routeUpdate1.mplsRoutesToUpdate.emplace_back(
+      RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
+  routeUpdate1.mplsRoutesToUpdate.emplace_back(
+      RibMplsEntry(label2, {mpls_path1_2_2}));
+  routeUpdate1.mplsRoutesToUpdate.emplace_back(
+      RibMplsEntry(label3, {mpls_path1_2_1}));
+  routeUpdatesQueue.push(routeUpdate1);
 
   // wait
   mockFibHandler_->waitForUpdateUnicastRoutes();
   mockFibHandler_->waitForUpdateMplsRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate1.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate1, fibRouteUpdatesQueueReader.get().value()));
 
   // verify routes
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
@@ -948,15 +1022,17 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   EXPECT_EQ(mockFibHandler_->getDelMplsRoutesCount(), 0);
 
   // delete one route
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToDelete = {toIPNetwork(prefix3)};
-    routeUpdate.mplsRoutesToDelete = {label1, label3};
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
+  DecisionRouteUpdate routeUpdate2;
+  routeUpdate2.unicastRoutesToDelete = {toIPNetwork(prefix3)};
+  routeUpdate2.mplsRoutesToDelete = {label1, label3};
+  routeUpdatesQueue.push(routeUpdate2);
 
   mockFibHandler_->waitForDeleteUnicastRoutes();
   mockFibHandler_->waitForDeleteMplsRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate2.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate2, fibRouteUpdatesQueueReader.get().value()));
 
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
@@ -971,17 +1047,19 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   EXPECT_EQ(mockFibHandler_->getDelMplsRoutesCount(), 2);
 
   // add back that route
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(
-        RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
+  DecisionRouteUpdate routeUpdate3;
+  routeUpdate3.addRouteToUpdate(
+      RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}));
+  routeUpdate3.mplsRoutesToUpdate.emplace_back(
+      RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
+  routeUpdatesQueue.push(routeUpdate3);
 
   mockFibHandler_->waitForUpdateUnicastRoutes();
   mockFibHandler_->waitForUpdateMplsRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate3.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate3, fibRouteUpdatesQueueReader.get().value()));
 
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
@@ -1012,11 +1090,15 @@ TEST_F(FibTestFixture, fibRestart) {
   routeUpdate.mplsRoutesToUpdate.emplace_back(
       RibMplsEntry(label2, {mpls_path1_2_2}));
 
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  routeUpdatesQueue.push(routeUpdate);
 
   // initial syncFib debounce
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
@@ -1034,6 +1116,10 @@ TEST_F(FibTestFixture, fibRestart) {
   // syncFib debounce
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate.type = DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
@@ -1064,11 +1150,15 @@ TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
   routeUpdate.mplsRoutesToUpdate.emplace_back(
       RibMplsEntry(label2, {mpls_path1_2_2}));
 
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  routeUpdatesQueue.push(routeUpdate);
 
   // initial syncFib debounce
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // ensure no other calls occured
   EXPECT_EQ(mockFibHandler_->getFibSyncCount(), 1);
@@ -1105,10 +1195,14 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   routeUpdate.mplsRoutesToUpdate.emplace_back(std::move(route1));
   routeUpdate.mplsRoutesToUpdate.emplace_back(std::move(route2));
   routeUpdate.mplsRoutesToUpdate.emplace_back(std::move(route3));
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  routeUpdatesQueue.push(routeUpdate);
 
   // wait for mpls
   mockFibHandler_->waitForUpdateMplsRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // verify mpls routes in DB
   mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
@@ -1183,8 +1277,13 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
   routeUpdate.addRouteToUpdate(std::move(route2));
   routeUpdate.addRouteToUpdate(std::move(route3));
   routeUpdate.addRouteToUpdate(std::move(route4));
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  routeUpdatesQueue.push(routeUpdate);
   mockFibHandler_->waitForUpdateUnicastRoutes();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
+
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 4);
 
@@ -1339,29 +1438,38 @@ TEST_F(FibTestFixture, doNotInstall) {
   route3.doNotInstall = true;
 
   // add routes to DB and update DB
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(std::move(route1));
-    routeUpdate.addRouteToUpdate(std::move(route2));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
-  mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.addRouteToUpdate(std::move(route1));
+  routeUpdate1.addRouteToUpdate(route2);
+  routeUpdatesQueue.push(std::move(routeUpdate1));
 
+  mockFibHandler_->waitForSyncFib();
+
+  DecisionRouteUpdate programmedRouteUpdate1;
+  programmedRouteUpdate1.addRouteToUpdate(route2);
+  programmedRouteUpdate1.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      programmedRouteUpdate1, fibRouteUpdatesQueueReader.get().value()));
+
+  mockFibHandler_->getRouteTableByClient(routes, kFibId);
   // only 1 route is installable
   EXPECT_EQ(routes.size(), 1);
 
   // add routes to DB and update DB
-  {
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(std::move(route3));
-    routeUpdate.addRouteToUpdate(std::move(route4));
-    routeUpdatesQueue.push(std::move(routeUpdate));
-  }
+  DecisionRouteUpdate routeUpdate2;
+  routeUpdate2.addRouteToUpdate(std::move(route3));
+  routeUpdate2.addRouteToUpdate(route4);
+  routeUpdatesQueue.push(std::move(routeUpdate2));
 
   mockFibHandler_->waitForUpdateUnicastRoutes();
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
 
+  DecisionRouteUpdate programmedRouteUpdate2;
+  programmedRouteUpdate2.addRouteToUpdate(route4);
+  programmedRouteUpdate2.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      programmedRouteUpdate2, fibRouteUpdatesQueueReader.get().value()));
+
+  mockFibHandler_->getRouteTableByClient(routes, kFibId);
   // now 2 routes are installable
   EXPECT_EQ(routes.size(), 2);
 }
@@ -1386,13 +1494,19 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
   routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix2));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(
-      RibMplsEntry(label1, {mpls_path1_2_1}));
+  auto mplsEntry = RibMplsEntry(label1, {mpls_path1_2_1});
+  routeUpdate.mplsRoutesToUpdate.emplace_back(mplsEntry);
   routeUpdate.mplsRoutesToDelete.emplace_back(label2);
   staticRouteUpdatesQueue.push(routeUpdate);
 
   // Wait for MPLS route updates
   mockFibHandler_->waitForUpdateMplsRoutes();
+  DecisionRouteUpdate syncedUpdate;
+  syncedUpdate.type = DecisionRouteUpdate::INCREMENTAL;
+  // Only updated MPLS routes are synced.
+  syncedUpdate.mplsRoutesToUpdate.emplace_back(mplsEntry);
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      syncedUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // Verify counters
   EXPECT_EQ(mockFibHandler_->getFibSyncCount(), 0);
@@ -1415,6 +1529,10 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   // Expect FIB sync for unicast & mpls routes
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  syncedUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      syncedUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // ensure no other calls occured
   EXPECT_EQ(mockFibHandler_->getFibSyncCount(), 1);
@@ -1453,10 +1571,6 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
  */
 TEST_F(
     FibTestFixtureWaitOnDecision, StaticMplsRoutesUpdateRetryTillSuccessful) {
-  OpenrEventBase evb;
-  folly::Baton waitBaton;
-  int scheduleAt{0};
-
   // 1. Initially there are 1 unicast and 1 MPLS routes in FIB agent.
   DecisionRouteUpdate initialRoutes;
   initialRoutes.addRouteToUpdate(
@@ -1503,6 +1617,12 @@ TEST_F(
 
   // 5. Expect static routes to be prorammed successfully.
   mockFibHandler_->waitForUpdateMplsRoutes();
+  DecisionRouteUpdate syncedUpdate;
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  staticRouteUpdate.type = DecisionRouteUpdate::INCREMENTAL;
+  staticRouteUpdate.mplsRoutesToDelete.clear();
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      staticRouteUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // Above backlogged static routes are programmed.
   // Existing routes in FIB client still exist.
@@ -1523,10 +1643,6 @@ TEST_F(
  * 5. Followup RIB instance is successful.
  */
 TEST_F(FibTestFixtureWaitOnDecision, RibRoutesUpdateRetryTillSuccessful) {
-  OpenrEventBase evb;
-  folly::Baton waitBaton;
-  int scheduleAt{0};
-
   // 1. FIB client is initially unhealthy.
   mockFibHandler_->setHandlerHealthyState(false /*isHealthy*/);
 
@@ -1553,6 +1669,11 @@ TEST_F(FibTestFixtureWaitOnDecision, RibRoutesUpdateRetryTillSuccessful) {
   // 4. Expect FIB sync for unicast & mpls routes
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  routeUpdate.unicastRoutesToDelete.clear();
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // Above backlogged RIB routes are programmed.
   // Existing routes in FIB client still exist.
@@ -1574,6 +1695,11 @@ TEST_F(FibTestFixtureWaitOnDecision, RibRoutesUpdateRetryTillSuccessful) {
   mockFibHandler_->waitForUpdateUnicastRoutes();
   mockFibHandler_->waitForUpdateMplsRoutes();
   mockFibHandler_->waitForDeleteMplsRoutes();
+
+  // Synced routes are sent to fibRouteUpdatesQueue_.
+  routeUpdate2.type = DecisionRouteUpdate::INCREMENTAL;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      routeUpdate2, fibRouteUpdatesQueueReader.get().value()));
 
   // Above normal RIB instance is programmed.
   mockFibHandler_->getRouteTableByClient(routes, kFibId);

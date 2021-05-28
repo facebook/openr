@@ -29,7 +29,7 @@ Fib::Fib(
     std::chrono::seconds coldStartDuration,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
-    messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
+    messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
@@ -37,9 +37,9 @@ Fib::Fib(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       syncStaticRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
-      fibUpdatesQueue_(fibUpdatesQueue),
+      fibRouteUpdatesQueue_(fibRouteUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
-  auto tConfig = config->getConfig();
+  auto& tConfig = config->getConfig();
 
   dryrun_ = tConfig.dryrun_ref().value_or(false);
   enableSegmentRouting_ = tConfig.enable_segment_routing_ref().value_or(false);
@@ -111,14 +111,14 @@ Fib::Fib(
           return;
         }
 
-        DecisionRouteUpdate routeUpdate;
+        DecisionRouteUpdate allMplsRoutes;
         std::transform(
             routeState_.mplsRoutes.cbegin(),
             routeState_.mplsRoutes.cend(),
-            std::back_inserter(routeUpdate.mplsRoutesToUpdate),
+            std::back_inserter(allMplsRoutes.mplsRoutesToUpdate),
             [](auto& iter) { return iter.second; });
 
-        if (updateRoutes(std::move(routeUpdate), true /* static routes */)) {
+        if (updateRoutes(std::move(allMplsRoutes), true /* static routes */)) {
           syncStaticRoutesExpBackoff_.reportSuccess();
         } else {
           // Apply exponential backoff and schedule next run
@@ -360,7 +360,7 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
 
 messaging::RQueue<DecisionRouteUpdate>
 Fib::getFibUpdatesReader() {
-  return fibUpdatesQueue_.getReader();
+  return fibRouteUpdatesQueue_.getReader();
 }
 
 void
@@ -494,17 +494,6 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     return true; // Treat route updates successful in dry run.
   }
 
-  // Publish the fib streaming routes after considering donotinstall
-  // and dryrun logic.
-  if (not routeUpdate.unicastRoutesToUpdate.empty() ||
-      not routeUpdate.unicastRoutesToDelete.empty() ||
-      not routeUpdate.mplsRoutesToUpdate.empty() ||
-      not routeUpdate.mplsRoutesToDelete.empty()) {
-    // Due to donotinstall logic it's possible to have empty change,
-    // no need to publish empty updates.
-    fibUpdatesQueue_.push(routeUpdate);
-  }
-
   // For static routes we always update the provided routes immediately
   if (!isStaticRoutes && syncRoutesTimer_->isScheduled()) {
     // Check if there's any full sync scheduled,
@@ -570,6 +559,10 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
       client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
     }
 
+    // Successfully synced routes.
+    auto syncedRoutes = std::move(routeUpdate);
+    syncedRoutes.type = DecisionRouteUpdate::INCREMENTAL;
+
     if (enableSegmentRouting_) {
       // Delete mpls routes
       if (numMplsRoutesToDelete) {
@@ -591,7 +584,14 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
 
         client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
       }
+    } else {
+      // Clear MPLS routes if segment routes is disabled.
+      syncedRoutes.mplsRoutesToDelete.clear();
+      syncedRoutes.mplsRoutesToUpdate.clear();
     }
+
+    // Send synced routes into fibRouteUpdatesQueue_.
+    fibRouteUpdatesQueue_.push(std::move(syncedRoutes));
 
     const auto elapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -646,16 +646,33 @@ Fib::syncRouteDb() {
     createFibClient(evb_, socket_, client_, thriftPort_);
     fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
 
+    DecisionRouteUpdate syncedRoutes;
+    // Set type as FULL_SYNC for first Fib sync after restarts.
+    // Followup Fib sync are triggered by either route program failures or reset
+    // of connection with switch agent.
+    syncedRoutes.type = (not hasSyncedFib_)
+        ? DecisionRouteUpdate::FULL_SYNC
+        : DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
     // Sync unicast routes
     LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes in FIB";
     client_->sync_syncFib(kFibId_, unicastRoutes);
+    syncedRoutes.unicastRoutesToUpdate = routeState_.unicastRoutes;
     printUnicastRoutesAddUpdate(unicastRoutes);
 
     // Sync mpls routes
     if (enableSegmentRouting_) {
       LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes in FIB";
       client_->sync_syncMplsFib(kFibId_, mplsRoutes);
+      std::transform(
+          routeState_.mplsRoutes.cbegin(),
+          routeState_.mplsRoutes.cend(),
+          std::back_inserter(syncedRoutes.mplsRoutesToUpdate),
+          [](auto& iter) { return iter.second; });
       printMplsRoutesAddUpdate(mplsRoutes);
+    }
+    // Send synced routes into fibRouteUpdatesQueue_.
+    if (not syncedRoutes.empty()) {
+      fibRouteUpdatesQueue_.push(std::move(syncedRoutes));
     }
 
     const auto elapsedTime =
@@ -689,7 +706,7 @@ void
 Fib::keepAliveCheck() {
   createFibClient(evb_, socket_, client_, thriftPort_);
   int64_t aliveSince = client_->sync_aliveSince();
-  // Check if FIB has restarted or not
+  // Check if switch agent has restarted or not
   if (aliveSince != latestAliveSince_) {
     LOG(WARNING) << "FibAgent seems to have restarted. "
                  << "Performing full route DB sync ...";

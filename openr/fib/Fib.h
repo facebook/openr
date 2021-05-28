@@ -52,7 +52,7 @@ class Fib final : public OpenrEventBase {
       std::chrono::seconds coldStartDuration,
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
-      messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue);
 
   /**
@@ -247,8 +247,9 @@ class Fib final : public OpenrEventBase {
   // periodically send alive msg to switch agent
   std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
 
-  // Queues to publish fib updates (Fib streaming)
-  messaging::ReplicateQueue<DecisionRouteUpdate>& fibUpdatesQueue_;
+  // Queues to publish programmed incremental IP/label routes or those from Fib
+  // sync. (Fib streaming)
+  messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue_;
 
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.

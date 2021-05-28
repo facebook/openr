@@ -34,8 +34,13 @@ struct DecisionRouteUpdate {
     DEFAULT,
     // Incremental route updates.
     INCREMENTAL,
-    // Route updates from full sync.
-    FULL_SYNC
+    // Full-sync route updates after openr (re)starts.
+    FULL_SYNC,
+    // Full-sync route udpates produced by Fib triggered by either route program
+    // failures or reset of connection with switch agent. This is requied by Fib
+    // monitors to distinguish from full-sync route updates after openr
+    // (re)starts.
+    FULL_SYNC_AFTER_FIB_FAILURES
   };
 
   Type type;
@@ -45,6 +50,13 @@ struct DecisionRouteUpdate {
   std::vector<RibMplsEntry> mplsRoutesToUpdate;
   std::vector<int32_t> mplsRoutesToDelete;
   std::optional<thrift::PerfEvents> perfEvents = std::nullopt;
+
+  bool
+  empty() {
+    return (
+        unicastRoutesToUpdate.empty() and unicastRoutesToDelete.empty() and
+        mplsRoutesToUpdate.empty() and mplsRoutesToDelete.empty());
+  }
 
   void
   addRouteToUpdate(RibUnicastEntry const& route) {

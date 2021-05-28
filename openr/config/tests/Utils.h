@@ -72,6 +72,7 @@ getBasicOpenrConfig(
   config.spark_config_ref() = sparkConfig;
   config.enable_rib_policy_ref() = true;
   config.assume_drained_ref() = false;
+  config.enable_fib_ack_ref() = true;
 
   if (areaCfg.empty()) {
     config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};

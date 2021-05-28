@@ -154,6 +154,15 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               break;
             }
 
+            // Route updates of type FULL_SYNC_AFTER_FIB_FAILURES are published
+            // by Fib triggered by either route program failures or reset of
+            // connection with switch agent. Fib monitors does not need to
+            // consume this type of route updates.
+            if (maybeUpdate.value().type ==
+                DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES) {
+              continue;
+            }
+
             // Publish the update to all active streams
             fibPublishers_.withWLock([&maybeUpdate](auto& fibPublishers) {
               if (fibPublishers.size()) {
