@@ -280,7 +280,7 @@ main(int argc, char** argv) {
   ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
-  ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue;
+  ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
 
@@ -400,6 +400,13 @@ main(int argc, char** argv) {
               FLAGS_kvstore_rep_port)},
           config));
 
+  // If FIB-ACK feature is enabled, Fib publishes routes to PrefixManager
+  // after programming has completed; Otherwise, Decision publishes routes to
+  // PrefixManager.
+  auto routeUpdatesQueueReader =
+      (config->getConfig().get_enable_fib_ack()
+           ? fibRouteUpdatesQueue.getReader()
+           : routeUpdatesQueue.getReader());
   auto prefixManager = startEventBase(
       allThreads,
       orderedEvbs,
@@ -408,7 +415,7 @@ main(int argc, char** argv) {
       std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           prefixUpdatesQueue.getReader(),
-          routeUpdatesQueue.getReader(),
+          std::move(routeUpdatesQueueReader),
           config,
           kvStore,
           initialPrefixHoldTime));
@@ -534,7 +541,7 @@ main(int argc, char** argv) {
           std::chrono::seconds(3 * *sparkConf.keepalive_time_s_ref()),
           routeUpdatesQueue.getReader(),
           std::move(fibStaticRouteUpdatesQueueReader),
-          fibUpdatesQueue,
+          fibRouteUpdatesQueue,
           logSampleQueue));
 
   // Start OpenrCtrl thrift server
@@ -616,7 +623,7 @@ main(int argc, char** argv) {
   prefixUpdatesQueue.close();
   kvStoreUpdatesQueue.close();
   staticRouteUpdatesQueue.close();
-  fibUpdatesQueue.close();
+  fibRouteUpdatesQueue.close();
   netlinkEventsQueue.close();
   logSampleQueue.close();
 

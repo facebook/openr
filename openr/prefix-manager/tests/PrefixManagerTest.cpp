@@ -72,7 +72,7 @@ class PrefixManagerTestFixture : public testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue,
         prefixUpdatesQueue.getReader(),
-        routeUpdatesQueue.getReader(),
+        fibRouteUpdatesQueue.getReader(),
         config,
         kvStoreWrapper->getKvStore(),
         std::chrono::seconds{0});
@@ -89,8 +89,8 @@ class PrefixManagerTestFixture : public testing::Test {
   TearDown() override {
     // Close queues
     prefixUpdatesQueue.close();
-    routeUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
+    fibRouteUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
 
     // cleanup kvStoreClient
@@ -152,8 +152,8 @@ class PrefixManagerTestFixture : public testing::Test {
 
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
 
   // Create the serializer for write/read
   CompactSerializer serializer;
@@ -673,7 +673,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   auto prefixManager2 = std::make_unique<PrefixManager>(
       staticRouteUpdatesQueue,
       prefixUpdatesQueue.getReader(),
-      routeUpdatesQueue.getReader(),
+      fibRouteUpdatesQueue.getReader(),
       config,
       kvStoreWrapper->getKvStore(),
       std::chrono::seconds(0));
@@ -741,7 +741,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
 
   // cleanup
   prefixUpdatesQueue.close();
-  routeUpdatesQueue.close();
+  fibRouteUpdatesQueue.close();
   kvStoreWrapper->closeQueue();
   prefixManager2->stop();
   prefixManagerThread2->join();
@@ -1151,7 +1151,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
     expected.emplace(keyStrB, expectedPrefixEntry1A);
@@ -1191,7 +1191,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicast1B);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
     expected.emplace(keyStrA, expectedPrefixEntry1B);
@@ -1218,7 +1218,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
 
@@ -1280,7 +1280,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
     expected.emplace(keyStrC, expectedPrefixEntry1A);
@@ -1301,7 +1301,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
 
@@ -1321,7 +1321,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
     expected.emplace(keyStrB, expectedPrefixEntry1A);
@@ -1353,7 +1353,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicast1B);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
     expected.emplace(keyStrA, expectedPrefixEntry1B);
@@ -1380,7 +1380,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
 
@@ -1699,7 +1699,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicastEntryV4_1);
     routeUpdate.addRouteToUpdate(unicastEntryV6_1);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     // Verify 1): PrefixManager -> Decision update
     {
@@ -1790,7 +1790,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     routeUpdate.addRouteToUpdate(unicastEntryV4_2);
     routeUpdate.addRouteToUpdate(unicastEntryV6_2);
     routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_2);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     // Verify 1): PrefixManager -> Decision update
     {
@@ -1849,7 +1849,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     tmpEntryV4.nexthops = {createNextHop(toBinaryAddress("192.168.0.1"))};
     routeUpdate.addRouteToUpdate(tmpEntryV4);
     routeUpdate.addRouteToUpdate(unicastEntryV6_2);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     // Verify 1): PrefixManager -> Decision update
     {
@@ -1915,7 +1915,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
     routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     // Verify 1): PrefixManager -> Decision update
     {
@@ -2091,7 +2091,7 @@ TEST_F(
       thrift::Types_constants::kDefaultArea());
   DecisionRouteUpdate routeUpdate1;
   routeUpdate1.addRouteToUpdate(unicastEntryV4_1);
-  routeUpdatesQueue.push(std::move(routeUpdate1));
+  fibRouteUpdatesQueue.push(std::move(routeUpdate1));
 
   auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
   EXPECT_FALSE(update.has_value()); // we need two supports, but only has 1
@@ -2109,7 +2109,7 @@ TEST_F(
       thrift::Types_constants::kDefaultArea());
   DecisionRouteUpdate routeUpdate2;
   routeUpdate2.addRouteToUpdate(unicastEntryV4_2);
-  routeUpdatesQueue.push(std::move(routeUpdate2));
+  fibRouteUpdatesQueue.push(std::move(routeUpdate2));
 
   update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
   EXPECT_TRUE(update.has_value()); // now we have two ;-)
@@ -2371,45 +2371,45 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //
   // Steps, briefly:
   //
-  // 1. Inject the following into the routeUpdatesQueue (simulating Decision to
-  //    Prefixmgr interaction):
+  // 1. Inject the following into the fibRouteUpdatesQueue (simulating Decision
+  //    to Prefixmgr interaction):
   //    - 1st supporting route for v4Prefix_;
   //    - 1st supporting route for v6Prefix_;
   // Verification:
-  //    a. v4Prefix_ will be sent to Decision on staticRouteUpdatesQueue (since
-  //       the install_to_fib bit is set for v4Prefix_)
-  //    b. v6Prefix_ will NOT be sent to Decision on staticRouteUpdatesQueue
-  //       (since min_supporting_route is not met for v6Prefix_, plus the
-  //       install_to_fib bit is NOT set for v6Prefix_)
-  //    c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
-  //    d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
-  //    e. Config values and supporting routes count is as expected for both
-  //       v4Prefix_ and v6Prefix_
+  //  a. v4Prefix_ will be sent to Decision on staticRouteUpdatesQueue (since
+  //     the install_to_fib bit is set for v4Prefix_)
+  //  b. v6Prefix_ will NOT be sent to Decision on staticRouteUpdatesQueue
+  //     (since min_supporting_route is not met for v6Prefix_, plus the
+  //     install_to_fib bit is NOT set for v6Prefix_)
+  //  c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
+  //  d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
+  //  e. Config values and supporting routes count is as expected for both
+  //     v4Prefix_ and v6Prefix_
   //
-  // 2. Inject the following into the routeUpdatesQueue (simulating Decision to
-  //    Prefixmgr interaction):
+  // 2. Inject the following into the fibRouteUpdatesQueue (simulating Decision
+  //    to Prefixmgr interaction):
   //    - 2nd supporting route for v6Prefix_;
   // Verification:
-  //    a. v6Prefix_ will STILL NOT be sent to Decision on
-  //       staticRouteUpdatesQueue since, while min_supporting_route is now met
-  //       for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
-  //    b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
-  //    c. Config values and supporting routes count is as expected for both
-  //       v4Prefix_ and v6Prefix_
+  //   a. v6Prefix_ will STILL NOT be sent to Decision on
+  //      staticRouteUpdatesQueue since, while min_supporting_route is now met
+  //      for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
+  //   b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
+  //   c. Config values and supporting routes count is as expected for both
+  //      v4Prefix_ and v6Prefix_
   //
   // 3. Withdraw 1 supporting route from both v4Prefix_ and v6Prefix_
-  //    - this will break the min_supporting_routes condition for both
-  //      the prefixes.
+  //   - this will break the min_supporting_routes condition for both
+  //     the prefixes.
   // Verification:
-  //    a. delete only for the v4Prefix_ gets sent to Decision
-  //    b. Both prefixes will be withdrawn from KvStore
-  //    c. Supporting routes count for both prefixes will decrement by 1
+  //   a. delete only for the v4Prefix_ gets sent to Decision
+  //   b. Both prefixes will be withdrawn from KvStore
+  //   c. Supporting routes count for both prefixes will decrement by 1
 
-  // Step 1 - inject 1 v4 and 1 v6 supporting prefix into routeUpdatesQueue
+  // Step 1 - inject 1 v4 and 1 v6 supporting prefix into fibRouteUpdatesQueue
   DecisionRouteUpdate routeUpdate;
   routeUpdate.addRouteToUpdate(unicastEntryV4_1);
   routeUpdate.addRouteToUpdate(unicastEntryV6_1);
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
   // Verify 1a and 1b: PrefixManager -> Decision staticRouteupdate
   {
@@ -2477,9 +2477,9 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
             folly::IPAddress::networkToString(v6Network_1)));
   }
 
-  // Step 2 - inject 1 v6 supporting prefix into routeUpdatesQueue
+  // Step 2 - inject 1 v6 supporting prefix into fibRouteUpdatesQueue
   routeUpdate.addRouteToUpdate(unicastEntryV6_2);
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
   // Verify 2a: PrefixManager -> Decision staticRouteUpdate
   {
@@ -2531,7 +2531,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   // Step 3 - withdraw 1 v4 and 1 v6 supporting prefix
   routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
   routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
-  routeUpdatesQueue.push(std::move(routeUpdate));
+  fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
   // Verify 3a PrefixManager -> Decision staticRouteupdate
   {

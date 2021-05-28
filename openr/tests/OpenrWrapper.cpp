@@ -202,7 +202,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   prefixManager_ = std::make_unique<PrefixManager>(
       staticRoutesQueue_,
       prefixUpdatesQueue_.getReader(),
-      routeUpdatesQueue_.getReader(),
+      fibRouteUpdatesQueue_.getReader(),
       config_,
       kvStore_.get(),
       std::chrono::seconds(0));
@@ -226,7 +226,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       fibColdStartDuration,
       routeUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
-      fibUpdatesQueue_,
+      fibRouteUpdatesQueue_,
       logSampleQueue_);
 
   //
@@ -369,7 +369,7 @@ OpenrWrapper<Serializer>::stop() {
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
   staticRoutesQueue_.close();
-  fibUpdatesQueue_.close();
+  fibRouteUpdatesQueue_.close();
   logSampleQueue_.close();
 
   // stop all modules in reverse order

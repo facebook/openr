@@ -112,7 +112,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
-        routeUpdatesQueue_.getReader(),
+        fibRouteUpdatesQueue_.getReader(),
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -127,7 +127,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   TearDown() override {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
-    routeUpdatesQueue_.close();
+    fibRouteUpdatesQueue_.close();
     logSampleQueue_.close();
     kvStoreWrapper_->closeQueue();
 
@@ -188,7 +188,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   // Queue for publishing prefix-updates to PrefixManager
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
-  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
 
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
@@ -274,8 +274,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     std::vector<std::unique_ptr<PrefixManager>> prefixManagers;
     std::vector<messaging::ReplicateQueue<PrefixEvent>> prefixQueues{
         numAllocators};
-    std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>> routeQueues{
-        numAllocators};
+    std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>>
+        fibRouteUpdatesQueues{numAllocators};
     messaging::ReplicateQueue<LogSample> logSampleQueue;
     messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
     std::vector<std::unique_ptr<PrefixAllocator>> allocators;
@@ -441,7 +441,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       auto prefixManager = std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           prefixQueues.at(i).getReader(),
-          routeQueues.at(i).getReader(),
+          fibRouteUpdatesQueues.at(i).getReader(),
           currConfig,
           store->getKvStore(),
           std::chrono::seconds(0));
@@ -512,7 +512,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     for (auto& queue : prefixQueues) {
       queue.close();
     }
-    for (auto& queue : routeQueues) {
+    for (auto& queue : fibRouteUpdatesQueues) {
       queue.close();
     }
     staticRouteUpdatesQueue.close();
@@ -653,7 +653,7 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   //       resetQueue() will clean up ALL readers including kvStoreClient. Must
   //       recreate it to receive KvStore publication.
   prefixUpdatesQueue_.close();
-  routeUpdatesQueue_.close();
+  fibRouteUpdatesQueue_.close();
   kvStoreWrapper_->closeQueue();
   kvStoreClient_.reset();
   prefixAllocator_->stop();
@@ -665,7 +665,7 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
 
   // reopen queue and restart prefixAllocator/prefixManager
   prefixUpdatesQueue_.open();
-  routeUpdatesQueue_.open();
+  fibRouteUpdatesQueue_.open();
   kvStoreWrapper_->openQueue();
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
     kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -988,7 +988,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   //       resetQueue() will clean up ALL readers including kvStoreClient. Must
   //       recreate it to receive KvStore publication.
   prefixUpdatesQueue_.close();
-  routeUpdatesQueue_.close();
+  fibRouteUpdatesQueue_.close();
   kvStoreWrapper_->closeQueue();
   kvStoreClient_.reset();
   prefixAllocator_->stop();
@@ -1000,7 +1000,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
 
   // reopen queue and restart prefixAllocator/prefixManager
   prefixUpdatesQueue_.open();
-  routeUpdatesQueue_.open();
+  fibRouteUpdatesQueue_.open();
   kvStoreWrapper_->openQueue();
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
     kvStoreClient_ = std::make_unique<KvStoreClientInternal>(

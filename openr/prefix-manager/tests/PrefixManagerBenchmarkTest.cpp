@@ -39,7 +39,7 @@ class PrefixManagerBenchmarkTestFixture {
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
-        routeUpdatesQueue_.getReader(),
+        fibRouteUpdatesQueue_.getReader(),
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds{0} /* no delay for initial dump */);
@@ -52,7 +52,7 @@ class PrefixManagerBenchmarkTestFixture {
   ~PrefixManagerBenchmarkTestFixture() {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
-    routeUpdatesQueue_.close();
+    fibRouteUpdatesQueue_.close();
     kvStoreWrapper_->closeQueue();
 
     prefixManager_->stop();
@@ -133,7 +133,7 @@ class PrefixManagerBenchmarkTestFixture {
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
-  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
 
   std::shared_ptr<Config> config_;
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;

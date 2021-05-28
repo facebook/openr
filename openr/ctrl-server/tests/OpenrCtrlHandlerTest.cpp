@@ -109,7 +109,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::seconds(2),
         routeUpdatesQueue_.getReader(),
         staticRoutesUpdatesQueue_.getReader(),
-        fibUpdatesQueue_,
+        fibRouteUpdatesQueue_,
         logSampleQueue_);
     fibThread_ = std::thread([&]() { fib->run(); });
 
@@ -117,7 +117,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManager = std::make_shared<PrefixManager>(
         staticRoutesUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
-        routeUpdatesQueue_.getReader(),
+        fibRouteUpdatesQueue_.getReader(),
         config,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -179,7 +179,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     peerUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
-    fibUpdatesQueue_.close();
+    fibRouteUpdatesQueue_.close();
     logSampleQueue_.close();
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
@@ -233,7 +233,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdatesQueue_;
-  messaging::ReplicateQueue<DecisionRouteUpdate> fibUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 

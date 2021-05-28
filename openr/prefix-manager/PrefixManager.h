@@ -60,7 +60,7 @@ class PrefixManager final : public OpenrEventBase {
       messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
       // consumer queue
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
-      messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
+      messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
       // config
       std::shared_ptr<const Config> config,
       // raw ptr for modules
@@ -230,8 +230,17 @@ class PrefixManager final : public OpenrEventBase {
    */
   void processOriginatedPrefixes();
 
-  // process decision route update, inject routes to different areas
-  void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
+  // Process Fib route update.
+  void processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate);
+
+  // Store programmed routes update from FIB, which are later used to check
+  // whether prefixes are ready to be injected into KvStore.
+  void storeProgrammedRoutes(const DecisionRouteUpdate& fibRouteUpdates);
+
+  // For one node locating in multiple areas, it should redistribute prefixes
+  // received from one area into other areas, performing similar role as border
+  // routers in BGP.
+  void redistributePrefixesAcrossAreas(DecisionRouteUpdate& fibRouteUpdate);
 
   // get all areaIds
   std::unordered_set<std::string> allAreaIds();
@@ -379,6 +388,13 @@ class PrefixManager final : public OpenrEventBase {
    */
   std::unordered_map<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
       ribPrefixDb_;
+
+  /*
+   * MPLS labels with label routes already programmed by FIB. For one prefix
+   * with prepend label, PrefixManager needs to make sure the associated label
+   * routes is programmed before advertisement.
+   */
+  std::unordered_set<int32_t> programmedLabels_;
 }; // PrefixManager
 
 } // namespace openr

@@ -43,7 +43,7 @@ PrefixManagerPendingUpdates::applyPrefixChange(
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
-    messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
+    messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
     KvStore* kvStore,
     const std::chrono::seconds& initialDumpTime)
@@ -130,9 +130,8 @@ PrefixManager::PrefixManager(
     }
   });
 
-  // Fiber to process route updates from Decision
-  addFiberTask([q = std::move(decisionRouteUpdatesQueue),
-                this]() mutable noexcept {
+  // Fiber to process route updates from Fib.
+  addFiberTask([q = std::move(fibRouteUpdatesQueue), this]() mutable noexcept {
     while (true) {
       auto maybeThriftObj = q.get(); // perform read
       if (maybeThriftObj.hasError()) {
@@ -142,7 +141,7 @@ PrefixManager::PrefixManager(
 
       try {
         VLOG(2) << "Received RIB updates from Decision";
-        processDecisionRouteUpdates(std::move(maybeThriftObj).value());
+        processFibRouteUpdates(std::move(maybeThriftObj).value());
       } catch (const std::exception&) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
         // collect stack strace then fail the process
@@ -1122,17 +1121,51 @@ PrefixManager::processOriginatedPrefixes() {
 }
 
 void
-PrefixManager::processDecisionRouteUpdates(
-    DecisionRouteUpdate&& decisionRouteUpdate) {
+PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
+  // Store programmed label/unicast routes info.
+  storeProgrammedRoutes(fibRouteUpdate);
+
+  // Re-advertise prefixes received from one area to other areas.
+  redistributePrefixesAcrossAreas(fibRouteUpdate);
+}
+
+void
+PrefixManager::storeProgrammedRoutes(
+    const DecisionRouteUpdate& fibRouteUpdates) {
+  // In case of full sync, reset previous stored programmed routes.
+  if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC or
+      fibRouteUpdates.type ==
+          DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES) {
+    programmedLabels_.clear();
+  }
+
+  // Handle programmed MPLS routes.
+  if (not fibRouteUpdates.mplsRoutesToUpdate.empty() or
+      not fibRouteUpdates.mplsRoutesToDelete.empty()) {
+    for (auto& mplsEntry : fibRouteUpdates.mplsRoutesToUpdate) {
+      programmedLabels_.insert(mplsEntry.label);
+    }
+    for (auto& deletedLabel : fibRouteUpdates.mplsRoutesToDelete) {
+      programmedLabels_.erase(deletedLabel);
+    }
+    // schedule `syncKvStore` after throttled timeout
+    syncKvStoreThrottled_->operator()();
+  }
+  // TODO: Handle programmed unicast routes.
+}
+
+void
+PrefixManager::redistributePrefixesAcrossAreas(
+    DecisionRouteUpdate& fibRouteUpdate) {
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
 
   // ATTN: Routes imported from local BGP won't show up inside
-  // `decisionRouteUpdate`. However, local-originated static route
+  // `fibRouteUpdate`. However, local-originated static route
   // (e.g. from route-aggregation) can come along.
 
   // Add/Update unicast routes
-  for (auto& [prefix, route] : decisionRouteUpdate.unicastRoutesToUpdate) {
+  for (auto& [prefix, route] : fibRouteUpdate.unicastRoutesToUpdate) {
     // NOTE: future expansion - run egress policy here
 
     //
@@ -1157,7 +1190,7 @@ PrefixManager::processDecisionRouteUpdates(
     prefixEntry.type_ref() = thrift::PrefixType::RIB;
     // 4. Avoid leaking prepend labels into other areas.
     // Today prefixes with prepend label are produced in BgpSpeaker and arrive
-    // at prefixUpdatesQueue. Prefixes extracted from decisionRouteUpdate are
+    // at prefixUpdatesQueue. Prefixes extracted from fibRouteUpdate are
     // for the purposes of redistribution from one area to another.
     prefixEntry.prependLabel_ref().reset();
 
@@ -1177,7 +1210,7 @@ PrefixManager::processDecisionRouteUpdates(
   }
 
   // Delete unicast routes
-  for (const auto& prefix : decisionRouteUpdate.unicastRoutesToDelete) {
+  for (const auto& prefix : fibRouteUpdate.unicastRoutesToDelete) {
     // TODO: remove this when advertise RibUnicastEntry for routes to delete
     if (originatedPrefixDb_.count(prefix)) {
       // skip local-originated prefix as it won't be considered as
@@ -1197,7 +1230,7 @@ PrefixManager::processDecisionRouteUpdates(
   processOriginatedPrefixes();
 
   // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
-  // We want to keep processDecisionRouteUpdates() running as dynamic
+  // We want to keep processFibRouteUpdates() running as dynamic
   // configuration could add/remove areas.
   if (areaToPolicy_.size() > 1) {
     advertisePrefixesImpl(advertisedPrefixes);

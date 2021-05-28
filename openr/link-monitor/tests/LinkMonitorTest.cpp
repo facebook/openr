@@ -216,7 +216,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue,
         prefixUpdatesQueue.getReader(),
-        routeUpdatesQueue.getReader(),
+        fibRouteUpdatesQueue.getReader(),
         config,
         kvStoreWrapper->getKvStore(),
         std::chrono::seconds(0));
@@ -239,7 +239,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
     neighborUpdatesQueue.close();
     kvStoreSyncEventsQueue.close();
     prefixUpdatesQueue.close();
-    routeUpdatesQueue.close();
+    fibRouteUpdatesQueue.close();
+    staticRouteUpdatesQueue.close();
     logSampleQueue.close();
     nlSock->closeQueue();
     kvStoreWrapper->closeQueue();
@@ -556,7 +557,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::RQueue<InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
