@@ -188,6 +188,7 @@ void
 Fib::stop() {
   // Invoke stop method of super class
   OpenrEventBase::stop();
+  VLOG(1) << "Stopped FIB event base";
 }
 
 std::optional<folly::CIDRNetwork>

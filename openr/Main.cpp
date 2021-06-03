@@ -150,7 +150,7 @@ startEventBase(
   // Start a thread
   allThreads.emplace_back(std::thread([evb = evb.get(), name]() noexcept {
     LOG(INFO) << "Starting " << name << " thread ...";
-    folly::setThreadName(folly::sformat("openr-{}", name));
+    folly::setThreadName(fmt::format("openr-{}", name));
     evb->run();
     LOG(INFO) << name << " thread got stopped.";
   }));
@@ -182,9 +182,6 @@ main(int argc, char** argv) {
   // any threads created below will inherit the signal mask
   folly::EventBase mainEvb;
   EventBaseStopSignalHandler handler(&mainEvb);
-  handler.registerSignalHandler(SIGINT);
-  handler.registerSignalHandler(SIGQUIT);
-  handler.registerSignalHandler(SIGTERM);
 
   // Initialize syslog
   // We log all messages upto INFO level.
@@ -193,7 +190,7 @@ main(int argc, char** argv) {
   // LOG_NODELAY => Connect immediately
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
-  SYSLOG(INFO) << "Starting OpenR daemon.";
+  SYSLOG(INFO) << "Starting OpenR daemon: ppid = " << getpid();
 
   // Export and log build information
   BuildInfo::exportBuildInfo();
@@ -394,7 +391,7 @@ main(int argc, char** argv) {
           kvStoreSyncEventsQueue,
           peerUpdatesQueue.getReader(),
           logSampleQueue,
-          KvStoreGlobalCmdUrl{folly::sformat(
+          KvStoreGlobalCmdUrl{fmt::format(
               "tcp://{}:{}",
               *config->getConfig().listen_addr_ref(),
               FLAGS_kvstore_rep_port)},
@@ -639,8 +636,10 @@ main(int argc, char** argv) {
   // Stop all threads (in reverse order of their creation)
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {
+    LOG(INFO) << "Stopping " << (*riter)->getEvbName();
     (*riter)->stop();
     (*riter)->waitUntilStopped();
+    LOG(INFO) << "Finally stopped " << (*riter)->getEvbName();
   }
 
   // stop bgp speaker
@@ -672,7 +671,7 @@ main(int argc, char** argv) {
   }
 
   // Close syslog connection (this is optional)
-  SYSLOG(INFO) << "Stopping OpenR daemon.";
+  SYSLOG(INFO) << "Stopping OpenR daemon: ppid = " << getpid();
   closelog();
 
   return 0;

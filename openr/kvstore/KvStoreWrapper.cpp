@@ -63,6 +63,7 @@ KvStoreWrapper::run() noexcept {
 
 void
 KvStoreWrapper::stop() {
+  VLOG(1) << "Stopping KvStoreWrapper";
   // Return immediately if not running
   if (!kvStore_->isRunning()) {
     return;
@@ -82,6 +83,7 @@ KvStoreWrapper::stop() {
   // Stop kvstore
   kvStore_->stop();
   kvStoreThread_.join();
+  VLOG(1) << "KvStoreWrapper stopped.";
 }
 
 bool

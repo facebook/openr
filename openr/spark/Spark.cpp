@@ -337,6 +337,7 @@ Spark::stop() {
   // NOTE: explicitly wait for msg to send out before going down
   floodRestartingMsg().get();
   OpenrEventBase::stop();
+  VLOG(1) << "Spark Event Base stopped";
 }
 
 void

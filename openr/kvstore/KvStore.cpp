@@ -256,10 +256,12 @@ KvStore::stop() {
     //       exit and wait for all pending thrift requests to be processed
     //       before eventbase stops.
     kvStoreDb_.clear();
+    VLOG(1) << "Instance inside KvStoreDb stopped";
   });
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
+  VLOG(1) << "KvStore event base stopped";
 }
 
 // static, public
@@ -1313,7 +1315,9 @@ KvStoreDb::~KvStoreDb() {
   evb_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // Destroy thrift clients associated with peers, which will
     // fulfill promises with exceptions if any.
+    cleanupTtlCountdownQueue();
     thriftPeers_.clear();
+    LOG(INFO) << "Successfully destroyed thriftPeers and timers";
   });
 
   // remove ZMQ socket

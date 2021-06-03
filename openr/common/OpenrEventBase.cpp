@@ -38,12 +38,17 @@ getFmOptions() {
 } // namespace
 
 EventBaseStopSignalHandler::EventBaseStopSignalHandler(folly::EventBase* evb)
-    : folly::AsyncSignalHandler(evb) {}
+    : folly::AsyncSignalHandler(evb) {
+  registerSignalHandler(SIGINT);
+  registerSignalHandler(SIGQUIT);
+  registerSignalHandler(SIGTERM);
+}
 
 void
 EventBaseStopSignalHandler::signalReceived(int signal) noexcept {
   LOG(INFO) << "Caught signal: " << signal << ". Stopping openr event-base...";
   getEventBase()->terminateLoopSoon();
+  LOG(INFO) << "Openr event-base stopped";
 }
 
 OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
