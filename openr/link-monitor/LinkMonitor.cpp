@@ -10,6 +10,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
@@ -189,7 +190,7 @@ LinkMonitor::LinkMonitor(
               initValue = *state_.nodeLabel_ref();
             }
             rangeAllocator_.at(areaId).startAllocator(
-                Constants::kSrGlobalRange, initValue);
+                MplsConstants::kSrGlobalRange, initValue);
           });
       startAllocTimer->scheduleTimeout(adjHoldTime);
       startAllocationTimers_.emplace_back(std::move(startAllocTimer));

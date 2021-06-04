@@ -22,6 +22,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
@@ -1976,18 +1977,18 @@ Spark::getNewLabelForIface(const std::string& ifName) {
   // interface must exists. We try to first assign label based on ifIndex if
   // not already taken.
   int32_t label =
-      Constants::kSrLocalRange.first + interfaceDb_.at(ifName).ifIndex;
+      MplsConstants::kSrLocalRange.first + interfaceDb_.at(ifName).ifIndex;
   if (allocatedLabels_.insert(label).second) { // new value inserted
     return label;
   }
 
   // Label already exists let's try to find out a new one from the back
-  label = Constants::kSrLocalRange.second; // last possible one
+  label = MplsConstants::kSrLocalRange.second; // last possible one
   while (!allocatedLabels_.insert(label).second) { // value already exists
     label--;
   }
 
-  if (label < Constants::kSrLocalRange.first) {
+  if (label < MplsConstants::kSrLocalRange.first) {
     throw std::runtime_error("Ran out of local label allocation space.");
   }
 

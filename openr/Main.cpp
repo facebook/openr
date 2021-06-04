@@ -38,6 +38,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Flags.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
@@ -226,21 +227,6 @@ main(int argc, char** argv) {
   }
 
   SYSLOG(INFO) << config->getRunningConfig();
-
-  // Sanity checks on Segment Routing labels
-  const int32_t maxLabel = Constants::kMaxSrLabel;
-  CHECK(Constants::kSrGlobalRange.first > 0);
-  CHECK(Constants::kSrGlobalRange.second < maxLabel);
-  CHECK(Constants::kSrLocalRange.first > 0);
-  CHECK(Constants::kSrLocalRange.second < maxLabel);
-  CHECK(Constants::kSrGlobalRange.first < Constants::kSrGlobalRange.second);
-  CHECK(Constants::kSrLocalRange.first < Constants::kSrLocalRange.second);
-
-  // Local and Global range must be exclusive of each other
-  CHECK(
-      (Constants::kSrGlobalRange.second < Constants::kSrLocalRange.first) ||
-      (Constants::kSrGlobalRange.first > Constants::kSrLocalRange.second))
-      << "Overlapping global/local segment routing label space.";
 
   // Reference to spark config
   const auto& sparkConf = config->getSparkConfig();

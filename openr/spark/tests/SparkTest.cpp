@@ -15,6 +15,7 @@
 
 #include <fb303/ServiceData.h>
 #include <openr/common/Constants.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
@@ -1035,7 +1036,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     EXPECT_EQ(nodeName3, *event1->info.nodeName_ref());
     // ifIndex already used for assigning label to node-2 via iface1. So next
     // label will be assigned from the end.
-    EXPECT_EQ(Constants::kSrLocalRange.second, *event1->info.label_ref());
+    EXPECT_EQ(MplsConstants::kSrLocalRange.second, *event1->info.label_ref());
     LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName3;
 
     auto event2 = node2->waitForEvent(NB_UP);
@@ -1044,7 +1045,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     EXPECT_EQ(nodeName3, *event2->info.nodeName_ref());
     // ifIndex already used for assigning label to node-1 via iface2. So next
     // label will be assigned from the end.
-    EXPECT_EQ(Constants::kSrLocalRange.second, *event2->info.label_ref());
+    EXPECT_EQ(MplsConstants::kSrLocalRange.second, *event2->info.label_ref());
     LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName3;
   }
 
@@ -1059,8 +1060,8 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     }
 
     std::set<int32_t> expectedLabels = {
-        Constants::kSrLocalRange.first + ifIndex3,
-        Constants::kSrLocalRange.second,
+        MplsConstants::kSrLocalRange.first + ifIndex3,
+        MplsConstants::kSrLocalRange.second,
     };
 
     ASSERT_EQ(1, events.count(nodeName1));

@@ -51,19 +51,6 @@ class Constants {
   // The maximum messages we can queue on sending socket
   static constexpr int kHighWaterMark{65536};
 
-  // Maximum label size
-  static constexpr int32_t kMaxSrLabel{(1 << 20) - 1};
-
-  // Segment Routing namespace constants. Local and Global ranges are exclusive
-  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrGlobalRange{101, 999};
-  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrLocalRange{50000, 59999};
-  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrV4StaticMplsRouteRange{60000, 64999};
-  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrV6StaticMplsRouteRange{65000, 69999};
-
   // IP TOS to be used for all control IP packets in network flowing across
   // the nodes
   // DSCP = 48 (first 6 bits), ECN = 0 (last 2 bits). Total 192

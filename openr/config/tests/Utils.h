@@ -8,10 +8,14 @@
 #pragma once
 
 #include <openr/common/Constants.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <optional>
+
+#include <openr/if/gen-cpp2/BgpConfig_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace {
 
@@ -41,7 +45,8 @@ getBasicOpenrConfig(
     bool enableSegmentRouting = false,
     bool dryrun = true,
     bool enableV4OverV6Nexthop = false,
-    bool enableAdjLabels = false) {
+    bool enableAdjLabels = false,
+    bool enablePrependLabels = false) {
   openr::thrift::LinkMonitorConfig linkMonitorConfig;
   linkMonitorConfig.include_interface_regexes_ref() =
       std::vector<std::string>{".*"};
@@ -80,20 +85,37 @@ getBasicOpenrConfig(
     config.areas_ref() = areaCfg;
   }
 
+  openr::thrift::SegmentRoutingConfig srConfig;
   if (enableAdjLabels) {
-    openr::thrift::SegmentRoutingConfig srConfig;
     openr::thrift::SegmentRoutingAdjLabelType sr_adj_label_type;
     openr::thrift::SegmentRoutingAdjLabel sr_adj_label;
     openr::thrift::LabelRange lr;
 
-    lr.start_label_ref() = openr::Constants::kSrLocalRange.first;
-    lr.end_label_ref() = openr::Constants::kSrLocalRange.second;
+    lr.start_label_ref() = openr::MplsConstants::kSrLocalRange.first;
+    lr.end_label_ref() = openr::MplsConstants::kSrLocalRange.second;
     sr_adj_label_type = openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
     sr_adj_label.sr_adj_label_type_ref() = sr_adj_label_type;
     sr_adj_label.adj_label_range_ref() = lr;
     srConfig.sr_adj_label_ref() = sr_adj_label;
-    config.segment_routing_config_ref() = srConfig;
   }
+
+  if (enablePrependLabels) {
+    openr::thrift::MplsLabelRanges prepend_label_ranges;
+    openr::thrift::LabelRange lr4;
+    openr::thrift::LabelRange lr6;
+    lr4.start_label_ref() =
+        openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+    lr4.end_label_ref() =
+        openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+    lr6.start_label_ref() =
+        openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+    lr6.end_label_ref() =
+        openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+    prepend_label_ranges.v4_ref() = lr4;
+    prepend_label_ranges.v6_ref() = lr6;
+    srConfig.prepend_label_ranges_ref() = prepend_label_ranges;
+  }
+  config.segment_routing_config_ref() = srConfig;
 
   return config;
 }

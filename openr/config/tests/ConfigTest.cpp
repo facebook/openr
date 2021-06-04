@@ -6,6 +6,7 @@
  */
 
 #include <openr/common/Constants.h>
+#include <openr/common/MplsUtil.h>
 #include <thread>
 #include <utility>
 #include "openr/if/gen-cpp2/BgpConfig_types.h"
@@ -76,17 +77,27 @@ getSegmentRoutingConfig() {
   openr::thrift::LabelRange lrp6;
 
   // prepend labels
-  lrp4.start_label_ref() = openr::Constants::kSrV4StaticMplsRouteRange.first;
-  lrp4.end_label_ref() = openr::Constants::kSrV4StaticMplsRouteRange.second;
-  lrp6.start_label_ref() = openr::Constants::kSrV6StaticMplsRouteRange.first;
-  lrp6.end_label_ref() = openr::Constants::kSrV6StaticMplsRouteRange.second;
+  lrp4.start_label_ref() =
+      openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+  lrp4.end_label_ref() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+  lrp6.start_label_ref() =
+      openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+  lrp6.end_label_ref() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
   prepend_labels.v4_ref() = lrp4;
   prepend_labels.v6_ref() = lrp6;
 
+  lrp4.start_label_ref() =
+      openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+  lrp4.end_label_ref() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+
+  lrp6.start_label_ref() =
+      openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+  lrp6.end_label_ref() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+
   // adj segment label range
   openr::thrift::LabelRange adj_label_range;
-  adj_label_range.start_label_ref() = openr::Constants::kSrLocalRange.first;
-  adj_label_range.end_label_ref() = openr::Constants::kSrLocalRange.second;
+  adj_label_range.start_label_ref() = openr::MplsConstants::kSrLocalRange.first;
+  adj_label_range.end_label_ref() = openr::MplsConstants::kSrLocalRange.second;
   adj_segment_label.sr_adj_label_type_ref() =
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
   adj_segment_label.adj_label_range_ref() = adj_label_range;
@@ -286,9 +297,9 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
     openr::thrift::LabelRange node_segment_label_range;
     node_segment_label_range.start_label_ref() =
-        openr::Constants::kSrGlobalRange.first;
+        openr::MplsConstants::kSrGlobalRange.first;
     node_segment_label_range.end_label_ref() =
-        openr::Constants::kSrGlobalRange.second;
+        openr::MplsConstants::kSrGlobalRange.second;
     node_segment_label.node_segment_label_range_ref() =
         node_segment_label_range;
 
@@ -305,9 +316,9 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
     // invalid label range and type is AUTO
     node_segment_label_range.end_label_ref() =
-        openr::Constants::kSrGlobalRange.first;
+        openr::MplsConstants::kSrGlobalRange.first;
     node_segment_label_range.start_label_ref() =
-        openr::Constants::kSrGlobalRange.second;
+        openr::MplsConstants::kSrGlobalRange.second;
     node_segment_label.node_segment_label_range_ref() =
         node_segment_label_range;
     for (auto& areaConf : *confAreaPolicy.areas_ref()) {

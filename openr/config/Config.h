@@ -19,7 +19,6 @@ namespace fs = std::experimental::filesystem;
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <optional>
-#include "openr/if/gen-cpp2/OpenrConfig_types.h"
 
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -138,8 +137,7 @@ class Config {
 
   bool
   isAdjacencyLabelsEnabled() const {
-    if (isSegmentRoutingEnabled() &&
-        getConfig().segment_routing_config_ref().has_value()) {
+    if (isSegmentRoutingEnabled() && isSegmentRoutingConfigured()) {
       const auto& srConfig = getSegmentRoutingConfig();
       return srConfig.sr_adj_label_ref().has_value() &&
           srConfig.sr_adj_label_ref()->sr_adj_label_type_ref() !=
@@ -255,6 +253,11 @@ class Config {
         config_.segment_routing_config_ref().has_value() and
         config_.segment_routing_config_ref()->sr_adj_label_ref().has_value());
     return *config_.segment_routing_config_ref()->sr_adj_label_ref();
+  }
+
+  bool
+  isSegmentRoutingConfigured() const {
+    return config_.segment_routing_config_ref().has_value();
   }
 
   //
