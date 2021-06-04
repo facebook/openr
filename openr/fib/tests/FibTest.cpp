@@ -1522,6 +1522,10 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
   EXPECT_EQ(mplsRoutes.size(), 1);
 
+  // Verify that MPLS route exists in cache
+  EXPECT_EQ(0, fib_->getUnicastRoutes({}).get()->size());
+  EXPECT_EQ(1, fib_->getMplsRoutes({}).get()->size());
+
   // Mimic decision pub sock publishing RouteDatabaseDelta (empty DB)
   DecisionRouteUpdate routeUpdateEmpty;
   routeUpdatesQueue.push(std::move(routeUpdateEmpty));
@@ -1529,10 +1533,6 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   // Expect FIB sync for unicast & mpls routes
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
-  // Synced routes are sent to fibRouteUpdatesQueue_.
-  syncedUpdate.type = DecisionRouteUpdate::FULL_SYNC;
-  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
-      syncedUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // ensure no other calls occured
   EXPECT_EQ(mockFibHandler_->getFibSyncCount(), 1);
@@ -1546,8 +1546,8 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
   mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  // MPLS routes were cached in routeState_ and programmed in Fib Sync.
-  EXPECT_EQ(mplsRoutes.size(), 1);
+  // MPLS route cached in routeState_ is overridden by Decision update
+  EXPECT_EQ(mplsRoutes.size(), 0);
 
   // Expect fiber for processing static route to be active
   EXPECT_EQ(1, staticRouteUpdatesQueue.getNumReaders());

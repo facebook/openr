@@ -400,7 +400,15 @@ Fib::RouteState::update(const DecisionRouteUpdate& routeUpdate) {
 // Process new route updates received from Decision module.
 void
 Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
-  routeState_.hasRoutesFromDecision = true;
+  // Toggle state on the first receipt of RIB from decision
+  if (not routeState_.hasRoutesFromDecision) {
+    routeState_.hasRoutesFromDecision = true;
+
+    // First RIB update is a SYNC and should be treated as source of truth. Any
+    // previously installed static route should be ignored.
+    routeState_.unicastRoutes.clear();
+    routeState_.mplsRoutes.clear();
+  }
 
   // Update perfEvents_ .. We replace existing perf events with new one as
   // convergence is going to be based on new data, not the old.
@@ -672,6 +680,7 @@ Fib::syncRouteDb() {
       printMplsRoutesAddUpdate(mplsRoutes);
     }
     // Send synced routes into fibRouteUpdatesQueue_.
+    // TODO, FIXME: We should be publishing empty route even if it is empty.
     if (not syncedRoutes.empty()) {
       fibRouteUpdatesQueue_.push(std::move(syncedRoutes));
     }
