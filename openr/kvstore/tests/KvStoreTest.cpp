@@ -1208,6 +1208,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
 
   // let kvstore dual sync
   /* sleep override */
+  // TODO: Make this test more reliable instead of hardcode waiting time
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
   // helper function to validate all roots up case

@@ -1568,6 +1568,9 @@ KvStoreDb::requestThriftPeerSync() {
     fb303::fbData->addStatValue(
         "kvstore.thrift.num_full_sync", 1, fb303::COUNT);
 
+    LOG(INFO) << "[Thrift Sync] Initiating full-sync request for peer: "
+              << peerName;
+
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
     // TODO: switch to getKvStoreKeyValsFiltered() when all nodes have
@@ -2393,35 +2396,60 @@ KvStoreDb::processNexthopChange(
     // recevied NEIGHBOR-DOWN event (so does dual), but dual still think I
     // should have this neighbor as nexthop, then something is wrong with
     // DUAL
-    CHECK(peers_.count(*newNh))
-        << rootId << ": trying to set new spt-parent who does not exist "
-        << *newNh;
-    CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
-    setChild(rootId, *newNh);
 
     // Enqueue new-nexthop for full-sync (insert only if entry doesn't
     // exists) NOTE we have to perform full-sync after we do FLOOD_TOPO_SET,
     // so that we can be sure that I won't be in a disconnected state after
     // we got full synced. (ps: full-sync is 3-way-sync, one direction sync
     // should be good enough)
-    LOG(INFO) << "Enqueuing full-sync request for peer " << *newNh;
-    peersToSyncWith_.emplace(
-        *newNh,
-        ExponentialBackoff<std::chrono::milliseconds>(
-            Constants::kInitialBackoff, Constants::kMaxBackoff));
+    if (kvParams_.enableThriftDualMsg) {
+      CHECK(thriftPeers_.count(*newNh))
+          << rootId << ": trying to set new spt-parent who does not exist "
+          << *newNh;
+      CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
+      setChild(rootId, *newNh);
 
-    // initial full-sync request if peersToSyncWith_ was empty
-    if (not fullSyncTimer_->isScheduled()) {
-      fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+      // state transition to IDLE to initiate full-sync
+      auto& peerSpec = thriftPeers_.at(*newNh).peerSpec;
+      logStateTransition(
+          *newNh, peerSpec.get_state(), thrift::KvStorePeerState::IDLE);
+
+      peerSpec.state_ref() =
+          thrift::KvStorePeerState::IDLE; // set IDLE to trigger full-sync
+
+      // kick off thriftSyncTimer_ if not yet to asyc process full-sync
+      if (not thriftSyncTimer_->isScheduled()) {
+        thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+      }
+    } else {
+      CHECK(peers_.count(*newNh))
+          << rootId << ": trying to set new spt-parent who does not exist "
+          << *newNh;
+      CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
+      setChild(rootId, *newNh);
+
+      LOG(INFO) << "[ZMQ Sync] Enqueuing full-sync request for peer " << *newNh;
+      peersToSyncWith_.emplace(
+          *newNh,
+          ExponentialBackoff<std::chrono::milliseconds>(
+              Constants::kInitialBackoff, Constants::kMaxBackoff));
+
+      // initial full-sync request if peersToSyncWith_ was empty
+      if (not fullSyncTimer_->isScheduled()) {
+        fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+      }
     }
   }
 
   // unset old parent if any
-  if (oldNh.has_value() and peers_.count(*oldNh)) {
-    // valid old parent AND it's still my peer, unset it
-    CHECK_NE(kvParams_.nodeId, *oldNh) << "old nexthop was myself";
-    // unset it
-    unsetChild(rootId, *oldNh);
+  if (oldNh.has_value()) {
+    if ((kvParams_.enableThriftDualMsg and thriftPeers_.count(*oldNh)) or
+        ((not kvParams_.enableThriftDualMsg) and peers_.count(*oldNh))) {
+      // valid old parent AND it's still my peer, unset it
+      CHECK_NE(kvParams_.nodeId, *oldNh) << "old nexthop was myself";
+      // unset it
+      unsetChild(rootId, *oldNh);
+    }
   }
 }
 
