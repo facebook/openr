@@ -156,7 +156,7 @@ Fib::Fib(
       // Backup static MPLS routes. In case of update Routes failed, later
       // scheduled syncStaticRoutesTimer_ will retry programming the routes.
       routeState_.hasStaticMplsRoutes = true;
-      backupRouteState(maybeThriftPub.value());
+      routeState_.update(maybeThriftPub.value());
 
       // Program received static route updates
       if (not updateRoutes(
@@ -365,35 +365,35 @@ Fib::getFibUpdatesReader() {
 }
 
 void
-Fib::backupRouteState(const DecisionRouteUpdate& routeUpdate) {
+Fib::RouteState::update(const DecisionRouteUpdate& routeUpdate) {
   // Add/Update unicast routes to update
   for (const auto& [prefix, route] : routeUpdate.unicastRoutesToUpdate) {
-    auto it = routeState_.unicastRoutes.find(prefix);
-    if (it != routeState_.unicastRoutes.end()) {
+    auto it = unicastRoutes.find(prefix);
+    if (it != unicastRoutes.end()) {
       it->second = route;
     } else {
-      routeState_.unicastRoutes.emplace(prefix, route);
+      unicastRoutes.emplace(prefix, route);
     }
   }
 
   // Add mpls routes to update
   for (const auto& route : routeUpdate.mplsRoutesToUpdate) {
-    auto it = routeState_.mplsRoutes.find(route.label);
-    if (it != routeState_.mplsRoutes.end()) {
+    auto it = mplsRoutes.find(route.label);
+    if (it != mplsRoutes.end()) {
       it->second = route;
     } else {
-      routeState_.mplsRoutes.emplace(route.label, route);
+      mplsRoutes.emplace(route.label, route);
     }
   }
 
   // Delete unicast routes
   for (const auto& dest : routeUpdate.unicastRoutesToDelete) {
-    routeState_.unicastRoutes.erase(dest);
+    unicastRoutes.erase(dest);
   }
 
   // Delete mpls routes
   for (const auto& topLabel : routeUpdate.mplsRoutesToDelete) {
-    routeState_.mplsRoutes.erase(topLabel);
+    mplsRoutes.erase(topLabel);
   }
 }
 
@@ -423,7 +423,7 @@ Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
 
   // Backup routes in routeState_. In case update routes failed, routes will be
   // programmed in later scheduled FIB sync.
-  backupRouteState(routeUpdate);
+  routeState_.update(routeUpdate);
 
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);

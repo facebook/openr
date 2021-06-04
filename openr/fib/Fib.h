@@ -186,8 +186,6 @@ class Fib final : public OpenrEventBase {
   // log perf events
   void logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents);
 
-  void backupRouteState(const DecisionRouteUpdate& routeUpdate);
-
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
   struct RouteState {
@@ -207,6 +205,11 @@ class Fib final : public OpenrEventBase {
     // successfully synced with agent, we have to trigger an enforced full fib
     // sync with agent again
     bool dirtyRouteDb{false};
+
+    /**
+     * Update RouteState with the newly received route update from Decision!
+     */
+    void update(const DecisionRouteUpdate& routeUpdate);
   };
   RouteState routeState_;
 
