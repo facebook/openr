@@ -11,7 +11,6 @@
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
@@ -180,14 +179,19 @@ class Fib final : public OpenrEventBase {
    */
   void keepAliveCheck();
 
-  // set flat counter/stats
+  /**
+   * Update flat counter/stats in fb303
+   */
   void updateGlobalCounters();
 
-  // log perf events
+  /**
+   * Create, log, and publish Open/R convergence event through LogSampleQueue
+   */
   void logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents);
 
-  // Prefix to available nexthop information. Also store perf information of
-  // received route-db if provided.
+  /**
+   * State variables to represent computed and programmed routes.
+   */
   struct RouteState {
     // Non modified copy of Unicast and MPLS routes received from Decision
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
@@ -223,15 +227,15 @@ class Fib final : public OpenrEventBase {
   const std::string myNodeName_;
 
   // Switch agent thrift server port
-  const int32_t thriftPort_;
+  const int32_t thriftPort_{0};
 
-  // In dry run we do not make actual thrift call to manipulate routes
-  bool dryrun_{true};
+  // Config Knob - In dry run FIB will not invoke route programming
+  // APIs, and mimick the whole logic as programming is successful.
+  const bool dryrun_{true};
 
-  // Enable segment routing
-  bool enableSegmentRouting_{false};
-
-  apache::thrift::CompactSerializer serializer_;
+  // Config Knob - Indicates if Segment Routing feature is enabled or not. MPLS
+  // routes will be programmed only if segment routing is enabled.
+  const bool enableSegmentRouting_{false};
 
   // Thrift client connection to switch FIB Agent using which we actually
   // manipulate routes.
@@ -244,6 +248,8 @@ class Fib final : public OpenrEventBase {
   std::unique_ptr<folly::AsyncTimeout> syncRoutesTimer_{nullptr};
   ExponentialBackoff<std::chrono::milliseconds> syncRoutesExpBackoff_;
 
+  // Callback timer with exponential backoff for programming failed static
+  // routes.
   std::unique_ptr<folly::AsyncTimeout> syncStaticRoutesTimer_{nullptr};
   ExponentialBackoff<std::chrono::milliseconds> syncStaticRoutesExpBackoff_;
 
@@ -261,12 +267,13 @@ class Fib final : public OpenrEventBase {
   // moves to true after initial sync
   bool hasSyncedFib_{false};
 
+  // Open/R ClientID for programming routes
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
-  // TODO: Remove if not needed
-  // Semaphore to serialize route programming across two fibers (interface
-  // updates & route updates)
-  // NOTE: Initializing with a single slot to avoid parallel processing
+  // Semaphore to serialize route programming across multiple fibers & async
+  // timers. e.g. static route updates queue, decision route updates queue and
+  // route programming retry timers
+  // NOTE: We initialize with a single slot for exclusive locking
   folly::fibers::Semaphore updateRoutesSemaphore_{1};
 
   // Queue to publish the event log

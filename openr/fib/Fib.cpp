@@ -33,6 +33,9 @@ Fib::Fib(
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : myNodeName_(*config->getConfig().node_name_ref()),
       thriftPort_(thriftPort),
+      dryrun_(config->getConfig().dryrun_ref().value_or(false)),
+      enableSegmentRouting_(
+          config->getConfig().enable_segment_routing_ref().value_or(false)),
       syncRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       syncStaticRoutesExpBackoff_(
@@ -40,9 +43,6 @@ Fib::Fib(
       fibRouteUpdatesQueue_(fibRouteUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
   auto& tConfig = config->getConfig();
-
-  dryrun_ = tConfig.dryrun_ref().value_or(false);
-  enableSegmentRouting_ = tConfig.enable_segment_routing_ref().value_or(false);
 
   syncRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     if (routeState_.hasRoutesFromDecision) {
