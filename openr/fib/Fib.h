@@ -208,7 +208,11 @@ class Fib final : public OpenrEventBase {
     // If set, it means what currently cached in local routes has not been 100%
     // successfully synced with agent, we have to trigger an enforced full fib
     // sync with agent again
-    bool dirtyRouteDb{false};
+    bool dirty{false};
+
+    // Indicates if routes has been synced with the underlying agent. Toggles to
+    // true after initial sync
+    bool synced{false};
 
     /**
      * Update RouteState with the newly received route update from Decision!
@@ -263,9 +267,6 @@ class Fib final : public OpenrEventBase {
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.
   int64_t latestAliveSince_{0};
-
-  // moves to true after initial sync
-  bool hasSyncedFib_{false};
 
   // Open/R ClientID for programming routes
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
