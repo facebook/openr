@@ -310,6 +310,10 @@ thrift::PrefixEntry createPrefixEntry(
     std::optional<thrift::MetricVector> mv = std::nullopt,
     std::optional<int64_t> minNexthop = std::nullopt);
 
+thrift::PrefixEntry createPrefixEntryWithPrependLabel(
+    thrift::IpPrefix prefix,
+    std::optional<int32_t> prependLabel = std::nullopt);
+
 thrift::PrefixMetrics createMetrics(int32_t pp, int32_t sp, int32_t d);
 
 thrift::PrefixEntry createPrefixEntryWithMetrics(

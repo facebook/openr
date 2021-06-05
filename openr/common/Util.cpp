@@ -662,6 +662,17 @@ createPrefixEntry(
   return prefixEntry;
 }
 
+// TODO: Audit which util functions in this file are only used in unit test.
+// Move functions only used in unit tests to be closer to unit tests, or create
+// a util_test.h/cpp to hold those ones.
+thrift::PrefixEntry
+createPrefixEntryWithPrependLabel(
+    thrift::IpPrefix prefix, std::optional<int32_t> prependLabel) {
+  auto prefixEntry = createPrefixEntry(prefix, thrift::PrefixType::BGP);
+  prefixEntry.prependLabel_ref().from_optional(prependLabel);
+  return prefixEntry;
+}
+
 // Currently used by DecisionTest and PrefixManagerTest
 thrift::PrefixMetrics
 createMetrics(int32_t pp, int32_t sp, int32_t d) {
@@ -671,17 +682,15 @@ createMetrics(int32_t pp, int32_t sp, int32_t d) {
   metrics.distance_ref() = d;
   return metrics;
 }
-// TODO - coalesce createPrefixEntry() with createPrefixEntryWithMetrics()
+
 thrift::PrefixEntry
 createPrefixEntryWithMetrics(
     thrift::IpPrefix const& prefix,
     thrift::PrefixType const& type,
     thrift::PrefixMetrics const& metrics) {
-  thrift::PrefixEntry entry;
-  entry.prefix_ref() = prefix;
-  entry.type_ref() = type;
-  entry.metrics_ref() = metrics;
-  return entry;
+  auto prefixEntry = createPrefixEntry(prefix, type);
+  prefixEntry.metrics_ref() = metrics;
+  return prefixEntry;
 }
 
 thrift::Value

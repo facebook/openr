@@ -56,7 +56,8 @@ PrefixManager::PrefixManager(
       preferOpenrOriginatedRoutes_(
           config->getConfig().get_prefer_openr_originated_routes()),
       enableNewPrefixFormat_(
-          config->getConfig().get_enable_new_prefix_format()) {
+          config->getConfig().get_enable_new_prefix_format()),
+      fibAckEnabled_(config->getConfig().get_enable_fib_ack()) {
   CHECK(kvStore_);
   CHECK(config);
 
@@ -196,9 +197,9 @@ PrefixManager::PrefixManager(
             nodeId_ == *prefixDb.thisNodeName_ref()) {
           VLOG(2) << "Learning previously announced prefix: " << prefixStr;
 
-          // populate advertisedKeys_ collection to make sure we can find
+          // populate keysInKvStore_ collection to make sure we can find
           // key when clear key from `KvStore`
-          advertisedKeys_[network].keys.emplace(prefixStr);
+          keysInKvStore_[network].keys.emplace(prefixStr);
 
           // Populate pendingState to check keys
           folly::small_vector<folly::CIDRNetwork> changed{network};
@@ -235,9 +236,9 @@ PrefixManager::PrefixManager(
         network = prefixKey->getCIDRNetwork();
       }
 
-      // populate advertisedKeys_ collection to make sure we can find
+      // populate keysInKvStore_ collection to make sure we can find
       // key when clear key from `KvStore`
-      advertisedKeys_[network].keys.emplace(prefixStr);
+      keysInKvStore_[network].keys.emplace(prefixStr);
 
       // Populate pendingState to check keys
       changed.emplace_back(network);
@@ -434,6 +435,25 @@ PrefixManager::deleteKvStoreKeyHelper(
   }
 }
 
+bool
+PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
+  // Skip the check if FIB-ACK feature is disabled.
+  if (not fibAckEnabled_) {
+    return true;
+  }
+  // If prepend label is set, the associated label route should have been
+  // programmed.
+  if (prefixEntry.tPrefixEntry->prependLabel_ref().has_value()) {
+    int32_t label = prefixEntry.tPrefixEntry->prependLabel_ref().value();
+    if (programmedLabels_.find(label) == programmedLabels_.end()) {
+      return false;
+    }
+  }
+  // TODO: Check unicast route is already programmed locally.
+
+  return true;
+}
+
 void
 PrefixManager::syncKvStore() {
   VLOG(1)
@@ -441,23 +461,26 @@ PrefixManager::syncKvStore() {
       << pendingUpdates_.getChangedPrefixes().size()
       << " changed prefixes. Total prefixes advertised: " << prefixMap_.size();
   DecisionRouteUpdate routeUpdatesOut;
+  // Prefixes in pendingUpdates_ that are synced to KvStore.
+  folly::small_vector<folly::CIDRNetwork> syncedPendingPrefixes{};
   // iterate over `pendingUpdates_` to advertise/withdraw incremental changes
   for (auto const& network : pendingUpdates_.getChangedPrefixes()) {
     auto it = prefixMap_.find(network);
     if (it == prefixMap_.end()) {
+      advertisedPrefixes_.erase(network);
       // delete actual keys being advertised in the cache
       //
       // Sample format:
       //  prefix    :    node1    :    0    :    0.0.0.0/32
       //    |              |           |             |
       //  marker        nodeId      areaId        prefixStr
-      auto keysIt = advertisedKeys_.find(network);
-      if (keysIt != advertisedKeys_.end()) {
+      auto keysIt = keysInKvStore_.find(network);
+      if (keysIt != keysInKvStore_.end()) {
         deleteKvStoreKeyHelper(keysIt->second.keys);
         if (keysIt->second.installedToFib) {
           routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
         }
-        advertisedKeys_.erase(keysIt);
+        keysInKvStore_.erase(keysIt);
       }
     } else {
       // add/update keys in `KvStore`
@@ -473,17 +496,22 @@ PrefixManager::syncKvStore() {
           bestTypes.count(thrift::PrefixType::CONFIG)) {
         bestType = thrift::PrefixType::CONFIG;
       }
-      auto& bestEntry = typeToPrefixes.at(bestType);
+      const PrefixEntry& bestEntry = typeToPrefixes.at(bestType);
+
+      if (not prefixEntryReadyToBeAdvertised(bestEntry)) {
+        // Skip if the prefix entry is not ready to be advertised yet.
+        continue;
+      }
+      advertisedPrefixes_.insert(network);
 
       // advertise best-entry for this prefix to `KvStore`
       auto newKeys = updateKvStoreKeyHelper(bestEntry);
 
-      auto keysIt = advertisedKeys_.find(network);
-      if (keysIt != advertisedKeys_.end()) {
-        // ATTN: This collection holds "advertised" prefixes in previous
-        // round of syncing. By removing prefixes in current run,
-        // whatever left in `advertisedKeys_` will be the delta to
-        // be removed.
+      auto keysIt = keysInKvStore_.find(network);
+      if (keysIt != keysInKvStore_.end()) {
+        // ATTN: This collection holds "advertised" prefixes in previous round
+        // of syncing. By removing prefixes in current run, whatever left in
+        // `keysInKvStore_` will be the delta to be removed.
         for (const auto& key : newKeys) {
           keysIt->second.keys.erase(key);
         }
@@ -496,11 +524,11 @@ PrefixManager::syncKvStore() {
         deleteKvStoreKeyHelper(keysIt->second.keys);
       }
 
-      // override `advertisedKeys_` for next-round syncing
-      advertisedKeys_[network].keys = std::move(newKeys);
+      // override `keysInKvStore_` for next-round syncing
+      keysInKvStore_[network].keys = std::move(newKeys);
       // propogate route update to `KvStore` and `Decision`(if necessary)
       if (bestEntry.shouldInstall()) {
-        advertisedKeys_[network].installedToFib = true;
+        keysInKvStore_[network].installedToFib = true;
         // Populate RibUnicastEntry struct
         // ATTN: AREA field is empty for NHs
         // if shouldInstall() is true, nexthops is guaranteed to have value.
@@ -510,13 +538,16 @@ PrefixManager::syncKvStore() {
       } else {
         // if was installed to fib, but now lose in tie break, withdraw from
         // fib.
-        if (advertisedKeys_[network].installedToFib) {
+        if (keysInKvStore_[network].installedToFib) {
           routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
-          advertisedKeys_[network].installedToFib = false;
+          keysInKvStore_[network].installedToFib = false;
         }
-      }
-    }
-  }
+      } // else
+    } // else
+
+    // Record already advertised prefix in pendingUpdates_.
+    syncedPendingPrefixes.emplace_back(network);
+  } // for
   // push originatedRoutes update via replicate queue
   if (routeUpdatesOut.unicastRoutesToUpdate.size() or
       routeUpdatesOut.unicastRoutesToDelete.size()) {
@@ -525,12 +556,16 @@ PrefixManager::syncKvStore() {
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
   }
 
-  VLOG(1) << "[KvStore Sync] Done syncing: "
-          << pendingUpdates_.getChangedPrefixes().size()
-          << " changed prefixes.";
-
-  // clean up
-  pendingUpdates_.reset();
+  // NOTE: Prefixes with label/unicast routes programmed locally are advertised
+  // to KvStore; Other prefixes are kept in pendingUpdates_ for future
+  // advertisement.
+  for (const auto& prefix : syncedPendingPrefixes) {
+    pendingUpdates_.removePrefixChange(prefix);
+  }
+  VLOG(1) << fmt::format(
+      "[KvStore Sync] Updated {} prefixes in KvStore; {} more awaiting FIB-ACK.",
+      syncedPendingPrefixes.size(),
+      pendingUpdates_.getChangedPrefixes().size());
 
   // Update flat counters
   size_t num_prefixes = 0;
@@ -538,8 +573,13 @@ PrefixManager::syncKvStore() {
     num_prefixes += typeToPrefixes.size();
   }
   fb303::fbData->setCounter("prefix_manager.received_prefixes", num_prefixes);
+  // TODO: report per-area advertised prefixes if openr is running in
+  // multi-areas.
   fb303::fbData->setCounter(
-      "prefix_manager.advertised_prefixes", prefixMap_.size());
+      "prefix_manager.advertised_prefixes", advertisedPrefixes_.size());
+  fb303::fbData->setCounter(
+      "prefix_manager.awaiting_prefixes",
+      pendingUpdates_.getChangedPrefixes().size());
 }
 
 folly::SemiFuture<bool>
@@ -1122,8 +1162,10 @@ PrefixManager::processOriginatedPrefixes() {
 
 void
 PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
-  // Store programmed label/unicast routes info.
-  storeProgrammedRoutes(fibRouteUpdate);
+  if (fibAckEnabled_) {
+    // Store programmed label/unicast routes info if FIB-ACK feature is enabled.
+    storeProgrammedRoutes(fibRouteUpdate);
+  }
 
   // Re-advertise prefixes received from one area to other areas.
   redistributePrefixesAcrossAreas(fibRouteUpdate);

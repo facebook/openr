@@ -39,6 +39,8 @@ const auto addr7 = toIpPrefix("ffff:10:3:7::0/64");
 const auto addr8 = toIpPrefix("ffff:10:4:8::/64");
 const auto addr9 = toIpPrefix("ffff:10:4:9::/64");
 const auto addr10 = toIpPrefix("ffff:10:4:10::/64");
+const uint32_t label1 = 65001;
+const uint32_t label2 = 65002;
 
 const auto prefixEntry1 = createPrefixEntry(addr1, thrift::PrefixType::DEFAULT);
 const auto prefixEntry2 =
@@ -53,6 +55,23 @@ const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::BGP);
 const auto prefixEntry8 =
     createPrefixEntry(addr8, thrift::PrefixType::PREFIX_ALLOCATOR);
 const auto prefixEntry9 = createPrefixEntry(addr9, thrift::PrefixType::VIP);
+const auto prefixEntry1Bgp = createPrefixEntry(addr1, thrift::PrefixType::BGP);
+const auto prefixEntry1WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr1, label1);
+const auto prefixEntry1WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr1, label2);
+const auto prefixEntry2WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr2, label1);
+const auto prefixEntry3WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr3, label2);
+const auto prefixEntry4WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr4, label1);
+const auto prefixEntry5WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr5, label2);
+const auto prefixEntry6WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr6, label1);
+const auto prefixEntry7WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr7, label2);
 
 } // namespace
 
@@ -118,6 +137,7 @@ class PrefixManagerTestFixture : public testing::Test {
   createConfig() {
     auto tConfig = getBasicOpenrConfig(nodeId_);
     tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    tConfig.enable_fib_ack_ref() = true;
     return tConfig;
   }
 
@@ -932,6 +952,257 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     auto prefixes = prefixManager->getPrefixes().get();
     EXPECT_EQ(0, prefixes->size());
   }
+}
+
+/**
+ * Validate PrefixManager does not advertise prefixes with prepend labels to
+ * KvStore, until receiving from Fib that associated label routes are already
+ * programmed. Both FULL_SYNC and INCREMENTAL route update types are tested.
+ * 1. Prefixes with prepend labels are advertised after FULL_SYNC route updates
+ *    of all labels are received.
+ * 2. INCREMENTAL delete of label route updates blocks the advertisement of
+ *    follow-up prefix updates with deleted label routes.
+ * 3. Next INCREMENTAL route update for above deleted label triggers the
+ *    advertisement of above cached prefixes with prepend label.
+ * 4. Follow-up FULL_SYNC route updates reset previously stored programmed
+ *    labels in PrefixManager. Only prefixes with newly programmed label routes
+ *    will be advertised.
+ */
+TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
+  // 1. Prefixes with prepend labels are advertised after FULL_SYNC route
+  // updates of all labels are received.
+  {
+    // PrefixManager receives updates of prefixes with prepend label.
+    PrefixEvent prefixEvent(
+        PrefixEventType::ADD_PREFIXES,
+        std::nullopt,
+        {prefixEntry1WithLabel1,
+         prefixEntry2WithLabel1,
+         prefixEntry3WithLabel2});
+    prefixUpdatesQueue.push(std::move(prefixEvent));
+
+    // Full sync of programmed routes for label1/2 arrives.
+    DecisionRouteUpdate fullSyncUpdates;
+    fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+    fullSyncUpdates.mplsRoutesToUpdate = {
+        RibMplsEntry(label1), RibMplsEntry(label2)};
+    fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+
+    // Wait for update in KvStore
+    // ATTN: prefixes with label1/2 should be updated via throttle.
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(3, pub.keyVals_ref()->size());
+  }
+
+  // 2. INCREMENTAL delete of label route updates blocks the advertisement of
+  // follow-up prefix updates with deleted label routes.
+  // NOTE: In practice, prefixes with deleting label should not appear in
+  // prefixUpdatesQueue. BgpSpeaker replaces deleting label with new one in
+  // prefix attributes. It sends new label routes for programming, meanwhile
+  // sending prefixes with new label to prefixUpdatesQueue. Added the scenario
+  // here just for test purposes.
+  {
+    // Route of label1 was deleted.
+    DecisionRouteUpdate deletedRoutes;
+    deletedRoutes.type = DecisionRouteUpdate::INCREMENTAL;
+    deletedRoutes.mplsRoutesToDelete = {label1};
+    fibRouteUpdatesQueue.push(std::move(deletedRoutes));
+
+    // PrefixManager receives prefix updates of  with prepend label.
+    PrefixEvent prefixEvent(
+        PrefixEventType::ADD_PREFIXES,
+        std::nullopt,
+        {prefixEntry4WithLabel1, prefixEntry5WithLabel2});
+    prefixUpdatesQueue.push(std::move(prefixEvent));
+
+    // Wait for update in KvStore
+    // ATTN: prefixes with label2 should be updated via throttle.
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+  }
+
+  // 3. Next INCREMENTAL route update including above deleted label triggers the
+  // advertisement of above cached prefixes with prepend label.
+  {
+    // Routes of label1/2 was programmed.
+    DecisionRouteUpdate updateRoutes;
+    updateRoutes.type = DecisionRouteUpdate::INCREMENTAL;
+    updateRoutes.mplsRoutesToUpdate = {
+        RibMplsEntry(label1), RibMplsEntry(label2)};
+    fibRouteUpdatesQueue.push(std::move(updateRoutes));
+
+    // Wait for update in KvStore
+    // ATTN: prefixes with label1 should be updated via throttle.
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+  }
+
+  // 4. Follow-up FULL_SYNC_AFTER_FIB_FAILURES route updates reset previously
+  // stored programmed labels in PrefixManager. Only prefixes with newly
+  // programmed label routes will be advertised.
+  {
+    // Full sync of programmed routes for label2 arrives.
+    DecisionRouteUpdate fullSyncUpdates;
+    fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
+    fullSyncUpdates.mplsRoutesToUpdate = {RibMplsEntry(label2)};
+    fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+
+    // PrefixManager receives prefix updates of  with prepend label.
+    PrefixEvent prefixEvent(
+        PrefixEventType::ADD_PREFIXES,
+        std::nullopt,
+        {prefixEntry6WithLabel1, prefixEntry7WithLabel2});
+    prefixUpdatesQueue.push(std::move(prefixEvent));
+
+    // Wait for update in KvStore
+    // ATTN: prefixes with label2 should be updated via throttle.
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+  }
+
+  auto prefixes = prefixManager->getPrefixes().get();
+  EXPECT_EQ(7, prefixes->size());
+  EXPECT_THAT(
+      *prefixes,
+      testing::UnorderedElementsAre(
+          prefixEntry1WithLabel1,
+          prefixEntry2WithLabel1,
+          prefixEntry3WithLabel2,
+          prefixEntry4WithLabel1,
+          prefixEntry5WithLabel2,
+          prefixEntry6WithLabel1,
+          prefixEntry7WithLabel2));
+}
+
+/**
+ * Validate PrefixManager does not advertise one prefix with prepend labels to
+ * KvStore, until receiving from Fib that associated label routes are already
+ * programmed.
+ * 1. Advertise <Prefix, Label=none>
+ * 2. Donot advertise prefix update of <Prefix, Label1>
+ * 3. Recived Label1 routes programmed signal; <Prefix, Label1> gets advertised.
+ * 4. Prefix Update <Prefix, Label2> not advertised
+ * 5. Prefix Update <Prefix, Label=none> gets updated again.
+ *
+ * TODO: PrefixManager needs to purge already advertised prefixes if associated
+ * prefixes are unprogrammed later.
+ */
+TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
+  int scheduleAt{0};
+
+  auto prefixKey = PrefixKey(
+      nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix_ref()), kTestingAreaName);
+  auto prefixKeyStr = prefixKey.getPrefixKey();
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // 1. PrefixManager receives updates of one prefix without label.
+        PrefixEvent prefixEvent(
+            PrefixEventType::ADD_PREFIXES, std::nullopt, {prefixEntry1Bgp});
+        prefixUpdatesQueue.push(std::move(prefixEvent));
+
+        // Wait for update in KvStore
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // ATTN: prefixes without label should be updated via throttle.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
+
+        // 2.1. PrefixManager receives <Prefix, Label1>.
+        PrefixEvent prefixEvent1(
+            PrefixEventType::ADD_PREFIXES,
+            std::nullopt,
+            {prefixEntry1WithLabel1});
+        prefixUpdatesQueue.push(std::move(prefixEvent1));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 2.2. Donot advertise prefix update of <Prefix, Label1> since label
+        // routes has not programmed yet.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        // Prepend label is still unset.
+        EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
+
+        // 3.1. Recived route programmed signal of Label1.
+        DecisionRouteUpdate routeUpdates;
+        routeUpdates.type = DecisionRouteUpdate::INCREMENTAL;
+        routeUpdates.mplsRoutesToUpdate = {RibMplsEntry(label1)};
+        fibRouteUpdatesQueue.push(std::move(routeUpdates));
+
+        // Wait for update in KvStore
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // 3.2. <Prefix, Label1> gets advertised.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0].prependLabel_ref().value(), label1);
+
+        // 4.1. PrefixManager receives <Prefix, Label2>.
+        prefixUpdatesQueue.push(PrefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            std::nullopt,
+            {prefixEntry1WithLabel2}));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 4.2. Donot advertise prefix update of <Prefix, Label2> since label
+        // routes has not programmed yet.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        // Prepend label is still label1.
+        EXPECT_EQ(db.prefixEntries_ref()[0].prependLabel_ref().value(), label1);
+
+        // 5.1. PrefixManager receives <Prefix, Label=none>.
+        prefixUpdatesQueue.push(PrefixEvent(
+            PrefixEventType::ADD_PREFIXES, std::nullopt, {prefixEntry1}));
+
+        // Wait for update in KvStore
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // 5.2. <Prefix, Label=none> gets advertised.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
+
+        evb.stop();
+      });
+
+  // let magic happen
+  evb.run();
 }
 
 /**
@@ -2371,39 +2642,39 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //
   // Steps, briefly:
   //
-  // 1. Inject the following into the fibRouteUpdatesQueue (simulating Decision
-  //    to Prefixmgr interaction):
+  // 1. Inject the following into the fibRouteUpdatesQueue (simulating Fib to
+  //    Prefixmgr interaction):
   //    - 1st supporting route for v4Prefix_;
   //    - 1st supporting route for v6Prefix_;
   // Verification:
-  //  a. v4Prefix_ will be sent to Decision on staticRouteUpdatesQueue (since
-  //     the install_to_fib bit is set for v4Prefix_)
-  //  b. v6Prefix_ will NOT be sent to Decision on staticRouteUpdatesQueue
-  //     (since min_supporting_route is not met for v6Prefix_, plus the
-  //     install_to_fib bit is NOT set for v6Prefix_)
-  //  c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
-  //  d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
-  //  e. Config values and supporting routes count is as expected for both
-  //     v4Prefix_ and v6Prefix_
+  //    a. v4Prefix_ will be sent to Decision on staticRouteUpdatesQueue (since
+  //       the install_to_fib bit is set for v4Prefix_)
+  //    b. v6Prefix_ will NOT be sent to Decision on staticRouteUpdatesQueue
+  //       (since min_supporting_route is not met for v6Prefix_, plus the
+  //       install_to_fib bit is NOT set for v6Prefix_)
+  //    c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
+  //    d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
+  //    e. Config values and supporting routes count is as expected for both
+  //       v4Prefix_ and v6Prefix_
   //
-  // 2. Inject the following into the fibRouteUpdatesQueue (simulating Decision
+  // 2. Inject the following into the fibRouteUpdatesQueue (simulating Fib
   //    to Prefixmgr interaction):
   //    - 2nd supporting route for v6Prefix_;
   // Verification:
-  //   a. v6Prefix_ will STILL NOT be sent to Decision on
-  //      staticRouteUpdatesQueue since, while min_supporting_route is now met
-  //      for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
-  //   b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
-  //   c. Config values and supporting routes count is as expected for both
-  //      v4Prefix_ and v6Prefix_
+  //    a. v6Prefix_ will STILL NOT be sent to Decision on
+  //       staticRouteUpdatesQueue since, while min_supporting_route is now met
+  //       for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
+  //    b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
+  //    c. Config values and supporting routes count is as expected for both
+  //       v4Prefix_ and v6Prefix_
   //
   // 3. Withdraw 1 supporting route from both v4Prefix_ and v6Prefix_
-  //   - this will break the min_supporting_routes condition for both
-  //     the prefixes.
+  //    - this will break the min_supporting_routes condition for both
+  //      the prefixes.
   // Verification:
-  //   a. delete only for the v4Prefix_ gets sent to Decision
-  //   b. Both prefixes will be withdrawn from KvStore
-  //   c. Supporting routes count for both prefixes will decrement by 1
+  //    a. delete only for the v4Prefix_ gets sent to Decision
+  //    b. Both prefixes will be withdrawn from KvStore
+  //    c. Supporting routes count for both prefixes will decrement by 1
 
   // Step 1 - inject 1 v4 and 1 v6 supporting prefix into fibRouteUpdatesQueue
   DecisionRouteUpdate routeUpdate;

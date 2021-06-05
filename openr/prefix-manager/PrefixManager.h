@@ -42,6 +42,11 @@ class PrefixManagerPendingUpdates {
 
   void applyPrefixChange(const folly::small_vector<folly::CIDRNetwork>& change);
 
+  void
+  removePrefixChange(const folly::CIDRNetwork& prefix) {
+    changedPrefixes_.erase(prefix);
+  }
+
  private:
   // track prefixes that have changed within this batch
   // ATTN: this collection contains:
@@ -186,6 +191,14 @@ class PrefixManager final : public OpenrEventBase {
       const std::unordered_set<std::string>& dstAreas);
 
   /*
+   * One prefixEntry is ready to be advertised iff
+   * - If prependLabel is set, the associated label route should have been
+   *   programmed locally.
+   * - [TODO] The associated unicast route should have been programmed locally.
+   */
+  bool prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry);
+
+  /*
    * Util function to interact with KvStore to advertise/withdraw prefixes
    * ATTN: syncKvStore() has throttled version `syncKvStoreThrottled_` to
    *       batch processing updates
@@ -283,6 +296,8 @@ class PrefixManager final : public OpenrEventBase {
       folly::CIDRNetwork,
       std::unordered_map<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
+  // The collection of prefixes advertised to KvStore.
+  std::unordered_set<folly::CIDRNetwork> advertisedPrefixes_;
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
@@ -295,7 +310,7 @@ class PrefixManager final : public OpenrEventBase {
     bool installedToFib{false};
     std::unordered_set<std::string> keys;
   };
-  std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> advertisedKeys_{};
+  std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> keysInKvStore_{};
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
 
@@ -395,6 +410,10 @@ class PrefixManager final : public OpenrEventBase {
    * routes is programmed before advertisement.
    */
   std::unordered_set<int32_t> programmedLabels_;
+
+  // Enable FIB-ACK to enforce route program ordering, aka, to-add routes should
+  // be programmed at originator ahead of being advertised to peers.
+  bool fibAckEnabled_{false};
 }; // PrefixManager
 
 } // namespace openr
