@@ -15,9 +15,12 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
 #include <folly/IPAddress.h>
+#include <folly/io/async/SSLContext.h>
 #include <openr/common/MplsUtil.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <re2/re2.h>
 #include <re2/set.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <optional>
 
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
@@ -154,6 +157,11 @@ class Config {
   bool
   isNetlinkFibHandlerEnabled() const {
     return config_.enable_netlink_fib_handler_ref().value_or(false);
+  }
+
+  bool
+  isFibServiceWaitingEnabled() const {
+    return *config_.enable_fib_service_waiting_ref();
   }
 
   bool
@@ -346,6 +354,114 @@ class Config {
   std::optional<neteng::config::routing_policy::PolicyConfig>
   getAreaPolicies() const {
     return config_.area_policies_ref().to_optional();
+  }
+
+  //
+  // thrift server
+  //
+  const thrift::ThriftServerConfig
+  getThriftServerConfig() const {
+    return config_.get_thrift_server();
+  }
+  bool
+  isSecureThriftServerEnabled() const {
+    return getThriftServerConfig().get_enable_secure_thrift_server();
+  }
+
+  const std::string
+  getSSLCertPath() {
+    auto certPath = getThriftServerConfig().x509_cert_path_ref();
+    if ((not certPath) && isSecureThriftServerEnabled()) {
+      throw std::invalid_argument(
+          "enable_secure_thrift_server = true, but x509_cert_path is empty");
+    }
+    return certPath.value();
+  }
+
+  const std::string
+  getSSLEccCurve() {
+    auto eccCurve = getThriftServerConfig().ecc_curve_name_ref();
+    if ((not eccCurve) && isSecureThriftServerEnabled()) {
+      throw std::invalid_argument(
+          "enable_secure_thrift_server = true, but ecc_curve_name is empty");
+    }
+    return eccCurve.value();
+  }
+
+  const std::string
+  getSSLCaPath() {
+    auto caPath = getThriftServerConfig().x509_ca_path_ref();
+    if ((not caPath) && isSecureThriftServerEnabled()) {
+      throw std::invalid_argument(
+          "enable_secure_thrift_server = true, but x509_ca_path is empty");
+    }
+    return caPath.value();
+  }
+
+  const std::string
+  getSSLKeyPath() {
+    std::string keyPath;
+    const auto& keyPathConfig = getThriftServerConfig().x509_key_path_ref();
+
+    // If unspecified x509_key_path, will use x509_cert_path
+    if (keyPathConfig) {
+      keyPath = keyPathConfig.value();
+    } else {
+      keyPath = getSSLCertPath();
+    }
+    return keyPath;
+  }
+
+  const std::string
+  getSSLAcceptablePeers() {
+    // If unspecified, will use accept connection from any authenticated peer
+    return getThriftServerConfig().acceptable_peers_ref().value_or("");
+  }
+
+  folly::SSLContext::VerifyClientCertificate
+  getSSLContextVerifyType() const {
+    // Get the verify_client_type config
+    auto mode = getThriftServerConfig().verify_client_type_ref().value_or(
+        thrift::VerifyClientType::DO_NOT_REQUEST);
+
+    // Set the folly::SSLContext::VerifyClientCertificate for thrift server
+    switch (mode) {
+    case thrift::VerifyClientType::ALWAYS:
+      return folly::SSLContext::VerifyClientCertificate::ALWAYS;
+
+    case thrift::VerifyClientType::IF_PRESENTED:
+      return folly::SSLContext::VerifyClientCertificate::IF_PRESENTED;
+
+    default:
+      return folly::SSLContext::VerifyClientCertificate::DO_NOT_REQUEST;
+    }
+  }
+
+  apache::thrift::SSLPolicy
+  getSSLThriftPolicy() const {
+    // Get the verify_client_type config
+    auto mode = getThriftServerConfig().verify_client_type_ref().value_or(
+        thrift::VerifyClientType::DO_NOT_REQUEST);
+
+    // Set the apache::thrift::SSLPolicy for starting thrift server
+    switch (mode) {
+    case thrift::VerifyClientType::ALWAYS:
+      return apache::thrift::SSLPolicy::REQUIRED;
+
+    case thrift::VerifyClientType::IF_PRESENTED:
+      return apache::thrift::SSLPolicy::PERMITTED;
+
+    default:
+      return apache::thrift::SSLPolicy::DISABLED;
+    }
+  }
+
+  //
+  // thrift client
+  //
+  std::optional<thrift::ThriftClientConfig>
+  getThriftClientConfig() const {
+    return config_.thrift_client_ref().to_optional();
   }
 
   //

@@ -542,5 +542,34 @@ Config::populateInternalDb() {
         "enable_watchdog = true, but watchdog_config is empty");
   }
 
+  //
+  // thrift server
+  //
+  if (isSecureThriftServerEnabled()) {
+    const auto& thriftServerConfig = getThriftServerConfig();
+
+    // Checking the fields needed when we enable the secure thrift server
+    const auto& caPath = thriftServerConfig.x509_ca_path_ref();
+    const auto& certPath = thriftServerConfig.x509_cert_path_ref();
+    const auto& eccCurve = thriftServerConfig.ecc_curve_name_ref();
+    if (not(caPath and certPath and eccCurve)) {
+      throw std::invalid_argument(
+          "enable_secure_thrift_server = true, but x509_ca_path, x509_cert_path or ecc_curve_name is empty.");
+    }
+    if ((not fs::exists(caPath.value())) or
+        (not fs::exists(certPath.value()))) {
+      throw std::invalid_argument(
+          "x509_ca_path or x509_cert_path is specified in the config but not found in the disk.");
+    }
+
+    // x509_key_path could be empty. If specified, need to be present in the
+    // file system.
+    const auto& keyPath = getThriftServerConfig().x509_key_path_ref();
+    if (keyPath and (not fs::exists(keyPath.value()))) {
+      throw std::invalid_argument(
+          "x509_key_path is specified in the config but not found in the disk.");
+    }
+  }
+
 } // namespace openr
 } // namespace openr

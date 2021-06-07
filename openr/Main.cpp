@@ -297,7 +297,7 @@ main(int argc, char** argv) {
   });
   mainEvb.waitUntilRunning();
 
-  if (FLAGS_enable_fib_service_waiting and
+  if (config->isFibServiceWaitingEnabled() and
       (not config->isNetlinkFibHandlerEnabled())) {
     waitForFibService(mainEvb, *config->getConfig().fib_port_ref());
   }
@@ -456,26 +456,38 @@ main(int argc, char** argv) {
           FLAGS_override_drain_state,
           initialAdjHoldTime));
 
-  // setup the SSL policy
+  // Setup the SSL policy
   std::shared_ptr<wangle::SSLContextConfig> sslContext;
-  if (FLAGS_enable_secure_thrift_server) {
-    CHECK(fs::exists(FLAGS_x509_ca_path));
-    CHECK(fs::exists(FLAGS_x509_cert_path));
-    auto& keyPath = FLAGS_x509_key_path;
-    if (!keyPath.empty()) {
-      CHECK(fs::exists(keyPath));
-    } else {
-      keyPath = FLAGS_x509_cert_path;
-    }
+  // Acceptable SSL peer names
+  std::unordered_set<std::string> acceptableNamesSet; // empty set by default
+
+  // OpenrCtrl thrift server
+  auto thriftCtrlServer = std::make_unique<apache::thrift::ThriftServer>();
+  // Set the port and interface for OpenrCtrl thrift server
+  thriftCtrlServer->setPort(*config->getConfig().openr_ctrl_port_ref());
+
+  if (config->isSecureThriftServerEnabled()) {
     sslContext = std::make_shared<wangle::SSLContextConfig>();
-    sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
-    sslContext->clientCAFile = FLAGS_x509_ca_path;
+    sslContext->setCertificate(
+        config->getSSLCertPath(), config->getSSLKeyPath(), "");
+    sslContext->clientCAFile = config->getSSLCaPath();
     sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
     sslContext->setNextProtocols(
         **apache::thrift::ThriftServer::defaultNextProtocols());
-    sslContext->clientVerification =
-        folly::SSLContext::VerifyClientCertificate::IF_PRESENTED;
-    sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
+    sslContext->clientVerification = config->getSSLContextVerifyType();
+    sslContext->eccCurveName = config->getSSLEccCurve();
+
+    // Get the acceptable peer name set
+    std::vector<std::string> acceptableNames;
+    folly::split(",", config->getSSLAcceptablePeers(), acceptableNames, true);
+    acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
+
+    // Start OpenrCtrl thrift server
+    setupThriftServerTls(
+        *thriftCtrlServer,
+        config->getSSLThriftPolicy(),
+        config->getSSLAcceptablePeers(),
+        sslContext);
   }
 
   auto pluginArgs = PluginArgs{
@@ -526,26 +538,6 @@ main(int argc, char** argv) {
           std::move(fibStaticRouteUpdatesQueueReader),
           fibRouteUpdatesQueue,
           logSampleQueue));
-
-  // Start OpenrCtrl thrift server
-  auto thriftCtrlServer = std::make_unique<apache::thrift::ThriftServer>();
-  if (FLAGS_enable_secure_thrift_server) {
-    setupThriftServerTls(
-        *thriftCtrlServer,
-        // TODO Change to REQUIRED after we have everyone using certs
-        apache::thrift::SSLPolicy::PERMITTED,
-        FLAGS_tls_ticket_seed_path,
-        sslContext);
-  }
-  // set the port and interface
-  thriftCtrlServer->setPort(*config->getConfig().openr_ctrl_port_ref());
-
-  std::unordered_set<std::string> acceptableNamesSet; // empty set by default
-  if (FLAGS_enable_secure_thrift_server) {
-    std::vector<std::string> acceptableNames;
-    folly::split(",", FLAGS_tls_acceptable_peers, acceptableNames, true);
-    acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
-  }
 
   // Create Open/R control handler
   auto ctrlEvb = startEventBase(
