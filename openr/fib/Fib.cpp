@@ -42,10 +42,15 @@ Fib::Fib(
 
   retryRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     bool isSuccess{true};
-    if (routeState_.hasRoutesFromDecision) {
+    if (routeState_.state == RouteState::SYNCING) {
       // SYNC routes if we've RIB snapshot from Decision
       isSuccess = syncRouteDb();
-    } else if (routeState_.hasStaticMplsRoutes) {
+      if (isSuccess) {
+        transitionRouteState(RouteState::FIB_SYNCED);
+      } else {
+        transitionRouteState(RouteState::FIB_ERROR);
+      }
+    } else if (routeState_.state == RouteState::AWAITING) {
       // We have static MPLS routes but no RIB snapshot, let's retry adding
       // those static MPLS routes
       DecisionRouteUpdate routeUpdate;
@@ -71,19 +76,18 @@ Fib::Fib(
       retryRoutesTimer_->scheduleTimeout(period);
     }
 
-    if (routeState_.hasRoutesFromDecision) {
-      fb303::fbData->setCounter(
-          "fib.synced", retryRoutesTimer_->isScheduled() ? 0 : 1);
-    }
+    fb303::fbData->setCounter(
+        "fib.synced", routeState_.state == RouteState::SYNCED);
   });
   // On startup we do require routedb_sync so explicitly set the counter to 0
   fb303::fbData->setCounter("fib.synced", 0);
 
   if (not tConfig.eor_time_s_ref()) {
-    routeState_.hasRoutesFromDecision = true;
+    // Force transition to SYNCING state
+    transitionRouteState(RouteState::RIB_UPDATE);
     LOG(INFO)
-        << "EOR time is not configured; schedule fib sync of routeDb with cold-start duration "
-        << coldStartDuration.count() << "secs";
+        << "EOR time is not configured; schedule fib sync of routeDb with "
+        << "cold-start duration " << coldStartDuration.count() << "secs";
     retryRoutesTimer_->scheduleTimeout(coldStartDuration);
   }
 
@@ -122,7 +126,7 @@ Fib::Fib(
   // Fiber to process and program static route updates.
   // - The routes are only programmed and updated but not deleted
   // - Updates arriving before first Decision RIB update will be processed. The
-  //   fiber will terminate after that.
+  //   fiber will terminate after FIB transition out of AWAITING state
   addFiberTask([q = std::move(staticRouteUpdatesQueue),
                 this]() mutable noexcept {
     LOG(INFO) << "Starting static routes update processing fiber";
@@ -130,7 +134,8 @@ Fib::Fib(
       auto maybeThriftPub = q.get(); // perform read
 
       // Terminate if queue is closed or we've received RIB from Decision
-      if (maybeThriftPub.hasError() or routeState_.hasRoutesFromDecision) {
+      if (maybeThriftPub.hasError() or
+          routeState_.state != RouteState::AWAITING) {
         LOG(INFO) << "Terminating static routes update processing fiber";
         break;
       }
@@ -143,7 +148,6 @@ Fib::Fib(
 
       // Backup static MPLS routes. In case of update Routes failed, later
       // scheduled retryRoutesTimer_ will retry programming the routes.
-      routeState_.hasStaticMplsRoutes = true;
       routeState_.update(maybeThriftPub.value());
 
       // Program received static route updates
@@ -388,15 +392,8 @@ Fib::RouteState::update(const DecisionRouteUpdate& routeUpdate) {
 // Process new route updates received from Decision module.
 void
 Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
-  // Toggle state on the first receipt of RIB from decision
-  if (not routeState_.hasRoutesFromDecision) {
-    routeState_.hasRoutesFromDecision = true;
-
-    // First RIB update is a SYNC and should be treated as source of truth. Any
-    // previously installed static route should be ignored.
-    routeState_.unicastRoutes.clear();
-    routeState_.mplsRoutes.clear();
-  }
+  // Process state transition event
+  transitionRouteState(RouteState::RIB_UPDATE);
 
   // Update perfEvents_ .. We replace existing perf events with new one as
   // convergence is going to be based on new data, not the old.
@@ -425,7 +422,7 @@ Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
 
   if (not updateRoutes(std::move(routeUpdate), false /* static routes */)) {
-    routeState_.needSync = true;
+    transitionRouteState(RouteState::FIB_ERROR);
     syncRouteDbDebounced(); // Schedule future full sync of route DB
   }
 }
@@ -489,15 +486,11 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
     return true; // Treat route updates successful in dry run.
   }
 
-  // For static routes we always update the provided routes immediately
-  if (!isStaticRoutes && retryRoutesTimer_->isScheduled()) {
-    // Check if there's any full sync scheduled,
-    // if so, skip partial sync
-    LOG(INFO) << "Full sync is scheduled, skip delta sync for now...";
-    return true;
-  } else if (!isStaticRoutes && routeState_.needSync) {
-    LOG(INFO) << "Scheduling full sync to recover from failure or process "
-              << "restart, skipping incremental update";
+  // Do not process incremental update if we're in SYNCING state. For static
+  // routes we always update the received routes immediately
+  if (!isStaticRoutes && routeState_.state <= RouteState::SYNCING) {
+    LOG(INFO) << "Skipping incremental update. Scheduling full sync to recover "
+              << "from failure or process restart.";
     syncRouteDbDebounced();
     return true;
   }
@@ -629,9 +622,6 @@ Fib::syncRouteDb() {
     LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes";
     printMplsRoutesAddUpdate(mplsRoutes);
 
-    // Update local state in dry-run mode
-    routeState_.needSync = false;
-
     return true;
   }
 
@@ -677,14 +667,12 @@ Fib::syncRouteDb() {
               << "ms to sync routes in FIB";
     fb303::fbData->addStatValue(
         "fib.route_sync.time_ms", elapsedTime.count(), fb303::AVG);
-    routeState_.needSync = false;
     routeState_.isInitialSynced = false;
     return true;
   } catch (std::exception const& e) {
     fb303::fbData->addStatValue("fib.thrift.failure.sync_fib", 1, fb303::COUNT);
     LOG(ERROR) << "Failed to sync routes in FIB. Error: "
                << folly::exceptionStr(e);
-    routeState_.needSync = true;
     client_.reset();
     return false;
   }
@@ -707,7 +695,8 @@ Fib::keepAliveCheck() {
     LOG(WARNING) << "FibAgent seems to have restarted. "
                  << "Performing full route DB sync ...";
     // FibAgent has restarted. Enforce full sync
-    routeState_.needSync = true;
+    transitionRouteState(RouteState::FIB_CONNECTED);
+    retryRoutesExpBackoff_.reportSuccess();
     retryRoutesExpBackoff_.reportSuccess();
     syncRouteDbDebounced();
   }
@@ -756,7 +745,7 @@ Fib::createFibClient(
 
 void
 Fib::updateGlobalCounters() {
-  if (not routeState_.hasRoutesFromDecision) {
+  if (routeState_.state == RouteState::AWAITING) {
     return;
   }
 
@@ -825,6 +814,57 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
   sample.addStringVector("perf_events", eventStrs);
   sample.addInt("duration_ms", totalDuration.count());
   logSampleQueue_.push(sample);
+}
+
+void
+Fib::transitionRouteState(RouteState::Event event) {
+  // Static matrix representing state transition. Here we handle all events
+  // across all states. First index represent the current state, second level
+  // index represents the event. Value represents the new state.
+  static const std::array<std::array<std::optional<RouteState::State>, 4>, 3>
+      stateMap = {
+          {{
+               /**
+                * Index-0, State=AWAITING
+                */
+               RouteState::SYNCING, // on Event=RIB_UPDATE
+               RouteState::AWAITING, // on Event=FIB_CONNECTED,
+               RouteState::AWAITING, // on Event=FIB_ERROR
+               std::nullopt // on Event=FIB_SYNCED
+           },
+           {
+               /**
+                * Index-1, State=SYNCING
+                */
+               RouteState::SYNCING, // on Event=RIB_UPDATE
+               RouteState::SYNCING, // on Event=FIB_CONNECTED,
+               RouteState::SYNCING, // on Event=FIB_ERROR
+               RouteState::SYNCED // on Event=FIB_SYNCED
+           },
+           {
+               /**
+                * Index-2, State=SYNCED
+                */
+               RouteState::SYNCED, // on Event=RIB_UPDATE
+               RouteState::SYNCING, // on Event=FIB_CONNECTED,
+               RouteState::SYNCING, // on Event=FIB_ERROR
+               std::nullopt // on Event=FIB_SYNCED
+           }}};
+  const auto prevState = routeState_.state;
+  const auto nextState = stateMap.at(prevState).at(event);
+  CHECK(nextState.has_value()) << "Next state is 'UNDEFINED'";
+
+  // Update current state
+  routeState_.state = nextState.value();
+
+  // NOTE: Special processing
+  // Clear all existing routes if we transition from AWAITING -> SYNCING
+  // First RIB update is a SYNC and should be treated as source of truth. Any
+  // previously installed static route should be ignored.
+  if (prevState == RouteState::AWAITING && nextState == RouteState::SYNCING) {
+    routeState_.unicastRoutes.clear();
+    routeState_.mplsRoutes.clear();
+  }
 }
 
 } // namespace openr

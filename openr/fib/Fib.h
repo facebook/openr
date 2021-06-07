@@ -197,21 +197,36 @@ class Fib final : public OpenrEventBase {
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
     std::unordered_map<uint32_t, RibMplsEntry> mplsRoutes;
 
-    // Indicates we've received a decision route publication and therefore have
-    // routes to sync. Will not synce routes with system until this is set.
-    bool hasRoutesFromDecision{false};
+    /**
+     * Enumeration depicting the route event that may arrive and affect `State`
+     */
+    enum Event {
+      // Route update from Decision
+      RIB_UPDATE = 0,
+      // FIB Agent connected or re-connected because of process restart
+      FIB_CONNECTED = 1,
+      // Route programming error
+      FIB_ERROR = 2,
+      // FIB sync is successful
+      FIB_SYNCED = 3,
+    };
 
-    // Indicates whether we've received static MPLS routes.
-    bool hasStaticMplsRoutes{false};
-
-    // Flag to indicate the need of syncing route with underlying agent. This
-    // can result from two events
-    // 1) Receipt of first RIB snapshot from Decision
-    // 2) Route programming error
-    // If set, it means what currently cached in local routes has not been 100%
-    // successfully synced with agent, we have to trigger an enforced full fib
-    // sync with agent again
-    bool needSync{true};
+    /**
+     * Enumeration depicting the current state of Routes
+     */
+    enum State {
+      // FIB starts in this state. It is awaiting RIB, but meanwhile will
+      // program any received static route update.
+      AWAITING = 0,
+      // Once the first RIB update aka snapshot is received, FIB transitions
+      // to syncing state. State may also downgrade to this state from SYNCED
+      // on FIB_CONNECTED (FibAgent reconnects).
+      SYNCING = 1,
+      // After successful SYNC of routes, FIB enters this state and perform
+      // only incremental route updates, deletes or retries.
+      SYNCED = 2,
+    };
+    State state{AWAITING}; // We start in AWAITING state
 
     // Flag to indicate first sync
     bool isInitialSynced{true};
@@ -221,6 +236,14 @@ class Fib final : public OpenrEventBase {
      */
     void update(const DecisionRouteUpdate& routeUpdate);
   };
+
+  /**
+   * Helper function for state transition based on the event. Perform special
+   * processing if applicable.
+   */
+  void transitionRouteState(RouteState::Event event);
+
+  // Instantiation of route state
   RouteState routeState_;
 
   // Events to capture and indicate performance of protocol convergence.
