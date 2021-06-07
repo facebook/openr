@@ -200,6 +200,7 @@ Spark::SparkNeighbor::SparkNeighbor(
     std::string const& nodeName,
     std::string const& localIfName,
     std::string const& remoteIfName,
+    bool enableFloodOptimization,
     uint32_t label,
     uint64_t seqNum,
     const std::chrono::milliseconds& samplingPeriod,
@@ -212,6 +213,7 @@ Spark::SparkNeighbor::SparkNeighbor(
       label(label),
       seqNum(seqNum),
       state(SparkNeighState::IDLE),
+      enableFloodOptimization(enableFloodOptimization),
       stepDetector(
           stepDetectorConfig /* step detector config */,
           samplingPeriod /* sampling period */,
@@ -251,6 +253,8 @@ Spark::Spark(
           *config->getSparkConfig().graceful_restart_time_s_ref())),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
+      enableFloodOptimization_(
+          config->getKvStoreConfig().get_enable_flood_optimization()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(openrCtrlThriftPort),
@@ -773,9 +777,11 @@ Spark::sendHandshakeMsg(
   handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort_ref() = kOpenrCtrlThriftPort_;
   handshakeMsg.kvStoreCmdPort_ref() = kKvStoreCmdPort_;
-  handshakeMsg.area_ref() =
-      neighborAreaId; // send neighborAreaId deduced locally
+  // ATTN: send neighborAreaId deduced locally
+  handshakeMsg.area_ref() = neighborAreaId;
   handshakeMsg.neighborNodeName_ref() = neighborName;
+  // ATTN: notify peer if I can support DUAL or not
+  handshakeMsg.enableFloodOptimization_ref() = enableFloodOptimization_;
 
   thrift::SparkHelloPacket pkt;
   pkt.handshakeMsg_ref() = std::move(handshakeMsg);
@@ -1219,6 +1225,7 @@ Spark::processHelloMsg(
             neighborName, // neighborNode name
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
+            enableFloodOptimization_, // DUAL supported or NOT
             config_->isAdjacencyLabelsEnabled()
                 ? getNewLabelForIface(ifName) // label for Segment Routing
                 : 0, // Non-SR mode (will be ignored)
@@ -1475,6 +1482,8 @@ Spark::processHandshakeMsg(
   neighbor.openrCtrlThriftPort = *handshakeMsg.openrCtrlThriftPort_ref();
   neighbor.transportAddressV4 = *handshakeMsg.transportAddressV4_ref();
   neighbor.transportAddressV6 = *handshakeMsg.transportAddressV6_ref();
+  neighbor.enableFloodOptimization =
+      handshakeMsg.enableFloodOptimization_ref().value_or(false);
 
   // update neighbor holdTime as "NEGOTIATING" process
   neighbor.heartbeatHoldTime = std::max(

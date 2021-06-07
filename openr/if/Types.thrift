@@ -758,6 +758,11 @@ struct PeerSpec {
   2: string cmdUrl (deprecated);
 
   /**
+   * support flood optimization or not
+   */
+  3: bool supportFloodOptimization = 0;
+
+  /**
    * thrift port
    */
   4: i32 ctrlPort = 0;
@@ -1278,21 +1283,12 @@ struct OpenrVersions {
 }
 
 /**
- * Spark will define 3 types of msg and fit into SparkPacket thrift structure:
- * 1. SparkHelloMsg;
+ * SparkHelloMsg;
  *    - Functionality:
  *      1) To advertise its own existence and basic neighbor information;
  *      2) To ask for immediate response for quick adjacency establishment;
  *      3) To notify for its own "RESTART" to neighbors;
  *    - SparkHelloMsg will be sent per interface;
- * 2. SparkHeartbeatMsg;
- *    - Functionality:
- *      To notify its own aliveness by advertising msg periodically;
- *    - SparkHeartbeatMsg will be sent per interface;
- * 3. SparkHandshakeMsg;
- *    - Functionality:
- *      To exchange param information to establish adjacency;
- *    - SparkHandshakeMsg will be sent per (interface, neighbor)
  */
 struct SparkHelloMsg {
   1: string domainName;
@@ -1307,7 +1303,10 @@ struct SparkHelloMsg {
 } (cpp.minimize_padding)
 
 /**
- * TODO
+ * SparkHeartbeatMsg
+ *    - Functionality:
+ *      To notify its own aliveness by advertising msg periodically;
+ *    - SparkHeartbeatMsg will be sent per interface;
  */
 struct SparkHeartbeatMsg {
   1: string nodeName;
@@ -1315,7 +1314,10 @@ struct SparkHeartbeatMsg {
 }
 
 /**
- * TODO
+ * SparkHandshakeMsg;
+ *    - Functionality:
+ *      To exchange param information to establish adjacency;
+ *    - SparkHandshakeMsg will be sent per (interface, neighbor)
  */
 struct SparkHandshakeMsg {
   /**
@@ -1364,15 +1366,17 @@ struct SparkHandshakeMsg {
    * Recipient neighbor node for this handshake message.
    * Other nodes will ignore. If not set, then this will
    * be treated as a multicast and all nodes will process it.
-   *
-   * TODO: Remove optional qualifier after AREA negotiation
-   *       is fully in use
    */
   11: optional string neighborNodeName;
+
+  12: optional bool enableFloodOptimization;
 } (cpp.minimize_padding)
 
 /**
- * TODO
+ * SparkHelloPacket will define 3 types of messages inside thrift structure:
+ *  - SparkHelloMsg;
+ *  - SparkHeartbeatMsg;
+ *  - SparkHandshakeMsg;
  */
 struct SparkHelloPacket {
   /**
@@ -1457,4 +1461,9 @@ struct SparkNeighbor {
    * Source Routing documentation for more information.
    */
   11: i32 label;
+
+  /**
+   * Flag to support flood optimization or not
+   */
+  12: bool enableFloodOptimization = 0;
 } (cpp.minimize_padding)

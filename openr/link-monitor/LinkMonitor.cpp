@@ -282,6 +282,10 @@ LinkMonitor::stop() {
 
 void
 LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
+  // ATTN: all the thrift field is guaranteed to be there since it is
+  // transformed from SparkNeighbor structure.
+  // TODO: instead of using thrift structure, inter-module commmunication
+  // should leverage C++ structure ONLY.
   const auto& neighborAddrV4 = *info.transportAddressV4_ref();
   const auto& neighborAddrV6 = *info.transportAddressV6_ref();
   const auto& localIfName = *info.localIfName_ref();
@@ -291,6 +295,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   const auto kvStoreCmdPort = *info.kvStoreCmdPort_ref();
   const auto openrCtrlThriftPort = *info.openrCtrlThriftPort_ref();
   const auto rttUs = *info.rttUs_ref();
+  const auto supportFloodOptimization = *info.enableFloodOptimization_ref();
 
   // current unixtime
   auto now = std::chrono::system_clock::now();
@@ -311,12 +316,14 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
       1 /* weight */,
       remoteIfName);
 
-  SYSLOG(INFO)
-      << EventTag() << "Neighbor " << remoteNodeName << " is up on interface "
-      << localIfName << ". Remote Interface: " << remoteIfName
-      << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
-      << ", addrV4: " << toString(neighborAddrV4)
-      << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area;
+  SYSLOG(INFO) << EventTag() << "Neighbor " << remoteNodeName
+               << " is up on interface " << localIfName
+               << ". Remote Interface: " << remoteIfName
+               << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
+               << ", addrV4: " << toString(neighborAddrV4)
+               << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area
+               << ", supportFloodOptimization: " << std::boolalpha
+               << supportFloodOptimization;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
   std::string repUrl{""};
@@ -356,7 +363,12 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
 
   adjacencies_[adjId] = AdjacencyValue(
       area,
-      createPeerSpec(repUrl, peerAddr, openrCtrlThriftPort),
+      createPeerSpec(
+          repUrl,
+          peerAddr,
+          openrCtrlThriftPort,
+          thrift::KvStorePeerState::IDLE,
+          supportFloodOptimization),
       std::move(newAdj),
       isRestarting);
 

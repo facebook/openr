@@ -277,6 +277,7 @@ class Spark final : public OpenrEventBase {
         std::string const& nodeName,
         std::string const& localIfName,
         std::string const& remoteIfName,
+        bool enableFloodOptimization,
         uint32_t label,
         uint64_t seqNum,
         std::chrono::milliseconds const& samplingPeriod,
@@ -306,6 +307,7 @@ class Spark final : public OpenrEventBase {
       // populate misc info
       info.rttUs_ref() = rtt.count();
       info.label_ref() = label;
+      info.enableFloodOptimization_ref() = enableFloodOptimization;
 
       return info;
     }
@@ -347,6 +349,9 @@ class Spark final : public OpenrEventBase {
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
     int32_t kvStoreCmdPort{0};
     int32_t openrCtrlThriftPort{0};
+
+    // flag to indicate if flood-optimization is supported or NOT
+    bool enableFloodOptimization{false};
 
     // hold time
     std::chrono::milliseconds heartbeatHoldTime{0};
@@ -483,6 +488,9 @@ class Spark final : public OpenrEventBase {
 
   // This flag indicates that we will enable v4 over v6 nexthop
   const bool v4OverV6Nexthop_{false};
+
+  // This flag indicates that if DUAL flood-optimization is supported or NOT
+  const bool enableFloodOptimization_{false};
 
   // the next sequence number to be used on any interface for outgoing hellos
   // NOTE: we increment this on hello sent out of any interfaces

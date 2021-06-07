@@ -176,7 +176,9 @@ class KvStoreWrapper {
         globalCmdUrl, /* cmdUrl for ZMQ */
         Constants::kPlatformHost.toString(), /* peerAddr for thrift */
         getThriftPort(),
-        state);
+        state,
+        config_->getKvStoreConfig().enable_flood_optimization_ref().value_or(
+            false));
   }
 
   /**

@@ -248,7 +248,8 @@ thrift::PeerSpec createPeerSpec(
     const std::string& cmdUrl,
     const std::string& thriftPeerAddr = "",
     const int32_t port = 0,
-    const thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE);
+    const thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE,
+    const bool supportFloodOptimization = false);
 
 thrift::SparkNeighbor createSparkNeighbor(
     const std::string& nodeName,
