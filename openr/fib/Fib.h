@@ -204,15 +204,17 @@ class Fib final : public OpenrEventBase {
     // Indicates whether we've received static MPLS routes.
     bool hasStaticMplsRoutes{false};
 
-    // Flag to indicate the result of previous route programming attempt.
+    // Flag to indicate the need of syncing route with underlying agent. This
+    // can result from two events
+    // 1) Receipt of first RIB snapshot from Decision
+    // 2) Route programming error
     // If set, it means what currently cached in local routes has not been 100%
     // successfully synced with agent, we have to trigger an enforced full fib
     // sync with agent again
-    bool dirty{false};
+    bool needSync{true};
 
-    // Indicates if routes has been synced with the underlying agent. Toggles to
-    // true after initial sync
-    bool synced{false};
+    // Flag to indicate first sync
+    bool isInitialSynced{true};
 
     /**
      * Update RouteState with the newly received route update from Decision!

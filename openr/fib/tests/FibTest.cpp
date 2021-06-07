@@ -1683,6 +1683,9 @@ TEST_F(FibTestFixtureWaitOnDecision, RibRoutesUpdateRetryTillSuccessful) {
   mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
   EXPECT_EQ(mplsRoutes.size(), 0);
 
+  // Make sure there is no update in FIB updates queue
+  EXPECT_EQ(0, fibRouteUpdatesQueueReader.size());
+
   // 3. FIB client flips to healthy.
   mockFibHandler_->setHandlerHealthyState(true /*isHealthy*/);
 

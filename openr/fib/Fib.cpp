@@ -45,7 +45,6 @@ Fib::Fib(
     if (routeState_.hasRoutesFromDecision) {
       // SYNC routes if we've RIB snapshot from Decision
       isSuccess = syncRouteDb();
-      routeState_.synced = isSuccess;
     } else if (routeState_.hasStaticMplsRoutes) {
       // We have static MPLS routes but no RIB snapshot, let's retry adding
       // those static MPLS routes
@@ -425,10 +424,8 @@ Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
   // Add some counters
   fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
 
-  if (updateRoutes(std::move(routeUpdate), false /* static routes */)) {
-    routeState_.dirty = false;
-  } else {
-    routeState_.dirty = true;
+  if (not updateRoutes(std::move(routeUpdate), false /* static routes */)) {
+    routeState_.needSync = true;
     syncRouteDbDebounced(); // Schedule future full sync of route DB
   }
 }
@@ -496,14 +493,11 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
   if (!isStaticRoutes && retryRoutesTimer_->isScheduled()) {
     // Check if there's any full sync scheduled,
     // if so, skip partial sync
-    LOG(INFO) << "Pending full sync is scheduled, skip delta sync for now...";
+    LOG(INFO) << "Full sync is scheduled, skip delta sync for now...";
     return true;
-  } else if (!isStaticRoutes && (routeState_.dirty or !routeState_.synced)) {
-    LOG_IF(INFO, routeState_.dirty)
-        << "Previous route programming failed or, skip delta sync to enforce "
-           "full fib sync...";
-    LOG_IF(INFO, !routeState_.synced) << "Syncing fib on startup...";
-
+  } else if (!isStaticRoutes && routeState_.needSync) {
+    LOG(INFO) << "Scheduling full sync to recover from failure or process "
+              << "restart, skipping incremental update";
     syncRouteDbDebounced();
     return true;
   }
@@ -634,6 +628,10 @@ Fib::syncRouteDb() {
 
     LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes";
     printMplsRoutesAddUpdate(mplsRoutes);
+
+    // Update local state in dry-run mode
+    routeState_.needSync = false;
+
     return true;
   }
 
@@ -648,7 +646,7 @@ Fib::syncRouteDb() {
     // Set type as FULL_SYNC for first Fib sync after restarts.
     // Followup Fib sync are triggered by either route program failures or reset
     // of connection with switch agent.
-    syncedRoutes.type = (not routeState_.synced)
+    syncedRoutes.type = (routeState_.isInitialSynced)
         ? DecisionRouteUpdate::FULL_SYNC
         : DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
     // Sync unicast routes
@@ -679,13 +677,14 @@ Fib::syncRouteDb() {
               << "ms to sync routes in FIB";
     fb303::fbData->addStatValue(
         "fib.route_sync.time_ms", elapsedTime.count(), fb303::AVG);
-    routeState_.dirty = false;
+    routeState_.needSync = false;
+    routeState_.isInitialSynced = false;
     return true;
   } catch (std::exception const& e) {
     fb303::fbData->addStatValue("fib.thrift.failure.sync_fib", 1, fb303::COUNT);
     LOG(ERROR) << "Failed to sync routes in FIB. Error: "
                << folly::exceptionStr(e);
-    routeState_.dirty = true;
+    routeState_.needSync = true;
     client_.reset();
     return false;
   }
@@ -707,8 +706,8 @@ Fib::keepAliveCheck() {
   if (aliveSince != latestAliveSince_) {
     LOG(WARNING) << "FibAgent seems to have restarted. "
                  << "Performing full route DB sync ...";
-    // set dirty flag
-    routeState_.dirty = true;
+    // FibAgent has restarted. Enforce full sync
+    routeState_.needSync = true;
     retryRoutesExpBackoff_.reportSuccess();
     syncRouteDbDebounced();
   }
