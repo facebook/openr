@@ -680,10 +680,8 @@ Fib::syncRouteDb() {
       printMplsRoutesAddUpdate(mplsRoutes);
     }
     // Send synced routes into fibRouteUpdatesQueue_.
-    // TODO, FIXME: We should be publishing empty route even if it is empty.
-    if (not syncedRoutes.empty()) {
-      fibRouteUpdatesQueue_.push(std::move(syncedRoutes));
-    }
+    // NOTE: even empty Fib sync will be published to fibRouteUpdatesQueue_.
+    fibRouteUpdatesQueue_.push(std::move(syncedRoutes));
 
     const auto elapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(

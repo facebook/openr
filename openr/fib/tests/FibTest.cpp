@@ -876,6 +876,11 @@ TEST_F(FibTestFixture, processRouteDb) {
   // initial syncFib debounce
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Empty routes are sent fi tobRouteUpdatesQueue_.
+  DecisionRouteUpdate emptyUpdate;
+  emptyUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      emptyUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // Mimic decision pub sock publishing RouteDatabaseDelta and
   // RouteDatabaseDeltaDetail
@@ -987,6 +992,11 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   // initial syncFib debounce
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Empty routes are sent fi tobRouteUpdatesQueue_.
+  DecisionRouteUpdate emptyUpdate;
+  emptyUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      emptyUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // Mimic decision pub sock publishing RouteDatabaseDelta
   DecisionRouteUpdate routeUpdate1;
@@ -1182,6 +1192,11 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   // initial syncFib debounce
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
+  // Empty routes are sent fi tobRouteUpdatesQueue_.
+  DecisionRouteUpdate emptyUpdate;
+  emptyUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      emptyUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   // Mimic decision pub sock publishing RouteDatabaseDelta
   auto route1 = RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2});
@@ -1255,6 +1270,11 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
 
   // initial syncFib debounce
   mockFibHandler_->waitForSyncFib();
+  // Empty routes are sent fi tobRouteUpdatesQueue_.
+  DecisionRouteUpdate emptyUpdate;
+  emptyUpdate.type = DecisionRouteUpdate::FULL_SYNC;
+  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
+      emptyUpdate, fibRouteUpdatesQueueReader.get().value()));
 
   const auto prefix1 = toIpPrefix("192.168.20.16/28");
   const auto prefix2 = toIpPrefix("192.168.0.0/16");
