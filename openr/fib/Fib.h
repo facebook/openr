@@ -247,15 +247,12 @@ class Fib final : public OpenrEventBase {
   folly::AsyncSocket* socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 
-  // Callback timer to sync routes to switch agent and scheduled on route-sync
-  // failure. ExponentialBackoff timer to ease up things if they go wrong
-  std::unique_ptr<folly::AsyncTimeout> syncRoutesTimer_{nullptr};
-  ExponentialBackoff<std::chrono::milliseconds> syncRoutesExpBackoff_;
-
-  // Callback timer with exponential backoff for programming failed static
-  // routes.
-  std::unique_ptr<folly::AsyncTimeout> syncStaticRoutesTimer_{nullptr};
-  ExponentialBackoff<std::chrono::milliseconds> syncStaticRoutesExpBackoff_;
+  // Callback timer to program routes to SwitchAgent. The updates to agent
+  // would be based on RouteState. It'll handle cases for retry static routes,
+  // sync initial route db, or retry failed route updates. We trigger this timer
+  // with ExponentialBackoff to ease up things if programming keeps failing.
+  std::unique_ptr<folly::AsyncTimeout> retryRoutesTimer_{nullptr};
+  ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
 
   // periodically send alive msg to switch agent
   std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};

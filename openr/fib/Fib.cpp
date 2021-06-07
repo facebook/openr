@@ -10,8 +10,6 @@
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-#include <algorithm>
-#include <exception>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
@@ -36,29 +34,48 @@ Fib::Fib(
       dryrun_(config->getConfig().dryrun_ref().value_or(false)),
       enableSegmentRouting_(
           config->getConfig().enable_segment_routing_ref().value_or(false)),
-      syncRoutesExpBackoff_(
-          Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
-      syncStaticRoutesExpBackoff_(
+      retryRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       fibRouteUpdatesQueue_(fibRouteUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
   auto& tConfig = config->getConfig();
 
-  syncRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+  retryRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    bool isSuccess{true};
     if (routeState_.hasRoutesFromDecision) {
-      if (syncRouteDb()) {
-        routeState_.synced = true;
-        syncRoutesExpBackoff_.reportSuccess();
-      } else {
-        // Apply exponential backoff and schedule next run
-        syncRoutesExpBackoff_.reportError();
-        const auto period = syncRoutesExpBackoff_.getTimeRemainingUntilRetry();
-        LOG(INFO) << "Scheduling fib sync after " << period.count() << "ms";
-        syncRoutesTimer_->scheduleTimeout(period);
-      }
+      // SYNC routes if we've RIB snapshot from Decision
+      isSuccess = syncRouteDb();
+      routeState_.synced = isSuccess;
+    } else if (routeState_.hasStaticMplsRoutes) {
+      // We have static MPLS routes but no RIB snapshot, let's retry adding
+      // those static MPLS routes
+      DecisionRouteUpdate routeUpdate;
+      std::transform(
+          routeState_.mplsRoutes.cbegin(),
+          routeState_.mplsRoutes.cend(),
+          std::back_inserter(routeUpdate.mplsRoutesToUpdate),
+          [](auto& iter) { return iter.second; });
+      LOG(INFO) << "Retry programming of "
+                << routeUpdate.mplsRoutesToUpdate.size()
+                << " mpls static routes.";
+      isSuccess =
+          updateRoutes(std::move(routeUpdate), true /* static routes */);
     }
-    fb303::fbData->setCounter(
-        "fib.synced", syncRoutesTimer_->isScheduled() ? 0 : 1);
+
+    // Update backoff and retry if not successful
+    if (isSuccess) {
+      retryRoutesExpBackoff_.reportSuccess();
+    } else {
+      retryRoutesExpBackoff_.reportError();
+      const auto period = retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
+      LOG(INFO) << "Scheduling retry timer after " << period.count() << "ms";
+      retryRoutesTimer_->scheduleTimeout(period);
+    }
+
+    if (routeState_.hasRoutesFromDecision) {
+      fb303::fbData->setCounter(
+          "fib.synced", retryRoutesTimer_->isScheduled() ? 0 : 1);
+    }
   });
   // On startup we do require routedb_sync so explicitly set the counter to 0
   fb303::fbData->setCounter("fib.synced", 0);
@@ -68,7 +85,7 @@ Fib::Fib(
     LOG(INFO)
         << "EOR time is not configured; schedule fib sync of routeDb with cold-start duration "
         << coldStartDuration.count() << "secs";
-    syncRoutesTimer_->scheduleTimeout(coldStartDuration);
+    retryRoutesTimer_->scheduleTimeout(coldStartDuration);
   }
 
   keepAliveTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -103,34 +120,6 @@ Fib::Fib(
     }
   });
 
-  syncStaticRoutesTimer_ =
-      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-        if (routeState_.hasRoutesFromDecision or
-            not routeState_.hasStaticMplsRoutes) {
-          LOG(INFO) << "Terminating syncStaticRoutesTimer_.";
-          return;
-        }
-
-        DecisionRouteUpdate allMplsRoutes;
-        std::transform(
-            routeState_.mplsRoutes.cbegin(),
-            routeState_.mplsRoutes.cend(),
-            std::back_inserter(allMplsRoutes.mplsRoutesToUpdate),
-            [](auto& iter) { return iter.second; });
-
-        if (updateRoutes(std::move(allMplsRoutes), true /* static routes */)) {
-          syncStaticRoutesExpBackoff_.reportSuccess();
-        } else {
-          // Apply exponential backoff and schedule next run
-          syncStaticRoutesExpBackoff_.reportError();
-          const auto period =
-              syncStaticRoutesExpBackoff_.getTimeRemainingUntilRetry();
-          LOG(INFO) << "Scheduling re-programming static MPLS routes after "
-                    << period.count() << "ms";
-          syncStaticRoutesTimer_->scheduleTimeout(period);
-        }
-      });
-
   // Fiber to process and program static route updates.
   // - The routes are only programmed and updated but not deleted
   // - Updates arriving before first Decision RIB update will be processed. The
@@ -154,16 +143,16 @@ Fib::Fib(
       maybeThriftPub->mplsRoutesToDelete.clear();
 
       // Backup static MPLS routes. In case of update Routes failed, later
-      // scheduled syncStaticRoutesTimer_ will retry programming the routes.
+      // scheduled retryRoutesTimer_ will retry programming the routes.
       routeState_.hasStaticMplsRoutes = true;
       routeState_.update(maybeThriftPub.value());
 
       // Program received static route updates
       if (not updateRoutes(
               std::move(maybeThriftPub).value(), true /* static routes */)) {
-        // If failed, trigger syncStaticRoutesTimer_ to retry programming of
-        // static MPLS routes.
-        syncStaticRoutesTimer_->scheduleTimeout(Constants::kFibInitialBackoff);
+        // Schedule retryRoutesTimer_ to retry programming of failed
+        // updates
+        retryRoutesTimer_->scheduleTimeout(Constants::kFibInitialBackoff);
       }
     }
   });
@@ -504,7 +493,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
   }
 
   // For static routes we always update the provided routes immediately
-  if (!isStaticRoutes && syncRoutesTimer_->isScheduled()) {
+  if (!isStaticRoutes && retryRoutesTimer_->isScheduled()) {
     // Check if there's any full sync scheduled,
     // if so, skip partial sync
     LOG(INFO) << "Pending full sync is scheduled, skip delta sync for now...";
@@ -704,9 +693,9 @@ Fib::syncRouteDb() {
 
 void
 Fib::syncRouteDbDebounced() {
-  if (!syncRoutesTimer_->isScheduled()) {
+  if (not retryRoutesTimer_->isScheduled()) {
     // Schedule an immediate run if previous one is not scheduled
-    syncRoutesTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+    retryRoutesTimer_->scheduleTimeout(std::chrono::milliseconds(0));
   }
 }
 
@@ -720,7 +709,7 @@ Fib::keepAliveCheck() {
                  << "Performing full route DB sync ...";
     // set dirty flag
     routeState_.dirty = true;
-    syncRoutesExpBackoff_.reportSuccess();
+    retryRoutesExpBackoff_.reportSuccess();
     syncRouteDbDebounced();
   }
   latestAliveSince_ = aliveSince;
