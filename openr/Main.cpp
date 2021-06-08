@@ -78,8 +78,14 @@ namespace {
 const std::string inet6Path = "/proc/net/if_inet6";
 } // namespace
 
-// Disable background jemalloc background thread => new jemalloc-5 feature
-const char* malloc_conf = "background_thread:false";
+// jemalloc parameters - http://jemalloc.net/jemalloc.3.html
+// background_thread:false - Disable background jemalloc background thread.
+// prof:true - Memory profiling enabled.
+// prof_active:false - Deactivate memory profiling by default.
+//                     On-the-fly activation is available.
+// prof_prefix - Filename prefix for profile dumps.
+const char* malloc_conf =
+    "background_thread:false,prof:true,prof_active:false,prof_prefix:/tmp/openr_heap";
 
 void
 checkIsIpv6Enabled() {

@@ -31,6 +31,18 @@ MonitorBase::MonitorBase(
   // Schedule an immediate timeout
   setProcessCounterTimer_->scheduleTimeout(0);
 
+  // Periodically dump the heap memory profile
+  if (config->isMemoryProfilingEnabled()) {
+    dumpHeapProfileTimer_ =
+        folly::AsyncTimeout::make(*getEvb(), [this, config]() noexcept {
+          dumpHeapProfile();
+          dumpHeapProfileTimer_->scheduleTimeout(
+              config->getMemoryProfilingInterval());
+        });
+    // Schedule an immediate timeout
+    dumpHeapProfileTimer_->scheduleTimeout(0);
+  }
+
   // Fiber task to read the LogSample from queue and publish
   addFiberTask(
       [q = std::move(logSampleQueue), config, this]() mutable noexcept {

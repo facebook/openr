@@ -25,6 +25,9 @@ class Monitor : public MonitorBase {
  private:
   //  print the log sample to syslog
   void processEventLog(LogSample const& eventLog) override;
+
+  // Get the heap profile
+  void dumpHeapProfile() override;
 };
 
 } // namespace openr

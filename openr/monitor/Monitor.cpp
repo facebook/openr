@@ -16,4 +16,10 @@ Monitor::processEventLog(LogSample const& eventLog) {
   // NOTE: Could add your own implementation to push logs to your database.
 }
 
+void
+Monitor::dumpHeapProfile() {
+  LOG(INFO)
+      << "Please add your own implementation to dump the heap memory profile.";
+}
+
 } // namespace openr

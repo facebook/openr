@@ -27,6 +27,7 @@ class MonitorMock : public MonitorBase {
       messaging::RQueue<LogSample> eventLogUpdatesQueue)
       : MonitorBase(config, category, eventLogUpdatesQueue) {}
   MOCK_METHOD1(processEventLog, void(LogSample const& eventLog));
+  MOCK_METHOD0(dumpHeapProfile, void());
 };
 
 class MonitorTestFixture : public ::testing::Test {

@@ -485,6 +485,27 @@ class Config {
     return *config_.assume_drained_ref();
   }
 
+  //
+  // Memory profiling
+  //
+  bool
+  isMemoryProfilingEnabled() const {
+    auto memProfileConf = config_.memory_profiling_config_ref();
+    return memProfileConf.has_value() and
+        memProfileConf.value().enable_memory_profiling_ref().value();
+  }
+
+  std::chrono::seconds
+  getMemoryProfilingInterval() const {
+    if (isMemoryProfilingEnabled()) {
+      return std::chrono::seconds(
+          config_.memory_profiling_config_ref()->get_heap_dump_interval_s());
+    } else {
+      throw std::invalid_argument(
+          "Trying to set memory profile timer with heap_dump_interval_s, but enable_memory_profiling = false");
+    }
+  }
+
  private:
   void populateInternalDb();
 

@@ -50,6 +50,9 @@ class MonitorBase : public OpenrEventBase {
   // Pure virtual function for processing and publishing a log
   virtual void processEventLog(LogSample const& eventLog) = 0;
 
+  // Get the heap profile
+  virtual void dumpHeapProfile() = 0;
+
   // Set process counters
   void updateProcessCounters();
 
@@ -64,6 +67,9 @@ class MonitorBase : public OpenrEventBase {
 
   // Timer to periodically set process cpu/uptime/memory counter
   std::unique_ptr<folly::AsyncTimeout> setProcessCounterTimer_;
+
+  // Timer to periodically dump the heap profile
+  std::unique_ptr<folly::AsyncTimeout> dumpHeapProfileTimer_;
 
   // Start timestamp for calculate process.uptime.seconds
   const std::chrono::steady_clock::time_point startTime_;
