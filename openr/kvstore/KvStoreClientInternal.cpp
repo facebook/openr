@@ -14,6 +14,27 @@ namespace fb303 = facebook::fb303;
 
 namespace openr {
 
+namespace {
+void
+printKeyValInArea(
+    int logLevel,
+    const std::string& prefixStr,
+    const AreaId& area,
+    const std::string& key,
+    const thrift::Value& val) {
+  VLOG(logLevel) << fmt::format(
+      "{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, "
+      "ttl: {}, area: {}]",
+      prefixStr,
+      key,
+      *val.version_ref(),
+      *val.originatorId_ref(),
+      *val.ttlVersion_ref(),
+      *val.ttl_ref(),
+      area.t);
+}
+} // namespace
+
 KvStoreClientInternal::KvStoreClientInternal(
     OpenrEventBase* eventBase,
     std::string const& nodeId,
@@ -510,16 +531,7 @@ KvStoreClientInternal::clearPendingKeys() {
         continue;
       }
 
-      VLOG(1) << "Clearing (key, version, originatorId, ttlVersion, ttl, area)"
-              << folly::sformat(
-                     "({}, {}, {}, {}, {}, {})",
-                     key,
-                     *thriftVal.version_ref(),
-                     *thriftVal.originatorId_ref(),
-                     *thriftVal.ttlVersion_ref(),
-                     *thriftVal.ttl_ref(),
-                     area.t);
-
+      printKeyValInArea(1 /*logLevel*/, "Clearing", area, key, thriftVal);
       DCHECK(thriftVal.value_ref());
       keyVals.emplace(key, thriftVal);
       keysToClear.emplace_back(key);
@@ -687,9 +699,9 @@ KvStoreClientInternal::processPublication(
         // NOTE: We don't need to advertise the value back
         if (sk != keyTtlBackoffs.end() and
             *sk->second.first.ttlVersion_ref() < *rcvdValue.ttlVersion_ref()) {
-          VLOG(2) << "Bumping TTL version for (key, version, originatorId) "
-                  << folly::sformat(
-                         "({}, {}, {})",
+          VLOG(2) << fmt::format(
+                         "Bumping TTL version for [key: {}, v: {}, "
+                         "originatorId: {}]",
                          key,
                          *rcvdValue.version_ref(),
                          *rcvdValue.originatorId_ref())
@@ -820,17 +832,7 @@ KvStoreClientInternal::advertisePendingKeys(
       backoff.reportError();
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
-      VLOG(1)
-          << "Advertising (key, version, originatorId, ttlVersion, ttl, area) "
-          << folly::sformat(
-                 "({}, {}, {}, {}, {}, {})",
-                 key,
-                 *thriftValue.version_ref(),
-                 *thriftValue.originatorId_ref(),
-                 *thriftValue.ttlVersion_ref(),
-                 *thriftValue.ttl_ref(),
-                 area.t);
-
+      printKeyValInArea(1 /*logLevel*/, "Advertising", area, key, thriftValue);
       // Set in keyVals which is going to be advertise to the kvStore.
       DCHECK(thriftValue.value_ref());
       keyVals.emplace(key, thriftValue);
@@ -886,16 +888,8 @@ KvStoreClientInternal::advertiseTtlUpdates() {
       (*thriftValue.ttlVersion_ref())++;
       // Set in keyVals which is going to be advertised to the kvStore.
       DCHECK(not thriftValue.value_ref());
-
-      VLOG(1)
-          << "Advertising ttl update (key, version, originatorId, ttlVersion, area)"
-          << folly::sformat(
-                 " ({}, {}, {}, {}, {})",
-                 key,
-                 *thriftValue.version_ref(),
-                 *thriftValue.originatorId_ref(),
-                 *thriftValue.ttlVersion_ref(),
-                 area.t);
+      printKeyValInArea(
+          1 /*logLevel*/, "Advertising ttl update", area, key, thriftValue);
       keyVals.emplace(key, thriftValue);
     }
 
@@ -921,14 +915,7 @@ KvStoreClientInternal::setKeysHelper(
 
   // Debugging purpose print-out
   for (auto const& [key, thriftValue] : keyVals) {
-    VLOG(3) << "Send update (key, version, originatorId, ttlVersion, area)"
-            << folly::sformat(
-                   " ({}, {}, {}, {}, {})",
-                   key,
-                   *thriftValue.version_ref(),
-                   *thriftValue.originatorId_ref(),
-                   *thriftValue.ttlVersion_ref(),
-                   area.t);
+    printKeyValInArea(3 /*logLevel*/, "Send update", area, key, thriftValue);
   }
 
   thrift::KeySetParams params;
