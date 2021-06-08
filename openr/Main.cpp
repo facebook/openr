@@ -101,20 +101,17 @@ void
 waitForFibService(const folly::EventBase& mainEvb, int port) {
   // TODO: handle case when openr received SIGTERM when waiting for fibService
   auto waitForFibStart = std::chrono::steady_clock::now();
-  auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
   auto switchState = thrift::SwitchRunState::UNINITIALIZED;
   folly::EventBase evb;
   folly::AsyncSocket* socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
 
-  // Block until the Fib client is ALIVE, AND switch is ready to accept
-  // route updates (aka, of CONFIGURED state).
+  // Block until the Fib client is ready to accept route updates (aka, of
+  // CONFIGURED state).
   while (mainEvb.isRunning() and
-         (facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus or
-          (thrift::SwitchRunState::CONFIGURED != switchState))) {
+         thrift::SwitchRunState::CONFIGURED != switchState) {
     openr::Fib::createFibClient(evb, socket, client, port);
     try {
-      fibStatus = client->sync_getStatus();
       switchState = client->sync_getSwitchRunState();
     } catch (const std::exception& e) {
     }
