@@ -369,7 +369,7 @@ class Config {
   }
 
   const std::string
-  getSSLCertPath() {
+  getSSLCertPath() const {
     auto certPath = getThriftServerConfig().x509_cert_path_ref();
     if ((not certPath) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
@@ -379,7 +379,7 @@ class Config {
   }
 
   const std::string
-  getSSLEccCurve() {
+  getSSLEccCurve() const {
     auto eccCurve = getThriftServerConfig().ecc_curve_name_ref();
     if ((not eccCurve) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
@@ -389,7 +389,7 @@ class Config {
   }
 
   const std::string
-  getSSLCaPath() {
+  getSSLCaPath() const {
     auto caPath = getThriftServerConfig().x509_ca_path_ref();
     if ((not caPath) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
@@ -399,7 +399,7 @@ class Config {
   }
 
   const std::string
-  getSSLKeyPath() {
+  getSSLKeyPath() const {
     std::string keyPath;
     const auto& keyPathConfig = getThriftServerConfig().x509_key_path_ref();
 
@@ -410,6 +410,16 @@ class Config {
       keyPath = getSSLCertPath();
     }
     return keyPath;
+  }
+
+  const std::string
+  getSSLSeedPath() const {
+    auto seedPath = getThriftServerConfig().ticket_seed_path_ref();
+    if ((not seedPath) && isSecureThriftServerEnabled()) {
+      throw std::invalid_argument(
+          "enable_secure_thrift_server = true, but ticket_seed_path is empty");
+    }
+    return seedPath.value();
   }
 
   const std::string

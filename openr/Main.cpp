@@ -489,7 +489,7 @@ main(int argc, char** argv) {
     setupThriftServerTls(
         *thriftCtrlServer,
         config->getSSLThriftPolicy(),
-        config->getSSLAcceptablePeers(),
+        config->getSSLSeedPath(),
         sslContext);
   }
 
