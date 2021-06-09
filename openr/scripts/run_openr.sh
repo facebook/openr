@@ -26,7 +26,7 @@
 #
 
 # OpenR binary path or command name present on bin paths
-OPENR=openr
+OPENR="openr"
 
 # Keep this list in sorted order
 ASSUME_DRAINED=false
@@ -63,6 +63,7 @@ if [ "${HOSTNAME}" = "localhost" ]; then
 fi
 NODE_NAME=${HOSTNAME}
 
+# TODO: Have main C++ code check for this ...
 IPV6_DISABLED=$(sysctl -n net.ipv6.conf.all.disable_ipv6)
 if [ "${IPV6_DISABLED}" != "0" ]; then
   echo "WARNING: IPv6 seems to be disabled and OpenR depends on it which may \
