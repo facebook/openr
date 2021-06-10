@@ -636,7 +636,7 @@ Fib::syncRouteDb() {
     // Set type as FULL_SYNC for first Fib sync after restarts.
     // Followup Fib sync are triggered by either route program failures or reset
     // of connection with switch agent.
-    syncedRoutes.type = (routeState_.isInitialSynced)
+    syncedRoutes.type = (not routeState_.isInitialSynced)
         ? DecisionRouteUpdate::FULL_SYNC
         : DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
     // Sync unicast routes
@@ -667,7 +667,7 @@ Fib::syncRouteDb() {
               << "ms to sync routes in FIB";
     fb303::fbData->addStatValue(
         "fib.route_sync.time_ms", elapsedTime.count(), fb303::AVG);
-    routeState_.isInitialSynced = false;
+    routeState_.isInitialSynced = true;
     return true;
   } catch (std::exception const& e) {
     fb303::fbData->addStatValue("fib.thrift.failure.sync_fib", 1, fb303::COUNT);

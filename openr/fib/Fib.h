@@ -28,21 +28,12 @@
 namespace openr {
 
 /**
- * Proxy agent to program computed routes using platform dependent agent (e.g.
- * FBOSS in case of Wedge Platform).
+ * Programs computed routes to the underlying platform (e.g. FBOSS or Linux). It
+ * uses thrift interface defined in `Platform.thrift` for programming routes.
  *
- * The functionality is very simple. We just react to RouteDatabase updates
- * from Decision module and forward best paths to switch agent to program.
- * There is no state keeping being done apart from handling interface events.
- *
- * This RouteDatabase contains all Loop Free Alternate (LFAs) paths along with
- * best paths. So Fib module derives best paths (path with minimum cost) and
- * programs them.
- *
- * Note: If for a prefix there are multiple paths with the smallest cost then
- * we program all of them which simulates ECMP behaviours across programmed
- * nexthops.
- *
+ * FIB module subscribes to route updates from Decision module and programs it.
+ * It'll take care of re-programming routes under the failure cases. FIB
+ * publishes the updates after successful programming.
  */
 class Fib final : public OpenrEventBase {
  public:
@@ -229,7 +220,7 @@ class Fib final : public OpenrEventBase {
     State state{AWAITING}; // We start in AWAITING state
 
     // Flag to indicate first sync
-    bool isInitialSynced{true};
+    bool isInitialSynced{false};
 
     /**
      * Update RouteState with the newly received route update from Decision!
