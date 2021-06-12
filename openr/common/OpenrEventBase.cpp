@@ -5,19 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/common/OpenrEventBase.h"
-
 #include <folly/fibers/FiberManagerMap.h>
+#include <openr/common/OpenrEventBase.h>
 
 namespace openr {
 
 namespace {
-std::chrono::seconds
-getElapsedSeconds() {
-  return std::chrono::duration_cast<std::chrono::seconds>(
-      std::chrono::system_clock::now().time_since_epoch());
-}
-
 int
 getZmqSocketFd(uintptr_t socketPtr) {
   int socketFd{-1};
