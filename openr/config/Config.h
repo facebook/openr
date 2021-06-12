@@ -33,7 +33,10 @@ using PrefixAllocationParams = std::pair<folly::CIDRNetwork, uint8_t>;
 class AreaConfiguration {
  public:
   explicit AreaConfiguration(thrift::AreaConfig const& area)
-      : areaId_(area.get_area_id()) {
+      : areaId_(area.get_area_id()), areaType_(area.get_area_type()) {
+    if (area.area_sr_node_label_ref().has_value()) {
+      srNodeLabel_ = *area.area_sr_node_label_ref();
+    }
     neighborRegexSet_ = compileRegexSet(area.get_neighbor_regexes());
     interfaceIncludeRegexSet_ =
         compileRegexSet(area.get_include_interface_regexes());
@@ -49,6 +52,11 @@ class AreaConfiguration {
   std::string const&
   getAreaId() const {
     return areaId_;
+  }
+
+  std::optional<openr::thrift::SegmentRoutingNodeLabel>
+  getNodeSegmentLabelConfig() const {
+    return srNodeLabel_;
   }
 
   bool
@@ -74,6 +82,9 @@ class AreaConfiguration {
 
  private:
   const std::string areaId_;
+  const openr::thrift::AreaType areaType_;
+  std::optional<openr::thrift::SegmentRoutingNodeLabel> srNodeLabel_{
+      std::nullopt};
 
   std::optional<std::string> importPolicyName_{std::nullopt};
 
@@ -126,16 +137,6 @@ class Config {
   bool
   isSegmentRoutingEnabled() const {
     return config_.enable_segment_routing_ref().value_or(false);
-  }
-
-  bool
-  isNodeSegmentLabelEnabled() const {
-    // TODO
-    // Once segment_routing_config gets added, the
-    // this check will be replaced with a logic
-    // which checks if node segment label is
-    // configured.
-    return isSegmentRoutingEnabled();
   }
 
   bool

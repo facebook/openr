@@ -73,7 +73,8 @@ LinkMonitor::LinkMonitor(
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool overrideDrainState,
     std::chrono::seconds adjHoldTime)
-    : nodeId_(config->getNodeName()),
+    : config_(config),
+      nodeId_(config->getNodeName()),
       enablePerfMeasurement_(
           config->getLinkMonitorConfig().get_enable_perf_measurement()),
       enableV4_(config->isV4Enabled()),
@@ -163,37 +164,55 @@ LinkMonitor::LinkMonitor(
   if (enableSegmentRouting_) {
     // create range allocator to get unique node labels
     for (auto const& kv : areas_) {
-      auto const& areaId = kv.first;
-      rangeAllocator_.emplace(
-          std::piecewise_construct,
-          std::forward_as_tuple(areaId),
-          std::forward_as_tuple(
-              AreaId{areaId},
-              nodeId_,
-              Constants::kNodeLabelRangePrefix.toString(),
-              kvStoreClient_.get(),
-              [&](std::optional<int32_t> newVal) noexcept {
-                state_.nodeLabel_ref() = newVal ? newVal.value() : 0;
-                advertiseAdjacencies();
-              }, /* callback */
-              std::chrono::milliseconds(100), /* minBackoffDur */
-              std::chrono::seconds(2), /* maxBackoffDur */
-              false /* override owner */,
-              nullptr, /* checkValueInUseCb */
-              Constants::kRangeAllocTtl));
+      auto const& srNodeLabelCfg = kv.second.getNodeSegmentLabelConfig();
+      if (not srNodeLabelCfg.has_value()) {
+        LOG(INFO) << "Area " << kv.first
+                  << " does not have segment routing node label config";
+        continue;
+      }
 
-      // Delay range allocation until we have formed all of our adjcencies
-      auto startAllocTimer =
-          folly::AsyncTimeout::make(*getEvb(), [this, areaId]() noexcept {
-            std::optional<int32_t> initValue;
-            if (*state_.nodeLabel_ref() != 0) {
-              initValue = *state_.nodeLabel_ref();
-            }
-            rangeAllocator_.at(areaId).startAllocator(
-                MplsConstants::kSrGlobalRange, initValue);
-          });
-      startAllocTimer->scheduleTimeout(adjHoldTime);
-      startAllocationTimers_.emplace_back(std::move(startAllocTimer));
+      switch (srNodeLabelCfg->get_sr_node_label_type()) {
+      case openr::thrift::SegmentRoutingNodeLabelType::AUTO: {
+        auto const& areaId = kv.first;
+        rangeAllocator_.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(areaId),
+            std::forward_as_tuple(
+                AreaId{areaId},
+                nodeId_,
+                Constants::kNodeLabelRangePrefix.toString(),
+                kvStoreClient_.get(),
+                [&](std::optional<int32_t> newVal) noexcept {
+                  state_.nodeLabel_ref() = newVal ? newVal.value() : 0;
+                  advertiseAdjacencies();
+                }, /* callback */
+                std::chrono::milliseconds(100), /* minBackoffDur */
+                std::chrono::seconds(2), /* maxBackoffDur */
+                false /* override owner */,
+                nullptr, /* checkValueInUseCb */
+                Constants::kRangeAllocTtl));
+
+        // Delay range allocation until we have formed all of our adjcencies
+        auto startAllocTimer =
+            folly::AsyncTimeout::make(*getEvb(), [this, areaId, kv]() noexcept {
+              std::optional<int32_t> initValue;
+              if (*state_.nodeLabel_ref() != 0) {
+                initValue = *state_.nodeLabel_ref();
+              }
+              rangeAllocator_.at(areaId).startAllocator(
+                  getNodeSegmentLabelRange(kv.second), initValue);
+            });
+        startAllocTimer->scheduleTimeout(adjHoldTime);
+        startAllocationTimers_.emplace_back(std::move(startAllocTimer));
+      } break;
+      case openr::thrift::SegmentRoutingNodeLabelType::STATIC: {
+        // Use statically configured node segment label as node label
+        state_.nodeLabel_ref() = getStaticNodeSegmentLabel(kv.second);
+      } break;
+      default:
+        DCHECK("Unknown segment routing node label allocation type");
+        break;
+      }
     }
   }
 

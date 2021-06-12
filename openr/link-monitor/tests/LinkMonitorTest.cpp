@@ -10,18 +10,22 @@
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
+#include <folly/Subprocess.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/system/Shell.h>
 #include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -31,6 +35,7 @@
 
 using namespace std;
 using namespace openr;
+using namespace folly::literals::shell_literals;
 
 using ::testing::InSequence;
 
@@ -52,18 +57,18 @@ const auto if_3_2 = "iface_3_2";
 const auto kvStoreCmdPort = 10002;
 
 const auto peerSpec_2_1 = createPeerSpec(
-    folly::sformat("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_1, kvStoreCmdPort),
-    folly::sformat("{}%{}", nb2_v6_addr, if_2_1),
+    fmt::format("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_1, kvStoreCmdPort),
+    fmt::format("{}%{}", nb2_v6_addr, if_2_1),
     1);
 
 const auto peerSpec_2_2 = createPeerSpec(
-    folly::sformat("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_2, kvStoreCmdPort),
-    folly::sformat("{}%{}", nb2_v6_addr, if_2_2),
+    fmt::format("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_2, kvStoreCmdPort),
+    fmt::format("{}%{}", nb2_v6_addr, if_2_2),
     1);
 
 const auto peerSpec_3_1 = createPeerSpec(
-    folly::sformat("tcp://[{}%{}]:{}", nb3_v6_addr, if_3_1, kvStoreCmdPort),
-    folly::sformat("{}%{}", nb3_v6_addr, if_3_1),
+    fmt::format("tcp://[{}%{}]:{}", nb3_v6_addr, if_3_1, kvStoreCmdPort),
+    fmt::format("{}%{}", nb3_v6_addr, if_3_1),
     2);
 
 const auto nb2 = createSparkNeighbor(
@@ -185,9 +190,14 @@ class LinkMonitorTestFixture : public ::testing::Test {
       std::unordered_set<std::string> areas = {},
       std::chrono::milliseconds flapInitalBackoff =
           std::chrono::milliseconds(1),
-      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
+      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8),
+      std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
+          areaMap = {}) {
     // cleanup any existing config file on disk
-    system(folly::sformat("rm -rf {}", kConfigStorePath).c_str());
+    auto cmd = "rm -rf {}"_shellify(kConfigStorePath.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    // Ignore result
+    proc.wait();
 
     // create MockNetlinkProtocolSocket
     nlSock = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&nlEvb_);
@@ -197,7 +207,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // create config
     config = std::make_shared<Config>(
-        getTestOpenrConfig(areas, flapInitalBackoff, flapMaxBackoff));
+        getTestOpenrConfig(areas, flapInitalBackoff, flapMaxBackoff, areaMap));
 
     // spin up a config store
     configStore = std::make_unique<PersistentStore>(config, true /* dryrun */);
@@ -278,12 +288,37 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
+  thrift::SegmentRoutingNodeLabel
+  getTestSegmentRoutingNodelLabel(
+      thrift::SegmentRoutingNodeLabelType nodeLabelType,
+      int32_t nodeLabel = 0,
+      int32_t startLabel = openr::MplsConstants::kSrGlobalRange.first,
+      int32_t endLabel = openr::MplsConstants::kSrGlobalRange.second) {
+    thrift::SegmentRoutingNodeLabel srNodeLabel;
+    if (nodeLabelType == thrift::SegmentRoutingNodeLabelType::AUTO) {
+      srNodeLabel.sr_node_label_type_ref() =
+          thrift::SegmentRoutingNodeLabelType::AUTO;
+      openr::thrift::LabelRange labelRange;
+      labelRange.start_label_ref() = startLabel;
+      labelRange.end_label_ref() = endLabel;
+      srNodeLabel.node_segment_label_range_ref() = labelRange;
+    } else {
+      srNodeLabel.sr_node_label_type_ref() =
+          thrift::SegmentRoutingNodeLabelType::STATIC;
+      srNodeLabel.node_segment_label_ref() = nodeLabel;
+    }
+
+    return srNodeLabel;
+  }
+
   thrift::OpenrConfig
   getTestOpenrConfig(
       std::unordered_set<std::string> areas = {},
       std::chrono::milliseconds flapInitalBackoff =
           std::chrono ::milliseconds(1),
-      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
+      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8),
+      std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
+          areaMap = {}) {
     if (areas.empty()) {
       areas.insert(kTestingAreaName);
     }
@@ -295,6 +330,30 @@ class LinkMonitorTestFixture : public ::testing::Test {
       area.include_interface_regexes_ref() = {
           kTestVethNamePrefix + ".*", "iface.*"};
       area.redistribute_interface_regexes_ref() = {"loopback"};
+
+      auto it = areaMap.find(id);
+      if (it == areaMap.end()) {
+        area.area_sr_node_label_ref() = getTestSegmentRoutingNodelLabel(
+            thrift::SegmentRoutingNodeLabelType::AUTO);
+      } else {
+        thrift::SegmentRoutingNodeLabel srNodeLabel;
+        openr::thrift::LabelRange labelRange;
+        srNodeLabel.sr_node_label_type_ref() =
+            *it->second.sr_node_label_type_ref();
+
+        if (it->second.node_segment_label_range_ref().has_value()) {
+          labelRange.start_label_ref() =
+              *it->second.get_node_segment_label_range()->start_label_ref();
+          labelRange.end_label_ref() =
+              *it->second.get_node_segment_label_range()->end_label_ref();
+        }
+
+        if (it->second.node_segment_label_ref().has_value()) {
+          srNodeLabel.node_segment_label_ref() =
+              *it->second.get_node_segment_label();
+        }
+        area.area_sr_node_label_ref() = srNodeLabel;
+      }
       areaConfig.emplace_back(std::move(area));
     }
     auto tConfig =
@@ -307,9 +366,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
     lmConf.linkflap_initial_backoff_ms_ref() = flapInitalBackoff.count();
     lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
     lmConf.use_rtt_metric_ref() = false;
-    *lmConf.include_interface_regexes_ref() = {
+    lmConf.include_interface_regexes_ref() = {
         kTestVethNamePrefix + ".*", "iface.*"};
-    *lmConf.redistribute_interface_regexes_ref() = {"loopback"};
+    lmConf.redistribute_interface_regexes_ref() = {"loopback"};
 
     tConfig.enable_new_gr_behavior_ref() = true;
     tConfig.assume_drained_ref() = false;
@@ -1955,6 +2014,105 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   }
 }
 
+/**
+ * Test allocation of static node segment label in mesh area
+ */
+TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
+  std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
+      areaMap1;
+  areaMap1.emplace(
+      kTestingAreaName,
+      getTestSegmentRoutingNodelLabel(
+          thrift::SegmentRoutingNodeLabelType::STATIC, 101));
+  SetUp(
+      {kTestingAreaName},
+      std::chrono::milliseconds(1),
+      std::chrono::milliseconds(8),
+      areaMap1);
+  size_t kNumNodesToTest = 10;
+  // spin up kNumNodesToTest - 1 new link monitors. 1 is spun up in setup()
+  std::vector<std::unique_ptr<LinkMonitor>> linkMonitors;
+  std::vector<std::unique_ptr<std::thread>> linkMonitorThreads;
+  std::vector<std::shared_ptr<Config>> configs;
+  std::unordered_set<std::string> areas{kNumNodesToTest};
+
+  for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
+    std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
+        areaMap2;
+    areaMap2.emplace(
+        kTestingAreaName,
+        getTestSegmentRoutingNodelLabel(
+            thrift::SegmentRoutingNodeLabelType::STATIC, 102 + i));
+    auto tConfigCopy = getTestOpenrConfig(
+        areas,
+        std::chrono::milliseconds(1),
+        std::chrono::milliseconds(8),
+        areaMap2);
+    tConfigCopy.node_name_ref() = fmt::format("lm{}", i + 1);
+    auto currConfig = std::make_shared<Config>(tConfigCopy);
+    auto lm = std::make_unique<LinkMonitor>(
+        currConfig,
+        nlSock.get(),
+        kvStoreWrapper->getKvStore(),
+        configStore.get(),
+        interfaceUpdatesQueue,
+        prefixUpdatesQueue,
+        peerUpdatesQueue,
+        logSampleQueue,
+        neighborUpdatesQueue.getReader(),
+        kvStoreSyncEventsQueue.getReader(),
+        nlSock->getReader(),
+        false, /* overrideDrainState */
+        std::chrono::seconds(1));
+    linkMonitors.emplace_back(std::move(lm));
+    configs.emplace_back(std::move(currConfig));
+
+    auto lmThread = std::make_unique<std::thread>([&linkMonitors]() {
+      LOG(INFO) << "LinkMonitor thread starting";
+      linkMonitors.back()->run();
+      LOG(INFO) << "LinkMonitor thread finishing";
+    });
+    linkMonitorThreads.emplace_back(std::move(lmThread));
+    linkMonitors.back()->waitUntilRunning();
+  }
+
+  // map of nodeId to value allocated
+  std::unordered_map<std::string, int32_t> nodeLabels;
+
+  // recv kv store publications until we have valid labels from each node
+  while (nodeLabels.size() < kNumNodesToTest) {
+    auto pub = kvStoreWrapper->recvPublication();
+    for (auto const& kv : *pub.keyVals_ref()) {
+      if (kv.first.find("adj:") == 0 and kv.second.value_ref()) {
+        auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
+            kv.second.value_ref().value(), serializer);
+        nodeLabels[*adjDb.thisNodeName_ref()] = *adjDb.nodeLabel_ref();
+        if (*adjDb.nodeLabel_ref() == 0) {
+          nodeLabels.erase(*adjDb.thisNodeName_ref());
+        }
+      }
+    }
+  }
+
+  // ensure that we have unique values
+  std::set<int32_t> labelSet;
+  for (auto const& kv : nodeLabels) {
+    labelSet.insert(kv.second);
+  }
+
+  EXPECT_EQ(kNumNodesToTest, labelSet.size());
+
+  // cleanup
+  nlSock->closeQueue();
+  neighborUpdatesQueue.close();
+  kvStoreSyncEventsQueue.close();
+  kvStoreWrapper->closeQueue();
+  for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
+    linkMonitors[i]->stop();
+    linkMonitorThreads[i]->join();
+  }
+}
+
 // Test getting unique nodeLabels
 TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   SetUp({});
@@ -1966,7 +2124,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   std::vector<std::shared_ptr<Config>> configs;
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
     auto tConfigCopy = getTestOpenrConfig();
-    *tConfigCopy.node_name_ref() = folly::sformat("lm{}", i + 1);
+    tConfigCopy.node_name_ref() = fmt::format("lm{}", i + 1);
     auto currConfig = std::make_shared<Config>(tConfigCopy);
     auto lm = std::make_unique<LinkMonitor>(
         currConfig,
@@ -2156,7 +2314,7 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
         prefixEntry.metrics_ref()->source_preference_ref());
     EXPECT_EQ(
         std::set<std::string>(
-            {"INTERFACE_SUBNET", folly::sformat("{}:loopback", nodeName)}),
+            {"INTERFACE_SUBNET", fmt::format("{}:loopback", nodeName)}),
         prefixEntry.tags_ref());
 
     // Both area should report the same set of prefixes

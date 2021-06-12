@@ -293,10 +293,38 @@ class LinkMonitor final : public OpenrEventBase {
   // returns any(a.anyAreaShouldRedistributeIface(iface) for a in areas_)
   bool anyAreaShouldRedistributeIface(std::string const& iface) const;
 
+  // Get the label range from the configuration
+  const std::pair<int32_t, int32_t>
+  getNodeSegmentLabelRange(AreaConfiguration const& areaConfig) const {
+    CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
+    std::pair<int32_t, int32_t> labelRange{
+        *areaConfig.getNodeSegmentLabelConfig()
+             ->get_node_segment_label_range()
+             ->start_label_ref(),
+        *areaConfig.getNodeSegmentLabelConfig()
+             ->get_node_segment_label_range()
+             ->end_label_ref()};
+    return labelRange;
+  }
+
+  // Get static area node segment label
+  int32_t
+  getStaticNodeSegmentLabel(AreaConfiguration const& areaConfig) const {
+    CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
+    if (areaConfig.getNodeSegmentLabelConfig()
+            ->node_segment_label_ref()
+            .has_value()) {
+      return *areaConfig.getNodeSegmentLabelConfig()->node_segment_label_ref();
+    }
+    return 0;
+  }
+
   //
   // immutable state/invariants
   //
 
+  // config
+  std::shared_ptr<const Config> config_;
   // used to build the key names for this node
   const std::string nodeId_;
   // enable performance measurement
