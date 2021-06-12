@@ -7,7 +7,7 @@
 
 import sys
 from builtins import object
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 import click
 from openr.cli.utils import utils
@@ -247,19 +247,24 @@ class LMAdjCmd(LMCmdBase):
         client: OpenrCtrl.Client,
         nodes: set,
         json: bool,
+        areas: Sequence[str] = (),
         *args,
         **kwargs,
     ) -> None:
-        adj_db = client.getLinkMonitorAdjacencies()
+        area_filters = OpenrCtrl.AdjacenciesFilter(selectAreas=set(areas))
+        adj_dbs = client.getLinkMonitorAdjacenciesFiltered(area_filters)
 
-        # adj_dbs is built with ONLY one single (node, adjDb). Ignpre bidir option
-        adjs_map = utils.adj_dbs_to_dict(
-            {adj_db.thisNodeName: adj_db}, nodes, False, self.iter_dbs
-        )
-        if json:
-            utils.print_json(adjs_map)
-        else:
-            utils.print_adjs_table(adjs_map, None, None)
+        for adj_db in adj_dbs:
+            if adj_db and adj_db.area and not json:
+                click.secho(f"Area: {adj_db.area}", bold=True)
+            # adj_db is built with ONLY one single (node, adjDb). Ignpre bidir option
+            adjs_map = utils.adj_dbs_to_dict(
+                {adj_db.thisNodeName: adj_db}, nodes, False, self.iter_dbs
+            )
+            if json:
+                utils.print_json(adjs_map)
+            else:
+                utils.print_adjs_table(adjs_map, None, None)
 
 
 class LMLinksCmd(LMCmdBase):

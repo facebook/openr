@@ -4,7 +4,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import List
 
+import bunch
 import click
 from openr.cli.commands import kvstore, lm
 from openr.cli.utils import utils
@@ -63,12 +65,13 @@ class LMLinksCli(object):
 class LMAdjCli(object):
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.argument("areas", nargs=-1)
     @click.pass_obj
-    def adj(cli_opts, json):  # noqa: B902
+    def adj(cli_opts: bunch.Bunch, json: bool, areas: List[str]):  # noqa: B902
         """Dump all formed adjacencies of the current host"""
 
         nodes = parse_nodes(cli_opts, "")
-        lm.LMAdjCmd(cli_opts).run(nodes, json)
+        lm.LMAdjCmd(cli_opts).run(nodes, json, areas)
 
 
 class SetNodeOverloadCli(object):
