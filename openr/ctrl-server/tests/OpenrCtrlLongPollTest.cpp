@@ -63,8 +63,8 @@ class LongPollFixture : public ::testing::Test {
 
  public:
   const std::string nodeName_{"Valar-Morghulis"};
-  const std::string adjKey_ = folly::sformat("adj:{}", nodeName_);
-  const std::string prefixKey_ = folly::sformat("prefix:{}", nodeName_);
+  const std::string adjKey_ = fmt::format("adj:{}", nodeName_);
+  const std::string prefixKey_ = fmt::format("prefix:{}", nodeName_);
 
   openr::OpenrEventBase testEvb_;
   std::shared_ptr<Config> config_{nullptr};
@@ -84,7 +84,7 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
   std::chrono::steady_clock::time_point endTime;
 
   // mimick there is a new publication from kvstore
-  testEvb_.scheduleTimeout(std::chrono::milliseconds(5000), [&]() noexcept {
+  testEvb_.scheduleTimeout(std::chrono::milliseconds(1000), [&]() noexcept {
     LOG(INFO) << "AdjKey set...";
     // catch  up the time
     startTime = std::chrono::steady_clock::now();

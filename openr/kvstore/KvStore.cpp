@@ -1315,7 +1315,6 @@ KvStoreDb::~KvStoreDb() {
   evb_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // Destroy thrift clients associated with peers, which will
     // fulfill promises with exceptions if any.
-    cleanupTtlCountdownQueue();
     thriftPeers_.clear();
     LOG(INFO) << "Successfully destroyed thriftPeers and timers";
   });
