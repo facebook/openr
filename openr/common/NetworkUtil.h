@@ -106,10 +106,19 @@ toIPAddress(const thrift::BinaryAddress& addr) {
       addr.addr_ref()->size()));
 }
 
+// construct thrift::IpPrefix
+inline thrift::IpPrefix
+createIpPrefix(
+    thrift::BinaryAddress const& prefixAddress, int16_t prefixLength) {
+  thrift::IpPrefix ipPrefix;
+  ipPrefix.prefixAddress_ref() = prefixAddress;
+  ipPrefix.prefixLength_ref() = prefixLength;
+  return ipPrefix;
+}
+
 inline thrift::IpPrefix
 toIpPrefix(const folly::CIDRNetwork& network) {
-  return thrift::IpPrefix(
-      apache::thrift::FRAGILE, toBinaryAddress(network.first), network.second);
+  return createIpPrefix(toBinaryAddress(network.first), network.second);
 }
 
 inline thrift::IpPrefix

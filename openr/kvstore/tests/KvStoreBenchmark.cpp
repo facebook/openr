@@ -118,8 +118,7 @@ updateKvStore(
     std::advance(kvIt, idx);
     auto key = kvIt->first;
     auto newValue = genRandomStr(kSizeOfValue);
-    thrift::Value thriftValue(
-        apache::thrift::FRAGILE,
+    auto thriftValue = createThriftValue(
         version, /* version */
         "kvStore", /* node id */
         newValue,
@@ -155,8 +154,7 @@ floodingUpdate(
   for (uint32_t idx = 0; idx < numOfUpdateKeys; idx++) {
     auto key = keys[idx];
     auto value = genRandomStr(kSizeOfValue);
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         version /* version */,
         "kvStore" /* originatorId */,
         value /* value */,
@@ -198,8 +196,7 @@ BM_KvStoreMergeKeyValues(
   for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
     auto key = genRandomStr(kSizeOfKey);
     auto value = genRandomStr(kSizeOfValue);
-    thrift::Value thriftValue(
-        apache::thrift::FRAGILE,
+    auto thriftValue = createThriftValue(
         version, /* version */
         "kvStore", /* node id */
         value,
@@ -237,8 +234,7 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
   for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
     auto key = genRandomStr(kSizeOfKey);
     auto value = genRandomStr(kSizeOfValue);
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "kvStore" /* originatorId */,
         value /* value */,

@@ -426,16 +426,12 @@ PrefixAllocator::savePrefixIndexToDisk(std::optional<uint32_t> prefixIndex) {
 
   VLOG(4) << "Saving prefix-allocator info to persistent config with index "
           << *prefixIndex;
-  auto prefix = thrift::IpPrefix(
-      apache::thrift::FRAGILE,
-      toBinaryAddress(allocParams_->first.first),
-      allocParams_->first.second);
-  thrift::AllocPrefix thriftAllocPrefix(
-      apache::thrift::FRAGILE,
+  auto prefix = createIpPrefix(
+      toBinaryAddress(allocParams_->first.first), allocParams_->first.second);
+  auto thriftAllocPrefix = createAllocPrefix(
       prefix,
       static_cast<int64_t>(allocParams_->second),
       static_cast<int64_t>(*prefixIndex));
-
   configStore_->storeThriftObj(kConfigKey, thriftAllocPrefix).get();
 }
 

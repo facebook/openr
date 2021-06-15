@@ -1243,8 +1243,8 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   /* test for expired keys update */
   int keyExpKeyCbCnt{0}; /* expired key call back count specific to a key */
   evb.scheduleTimeout(std::chrono::milliseconds(20), [&]() noexcept {
-    thrift::Value keyExpVal{
-        apache::thrift::FRAGILE, 1, nodeId, "test_key_exp_val", 1, 500, 0};
+    auto keyExpVal =
+        createThriftValue(1, nodeId, "test_key_exp_val", 1, 500, 0);
 
     client2->subscribeKey(
         kTestingAreaName,

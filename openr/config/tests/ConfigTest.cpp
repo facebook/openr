@@ -114,7 +114,6 @@ const std::string myArea = "myArea";
 } // namespace
 
 namespace openr {
-using apache::thrift::FragileConstructor::FRAGILE;
 
 class ConfigTestFixture : public ::testing::Test {
  public:

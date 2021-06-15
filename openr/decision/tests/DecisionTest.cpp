@@ -40,7 +40,6 @@ using namespace testing;
 namespace fb303 = facebook::fb303;
 
 using apache::thrift::CompactSerializer;
-using apache::thrift::FRAGILE;
 
 namespace {
 
@@ -4762,8 +4761,7 @@ class DecisionTestFixture : public ::testing::Test {
       int32_t nodeId = 0) {
     auto adjDB = createAdjDb(node, adjs, nodeId);
     adjDB.isOverloaded_ref() = overloaded;
-    return thrift::Value(
-        FRAGILE,
+    return createThriftValue(
         version,
         "originator-1",
         writeThriftObjStr(adjDB, serializer),

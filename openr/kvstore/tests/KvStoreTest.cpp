@@ -241,8 +241,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         // Create new key-value pair.
         const std::string key = folly::sformat("key-{}-{}", i, j);
         const auto value = genRandomStr(kValueStrSize);
-        thrift::Value thriftVal(
-            apache::thrift::FRAGILE,
+        auto thriftVal = createThriftValue(
             version,
             "pluto" /* originatorId */,
             value,
@@ -494,8 +493,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
  */
 TEST_F(KvStoreTestFixture, TtlVerification) {
   const std::string key{"dummyKey"};
-  const thrift::Value value(
-      apache::thrift::FRAGILE,
+  const auto value = createThriftValue(
       5, /* version */
       "node1", /* node id */
       "dummyValue",
@@ -756,8 +754,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   // Set key into store0 with origninator ID as "store0".
   // getKey should pass for this key.
   LOG(INFO) << "Setting value in store0 with originator id as store0...";
-  thrift::Value thriftVal(
-      apache::thrift::FRAGILE,
+  auto thriftVal = createThriftValue(
       1 /* version */,
       "store0" /* originatorId */,
       "value1" /* value */,
@@ -781,8 +778,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   // Set key with a different originator ID
   // This shouldn't be added to Kvstore
   LOG(INFO) << "Setting value in store0 with originator id as store1...";
-  thrift::Value thriftVal2(
-      apache::thrift::FRAGILE,
+  auto thriftVal2 = createThriftValue(
       1 /* version */,
       "store1" /* originatorId */,
       "value1" /* value */,
@@ -805,8 +801,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   // Set key with a different originator ID, but matching prefix
   // This should be added to Kvstore.
   LOG(INFO) << "Setting key value with a matching key prefix...";
-  thrift::Value thriftVal3(
-      apache::thrift::FRAGILE,
+  auto thriftVal3 = createThriftValue(
       1 /* version */,
       "store1" /* originatorId */,
       "value1" /* value */,
@@ -829,8 +824,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   // Add another matching key prefix, different originator ID
   // This should be added to Kvstore.
   LOG(INFO) << "Setting key value with a matching key prefix...";
-  thrift::Value thriftVal4(
-      apache::thrift::FRAGILE,
+  auto thriftVal4 = createThriftValue(
       1 /* version */,
       "store1" /* originatorId */,
       "value1" /* value */,
@@ -853,8 +847,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   // Add non-matching key prefix, different originator ID..
   // This shouldn't be added to Kvstore.
   LOG(INFO) << "Setting key value with a non-matching key prefix...";
-  thrift::Value thriftVal5(
-      apache::thrift::FRAGILE,
+  auto thriftVal5 = createThriftValue(
       1 /* version */,
       "storex" /* originatorId */,
       "value1" /* value */,
@@ -875,8 +868,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
 
   // Add key in store1 with originator ID of store0
   LOG(INFO) << "Setting key with origninator ID of leaf into a non-leaf node";
-  thrift::Value thriftVal6(
-      apache::thrift::FRAGILE,
+  auto thriftVal6 = createThriftValue(
       1 /* version */,
       "store0" /* originatorId */,
       "value1" /* value */,
@@ -946,8 +938,7 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   store0->run();
   store1->run();
 
-  thrift::Value thriftVal1(
-      apache::thrift::FRAGILE,
+  auto thriftVal1 = createThriftValue(
       1 /* version */,
       "node1" /* originatorId */,
       "value1" /* value */,
@@ -960,8 +951,7 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
       *thriftVal1.originatorId_ref(),
       thriftVal1.value_ref());
 
-  thrift::Value thriftVal2(
-      apache::thrift::FRAGILE,
+  auto thriftVal2 = createThriftValue(
       1 /* version */,
       "node1" /* originatorId */,
       "value2" /* value */,
@@ -1754,8 +1744,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
   for (auto& store : peerStores) {
     auto key = folly::sformat("test-key-{}", store->getNodeId());
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "gotham_city" /* originatorId */,
         folly::sformat("test-value-{}", store->getNodeId()),
@@ -1816,8 +1805,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "Submitting the second round of key-values...";
   for (auto& store : peerStores) {
     auto key = folly::sformat("test-key-{}", store->getNodeId());
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         2 /* version */,
         "gotham_city" /* originatorId */,
         folly::sformat("test-value-new-{}", store->getNodeId()),
@@ -1876,8 +1864,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   {
     auto& store = peerStores[0];
     auto key = folly::sformat("flood-test-key-1", store->getNodeId());
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         2 /* version */,
         "gotham_city" /* originatorId */,
         folly::sformat("flood-test-value-1", store->getNodeId()),
@@ -1979,8 +1966,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   LOG(INFO) << "Submitting key-values from first and last store";
 
   // set a key from first store
-  thrift::Value thriftValFirst(
-      apache::thrift::FRAGILE,
+  auto thriftValFirst = createThriftValue(
       10 /* version */,
       "1" /* originatorId */,
       "test-value-1",
@@ -1995,8 +1981,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
       thriftValFirst.value_ref());
 
   // set a key from the store on the other end of the chain
-  thrift::Value thriftValLast(
-      apache::thrift::FRAGILE,
+  auto thriftValLast = createThriftValue(
       10 /* version */,
       "2" /* originatorId */,
       "test-value-2",
@@ -2052,8 +2037,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   // it should not have any effect, since version is lower. It is sufficient
   // to verify changes on only first node.
   {
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         9 /* version */,
         "9" /* originatorId */,
         "test-value-1",
@@ -2091,8 +2075,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   int i = 0;
   for (auto& store : peerStores) {
     auto key = folly::sformat("{}-test-key-{}", i % 2, store->getNodeId());
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "gotham_city" /* originatorId */,
         folly::sformat("test-value-{}", store->getNodeId()),
@@ -2171,8 +2154,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   const std::unordered_map<std::string, thrift::Value> emptyKeyVals;
   for (int i = 0; i < 3; ++i) {
     const auto key = folly::sformat("test-key-{}", i);
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "gotham_city" /* originatorId */,
         folly::sformat("test-value-{}", myStore->getNodeId()),
@@ -2207,8 +2189,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   // Add missing key, test-key-0, into peerKeyVals
   const auto key = "test-key-0";
   const auto strVal = folly::sformat("test-value-{}", myStore->getNodeId());
-  const thrift::Value thriftVal(
-      apache::thrift::FRAGILE,
+  const auto thriftVal = createThriftValue(
       1 /* version */,
       "gotham_city" /* originatorId */,
       strVal /* value */,
@@ -2270,8 +2251,7 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
   // Set key via KvStoreWrapper::setKey
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   const auto key = folly::sformat("test-key");
-  const thrift::Value thriftVal(
-      apache::thrift::FRAGILE,
+  const auto thriftVal = createThriftValue(
       1 /* version */,
       "gotham_city" /* originatorId */,
       folly::sformat("test-value"),
@@ -2308,8 +2288,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
    * verify key is synced to store0
    */
   int64_t ttl1 = 6000;
-  thrift::Value thriftVal1(
-      apache::thrift::FRAGILE,
+  auto thriftVal1 = createThriftValue(
       1 /* version */,
       "utest" /* originatorId */,
       "value" /* value */,
@@ -2336,8 +2315,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
 
   /* Add another key with TTL < ttlDecr, and check it's not synced */
   int64_t ttl2 = *store1Conf.ttl_decrement_ms_ref() - 1;
-  thrift::Value thriftVal2(
-      apache::thrift::FRAGILE,
+  auto thriftVal2 = createThriftValue(
       1 /* version */,
       "utest" /* originatorId */,
       "value" /* value */,
@@ -2371,10 +2349,8 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   // use prod syncInterval 60s
   thrift::KvstoreConfig prodConf, rateLimitConf;
   const size_t messageRate{10}, burstSize{50};
-  thrift::KvstoreFloodRate floodRate(
-      apache::thrift::FRAGILE,
-      messageRate /*flood_msg_per_sec*/,
-      burstSize /*flood_msg_burst_size*/);
+  auto floodRate = createKvstoreFloodRate(
+      messageRate /*flood_msg_per_sec*/, burstSize /*flood_msg_burst_size*/);
   rateLimitConf.flood_rate_ref() = floodRate;
 
   auto store0 = createKvStore("store0", prodConf);
@@ -2396,8 +2372,7 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   int expectNumKeys{0};
   uint64_t elapsedTime1{0};
   do {
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "store1" /* originatorId */,
         "value" /* value */,
@@ -2444,10 +2419,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
 
   const size_t messageRate{10}, burstSize{50};
   auto rateLimitConf = getTestKvConf();
-  thrift::KvstoreFloodRate floodRate(
-      apache::thrift::FRAGILE,
-      messageRate /*flood_msg_per_sec*/,
-      burstSize /*flood_msg_burst_size*/);
+  auto floodRate = createKvstoreFloodRate(
+      messageRate /*flood_msg_per_sec*/, burstSize /*flood_msg_burst_size*/);
   rateLimitConf.flood_rate_ref() = floodRate;
 
   auto store0 = createKvStore("store0");
@@ -2468,8 +2441,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   int i1{0};
   uint64_t elapsedTime1{0};
   do {
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "store1" /* originatorId */,
         "value" /* value */,
@@ -2511,8 +2483,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   uint64_t elapsedTime2{0};
   fb303::fbData->resetAllData();
   do {
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "store1" /* originatorId */,
         "value" /* value */,
@@ -2557,8 +2528,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   uint64_t elapsedTime3{0};
   do {
     auto key = folly::sformat("key3{}", ++i3);
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "store1" /* originatorId */,
         "value" /* value */,
@@ -2605,8 +2575,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   int64_t ttlLow = 50; // in msec
   do {
     auto key = folly::sformat("key4{}", ++i4);
-    thrift::Value thriftVal(
-        apache::thrift::FRAGILE,
+    auto thriftVal = createThriftValue(
         1 /* version */,
         "store1" /* originatorId */,
         "value" /* value */,

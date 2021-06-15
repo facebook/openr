@@ -65,7 +65,6 @@ const uint8_t kRswMarker = 3;
 namespace openr {
 
 using apache::thrift::CompactSerializer;
-using apache::thrift::FRAGILE;
 
 //
 // Start the decision thread and simulate KvStore communications

@@ -220,14 +220,13 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     const auto ret = kvStoreClient_->setKey(
         area_,
         newKey,
-        thrift::Value(
-            apache::thrift::FRAGILE,
-            1 /* version */,
-            nodeName_ /* originatorId */,
-            details::primitiveToBinary(newVal) /* value */,
-            rangeAllocTtl_.count() /* ttl */,
-            ttlVersion /* ttl version */,
-            0 /* hash */));
+        createThriftValue(
+            1,
+            nodeName_,
+            details::primitiveToBinary(newVal),
+            rangeAllocTtl_.count(),
+            ttlVersion,
+            0));
     CHECK(ret.has_value());
   } else {
     CHECK(shouldOwnMine);

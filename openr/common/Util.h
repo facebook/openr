@@ -322,6 +322,21 @@ thrift::PrefixEntry createPrefixEntryWithMetrics(
     thrift::PrefixType const& type,
     thrift::PrefixMetrics const& metrics);
 
+thrift::AllocPrefix createAllocPrefix(
+    thrift::IpPrefix const& seedPrefix,
+    int64_t allocPrefixLen,
+    int64_t allocPrefixIndex);
+
+thrift::PerfEvent createPerfEvent(
+    std::string nodeName, std::string eventDescr, int64_t unixTs);
+
+thrift::KvstoreFloodRate createKvstoreFloodRate(
+    int32_t flood_msg_per_sec, int32_t flood_msg_burst_size);
+
+thrift::OpenrVersions createOpenrVersions(
+    const thrift::OpenrVersion& version,
+    const thrift::OpenrVersion& lowestSupportedVersion);
+
 thrift::Value createThriftValue(
     int64_t version,
     std::string originatorId,

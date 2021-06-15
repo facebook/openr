@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "Util.h"
+#include <openr/common/Util.h>
 
 #include <fmt/core.h>
 #include <ifaddrs.h>
@@ -200,8 +200,8 @@ addPerfEvent(
     thrift::PerfEvents& perfEvents,
     const std::string& nodeName,
     const std::string& eventDescr) noexcept {
-  thrift::PerfEvent event(
-      apache::thrift::FRAGILE, nodeName, eventDescr, getUnixTimeStampMs());
+  thrift::PerfEvent event =
+      createPerfEvent(nodeName, eventDescr, getUnixTimeStampMs());
   perfEvents.events_ref()->emplace_back(std::move(event));
 }
 
@@ -429,25 +429,28 @@ findDeltaRoutes(
 
 thrift::BuildInfo
 getBuildInfoThrift() noexcept {
-  return thrift::BuildInfo(
-      apache::thrift::FRAGILE,
-      BuildInfo::getBuildUser(),
-      BuildInfo::getBuildTime(),
-      static_cast<int64_t>(BuildInfo::getBuildTimeUnix()),
-      BuildInfo::getBuildHost(),
-      BuildInfo::getBuildPath(),
-      BuildInfo::getBuildRevision(),
-      static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix()),
-      BuildInfo::getBuildUpstreamRevision(),
-      BuildInfo::getBuildUpstreamRevisionCommitTimeUnix(),
-      BuildInfo::getBuildPackageName(),
-      BuildInfo::getBuildPackageVersion(),
-      BuildInfo::getBuildPackageRelease(),
-      BuildInfo::getBuildPlatform(),
-      BuildInfo::getBuildRule(),
-      BuildInfo::getBuildType(),
-      BuildInfo::getBuildTool(),
-      BuildInfo::getBuildMode());
+  thrift::BuildInfo buildInfo;
+  buildInfo.buildUser_ref() = BuildInfo::getBuildUser();
+  buildInfo.buildTime_ref() = BuildInfo::getBuildTime();
+  buildInfo.buildTimeUnix_ref() =
+      static_cast<int64_t>(BuildInfo::getBuildTimeUnix());
+  buildInfo.buildHost_ref() = BuildInfo::getBuildHost();
+  buildInfo.buildPath_ref() = BuildInfo::getBuildPath();
+  buildInfo.buildRevision_ref() = BuildInfo::getBuildRevision();
+  buildInfo.buildRevisionCommitTimeUnix_ref() =
+      static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix());
+  buildInfo.buildUpstreamRevision_ref() = BuildInfo::getBuildUpstreamRevision();
+  buildInfo.buildUpstreamRevisionCommitTimeUnix_ref() =
+      BuildInfo::getBuildUpstreamRevisionCommitTimeUnix();
+  buildInfo.buildPackageName_ref() = BuildInfo::getBuildPackageName();
+  buildInfo.buildPackageVersion_ref() = BuildInfo::getBuildPackageVersion();
+  buildInfo.buildPackageRelease_ref() = BuildInfo::getBuildPackageRelease();
+  buildInfo.buildPlatform_ref() = BuildInfo::getBuildPlatform();
+  buildInfo.buildRule_ref() = BuildInfo::getBuildRule();
+  buildInfo.buildType_ref() = BuildInfo::getBuildType();
+  buildInfo.buildTool_ref() = BuildInfo::getBuildTool();
+  buildInfo.buildMode_ref() = BuildInfo::getBuildMode();
+  return buildInfo;
 }
 
 std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
@@ -695,6 +698,51 @@ createPrefixEntryWithMetrics(
   return prefixEntry;
 }
 
+// construct thrift::AllocPrefix
+thrift::AllocPrefix
+createAllocPrefix(
+    const thrift::IpPrefix& seedPrefix,
+    int64_t allocPrefixLen,
+    int64_t allocPrefixIndex) {
+  thrift::AllocPrefix allocPrefix;
+  allocPrefix.seedPrefix_ref() = seedPrefix;
+  allocPrefix.allocPrefixLen_ref() = allocPrefixLen;
+  allocPrefix.allocPrefixIndex_ref() = allocPrefixIndex;
+  return allocPrefix;
+}
+
+// construct thrift::PerfEvent
+thrift::PerfEvent
+createPerfEvent(std::string nodeName, std::string eventDescr, int64_t unixTs) {
+  thrift::PerfEvent perfEvent;
+  perfEvent.nodeName_ref() = nodeName;
+  perfEvent.eventDescr_ref() = eventDescr;
+  perfEvent.unixTs_ref() = unixTs;
+  return perfEvent;
+}
+
+// construct thrift::KvstoreFloodRate
+thrift::KvstoreFloodRate
+createKvstoreFloodRate(
+    int32_t flood_msg_per_sec, int32_t flood_msg_burst_size) {
+  thrift::KvstoreFloodRate floodRate;
+  floodRate.flood_msg_per_sec_ref() = flood_msg_per_sec;
+  floodRate.flood_msg_burst_size_ref() = flood_msg_burst_size;
+  return floodRate;
+}
+
+// construct thrift::OpenrVersions
+thrift::OpenrVersions
+createOpenrVersions(
+    const thrift::OpenrVersion& version,
+    const thrift::OpenrVersion& lowestSupportedVersion) {
+  thrift::OpenrVersions openrVersions;
+  openrVersions.version_ref() = version;
+  openrVersions.lowestSupportedVersion_ref() = lowestSupportedVersion;
+  return openrVersions;
+}
+
+// construct thrift::Value
 thrift::Value
 createThriftValue(
     int64_t version,
@@ -705,7 +753,7 @@ createThriftValue(
     std::optional<int64_t> hash) {
   thrift::Value value;
   value.version_ref() = version;
-  *value.originatorId_ref() = originatorId;
+  value.originatorId_ref() = originatorId;
   value.value_ref().from_optional(data);
   value.ttl_ref() = ttl;
   value.ttlVersion_ref() = ttlVersion;

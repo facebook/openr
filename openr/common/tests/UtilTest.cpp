@@ -173,6 +173,19 @@ TEST(UtilTest, NetworkUtilTest) {
     EXPECT_THROW(toIPNetwork(v4Prefix), thrift::OpenrError);
     EXPECT_THROW(toIPNetwork(v6Prefix), thrift::OpenrError);
   }
+
+  //
+  // Test for: createIpPrefix()
+  //
+  {
+    folly::IPAddress v4Addr = folly::IPAddress("10.1.1.1");
+    thrift::BinaryAddress v4AddrBin = toBinaryAddress(v4Addr);
+    const uint16_t v4Len = 32;
+
+    thrift::IpPrefix v4Prefix = createIpPrefix(v4AddrBin, v4Len);
+    EXPECT_EQ(v4Prefix.prefixAddress_ref().value(), v4AddrBin);
+    EXPECT_EQ(v4Prefix.prefixLength_ref().value(), v4Len);
+  }
 }
 
 TEST(UtilTest, PrefixKeyTest) {
@@ -462,13 +475,11 @@ TEST(UtilTest, getTotalPerfEventsDurationTest) {
 
   {
     thrift::PerfEvents perfEvents;
-    thrift::PerfEvent event1{apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
+    thrift::PerfEvent event1 = createPerfEvent("node1", "LINK_UP", 100);
     perfEvents.events_ref()->emplace_back(std::move(event1));
-    thrift::PerfEvent event2{
-        apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
+    thrift::PerfEvent event2 = createPerfEvent("node1", "DECISION_RECVD", 200);
     perfEvents.events_ref()->emplace_back(std::move(event2));
-    thrift::PerfEvent event3{
-        apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
+    thrift::PerfEvent event3 = createPerfEvent("node1", "SPF_CALCULATE", 300);
     perfEvents.events_ref()->emplace_back(std::move(event3));
     auto duration = getTotalPerfEventsDuration(perfEvents);
     EXPECT_EQ(duration.count(), 200);
@@ -485,13 +496,11 @@ TEST(UtilTest, getDurationBetweenPerfEventsTest) {
 
   {
     thrift::PerfEvents perfEvents;
-    thrift::PerfEvent event1{apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
+    thrift::PerfEvent event1 = createPerfEvent("node1", "LINK_UP", 100);
     perfEvents.events_ref()->emplace_back(std::move(event1));
-    thrift::PerfEvent event2{
-        apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
+    thrift::PerfEvent event2 = createPerfEvent("node1", "DECISION_RECVD", 200);
     perfEvents.events_ref()->emplace_back(std::move(event2));
-    thrift::PerfEvent event3{
-        apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
+    thrift::PerfEvent event3 = createPerfEvent("node1", "SPF_CALCULATE", 300);
     perfEvents.events_ref()->emplace_back(std::move(event3));
     auto maybeDuration =
         getDurationBetweenPerfEvents(perfEvents, "LINK_UP", "SPF_CALCULATE");
@@ -1003,6 +1012,93 @@ TEST(UtilTest, BestMetricsSelection) {
         std::make_pair<std::string, std::string>("node2", "area1");
     EXPECT_EQ(node2bestKey, selectBestNodeArea(bestKeys, "node2"));
   }
+}
+
+TEST(UtilTest, BuildInfoConstruction) {
+  thrift::BuildInfo info = getBuildInfoThrift();
+  EXPECT_EQ(info.buildUser_ref().value(), BuildInfo::getBuildUser());
+  EXPECT_EQ(info.buildTime_ref().value(), BuildInfo::getBuildTime());
+  EXPECT_EQ(
+      info.buildTimeUnix_ref().value(),
+      static_cast<int64_t>(BuildInfo::getBuildTimeUnix()));
+  EXPECT_EQ(info.buildHost_ref().value(), BuildInfo::getBuildHost());
+  EXPECT_EQ(info.buildPath_ref().value(), BuildInfo::getBuildPath());
+  EXPECT_EQ(info.buildRevision_ref().value(), BuildInfo::getBuildRevision());
+  EXPECT_EQ(
+      info.buildRevisionCommitTimeUnix_ref().value(),
+      static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix()));
+  EXPECT_EQ(
+      info.buildUpstreamRevision_ref().value(),
+      BuildInfo::getBuildUpstreamRevision());
+  EXPECT_EQ(
+      info.buildUpstreamRevisionCommitTimeUnix_ref().value(),
+      BuildInfo::getBuildUpstreamRevisionCommitTimeUnix());
+  EXPECT_EQ(
+      info.buildPackageName_ref().value(), BuildInfo::getBuildPackageName());
+  EXPECT_EQ(
+      info.buildPackageVersion_ref().value(),
+      BuildInfo::getBuildPackageVersion());
+  EXPECT_EQ(
+      info.buildPackageRelease_ref().value(),
+      BuildInfo::getBuildPackageRelease());
+  EXPECT_EQ(info.buildPlatform_ref().value(), BuildInfo::getBuildPlatform());
+  EXPECT_EQ(info.buildRule_ref().value(), BuildInfo::getBuildRule());
+  EXPECT_EQ(info.buildType_ref().value(), BuildInfo::getBuildType());
+  EXPECT_EQ(info.buildTool_ref().value(), BuildInfo::getBuildTool());
+  EXPECT_EQ(info.buildMode_ref().value(), BuildInfo::getBuildMode());
+}
+
+TEST(UtilTest, AllocPrefixConstruction) {
+  thrift::IpPrefix ipPrefix = toIpPrefix("192.0.0.0/8");
+  const int64_t prefixLen = 24;
+  const int64_t prefixIndex = 4;
+  thrift::AllocPrefix allocPrefix =
+      createAllocPrefix(ipPrefix, prefixLen, prefixIndex);
+  EXPECT_EQ(allocPrefix.seedPrefix_ref().value(), ipPrefix);
+  EXPECT_EQ(allocPrefix.allocPrefixLen_ref().value(), prefixLen);
+  EXPECT_EQ(allocPrefix.allocPrefixIndex_ref().value(), prefixIndex);
+}
+
+TEST(UtilTest, PerfEventConstruction) {
+  thrift::PerfEvent perfEvent =
+      createPerfEvent("Test Node", "Test Perf Event Construction", 100);
+  EXPECT_EQ(perfEvent.nodeName_ref().value(), "Test Node");
+  EXPECT_EQ(perfEvent.eventDescr_ref().value(), "Test Perf Event Construction");
+  EXPECT_EQ(perfEvent.unixTs_ref().value(), 100);
+}
+
+TEST(UtilTest, KvStoreFloodRateConstruction) {
+  const int32_t flood_msg_per_sec = 3;
+  const int32_t flood_msg_burst_size = 4;
+  thrift::KvstoreFloodRate floodRate =
+      createKvstoreFloodRate(flood_msg_per_sec, flood_msg_burst_size);
+  EXPECT_EQ(floodRate.flood_msg_per_sec_ref().value(), flood_msg_per_sec);
+  EXPECT_EQ(floodRate.flood_msg_burst_size_ref().value(), flood_msg_burst_size);
+}
+
+TEST(UtilTest, OpenrVersionsConstruction) {
+  const int32_t version = 60;
+  const int32_t lowestVersion = 30;
+  thrift::OpenrVersions openrVersions =
+      createOpenrVersions(version, lowestVersion);
+  EXPECT_EQ(openrVersions.version_ref().value(), version);
+  EXPECT_EQ(openrVersions.lowestSupportedVersion_ref().value(), lowestVersion);
+}
+
+TEST(UtilTest, ThriftValueConstruction) {
+  const int64_t version = 41;
+  const int64_t ttl = 42;
+  const int64_t ttlVersion = 43;
+  const int64_t hash = 44;
+
+  thrift::Value thriftVal = createThriftValue(
+      version, "test originator", "test data", ttl, ttlVersion, hash);
+  EXPECT_EQ(thriftVal.version_ref().value(), version);
+  EXPECT_EQ(thriftVal.originatorId_ref().value(), "test originator");
+  EXPECT_EQ(thriftVal.value_ref().value(), "test data");
+  EXPECT_EQ(thriftVal.ttl_ref().value(), ttl);
+  EXPECT_EQ(thriftVal.ttlVersion_ref().value(), ttlVersion);
+  EXPECT_EQ(thriftVal.hash_ref().value(), hash);
 }
 
 int
