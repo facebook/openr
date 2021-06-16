@@ -15,6 +15,7 @@ import sys
 import time
 from builtins import str
 from collections import defaultdict
+from collections.abc import Iterable
 from itertools import combinations
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
@@ -36,15 +37,15 @@ from thrift.py3.client import ClientType
 class KvStoreCmdBase(OpenrCtrlCmd):
     def __init__(self, cli_opts: bunch.Bunch):
         super().__init__(cli_opts)
+        self.area_feature: bool = False
+        self.areas: Set = set()
 
     def _init_area(self, client: Union[OpenrCtrl.Client, OpenrCtrlCppClient]):
         # find out if area feature is supported
         # TODO: remove self.area_feature as it will be supported by default
-        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `area_feature`.
         self.area_feature = True
 
         # get list of areas if area feature is supported.
-        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `areas`.
         self.areas = set()
         if self.area_feature:
             # pyre-fixme[6]: Expected `Client` for 1st param but got
@@ -120,12 +121,10 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         node_dict = {}
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = openr_types.Publication()
-        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `area_feature`.
         if not self.area_feature:
             resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         else:
             if area is None:
-                # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `areas`.
                 print(f"Error: Must specify one of the areas: {self.areas}")
                 sys.exit(1)
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
@@ -153,11 +152,9 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         return None
 
     def get_area_id(self) -> str:
-        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `area_feature`.
         if not self.area_feature:
             # pyre-fixme[7]: Expected `str` but got `None`.
             return None
-        # pyre-fixme[16]: `KvStoreCmdBase` has no attribute `areas`.
         if 1 != len(self.areas):
             print(f"Error: Must specify one of the areas: {self.areas}")
             sys.exit(1)
@@ -215,13 +212,11 @@ class PrefixesCmd(KvPrefixesCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `PrefixesCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, nodes, json, prefix, client_type)
             return
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         area_kv = {}
-        # pyre-fixme[16]: `PrefixesCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
             area_kv[area] = resp
@@ -322,7 +317,6 @@ class KeysCmd(KvKeysCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `KeysCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, json, prefix, originator, ttl)
             return
@@ -332,7 +326,6 @@ class KeysCmd(KvKeysCmd):
         )
 
         area_kv = {}
-        # pyre-fixme[16]: `KeysCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
             area_kv[area] = resp
@@ -379,9 +372,9 @@ class KvKeyValsCmd(KvStoreCmdBase):
         for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
             val = self.deserialize_kvstore_publication(key, value)
             if not val:
-                if all(
+                if isinstance(value.value, Iterable) and all(
                     isinstance(c, str) and c in string.printable
-                    # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
+                    # pyre-ignore[16]
                     for c in value.value
                 ):
                     val = value.value
@@ -416,12 +409,10 @@ class KeyValsCmd(KvKeyValsCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `KeyValsCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, keys)
             return
 
-        # pyre-fixme[16]: `KeyValsCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsArea(keys, area)
             if len(resp.keyVals):
@@ -468,7 +459,7 @@ class KvNodesCmd(KvStoreCmdBase):
                     graph.add_edge(adj.otherNodeName, adj_db.thisNodeName)
                     continue
                 edges.add((adj_db.thisNodeName, adj.otherNodeName, adj.ifName))
-        # pyre-fixme[16]: Module `nx` has no attribute `node_connected_component`.
+        # pyre-ignore[16]
         return nx.node_connected_component(graph, node_id)
 
     def print_kvstore_nodes(
@@ -535,7 +526,6 @@ class NodesCmd(KvNodesCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `NodesCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
             return
@@ -544,7 +534,6 @@ class NodesCmd(KvNodesCmd):
         all_kv.keyVals = {}
         node_area = {}
         nodes = set()
-        # pyre-fixme[16]: `NodesCmd` has no attribute `areas`.
         for area in self.areas:
             prefix_keys = client.getKvStoreKeyValsFilteredArea(
                 self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER), area
@@ -619,13 +608,11 @@ class AdjCmd(KvAdjCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `AdjCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, nodes, bidir, json)
             return
 
         publications = {}
-        # pyre-fixme[16]: `AdjCmd` has no attribute `areas`.
         for area in self.areas:
             keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
             publications[area] = client.getKvStoreKeyValsFilteredArea(
@@ -642,12 +629,10 @@ class Areas(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `Areas` has no attribute `area_feature`.
         if not self.area_feature:
             return
 
         if in_json:
-            # pyre-fixme[16]: `Areas` has no attribute `areas`.
             print(json.dumps(list(self.areas)))
         else:
             print(f"Areas configured: {self.areas}")
@@ -661,7 +646,6 @@ class FloodCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `FloodCmd` has no attribute `areas`.
         for area in self.areas:
             spt_infos = client.getSpanningTreeInfos(area)
             utils.print_spt_infos(spt_infos, roots, area)
@@ -698,7 +682,6 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `ShowAdjNodeCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client, nodes, node, interface, args, kwargs)
             return
@@ -706,7 +689,6 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         resp = openr_types.Publication()
         resp.keyVals = {}
-        # pyre-fixme[16]: `ShowAdjNodeCmd` has no attribute `areas`.
         for area in self.areas:
             publication = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
             resp.keyVals.update(publication.keyVals)
@@ -717,27 +699,23 @@ class KvCompareCmd(KvStoreCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
-        nodes: set,
+        nodes_in: str,
         *args,
         **kwargs,
     ) -> None:
         area = self.get_area_id()
 
         all_nodes_to_ips = self.get_node_to_ips(client, area)
-        if nodes:
-            # pyre-fixme[16]: `Set` has no attribute `strip`.
-            nodes = set(nodes.strip().split(","))
+        if nodes_in:
+            nodes = set(nodes_in.strip().split(","))
             if "all" in nodes:
-                # pyre-fixme[9]: nodes has type `Set[typing.Any]`; used as
-                #  `List[typing.Any]`.
-                nodes = list(all_nodes_to_ips.keys())
+                nodes = set(all_nodes_to_ips.keys())
             host_id = client.getMyNodeName()
             if host_id in nodes:
                 nodes.remove(host_id)
 
             keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
             pub = None
-            # pyre-fixme[16]: `KvCompareCmd` has no attribute `area_feature`.
             if not self.area_feature:
                 pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
             else:
@@ -746,9 +724,7 @@ class KvCompareCmd(KvStoreCmdBase):
             for node in kv_dict:
                 self.compare(pub.keyVals, kv_dict[node], host_id, node)
         else:
-            # pyre-fixme[9]: nodes has type `Set[typing.Any]`; used as
-            #  `List[typing.Any]`.
-            nodes = list(all_nodes_to_ips.keys())
+            nodes = set(all_nodes_to_ips.keys())
             kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips, area)
             for our_node, other_node in combinations(kv_dict.keys(), 2):
                 self.compare(
@@ -878,12 +854,10 @@ class PeersCmd(KvPeersCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `PeersCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
             return
         peers_list = {}
-        # pyre-fixme[16]: `PeersCmd` has no attribute `areas`.
         for area in self.areas:
             peers_list[area] = client.getKvStorePeersArea(area)
         self.print_peers(client, peers_list)
@@ -907,14 +881,17 @@ class EraseKeyCmd(KvStoreCmdBase):
 
         # Get and modify the key
         val = keyVals.get(key)
-        # pyre-fixme[16]: `Optional` has no attribute `value`.
-        val.value = None
-        # pyre-fixme[16]: `Optional` has no attribute `ttl`.
-        val.ttl = 256  # set new ttl to 256ms (its decremented 1ms on every hop)
-        # pyre-fixme[16]: `Optional` has no attribute `ttlVersion`.
-        val.ttlVersion += 1  # bump up ttl version
+
+        newVal = openr_types.Value()
+        newVal.version = getattr(val, "version", 0)
+        newVal.originatorId = getattr(val, "originatorId", "")
+        newVal.hash = getattr(val, "hash", 0)
+        newVal.value = None
+        newVal.ttl = 256  # set new ttl to 256ms (its decremented 1ms on every hop)
+        newVal.ttlVersion = getattr(val, "ttlVersion", 0) + 1  # bump up ttl version
 
         print(keyVals)
+        keyVals[key] = newVal
 
         client.setKvStoreKeyVals(openr_types.KeySetParams(keyVals), area)
 
@@ -945,12 +922,12 @@ class SetKeyCmd(KvStoreCmdBase):
                 publication = client.getKvStoreKeyValsArea([key], area)
             if key in publication.keyVals:
                 existing_val = publication.keyVals.get(key)
+                curr_version = getattr(existing_val, "version", 0)
                 print(
                     "Key {} found in KvStore w/ version {}. Overwriting with"
-                    # pyre-fixme[16]: `Optional` has no attribute `version`.
-                    " higher version ...".format(key, existing_val.version)
+                    " higher version ...".format(key, curr_version)
                 )
-                version = existing_val.version + 1
+                version = curr_version + 1
             else:
                 version = 1
         val.version = version
@@ -1050,8 +1027,7 @@ class SnoopCmd(KvStoreCmdBase):
         #  `ResponseAndClientBufferedStream__Types_Publication_Types_Publication` into
         #  2 values.
         snapshot, updates = await client.subscribeAndGetKvStoreFiltered(kvDumpParams)
-        # pyre-fixme[6]: Expected `str` for 2nd param but got `None`.
-        global_dbs = self.process_snapshot(snapshot, area)
+        global_dbs = self.process_snapshot(snapshot)
         self.print_delta(snapshot, ttl, delta, global_dbs)
         print("Magic begins here ... \n")
 
@@ -1085,11 +1061,9 @@ class SnoopCmd(KvStoreCmdBase):
             rows.append(["Key: {} got expired".format(key)])
 
             # Delete key from global DBs
-            # pyre-fixme[16]: `Dict` has no attribute `publications`.
-            global_dbs.publications.pop(key, None)
+            global_dbs["publications"].pop(key, None)
             if key.startswith(Consts.ADJ_DB_MARKER):
-                # pyre-fixme[16]: `Dict` has no attribute `adjs`.
-                global_dbs.adjs.pop(key.split(":")[1], None)
+                global_dbs["adjs"].pop(key.split(":")[1], None)
 
             if key.startswith(Consts.PREFIX_DB_MARKER):
                 prefix_match = re.match(Consts.PER_PREFIX_KEY_REGEX, key)
@@ -1101,11 +1075,10 @@ class SnoopCmd(KvStoreCmdBase):
                     addr_str = prefix_match.group("ipaddr")
                     prefix_len = prefix_match.group("plen")
                     prefix_set.add("{}/{}".format(addr_str, prefix_len))
-                    # pyre-fixme[16]: `Dict` has no attribute `prefixes`.
-                    node_prefix_set = global_dbs.prefixes[prefix_match.group("node")]
+                    node_prefix_set = global_dbs["prefixes"][prefix_match.group("node")]
                     node_prefix_set = node_prefix_set - prefix_set
                 else:
-                    global_dbs.prefixes.pop(key.split(":")[1], None)
+                    global_dbs["prefixes"].pop(key.split(":")[1], None)
         if rows:
             print(printing.render_vertical_table(rows, timestamp=True))
 
@@ -1129,43 +1102,37 @@ class SnoopCmd(KvStoreCmdBase):
                     key,
                     value,
                     delta,
-                    # pyre-fixme[16]: `Dict` has no attribute `adjs`.
-                    global_dbs.adjs,
-                    # pyre-fixme[16]: `Dict` has no attribute `publications`.
-                    global_dbs.publications,
+                    global_dbs["adjs"],
+                    global_dbs["publications"],
                 )
                 continue
 
             if key.startswith(Consts.PREFIX_DB_MARKER):
                 self.print_prefix_delta(
                     key,
-                    # pyre-fixme[6]: Expected `Publication` for 2nd param but got
-                    #  `Value`.
                     value,
                     delta,
-                    # pyre-fixme[16]: `Dict` has no attribute `prefixes`.
-                    global_dbs.prefixes,
-                    global_dbs.publications,
+                    global_dbs["prefixes"],
+                    global_dbs["publications"],
                 )
                 continue
 
             print("Traversal List: {}".format(msg.nodeIds))
             self.print_publication_delta(
                 "Key: {} update".format(key),
-                utils.sprint_pub_update(global_dbs.publications, key, value),
+                utils.sprint_pub_update(global_dbs["publications"], key, value),
                 timestamp=True,
             )
 
     def print_prefix_delta(
         self,
         key: str,
-        value: openr_types.Publication,
+        value: openr_types.Value,
         delta: bool,
         global_prefix_db: Dict,
         global_publication_db: Dict,
     ):
         prefix_db = serializer.deserialize_thrift_object(
-            # pyre-fixme[16]: `Publication` has no attribute `value`.
             value.value,
             openr_types.PrefixDatabase,
         )
@@ -1219,7 +1186,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def process_snapshot(self, resp: openr_types.Publication, area: str) -> Dict:
+    def process_snapshot(self, resp: openr_types.Publication) -> Dict:
         global_dbs = bunch.Bunch(
             {
                 "prefixes": {},
@@ -1228,18 +1195,11 @@ class SnoopCmd(KvStoreCmdBase):
             }
         )
 
-        # Filter key-vals based for an area if specified
-        if area:
-            # pyre-fixme[16]: `Value` has no attribute `area`.
-            resp.keyVals = {k: v for k, v in resp.keyVals.items() if v.area == area}
-
         # Populate global_dbs
-        # pyre-fixme[16]: `Bunch` has no attribute `prefixes`.
-        global_dbs.prefixes = utils.build_global_prefix_db(resp)
-        # pyre-fixme[16]: `Bunch` has no attribute `adjs`.
-        global_dbs.adjs = utils.build_global_adj_db(resp)
+        global_dbs["prefixes"] = utils.build_global_prefix_db(resp)
+        global_dbs["adjs"] = utils.build_global_adj_db(resp)
         for key, value in resp.keyVals.items():
-            global_dbs.publications[key] = value
+            global_dbs["publications"][key] = value
 
         print("Done. Loaded {} initial key-values".format(len(resp.keyVals)))
         return global_dbs
@@ -1270,8 +1230,13 @@ class KvAllocationsListCmd(KvStoreCmdBase):
                 "" if area is None else f'Static prefix allocations in area "{area}"'
             )
             print(area_str)
-            # pyre-fixme[16]: `Optional` has no attribute `value`.
-            utils.print_allocations_table(keyVals.get(key).value)
+            utils.print_allocations_table(
+                getattr(
+                    keyVals.get(key),
+                    "value",
+                    openr_types.StaticAllocation(nodePrefixes={}),
+                )
+            )
 
 
 class AllocationsListCmd(KvAllocationsListCmd):
@@ -1281,13 +1246,11 @@ class AllocationsListCmd(KvAllocationsListCmd):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `AllocationsListCmd` has no attribute `area_feature`.
         if not self.area_feature:
             super()._run(client)
             return
 
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
-        # pyre-fixme[16]: `AllocationsListCmd` has no attribute `areas`.
         for area in self.areas:
             resp = client.getKvStoreKeyValsArea([key], area)
             self.print_allocations(key, resp.keyVals, area)
@@ -1314,8 +1277,11 @@ class AllocationsSetCmd(SetKeyCmd):
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
-                # pyre-fixme[16]: `Optional` has no attribute `value`.
-                resp.keyVals.get(key).value,
+                getattr(
+                    resp.keyVals.get(key),
+                    "value",
+                    openr_types.StaticAllocation(nodePrefixes={}),
+                ),
                 openr_types.StaticAllocation,
             )
         else:
@@ -1360,8 +1326,11 @@ class AllocationsUnsetCmd(SetKeyCmd):
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
-                # pyre-fixme[16]: `Optional` has no attribute `value`.
-                resp.keyVals.get(key).value,
+                getattr(
+                    resp.keyVals.get(key),
+                    "value",
+                    openr_types.StaticAllocation(nodePrefixes={}),
+                ),
                 openr_types.StaticAllocation,
             )
         else:
@@ -1399,7 +1368,6 @@ class SummaryCmd(KvStoreCmdBase):
     ]
 
     def _get_area_str(self) -> str:
-        # pyre-fixme[16]: `SummaryCmd` has no attribute `areas`.
         s = "s" if len(self.areas) != 1 else ""
         return f", {str(len(self.areas))} configured area{s}"
 
@@ -1461,7 +1429,6 @@ class SummaryCmd(KvStoreCmdBase):
         allFlag: bool = False
         # if no area(s) filter specified in CLI, then get all configured areas
         if len(input_areas) == 0:
-            # pyre-fixme[16]: `SummaryCmd` has no attribute `areas`.
             input_areas = set(self.areas)
             allFlag = True
 
@@ -1482,7 +1449,6 @@ class SummaryCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        # pyre-fixme[16]: `SummaryCmd` has no attribute `areas`.
         areaSet = set(self.areas)
         # get per-area Summary list from KvStore for all areas
         summaries = client.getKvStoreAreaSummary(areaSet)
