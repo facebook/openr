@@ -29,26 +29,22 @@
 OPENR="openr"
 
 # Keep this list in sorted order
-ASSUME_DRAINED=false
 CONFIG=""
-CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
 # [TO BE DEPRECATED]
-DECISION_DEBOUNCE_MAX_MS=250
-DECISION_DEBOUNCE_MIN_MS=10
 ENABLE_BGP_ROUTE_PROGRAMMING=true
-ENABLE_FIB_SERVICE_WAITING=true
-ENABLE_PERF_MEASUREMENT=true
 ENABLE_SECURE_THRIFT_SERVER=false
-IP_TOS=192
-KVSTORE_ZMQ_HWM=65536
+
+# [Logging related config]
 LOGGING=""
 LOG_FILE=""
 MIN_LOG_LEVEL=0
+VERBOSITY=1
+VMODULE=""
+
+# [TLS related config]
 TLS_ACCEPTABLE_PEERS=""
 TLS_ECC_CURVE_NAME="prime256v1"
 TLS_TICKET_SEED_PATH=""
-VERBOSITY=1
-VMODULE=""
 X509_CA_PATH=""
 X509_CERT_PATH=""
 X509_KEY_PATH=""
@@ -62,13 +58,6 @@ if [ "${HOSTNAME}" = "localhost" ]; then
   exit 1
 fi
 NODE_NAME=${HOSTNAME}
-
-# TODO: Have main C++ code check for this ...
-IPV6_DISABLED=$(sysctl -n net.ipv6.conf.all.disable_ipv6)
-if [ "${IPV6_DISABLED}" != "0" ]; then
-  echo "WARNING: IPv6 seems to be disabled and OpenR depends on it which may \
-lead to incorrect functioning" >&2
-fi
 
 #
 # Load custom configuration if any!
@@ -102,17 +91,9 @@ fi
 #
 
 ARGS="\
-  --assume_drained=${ASSUME_DRAINED} \
   --config=${CONFIG} \
-  --config_store_filepath=${CONFIG_STORE_FILEPATH} \
-  --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
-  --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
   --enable_bgp_route_programming=${ENABLE_BGP_ROUTE_PROGRAMMING} \
-  --enable_fib_service_waiting=${ENABLE_FIB_SERVICE_WAITING} \
-  --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
   --enable_secure_thrift_server=${ENABLE_SECURE_THRIFT_SERVER} \
-  --ip_tos=${IP_TOS} \
-  --kvstore_zmq_hwm=${KVSTORE_ZMQ_HWM} \
   --logging=${LOGGING} \
   --minloglevel=${MIN_LOG_LEVEL} \
   --node_name=${NODE_NAME} \
