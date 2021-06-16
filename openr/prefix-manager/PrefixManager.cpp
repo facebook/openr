@@ -415,20 +415,23 @@ PrefixManager::deleteKvStoreKeyHelper(
 
   // TODO: see if we can avoid encoding/decoding of string
   for (const auto& prefixStr : deletedKeys) {
-    auto prefixKey = PrefixKey::fromStr(prefixStr);
+    auto prefixKey = PrefixKey::isPrefixKeyV2Str(prefixStr)
+        ? PrefixKey::fromStrV2(prefixStr)
+        : PrefixKey::fromStr(prefixStr);
     CHECK(prefixKey.hasValue());
+    const auto network = prefixKey->getCIDRNetwork();
+    const auto area = prefixKey->getPrefixArea();
 
     thrift::PrefixEntry entry;
-    entry.prefix_ref() = toIpPrefix(prefixKey->getCIDRNetwork());
+    entry.prefix_ref() = toIpPrefix(network);
     deletedPrefixDb.prefixEntries_ref() = {entry};
     VLOG(1) << "[Prefix Withdraw] "
-            << "Area: " << prefixKey->getPrefixArea() << ", "
-            << toString(*entry.prefix_ref());
+            << "Area: " << area << ", " << toString(*entry.prefix_ref());
     fb303::fbData->addStatValue(
         "prefix_manager.route_withdraws", 1, fb303::SUM);
 
     kvStoreClient_->clearKey(
-        AreaId{prefixKey->getPrefixArea()},
+        AreaId{area},
         prefixStr,
         writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
         ttlKeyInKvStore_);

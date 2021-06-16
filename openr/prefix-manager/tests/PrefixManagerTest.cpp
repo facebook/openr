@@ -87,21 +87,8 @@ class PrefixManagerTestFixture : public testing::Test {
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
-    // start a prefix manager
-    prefixManager = std::make_unique<PrefixManager>(
-        staticRouteUpdatesQueue,
-        prefixUpdatesQueue.getReader(),
-        fibRouteUpdatesQueue.getReader(),
-        config,
-        kvStoreWrapper->getKvStore(),
-        std::chrono::seconds{0});
-
-    prefixManagerThread = std::make_unique<std::thread>([this]() {
-      LOG(INFO) << "PrefixManager thread starting";
-      prefixManager->run();
-      LOG(INFO) << "PrefixManager thread finishing";
-    });
-    prefixManager->waitUntilRunning();
+    // spin up a prefix-mgr
+    createPrefixManager(config);
   }
 
   void
@@ -131,6 +118,25 @@ class PrefixManagerTestFixture : public testing::Test {
       evb.waitUntilStopped();
       evbThread.join();
     }
+  }
+
+  void
+  createPrefixManager(std::shared_ptr<Config> cfg) {
+    // start a prefix manager
+    prefixManager = std::make_unique<PrefixManager>(
+        staticRouteUpdatesQueue,
+        prefixUpdatesQueue.getReader(),
+        fibRouteUpdatesQueue.getReader(),
+        cfg,
+        kvStoreWrapper->getKvStore(),
+        std::chrono::seconds{0});
+
+    prefixManagerThread = std::make_unique<std::thread>([this]() {
+      LOG(INFO) << "PrefixManager thread starting";
+      prefixManager->run();
+      LOG(INFO) << "PrefixManager thread finishing";
+    });
+    prefixManager->waitUntilRunning();
   }
 
   virtual thrift::OpenrConfig
@@ -183,6 +189,60 @@ class PrefixManagerTestFixture : public testing::Test {
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient{nullptr};
 };
+
+class PrefixManagerPrefixKeyFormatTestFixture
+    : public PrefixManagerTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = getBasicOpenrConfig(nodeId_);
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    tConfig.enable_new_prefix_format_ref() = 1;
+
+    return tConfig;
+  }
+};
+
+/*
+ * This is to test backward compatibility between old and new prefix key format.
+ * We will make sure:
+ *  1) There will be no crash due to parsing old/new prefix keys;
+ *  2) Prefix key format upgrade/downgrade is supported;
+ */
+TEST_F(
+    PrefixManagerPrefixKeyFormatTestFixture,
+    PrefixKeyFormatBackwardCompatibility) {
+  // Make sure we have old format of keys added
+  auto prefixKey1 = PrefixKey(
+      nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName, true);
+
+  auto prefixKey2 = PrefixKey(
+      nodeId_, toIPNetwork(*prefixEntry2.prefix_ref()), kTestingAreaName, true);
+
+  // Inject 2 prefixes and validate format prefixStr
+  {
+    // ATTN: remember v1 format of keys for future validation.
+    auto keyStr1 = prefixKey1.getPrefixKeyV2();
+    auto keyStr2 = prefixKey2.getPrefixKeyV2();
+
+    prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2}).get();
+
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(2, pub.keyVals_ref()->size());
+    EXPECT_EQ(1, pub.keyVals_ref()->count(keyStr1));
+    EXPECT_EQ(1, pub.keyVals_ref()->count(keyStr2));
+  }
+
+  // Withdraw 1 out of 2 previously advertised prefixes and validate format
+  // prefixStr ATTNL: make sure there will be no crash for prefix manager
+  {
+    prefixManager->withdrawPrefixes({prefixEntry1}).get();
+
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+    EXPECT_EQ(1, pub.keyVals_ref()->count(prefixKey1.getPrefixKeyV2()));
+  }
+}
 
 TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   // Expect no throw
