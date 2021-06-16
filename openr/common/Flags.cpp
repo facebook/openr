@@ -5,32 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/common/Flags.h"
+#include <openr/common/Flags.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 
-DEFINE_string(
-    config_store_filepath,
-    "/tmp/aq_persistent_config_store.bin",
-    "File name where to persist OpenR's internal state across restarts");
 DEFINE_string(config, "", "OpenR config file path");
-DEFINE_bool(
-    enable_fib_service_waiting,
-    true,
-    "Wait for Switch FIB agent to be ready before initialize OpenR");
-DEFINE_bool(
-    enable_perf_measurement,
-    true,
-    "Enable performance measurement in network.");
-DEFINE_int32(
-    ip_tos,
-    openr::Constants::kIpTos,
-    "Mark control plane traffic with specified IP-TOS value. Set this to 0 "
-    "if you don't want to mark packets.");
-DEFINE_bool(
-    assume_drained,
-    false,
-    "If set, will assume node is drained if no drain state is found in the "
-    "persistent store");
 DEFINE_bool(
     override_drain_state,
     false,
@@ -81,16 +59,6 @@ DEFINE_string(
     "A comma separated list of strings. Strings are x509 common names to "
     "accept SSL connections from. If an empty string is provided, the server "
     "will accept connections from any authenticated peer.");
-DEFINE_int32(
-    decision_debounce_min_ms,
-    10,
-    "Fast reaction time to update decision spf upon receiving adj db update "
-    "(in milliseconds)");
-DEFINE_int32(
-    decision_debounce_max_ms,
-    250,
-    "Decision debounce time to update spf in frequent adj db update "
-    "(in milliseconds)");
 
 //
 // TODO: [DEPRECATED] All following flags are deprecated in favor of config
@@ -104,10 +72,6 @@ DEFINE_int32(
     kvstore_rep_port,
     openr::Constants::kKvStoreRepPort,
     "The port KvStore replier listens on");
-DEFINE_string(
-    areas,
-    openr::thrift::Types_constants::kDefaultArea(),
-    "Comma separated list of areas name specified as string");
 DEFINE_int32(
     spark_mcast_port,
     openr::Constants::kSparkMcastPort,
@@ -161,11 +125,6 @@ DEFINE_string(
     redistribute_ifaces,
     "",
     "The interface names or regex who's prefixes we want to advertise");
-DEFINE_string(
-    cert_file_path,
-    "/tmp/cert_node_1.json",
-    "my certificate file containing private & public key pair");
-DEFINE_bool(enable_encryption, false, "Encrypt traffic between AQ instances");
 DEFINE_bool(
     enable_rtt_metric,
     true,
@@ -248,10 +207,6 @@ DEFINE_string(
     "",
     "Only keys with originator ID matching any of the originator ID will "
     "be added to kvstore.");
-DEFINE_int32(
-    kvstore_zmq_hwm,
-    openr::Constants::kHighWaterMark,
-    "Max number of packets to hold in kvstore ZMQ socket queue per peer");
 DEFINE_int32(
     kvstore_flood_msg_per_sec,
     0,

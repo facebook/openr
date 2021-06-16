@@ -11,19 +11,10 @@
 
 #include <openr/common/Constants.h>
 
-// persistent store file
-DECLARE_string(config_store_filepath);
 // openr config file
 DECLARE_string(config);
 
-// platform flags
-DECLARE_bool(enable_fib_service_waiting);
-DECLARE_bool(enable_perf_measurement);
-
-DECLARE_int32(ip_tos);
-
 // drain workflow flags
-DECLARE_bool(assume_drained);
 DECLARE_bool(override_drain_state);
 
 // migration workflow flags
@@ -42,18 +33,14 @@ DECLARE_string(tls_ticket_seed_path);
 DECLARE_string(tls_ecc_curve_name);
 DECLARE_string(tls_acceptable_peers);
 
-// TODO: these should be const
-DECLARE_int32(decision_debounce_min_ms);
-DECLARE_int32(decision_debounce_max_ms);
-
-//
-// TODO: [DEPRECATED] All following flags are deprecated in favor of config
-//
-
+// TODO: Deprecate when port reference is gone for ZMQ
 DECLARE_int32(openr_ctrl_port);
 DECLARE_int32(kvstore_rep_port);
 
-DECLARE_string(areas);
+//
+// TODO: All following flags will be removed once GflagsConfig.h is gone.
+//
+
 DECLARE_string(domain);
 DECLARE_string(listen_addr);
 DECLARE_string(node_name);
@@ -71,9 +58,6 @@ DECLARE_bool(override_loopback_addr);
 DECLARE_string(iface_regex_include);
 DECLARE_string(iface_regex_exclude);
 DECLARE_string(redistribute_ifaces);
-DECLARE_string(cert_file_path);
-
-DECLARE_bool(enable_encryption);
 
 DECLARE_bool(enable_rtt_metric);
 DECLARE_bool(enable_v4);
@@ -99,7 +83,6 @@ DECLARE_bool(set_leaf_node);
 DECLARE_string(key_prefix_filters);
 DECLARE_string(key_originator_id_filters);
 
-DECLARE_int32(kvstore_zmq_hwm);
 DECLARE_int32(kvstore_flood_msg_per_sec);
 DECLARE_int32(kvstore_flood_msg_burst_size);
 DECLARE_int32(kvstore_key_ttl_ms);
