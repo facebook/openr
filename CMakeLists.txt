@@ -557,6 +557,12 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/decision
   )
 
+  add_openr_test(RibEntryTest rib_entry_test
+    SOURCES
+      openr/decision/tests/RibEntryTest.cpp
+    DESTINATION sbin/tests/openr/decision
+  )
+
   add_openr_test(KvStoreTest kvstore_test
     SOURCES
       openr/kvstore/tests/KvStoreTest.cpp

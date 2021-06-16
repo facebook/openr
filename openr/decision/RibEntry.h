@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include "openr/if/gen-cpp2/Network_types.h"
 
 #include <folly/IPAddress.h>
 #include <openr/common/NetworkUtil.h>
@@ -135,6 +136,44 @@ struct RibMplsEntry : RibEntry {
     thrift::MplsRouteDetail tMplsDetail;
     tMplsDetail.mplsRoute_ref() = toThrift();
     return tMplsDetail;
+  }
+
+  /**
+   * MPLS Action can be specified per next-hop. However, HW can only specify a
+   * single action on a next-hop group. For this reason we filter next-hops
+   * to a unique MPLS action.
+   */
+  void
+  filterNexthopsToUniqueAction() {
+    // Optimization for single nexthop case. POP_AND_LOOKUP is supported by
+    // this optimization
+    if (nexthops.size() <= 1) {
+      return;
+    }
+
+    // Deduce a unique MPLS action
+    thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
+    for (auto const& nextHop : nexthops) {
+      CHECK(nextHop.mplsAction_ref().has_value());
+      auto& action = *nextHop.mplsAction_ref()->action_ref();
+      // Action can't be push (we don't push labels in MPLS routes)
+      // or POP with multiple nexthops. It must be either SWAP or PHP
+      CHECK(
+          action == thrift::MplsActionCode::SWAP or
+          action == thrift::MplsActionCode::PHP);
+      if (action == thrift::MplsActionCode::PHP) {
+        mplsActionCode = thrift::MplsActionCode::PHP;
+      }
+    }
+
+    // Filter nexthop that do not match selected MPLS action
+    for (auto it = nexthops.begin(); it != nexthops.end();) {
+      if (mplsActionCode != *it->mplsAction_ref()->action_ref()) {
+        it = nexthops.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 };
 } // namespace openr
