@@ -309,42 +309,6 @@ getRemoteIfName(const thrift::Adjacency& adj) {
   return fmt::format("neigh-{}", *adj.ifName_ref());
 }
 
-std::vector<thrift::NextHopThrift>
-selectMplsNextHops(std::vector<thrift::NextHopThrift> const& allNextHops) {
-  // Optimization for single nexthop case
-  if (allNextHops.size() <= 1) {
-    return allNextHops;
-  }
-  // Find minimum cost and mpls action
-  thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
-  for (auto const& nextHop : allNextHops) {
-    CHECK(nextHop.mplsAction_ref().has_value());
-    // Action can't be push (we don't push labels in MPLS routes)
-    // or POP with multiple nexthops
-    CHECK(
-        thrift::MplsActionCode::PUSH !=
-        *nextHop.mplsAction_ref()->action_ref());
-    CHECK(
-        thrift::MplsActionCode::POP_AND_LOOKUP !=
-        *nextHop.mplsAction_ref()->action_ref());
-
-    if (*nextHop.mplsAction_ref()->action_ref() ==
-        thrift::MplsActionCode::PHP) {
-      mplsActionCode = thrift::MplsActionCode::PHP;
-    }
-  }
-
-  // Find nextHops with the minimum cost and required mpls action
-  std::vector<thrift::NextHopThrift> bestNextHops;
-  for (auto const& nextHop : allNextHops) {
-    if (*nextHop.mplsAction_ref()->action_ref() == mplsActionCode) {
-      bestNextHops.emplace_back(nextHop);
-    }
-  }
-
-  return bestNextHops;
-}
-
 thrift::RouteDatabaseDelta
 findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
@@ -940,46 +904,24 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
   return mplsRoute;
 }
 
-std::vector<thrift::MplsRoute>
-createMplsRoutesWithSelectedNextHops(
-    const std::vector<thrift::MplsRoute>& routes) {
-  // Build routes to be programmed
-  std::vector<thrift::MplsRoute> newRoutes;
-
-  for (auto const& route : routes) {
-    newRoutes.emplace_back(createMplsRoute(
-        *route.topLabel_ref(), selectMplsNextHops(*route.nextHops_ref())));
-  }
-
-  return newRoutes;
-}
-
 std::vector<thrift::UnicastRoute>
 createUnicastRoutesFromMap(
     const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes) {
-  // Build routes to be programmed
   std::vector<thrift::UnicastRoute> newRoutes;
-
   for (auto const& [_, route] : unicastRoutes) {
     newRoutes.emplace_back(route.toThrift());
   }
-
   return newRoutes;
 }
 
 std::vector<thrift::MplsRoute>
-createMplsRoutesWithSelectedNextHopsMap(
+createMplsRoutesFromMap(
     const std::unordered_map<uint32_t, RibMplsEntry>& mplsRoutes) {
-  // Build routes to be programmed
   std::vector<thrift::MplsRoute> newRoutes;
-
-  for (auto const& route : mplsRoutes) {
-    newRoutes.emplace_back(createMplsRoute(
-        route.first,
-        selectMplsNextHops(*route.second.toThrift().nextHops_ref())));
+  for (auto const& [_, route] : mplsRoutes) {
+    newRoutes.emplace_back(route.toThrift());
   }
-
   return newRoutes;
 }
 

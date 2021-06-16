@@ -421,19 +421,7 @@ thrift::MplsRoute createMplsRoute(
 std::vector<thrift::UnicastRoute> createUnicastRoutesFromMap(
     const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes);
-
-/**
- * Given list of nextHops for mpls route, validate nexthops and return
- * subset of nextHops with the same MplsActionCode. PHP (immediate) next-hops
- * are preferred over SWAP (in-direct) next-hops
- *
- * Later two APIs are bulk conversion of MPLS route
- */
-std::vector<thrift::NextHopThrift> selectMplsNextHops(
-    std::vector<thrift::NextHopThrift> const& nextHops);
-std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHops(
-    const std::vector<thrift::MplsRoute>& routes);
-std::vector<thrift::MplsRoute> createMplsRoutesWithSelectedNextHopsMap(
+std::vector<thrift::MplsRoute> createMplsRoutesFromMap(
     const std::unordered_map<uint32_t, RibMplsEntry>& mplsRoutes);
 
 std::string getNodeNameFromKey(const std::string& key);

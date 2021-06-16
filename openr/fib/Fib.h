@@ -142,7 +142,12 @@ class Fib final : public OpenrEventBase {
   /**
    * Process new route updates received from Decision module
    */
-  void processRouteUpdates(DecisionRouteUpdate&& routeUpdate);
+  void processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate);
+
+  /**
+   * Process new route updates received from StaticRoute update queue
+   */
+  void processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate);
 
   /**
    * Trigger add/del routes thrift calls
@@ -223,7 +228,8 @@ class Fib final : public OpenrEventBase {
     bool isInitialSynced{false};
 
     /**
-     * Update RouteState with the newly received route update from Decision!
+     * Update RouteState with the received route update from Decision or Static
+     * RouteUpdates queue.
      */
     void update(const DecisionRouteUpdate& routeUpdate);
   };
@@ -264,9 +270,13 @@ class Fib final : public OpenrEventBase {
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 
   // Callback timer to program routes to SwitchAgent. The updates to agent
-  // would be based on RouteState. It'll handle cases for retry static routes,
-  // sync initial route db, or retry failed route updates. We trigger this timer
-  // with ExponentialBackoff to ease up things if programming keeps failing.
+  // would be based on RouteState. It'll handle all cases for route update e.g.
+  // - Sync initial route database
+  // - Program newly received route update
+  // - Retry static routes
+  // - [TODO has] Retry failed route updates
+  // We trigger this timer with ExponentialBackoff to ease up things if
+  // programming keeps failing.
   std::unique_ptr<folly::AsyncTimeout> retryRoutesTimer_{nullptr};
   ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
 

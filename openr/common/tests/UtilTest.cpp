@@ -520,32 +520,6 @@ TEST(UtilTest, getDurationBetweenPerfEventsTest) {
   }
 }
 
-TEST(UtilTest, selectMplsNextHops) {
-  // Validate pop route
-  auto bestNextHops = selectMplsNextHops({path1_2_2_pop});
-  EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_2_pop}));
-
-  // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
-  // Metric is ignored
-  bestNextHops = selectMplsNextHops(
-      {path1_2_1_swap, path1_2_2_php, path1_3_1_swap, path1_2_2_php});
-  EXPECT_EQ(
-      bestNextHops,
-      std::vector<thrift::NextHopThrift>({path1_2_2_php, path1_2_2_php}));
-
-  // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
-  // Metric is ignored
-  bestNextHops = selectMplsNextHops(
-      {path1_2_1_php, path1_2_2_swap, path1_3_1_php, path1_3_2_swap});
-  EXPECT_EQ(
-      bestNextHops,
-      std::vector<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
-
-  // Prefer PHP over SWAP for metric tie
-  bestNextHops = selectMplsNextHops({path1_2_1_swap, path1_3_1_php});
-  EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_3_1_php}));
-}
-
 TEST(UtilTest, findDeltaRoutes) {
   thrift::RouteDatabase oldRouteDb;
   *oldRouteDb.thisNodeName_ref() = "node-1";

@@ -119,7 +119,8 @@ Fib::Fib(
         VLOG(1) << "Terminating route delta processing fiber";
         break;
       }
-      processRouteUpdates(std::move(maybeThriftObj).value());
+      fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
+      processDecisionRouteUpdate(std::move(maybeThriftObj).value());
     }
   });
 
@@ -127,38 +128,22 @@ Fib::Fib(
   // - The routes are only programmed and updated but not deleted
   // - Updates arriving before first Decision RIB update will be processed. The
   //   fiber will terminate after FIB transition out of AWAITING state
-  addFiberTask([q = std::move(staticRouteUpdatesQueue),
-                this]() mutable noexcept {
-    LOG(INFO) << "Starting static routes update processing fiber";
-    while (true) {
-      auto maybeThriftPub = q.get(); // perform read
+  addFiberTask(
+      [q = std::move(staticRouteUpdatesQueue), this]() mutable noexcept {
+        LOG(INFO) << "Starting static routes update processing fiber";
+        while (true) {
+          auto maybeThriftPub = q.get(); // perform read
 
-      // Terminate if queue is closed or we've received RIB from Decision
-      if (maybeThriftPub.hasError() or
-          routeState_.state != RouteState::AWAITING) {
-        LOG(INFO) << "Terminating static routes update processing fiber";
-        break;
-      }
-
-      // NOTE: We only process the static MPLS routes to add or update
-      LOG(INFO) << "Received static routes update";
-      maybeThriftPub->unicastRoutesToUpdate.clear();
-      maybeThriftPub->unicastRoutesToDelete.clear();
-      maybeThriftPub->mplsRoutesToDelete.clear();
-
-      // Backup static MPLS routes. In case of update Routes failed, later
-      // scheduled retryRoutesTimer_ will retry programming the routes.
-      routeState_.update(maybeThriftPub.value());
-
-      // Program received static route updates
-      if (not updateRoutes(
-              std::move(maybeThriftPub).value(), true /* static routes */)) {
-        // Schedule retryRoutesTimer_ to retry programming of failed
-        // updates
-        retryRoutesTimer_->scheduleTimeout(Constants::kFibInitialBackoff);
-      }
-    }
-  });
+          // Terminate if queue is closed or we've received RIB from Decision
+          if (maybeThriftPub.hasError() or
+              routeState_.state != RouteState::AWAITING) {
+            LOG(INFO) << "Terminating static routes update processing fiber";
+            break;
+          }
+          fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
+          processStaticRouteUpdate(std::move(maybeThriftPub).value());
+        }
+      });
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("fib.convergence_time_ms", fb303::AVG);
@@ -360,22 +345,12 @@ void
 Fib::RouteState::update(const DecisionRouteUpdate& routeUpdate) {
   // Add/Update unicast routes to update
   for (const auto& [prefix, route] : routeUpdate.unicastRoutesToUpdate) {
-    auto it = unicastRoutes.find(prefix);
-    if (it != unicastRoutes.end()) {
-      it->second = route;
-    } else {
-      unicastRoutes.emplace(prefix, route);
-    }
+    unicastRoutes.insert_or_assign(prefix, route);
   }
 
   // Add mpls routes to update
   for (const auto& route : routeUpdate.mplsRoutesToUpdate) {
-    auto it = mplsRoutes.find(route.label);
-    if (it != mplsRoutes.end()) {
-      it->second = route;
-    } else {
-      mplsRoutes.emplace(route.label, route);
-    }
+    mplsRoutes.insert_or_assign(route.label, route);
   }
 
   // Delete unicast routes
@@ -391,7 +366,7 @@ Fib::RouteState::update(const DecisionRouteUpdate& routeUpdate) {
 
 // Process new route updates received from Decision module.
 void
-Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
+Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   // Process state transition event
   transitionRouteState(RouteState::RIB_UPDATE);
 
@@ -414,16 +389,38 @@ Fib::processRouteUpdates(DecisionRouteUpdate&& routeUpdate) {
     }
   }
 
+  // Filter MPLS next-hops to unique action
+  for (auto& mplsRoute : routeUpdate.mplsRoutesToUpdate) {
+    mplsRoute.filterNexthopsToUniqueAction();
+  }
+
   // Backup routes in routeState_. In case update routes failed, routes will be
   // programmed in later scheduled FIB sync.
   routeState_.update(routeUpdate);
 
-  // Add some counters
-  fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
-
   if (not updateRoutes(std::move(routeUpdate), false /* static routes */)) {
     transitionRouteState(RouteState::FIB_ERROR);
     syncRouteDbDebounced(); // Schedule future full sync of route DB
+  }
+}
+
+void
+Fib::processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
+  // NOTE: We only process the static MPLS routes to add or update
+  LOG(INFO) << "Received static routes update";
+  routeUpdate.unicastRoutesToUpdate.clear();
+  routeUpdate.unicastRoutesToDelete.clear();
+  routeUpdate.mplsRoutesToDelete.clear();
+
+  // Backup static MPLS routes. In case of update Routes failed, later
+  // scheduled retryRoutesTimer_ will retry programming the routes.
+  routeState_.update(routeUpdate);
+
+  // Program received static route updates
+  if (not updateRoutes(std::move(routeUpdate), true /* static routes */)) {
+    // Schedule retryRoutesTimer_ to retry programming of failed
+    // updates
+    retryRoutesTimer_->scheduleTimeout(Constants::kFibInitialBackoff);
   }
 }
 
@@ -499,8 +496,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
   // and MplsRoute with the FibService client APIs
   auto routeDbDelta = routeUpdate.toThrift();
   auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
-  auto const& mplsRoutesToUpdate = createMplsRoutesWithSelectedNextHops(
-      *routeDbDelta.mplsRoutesToUpdate_ref());
+  auto const& mplsRoutesToUpdate = *routeDbDelta.mplsRoutesToUpdate_ref();
 
   uint32_t numUnicastRoutesToDelete =
       routeDbDelta.unicastRoutesToDelete_ref()->size();
@@ -606,8 +602,7 @@ bool
 Fib::syncRouteDb() {
   const auto& unicastRoutes =
       createUnicastRoutesFromMap(routeState_.unicastRoutes);
-  const auto& mplsRoutes =
-      createMplsRoutesWithSelectedNextHopsMap(routeState_.mplsRoutes);
+  const auto& mplsRoutes = createMplsRoutesFromMap(routeState_.mplsRoutes);
 
   // update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
