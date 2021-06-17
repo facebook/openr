@@ -48,6 +48,13 @@ exception PlatformError {
   1: string message;
 } (message = "message")
 
+exception PlatformFibUpdateError {
+  1: map<i32, list<Network.IpPrefix>> vrf2failedAddUpdatePrefixes;
+  2: map<i32, list<Network.IpPrefix>> vrf2failedDeletePrefixes;
+  3: list<i32> failedAddUpdateMplsLabels;
+  4: list<i32> failedDeleteMplsLabels;
+}
+
 // static mapping of clientId => protocolId, priority same of admin distance
 // For Open/R.
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
@@ -72,6 +79,7 @@ service FibService extends fb303_core.BaseService {
   //
   void addUnicastRoute(1: i16 clientId, 2: Network.UnicastRoute route) throws (
     1: PlatformError error,
+    2: PlatformFibUpdateError fibError,
   );
 
   void deleteUnicastRoute(1: i16 clientId, 2: Network.IpPrefix prefix) throws (
@@ -81,7 +89,7 @@ service FibService extends fb303_core.BaseService {
   void addUnicastRoutes(
     1: i16 clientId,
     2: list<Network.UnicastRoute> routes,
-  ) throws (1: PlatformError error);
+  ) throws (1: PlatformError error, 2: PlatformFibUpdateError fibError);
 
   void deleteUnicastRoutes(
     1: i16 clientId,
@@ -90,6 +98,7 @@ service FibService extends fb303_core.BaseService {
 
   void syncFib(1: i16 clientId, 2: list<Network.UnicastRoute> routes) throws (
     1: PlatformError error,
+    2: PlatformFibUpdateError fibError,
   );
 
   // Retrieve list of unicast routes per client
@@ -107,7 +116,7 @@ service FibService extends fb303_core.BaseService {
   void addMplsRoutes(
     1: i16 clientId,
     2: list<Network.MplsRoute> routes,
-  ) throws (1: PlatformError error);
+  ) throws (1: PlatformError error, 2: PlatformFibUpdateError fibError);
 
   void deleteMplsRoutes(1: i16 clientId, 2: list<i32> topLabels) throws (
     1: PlatformError error,
@@ -117,6 +126,7 @@ service FibService extends fb303_core.BaseService {
   // traffic. Similar to syncFib API
   void syncMplsFib(1: i16 clientId, 2: list<Network.MplsRoute> routes) throws (
     1: PlatformError error,
+    2: PlatformFibUpdateError fibError,
   );
 
   // Retrieve list of MPLS routes per client
