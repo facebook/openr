@@ -109,8 +109,6 @@ DecisionPendingUpdates::addUpdate(
 
 Decision::Decision(
     std::shared_ptr<const Config> config,
-    // TODO: migrate argument list flags to OpenrConfig
-    bool enableBgpRouteProgramming,
     // consumer queue
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
@@ -134,7 +132,7 @@ Decision::Decision(
       config->isV4Enabled(),
       config->isSegmentRoutingEnabled(),
       config->isAdjacencyLabelsEnabled(),
-      enableBgpRouteProgramming,
+      config->isBgpRouteProgrammingEnabled(),
       config->isBestRouteSelectionEnabled(),
       config->isV4OverV6NexthopEnabled());
 

@@ -60,6 +60,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // decision config
     tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
     tConfig.decision_config_ref()->debounce_max_ms_ref() = 500;
+    tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
 
     // kvstore config
     tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
@@ -96,7 +97,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create Decision module
     decision = std::make_shared<Decision>(
         config,
-        true, /* enableBgpRouteProgramming */
         kvStoreWrapper_->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         routeUpdatesQueue_);

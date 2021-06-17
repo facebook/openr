@@ -228,7 +228,6 @@ Spark::Spark(
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<NeighborEvent>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
-    OpenrCtrlThriftPort openrCtrlThriftPort,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
     std::pair<uint32_t, uint32_t> version,
@@ -257,7 +256,8 @@ Spark::Spark(
           config->getKvStoreConfig().get_enable_flood_optimization()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kKvStoreCmdPort_(kvStoreCmdPort),
-      kOpenrCtrlThriftPort_(openrCtrlThriftPort),
+      kOpenrCtrlThriftPort_(
+          config->getThriftServerConfig().get_openr_ctrl_port()),
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
       config_(std::move(config)) {

@@ -434,7 +434,6 @@ main(int argc, char** argv) {
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
-          OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
           std::make_shared<IoProvider>(),
           config));
 
@@ -467,7 +466,8 @@ main(int argc, char** argv) {
   // OpenrCtrl thrift server
   auto thriftCtrlServer = std::make_unique<apache::thrift::ThriftServer>();
   // Set the port and interface for OpenrCtrl thrift server
-  thriftCtrlServer->setPort(*config->getConfig().openr_ctrl_port_ref());
+  thriftCtrlServer->setPort(
+      config->getThriftServerConfig().get_openr_ctrl_port());
 
   if (config->isSecureThriftServerEnabled()) {
     sslContext = std::make_shared<wangle::SSLContextConfig>();
@@ -522,7 +522,6 @@ main(int argc, char** argv) {
       "decision",
       std::make_unique<Decision>(
           config,
-          FLAGS_enable_bgp_route_programming,
           kvStoreUpdatesQueue.getReader(),
           std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));

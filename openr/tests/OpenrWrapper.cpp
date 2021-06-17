@@ -60,6 +60,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // decision config
   tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
   tConfig.decision_config_ref()->debounce_max_ms_ref() = 250;
+  tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
 
   // prefix allocation config
   tConfig.enable_prefix_allocation_ref() = true;
@@ -166,7 +167,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       KvStoreCmdPort{0},
-      OpenrCtrlThriftPort{0},
       ioProvider_,
       config_);
 
@@ -212,7 +212,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   decision_ = std::make_unique<Decision>(
       config_,
-      true, // enableBgpRouteProgramming
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       routeUpdatesQueue_);

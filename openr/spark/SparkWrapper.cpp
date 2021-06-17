@@ -25,7 +25,6 @@ SparkWrapper::SparkWrapper(
             interfaceUpdatesQueue_.getReader(),
             neighborUpdatesQueue_,
             KvStoreCmdPort{10002},
-            OpenrCtrlThriftPort{2018},
             std::move(ioProvider),
             config,
             version,
@@ -34,7 +33,6 @@ SparkWrapper::SparkWrapper(
             interfaceUpdatesQueue_.getReader(),
             neighborUpdatesQueue_,
             KvStoreCmdPort{10002},
-            OpenrCtrlThriftPort{2018},
             std::move(ioProvider),
             config,
             version

@@ -4618,7 +4618,6 @@ class DecisionTestFixture : public ::testing::Test {
 
     decision = make_shared<Decision>(
         config,
-        true, /* enableBgpRouteProgramming */
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
@@ -6074,7 +6073,6 @@ TEST(Decision, RibPolicyFeatureKnob) {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   auto decision = std::make_unique<Decision>(
       config,
-      true, /* enableBgpRouteProgramming */
       kvStoreUpdatesQueue.getReader(),
       staticRouteUpdatesQueue.getReader(),
       routeUpdatesQueue);
@@ -7023,6 +7021,7 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
         debounceTimeoutMin.count();
     tConfig.decision_config_ref()->debounce_max_ms_ref() =
         debounceTimeoutMax.count();
+    tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
 
     tConfig_ = tConfig;
     return tConfig;

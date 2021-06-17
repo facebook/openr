@@ -233,6 +233,14 @@ class Config {
   }
 
   //
+  // decision
+  //
+  bool
+  isBgpRouteProgrammingEnabled() const {
+    return config_.get_decision_config().get_enable_bgp_route_programming();
+  }
+
+  //
   // link monitor
   //
   const thrift::LinkMonitorConfig&

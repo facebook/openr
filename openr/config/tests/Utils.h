@@ -62,6 +62,9 @@ getBasicOpenrConfig(
   sparkConfig.hold_time_s_ref() = 2;
   sparkConfig.graceful_restart_time_s_ref() = 6;
 
+  openr::thrift::DecisionConfig decisionConfig;
+  decisionConfig.enable_bgp_route_programming_ref() = true;
+
   openr::thrift::OpenrConfig config;
 
   config.node_name_ref() = nodeName;
@@ -75,6 +78,7 @@ getBasicOpenrConfig(
   config.kvstore_config_ref() = kvstoreConfig;
   config.link_monitor_config_ref() = linkMonitorConfig;
   config.spark_config_ref() = sparkConfig;
+  config.decision_config_ref() = decisionConfig;
   config.enable_rib_policy_ref() = true;
   config.assume_drained_ref() = false;
   config.enable_fib_ack_ref() = true;

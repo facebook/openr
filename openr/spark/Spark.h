@@ -83,7 +83,6 @@ class Spark final : public OpenrEventBase {
       messaging::ReplicateQueue<NeighborEvent>& nbrUpdatesQueue,
       // port for TCP connection
       KvStoreCmdPort kvStoreCmdPort,
-      OpenrCtrlThriftPort openrCtrlThriftPort,
       // raw ptr of modules
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<const Config> config,
