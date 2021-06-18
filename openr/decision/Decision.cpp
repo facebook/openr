@@ -484,26 +484,17 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
       // TODO: avoid decoding from string
       std::string node{};
       folly::CIDRNetwork network{};
-      bool isPrefixKeyV2 = PrefixKey::isPrefixKeyV2Str(key);
-      if (isPrefixKeyV2) {
-        auto maybePrefixKeyV2 = PrefixKey::fromStrV2(key, area);
-        if (maybePrefixKeyV2.hasError()) {
-          // this is bad format of key.
-          LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
-          continue;
-        }
-        node = maybePrefixKeyV2.value().getNodeName();
-        network = maybePrefixKeyV2.value().getCIDRNetwork();
-      } else {
-        auto maybePrefixKey = PrefixKey::fromStr(key);
-        if (maybePrefixKey.hasError()) {
-          // this is bad format of key.
-          LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
-          continue;
-        }
-        node = maybePrefixKey.value().getNodeName();
-        network = maybePrefixKey.value().getCIDRNetwork();
+      auto isPrefixKeyV2 = PrefixKey::isPrefixKeyV2Str(key);
+      auto maybePrefixKey = isPrefixKeyV2 ? PrefixKey::fromStrV2(key, area)
+                                          : PrefixKey::fromStr(key);
+      if (maybePrefixKey.hasError()) {
+        // this is bad format of key.
+        LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
+        continue;
       }
+
+      node = maybePrefixKey.value().getNodeName();
+      network = maybePrefixKey.value().getCIDRNetwork();
 
       // construct new prefix key with local publication area id
       PrefixKey prefixKey(node, network, area, isPrefixKeyV2);

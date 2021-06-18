@@ -381,11 +381,11 @@ findDeltaRoutes(
 
   // Build routes to be programmed.
   thrift::RouteDatabaseDelta routeDbDelta;
-  *routeDbDelta.unicastRoutesToUpdate_ref() = std::move(unicastRoutesToUpdate);
-  *routeDbDelta.unicastRoutesToDelete_ref() = {
+  routeDbDelta.unicastRoutesToUpdate_ref() = std::move(unicastRoutesToUpdate);
+  routeDbDelta.unicastRoutesToDelete_ref() = {
       prefixesToRemove.begin(), prefixesToRemove.end()};
-  *routeDbDelta.mplsRoutesToUpdate_ref() = std::move(mplsRoutesToUpdate);
-  *routeDbDelta.mplsRoutesToDelete_ref() = {
+  routeDbDelta.mplsRoutesToUpdate_ref() = std::move(mplsRoutesToUpdate);
+  routeDbDelta.mplsRoutesToDelete_ref() = {
       labelsToRemove.begin(), labelsToRemove.end()};
 
   return routeDbDelta;
@@ -537,10 +537,10 @@ createThriftAdjacency(
     int64_t weight,
     const std::string& remoteIfName) {
   thrift::Adjacency adj;
-  *adj.otherNodeName_ref() = nodeName;
-  *adj.ifName_ref() = ifName;
-  *adj.nextHopV6_ref() = toBinaryAddress(folly::IPAddress(nextHopV6));
-  *adj.nextHopV4_ref() = toBinaryAddress(folly::IPAddress(nextHopV4));
+  adj.otherNodeName_ref() = nodeName;
+  adj.ifName_ref() = ifName;
+  adj.nextHopV6_ref() = toBinaryAddress(folly::IPAddress(nextHopV6));
+  adj.nextHopV4_ref() = toBinaryAddress(folly::IPAddress(nextHopV4));
   adj.metric_ref() = metric;
   adj.adjLabel_ref() = adjLabel;
   adj.isOverloaded_ref() = isOverloaded;
@@ -598,8 +598,8 @@ createPrefixDb(
     const std::string& area,
     bool withdraw) {
   thrift::PrefixDatabase prefixDb;
-  *prefixDb.thisNodeName_ref() = nodeName;
-  *prefixDb.prefixEntries_ref() = prefixEntries;
+  prefixDb.thisNodeName_ref() = nodeName;
+  prefixDb.prefixEntries_ref() = prefixEntries;
   prefixDb.area_ref() = area;
   prefixDb.deletePrefix_ref() = withdraw;
   return prefixDb;
@@ -619,7 +619,7 @@ createPrefixEntry(
     std::optional<thrift::MetricVector> mv,
     std::optional<int64_t> minNexthop) {
   thrift::PrefixEntry prefixEntry;
-  *prefixEntry.prefix_ref() = prefix;
+  prefixEntry.prefix_ref() = prefix;
   prefixEntry.type_ref() = type;
   if (not data.empty()) {
     prefixEntry.data_ref() = data;
@@ -838,7 +838,7 @@ createNextHop(
     const std::optional<std::string>& area,
     const std::optional<std::string>& neighborNodeName) {
   thrift::NextHopThrift nextHop;
-  *nextHop.address_ref() = addr;
+  nextHop.address_ref() = addr;
   nextHop.address_ref()->ifName_ref().from_optional(std::move(ifName));
   nextHop.metric_ref() = metric;
   nextHop.mplsAction_ref().from_optional(maybeMplsAction);
@@ -974,7 +974,7 @@ createMetricEntity(
   me.priority_ref() = priority;
   me.op_ref() = op;
   me.isBestPathTieBreaker_ref() = isBestPathTieBreaker;
-  *me.metric_ref() = metric;
+  me.metric_ref() = metric;
 
   return me;
 }

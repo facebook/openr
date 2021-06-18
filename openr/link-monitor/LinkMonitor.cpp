@@ -296,10 +296,11 @@ void
 LinkMonitor::stop() {
   // Stop KvStoreClient first
   kvStoreClient_->stop();
-  LOG(INFO) << "KvStoreClient successfully stopped.";
+  LOG(INFO) << "KvStoreClient successfully stopped in LinkMonitor";
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
+  LOG(INFO) << "EventBase successfully stopped in LinkMonitor";
 }
 
 void
@@ -352,19 +353,19 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   std::string peerAddr{""};
   if (!mockMode_) {
     // peer address used for KvStore external sync over ZMQ
-    repUrl = folly::sformat(
+    repUrl = fmt::format(
         "tcp://[{}%{}]:{}",
         toString(neighborAddrV6),
         localIfName,
         kvStoreCmdPort);
     // peer address used for KvStore external sync over thrift
-    peerAddr = folly::sformat("{}%{}", toString(neighborAddrV6), localIfName);
+    peerAddr = fmt::format("{}%{}", toString(neighborAddrV6), localIfName);
   } else {
     // use inproc address
-    repUrl = folly::sformat("inproc://{}-kvstore-cmd-global", remoteNodeName);
+    repUrl = fmt::format("inproc://{}-kvstore-cmd-global", remoteNodeName);
     // TODO: address value of peerAddr under system test environment
-    peerAddr = folly::sformat(
-        "{}%{}", Constants::kPlatformHost.toString(), localIfName);
+    peerAddr =
+        fmt::format("{}%{}", Constants::kPlatformHost.toString(), localIfName);
   }
 
   CHECK(not repUrl.empty()) << "Got empty repUrl";
@@ -771,7 +772,7 @@ LinkMonitor::advertiseRedistAddrs() {
       {
         auto& tags = prefixEntry.tags_ref().value();
         tags.emplace("INTERFACE_SUBNET");
-        tags.emplace(folly::sformat("{}:{}", nodeId_, interface.getIfName()));
+        tags.emplace(fmt::format("{}:{}", nodeId_, interface.getIfName()));
       }
       // Metrics
       {
@@ -1422,7 +1423,7 @@ LinkMonitor::logLinkEvent(
 
   LogSample sample{};
   const std::string event = isUp ? "UP" : "DOWN";
-  sample.addString("event", folly::sformat("IFACE_{}", event));
+  sample.addString("event", fmt::format("IFACE_{}", event));
   sample.addString("interface", iface);
   sample.addInt("backoff_ms", backoffTime.count());
 

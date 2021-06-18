@@ -452,7 +452,7 @@ template <typename Key, typename MetricsWrapper>
 std::set<Key> selectBestPrefixMetrics(
     std::unordered_map<Key, std::shared_ptr<MetricsWrapper>> const& prefixes);
 
-// Deterministic choose one as best path from multipaths. Used in Decision.
+// Deterministically choose one as best path from multipaths. Used in Decision.
 // Choose local if local node is a part of the multipaths.
 // Otherwise choose smallest key: allNodeAreas.begin().
 NodeAndArea selectBestNodeArea(
