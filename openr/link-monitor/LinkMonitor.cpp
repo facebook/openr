@@ -208,6 +208,9 @@ LinkMonitor::LinkMonitor(
       case openr::thrift::SegmentRoutingNodeLabelType::STATIC: {
         // Use statically configured node segment label as node label
         state_.nodeLabel_ref() = getStaticNodeSegmentLabel(kv.second);
+        LOG(INFO) << "Allocating static node segment label "
+                  << *state_.nodeLabel_ref() << " in area " << kv.first
+                  << " for " << nodeId_;
       } break;
       default:
         DCHECK("Unknown segment routing node label allocation type");
@@ -853,10 +856,10 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   // prepare adjacency database
   thrift::AdjacencyDatabase adjDb;
 
-  *adjDb.thisNodeName_ref() = nodeId_;
+  adjDb.thisNodeName_ref() = nodeId_;
   adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
   adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
-  *adjDb.area_ref() = area;
+  adjDb.area_ref() = area;
 
   for (auto& [adjKey, adjValue] : adjacencies_) {
     // ignore unrelated area
@@ -897,8 +900,8 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
 
     // Override metric with adj metric if it exists
     thrift::AdjKey tAdjKey;
-    *tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
-    *tAdjKey.ifName_ref() = *adj.ifName_ref();
+    tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
+    tAdjKey.ifName_ref() = *adj.ifName_ref();
     adj.metric_ref() = folly::get_default(
         *state_.adjMetricOverrides_ref(), tAdjKey, *adj.metric_ref());
 
