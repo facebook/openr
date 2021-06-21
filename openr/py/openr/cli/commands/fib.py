@@ -443,14 +443,15 @@ class FibSnoopCmd(OpenrCtrlCmd):
         **kwargs,
     ) -> None:
 
-        # pyre-fixme[23]: Unable to unpack `ResponseAndClientBufferedStream__Types_Ro...
-        initialDb, updates = await client.subscribeAndGetFib()
+        initialDb, updates = (await client.subscribeAndGetFib()).__iter__()
         # Print summary
         print(f" Routes for {initialDb.thisNodeName}.")
         print(f" {len(initialDb.unicastRoutes)} unicast routes in initial dump.")
         print(f" {len(initialDb.mplsRoutes)} mpls routes in initial dump.\n")
         # Expand initial dump based on input argument
         if initial_dump:
+            # pyre-fixme[6]: Expected `RouteDatabase` for 1st param but got
+            #  `RouteDatabase`.
             self.print_route_db(initialDb, prefixes)
 
         print("RouteDatabaseDelta updates to follow ...\n")
@@ -472,4 +473,6 @@ class FibSnoopCmd(OpenrCtrlCmd):
             else:
                 msg = await done.pop()
 
+            # pyre-fixme[6]: Expected `RouteDatabaseDelta` for 1st param but got
+            #  `RouteDatabaseDelta`.
             self.print_route_db_delta(msg, prefixes)

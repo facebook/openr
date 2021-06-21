@@ -1023,10 +1023,8 @@ class SnoopCmd(KvStoreCmdBase):
         )
 
         print("Retrieving and subcribing KvStore ... ")
-        # pyre-fixme[23]: Unable to unpack
-        #  `ResponseAndClientBufferedStream__Types_Publication_Types_Publication` into
-        #  2 values.
-        snapshot, updates = await client.subscribeAndGetKvStoreFiltered(kvDumpParams)
+        response = await client.subscribeAndGetKvStoreFiltered(kvDumpParams)
+        snapshot, updates = response.__iter__()
         global_dbs = self.process_snapshot(snapshot)
         self.print_delta(snapshot, ttl, delta, global_dbs)
         print("Magic begins here ... \n")
@@ -1052,7 +1050,7 @@ class SnoopCmd(KvStoreCmdBase):
                 self.print_expired_keys(msg, global_dbs)
                 self.print_delta(msg, ttl, delta, global_dbs)
 
-    def print_expired_keys(self, msg: openr_types.Publication, global_dbs: Dict):
+    def print_expired_keys(self, msg: openr_types_py3.Publication, global_dbs: Dict):
         rows = []
         if len(msg.expiredKeys):
             print("Traversal List: {}".format(msg.nodeIds))
@@ -1083,7 +1081,7 @@ class SnoopCmd(KvStoreCmdBase):
             print(printing.render_vertical_table(rows, timestamp=True))
 
     def print_delta(
-        self, msg: openr_types.Publication, ttl: bool, delta: bool, global_dbs: Dict
+        self, msg: openr_types_py3.Publication, ttl: bool, delta: bool, global_dbs: Dict
     ):
 
         for key, value in msg.keyVals.items():
@@ -1127,7 +1125,7 @@ class SnoopCmd(KvStoreCmdBase):
     def print_prefix_delta(
         self,
         key: str,
-        value: openr_types.Value,
+        value: openr_types_py3.Value,
         delta: bool,
         global_prefix_db: Dict,
         global_publication_db: Dict,
@@ -1156,7 +1154,7 @@ class SnoopCmd(KvStoreCmdBase):
     def print_adj_delta(
         self,
         key: str,
-        value: openr_types.Value,
+        value: openr_types_py3.Value,
         delta: bool,
         global_adj_db: Dict,
         global_publication_db: Dict,
@@ -1186,7 +1184,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def process_snapshot(self, resp: openr_types.Publication) -> Dict:
+    def process_snapshot(self, resp: openr_types_py3.Publication) -> Dict:
         global_dbs = bunch.Bunch(
             {
                 "prefixes": {},
