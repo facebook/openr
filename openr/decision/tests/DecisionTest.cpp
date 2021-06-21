@@ -4853,17 +4853,33 @@ class DecisionTestFixture : public ::testing::Test {
  *
  * 1 ---- 2 (advertising prefix with both v1 and v2)
  *
- * 1) publish prefix keys with format v1;
- * 2) expire prefx keys with format v1 and verify it is gone;
- * 3) publish prefix keys with format v2;
- * 4) expire prefix keys with format v2 and verify it is gone;
- * 5) publish prefix keys with format v1 + v2;
- * 6) expire prefix keys with format v1 and verify it still exists;
- * 7) expire prefix keys with format v2 and verify it is gone;
+ * - (Old binary flow): Format v1 expiration without v2
+ *    1) publish v1 format prefix keys;
+ *    2) expire v1 format prefix keys;
+ *    3) verify route is removed;
+ *
+ * - (New binary flow): Format v2 expiration without v1
+ *    1) publish v2 format prefix keys;
+ *    2) expire v2 format prefix keys;
+ *    3) verify route is removed;
+ *
+ * - (Canary-on flow): Format v1 expiration with v1 + v2
+ *    1) publish v1 + v2 format prefix keys;
+ *    2) expire v1 format prefix keys;
+ *    3) verify route is still there;
+ *    4) expire v2 format prefix keys;
+ *    5) verify route is removed;
+ *
+ * - (Canary-off flow): Format v2 expiration with v1 + v2
+ *    1) publish v1 + v2 format prefix keys;
+ *    2) expire v2 format prefix keys;
+ *    3) verify route is still there;
+ *    4) expire v1 format prefix keys;
+ *    5) verify route is removed;
  */
 TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
   //
-  // Step1: prefix-key with v1 format ONLY
+  // (Old binary flow): Format v1 expiration without v2
   //
   {
     // publish initial link-state + prefix-state
@@ -4879,26 +4895,21 @@ TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
 
     // verify prefix-state
     verifyReceivedRoutes(toIPNetwork(addr1), false);
-  }
 
-  //
-  // Step2: v1 format prefix key expiration
-  //
-  {
     // prefix key with v1 format expired
-    auto publication = createThriftPublication(
+    publication = createThriftPublication(
         /* no prefix key update */
         {},
         /* expired-keys */
         {createPrefixKeyValue("2", 1, addr1).first});
     sendKvPublication(publication);
 
-    // verify prefix-state gets cleared
+    // verify route withdrawn
     verifyReceivedRoutes(toIPNetwork(addr1), true);
   }
 
   //
-  // Step3: prefix-key with v2 format ONLY
+  // (New binary flow): Format v2 expiration without v1
   //
   {
     // publish initial prefix-state
@@ -4911,14 +4922,9 @@ TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
 
     // verify prefix-state
     verifyReceivedRoutes(toIPNetwork(addr1), false);
-  }
 
-  //
-  // Step4: v2 format prefix key expiration
-  //
-  {
     // prefix key with v2 format expired
-    auto publication = createThriftPublication(
+    publication = createThriftPublication(
         /* no prefix key update */
         {},
         /* expired-keys */
@@ -4926,12 +4932,12 @@ TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
              .first});
     sendKvPublication(publication);
 
-    // verify prefix-state NOT get cleared
+    // verify route withdrawn
     verifyReceivedRoutes(toIPNetwork(addr1), true);
   }
 
   //
-  // Step5: prefix-key with v1 + v2 format
+  // (Canary-on flow): Format v1 expiration with v1 + v2
   //
   {
     // publish initial prefix-state
@@ -4946,31 +4952,20 @@ TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
 
     // verify prefix-state
     verifyReceivedRoutes(toIPNetwork(addr1), false);
-  }
 
-  //
-  // Step6: v1 format prefix key expiration
-  // ATTN: prefix will NOT retire since we have received format v2
-  //
-  {
     // prefix key with v1 format expired
-    auto publication = createThriftPublication(
+    publication = createThriftPublication(
         /* no prefix key update */
         {},
         /* expired-keys */
         {createPrefixKeyValue("2", 1, addr1).first});
     sendKvPublication(publication);
 
-    // verify prefix-state NOT get cleared
+    // ATTN: no route withdrawn since we have received format v2
     verifyReceivedRoutes(toIPNetwork(addr1), false);
-  }
 
-  //
-  // Step7: v2 format prefix key expiration
-  //
-  {
-    // prefix key with v1 format expired
-    auto publication = createThriftPublication(
+    // prefix key with v2 format expired
+    publication = createThriftPublication(
         /* no prefix key update */
         {},
         /* expired-keys */
@@ -4978,7 +4973,48 @@ TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
              .first});
     sendKvPublication(publication);
 
-    // verify prefix-state NOT get cleared
+    // verify route withdrawn
+    verifyReceivedRoutes(toIPNetwork(addr1), true);
+  }
+
+  //
+  // (Canary-off flow): Format v2 expiration with v1 + v2
+  //
+  {
+    // publish initial prefix-state
+    auto publication = createThriftPublication(
+        {/* prefix key format v1 */
+         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, false),
+         /* prefix key format v2 */
+         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)},
+        /* expired-keys */
+        {});
+    sendKvPublication(publication);
+
+    // verify prefix-state
+    verifyReceivedRoutes(toIPNetwork(addr1), false);
+
+    // prefix key with v2 format expired
+    publication = createThriftPublication(
+        /* no prefix key update */
+        {},
+        /* expired-keys */
+        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)
+             .first});
+    sendKvPublication(publication);
+
+    // ATTN: no route withdrawn since we have received format v1
+    verifyReceivedRoutes(toIPNetwork(addr1), false);
+
+    // prefix key with v1 format expired
+    publication = createThriftPublication(
+        /* no prefix key update */
+        {},
+        /* expired-keys */
+        {createPrefixKeyValue("2", 1, addr1).first});
+    sendKvPublication(publication);
+
+    // verify route withdrawn
     verifyReceivedRoutes(toIPNetwork(addr1), true);
   }
 }

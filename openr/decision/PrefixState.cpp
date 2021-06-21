@@ -24,6 +24,8 @@ PrefixState::updatePrefix(
   // Update v2 format prefix key collection
   if (key.isPrefixKeyV2()) {
     prefixKeyV2_.insert(key);
+  } else {
+    prefixKey_.insert(key);
   }
 
   // Skip rest of code, if prefix exists and has no change
@@ -46,15 +48,22 @@ std::unordered_set<folly::CIDRNetwork>
 PrefixState::deletePrefix(PrefixKey const& key) {
   std::unordered_set<folly::CIDRNetwork> changed;
 
-  if ((not key.isPrefixKeyV2()) and prefixKeyV2_.count(key)) {
-    LOG(INFO) << "Skip withdraw prefix: "
-              << folly::IPAddress::networkToString(key.getCIDRNetwork())
-              << " since prefix key with v2 format received.";
-    return changed;
-  }
-
   if (key.isPrefixKeyV2()) {
     prefixKeyV2_.erase(key);
+    if (prefixKey_.count(key)) {
+      LOG(INFO) << "Skip withdrawing v2 format prefix: "
+                << folly::IPAddress::networkToString(key.getCIDRNetwork())
+                << " since same key with v1 format received.";
+      return changed;
+    }
+  } else {
+    prefixKey_.erase(key);
+    if (prefixKeyV2_.count(key)) {
+      LOG(INFO) << "Skip withdrawing v1 format prefix: "
+                << folly::IPAddress::networkToString(key.getCIDRNetwork())
+                << " since same key with v2 format received.";
+      return changed;
+    }
   }
 
   auto search = prefixes_.find(key.getCIDRNetwork());

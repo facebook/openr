@@ -64,6 +64,10 @@ class PrefixState {
   //  IpPrefix -> collection of originator(i.e. [node, area] combination)
   std::unordered_map<folly::CIDRNetwork, PrefixEntries> prefixes_;
 
+  // TODO: Remove following collection when format migration is done
+  // Local cache for v1 format of prefix keys for downgrade purpose
+  std::unordered_set<PrefixKey> prefixKey_;
+
   // Local cache for v2 format of prefix keys
   std::unordered_set<PrefixKey> prefixKeyV2_;
 };
