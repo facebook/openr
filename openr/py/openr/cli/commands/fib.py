@@ -8,14 +8,16 @@ import asyncio
 import ipaddress
 import time
 from builtins import object
-from typing import List, Optional
+from typing import List, Optional, Union, Sequence
 
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.thrift.Network import types as network_types_py3
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types import types as openr_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from thrift.py3.client import ClientType
@@ -289,7 +291,9 @@ class FibValidateRoutesCmd(FibAgentCmd):
 class FibSnoopCmd(OpenrCtrlCmd):
     def print_ip_prefixes_filtered(
         self,
-        ip_prefixes: List[network_types.IpPrefix],
+        ip_prefixes: Union[
+            Sequence[network_types_py3.IpPrefix], List[network_types.IpPrefix]
+        ],
         prefixes_filter: Optional[List[str]] = None,
         element_prefix: str = ">",
         element_suffix: str = "",
@@ -328,7 +332,10 @@ class FibSnoopCmd(OpenrCtrlCmd):
         )
 
     def print_mpls_labels(
-        self, labels: List[int], element_prefix: str = ">", element_suffix: str = ""
+        self,
+        labels: Union[List[int], Sequence[int]],
+        element_prefix: str = ">",
+        element_suffix: str = "",
     ) -> None:
         """
         Print mpls labels. Subset specified by labels_filter only will be printed if specified
@@ -350,7 +357,10 @@ class FibSnoopCmd(OpenrCtrlCmd):
 
     def print_route_db_delta(
         self,
-        delta_db: openr_types.RouteDatabaseDelta,
+        delta_db: Union[
+            openr_types.RouteDatabaseDelta,
+            openr_types_py3.RouteDatabaseDelta,
+        ],
         prefixes: Optional[List[str]] = None,
     ) -> None:
         """print the RouteDatabaseDelta from Fib module"""
@@ -391,7 +401,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
 
     def print_route_db(
         self,
-        route_db: openr_types.RouteDatabase,
+        route_db: Union[openr_types.RouteDatabase, openr_types_py3.RouteDatabase],
         prefixes: Optional[List[str]] = None,
         labels: Optional[List[int]] = None,
     ) -> None:
@@ -450,8 +460,6 @@ class FibSnoopCmd(OpenrCtrlCmd):
         print(f" {len(initialDb.mplsRoutes)} mpls routes in initial dump.\n")
         # Expand initial dump based on input argument
         if initial_dump:
-            # pyre-fixme[6]: Expected `RouteDatabase` for 1st param but got
-            #  `RouteDatabase`.
             self.print_route_db(initialDb, prefixes)
 
         print("RouteDatabaseDelta updates to follow ...\n")
@@ -473,6 +481,4 @@ class FibSnoopCmd(OpenrCtrlCmd):
             else:
                 msg = await done.pop()
 
-            # pyre-fixme[6]: Expected `RouteDatabaseDelta` for 1st param but got
-            #  `RouteDatabaseDelta`.
             self.print_route_db_delta(msg, prefixes)

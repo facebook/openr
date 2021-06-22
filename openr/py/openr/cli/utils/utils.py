@@ -16,7 +16,7 @@ from builtins import chr, input, map
 from collections import defaultdict
 from functools import lru_cache, partial
 from itertools import product
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, Callable
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, Callable, Sequence
 
 import bunch
 import click
@@ -25,6 +25,7 @@ from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as config_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Platform import FibService, ttypes as platform_types
+from openr.thrift.Network import types as network_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -1620,7 +1621,7 @@ def mpls_action_to_str(mpls_action: network_types.MplsAction) -> str:
 
 
 def ip_nexthop_to_str(
-    nextHop: network_types.NextHopThrift,
+    nextHop: Union[network_types.NextHopThrift, network_types_py3.NextHopThrift],
     ignore_v4_iface: bool = False,
     ignore_v6_iface: bool = False,
 ) -> str:
@@ -1655,7 +1656,9 @@ def ip_nexthop_to_str(
 
 def print_unicast_routes(
     caption: str,
-    unicast_routes: List[network_types.UnicastRoute],
+    unicast_routes: Union[
+        Sequence[network_types_py3.UnicastRoute], List[network_types.UnicastRoute]
+    ],
     prefixes: Optional[List[str]] = None,
     element_prefix: str = ">",
     element_suffix: str = "",
@@ -1727,7 +1730,9 @@ def build_unicast_route(
 
 def print_mpls_routes(
     caption: str,
-    mpls_routes: List[network_types.MplsRoute],
+    mpls_routes: Union[
+        List[network_types.MplsRoute], Sequence[network_types_py3.MplsRoute]
+    ],
     labels: Optional[List[int]] = None,
     element_prefix: str = ">",
     element_suffix: str = "",
