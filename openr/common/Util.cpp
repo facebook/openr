@@ -103,7 +103,7 @@ setupThriftServerTls(
   thriftServer.setAllowPlaintextOnLoopback(true);
   thriftServer.setSSLConfig(sslContext);
   if (fs::exists(ticketSeedPath)) {
-    thriftServer.watchTicketPathForChanges(ticketSeedPath, true);
+    thriftServer.watchTicketPathForChanges(ticketSeedPath);
   }
   return;
 }
