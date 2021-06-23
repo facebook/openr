@@ -9,6 +9,7 @@
 
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include "folly/IPAddress.h"
 #include "openr/if/gen-cpp2/Platform_types.h"
 
 namespace openr {
@@ -73,6 +74,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   void waitForUpdateMplsRoutes();
   void waitForDeleteMplsRoutes();
   void waitForSyncMplsFib();
+  void waitForUnhealthyException();
 
   int64_t aliveSince() override;
 
@@ -115,11 +117,22 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
     isHealthy_ = isHealthy;
   }
 
+  /**
+   * Marks following prefixes as dirty. This means any subsequent updates about
+   * these prefixes would fail to program. Deletion may succeed.
+   */
+  void setDirtyState(
+      std::vector<folly::CIDRNetwork> const& dirtyPrefixes,
+      std::vector<int32_t> const& dirtyLabels);
+
   void stop();
 
   void restart();
 
  private:
+  // Make sure the FibHandler is in healthy state. Else throw exception
+  void ensureHealthy();
+
   // Time when service started, in number of seconds, since epoch
   folly::Synchronized<int64_t> startTime_{0};
 
@@ -130,6 +143,10 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Synchronized<
       std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>>
       mplsRouteDb_;
+
+  // Dirty prefixes & labels in HW, and also won't be accepted from clients
+  folly::Synchronized<std::unordered_set<folly::CIDRNetwork>> dirtyPrefixes_;
+  folly::Synchronized<std::unordered_set<int32_t>> dirtyLabels_;
 
   // Stats
   std::atomic<size_t> fibSyncCount_{0};
@@ -147,6 +164,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Baton<> updateMplsRoutesBaton_;
   folly::Baton<> deleteMplsRoutesBaton_;
   folly::Baton<> syncMplsFibBaton_;
+  folly::Baton<> unhealthyExceptionBaton_;
 };
 
 } // namespace openr
