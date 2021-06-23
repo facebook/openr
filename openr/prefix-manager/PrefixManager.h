@@ -414,6 +414,9 @@ class PrefixManager final : public OpenrEventBase {
   // Enable FIB-ACK to enforce route program ordering, aka, to-add routes should
   // be programmed at originator ahead of being advertised to peers.
   bool fibAckEnabled_{false};
+
+  // Send update requests to KvStore via queue
+  bool enableKvStoreRequestQueue_{false};
 }; // PrefixManager
 
 } // namespace openr

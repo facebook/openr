@@ -102,6 +102,9 @@ struct KvStoreParams {
   bool enableFloodOptimization{false};
   bool isFloodRoot{false};
   bool enableThriftDualMsg{false};
+  // consume requests from local modules (e.g. PrefixManager, LinkMonitor)
+  // via queue
+  bool enableKvStoreRequestQueue{false};
 
   KvStoreParams(
       std::string nodeId,
@@ -121,7 +124,8 @@ struct KvStoreParams {
       // DUAL related config knob
       bool enableFloodOptimization,
       bool isFloodRoot,
-      bool enableThriftDualMsg)
+      bool enableThriftDualMsg,
+      bool enableKvStoreRequestQueue)
       : nodeId(nodeId),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         kvStoreSyncEventsQueue(kvStoreSyncEventsQueue),
@@ -134,7 +138,8 @@ struct KvStoreParams {
         ttlDecr(ttldecr),
         enableFloodOptimization(enableFloodOptimization),
         isFloodRoot(isFloodRoot),
-        enableThriftDualMsg(enableThriftDualMsg) {}
+        enableThriftDualMsg(enableThriftDualMsg),
+        enableKvStoreRequestQueue(enableKvStoreRequestQueue) {}
 };
 
 // The class represents a KV Store DB and stores KV pairs in internal map.

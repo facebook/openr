@@ -54,7 +54,8 @@ KvStore::KvStore(
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
               false),
           config->getKvStoreConfig().is_flood_root_ref().value_or(false),
-          config->getKvStoreConfig().get_enable_thrift_dual_msg()) {
+          config->getKvStoreConfig().get_enable_thrift_dual_msg(),
+          config->getConfig().get_enable_kvstore_request_queue()) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {

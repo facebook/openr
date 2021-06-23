@@ -57,7 +57,9 @@ PrefixManager::PrefixManager(
           config->getConfig().get_prefer_openr_originated_routes()),
       enableNewPrefixFormat_(
           config->getConfig().get_enable_new_prefix_format()),
-      fibAckEnabled_(config->getConfig().get_enable_fib_ack()) {
+      fibAckEnabled_(config->getConfig().get_enable_fib_ack()),
+      enableKvStoreRequestQueue_(
+          config->getConfig().get_enable_kvstore_request_queue()) {
   CHECK(kvStore_);
   CHECK(config);
 

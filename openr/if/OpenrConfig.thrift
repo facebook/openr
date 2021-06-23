@@ -833,6 +833,12 @@ struct OpenrConfig {
   */
   58: bool enable_fib_ack = false;
 
+  /**
+   * Flag to indicate if KvStore will consume requests from local modules
+   * (e.g. PrefixManager, LinkMonitor) via queue.
+   */
+  59: bool enable_kvstore_request_queue = false;
+
   # vip thrift injection service
   90: optional bool enable_vip_service;
 

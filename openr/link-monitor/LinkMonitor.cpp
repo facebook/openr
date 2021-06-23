@@ -91,6 +91,8 @@ LinkMonitor::LinkMonitor(
           *config->getLinkMonitorConfig().linkflap_max_backoff_ms_ref())),
       ttlKeyInKvStore_(config->getKvStoreKeyTtl()),
       areas_(config->getAreas()),
+      enableKvStoreRequestQueue_(
+          config->getConfig().get_enable_kvstore_request_queue()),
       interfaceUpdatesQueue_(interfaceUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),

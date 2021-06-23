@@ -82,6 +82,7 @@ getBasicOpenrConfig(
   config.enable_rib_policy_ref() = true;
   config.assume_drained_ref() = false;
   config.enable_fib_ack_ref() = true;
+  config.enable_kvstore_request_queue_ref() = false;
 
   if (areaCfg.empty()) {
     config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};

@@ -352,6 +352,8 @@ class LinkMonitor final : public OpenrEventBase {
   std::chrono::milliseconds ttlKeyInKvStore_;
 
   std::unordered_map<std::string, AreaConfiguration> const areas_;
+  // Send update requests to KvStore via queue
+  bool enableKvStoreRequestQueue_{false};
 
   //
   // Mutable state
