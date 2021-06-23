@@ -76,7 +76,12 @@ service FibService extends fb303_core.BaseService {
 
   //
   // Unicast Routes API
+  // NOTE: FibAgent may throw `PlatformFibUpdateError` for Add and Sync
+  // APIs only. Delete should never fail, since it does not consume HW resources
+  // but rather frees them. Agent already protect against spurious deletes e.g.
+  // trying to delete non-existing route (aka double deletes).
   //
+
   void addUnicastRoute(1: i16 clientId, 2: Network.UnicastRoute route) throws (
     1: PlatformError error,
     2: PlatformFibUpdateError fibError,
@@ -112,7 +117,12 @@ service FibService extends fb303_core.BaseService {
 
   //
   // MPLS routes API
+  // NOTE: FibAgent may throw `PlatformFibUpdateError` for Add and Sync
+  // APIs only. Delete should never fail, since it does not consume HW resources
+  // but rather frees them. Agent already protect against spurious deletes e.g.
+  // trying to delete non-existing route (aka double deletes).
   //
+
   void addMplsRoutes(
     1: i16 clientId,
     2: list<Network.MplsRoute> routes,
