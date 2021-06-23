@@ -1125,10 +1125,13 @@ TEST_F(FibTestFixture, fibRestart) {
   // syncFib debounce
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
-  // Synced routes are sent to fibRouteUpdatesQueue_.
-  routeUpdate.type = DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
-  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
-      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
+  // Empty route update is sent with INCREMENTAL type. There is no real change
+  // in FIB routes.
+  {
+    auto rcvdRouteUpdate = fibRouteUpdatesQueueReader.get().value();
+    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, rcvdRouteUpdate.type);
+    EXPECT_TRUE(rcvdRouteUpdate.empty());
+  }
 
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);

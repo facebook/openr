@@ -1178,9 +1178,7 @@ void
 PrefixManager::storeProgrammedRoutes(
     const DecisionRouteUpdate& fibRouteUpdates) {
   // In case of full sync, reset previous stored programmed routes.
-  if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC or
-      fibRouteUpdates.type ==
-          DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES) {
+  if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC) {
     programmedLabels_.clear();
   }
 

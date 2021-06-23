@@ -150,24 +150,24 @@ class Fib final : public OpenrEventBase {
   void processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate);
 
   /**
-   * Trigger add/del routes thrift calls
-   * on success no action needed
-   * on failure invokes syncRouteDbDebounced
+   * Incremental route programming. On route programming failure,
+   * prefixes/labels are marked dirty and retryRoutesTimer is scheduled.
    */
-  bool updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes);
+  void updateRoutes(DecisionRouteUpdate&& routeUpdate);
 
   /**
-   * Sync the current routeDb_ with the switch agent.
-   * on success no action needed
-   * on failure invokes syncRouteDbDebounced
+   * Sync the current RouteState with the switch agent.
+   * - On complete failure retry is scheduled
+   * - On partial failure, the failed prefixes/labels are marked dirty and
+   *   retryRoutesTimer is scheduled.
    */
-  bool syncRouteDb();
+  void syncRoutes();
 
   /**
-   * Asynchrounsly schedules the syncRouteDb call and returns immediately. All
-   * APIs should call this function to sync-routes.
+   * Asynchrounsly schedules the retry routes timer call and returns
+   * immediately. All APIs should call this function to schedule retry-timer.
    */
-  void syncRouteDbDebounced();
+  void scheduleRetryRoutesTimer();
 
   /**
    * Get aliveSince from FibService, and check if Fib restarts
@@ -194,6 +194,15 @@ class Fib final : public OpenrEventBase {
     std::unordered_map<uint32_t, RibMplsEntry> mplsRoutes;
 
     /**
+     * Set of route keys (prefixes & labels) that needs to be updated in HW. Two
+     * reasons for dirty marking
+     * 1) A new update/delete notification is received for Prefix/Label
+     * 2) Prefix/Label experienced a programming failure
+     */
+    std::unordered_set<folly::CIDRNetwork> dirtyPrefixes;
+    std::unordered_set<uint32_t> dirtyLabels;
+
+    /**
      * Enumeration depicting the route event that may arrive and affect `State`
      */
     enum Event {
@@ -201,10 +210,8 @@ class Fib final : public OpenrEventBase {
       RIB_UPDATE = 0,
       // FIB Agent connected or re-connected because of process restart
       FIB_CONNECTED = 1,
-      // Route programming error
-      FIB_ERROR = 2,
       // FIB sync is successful
-      FIB_SYNCED = 3,
+      FIB_SYNCED = 2,
     };
 
     /**
@@ -228,10 +235,31 @@ class Fib final : public OpenrEventBase {
     bool isInitialSynced{false};
 
     /**
+     * Does current route state needs (re-)programming of routes
+     */
+    bool
+    needsRetry() const {
+      return state == SYNCING or dirtyPrefixes.size() or dirtyLabels.size();
+    }
+
+    /**
      * Update RouteState with the received route update from Decision or Static
-     * RouteUpdates queue.
+     * RouteUpdates queue. Update dirty set of prefixes and labels
      */
     void update(const DecisionRouteUpdate& routeUpdate);
+
+    /**
+     * Create DecisionRouteUpdate that'll need to be re-programmed & published
+     * to users. As a part of this dirty prefixes and labels will be cleared as
+     * they'll be captured in this update that would be programmed.
+     */
+    DecisionRouteUpdate createUpdate();
+
+    /**
+     * Update state as a result of PlatformFibUpdateError. This will populate
+     * the dirty state.
+     */
+    void processFibUpdateError(thrift::PlatformFibUpdateError const& fibError);
   };
 
   /**
@@ -274,7 +302,7 @@ class Fib final : public OpenrEventBase {
   // - Sync initial route database
   // - Program newly received route update
   // - Retry static routes
-  // - [TODO has] Retry failed route updates
+  // - Retry failed route updates
   // We trigger this timer with ExponentialBackoff to ease up things if
   // programming keeps failing.
   std::unique_ptr<folly::AsyncTimeout> retryRoutesTimer_{nullptr};

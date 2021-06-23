@@ -1097,13 +1097,13 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
     EXPECT_EQ(1, pub.keyVals_ref()->size());
   }
 
-  // 4. Follow-up FULL_SYNC_AFTER_FIB_FAILURES route updates reset previously
+  // 4. Follow-up FULL_SYNC route updates reset previously
   // stored programmed labels in PrefixManager. Only prefixes with newly
   // programmed label routes will be advertised.
   {
     // Full sync of programmed routes for label2 arrives.
     DecisionRouteUpdate fullSyncUpdates;
-    fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
+    fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
     fullSyncUpdates.mplsRoutesToUpdate = {RibMplsEntry(label2)};
     fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
 

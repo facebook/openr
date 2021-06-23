@@ -16,10 +16,38 @@
 #include <openr/common/Util.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/fib/Fib.h>
+#include <openr/if/gen-cpp2/Platform_types.h>
 
 namespace fb303 = facebook::fb303;
 
 namespace openr {
+
+namespace { // anonymous for local function definitions
+
+void
+logFibUpdateError(thrift::PlatformFibUpdateError const& error) {
+  fb303::fbData->addStatValue(
+      "fib.thrift.failure.fib_update_error", 1, fb303::COUNT);
+  LOG(ERROR) << "Partially failed to update/delete following in FIB.";
+  for (auto& [_, prefixes] : *error.vrf2failedAddUpdatePrefixes_ref()) {
+    for (auto& prefix : prefixes) {
+      LOG(ERROR) << "  > " << toString(prefix) << " add/update";
+    }
+  }
+  for (auto& [_, prefixes] : *error.vrf2failedDeletePrefixes_ref()) {
+    for (auto& prefix : prefixes) {
+      LOG(ERROR) << "  > " << toString(prefix) << " delete";
+    }
+  }
+  for (auto& label : *error.failedAddUpdateMplsLabels_ref()) {
+    LOG(ERROR) << "  > " << label << " add/update";
+  }
+  for (auto& label : *error.failedDeleteMplsLabels_ref()) {
+    LOG(ERROR) << "  > " << label << " delete";
+  }
+}
+
+} // namespace
 
 Fib::Fib(
     std::shared_ptr<const Config> config,
@@ -41,33 +69,21 @@ Fib::Fib(
   auto& tConfig = config->getConfig();
 
   retryRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    bool isSuccess{true};
     if (routeState_.state == RouteState::SYNCING) {
       // SYNC routes if we've RIB snapshot from Decision
-      isSuccess = syncRouteDb();
-      if (isSuccess) {
-        transitionRouteState(RouteState::FIB_SYNCED);
-      } else {
-        transitionRouteState(RouteState::FIB_ERROR);
+      syncRoutes();
+    } else {
+      // We retry incremental update of routes based on dirty state in AWAITING
+      // & SYNCED states
+      auto routeUpdate = routeState_.createUpdate();
+      if (not routeUpdate.empty()) {
+        LOG(INFO) << "Retry programming of dirty route entries";
+        updateRoutes(std::move(routeUpdate));
       }
-    } else if (routeState_.state == RouteState::AWAITING) {
-      // We have static MPLS routes but no RIB snapshot, let's retry adding
-      // those static MPLS routes
-      DecisionRouteUpdate routeUpdate;
-      std::transform(
-          routeState_.mplsRoutes.cbegin(),
-          routeState_.mplsRoutes.cend(),
-          std::back_inserter(routeUpdate.mplsRoutesToUpdate),
-          [](auto& iter) { return iter.second; });
-      LOG(INFO) << "Retry programming of "
-                << routeUpdate.mplsRoutesToUpdate.size()
-                << " mpls static routes.";
-      isSuccess =
-          updateRoutes(std::move(routeUpdate), true /* static routes */);
     }
 
     // Update backoff and retry if not successful
-    if (isSuccess) {
+    if (not routeState_.needsRetry()) {
       retryRoutesExpBackoff_.reportSuccess();
     } else {
       retryRoutesExpBackoff_.reportError();
@@ -158,7 +174,6 @@ Fib::Fib(
       "fib.thrift.failure.keepalive", fb303::COUNT);
   fb303::fbData->addStatExportType("fib.thrift.failure.sync_fib", fb303::COUNT);
   fb303::fbData->addStatExportType("fib.route_programming.time_ms", fb303::AVG);
-  fb303::fbData->addStatExportType("fib.route_sync.time_ms", fb303::AVG);
 }
 
 void
@@ -364,6 +379,81 @@ Fib::RouteState::update(const DecisionRouteUpdate& routeUpdate) {
   }
 }
 
+DecisionRouteUpdate
+Fib::RouteState::createUpdate() {
+  DecisionRouteUpdate update;
+
+  //
+  // Case - First Sync
+  // Return all updates
+  //
+
+  if (state == SYNCING and not isInitialSynced) {
+    update.type = DecisionRouteUpdate::FULL_SYNC;
+    update.unicastRoutesToUpdate = unicastRoutes;
+    for (auto const& [_, mplsEntry] : mplsRoutes) {
+      update.mplsRoutesToUpdate.emplace_back(mplsEntry);
+    }
+    return update;
+  }
+
+  //
+  // Case - Subsequent Sync or re-programming of failed routes
+  // Return updates based on dirty state
+  //
+  update.type = DecisionRouteUpdate::INCREMENTAL;
+
+  // Populate unicast routes to add, update, or delete
+  for (auto& prefix : dirtyPrefixes) {
+    auto it = unicastRoutes.find(prefix);
+    if (it == unicastRoutes.end()) { // Delete
+      update.unicastRoutesToDelete.emplace_back(prefix);
+    } else { // Add or Update
+      update.unicastRoutesToUpdate.emplace(prefix, it->second);
+    }
+  }
+
+  // Populate mpls routes to add, update, or delete
+  for (auto& label : dirtyLabels) {
+    auto it = mplsRoutes.find(label);
+    if (it == mplsRoutes.end()) { // Delete
+      update.mplsRoutesToDelete.emplace_back(label);
+    } else { // Add or Update
+      update.mplsRoutesToUpdate.emplace_back(it->second);
+    }
+  }
+
+  // Clear dirty state as we've created new update to program
+  dirtyPrefixes.clear();
+  dirtyLabels.clear();
+
+  return update;
+}
+
+void
+Fib::RouteState::processFibUpdateError(
+    thrift::PlatformFibUpdateError const& fibError) {
+  // Mark prefixes as dirty
+  for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes_ref()) {
+    for (auto& prefix : prefixes) {
+      dirtyPrefixes.emplace(toIPNetwork(prefix));
+    }
+  }
+  for (auto& [_, prefixes] : *fibError.vrf2failedDeletePrefixes_ref()) {
+    for (auto& prefix : prefixes) {
+      dirtyPrefixes.emplace(toIPNetwork(prefix));
+    }
+  }
+
+  // Mark labels as dirty
+  dirtyLabels.insert(
+      fibError.failedAddUpdateMplsLabels_ref()->begin(),
+      fibError.failedAddUpdateMplsLabels_ref()->end());
+  dirtyLabels.insert(
+      fibError.failedDeleteMplsLabels_ref()->begin(),
+      fibError.failedDeleteMplsLabels_ref()->end());
+}
+
 // Process new route updates received from Decision module.
 void
 Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
@@ -394,13 +484,11 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
     mplsRoute.filterNexthopsToUniqueAction();
   }
 
-  // Backup routes in routeState_. In case update routes failed, routes will be
-  // programmed in later scheduled FIB sync.
-  routeState_.update(routeUpdate);
-
-  if (not updateRoutes(std::move(routeUpdate), false /* static routes */)) {
-    transitionRouteState(RouteState::FIB_ERROR);
-    syncRouteDbDebounced(); // Schedule future full sync of route DB
+  // Update routes,
+  updateRoutes(std::move(routeUpdate));
+  if (routeState_.needsRetry()) {
+    // Schedule retry routes timer if need be
+    scheduleRetryRoutesTimer();
   }
 }
 
@@ -412,14 +500,13 @@ Fib::processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   routeUpdate.unicastRoutesToDelete.clear();
   routeUpdate.mplsRoutesToDelete.clear();
 
-  // Backup static MPLS routes. In case of update Routes failed, later
-  // scheduled retryRoutesTimer_ will retry programming the routes.
-  routeState_.update(routeUpdate);
+  // Static route can only be received in AWAITING state
+  CHECK_EQ(routeState_.state, RouteState::AWAITING);
 
   // Program received static route updates
-  if (not updateRoutes(std::move(routeUpdate), true /* static routes */)) {
-    // Schedule retryRoutesTimer_ to retry programming of failed
-    // updates
+  updateRoutes(std::move(routeUpdate));
+  if (routeState_.needsRetry()) {
+    // Schedule retry routes timer if need be
     retryRoutesTimer_->scheduleTimeout(Constants::kFibInitialBackoff);
   }
 }
@@ -466,215 +553,307 @@ Fib::printMplsRoutesAddUpdate(
   }
 }
 
-bool
-Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool isStaticRoutes) {
+void
+Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
   updateRoutesSemaphore_.wait();
 
-  // update flat counters here as they depend on routeState_ and its change
+  // Backup routes in routeState_. In case update routes failed, routes will be
+  // programmed in later scheduled FIB sync.
+  routeState_.update(routeUpdate);
+
+  // Update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
 
-  if (dryrun_) {
-    // Do not program routes in case of dryrun
-    LOG(INFO) << "Skipping programming of routes in dryrun ... ";
-    logPerfEvents(routeUpdate.perfEvents);
-    return true; // Treat route updates successful in dry run.
+  // Skip route programming if we're in the SYNCING state. We only perform
+  // incremental route programming in AWAITING or SYNCED state. In SYNCING
+  // state we let `syncRoutes` do the work instead.
+  if (routeState_.state == RouteState::SYNCING) {
+    return;
   }
 
-  // Do not process incremental update if we're in SYNCING state. For static
-  // routes we always update the received routes immediately
-  if (!isStaticRoutes && routeState_.state <= RouteState::SYNCING) {
-    LOG(INFO) << "Skipping incremental update. Scheduling full sync to recover "
-              << "from failure or process restart.";
-    syncRouteDbDebounced();
-    return true;
+  // Return if empty
+  if (routeUpdate.empty()) {
+    return;
   }
+
+  LOG(INFO) << "Updating routes in FIB";
+  const auto startTime = std::chrono::steady_clock::now();
 
   // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
   // and MplsRoute with the FibService client APIs
   auto routeDbDelta = routeUpdate.toThrift();
-  auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
-  auto const& mplsRoutesToUpdate = *routeDbDelta.mplsRoutesToUpdate_ref();
 
-  uint32_t numUnicastRoutesToDelete =
-      routeDbDelta.unicastRoutesToDelete_ref()->size();
-  uint32_t numUnicastRoutesToUpdate = unicastRoutesToUpdate.size();
-  uint32_t numMplsRoutesToDelete =
-      routeDbDelta.mplsRoutesToDelete_ref()->size();
-  uint32_t numMplsRoutesToUpdate = mplsRoutesToUpdate.size();
-  uint32_t numOfRouteUpdates = numUnicastRoutesToDelete +
-      numUnicastRoutesToUpdate + numMplsRoutesToDelete + numMplsRoutesToUpdate;
-
-  if (numOfRouteUpdates == 0) {
-    return true;
+  //
+  // Delete Unicast routes
+  //
+  auto const& unicastRoutesToDelete = *routeDbDelta.unicastRoutesToDelete_ref();
+  if (unicastRoutesToDelete.size()) {
+    LOG(INFO) << "Deleting " << unicastRoutesToDelete.size()
+              << " unicast routes in FIB";
+    for (auto const& prefix : unicastRoutesToDelete) {
+      VLOG(1) << "> " << toString(prefix);
+    }
+    if (dryrun_) {
+      LOG(INFO) << "Skipping deletion of unicast routes in dryrun ... ";
+    } else {
+      try {
+        createFibClient(evb_, socket_, client_, thriftPort_);
+        client_->sync_deleteUnicastRoutes(kFibId_, unicastRoutesToDelete);
+      } catch (std::exception& e) {
+        client_.reset();
+        fb303::fbData->addStatValue(
+            "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
+        LOG(ERROR) << "Failed to delete unicast routes from FIB. Error: "
+                   << folly::exceptionStr(e);
+        // Marked all routes to be deleted as dirty. So we try to remove them
+        // again from FIB.
+        routeState_.dirtyPrefixes.insert(
+            routeUpdate.unicastRoutesToDelete.begin(),
+            routeUpdate.unicastRoutesToDelete.end());
+        // NOTE: We still want to advertise these prefixes as deleted
+      }
+    }
   }
 
-  // Make thrift calls to do real programming
-  try {
-    LOG(INFO) << "Updating routes in FIB";
-    const auto startTime = std::chrono::steady_clock::now();
-
-    // Create FIB client if doesn't exists
-    createFibClient(evb_, socket_, client_, thriftPort_);
-
-    // Delete unicast routes
-    if (numUnicastRoutesToDelete) {
-      LOG(INFO) << "Deleting " << numUnicastRoutesToDelete
-                << " unicast routes in FIB";
-      for (auto const& prefix : *routeDbDelta.unicastRoutesToDelete_ref()) {
-        VLOG(1) << "> " << toString(prefix);
-      }
-
-      client_->sync_deleteUnicastRoutes(
-          kFibId_, *routeDbDelta.unicastRoutesToDelete_ref());
-    }
-
-    // Add unicast routes
-    if (numUnicastRoutesToUpdate) {
-      LOG(INFO) << "Adding/Updating " << numUnicastRoutesToUpdate
-                << " unicast routes in FIB";
-      printUnicastRoutesAddUpdate(unicastRoutesToUpdate);
-
-      client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
-    }
-
-    // Successfully synced routes.
-    auto syncedRoutes = std::move(routeUpdate);
-    syncedRoutes.type = DecisionRouteUpdate::INCREMENTAL;
-
-    if (enableSegmentRouting_) {
-      // Delete mpls routes
-      if (numMplsRoutesToDelete) {
-        LOG(INFO) << "Deleting " << numMplsRoutesToDelete
-                  << " mpls routes in FIB";
-        for (auto const& topLabel : *routeDbDelta.mplsRoutesToDelete_ref()) {
-          VLOG(1) << "> " << std::to_string(topLabel);
+  //
+  // Update Unicast routes
+  //
+  auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
+  if (unicastRoutesToUpdate.size()) {
+    LOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
+              << " unicast routes in FIB";
+    printUnicastRoutesAddUpdate(unicastRoutesToUpdate);
+    if (dryrun_) {
+      LOG(INFO) << "Skipping add/update of unicast routes in dryrun ... ";
+    } else {
+      try {
+        createFibClient(evb_, socket_, client_, thriftPort_);
+        client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
+      } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
+        logFibUpdateError(fibUpdateError);
+        // Remove failed routes from fibRouteUpdates
+        routeUpdate.processFibUpdateError(fibUpdateError);
+        // Mark failed routes as dirty in route state
+        routeState_.processFibUpdateError(fibUpdateError);
+      } catch (std::exception const& e) {
+        client_.reset();
+        fb303::fbData->addStatValue(
+            "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
+        LOG(ERROR) << "Failed to add/update unicast routes in FIB. Error: "
+                   << folly::exceptionStr(e);
+        // Mark routes we failed to update as dirty for retry. Also declare
+        // these routes as deleted to client, because we failed to update them
+        // Next retry should restore, but meanwhile clients can take appropriate
+        // action because FIB state is unclear e.g. withdraw route from KvStore
+        for (auto& [prefix, _] : routeUpdate.unicastRoutesToUpdate) {
+          routeState_.dirtyPrefixes.emplace(prefix);
+          routeUpdate.unicastRoutesToDelete.emplace_back(prefix);
         }
 
-        client_->sync_deleteMplsRoutes(
-            kFibId_, *routeDbDelta.mplsRoutesToDelete_ref());
+        // We don't want to advertise failed route add/updates
+        routeUpdate.unicastRoutesToUpdate.clear();
       }
-
-      // Add mpls routes
-      if (numMplsRoutesToUpdate) {
-        LOG(INFO) << "Adding/Updating " << numMplsRoutesToUpdate
-                  << " mpls routes in FIB";
-        printMplsRoutesAddUpdate(mplsRoutesToUpdate);
-
-        client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
-      }
-    } else {
-      // Clear MPLS routes if segment routes is disabled.
-      syncedRoutes.mplsRoutesToDelete.clear();
-      syncedRoutes.mplsRoutesToUpdate.clear();
     }
-
-    // Send synced routes into fibRouteUpdatesQueue_.
-    fibRouteUpdatesQueue_.push(std::move(syncedRoutes));
-
-    const auto elapsedTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - startTime);
-
-    LOG(INFO) << fmt::format(
-        "It took {} ms to update {} routes in FIB",
-        elapsedTime.count(),
-        numOfRouteUpdates);
-
-    fb303::fbData->addStatValue(
-        "fib.route_programming.time_ms", elapsedTime.count(), fb303::AVG);
-    fb303::fbData->addStatValue(
-        "fib.num_of_route_updates", numOfRouteUpdates, fb303::SUM);
-    return true;
-  } catch (const std::exception& e) {
-    client_.reset();
-    fb303::fbData->addStatValue(
-        "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-    LOG(ERROR) << "Failed to update routes in FIB. Error: "
-               << folly::exceptionStr(e);
-    return false;
   }
+
+  //
+  // Delete Mpls routes
+  //
+  auto const& mplsRoutesToDelete = *routeDbDelta.mplsRoutesToDelete_ref();
+  if (enableSegmentRouting_ and mplsRoutesToDelete.size()) {
+    LOG(INFO) << "Deleting " << mplsRoutesToDelete.size()
+              << " mpls routes in FIB";
+    for (auto const& topLabel : mplsRoutesToDelete) {
+      VLOG(1) << "> " << std::to_string(topLabel);
+    }
+    if (dryrun_) {
+      LOG(INFO) << "Skipping deletion of mpls routes in dryrun ... ";
+    } else {
+      try {
+        createFibClient(evb_, socket_, client_, thriftPort_);
+        client_->sync_deleteMplsRoutes(kFibId_, mplsRoutesToDelete);
+      } catch (std::exception const& e) {
+        client_.reset();
+        fb303::fbData->addStatValue(
+            "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
+        LOG(ERROR) << "Failed to delete mpls routes from FIB. Error: "
+                   << folly::exceptionStr(e);
+        // Marked all routes to be deleted as dirty. So we try to remove them
+        // again from FIB.
+        routeState_.dirtyLabels.insert(
+            routeUpdate.mplsRoutesToDelete.begin(),
+            routeUpdate.mplsRoutesToDelete.end());
+        // NOTE: We still want to advertise these labels as deleted
+      }
+    }
+  }
+
+  //
+  // Update Mpls routes
+  //
+  auto const& mplsRoutesToUpdate = *routeDbDelta.mplsRoutesToUpdate_ref();
+  if (enableSegmentRouting_ and mplsRoutesToUpdate.size()) {
+    LOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
+              << " mpls routes in FIB";
+    printMplsRoutesAddUpdate(mplsRoutesToUpdate);
+    if (dryrun_) {
+      LOG(INFO) << "Skipping add/update of mpls routes in dryrun ... ";
+    } else {
+      try {
+        createFibClient(evb_, socket_, client_, thriftPort_);
+        client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
+      } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
+        logFibUpdateError(fibUpdateError);
+        // Remove failed routes from fibRouteUpdates
+        routeUpdate.processFibUpdateError(fibUpdateError);
+        // Mark failed routes as dirty in route state
+        routeState_.processFibUpdateError(fibUpdateError);
+      } catch (std::exception const& e) {
+        client_.reset();
+        fb303::fbData->addStatValue(
+            "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
+        LOG(ERROR) << "Failed to add/update mpls routes in FIB. Error: "
+                   << folly::exceptionStr(e);
+        // Mark routes we failed to update as dirty for retry. Also declare
+        // these routes as deleted to client, because we failed to update them
+        // Next retry should restore, but meanwhile clients can take appropriate
+        // action because FIB state is unclear e.g. withdraw route from KvStore
+        for (auto& mplsRoute : routeUpdate.mplsRoutesToUpdate) {
+          routeState_.dirtyLabels.emplace(mplsRoute.label);
+          routeUpdate.mplsRoutesToDelete.emplace_back(mplsRoute.label);
+        }
+
+        // We don't want to advertise failed route add/updates
+        routeUpdate.mplsRoutesToUpdate.clear();
+      }
+    }
+  }
+
+  // Log statistics
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - startTime);
+  LOG(INFO) << fmt::format(
+      "It took {} ms to update routes in FIB", elapsedTime.count());
+  fb303::fbData->addStatValue(
+      "fib.route_programming.time_ms", elapsedTime.count(), fb303::AVG);
+  fb303::fbData->addStatValue(
+      "fib.num_of_route_updates", routeUpdate.size(), fb303::SUM);
+
+  // Publish the route update. Clear MPLS routes if segment routing is disabled
+  routeUpdate.type = DecisionRouteUpdate::INCREMENTAL;
+  if (not enableSegmentRouting_) {
+    routeUpdate.mplsRoutesToUpdate.clear();
+    routeUpdate.mplsRoutesToDelete.clear();
+  }
+  fibRouteUpdatesQueue_.push(std::move(routeUpdate));
 }
 
-bool
-Fib::syncRouteDb() {
+void
+Fib::syncRoutes() {
+  SCOPE_EXIT {
+    updateRoutesSemaphore_.signal(); // Release when this function returns
+  };
+  updateRoutesSemaphore_.wait();
+
+  // Create set of routes to sync in thrift format
   const auto& unicastRoutes =
       createUnicastRoutesFromMap(routeState_.unicastRoutes);
   const auto& mplsRoutes = createMplsRoutesFromMap(routeState_.mplsRoutes);
+  auto startTime = std::chrono::steady_clock::now();
+  fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
+
+  // Create DecisionRouteUpdate that'll be published after successful sync. On
+  // partial failures we remove routes from this update.
+  auto fibRouteUpdates = routeState_.createUpdate();
 
   // update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
 
-  // In dry run we just print the routes. No real action
+  //
+  // Sync Unicast routes
+  //
+  LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes in FIB";
+  printUnicastRoutesAddUpdate(unicastRoutes);
   if (dryrun_) {
-    LOG(INFO) << "Skipping programming of routes in dryrun ... ";
-
-    LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes";
-    printUnicastRoutesAddUpdate(unicastRoutes);
-
-    LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes";
-    printMplsRoutesAddUpdate(mplsRoutes);
-
-    return true;
-  }
-
-  try {
-    LOG(INFO) << "Syncing routes in FIB";
-    auto startTime = std::chrono::steady_clock::now();
-
-    createFibClient(evb_, socket_, client_, thriftPort_);
-    fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
-
-    DecisionRouteUpdate syncedRoutes;
-    // Set type as FULL_SYNC for first Fib sync after restarts.
-    // Followup Fib sync are triggered by either route program failures or reset
-    // of connection with switch agent.
-    syncedRoutes.type = (not routeState_.isInitialSynced)
-        ? DecisionRouteUpdate::FULL_SYNC
-        : DecisionRouteUpdate::FULL_SYNC_AFTER_FIB_FAILURES;
-    // Sync unicast routes
-    LOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes in FIB";
-    client_->sync_syncFib(kFibId_, unicastRoutes);
-    syncedRoutes.unicastRoutesToUpdate = routeState_.unicastRoutes;
-    printUnicastRoutesAddUpdate(unicastRoutes);
-
-    // Sync mpls routes
-    if (enableSegmentRouting_) {
-      LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes in FIB";
-      client_->sync_syncMplsFib(kFibId_, mplsRoutes);
-      std::transform(
-          routeState_.mplsRoutes.cbegin(),
-          routeState_.mplsRoutes.cend(),
-          std::back_inserter(syncedRoutes.mplsRoutesToUpdate),
-          [](auto& iter) { return iter.second; });
-      printMplsRoutesAddUpdate(mplsRoutes);
+    LOG(INFO) << "Skipping programming of unicast routes in dryrun ... ";
+  } else {
+    try {
+      createFibClient(evb_, socket_, client_, thriftPort_);
+      client_->sync_syncFib(kFibId_, unicastRoutes);
+    } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
+      logFibUpdateError(fibUpdateError);
+      // Remove failed routes from fibRouteUpdates
+      fibRouteUpdates.processFibUpdateError(fibUpdateError);
+      // Mark failed routes as dirty in route state
+      routeState_.processFibUpdateError(fibUpdateError);
+    } catch (std::exception const& e) {
+      client_.reset();
+      fb303::fbData->addStatValue(
+          "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
+      LOG(ERROR) << "Failed to sync unicast routes in FIB. Error: "
+                 << folly::exceptionStr(e);
+      return;
     }
-    // Send synced routes into fibRouteUpdatesQueue_.
-    // NOTE: even empty Fib sync will be published to fibRouteUpdatesQueue_.
-    fibRouteUpdatesQueue_.push(std::move(syncedRoutes));
-
-    const auto elapsedTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - startTime);
-    LOG(INFO) << "It took " << elapsedTime.count()
-              << "ms to sync routes in FIB";
-    fb303::fbData->addStatValue(
-        "fib.route_sync.time_ms", elapsedTime.count(), fb303::AVG);
-    routeState_.isInitialSynced = true;
-    return true;
-  } catch (std::exception const& e) {
-    fb303::fbData->addStatValue("fib.thrift.failure.sync_fib", 1, fb303::COUNT);
-    LOG(ERROR) << "Failed to sync routes in FIB. Error: "
-               << folly::exceptionStr(e);
-    client_.reset();
-    return false;
   }
+
+  //
+  // Sync Mpls routes
+  //
+  if (enableSegmentRouting_) {
+    LOG(INFO) << "Syncing " << mplsRoutes.size() << " mpls routes in FIB";
+    printMplsRoutesAddUpdate(mplsRoutes);
+    if (dryrun_) {
+      LOG(INFO) << "Skipping programming of mpls routes in dryrun ...";
+    } else {
+      try {
+        createFibClient(evb_, socket_, client_, thriftPort_);
+        client_->sync_syncMplsFib(kFibId_, mplsRoutes);
+      } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
+        logFibUpdateError(fibUpdateError);
+        // Remove failed routes from fibRouteUpdates
+        fibRouteUpdates.processFibUpdateError(fibUpdateError);
+        // Mark failed routes as dirty in route state
+        routeState_.processFibUpdateError(fibUpdateError);
+      } catch (std::exception const& e) {
+        client_.reset();
+        fb303::fbData->addStatValue(
+            "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
+        LOG(ERROR) << "Failed to sync unicast routes in FIB. Error: "
+                   << folly::exceptionStr(e);
+        return;
+      }
+    } // else
+  } // if enableSegmentRouting_
+
+  // Some statistics
+  // NOTE: We set counter for sync time as it is one time event. We report the
+  // value of last sync duration
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - startTime);
+  LOG(INFO) << "It took " << elapsedTime.count() << "ms to sync routes in FIB";
+  fb303::fbData->setCounter("fib.route_sync.time_ms", elapsedTime.count());
+
+  // Publish route update. We'll do so only if sync is successful for both MPLS
+  // and Unicast routes.
+  // NOTE: even empty Fib sync will be published to fibRouteUpdatesQueue_.
+  if (not enableSegmentRouting_) {
+    fibRouteUpdates.mplsRoutesToUpdate.clear();
+    fibRouteUpdates.mplsRoutesToDelete.clear();
+  }
+  fibRouteUpdatesQueue_.push(std::move(fibRouteUpdates));
+
+  // Transition state on successful sync. Also record our first sync
+  transitionRouteState(RouteState::FIB_SYNCED);
+  routeState_.isInitialSynced = true;
 }
 
 void
-Fib::syncRouteDbDebounced() {
+Fib::scheduleRetryRoutesTimer() {
   if (not retryRoutesTimer_->isScheduled()) {
     // Schedule an immediate run if previous one is not scheduled
     retryRoutesTimer_->scheduleTimeout(std::chrono::milliseconds(0));
@@ -693,7 +872,7 @@ Fib::keepAliveCheck() {
     transitionRouteState(RouteState::FIB_CONNECTED);
     retryRoutesExpBackoff_.reportSuccess();
     retryRoutesExpBackoff_.reportSuccess();
-    syncRouteDbDebounced();
+    scheduleRetryRoutesTimer();
   }
   latestAliveSince_ = aliveSince;
 }
@@ -824,7 +1003,6 @@ Fib::transitionRouteState(RouteState::Event event) {
                 */
                RouteState::SYNCING, // on Event=RIB_UPDATE
                RouteState::AWAITING, // on Event=FIB_CONNECTED,
-               RouteState::AWAITING, // on Event=FIB_ERROR
                std::nullopt // on Event=FIB_SYNCED
            },
            {
@@ -833,7 +1011,6 @@ Fib::transitionRouteState(RouteState::Event event) {
                 */
                RouteState::SYNCING, // on Event=RIB_UPDATE
                RouteState::SYNCING, // on Event=FIB_CONNECTED,
-               RouteState::SYNCING, // on Event=FIB_ERROR
                RouteState::SYNCED // on Event=FIB_SYNCED
            },
            {
@@ -842,7 +1019,6 @@ Fib::transitionRouteState(RouteState::Event event) {
                 */
                RouteState::SYNCED, // on Event=RIB_UPDATE
                RouteState::SYNCING, // on Event=FIB_CONNECTED,
-               RouteState::SYNCING, // on Event=FIB_ERROR
                std::nullopt // on Event=FIB_SYNCED
            }}};
   const auto prevState = routeState_.state;

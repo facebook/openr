@@ -11,9 +11,11 @@
 #include <vector>
 
 #include <folly/IPAddress.h>
+
 #include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
+#include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
@@ -31,31 +33,34 @@ struct DecisionRouteUpdate {
     // Default value.
     // [Not recommended] Producer and consumer have implicit signal indicating
     // route updates are incremental or from full sync.
+    // TODO FIXME: Remove Default. A route update must have determistic type
     DEFAULT,
     // Incremental route updates.
     INCREMENTAL,
     // Full-sync route updates after openr (re)starts.
     FULL_SYNC,
-    // Full-sync route udpates produced by Fib triggered by either route program
-    // failures or reset of connection with switch agent. This is requied by Fib
-    // monitors to distinguish from full-sync route updates after openr
-    // (re)starts.
-    FULL_SYNC_AFTER_FIB_FAILURES
   };
 
   Type type;
   std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutesToUpdate;
   std::vector<folly::CIDRNetwork> unicastRoutesToDelete;
+  // TODO: Establish parity with `unicastRoutesToUpdate`
   std::vector<RibMplsEntry> mplsRoutesToUpdate;
   std::vector<int32_t> mplsRoutesToDelete;
   std::optional<thrift::PerfEvents> perfEvents = std::nullopt;
 
   bool
-  empty() {
+  empty() const {
     return (
         unicastRoutesToUpdate.empty() and unicastRoutesToDelete.empty() and
         mplsRoutesToUpdate.empty() and mplsRoutesToDelete.empty());
+  }
+
+  size_t
+  size() const {
+    return unicastRoutesToUpdate.size() + unicastRoutesToDelete.size() +
+        mplsRoutesToUpdate.size() + mplsRoutesToDelete.size();
   }
 
   void
@@ -114,6 +119,45 @@ struct DecisionRouteUpdate {
     *deltaDetail.mplsRoutesToDelete_ref() = mplsRoutesToDelete;
 
     return deltaDetail;
+  }
+
+  /**
+   * Process FIB update error. It removes all the entries to add/update from
+   * this update that failed to program.
+   *
+   * NOTE: We don't remove all the entries that failed to remove, rather we
+   * keep them as removed. It is better to inform that route is removed instead
+   * of not informing that it is not removed.
+   */
+  void
+  processFibUpdateError(thrift::PlatformFibUpdateError const& fibError) {
+    // Delete unicast routes that failed to program. Also mark them as deleted
+    for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes_ref()) {
+      for (auto& prefix : prefixes) {
+        auto network = toIPNetwork(prefix);
+        unicastRoutesToUpdate.erase(network);
+        unicastRoutesToDelete.emplace_back(network);
+      }
+    }
+
+    // Delete mpls routes that failed to program. Also mark them as deleted
+    // TODO has: Improve the complexity by changing data-structure of
+    // mplsRoutesToUpdate
+    std::unordered_set<int32_t> failedMplsRouteToUpdate{
+        fibError.failedAddUpdateMplsLabels_ref()->begin(),
+        fibError.failedAddUpdateMplsLabels_ref()->end()};
+    for (auto it = mplsRoutesToUpdate.begin();
+         it != mplsRoutesToUpdate.end();) {
+      if (failedMplsRouteToUpdate.count(it->label)) {
+        it = mplsRoutesToUpdate.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    mplsRoutesToDelete.insert(
+        mplsRoutesToDelete.end(),
+        failedMplsRouteToUpdate.begin(),
+        failedMplsRouteToUpdate.end());
   }
 };
 
