@@ -1088,8 +1088,9 @@ def sprint_pub_update(global_publication_db, key, value):
     return printing.render_horizontal_table(rows, tablefmt="plain") if rows else ""
 
 
-# pyre-fixme[9]: key has type `str`; used as `None`.
-def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = None):
+def update_global_prefix_db(
+    global_prefix_db: Dict, prefix_db: Dict, key: Optional[str] = None
+):
     """update the global prefix map with a single publication
 
     :param global_prefix_map map(node, set([str])): map of all prefixes
@@ -1175,8 +1176,7 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
 def sprint_prefixes_db_delta(
     global_prefixes_db: Dict,
     prefix_db: Dict,
-    # pyre-fixme[9]: key has type `str`; used as `None`.
-    key: str = None,
+    key: Optional[str] = None,
 ):
     """given serialzied prefixes for a single node, output the delta
         between those prefixes and global prefixes snapshot
@@ -1223,8 +1223,7 @@ def sprint_prefixes_db_delta(
 def dump_node_kvs(
     cli_opts: bunch.Bunch,
     host: str,
-    # pyre-fixme[9]: area has type `str`; used as `None`.
-    area: str = None,
+    area: Optional[str] = None,
 ) -> openr_types.Publication:
     pub = None
 
@@ -1278,18 +1277,14 @@ def build_routes(
     Build list of UnicastRoute using prefixes and nexthops list
     """
 
-    # pyre-fixme[9]: prefixes has type `List[str]`; used as
-    #  `List[network_types.IpPrefix]`.
-    prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+    prefixes_str = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
     nhs = build_nexthops(nexthops)
     return [
         network_types.UnicastRoute(
-            # pyre-fixme[6]: Expected `Optional[network_types.IpPrefix]` for 1st
-            #  param but got `str`.
             dest=p,
             nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs],
         )
-        for p in prefixes
+        for p in prefixes_str
     ]
 
 
@@ -1766,13 +1761,9 @@ def get_routes_json(
     host: str,
     client: int,
     routes: List[network_types.UnicastRoute],
-    # pyre-fixme[9]: prefixes has type `List[str]`; used as `None`.
-    prefixes: List[str] = None,
-    # pyre-fixme[9]: mpls_routes has type `List[network_types.MplsRoute]`; used as
-    #  `None`.
-    mpls_routes: List[network_types.MplsRoute] = None,
-    # pyre-fixme[9]: labels has type `List[int]`; used as `None`.
-    labels: List[int] = None,
+    prefixes: Optional[List[str]],
+    mpls_routes: Optional[List[network_types.MplsRoute]],
+    labels: Optional[List[int]],
 ):
     networks = None
     if prefixes:
@@ -1791,15 +1782,16 @@ def get_routes_json(
         # pyre-fixme[16]: `int` has no attribute `append`.
         data["routes"].append(route_data)
 
-    for label in mpls_routes:
-        dest = label.topLabel
-        if labels and dest not in labels:
-            continue
-        route_data = {
-            "dest": dest,
-            "nexthops": [ip_nexthop_to_str(nh) for nh in label.nextHops],
-        }
-        data["mplsRoutes"].append(route_data)
+    if mpls_routes:
+        for label in mpls_routes:
+            dest = label.topLabel
+            if labels and dest not in labels:
+                continue
+            route_data = {
+                "dest": dest,
+                "nexthops": [ip_nexthop_to_str(nh) for nh in label.nextHops],
+            }
+            data["mplsRoutes"].append(route_data)
 
     return data
 
@@ -1829,8 +1821,7 @@ def get_routes(
 def print_spt_infos(
     spt_infos: openr_types.SptInfos,
     roots: List[str],
-    # pyre-fixme[9]: area has type `str`; used as `None`.
-    area: str = None,
+    area: Optional[str] = None,
 ) -> None:
     """
     print spanning tree information

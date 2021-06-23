@@ -148,9 +148,8 @@ class FloodCli(object):
         """dump the flooding-topology information"""
 
         if roots is not None:
-            # pyre-fixme[9]: roots has type `str`; used as `List[str]`.
-            roots = roots.split(",")
-        kvstore.FloodCmd(cli_opts).run(roots)
+            roots_split = roots.split(",")
+        kvstore.FloodCmd(cli_opts).run(roots_split)
 
 
 class KvCompareCli(object):

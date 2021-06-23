@@ -114,8 +114,9 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
             parse_func(container, value)
 
-    # pyre-fixme[9]: area has type `str`; used as `None`.
-    def get_node_to_ips(self, client: OpenrCtrl.Client, area: str = None) -> Dict:
+    def get_node_to_ips(
+        self, client: OpenrCtrl.Client, area: Optional[str] = None
+    ) -> Dict:
         """get the dict of all nodes to their IP in the network"""
 
         node_dict = {}
@@ -363,8 +364,7 @@ class KvKeyValsCmd(KvStoreCmdBase):
     def print_kvstore_values(
         self,
         resp: openr_types.Publication,
-        # pyre-fixme[9]: area has type `str`; used as `None`.
-        area: str = None,
+        area: Optional[str] = None,
     ) -> None:
         """print values from raw publication from KvStore"""
 
@@ -467,8 +467,7 @@ class KvNodesCmd(KvStoreCmdBase):
         connected_nodes: Set[str],
         prefix_keys: openr_types.Publication,
         host_id: str,
-        # pyre-fixme[9]: node_area has type `Dict[str, str]`; used as `None`.
-        node_area: Dict[str, str] = None,
+        node_area: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Print kvstore nodes information. Their loopback and reachability
@@ -804,8 +803,9 @@ class KvCompareCmd(KvStoreCmdBase):
             )
         )
 
-    # pyre-fixme[9]: area has type `str`; used as `None`.
-    def dump_nodes_kvs(self, nodes: set, all_nodes_to_ips: Dict, area: str = None):
+    def dump_nodes_kvs(
+        self, nodes: set, all_nodes_to_ips: Dict, area: Optional[str] = None
+    ):
         """get the kvs of a set of nodes"""
 
         kv_dict = {}
@@ -1218,8 +1218,7 @@ class KvAllocationsListCmd(KvStoreCmdBase):
         self,
         key: str,
         keyVals: openr_types.KeyVals,
-        # pyre-fixme[9]: area has type `str`; used as `None`.
-        area: str = None,
+        area: Optional[str] = None,
     ) -> None:
         if key not in keyVals:
             print("Static allocation is not set in KvStore")
