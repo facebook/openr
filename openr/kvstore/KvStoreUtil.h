@@ -10,11 +10,52 @@
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 namespace openr {
+
+class KvStoreFilters {
+ public:
+  // takes the list of comma separated key prefixes to match,
+  // and the list of originator IDs to match in the value
+  explicit KvStoreFilters(
+      std::vector<std::string> const& keyPrefix,
+      std::set<std::string> const& originatorIds);
+
+  // Check if key matches the filters
+  bool keyMatchAny(std::string const& key, thrift::Value const& value) const;
+
+  // Check if key matches all the filters
+  bool keyMatchAll(std::string const& key, thrift::Value const& value) const;
+
+  bool keyMatch(
+      std::string const& key,
+      thrift::Value const& value,
+      thrift::FilterOperator const& oper = thrift::FilterOperator::OR) const;
+
+  // return comma separeated string prefix
+  std::vector<std::string> getKeyPrefixes() const;
+
+  // return set of origninator IDs
+  std::set<std::string> getOriginatorIdList() const;
+
+  // print filters
+  std::string str() const;
+
+ private:
+  // list of string prefixes, empty list matches all keys
+  std::vector<std::string> keyPrefixList_{};
+
+  // set of node IDs to match, empty set matches all nodes
+  std::set<std::string> originatorIds_{};
+
+  // keyPrefix class to create RE2 set and to match keys
+  RegexSet keyRegexSet_;
+};
 
 // helper for deserialization
 template <typename ThriftType>
@@ -95,6 +136,45 @@ dumpAllWithThriftClientFromMultiple(
     const std::shared_ptr<folly::SSLContext> sslContext = nullptr,
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
+
+/*
+ * Static method to precess the key-values publication, attempt to merge it
+ in
+ * the existing map, and return a publication made out of the updated values.
+ *
+ * @param kvStore - key-value map with current key-values in KVStore
+ * @param keyVals - key-value map with key-values to merge in
+ * @param filters - optional filters, matching keys in keyVals will be
+                    merged in
+ *
+ * @return
+ *  - key-value map obtained by merging data; publication made out of
+ *    the updated values
+ */
+std::unordered_map<std::string, thrift::Value> mergeKeyValues(
+    std::unordered_map<std::string, thrift::Value>& kvStore,
+    std::unordered_map<std::string, thrift::Value> const& keyVals,
+    std::optional<KvStoreFilters> const& filters = std::nullopt);
+
+std::optional<openr::KvStoreFilters> getKvStoreFilters(
+    std::shared_ptr<const openr::Config> config);
+
+/*
+ * Compare two thrift::Values to figure out which value is better to
+ * use, it will compare following attributes in order
+ * <version>, <orginatorId>, <value>, <ttl-version>
+ *
+ * @param v1 - first thrift::Value to compare
+ * @param v2 - second thrift::Value to compare
+ *
+ * @return
+ *  - int that represents which value is better
+ *      1  if v1 is better
+ *     -1  if v2 is better
+ *      0  if equal
+ *     -2  if unknown (can happen if value is missing -- only hash is provided)
+ */
+int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
 } // namespace openr
 

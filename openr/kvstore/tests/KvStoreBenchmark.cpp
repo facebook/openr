@@ -20,6 +20,7 @@
 #include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
 namespace {
@@ -135,7 +136,7 @@ updateKvStore(
   suspender.dismiss(); // Start measuring benchmark time
 
   // Merge update with kvStore
-  KvStore::mergeKeyValues(kvStore, update);
+  mergeKeyValues(kvStore, update);
 }
 
 /**

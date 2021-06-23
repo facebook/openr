@@ -11,6 +11,7 @@
 
 #include <openr/common/OpenrClient.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStoreUtil.h>
 
 DEFINE_string(host, "::1", "Host to connect to");
 DEFINE_int32(port, openr::Constants::kOpenrCtrlPort, "OpenrCtrl server port");
@@ -65,7 +66,7 @@ main(int argc, char** argv) {
                 }
 
                 // Print updates
-                auto updatedKeyVals = openr::KvStore::mergeKeyValues(
+                auto updatedKeyVals = openr::mergeKeyValues(
                     areaKeyVals.at(pub.get_area()), *pub.keyVals_ref());
                 for (auto& [key, val] : updatedKeyVals) {
                   std::cout

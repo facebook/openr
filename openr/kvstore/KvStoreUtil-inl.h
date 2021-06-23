@@ -5,9 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/gen/Base.h>
 #include <openr/common/OpenrClient.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStore.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {
 
@@ -178,7 +180,7 @@ dumpAllWithThriftClientFromMultiple(
                        << folly::exceptionStr(result.exception());
           } else if (result.hasValue()) {
             auto keyVals = *result.value().keyVals_ref();
-            const auto deltaPub = KvStore::mergeKeyValues(merged, keyVals);
+            const auto deltaPub = mergeKeyValues(merged, keyVals);
 
             VLOG(3) << "Received kvstore publication with: " << keyVals.size()
                     << " key-vals. Incurred " << deltaPub.size()
