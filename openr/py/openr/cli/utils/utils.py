@@ -794,8 +794,7 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
 def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
     """convert nextHop from thrift instance into a dict in strings"""
     if nextHop is None:
-        # pyre-fixme[7]: Expected `Dict[str, typing.Any]` but got `None`.
-        return None
+        return {}
 
     def _update(next_hop_dict, nextHop):
         next_hop_dict.update(
@@ -1302,7 +1301,7 @@ def get_route_as_dict_in_str(
     Convert a routeDb into a dict representing routes in string format
     """
 
-    routes_dict = None
+    routes_dict = {}
     # Thrift object instances do not have hash support
     # Make custom stringified object so we can hash and diff
     # dict of prefixes(str) : nexthops(str)
@@ -1325,8 +1324,6 @@ def get_route_as_dict_in_str(
     else:
         assert 0, "Unknown route type %s" % route_type
 
-    # pyre-fixme[7]: Expected `Dict[str, str]` but got `Optional[Dict[typing.Any,
-    #  List[str]]]`.
     return routes_dict
 
 
@@ -1700,7 +1697,7 @@ def print_unicast_routes(
 
 
 def build_unicast_route(
-    route: object,
+    route: Union[network_types_py3.UnicastRoute, network_types.UnicastRoute],
     filter_for_networks: Optional[
         List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]
     ] = None,
@@ -1712,18 +1709,14 @@ def build_unicast_route(
         :param filter_for_networks: IP/Prefixes to filter.
         :param filter_exact_match: Indicate exact match or subnet match.
     """
-    # pyre-fixme[16]: `object` has no attribute `dest`.
     dest = ipnetwork.sprint_prefix(route.dest)
     if filter_for_networks:
         if filter_exact_match:
             if not ipaddress.ip_network(dest) in filter_for_networks:
-                # pyre-fixme[7]: Expected `Tuple[str, List[str]]` but got `None`.
-                return None
+                return ("", [])
         else:
             if not ipnetwork.contain_any_prefix(dest, filter_for_networks):
-                # pyre-fixme[7]: Expected `Tuple[str, List[str]]` but got `None`.
-                return None
-    # pyre-fixme[16]: `object` has no attribute `nextHops`.
+                return ("", [])
     nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
     return dest, nexthops
 

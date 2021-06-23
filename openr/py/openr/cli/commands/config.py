@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import Tuple
+from typing import Tuple, Optional
 
 import click
 import jsondiff
@@ -60,7 +60,7 @@ class ConfigCompareCmd(OpenrCtrlCmd):
 class ConfigStoreCmdBase(OpenrCtrlCmd):
     def getConfigWrapper(
         self, client: OpenrCtrl.Client, config_key: str
-    ) -> Tuple[str, str]:
+    ) -> Tuple[Optional[bytes], Optional[str]]:
         blob = None
         exception_str = None
         try:
@@ -68,8 +68,6 @@ class ConfigStoreCmdBase(OpenrCtrlCmd):
         except OpenrError as ex:
             exception_str = "Exception getting key for {}: {}".format(config_key, ex)
 
-        # pyre-fixme[7]: Expected `Tuple[str, str]` but got
-        #  `Tuple[typing.Optional[bytes], typing.Optional[str]]`.
         return (blob, exception_str)
 
 

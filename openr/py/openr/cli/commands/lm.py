@@ -7,7 +7,7 @@
 
 import sys
 from builtins import object
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Optional
 
 import click
 from openr.cli.utils import utils
@@ -89,7 +89,7 @@ class LMCmdBase(OpenrCtrlCmd):
 
     def check_link_overriden(
         self, links: openr_types.DumpLinksReply, interface: str, metric: int
-    ) -> bool:
+    ) -> Optional[bool]:
         """
         This function call will comapre the metricOverride in the following way:
         1) metricOverride NOT set -> return None;
@@ -97,7 +97,6 @@ class LMCmdBase(OpenrCtrlCmd):
         """
         metricOverride = links.interfaceDetails[interface].metricOverride
         if not metricOverride:
-            # pyre-fixme[7]: Expected `bool` but got `None`.
             return None
         return metricOverride == metric
 

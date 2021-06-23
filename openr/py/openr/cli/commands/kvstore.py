@@ -153,8 +153,8 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
     def get_area_id(self) -> str:
         if not self.area_feature:
-            # pyre-fixme[7]: Expected `str` but got `None`.
-            return None
+            print("Try to call get_area_id() without enabling area feature.")
+            sys.exit(1)
         if 1 != len(self.areas):
             print(f"Error: Must specify one of the areas: {self.areas}")
             sys.exit(1)

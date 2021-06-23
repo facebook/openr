@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Any, Callable, Dict, Set, Optional, Coroutine
+from typing import Any, Callable, Dict, Set, Optional
 
 import bunch
 from openr.clients.openr_client import get_openr_ctrl_client
@@ -35,7 +35,7 @@ class OpenrCtrlCmd(object):
         with get_openr_ctrl_client(self.host, self.cli_opts) as client:
             self._run(client, *args, **kwargs)
 
-    def _run(self, client: Any, *args, **kwargs) -> Optional[Coroutine]:
+    def _run(self, client: Any, *args, **kwargs) -> Any:
         """
         To be implemented by sub-command.
         @param: client - Client to connect to the Open/R server.

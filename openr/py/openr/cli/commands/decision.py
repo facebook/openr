@@ -455,7 +455,7 @@ class PathCmd(OpenrCtrlCmd):
 class DecisionValidateCmd(OpenrCtrlCmd):
     def _run(
         self, client: OpenrCtrl.Client, json=False, area: str = "", *args, **kwargs
-    ) -> None:
+    ) -> int:
         """Returns a status code. 0 = success, 1 = failure"""
         (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
             client, area
@@ -501,7 +501,6 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             json,
         )
 
-        # pyre-fixme[7]: Expected `None` but got `int`.
         return adjValidateRet or prefixValidateRet
 
     def get_dbs(self, client: OpenrCtrl.Client, area: str) -> Tuple[Dict, Dict, Dict]:
@@ -743,8 +742,6 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
             # TODO: Print routes in json
             raise NotImplementedError()
         else:
-            # pyre-fixme[6]: Expected `List[ctrl_types.ReceivedRouteDetail]` for 1st
-            #  param but got `List[ctrl_types.AdvertisedRouteDetail]`.
             self.render(routes, detailed)
 
     def fetch(
@@ -753,7 +750,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         prefixes: List[str],
         node: Optional[str],
         area: Optional[str],
-    ) -> List[ctrl_types.AdvertisedRouteDetail]:
+    ) -> List[ctrl_types.ReceivedRouteDetail]:
         """
         Fetch the requested data
         """
@@ -768,8 +765,6 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
             route_filter.areaName = area
 
         # Get routes
-        # pyre-fixme[7]: Expected `List[ctrl_types.AdvertisedRouteDetail]` but got
-        #  `List[ctrl_types.ReceivedRouteDetail]`.
         return client.getReceivedRoutesFiltered(route_filter)
 
     def render(
@@ -779,8 +774,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         Render received routes
         """
 
-        def key_fn(key: ctrl_types.NodeAndArea) -> Tuple[str]:
-            # pyre-fixme[7]: Expected `Tuple[str]` but got `Tuple[str, str]`.
+        def key_fn(key: ctrl_types.NodeAndArea) -> Tuple[str, str]:
             return (key.node, key.area)
 
         # pyre-fixme[6]: Expected

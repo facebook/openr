@@ -107,13 +107,11 @@ def ip_to_unicast_route(
 
 def mpls_to_mpls_route(
     label: int, nexthops: List[network_types.NextHopThrift]
-) -> network_types.UnicastRoute:
+) -> network_types.MplsRoute:
     """
     :param label: MPLS label
     :param nexthops: List of nexthops
     """
-
-    # pyre-fixme[7]: Expected `UnicastRoute` but got `MplsRoute`.
     return network_types.MplsRoute(topLabel=label, nextHops=nexthops)
 
 
@@ -185,12 +183,10 @@ def sprint_prefix_forwarding_type(forwarding_type):
 
 def sprint_prefix_forwarding_algorithm(
     forwarding_algo: openr_config_types.PrefixForwardingAlgorithm,
-) -> str:
+) -> Optional[str]:
     """
     :param forwarding_algorithm: openr_config_types.PrefixForwardingAlgorithm
     """
-
-    # pyre-fixme[7]: Expected `str` but got `Optional[str]`.
     return openr_config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
         forwarding_algo
     )
