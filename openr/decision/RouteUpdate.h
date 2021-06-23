@@ -30,18 +30,13 @@ namespace openr {
  */
 struct DecisionRouteUpdate {
   enum Type {
-    // Default value.
-    // [Not recommended] Producer and consumer have implicit signal indicating
-    // route updates are incremental or from full sync.
-    // TODO FIXME: Remove Default. A route update must have determistic type
-    DEFAULT,
     // Incremental route updates.
     INCREMENTAL,
     // Full-sync route updates after openr (re)starts.
     FULL_SYNC,
   };
 
-  Type type;
+  Type type{INCREMENTAL}; // Incremental route update is default behavior
   std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutesToUpdate;
   std::vector<folly::CIDRNetwork> unicastRoutesToDelete;
