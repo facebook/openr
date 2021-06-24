@@ -34,6 +34,14 @@ from thrift.protocol import TBinaryProtocol
 from thrift.transport import TSocket, TTransport
 
 
+PrintAdvertisedTypes = Union[
+    ctrl_types.AdvertisedRoute,
+    ctrl_types.ReceivedRoute,
+    ctrl_types.NodeAndArea,
+    network_types.PrefixType,
+]
+
+
 def yesno(question, skip_confirm=False):
     """
     Ask a yes/no question. No default, we want to avoid mistakes as
@@ -1426,6 +1434,18 @@ def prefixes_with_different_nexthops(
     return keys
 
 
+def _only_mpls_routes(
+    all_routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]]
+) -> List[network_types.MplsRoute]:
+    return [r for r in all_routes if isinstance(r, network_types.MplsRoute)]
+
+
+def _only_unicast_routes(
+    all_routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]]
+) -> List[network_types.UnicastRoute]:
+    return [r for r in all_routes if isinstance(r, network_types.UnicastRoute)]
+
+
 def compare_route_db(
     routes_a: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
     routes_b: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
@@ -1462,15 +1482,9 @@ def compare_route_db(
         caption = "Routes in {} but not in {}".format(*sources)
         if not quiet:
             if route_type == "unicast":
-                # pyre-fixme[6]: Expected `List[network_types.UnicastRoute]` for 2nd
-                #  param but got `List[Union[network_types.MplsRoute,
-                #  network_types.UnicastRoute]]`.
-                print_unicast_routes(caption, extra_routes_in_a)
+                print_unicast_routes(caption, _only_unicast_routes(extra_routes_in_a))
             elif route_type == "mpls":
-                # pyre-fixme[6]: Expected `List[network_types.MplsRoute]` for 2nd
-                #  param but got `List[Union[network_types.MplsRoute,
-                #  network_types.UnicastRoute]]`.
-                print_mpls_routes(caption, extra_routes_in_a)
+                print_mpls_routes(caption, _only_mpls_routes(extra_routes_in_a))
         else:
             error_msg.append(caption)
 
@@ -1478,15 +1492,9 @@ def compare_route_db(
         caption = "Routes in {} but not in {}".format(*reversed(sources))
         if not quiet:
             if route_type == "unicast":
-                # pyre-fixme[6]: Expected `List[network_types.UnicastRoute]` for 2nd
-                #  param but got `List[Union[network_types.MplsRoute,
-                #  network_types.UnicastRoute]]`.
-                print_unicast_routes(caption, extra_routes_in_b)
+                print_unicast_routes(caption, _only_unicast_routes(extra_routes_in_b))
             elif route_type == "mpls":
-                # pyre-fixme[6]: Expected `List[network_types.MplsRoute]` for 2nd
-                #  param but got `List[Union[network_types.MplsRoute,
-                #  network_types.UnicastRoute]]`.
-                print_mpls_routes(caption, extra_routes_in_b)
+                print_mpls_routes(caption, _only_mpls_routes(extra_routes_in_b))
         else:
             error_msg.append(caption)
 
@@ -1595,21 +1603,27 @@ def validate_route_nexthops(routes, interfaces, sources, quiet=False):
     return False, error_msg
 
 
-def mpls_action_to_str(mpls_action: network_types.MplsAction) -> str:
+def mpls_action_to_str(
+    mpls_action: Union[network_types.MplsAction, network_types_py3.MplsAction]
+) -> str:
     """
     Convert Network.MplsAction to string representation
     """
 
-    action_str = network_types.MplsActionCode._VALUES_TO_NAMES.get(
-        mpls_action.action, ""
-    )
+    if isinstance(mpls_action, network_types.MplsAction):
+        action_str = network_types.MplsActionCode._VALUES_TO_NAMES.get(
+            mpls_action.action, ""
+        )
+    else:
+        action_str = mpls_action.action.name
+
     label_str = ""
     if mpls_action.swapLabel is not None:
         label_str = f" {mpls_action.swapLabel}"
-    if mpls_action.pushLabels is not None:
-        # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
-        label_str = f" {'/'.join(str(l) for l in mpls_action.pushLabels)}"
-    return "mpls {}{}".format(action_str, label_str)
+    push_labels = mpls_action.pushLabels
+    if push_labels is not None:
+        label_str = f" {'/'.join(str(l) for l in push_labels)}"
+    return f"mpls {action_str}{label_str}"
 
 
 def ip_nexthop_to_str(
@@ -1629,13 +1643,10 @@ def ip_nexthop_to_str(
         ifName = ""
     addr_str = "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
 
-    mpls_action_str = (
-        # pyre-fixme[6]: Expected `MplsAction` for 1st param but got
-        #  `Optional[network_types.MplsAction]`.
-        " {}".format(mpls_action_to_str(nextHop.mplsAction))
-        if nextHop.mplsAction is not None
-        else ""
-    )
+    mpls_action_str = " "
+    mpls_action = nextHop.mplsAction
+    if mpls_action:
+        mpls_action_str += mpls_action_to_str(mpls_action)
 
     # NOTE: Default weight=0 is in-fact weight=1
     weight = f" weight {1 if nextHop.weight == 0 else nextHop.weight}"
@@ -1643,7 +1654,7 @@ def ip_nexthop_to_str(
     # always put addr_str at head
     # this is consumed by downstream tooling in --json options
     # TODO remove hard dependency on json output format in fbossdeploy/fcr
-    return "{}{}{}".format(addr_str, mpls_action_str, weight)
+    return f"{addr_str}{mpls_action_str}{weight}"
 
 
 def print_unicast_routes(
@@ -1945,7 +1956,7 @@ def print_route_details(
     routes: List[
         Union[ctrl_types.AdvertisedRouteDetail, ctrl_types.ReceivedRouteDetail]
     ],
-    key_to_str_fn: Callable[[network_types.PrefixType], Tuple[str]],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
     detailed: bool,
 ) -> None:
     """
@@ -1969,11 +1980,7 @@ def print_route_details(
     print_route_header(rows, detailed)
 
     for route_detail in routes:
-        # pyre-fixme[6]: Expected `PrefixType` for 1st param but got
-        #  `Union[ctrl_types.NodeAndArea, network_types.PrefixType]`.
         best_key = key_to_str_fn(route_detail.bestKey)
-        # pyre-fixme[6]: Expected `PrefixType` for 1st param but got
-        #  `Union[ctrl_types.NodeAndArea, network_types.PrefixType]`.
         best_keys = {key_to_str_fn(k) for k in route_detail.bestKeys}
 
         # Create a title for the route
@@ -1984,11 +1991,7 @@ def print_route_details(
 
         # Add all entries associated with routes
         for route in route_detail.routes:
-            # pyre-fixme[6]: Expected `PrefixType` for 1st param but got
-            #  `Union[ctrl_types.NodeAndArea, network_types.PrefixType]`.
             markers = f"{'*' if key_to_str_fn(route.key) in best_keys else ''}{'@' if key_to_str_fn(route.key) == best_key else ' '}"
-            # pyre-fixme[6]: Expected `AdvertisedRoute` for 2nd param but got
-            #  `Union[ctrl_types.AdvertisedRoute, ctrl_types.ReceivedRoute]`.
             print_route_helper(rows, route, key_to_str_fn, detailed, markers)
         rows.append("")
 
@@ -1997,7 +2000,7 @@ def print_route_details(
 
 def print_advertised_routes(
     routes: List[ctrl_types.AdvertisedRoute],
-    key_to_str_fn: Callable[[network_types.PrefixType], Tuple[str]],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
     detailed: bool,
 ) -> None:
     """
@@ -2061,8 +2064,8 @@ def print_route_header(rows: List[str], detailed: bool):
 
 def print_route_helper(
     rows: List[str],
-    route: ctrl_types.AdvertisedRoute,
-    key_to_str_fn: Callable[[network_types.PrefixType], Tuple[str]],
+    route: Union[ctrl_types.AdvertisedRoute, ctrl_types.ReceivedRoute],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
     detailed: bool,
     markers: str,
 ) -> None:
@@ -2103,7 +2106,11 @@ def print_route_helper(
             rows.append(f"     Misc - prepend-label: {route.route.prependLabel}")
         rows.append(f"     Tags - {', '.join(route.route.tags)}")
         rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
-        if hasattr(route, "hitPolicy") and route.hitPolicy:
+        if (
+            isinstance(route, ctrl_types.AdvertisedRoute)
+            and hasattr(route, "hitPolicy")
+            and route.hitPolicy
+        ):
             rows.append(f"     Policy - {route.hitPolicy}")
     else:
         min_nexthop = (

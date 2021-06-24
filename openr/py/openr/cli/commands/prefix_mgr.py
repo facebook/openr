@@ -7,12 +7,22 @@
 from typing import List, Optional, Tuple
 
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.cli.utils.utils import print_route_details, print_advertised_routes
+from openr.cli.utils.utils import (
+    PrintAdvertisedTypes,
+    print_route_details,
+    print_advertised_routes,
+)
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig.ttypes import PrefixForwardingType, PrefixForwardingAlgorithm
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
+
+
+def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
+    if not isinstance(key, network_types.PrefixType):
+        return ("N/A",)
+    return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
 
 
 class PrefixMgrCmd(OpenrCtrlCmd):
@@ -178,15 +188,11 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         """
         Render advertised routes
         """
-
-        def key_fn(key: network_types.PrefixType) -> Tuple[str]:
-            return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
-
         # pyre-fixme[6]: Expected
         #  `List[typing.Union[ctrl_types.AdvertisedRouteDetail,
         #  ctrl_types.ReceivedRouteDetail]]` for 1st param but got
         #  `List[ctrl_types.AdvertisedRouteDetail]`.
-        print_route_details(routes, key_fn, detailed)
+        print_route_details(routes, prefix_type_key_fn, detailed)
 
 
 class OriginatedRoutesCmd(PrefixMgrCmd):
@@ -300,8 +306,4 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         """
         Render advertised routes
         """
-
-        def key_fn(key: network_types.PrefixType) -> Tuple[str]:
-            return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
-
-        print_advertised_routes(routes, key_fn, detailed)
+        print_advertised_routes(routes, prefix_type_key_fn, detailed)
