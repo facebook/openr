@@ -13,7 +13,7 @@ from openr.cli.commands import prefix_mgr
 from openr.OpenrCtrl import ttypes as ctrl_types
 
 
-class PrefixMgrCli(object):
+class PrefixMgrCli:
     def __init__(self):
         self.prefixmgr.add_command(WithdrawCli().withdraw)
         self.prefixmgr.add_command(AdvertiseCli().advertise)
@@ -39,10 +39,11 @@ class WithdrawCli(object):
         help="Type or client-ID associated with prefix.",
     )
     @click.pass_obj
-    def withdraw(cli_opts, prefixes: List[str], prefix_type: str):  # noqa: B902
+    def withdraw(
+        cli_opts: bunch.Bunch, prefixes: List[str], prefix_type: str  # noqa: B902
+    ):
         """Withdraw the prefixes being advertised from this node"""
 
-        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `WithdrawCli`.
         prefix_mgr.WithdrawCmd(cli_opts).run(prefixes, prefix_type)
 
 

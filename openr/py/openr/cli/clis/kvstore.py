@@ -254,8 +254,8 @@ class SnoopCli(object):
     )
     @click.pass_obj
     def snoop(
-        cli_opts, delta, ttl, regexes, duration, originator_ids, match_all
-    ):  # noqa: B902
+        cli_opts, delta, ttl, regexes, duration, originator_ids, match_all  # noqa: B902
+    ):
         """Snoop on KV-store updates in the network. We are primarily
         looking at the adj/prefix announcements.
         """
@@ -305,8 +305,7 @@ class SummaryCli(object):
         "either of the two valid flags: -a or --areas",
     )
     @click.pass_obj
-    def summary(cli_opts, area: List[str]) -> None:  # noqa: B902
+    def summary(cli_opts: Bunch, area: List[str]) -> None:  # noqa: B902
         """show the KV store summary for each area"""
 
-        # pyre-fixme[6]: Expected `Bunch` for 1st param but got `SummaryCli`.
         kvstore.SummaryCmd(cli_opts).run(set(area))
