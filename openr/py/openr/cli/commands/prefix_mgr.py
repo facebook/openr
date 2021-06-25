@@ -188,10 +188,6 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         """
         Render advertised routes
         """
-        # pyre-fixme[6]: Expected
-        #  `List[typing.Union[ctrl_types.AdvertisedRouteDetail,
-        #  ctrl_types.ReceivedRouteDetail]]` for 1st param but got
-        #  `List[ctrl_types.AdvertisedRouteDetail]`.
         print_route_details(routes, prefix_type_key_fn, detailed)
 
 
@@ -228,16 +224,12 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
                 f"     Metrics - path-preference: {prefix_entry.prefix.path_preference}"
                 f", source-preference: {prefix_entry.prefix.source_preference}"
             )
-            if prefix_entry.prefix.tags:
-                # pyre-fixme[6]: Expected `Iterable[str]` for 1st param but got
-                #  `Optional[typing.Set[str]]`.
-                rows.append(f"     Tags - {', '.join(prefix_entry.prefix.tags)}")
-            if prefix_entry.prefix.area_stack:
-                rows.append(
-                    # pyre-fixme[6]: Expected `Iterable[str]` for 1st param but got
-                    #  `Optional[List[str]]`.
-                    f"     Area Stack - {', '.join(prefix_entry.prefix.area_stack)}"
-                )
+            prefix_tags = prefix_entry.prefix.tags
+            if prefix_tags:
+                rows.append(f"     Tags - {', '.join(prefix_tags)}")
+            area_stack = prefix_entry.prefix.area_stack
+            if area_stack:
+                rows.append(f"     Area Stack - {', '.join(area_stack)}")
             if prefix_entry.prefix.minNexthop:
                 rows.append(f"     Min-nexthops: {prefix_entry.prefix.minNexthop}")
             rows.append(

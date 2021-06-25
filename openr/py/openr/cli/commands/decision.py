@@ -75,8 +75,7 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
 
         nodes = set()
         adj_dbs = client.getDecisionPrefixDbs()
-        # pyre-fixme[6]: Expected `Set[typing.Any]` for 3rd param but got `List[str]`.
-        self.iter_dbs(nodes, adj_dbs, ["all"], _parse)
+        self.iter_dbs(nodes, adj_dbs, {"all"}, _parse)
         return nodes
 
 
@@ -768,17 +767,17 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         return client.getReceivedRoutesFiltered(route_filter)
 
     def render(
-        self, routes: List[ctrl_types.ReceivedRouteDetail], detailed: bool
+        self,
+        routes: List[ctrl_types.ReceivedRouteDetail],
+        detailed: bool,
     ) -> None:
         """
         Render received routes
         """
 
-        def key_fn(key: ctrl_types.NodeAndArea) -> Tuple[str, str]:
+        def key_fn(key: utils.PrintAdvertisedTypes) -> Tuple[str, str]:
+            if not isinstance(key, ctrl_types.NodeAndArea):
+                return ("", "")
             return (key.node, key.area)
 
-        # pyre-fixme[6]: Expected
-        #  `List[typing.Union[ctrl_types.AdvertisedRouteDetail,
-        #  ctrl_types.ReceivedRouteDetail]]` for 1st param but got
-        #  `List[ctrl_types.ReceivedRouteDetail]`.
         utils.print_route_details(routes, key_fn, detailed)

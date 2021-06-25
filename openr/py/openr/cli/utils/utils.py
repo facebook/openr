@@ -16,7 +16,18 @@ from builtins import chr, input, map
 from collections import defaultdict
 from functools import lru_cache, partial
 from itertools import product
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, Callable, Sequence
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+    Callable,
+    Sequence,
+)
 
 import bunch
 import click
@@ -858,10 +869,10 @@ def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
 
 
 def print_routes_json(
-    route_db_dict,
+    route_db_dict: Dict,
     prefixes: Optional[List[str]] = None,
     labels: Optional[List[int]] = None,
-):
+) -> None:
     """
     Print json representation of routes. Takes prefixes and labels to
     filter
@@ -1953,10 +1964,10 @@ def is_color_output_supported() -> bool:
 
 
 def print_route_details(
-    routes: List[
+    routes: Iterable[
         Union[ctrl_types.AdvertisedRouteDetail, ctrl_types.ReceivedRouteDetail]
     ],
-    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
     detailed: bool,
 ) -> None:
     """
@@ -2065,7 +2076,7 @@ def print_route_header(rows: List[str], detailed: bool):
 def print_route_helper(
     rows: List[str],
     route: Union[ctrl_types.AdvertisedRoute, ctrl_types.ReceivedRoute],
-    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
     detailed: bool,
     markers: str,
 ) -> None:

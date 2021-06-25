@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 import click
 import jsondiff
@@ -179,8 +179,14 @@ class ConfigEraseCmd(ConfigStoreCmdBase):
 
 class ConfigStoreCmd(ConfigStoreCmdBase):
     def _run(
-        self, client: OpenrCtrl.Client, key: str, value: str, *args, **kwargs
+        self,
+        client: OpenrCtrl.Client,
+        key: str,
+        value: Union[bytes, str],
+        *args,
+        **kwargs
     ) -> None:
-        # pyre-fixme[6]: Expected `bytes` for 2nd param but got `str`.
+        if isinstance(value, str):
+            value = value.encode()
         client.setConfigKey(key, value)
         print("Key:{}, value:{} stored".format(key, value))
