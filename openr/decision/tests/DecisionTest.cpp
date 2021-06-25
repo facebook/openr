@@ -1887,13 +1887,7 @@ class SimpleRingTopologyFixture
     auto deltaRoutes = compDb.calculateUpdate(
         spfSolver->buildRouteDb(nodeName, areaLinkStates, prefixState).value());
 
-    int find = 0;
-    for (const auto& mplsRoute : deltaRoutes.mplsRoutesToUpdate) {
-      if (mplsRoute.label == mplsLabel) {
-        find++;
-      }
-    }
-    EXPECT_EQ(find, 1);
+    EXPECT_EQ(deltaRoutes.mplsRoutesToUpdate.count(mplsLabel), 1);
     EXPECT_EQ(deltaRoutes.mplsRoutesToDelete.size(), 0);
   }
 };
@@ -2380,8 +2374,8 @@ TEST_P(SimpleRingTopologyFixture, IpToMplsLabelPrepend) {
   std::unordered_set<thrift::NextHopThrift> staticNextHops{
       createNextHop(nh1Addr, std::nullopt, 0, phpAction),
       createNextHop(nh2Addr, std::nullopt, 0, phpAction)};
-  std::vector<RibMplsEntry> mplsRoutesToUpdate{
-      RibMplsEntry(prependLabel, staticNextHops)};
+  std::unordered_map<int32_t, RibMplsEntry> mplsRoutesToUpdate{
+      {prependLabel, RibMplsEntry(prependLabel, staticNextHops)}};
   spfSolver->updateStaticMplsRoutes(mplsRoutesToUpdate, {});
 
   // Get and verify next-hops. Both node1 & node4 will report static next-hops
@@ -2802,7 +2796,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   *nh.address_ref() = toBinaryAddress("1.1.1.1");
   nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
   spfSolver->updateStaticMplsRoutes(
-      {RibMplsEntry(staticMplsRouteLabel, {nh})}, {});
+      {{staticMplsRouteLabel, RibMplsEntry(staticMplsRouteLabel, {nh})}}, {});
 
   routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -2908,7 +2902,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   *nh.address_ref() = toBinaryAddress("1.1.1.1");
   nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
   spfSolver->updateStaticMplsRoutes(
-      {RibMplsEntry(staticMplsRouteLabel, {nh})}, {});
+      {{staticMplsRouteLabel, RibMplsEntry(staticMplsRouteLabel, {nh})}}, {});
 
   auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
@@ -4741,7 +4735,7 @@ class DecisionTestFixture : public ::testing::Test {
     for (const auto& mplsRoute : *publication.mplsRoutesToUpdate_ref()) {
       auto nhs = std::unordered_set<thrift::NextHopThrift>(
           mplsRoute.nextHops_ref()->begin(), mplsRoute.nextHops_ref()->end());
-      routeUpdate.mplsRoutesToUpdate.push_back(
+      routeUpdate.addMplsRouteToUpdate(
           RibMplsEntry(*mplsRoute.topLabel_ref(), std::move(nhs)));
     }
     for (const auto& label : *publication.mplsRoutesToDelete_ref()) {
@@ -5294,9 +5288,9 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routesDelta = routeUpdatesQueueReader.get().value();
   routesDelta.perfEvents.reset();
   EXPECT_EQ(1, routesDelta.mplsRoutesToUpdate.size());
-  EXPECT_EQ(32012, routesDelta.mplsRoutesToUpdate.at(0).label);
+  ASSERT_EQ(1, routesDelta.mplsRoutesToUpdate.count(32012));
   EXPECT_THAT(
-      routesDelta.mplsRoutesToUpdate.at(0).nexthops,
+      routesDelta.mplsRoutesToUpdate.at(32012).nexthops,
       testing::UnorderedElementsAre(nh, nh1));
 
   mplsRoutes = *decision->getDecisionRouteDb("").get()->mplsRoutes_ref();

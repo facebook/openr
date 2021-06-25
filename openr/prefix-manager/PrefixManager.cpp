@@ -1187,8 +1187,8 @@ PrefixManager::storeProgrammedRoutes(
   // Handle programmed MPLS routes.
   if (not fibRouteUpdates.mplsRoutesToUpdate.empty() or
       not fibRouteUpdates.mplsRoutesToDelete.empty()) {
-    for (auto& mplsEntry : fibRouteUpdates.mplsRoutesToUpdate) {
-      programmedLabels_.insert(mplsEntry.label);
+    for (auto& [label, _] : fibRouteUpdates.mplsRoutesToUpdate) {
+      programmedLabels_.insert(label);
     }
     for (auto& deletedLabel : fibRouteUpdates.mplsRoutesToDelete) {
       programmedLabels_.erase(deletedLabel);

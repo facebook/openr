@@ -117,11 +117,12 @@ class SpfSolver {
   //
 
   void updateStaticUnicastRoutes(
-      const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
+      const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+          unicastRoutesToUpdate,
       const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
 
   void updateStaticMplsRoutes(
-      const std::vector<RibMplsEntry>& mplsRoutesToUpdate,
+      const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutesToUpdate,
       const std::vector<int32_t>& mplsRoutesToDelete);
 
   // Build route database using given prefix and link states for a given

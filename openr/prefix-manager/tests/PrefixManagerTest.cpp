@@ -1045,7 +1045,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
     DecisionRouteUpdate fullSyncUpdates;
     fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
     fullSyncUpdates.mplsRoutesToUpdate = {
-        RibMplsEntry(label1), RibMplsEntry(label2)};
+        {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
     fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
 
     // Wait for update in KvStore
@@ -1088,7 +1088,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
     DecisionRouteUpdate updateRoutes;
     updateRoutes.type = DecisionRouteUpdate::INCREMENTAL;
     updateRoutes.mplsRoutesToUpdate = {
-        RibMplsEntry(label1), RibMplsEntry(label2)};
+        {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
     fibRouteUpdatesQueue.push(std::move(updateRoutes));
 
     // Wait for update in KvStore
@@ -1104,7 +1104,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
     // Full sync of programmed routes for label2 arrives.
     DecisionRouteUpdate fullSyncUpdates;
     fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
-    fullSyncUpdates.mplsRoutesToUpdate = {RibMplsEntry(label2)};
+    fullSyncUpdates.mplsRoutesToUpdate = {{label2, RibMplsEntry(label2)}};
     fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
 
     // PrefixManager receives prefix updates of  with prepend label.
@@ -1202,7 +1202,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
         // 3.1. Recived route programmed signal of Label1.
         DecisionRouteUpdate routeUpdates;
         routeUpdates.type = DecisionRouteUpdate::INCREMENTAL;
-        routeUpdates.mplsRoutesToUpdate = {RibMplsEntry(label1)};
+        routeUpdates.mplsRoutesToUpdate = {{label1, RibMplsEntry(label1)}};
         fibRouteUpdatesQueue.push(std::move(routeUpdates));
 
         // Wait for update in KvStore

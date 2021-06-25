@@ -191,7 +191,7 @@ class Fib final : public OpenrEventBase {
   struct RouteState {
     // Non modified copy of Unicast and MPLS routes received from Decision
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
-    std::unordered_map<uint32_t, RibMplsEntry> mplsRoutes;
+    std::unordered_map<int32_t, RibMplsEntry> mplsRoutes;
 
     /**
      * Set of route keys (prefixes & labels) that needs to be updated in HW. Two

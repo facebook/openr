@@ -364,8 +364,8 @@ Fib::RouteState::update(const DecisionRouteUpdate& routeUpdate) {
   }
 
   // Add mpls routes to update
-  for (const auto& route : routeUpdate.mplsRoutesToUpdate) {
-    mplsRoutes.insert_or_assign(route.label, route);
+  for (const auto& [label, route] : routeUpdate.mplsRoutesToUpdate) {
+    mplsRoutes.insert_or_assign(label, route);
   }
 
   // Delete unicast routes
@@ -391,9 +391,7 @@ Fib::RouteState::createUpdate() {
   if (state == SYNCING and not isInitialSynced) {
     update.type = DecisionRouteUpdate::FULL_SYNC;
     update.unicastRoutesToUpdate = unicastRoutes;
-    for (auto const& [_, mplsEntry] : mplsRoutes) {
-      update.mplsRoutesToUpdate.emplace_back(mplsEntry);
-    }
+    update.mplsRoutesToUpdate = mplsRoutes;
     return update;
   }
 
@@ -419,7 +417,7 @@ Fib::RouteState::createUpdate() {
     if (it == mplsRoutes.end()) { // Delete
       update.mplsRoutesToDelete.emplace_back(label);
     } else { // Add or Update
-      update.mplsRoutesToUpdate.emplace_back(it->second);
+      update.mplsRoutesToUpdate.emplace(label, it->second);
     }
   }
 
@@ -480,7 +478,7 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   }
 
   // Filter MPLS next-hops to unique action
-  for (auto& mplsRoute : routeUpdate.mplsRoutesToUpdate) {
+  for (auto& [_, mplsRoute] : routeUpdate.mplsRoutesToUpdate) {
     mplsRoute.filterNexthopsToUniqueAction();
   }
 
@@ -721,9 +719,9 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
         // these routes as deleted to client, because we failed to update them
         // Next retry should restore, but meanwhile clients can take appropriate
         // action because FIB state is unclear e.g. withdraw route from KvStore
-        for (auto& mplsRoute : routeUpdate.mplsRoutesToUpdate) {
-          routeState_.dirtyLabels.emplace(mplsRoute.label);
-          routeUpdate.mplsRoutesToDelete.emplace_back(mplsRoute.label);
+        for (auto& [label, _] : routeUpdate.mplsRoutesToUpdate) {
+          routeState_.dirtyLabels.emplace(label);
+          routeUpdate.mplsRoutesToDelete.emplace_back(label);
         }
 
         // We don't want to advertise failed route add/updates

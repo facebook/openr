@@ -36,13 +36,20 @@ struct DecisionRouteUpdate {
     FULL_SYNC,
   };
 
+  // Type of this route update. Client should reset state if type of received
+  // route update is FULL_SYNC
   Type type{INCREMENTAL}; // Incremental route update is default behavior
+
+  // Unicast routes
   std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutesToUpdate;
   std::vector<folly::CIDRNetwork> unicastRoutesToDelete;
-  // TODO: Establish parity with `unicastRoutesToUpdate`
-  std::vector<RibMplsEntry> mplsRoutesToUpdate;
+
+  // MPLS routes
+  std::unordered_map<int32_t, RibMplsEntry> mplsRoutesToUpdate;
   std::vector<int32_t> mplsRoutesToDelete;
+
+  // Optional perf events associated with this route update
   std::optional<thrift::PerfEvents> perfEvents = std::nullopt;
 
   bool
@@ -58,17 +65,28 @@ struct DecisionRouteUpdate {
         mplsRoutesToUpdate.size() + mplsRoutesToDelete.size();
   }
 
+  /**
+   * Add unicast route.
+   * NOTE: Parameter is by value that can be constructed from `const&` as well
+   * as rvalue. In case of later it'll ensure zero-copy.
+   */
   void
-  addRouteToUpdate(RibUnicastEntry const& route) {
-    CHECK(!unicastRoutesToUpdate.count(route.prefix));
-    unicastRoutesToUpdate.emplace(route.prefix, route);
+  addRouteToUpdate(RibUnicastEntry route) {
+    auto prefix = route.prefix; // NOTE: Intended copy
+    auto res = unicastRoutesToUpdate.emplace(prefix, std::move(route));
+    CHECK(res.second) << "Duplicate Unicast route update";
   }
 
+  /**
+   * Add mpls route.
+   * NOTE: Parameter is by value that can be constructed from `const&` as well
+   * as rvalue. In case of later it'll ensure zero-copy.
+   */
   void
-  addRouteToUpdate(RibUnicastEntry&& route) {
-    auto prefix = route.prefix;
-    CHECK(!unicastRoutesToUpdate.count(prefix));
-    unicastRoutesToUpdate.emplace(std::move(prefix), std::move(route));
+  addMplsRouteToUpdate(RibMplsEntry route) {
+    auto label = route.label; // NOTE: Intended copy
+    auto res = mplsRoutesToUpdate.emplace(label, std::move(route));
+    CHECK(res.second) << "Duplicate MPLS route update";
   }
 
   // TODO: rename this func
@@ -84,7 +102,7 @@ struct DecisionRouteUpdate {
       delta.unicastRoutesToDelete_ref()->emplace_back(toIpPrefix(route));
     }
     // mpls
-    for (const auto& route : mplsRoutesToUpdate) {
+    for (const auto& [_, route] : mplsRoutesToUpdate) {
       delta.mplsRoutesToUpdate_ref()->emplace_back(route.toThrift());
     }
     *delta.mplsRoutesToDelete_ref() = mplsRoutesToDelete;
@@ -107,7 +125,7 @@ struct DecisionRouteUpdate {
       deltaDetail.unicastRoutesToDelete_ref()->emplace_back(toIpPrefix(route));
     }
     // mpls
-    for (const auto& route : mplsRoutesToUpdate) {
+    for (const auto& [_, route] : mplsRoutesToUpdate) {
       deltaDetail.mplsRoutesToUpdate_ref()->emplace_back(
           route.toThriftDetail());
     }
@@ -136,23 +154,10 @@ struct DecisionRouteUpdate {
     }
 
     // Delete mpls routes that failed to program. Also mark them as deleted
-    // TODO has: Improve the complexity by changing data-structure of
-    // mplsRoutesToUpdate
-    std::unordered_set<int32_t> failedMplsRouteToUpdate{
-        fibError.failedAddUpdateMplsLabels_ref()->begin(),
-        fibError.failedAddUpdateMplsLabels_ref()->end()};
-    for (auto it = mplsRoutesToUpdate.begin();
-         it != mplsRoutesToUpdate.end();) {
-      if (failedMplsRouteToUpdate.count(it->label)) {
-        it = mplsRoutesToUpdate.erase(it);
-      } else {
-        ++it;
-      }
+    for (auto& label : *fibError.failedAddUpdateMplsLabels_ref()) {
+      mplsRoutesToUpdate.erase(label);
+      mplsRoutesToDelete.emplace_back(label);
     }
-    mplsRoutesToDelete.insert(
-        mplsRoutesToDelete.end(),
-        failedMplsRouteToUpdate.begin(),
-        failedMplsRouteToUpdate.end());
   }
 };
 

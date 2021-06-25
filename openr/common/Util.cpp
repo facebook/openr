@@ -917,7 +917,7 @@ createUnicastRoutesFromMap(
 
 std::vector<thrift::MplsRoute>
 createMplsRoutesFromMap(
-    const std::unordered_map<uint32_t, RibMplsEntry>& mplsRoutes) {
+    const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutes) {
   std::vector<thrift::MplsRoute> newRoutes;
   for (auto const& [_, route] : mplsRoutes) {
     newRoutes.emplace_back(route.toThrift());

@@ -32,17 +32,17 @@ DecisionRouteDb::calculateUpdate(DecisionRouteDb&& newDb) const {
   }
 
   // unicastRoutesToDelete
-  for (auto& [prefix, _] : unicastRoutes) {
+  for (auto const& [prefix, _] : unicastRoutes) {
     if (!newDb.unicastRoutes.count(prefix)) {
       delta.unicastRoutesToDelete.emplace_back(prefix);
     }
   }
 
   // mplsRoutesToUpdate
-  for (const auto& [label, entry] : newDb.mplsRoutes) {
+  for (auto& [label, entry] : newDb.mplsRoutes) {
     const auto& search = mplsRoutes.find(label);
     if (search == mplsRoutes.end() || search->second != entry) {
-      delta.mplsRoutesToUpdate.emplace_back(entry);
+      delta.addMplsRouteToUpdate(std::move(entry));
     }
   }
 
@@ -66,7 +66,7 @@ DecisionRouteDb::update(DecisionRouteUpdate const& update) {
   for (auto const& label : update.mplsRoutesToDelete) {
     mplsRoutes.erase(label);
   }
-  for (auto const& entry : update.mplsRoutesToUpdate) {
+  for (auto const& [_, entry] : update.mplsRoutesToUpdate) {
     mplsRoutes.insert_or_assign(entry.label, entry);
   }
 }
@@ -112,14 +112,14 @@ SpfSolver::~SpfSolver() = default;
 
 void
 SpfSolver::updateStaticUnicastRoutes(
-    const std::vector<RibUnicastEntry>& unicastRoutesToUpdate,
+    const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+        unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
   LOG_IF(INFO, unicastRoutesToUpdate.size())
       << "Adding/Updating " << unicastRoutesToUpdate.size()
       << " static unicast routes.";
-  for (const auto& ribUnicastEntry : unicastRoutesToUpdate) {
-    const auto& prefix = ribUnicastEntry.prefix;
+  for (const auto& [prefix, ribUnicastEntry] : unicastRoutesToUpdate) {
     staticUnicastRoutes_.insert_or_assign(prefix, ribUnicastEntry);
 
     VLOG(1) << "> " << folly::IPAddress::networkToString(prefix)
@@ -142,16 +142,16 @@ SpfSolver::updateStaticUnicastRoutes(
 
 void
 SpfSolver::updateStaticMplsRoutes(
-    const std::vector<RibMplsEntry>& mplsRoutesToUpdate,
+    const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutesToUpdate,
     const std::vector<int32_t>& mplsRoutesToDelete) {
   // Process MPLS routes to add or update
   LOG_IF(INFO, mplsRoutesToUpdate.size())
       << "Adding/Updating " << mplsRoutesToUpdate.size()
       << " static mpls routes.";
-  for (const auto& mplsRoute : mplsRoutesToUpdate) {
-    staticMplsRoutes_.insert_or_assign(mplsRoute.label, mplsRoute);
+  for (const auto& [label, mplsRoute] : mplsRoutesToUpdate) {
+    staticMplsRoutes_.insert_or_assign(label, mplsRoute);
 
-    VLOG(1) << "> " << mplsRoute.label
+    VLOG(1) << "> " << label
             << ", NextHopsCount = " << mplsRoute.nexthops.size();
     for (auto const& nh : mplsRoute.nexthops) {
       VLOG(2) << " via " << toString(nh);

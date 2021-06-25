@@ -298,6 +298,7 @@ checkEqualDecisionRouteUpdate(
   }
 
   if (lhs.unicastRoutesToUpdate != rhs.unicastRoutesToUpdate or
+      lhs.mplsRoutesToUpdate != rhs.mplsRoutesToUpdate or
       std::unordered_set(
           lhs.unicastRoutesToDelete.begin(), lhs.unicastRoutesToDelete.end()) !=
           std::unordered_set(
@@ -307,21 +308,8 @@ checkEqualDecisionRouteUpdate(
           lhs.mplsRoutesToDelete.begin(), lhs.mplsRoutesToDelete.end()) !=
           std::unordered_set(
               rhs.mplsRoutesToDelete.begin(), rhs.mplsRoutesToDelete.end())) {
-    LOG(INFO) << "unicast update/delete, or mpls delete, not the same.";
+    LOG(INFO) << "unicast/mpls update/delete not the same.";
     return false;
-  }
-  // check mplsRoutesToUpdate.
-  std::unordered_map<uint32_t, RibMplsEntry> lMplsRouteMap;
-  std::unordered_map<uint32_t, RibMplsEntry> rMplsRouteMap;
-  for (auto& mplsRoute : lhs.mplsRoutesToUpdate) {
-    lMplsRouteMap.insert({mplsRoute.label, mplsRoute});
-  }
-  for (auto& mplsRoute : rhs.mplsRoutesToUpdate) {
-    rMplsRouteMap.insert({mplsRoute.label, mplsRoute});
-  }
-  if (lMplsRouteMap != rMplsRouteMap) {
-    return false;
-    LOG(INFO) << "mpls route not the same.";
   }
   return lhs.type == rhs.type;
 }
@@ -998,10 +986,9 @@ TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
   DecisionRouteUpdate routeUpdate;
   routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(
+  routeUpdate.addMplsRouteToUpdate(
       RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(
-      RibMplsEntry(label2, {mpls_path1_2_2}));
+  routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_2}));
 
   routeUpdatesQueue.push(routeUpdate);
 
@@ -1050,9 +1037,9 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   const auto& tRoute3 = route3.toThrift();
 
   DecisionRouteUpdate routeUpdate;
-  routeUpdate.mplsRoutesToUpdate.emplace_back(std::move(route1));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(std::move(route2));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(std::move(route3));
+  routeUpdate.addMplsRouteToUpdate(std::move(route1));
+  routeUpdate.addMplsRouteToUpdate(std::move(route2));
+  routeUpdate.addMplsRouteToUpdate(std::move(route3));
   routeUpdatesQueue.push(routeUpdate);
 
   // wait for mpls
@@ -1358,7 +1345,7 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
   routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix2));
   auto mplsEntry = RibMplsEntry(label1, {mpls_path1_2_1});
-  routeUpdate.mplsRoutesToUpdate.emplace_back(mplsEntry);
+  routeUpdate.addMplsRouteToUpdate(mplsEntry);
   routeUpdate.mplsRoutesToDelete.emplace_back(label2);
   staticRouteUpdatesQueue.push(routeUpdate);
 
@@ -1367,7 +1354,7 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
   DecisionRouteUpdate syncedUpdate;
   syncedUpdate.type = DecisionRouteUpdate::INCREMENTAL;
   // Only updated MPLS routes are synced.
-  syncedUpdate.mplsRoutesToUpdate.emplace_back(mplsEntry);
+  syncedUpdate.addMplsRouteToUpdate(mplsEntry);
   EXPECT_TRUE(checkEqualDecisionRouteUpdate(
       syncedUpdate, fibRouteUpdatesQueueReader.get().value()));
 
@@ -1438,8 +1425,7 @@ TEST_F(
   DecisionRouteUpdate initialRoutes;
   initialRoutes.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-  initialRoutes.mplsRoutesToUpdate.emplace_back(
-      RibMplsEntry(label1, {mpls_path1_2_1}));
+  initialRoutes.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
   auto initialRouteDb = initialRoutes.toThrift();
   mockFibHandler_->addUnicastRoutes(
       kFibId_,
@@ -1464,7 +1450,7 @@ TEST_F(
 
   // 3. Add static MPLS routes into the queue.
   DecisionRouteUpdate staticRouteUpdate;
-  staticRouteUpdate.mplsRoutesToUpdate.emplace_back(
+  staticRouteUpdate.addMplsRouteToUpdate(
       RibMplsEntry(label2, {mpls_path1_2_2}));
   staticRouteUpdate.mplsRoutesToDelete.emplace_back(label3);
   staticRouteUpdatesQueue.push(staticRouteUpdate);
@@ -1515,10 +1501,8 @@ TEST_F(FibTestFixtureWaitOnDecision, SyncFibProgramming) {
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
   routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1}));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(
-      RibMplsEntry(label1, {mpls_path1_2_1}));
-  routeUpdate.mplsRoutesToUpdate.emplace_back(
-      RibMplsEntry(label2, {mpls_path1_2_1}));
+  routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
+  routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_1}));
   routeUpdatesQueue.push(routeUpdate);
 
   //
@@ -1649,7 +1633,7 @@ TEST_F(FibTestFixtureWaitOnDecision, SyncFibProgramming) {
     ASSERT_EQ(1, publication.unicastRoutesToUpdate.size());
     ASSERT_EQ(1, publication.mplsRoutesToUpdate.size());
     EXPECT_TRUE(publication.unicastRoutesToUpdate.count(toIPNetwork(prefix2)));
-    EXPECT_EQ(label2, publication.mplsRoutesToUpdate.at(0).label);
+    EXPECT_EQ(1, publication.mplsRoutesToUpdate.count(label2));
   }
 
   // Make sure there are no pending FIB publications (just for fun)
@@ -1688,8 +1672,7 @@ TEST_F(FibTestFixtureWaitOnDecision, IncrementalRouteProgramming) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label1, {mpls_path1_2_1}));
+    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get added successfully
@@ -1706,7 +1689,7 @@ TEST_F(FibTestFixtureWaitOnDecision, IncrementalRouteProgramming) {
     checkEqualDecisionRouteUpdate(routeUpdate, publication);
     EXPECT_EQ(2, publication.size());
     EXPECT_TRUE(publication.unicastRoutesToUpdate.count(toIPNetwork(prefix1)));
-    EXPECT_EQ(label1, publication.mplsRoutesToUpdate.at(0).label);
+    EXPECT_EQ(1, publication.mplsRoutesToUpdate.count(label1));
   }
 
   //
@@ -1720,8 +1703,7 @@ TEST_F(FibTestFixtureWaitOnDecision, IncrementalRouteProgramming) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label2, {mpls_path1_2_1}));
+    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they don't get programmed. Wait for exception for each type
@@ -1773,8 +1755,7 @@ TEST_F(FibTestFixtureWaitOnDecision, IncrementalRouteProgramming) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_2}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label1, {mpls_path1_2_2}));
+    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_2}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Wait for route programming to proceed. Let it repeat twice
@@ -1920,8 +1901,7 @@ TEST_F(FibTestFixtureWaitOnDecision, RouteProgrammingWithPersistentFailure) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label2, {mpls_path1_2_1}));
+    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they don't get programmed. Wait for exception for each type
@@ -1951,8 +1931,7 @@ TEST_F(FibTestFixtureWaitOnDecision, RouteProgrammingWithPersistentFailure) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-    routeUpdate.mplsRoutesToUpdate.emplace_back(
-        RibMplsEntry(label1, {mpls_path1_2_1}));
+    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get added successfully
@@ -2013,7 +1992,7 @@ TEST_F(FibTestFixtureWaitOnDecision, RouteProgrammingWithPersistentFailure) {
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
     EXPECT_EQ(2, publication.size()); // modifications
     EXPECT_TRUE(publication.unicastRoutesToUpdate.count(toIPNetwork(prefix2)));
-    EXPECT_EQ(label2, publication.mplsRoutesToUpdate.at(0).label);
+    EXPECT_EQ(1, publication.mplsRoutesToUpdate.count(label2));
   }
 }
 

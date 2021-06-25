@@ -422,7 +422,7 @@ std::vector<thrift::UnicastRoute> createUnicastRoutesFromMap(
     const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes);
 std::vector<thrift::MplsRoute> createMplsRoutesFromMap(
-    const std::unordered_map<uint32_t, RibMplsEntry>& mplsRoutes);
+    const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutes);
 
 std::string getNodeNameFromKey(const std::string& key);
 

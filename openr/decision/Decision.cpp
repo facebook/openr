@@ -510,27 +510,22 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
   // update static unicast routes
   if (routeUpdate.unicastRoutesToUpdate.size() or
       routeUpdate.unicastRoutesToDelete.size()) {
-    std::vector<RibUnicastEntry> unicastRoutesToUpdate{};
-    std::unordered_set<folly::CIDRNetwork> addedPrefixes{};
-    for (const auto& [prefix, ribUnicastEntry] :
-         routeUpdate.unicastRoutesToUpdate) {
-      unicastRoutesToUpdate.emplace_back(ribUnicastEntry);
-      addedPrefixes.emplace(prefix);
-    }
-
     // store as local storage
     spfSolver_->updateStaticUnicastRoutes(
-        unicastRoutesToUpdate, routeUpdate.unicastRoutesToDelete);
+        routeUpdate.unicastRoutesToUpdate, routeUpdate.unicastRoutesToDelete);
+
+    // Create set of changed prefixes
+    std::unordered_set<folly::CIDRNetwork> changedPrefixes{
+        routeUpdate.unicastRoutesToDelete.cbegin(),
+        routeUpdate.unicastRoutesToDelete.cend()};
+    for (const auto& [prefix, ribUnicastEntry] :
+         routeUpdate.unicastRoutesToUpdate) {
+      changedPrefixes.emplace(prefix);
+    }
 
     // only apply prefix updates, no full DB rebuild
-    // TODO: remove std::unordered_set usage
     pendingUpdates_.applyPrefixStateChange(
-        std::move(addedPrefixes), thrift::PrefixDatabase().perfEvents_ref());
-    pendingUpdates_.applyPrefixStateChange(
-        std::unordered_set<folly::CIDRNetwork>{
-            routeUpdate.unicastRoutesToDelete.cbegin(),
-            routeUpdate.unicastRoutesToDelete.cend()},
-        thrift::PrefixDatabase().perfEvents_ref());
+        std::move(changedPrefixes), thrift::PrefixDatabase().perfEvents_ref());
   }
 
   // update static MPLS routes
