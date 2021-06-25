@@ -17,7 +17,7 @@ from builtins import str
 from collections import defaultdict
 from collections.abc import Iterable
 from itertools import combinations
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set
 
 import bunch
 import hexdump
@@ -40,7 +40,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         self.area_feature: bool = False
         self.areas: Set = set()
 
-    def _init_area(self, client: Union[OpenrCtrl.Client, OpenrCtrlCppClient]):
+    def _init_area(self, client: OpenrCtrl.Client) -> None:
         # find out if area feature is supported
         # TODO: remove self.area_feature as it will be supported by default
         self.area_feature = True
@@ -48,8 +48,6 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         # get list of areas if area feature is supported.
         self.areas = set()
         if self.area_feature:
-            # pyre-fixme[6]: Expected `Client` for 1st param but got
-            #  `Union[OpenrCtrl.Client, OpenrCtrlCppClient]`.
             self.areas = utils.get_areas_list(client)
             if self.cli_opts.area != "":
                 if self.cli_opts.area in self.areas:
@@ -176,9 +174,7 @@ class KvPrefixesCmd(KvStoreCmdBase):
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        # pyre-fixme[6]: Expected `Dict[str, openr_types.Publication]` for 1st param
-        #  but got `Dict[None, openr_types.Publication]`.
-        self.print_prefix({None: resp}, nodes, json, prefix, client_type)
+        self.print_prefix({"": resp}, nodes, json, prefix, client_type)
 
     def print_prefix(
         self,
@@ -239,9 +235,7 @@ class KvKeysCmd(KvStoreCmdBase):
             prefix, {originator} if originator else None
         )
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        # pyre-fixme[6]: Expected `Dict[str, openr_types.Publication]` for 1st param
-        #  but got `Dict[None, openr_types.Publication]`.
-        self.print_kvstore_keys({None: resp}, ttl, json)
+        self.print_kvstore_keys({"": resp}, ttl, json)
 
     def print_kvstore_keys(
         self, resp: Dict[str, openr_types.Publication], ttl: bool, json: bool
@@ -273,9 +267,9 @@ class KvKeysCmd(KvStoreCmdBase):
             area_str = "N/A" if area is None else area
             for key, value in sorted(keyVals.items(), key=lambda x: x[0]):
                 # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
-                # pyre-fixme[6]: Expected `Sized` for 1st param but got
-                #  `Optional[bytes]`.
-                kv_size = 32 + len(key) + len(value.originatorId) + len(value.value)
+                bytes_value = value.value
+                bytes_len = len(bytes_value if bytes_value is not None else b"")
+                kv_size = 32 + len(key) + len(value.originatorId) + bytes_len
                 db_bytes += kv_size
 
                 hash_num = value.hash
@@ -563,9 +557,7 @@ class KvAdjCmd(KvStoreCmdBase):
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        # pyre-fixme[6]: Expected `Dict[str, openr_types.Publication]` for 1st param
-        #  but got `Dict[None, openr_types.Publication]`.
-        self.print_adj({None: publication}, nodes, bidir, json)
+        self.print_adj({"": publication}, nodes, bidir, json)
 
     def print_adj(
         self, publications: Dict[str, openr_types.Publication], nodes, bidir, json
@@ -826,9 +818,7 @@ class KvPeersCmd(KvStoreCmdBase):
         **kwargs,
     ) -> None:
         peers = client.getKvStorePeers()
-        # pyre-fixme[6]: Expected `Dict[str, typing.Any]` for 2nd param but got
-        #  `Dict[None, Dict[str, openr_types.PeerSpec]]`.
-        self.print_peers(client, {None: peers})
+        self.print_peers(client, {"": peers})
 
     def print_peers(self, client: OpenrCtrl.Client, peers_list: Dict[str, Any]) -> None:
         """print the Kv Store peers"""
@@ -1001,7 +991,7 @@ class SnoopCmd(KvStoreCmdBase):
         ttl: bool,
         regexes: Optional[List[str]],
         duration: int,
-        originator_ids: Optional[List[str]],
+        originator_ids: Optional[Set[str]],
         match_all: bool = True,
         *args,
         **kwargs,
@@ -1014,8 +1004,6 @@ class SnoopCmd(KvStoreCmdBase):
         kvDumpParams = openr_types_py3.KeyDumpParams(
             ignoreTtl=not ttl,
             keys=regexes,
-            # pyre-fixme[6]: Expected `Optional[typing.AbstractSet[str]]` for 3rd
-            #  param but got `Optional[List[str]]`.
             originatorIds=originator_ids,
             oper=openr_types_py3.FilterOperator.AND
             if match_all
@@ -1088,9 +1076,8 @@ class SnoopCmd(KvStoreCmdBase):
             if value.value is None:
                 print("Traversal List: {}".format(msg.nodeIds))
                 self.print_publication_delta(
-                    "Key: {}, ttl update".format(key),
-                    # pyre-fixme[6]: Expected `List[str]` for 2nd param but got `str`.
-                    "ttl: {}, ttlVersion: {}".format(value.ttl, value.ttlVersion),
+                    f"Key: {key}, ttl update",
+                    [f"ttl: {value.ttl}, ttlVersion: {value.ttlVersion}"],
                     timestamp=True,
                 )
                 continue
@@ -1331,9 +1318,9 @@ class AllocationsUnsetCmd(SetKeyCmd):
                 openr_types.StaticAllocation,
             )
         else:
-            # pyre-fixme[6]: Expected `Optional[Dict[str, network_types.IpPrefix]]`
-            #  for 1st param but got `Dict[str, str]`.
-            allocs = openr_types.StaticAllocation(nodePrefixes={node_name: ""})
+            allocs = openr_types.StaticAllocation(
+                nodePrefixes={node_name: network_types.IpPrefix()}
+            )
 
         # Return if there need no change
         if node_name not in allocs.nodePrefixes:
