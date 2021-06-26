@@ -161,6 +161,8 @@ void
 NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
   VLOG(2) << "Completed netlink request. seq=" << ack << ", retval=" << status;
   if (std::abs(status) != EEXIST && std::abs(status) != ESRCH && status != 0) {
+    LOG(ERROR) << "Netlink request error for seq=" << ack
+               << ", retval=" << status;
     fbData->addStatValue("netlink.requests.error", 1, fb303::SUM);
   } else {
     fbData->addStatValue("netlink.requests.success", 1, fb303::SUM);
