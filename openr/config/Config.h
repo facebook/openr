@@ -33,7 +33,7 @@ using PrefixAllocationParams = std::pair<folly::CIDRNetwork, uint8_t>;
 class AreaConfiguration {
  public:
   explicit AreaConfiguration(thrift::AreaConfig const& area)
-      : areaId_(area.get_area_id()), areaType_(area.get_area_type()) {
+      : areaId_(area.get_area_id()) {
     if (area.area_sr_node_label_ref().has_value()) {
       srNodeLabel_ = *area.area_sr_node_label_ref();
     }
@@ -82,7 +82,6 @@ class AreaConfiguration {
 
  private:
   const std::string areaId_;
-  const openr::thrift::AreaType areaType_;
   std::optional<openr::thrift::SegmentRoutingNodeLabel> srNodeLabel_{
       std::nullopt};
 

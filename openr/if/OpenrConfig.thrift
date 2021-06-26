@@ -503,7 +503,6 @@ struct SegmentRoutingConfig {
  * ```
  *  config = {
  *    area_id : "MyNetworkArea",
- *    area_type: POD,
  *    neighbor_regexes : [],
  *    include_interface_regexes : [],
  *    exclude_interface_regexes : [],
@@ -513,30 +512,8 @@ struct SegmentRoutingConfig {
  *
  */
 
-enum AreaType {
-  /* no specific area configured for backward compatibility */
-  DEFAULT = 1,
-
-  /* pod area */
-  POD = 2,
-
-  /* mesh area type */
-  MESH = 3,
-
-  /* spine area type */
-  SPINE = 4,
-}
-
 struct AreaConfig {
   1: string area_id;
-
-  /**
-   * Instead of looking for an area config based on area name,
-   * area config based on area type can be used. For example,
-   * segment label can allocate labels from area or default area
-   * if no mesh area is configured.
-   */
-  2: AreaType area_type = AreaType.DEFAULT;
   3: list<string> neighbor_regexes;
   4: list<string> include_interface_regexes;
   5: list<string> exclude_interface_regexes;
