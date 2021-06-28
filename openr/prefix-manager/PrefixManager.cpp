@@ -177,21 +177,14 @@ PrefixManager::PrefixManager(
         }
 
         // TODO: avoid decoding keys
-        folly::CIDRNetwork network;
-        if (enableNewPrefixFormat_) {
-          if (not PrefixKey::isPrefixKeyV2Str(prefixStr)) {
-            // ATTN: local prefixMgr will received previously advertised keys
-            // with old prefix key format. Ignore them.
-            LOG(INFO) << "Skip processing old format of prefix key: "
-                      << prefixStr;
-            return;
-          }
-          auto prefixKeyV2 = PrefixKey::fromStrV2(prefixStr);
-          network = prefixKeyV2->getCIDRNetwork();
-        } else {
-          auto prefixKey = PrefixKey::fromStr(prefixStr);
-          network = prefixKey->getCIDRNetwork();
+        auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
+        if (maybePrefixKey.hasError()) {
+          // this is bad format of key.
+          LOG(ERROR) << "Unable to parse prefix key: " << prefixStr
+                     << ". Skipping.";
+          return;
         }
+        const auto network = maybePrefixKey->getCIDRNetwork();
 
         const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             *val.value().value_ref(), serializer_);
@@ -224,19 +217,14 @@ PrefixManager::PrefixManager(
     folly::small_vector<folly::CIDRNetwork> changed;
     for (auto const& [prefixStr, _] : result.value()) {
       // TODO: avoid decoding keys
-      folly::CIDRNetwork network;
-      if (enableNewPrefixFormat_) {
-        if (not PrefixKey::isPrefixKeyV2Str(prefixStr)) {
-          // ATTN: local prefixMgr will received previously advertised keys
-          // with old prefix key format. Ignore them.
-          continue;
-        }
-        auto prefixKeyV2 = PrefixKey::fromStrV2(prefixStr);
-        network = prefixKeyV2->getCIDRNetwork();
-      } else {
-        auto prefixKey = PrefixKey::fromStr(prefixStr);
-        network = prefixKey->getCIDRNetwork();
+      auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
+      if (maybePrefixKey.hasError()) {
+        // this is bad format of key.
+        LOG(ERROR) << "Unable to parse prefix key: " << prefixStr
+                   << ". Skipping.";
+        continue;
       }
+      const auto network = maybePrefixKey->getCIDRNetwork();
 
       // populate keysInKvStore_ collection to make sure we can find
       // key when clear key from `KvStore`
@@ -417,12 +405,16 @@ PrefixManager::deleteKvStoreKeyHelper(
 
   // TODO: see if we can avoid encoding/decoding of string
   for (const auto& prefixStr : deletedKeys) {
-    auto prefixKey = PrefixKey::isPrefixKeyV2Str(prefixStr)
-        ? PrefixKey::fromStrV2(prefixStr)
-        : PrefixKey::fromStr(prefixStr);
-    CHECK(prefixKey.hasValue());
-    const auto network = prefixKey->getCIDRNetwork();
-    const auto area = prefixKey->getPrefixArea();
+    // TODO: add multi-area support for prefixStr instead of use default area
+    auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
+    if (maybePrefixKey.hasError()) {
+      // this is bad format of key.
+      LOG(ERROR) << "Unable to parse prefix key: " << prefixStr
+                 << ". Skipping.";
+      continue;
+    }
+    const auto network = maybePrefixKey->getCIDRNetwork();
+    const auto area = maybePrefixKey->getPrefixArea();
 
     thrift::PrefixEntry entry;
     entry.prefix_ref() = toIpPrefix(network);

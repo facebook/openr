@@ -78,46 +78,37 @@ PrefixKey::isPrefixKeyV2Str(const std::string& key) {
 }
 
 folly::Expected<PrefixKey, std::string>
-PrefixKey::fromStr(const std::string& key) {
+PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
+  bool isV2PrefixKey{false};
   int plen{0};
   std::string area{};
   std::string node{};
-  std::string ipstr{};
-  folly::CIDRNetwork ipaddress;
-  auto patt = RE2::FullMatch(key, getPrefixRE2(), &node, &area, &ipstr, &plen);
-  if (!patt) {
-    return folly::makeUnexpected(fmt::format("Invalid key format {}", key));
-  }
-
-  try {
-    ipaddress =
-        folly::IPAddress::createNetwork(fmt::format("{}/{}", ipstr, plen));
-  } catch (const folly::IPAddressFormatException& e) {
-    LOG(INFO) << "Exception in converting to Prefix. " << e.what();
-    return folly::makeUnexpected(std::string("Invalid IP address in key"));
-  }
-  return PrefixKey(node, ipaddress, area, false);
-}
-
-folly::Expected<PrefixKey, std::string>
-PrefixKey::fromStrV2(const std::string& key, const std::string& area) {
-  int plen{0};
-  std::string node{};
   std::string ipStr{};
-  folly::CIDRNetwork ipAddress;
-  auto patt = RE2::FullMatch(key, getPrefixRE2V2(), &node, &ipStr, &plen);
-  if (!patt) {
-    return folly::makeUnexpected(fmt::format("Invalid key format {}", key));
+  folly::CIDRNetwork network;
+
+  auto patt = RE2::FullMatch(key, getPrefixRE2(), &node, &area, &ipStr, &plen);
+  if (not patt) {
+    auto pattV2 =
+        RE2::FullMatch(key, PrefixKey::getPrefixRE2V2(), &node, &ipStr, &plen);
+    if (not pattV2) {
+      return folly::makeUnexpected(fmt::format("Invalid key format {}", key));
+    }
+    // this is a v2 format prefix key
+    isV2PrefixKey = true;
   }
 
   try {
-    ipAddress =
+    network =
         folly::IPAddress::createNetwork(fmt::format("{}/{}", ipStr, plen));
   } catch (const folly::IPAddressFormatException& e) {
     LOG(INFO) << "Exception in converting to Prefix. " << e.what();
     return folly::makeUnexpected(std::string("Invalid IP address in key"));
   }
-  return PrefixKey(node, ipAddress, area, true);
+  return PrefixKey(
+      node,
+      network,
+      isV2PrefixKey ? areaIn : area, /* use passed in area for v2 format */
+      isV2PrefixKey);
 }
 
 } // namespace openr

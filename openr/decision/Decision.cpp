@@ -481,25 +481,14 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
           thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
     } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
       // prefixDb: delete keys starting with "prefix:"
-      // TODO: avoid decoding from string
-      std::string node{};
-      folly::CIDRNetwork network{};
-      auto isPrefixKeyV2 = PrefixKey::isPrefixKeyV2Str(key);
-      auto maybePrefixKey = isPrefixKeyV2 ? PrefixKey::fromStrV2(key, area)
-                                          : PrefixKey::fromStr(key);
+      auto maybePrefixKey = PrefixKey::fromStr(key, area);
       if (maybePrefixKey.hasError()) {
         // this is bad format of key.
         LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
         continue;
       }
-
-      node = maybePrefixKey.value().getNodeName();
-      network = maybePrefixKey.value().getCIDRNetwork();
-
-      // construct new prefix key with local publication area id
-      PrefixKey prefixKey(node, network, area, isPrefixKeyV2);
       pendingUpdates_.applyPrefixStateChange(
-          prefixState_.deletePrefix(prefixKey),
+          prefixState_.deletePrefix(maybePrefixKey.value()),
           thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
     }
   }

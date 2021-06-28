@@ -399,10 +399,6 @@ class PrefixKey {
 
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStr(
-      const std::string& key);
-
-  // construct PrefixKey object from a give key string
-  static folly::Expected<PrefixKey, std::string> fromStrV2(
       const std::string& key,
       const std::string& area = thrift::Types_constants::kDefaultArea());
 
