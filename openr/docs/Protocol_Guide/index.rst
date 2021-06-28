@@ -11,6 +11,7 @@ Here we explain in detail all components and protocols used within Open Routing
    Config
    Decision
    Fib
+   Initialization_Process
    KvStore
    LinkMonitor
    Messaging

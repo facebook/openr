@@ -39,8 +39,7 @@ For **Thrift Interface**, check out
 `Fib` programs routes via external FibAgent (HW specific, implements
 `FibService`) over thrift. Open/R offers `FibService` implementation for native
 routing with Linux. The binary is named as `platform_linux` and code is located
-at `openr/platform/` directory. For more detals, see
-[Platform.md](https://github.com/facebook/openr/blob/master/openr/docs/Protocol_Guide/Platform.md)
+at `openr/platform/` directory. For more detals, see [Platform.md](Platform.md)
 
 Thrift port to communicate with underlying platform can be configured via
 `fib_port` inside
