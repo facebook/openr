@@ -10,6 +10,7 @@ Here we explain operating and managing Open Routing
    CLI
    Configuration
    Control_Plane_IO
+   Draining
    Monitoring
    RoadMap
    RouteRepresentation
