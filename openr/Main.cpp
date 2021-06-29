@@ -324,8 +324,8 @@ main(int argc, char** argv) {
   // Start NetlinkFibHandler if specified
   if (config->isNetlinkFibHandlerEnabled()) {
     // Create ThreadManager for thrift services
-    thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
-        2 /* num of threads */, false /* task stats */);
+    thriftThreadMgr =
+        ThreadManager::newPriorityQueueThreadManager(2 /* num of threads */);
     thriftThreadMgr->setNamePrefix("ThriftCpuPool");
     thriftThreadMgr->start();
     CHECK(thriftThreadMgr);
