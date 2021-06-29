@@ -85,7 +85,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 //
 // validate mergeKeyValues
 //
-TEST(KvStore, mergeKeyValuesTest) {
+TEST(KvStoreUtil, mergeKeyValuesTest) {
   std::unordered_map<std::string, thrift::Value> oldStore;
   std::unordered_map<std::string, thrift::Value> myStore;
   std::unordered_map<std::string, thrift::Value> newStore;
@@ -234,7 +234,7 @@ TEST(KvStore, mergeKeyValuesTest) {
 //
 // Test compareValues method
 //
-TEST(KvStore, compareValuesTest) {
+TEST(KvStoreUtil, compareValuesTest) {
   auto refValue = createThriftValue(
       5, /* version */
       "node5", /* node id */
@@ -396,6 +396,73 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     ASSERT_TRUE(db.has_value());
     ASSERT_TRUE(db.value().empty());
   }
+}
+
+//
+// Test KvStoreFilters APIs
+//
+TEST(KvStoreUtil, KvStoreFiltersTest) {
+  // Nodes and keys that are in the matching list
+  const std::string node1{"node1"};
+  const std::string node2{"node2"};
+
+  const std::string node1_key1{fmt::format("prefix:{}:key1", node1)};
+  const auto node1_val1 = createThriftValue(
+      1, /* version */
+      node1, /* node id */
+      "dummyValue1");
+
+  const std::string node1_key2{fmt::format("prefix:{}:key2", node1)};
+  const auto node1_val2 = createThriftValue(
+      2, /* version */
+      node1, /* node id */
+      "dummyValue2");
+
+  const std::string node2_key1{fmt::format("prefix:{}:key1", node2)};
+  const auto node2_val1 = createThriftValue(
+      3, /* version */
+      node2, /* node id */
+      "dummyValue1");
+
+  // Only match the prefix from node1 and node2
+  std::vector<std::string> keys = {
+      fmt::format("prefix:{}:", node1), fmt::format("prefix:{}:", node2)};
+  std::set<std::string> nodes = {node1, node2};
+
+  // Node and key that are not in the matching list
+  const std::string node3{"node3"};
+  std::string node3_key1{fmt::format("prefix:{}:key1", node3)};
+  auto node3_val1 = createThriftValue(
+      1, /* version */
+      node3, /* node id */
+      "dummyValue1");
+
+  // 1. Test OR logic filter - keyMatchAny()
+  auto orFilter = KvStoreFilters(keys, nodes, thrift::FilterOperator::OR);
+  // Match key only
+  ASSERT_TRUE(orFilter.keyMatch(node1_key1, node3_val1));
+  ASSERT_TRUE(orFilter.keyMatch(node2_key1, node3_val1));
+  // Match node only
+  ASSERT_TRUE(orFilter.keyMatch(node3_key1, node1_val1));
+  ASSERT_TRUE(orFilter.keyMatch(node3_key1, node2_val1));
+  // Match both
+  ASSERT_TRUE(orFilter.keyMatch(node1_key1, node1_val2));
+  ASSERT_TRUE(orFilter.keyMatch(node1_key2, node1_val2));
+  ASSERT_TRUE(orFilter.keyMatch(node1_key2, node1_val1));
+  // No match
+  ASSERT_FALSE(orFilter.keyMatch(node3_key1, node3_val1));
+
+  // 2. Test AND logic filter - keyMatchAll()
+  auto andFilter = KvStoreFilters(keys, nodes, thrift::FilterOperator::AND);
+  // Return true if match all attributes
+  ASSERT_TRUE(andFilter.keyMatch(node1_key1, node1_val1));
+  ASSERT_TRUE(andFilter.keyMatch(node1_key1, node1_val2));
+  ASSERT_TRUE(andFilter.keyMatch(node1_key2, node1_val2));
+  ASSERT_TRUE(andFilter.keyMatch(node1_key2, node1_val1));
+  // Return false if either one doesn't match
+  ASSERT_FALSE(andFilter.keyMatch(node1_key1, node3_val1)); // Match key only
+  ASSERT_FALSE(andFilter.keyMatch(node3_key1, node1_val1)); // Match node only
+  ASSERT_FALSE(andFilter.keyMatch(node3_key1, node3_val1)); // No match
 }
 
 int

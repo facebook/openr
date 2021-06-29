@@ -34,8 +34,12 @@ KvStorePublisher::KvStorePublisher(
     folly::split(",", *filter.prefix_ref(), keyPrefix, true);
   }
 
+  thrift::FilterOperator op = filter_.oper_ref().has_value()
+      ? *filter_.oper_ref()
+      : thrift::FilterOperator::OR;
+
   keyPrefixFilter_ =
-      KvStoreFilters(keyPrefix, std::move(*filter.originatorIds_ref()));
+      KvStoreFilters(keyPrefix, std::move(*filter.originatorIds_ref()), op);
 }
 
 /**
@@ -92,17 +96,13 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   }
 
   thrift::KeyVals keyvals;
-  thrift::FilterOperator op = filter_.oper_ref().has_value()
-      ? *filter_.oper_ref()
-      : thrift::FilterOperator::OR;
-
   for (auto& [key, val] : *pub.keyVals_ref()) {
     if (*filter_.ignoreTtl_ref() and not val.value_ref().has_value()) {
       // ignore TTL updates
       continue;
     }
 
-    if (not keyPrefixFilter_.keyMatch(key, val, op)) {
+    if (not keyPrefixFilter_.keyMatch(key, val)) {
       continue;
     }
 

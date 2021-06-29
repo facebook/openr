@@ -163,9 +163,10 @@ PrefixManager::PrefixManager(
   const auto keyPrefix =
       fmt::format("{}{}:", Constants::kPrefixDbMarker.toString(), nodeId_);
   kvStoreClient_->subscribeKeyFilter(
-      // TODO: by default keyMatch option is OR. Change to leverage originatorId
-      // for subscription instead of checking nodeId internally
-      KvStoreFilters({keyPrefix}, {} /* originatorIds */),
+      KvStoreFilters(
+          {keyPrefix},
+          {nodeId_},
+          thrift::FilterOperator::AND /* match both keyPrefix and nodeId_ */),
       [this](
           const std::string& prefixStr,
           std::optional<thrift::Value> val) noexcept {
@@ -199,8 +200,7 @@ PrefixManager::PrefixManager(
           const auto network = maybePrefixKey->getCIDRNetwork();
           const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
               *val.value().value_ref(), serializer_);
-          if ((not *prefixDb.deletePrefix_ref()) and
-              nodeId_ == *prefixDb.thisNodeName_ref()) {
+          if (not *prefixDb.deletePrefix_ref()) {
             VLOG(2) << "Learning previously announced prefix: " << prefixStr;
 
             // populate keysInKvStore_ collection to make sure we can find

@@ -24,7 +24,9 @@ class KvStoreFilters {
   // and the list of originator IDs to match in the value
   explicit KvStoreFilters(
       std::vector<std::string> const& keyPrefix,
-      std::set<std::string> const& originatorIds);
+      std::set<std::string> const& originatorIds,
+      thrift::FilterOperator const& filterOperator =
+          thrift::FilterOperator::OR);
 
   // Check if key matches the filters
   bool keyMatchAny(std::string const& key, thrift::Value const& value) const;
@@ -32,10 +34,7 @@ class KvStoreFilters {
   // Check if key matches all the filters
   bool keyMatchAll(std::string const& key, thrift::Value const& value) const;
 
-  bool keyMatch(
-      std::string const& key,
-      thrift::Value const& value,
-      thrift::FilterOperator const& oper = thrift::FilterOperator::OR) const;
+  bool keyMatch(std::string const& key, thrift::Value const& value) const;
 
   // return comma separeated string prefix
   std::vector<std::string> getKeyPrefixes() const;
@@ -55,6 +54,9 @@ class KvStoreFilters {
 
   // keyPrefix class to create RE2 set and to match keys
   RegexSet keyRegexSet_;
+
+  // filter's OR/AND matching logic for attributes
+  thrift::FilterOperator filterOperator_;
 };
 
 // helper for deserialization

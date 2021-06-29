@@ -237,15 +237,20 @@ compareValues(const thrift::Value& v1, const thrift::Value& v2) {
 
 KvStoreFilters::KvStoreFilters(
     std::vector<std::string> const& keyPrefix,
-    std::set<std::string> const& nodeIds)
+    std::set<std::string> const& nodeIds,
+    thrift::FilterOperator const& filterOperator)
     : keyPrefixList_(keyPrefix),
       originatorIds_(nodeIds),
-      keyRegexSet_(RegexSet(keyPrefixList_)) {}
+      keyRegexSet_(RegexSet(keyPrefixList_)),
+      filterOperator_(filterOperator) {}
 
+// The function return true if there is a match on one of
+// the attributes, such as key prefix or originator ids.
 bool
 KvStoreFilters::keyMatchAny(
     std::string const& key, thrift::Value const& value) const {
   if (keyPrefixList_.empty() && originatorIds_.empty()) {
+    // No filter and nothing to match against.
     return true;
   }
   if (!keyPrefixList_.empty() && keyRegexSet_.match(key)) {
@@ -256,17 +261,6 @@ KvStoreFilters::keyMatchAny(
     return true;
   }
   return false;
-}
-
-bool
-KvStoreFilters::keyMatch(
-    std::string const& key,
-    thrift::Value const& value,
-    thrift::FilterOperator const& oper) const {
-  if (oper == thrift::FilterOperator::OR) {
-    return keyMatchAny(key, value);
-  }
-  return keyMatchAll(key, value);
 }
 
 // The function return true if there is a match on all the attributes
@@ -289,6 +283,15 @@ KvStoreFilters::keyMatchAll(
   }
 
   return true;
+}
+
+bool
+KvStoreFilters::keyMatch(
+    std::string const& key, thrift::Value const& value) const {
+  if (filterOperator_ == thrift::FilterOperator::OR) {
+    return keyMatchAny(key, value);
+  }
+  return keyMatchAll(key, value);
 }
 
 std::vector<std::string>
