@@ -58,7 +58,6 @@ KvStoreClientInternal::KvStoreClientInternal(
         LOG(INFO) << "Starting KvStore updates processing fiber";
         while (true) {
           auto maybePublication = q.get(); // perform read
-          VLOG(2) << "Received KvStore update";
           if (maybePublication.hasError()) {
             LOG(INFO) << "Terminating KvStore updates processing fiber";
             break;
@@ -671,7 +670,7 @@ KvStoreClientInternal::processPublication(
   auto& callbacks = keyCallbacks_[area];
 
   for (auto const& [key, rcvdValue] : *publication.keyVals_ref()) {
-    if (not rcvdValue.value_ref()) {
+    if (not rcvdValue.value_ref().has_value()) {
       // ignore TTL update
       continue;
     }

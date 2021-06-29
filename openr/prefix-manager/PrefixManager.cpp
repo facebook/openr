@@ -184,22 +184,37 @@ PrefixManager::PrefixManager(
                      << ". Skipping.";
           return;
         }
-        const auto network = maybePrefixKey->getCIDRNetwork();
 
-        const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-            *val.value().value_ref(), serializer_);
-        if ((not *prefixDb.deletePrefix_ref()) and
-            nodeId_ == *prefixDb.thisNodeName_ref()) {
-          VLOG(2) << "Learning previously announced prefix: " << prefixStr;
+        // ATTN: to avoid prefix churn, skip processing prefixes from previous
+        // incarnation with different prefix key format.
+        if (enableNewPrefixFormat_ != maybePrefixKey.value().isPrefixKeyV2()) {
+          const std::string version =
+              maybePrefixKey.value().isPrefixKeyV2() ? "v2" : "v1";
+          LOG(INFO) << fmt::format(
+              "Skip processing {} format of prefix: {}", version, prefixStr);
+          return;
+        }
 
-          // populate keysInKvStore_ collection to make sure we can find
-          // key when clear key from `KvStore`
-          keysInKvStore_[network].keys.emplace(prefixStr);
+        try {
+          const auto network = maybePrefixKey->getCIDRNetwork();
+          const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+              *val.value().value_ref(), serializer_);
+          if ((not *prefixDb.deletePrefix_ref()) and
+              nodeId_ == *prefixDb.thisNodeName_ref()) {
+            VLOG(2) << "Learning previously announced prefix: " << prefixStr;
 
-          // Populate pendingState to check keys
-          folly::small_vector<folly::CIDRNetwork> changed{network};
-          pendingUpdates_.applyPrefixChange(changed);
-          syncKvStoreThrottled_->operator()();
+            // populate keysInKvStore_ collection to make sure we can find
+            // key when clear key from `KvStore`
+            keysInKvStore_[network].keys.emplace(prefixStr);
+
+            // Populate pendingState to check keys
+            folly::small_vector<folly::CIDRNetwork> changed{network};
+            pendingUpdates_.applyPrefixChange(changed);
+            syncKvStoreThrottled_->operator()();
+          }
+        } catch (const std::exception& ex) {
+          LOG(ERROR) << "Failed to deserialize corresponding value for key "
+                     << prefixStr << ". Exception: " << folly::exceptionStr(ex);
         }
       });
 
@@ -224,10 +239,20 @@ PrefixManager::PrefixManager(
                    << ". Skipping.";
         continue;
       }
-      const auto network = maybePrefixKey->getCIDRNetwork();
+
+      // ATTN: to avoid prefix churn, skip processing prefixes from previous
+      // incarnation with different prefix key format.
+      if (enableNewPrefixFormat_ != maybePrefixKey.value().isPrefixKeyV2()) {
+        const std::string version =
+            maybePrefixKey.value().isPrefixKeyV2() ? "v2" : "v1";
+        LOG(INFO) << fmt::format(
+            "Skip processing {} format of prefix: {}", version, prefixStr);
+        continue;
+      }
 
       // populate keysInKvStore_ collection to make sure we can find
       // key when clear key from `KvStore`
+      const auto network = maybePrefixKey->getCIDRNetwork();
       keysInKvStore_[network].keys.emplace(prefixStr);
 
       // Populate pendingState to check keys

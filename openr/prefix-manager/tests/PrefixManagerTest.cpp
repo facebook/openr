@@ -94,10 +94,7 @@ class PrefixManagerTestFixture : public testing::Test {
   void
   TearDown() override {
     // Close queues
-    prefixUpdatesQueue.close();
-    staticRouteUpdatesQueue.close();
-    fibRouteUpdatesQueue.close();
-    kvStoreWrapper->closeQueue();
+    closeQueue();
 
     // cleanup kvStoreClient
     if (kvStoreClient) {
@@ -118,6 +115,22 @@ class PrefixManagerTestFixture : public testing::Test {
       evb.waitUntilStopped();
       evbThread.join();
     }
+  }
+
+  void
+  closeQueue() {
+    prefixUpdatesQueue.close();
+    staticRouteUpdatesQueue.close();
+    fibRouteUpdatesQueue.close();
+    kvStoreWrapper->closeQueue();
+  }
+
+  void
+  openQueue() {
+    prefixUpdatesQueue.open();
+    staticRouteUpdatesQueue.open();
+    fibRouteUpdatesQueue.open();
+    kvStoreWrapper->openQueue();
   }
 
   void
@@ -215,16 +228,15 @@ TEST_F(
   // Make sure we have old format of keys added
   auto prefixKey1 = PrefixKey(
       nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName, true);
-
   auto prefixKey2 = PrefixKey(
       nodeId_, toIPNetwork(*prefixEntry2.prefix_ref()), kTestingAreaName, true);
 
+  // ATTN: remember v1 format of keys for future validation.
+  auto keyStr1 = prefixKey1.getPrefixKeyV2();
+  auto keyStr2 = prefixKey2.getPrefixKeyV2();
+
   // Inject 2 prefixes and validate format prefixStr
   {
-    // ATTN: remember v1 format of keys for future validation.
-    auto keyStr1 = prefixKey1.getPrefixKeyV2();
-    auto keyStr2 = prefixKey2.getPrefixKeyV2();
-
     prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2}).get();
 
     auto pub = kvStoreWrapper->recvPublication();
@@ -241,6 +253,48 @@ TEST_F(
     auto pub = kvStoreWrapper->recvPublication();
     EXPECT_EQ(1, pub.keyVals_ref()->size());
     EXPECT_EQ(1, pub.keyVals_ref()->count(prefixKey1.getPrefixKeyV2()));
+  }
+
+  // ATTN: this is to mimick the "downgrade/roll-back" step of PrefixManager
+  // with `enable_new_prefix_format` change from true to false.
+  {
+    // mimick PrefixManager shutting down procedure
+    closeQueue();
+
+    prefixManager->stop();
+    prefixManagerThread->join();
+    prefixManager.reset();
+
+    // mimick PrefixManager restarting procedure with knob turned off
+    openQueue();
+    auto cfg =
+        std::make_shared<Config>(PrefixManagerTestFixture::createConfig());
+    createPrefixManager(cfg); // util call will override `prefixManager`
+
+    // Wait for throttled update
+    // consider prefixManager throttle + kvstoreClientInternal throttle
+    evb.scheduleTimeout(
+        std::chrono::milliseconds(
+            3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+        [&]() {
+          // Wait for throttled update to announce to kvstore
+          auto maybeValue1 = kvStoreWrapper->getKey(kTestingAreaName, keyStr1);
+          auto maybeValue2 = kvStoreWrapper->getKey(kTestingAreaName, keyStr2);
+          EXPECT_TRUE(maybeValue1.has_value());
+          EXPECT_TRUE(maybeValue2.has_value());
+
+          auto db1 = readThriftObjStr<thrift::PrefixDatabase>(
+              maybeValue1.value().value_ref().value(), serializer);
+          auto db2 = readThriftObjStr<thrift::PrefixDatabase>(
+              maybeValue2.value().value_ref().value(), serializer);
+          EXPECT_EQ(*db2.deletePrefix_ref(), false);
+          EXPECT_EQ(*db1.deletePrefix_ref(), false);
+
+          evb.stop();
+        });
+
+    // let magic happen
+    evb.run();
   }
 }
 
