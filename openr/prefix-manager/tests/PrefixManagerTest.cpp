@@ -2676,6 +2676,84 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
   baton.reset();
 }
 
+// Verify that the PrefixMgr API getAreaAdvertisedRoutes() returns the
+// correct preferred prefixes. Specifically, thrift::PrefixType::CONFIG
+// take precedence over thrift::PrefixType::BGP prefixes when they both
+// both have the same metrics, and when prefer_openr_originated_routes KNOB
+// is turned ON
+// Also verify that this API's output does not interfere with any other
+// thrift::PrefixType prefixes, like thrift::PrefixType::DEFAULT below.
+// This ensures that no other existing functionality has changed.
+
+TEST_F(RouteOriginationKnobTestFixture, VerifyCLIWithMultipleClients) {
+  const auto defaultPrefixLower = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
+  const auto bgpPrefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
+  const auto openrPrefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::CONFIG, createMetrics(200, 0, 0));
+  const auto defaultPrefixHigher = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
+
+  thrift::AdvertisedRouteFilter emptyFilter;
+  {
+    // With only the BGP prefix, this will be advertised
+    prefixManager->advertisePrefixes({bgpPrefix});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::BGP, *route.key_ref());
+  }
+  {
+    // Between BGP and CONFIG prefix, CONFIG will be advertised
+    prefixManager->advertisePrefixes({openrPrefix});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::CONFIG, *route.key_ref());
+  }
+  {
+    // Even though DEFAULT prefix is higher preference, its metrics are lower
+    prefixManager->advertisePrefixes({defaultPrefixLower});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::CONFIG, *route.key_ref());
+  }
+  {
+    // with higher/same metrics, DEFFAULT prefix will be preferred over CONFIG
+    prefixManager->advertisePrefixes({defaultPrefixHigher});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::DEFAULT, *route.key_ref());
+  }
+}
+
 class RouteOriginationSingleAreaFixture : public RouteOriginationFixture {
  public:
   openr::thrift::OpenrConfig

@@ -843,8 +843,18 @@ PrefixManager::filterAndAddAreaRoute(
     return;
   }
 
-  auto bestPrefixType = *selectBestPrefixMetrics(prefixEntries).begin();
-  const auto& bestPrefixEntry = prefixEntries.at(bestPrefixType);
+  const auto bestPrefixTypes = selectBestPrefixMetrics(prefixEntries);
+
+  auto bestPrefixType = *bestPrefixTypes.begin();
+  // if best route is BGP, and an equivalent CONFIG route exists,
+  // then prefer config route if knob prefer_openr_originated_config_=true
+  if (bestPrefixType == thrift::PrefixType::BGP and
+      preferOpenrOriginatedRoutes_ and
+      bestPrefixTypes.count(thrift::PrefixType::CONFIG)) {
+    bestPrefixType = thrift::PrefixType::CONFIG;
+  }
+  const PrefixEntry& bestPrefixEntry = prefixEntries.at(bestPrefixType);
+
   // The prefix will not be advertised to user provided area
   if (not bestPrefixEntry.dstAreas.count(area)) {
     return;
