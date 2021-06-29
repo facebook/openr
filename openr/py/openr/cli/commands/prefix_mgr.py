@@ -195,21 +195,96 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
     def _run(
         self,
         client: OpenrCtrl.Client,
+        detailed: bool,
         *args,
         **kwargs,
     ) -> None:
 
         # Get data
-        self.render(client.getOriginatedPrefixes())
+        self._render(client.getOriginatedPrefixes(), detailed)
 
-    def render(
+    def _render(
         self,
         originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+        detailed: bool,
     ) -> None:
         """
         Render advertised routes
         """
         rows = [""]
+
+        if detailed:
+            self._print_orig_routes_detailed(rows, originated_prefixes)
+        else:
+            self._print_orig_routes(rows, originated_prefixes)
+
+        print("\n".join(rows))
+
+    def _print_orig_routes(
+        self,
+        rows: List[str],
+        originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+    ):
+        """
+        Construct print lines of originated route in tabular fashion
+
+        Output format example with table heading:
+        Prefix                                     Community     SR    MSR      I
+        2401:db00:30:40::/59                     65529:26730      2      1    1/1
+
+        """
+        rows.append(
+            "Acronyms: SR - Supporting Routes Count | MSR - Min Supporting Routes\n"
+            "          I  - Install_to_fib/Installed"
+        )
+        rows.append("")
+
+        rows.append(
+            f"{'Prefix':<36} "
+            f"{'Community':>15} "
+            f"{'SR':>6} "
+            f"{'MSR':>6} "
+            f"{'I':>6} "
+        )
+        rows.append("")
+        for prefix_entry in originated_prefixes:
+            tag: List[str] = [""]
+            prefix_tags = prefix_entry.prefix.tags
+            if prefix_tags:
+                tag = list(prefix_tags)
+
+            installed: bool = False
+            if prefix_entry.prefix.install_to_fib:
+                installed = prefix_entry.installed
+
+            rows.append(
+                f"{prefix_entry.prefix.prefix:<36} "
+                f"{str(tag[0]):>15} "
+                f"{len(prefix_entry.supporting_prefixes):>6} "
+                f"{prefix_entry.prefix.minimum_supporting_routes:>6} {'':3}"
+                f"{prefix_entry.prefix.install_to_fib:>1}/{installed:<1}"
+            )
+            for index in range(1, len(tag)):
+                rows.append(f"{'':37}{str(tag[index]):>15} ")
+
+    def _print_orig_routes_detailed(
+        self,
+        rows: List[str],
+        originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+    ) -> None:
+        """
+        Construct print lines of originated route, append to rows
+
+        Output format
+                Prefix <key>
+                Forwarding algo=<fwd-algo> type=<fwd-type>
+                Metrics - path pref<path-pref> source pref <source-pref>
+                Tags <tags?>
+                Area Stack <area-stack?>
+                Min Next Hops <min-nexthops?>
+                Min Supporting Routes <min-supporting-routes>
+                Install to FIB <install-to-fib?>
+        """
 
         for prefix_entry in originated_prefixes:
             rows.append(f"> {prefix_entry.prefix.prefix}")
@@ -219,7 +294,9 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
             fwd_type = PrefixForwardingType._VALUES_TO_NAMES.get(
                 prefix_entry.prefix.forwardingType
             )
-            rows.append(f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}")
+            rows.append(
+                f"     Forwarding - algorithm: {fwd_algo:>7} {'Type: ' + fwd_type:>23}"
+            )
             rows.append(
                 f"     Metrics - path-preference: {prefix_entry.prefix.path_preference}"
                 f", source-preference: {prefix_entry.prefix.source_preference}"
@@ -234,14 +311,15 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
                 rows.append(f"     Min-nexthops: {prefix_entry.prefix.minNexthop}")
             rows.append(
                 f"     Min Supporting Routes - {(prefix_entry.prefix.minimum_supporting_routes)}"
+                f"     Supporting Routes Cnt - {len(prefix_entry.supporting_prefixes)}"
             )
             if prefix_entry.prefix.install_to_fib:
                 rows.append(
                     f"     install_to_fib: {prefix_entry.prefix.install_to_fib}"
+                    f" {'Installed: ' + str(prefix_entry.installed):>34}"
                 )
-            rows.append("")
 
-        print("\n".join(rows))
+            rows.append("")
 
 
 class AreaAdvertisedRoutesCmd(PrefixMgrCmd):

@@ -214,12 +214,15 @@ class AdvertisedRoutesCli(object):
 
 class OriginatedRoutesCli(object):
     @click.command("originated-routes")
+    @click.option(
+        "--detail/--no-detail",
+        default=False,
+        help="Show all details including tags and area-stack",
+    )
     @click.pass_obj
-    def show(
-        cli_opts: bunch.Bunch,  # noqa: B902
-    ) -> None:
+    def show(cli_opts: bunch.Bunch, detail: bool) -> None:  # noqa: B902
         """
         Show originated routes configured on this node. Will show all by default
         """
 
-        prefix_mgr.OriginatedRoutesCmd(cli_opts).run()
+        prefix_mgr.OriginatedRoutesCmd(cli_opts).run(detail)
