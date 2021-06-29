@@ -181,8 +181,10 @@ PrefixManager::PrefixManager(
         auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
         if (maybePrefixKey.hasError()) {
           // this is bad format of key.
-          LOG(ERROR) << "Unable to parse prefix key: " << prefixStr
-                     << ". Skipping.";
+          LOG(ERROR) << fmt::format(
+              "Unable to parse prefix key: {} with error: {}",
+              prefixStr,
+              maybePrefixKey.error());
           return;
         }
 
@@ -235,8 +237,10 @@ PrefixManager::PrefixManager(
       auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
       if (maybePrefixKey.hasError()) {
         // this is bad format of key.
-        LOG(ERROR) << "Unable to parse prefix key: " << prefixStr
-                   << ". Skipping.";
+        LOG(ERROR) << fmt::format(
+            "Unable to parse prefix key: {} with error: {}",
+            prefixStr,
+            maybePrefixKey.error());
         continue;
       }
 
@@ -434,8 +438,10 @@ PrefixManager::deleteKvStoreKeyHelper(
     auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
     if (maybePrefixKey.hasError()) {
       // this is bad format of key.
-      LOG(ERROR) << "Unable to parse prefix key: " << prefixStr
-                 << ". Skipping.";
+      LOG(ERROR) << fmt::format(
+          "Unable to parse prefix key: {} with error: {}",
+          prefixStr,
+          maybePrefixKey.error());
       continue;
     }
     const auto network = maybePrefixKey->getCIDRNetwork();

@@ -91,7 +91,8 @@ PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
     auto pattV2 =
         RE2::FullMatch(key, PrefixKey::getPrefixRE2V2(), &node, &ipStr, &plen);
     if (not pattV2) {
-      return folly::makeUnexpected(fmt::format("Invalid key format {}", key));
+      return folly::makeUnexpected(
+          fmt::format("Invalid format for key: {}.", key));
     }
     // this is a v2 format prefix key
     isV2PrefixKey = true;
@@ -101,8 +102,10 @@ PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
     network =
         folly::IPAddress::createNetwork(fmt::format("{}/{}", ipStr, plen));
   } catch (const folly::IPAddressFormatException& e) {
-    LOG(INFO) << "Exception in converting to Prefix. " << e.what();
-    return folly::makeUnexpected(std::string("Invalid IP address in key"));
+    return folly::makeUnexpected(fmt::format(
+        "Exception in converting string to IP address for key: {}. Exception: {}",
+        key,
+        e.what()));
   }
   return PrefixKey(
       node,

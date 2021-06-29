@@ -484,7 +484,10 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
       auto maybePrefixKey = PrefixKey::fromStr(key, area);
       if (maybePrefixKey.hasError()) {
         // this is bad format of key.
-        LOG(ERROR) << "Unable to parse prefix key: " << key << ". Skipping.";
+        LOG(ERROR) << fmt::format(
+            "Unable to parse prefix key: {} with error: {}",
+            key,
+            maybePrefixKey.error());
         continue;
       }
       pendingUpdates_.applyPrefixStateChange(
