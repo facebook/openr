@@ -1443,19 +1443,23 @@ KvStoreDb::addThriftPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
   for (auto const& [peerName, newPeerSpec] : peers) {
+    auto const& supportFloodOptimization =
+        newPeerSpec.get_supportFloodOptimization();
+    auto const& peerAddr = newPeerSpec.get_peerAddr();
+
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter != thriftPeers_.end()) {
       LOG(INFO) << "[Peer Update] " << peerName << " is updated."
-                << " peerAddr: " << *newPeerSpec.peerAddr_ref();
+                << " peerAddr: " << peerAddr
+                << " supportFloodOptimization: " << supportFloodOptimization;
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
       if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr_ref()) {
         // case1: peerSpec updated(i.e. parallel adjacencies can
         //        potentially have peerSpec updated by LM)
         LOG(INFO) << "[Peer Update] peerAddr is updated from: "
-                  << *oldPeerSpec.peerAddr_ref()
-                  << " to: " << *newPeerSpec.peerAddr_ref();
+                  << oldPeerSpec.get_peerAddr() << " to: " << peerAddr;
       }
       logStateTransition(
           peerName,
@@ -1470,7 +1474,8 @@ KvStoreDb::addThriftPeers(
     } else {
       // case 2: found a new peer coming up
       LOG(INFO) << "[Peer Add] " << peerName << " is added."
-                << " peerAddr: " << *newPeerSpec.peerAddr_ref();
+                << " peerAddr: " << peerAddr
+                << " supportFloodOptimization: " << supportFloodOptimization;
 
       KvStorePeer peer(
           peerName,
@@ -1519,6 +1524,8 @@ KvStoreDb::addPeers(
           Constants::kGlobalCmdLocalIdTemplate.toString(),
           peerName,
           peerAddCounter_);
+      const auto& supportFloodOptimization =
+          newPeerSpec.get_supportFloodOptimization();
 
       try {
         auto it = peers_.find(peerName);
@@ -1526,7 +1533,9 @@ KvStoreDb::addPeers(
         bool isNewPeer{false};
 
         // add dual peers for both new-peer or update-peer event
-        dualPeersToAdd.emplace_back(peerName);
+        if (supportFloodOptimization) {
+          dualPeersToAdd.emplace_back(peerName);
+        }
 
         if (it != peers_.end()) {
           LOG(INFO) << "Updating existing peer " << peerName;
@@ -1581,7 +1590,7 @@ KvStoreDb::addPeers(
           }
         }
 
-        if (isNewPeer) {
+        if (isNewPeer and supportFloodOptimization) {
           // make sure let peer to unset-child for me for all roots first
           // after that, I'll be fed with proper dual-events and I'll be
           // chosing new nexthop if need.
@@ -1637,7 +1646,9 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
     const auto& peerSpec = peerIter->second.peerSpec;
 
     LOG(INFO) << "[Peer Delete] " << peerName
-              << " is detached from: " << *peerSpec.peerAddr_ref();
+              << " is detached from: " << peerSpec.get_peerAddr()
+              << ", supportFloodOptimization: "
+              << peerSpec.get_supportFloodOptimization();
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
@@ -1665,9 +1676,13 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
       }
 
       const auto& peerSpec = it->second.first;
-      dualPeersToRemove.emplace_back(peerName);
+      if (peerSpec.get_supportFloodOptimization()) {
+        dualPeersToRemove.emplace_back(peerName);
+      }
 
-      LOG(INFO) << "Detaching from: " << *peerSpec.cmdUrl_ref();
+      LOG(INFO) << "Detaching from: " << peerSpec.get_cmdUrl()
+                << ", support-flood-optimization: "
+                << peerSpec.get_supportFloodOptimization();
       auto syncRes =
           peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
       if (syncRes.hasError()) {
@@ -2514,11 +2529,14 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
     floodToAll = true;
   }
 
-  // flood-peers: SPT-peers + peers-who-does-not-support-dual
+  // flood-peers:
+  //  1) SPT-peers;
+  //  2) peers-who-does-not-support-DUAL;
   std::unordered_set<std::string> floodPeers;
-  for (const auto& [peer, _] : thriftPeers_) {
-    if (floodToAll or sptPeers.count(peer) != 0) {
-      floodPeers.emplace(peer);
+  for (const auto& [peerName, peer] : thriftPeers_) {
+    if (floodToAll or sptPeers.count(peerName) != 0 or
+        (not peer.peerSpec.get_supportFloodOptimization())) {
+      floodPeers.emplace(peerName);
     }
   }
   return floodPeers;
