@@ -496,7 +496,9 @@ main(int argc, char** argv) {
   auto pluginArgs = PluginArgs{
       prefixUpdatesQueue,
       staticRouteUpdatesQueue,
-      routeUpdatesQueue.getReader(),
+      (config->getConfig().get_enable_fib_ack()
+           ? fibRouteUpdatesQueue.getReader()
+           : routeUpdatesQueue.getReader()),
       config,
       sslContext};
 
