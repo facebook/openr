@@ -482,6 +482,27 @@ PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   return true;
 }
 
+namespace {
+
+std::pair<thrift::PrefixType, const PrefixEntry>
+getBestPrefixEntry(
+    const std::unordered_map<thrift::PrefixType, PrefixEntry>&
+        prefixTypeToEntry,
+    bool preferOpenrOriginatedRoutes) {
+  // select the best entry/entries by comparing metric_ref() field
+  const auto bestTypes = selectBestPrefixMetrics(prefixTypeToEntry);
+  auto bestType = *bestTypes.begin();
+  // if best route is BGP, and an equivalent CONFIG route exists,
+  // then prefer config route if knob prefer_openr_originated_config_=true
+  if (bestType == thrift::PrefixType::BGP and preferOpenrOriginatedRoutes and
+      bestTypes.count(thrift::PrefixType::CONFIG)) {
+    bestType = thrift::PrefixType::CONFIG;
+  }
+  return std::make_pair(bestType, prefixTypeToEntry.at(bestType));
+}
+
+} // namespace
+
 void
 PrefixManager::syncKvStore() {
   VLOG(1)
@@ -492,50 +513,39 @@ PrefixManager::syncKvStore() {
   // Prefixes in pendingUpdates_ that are synced to KvStore.
   folly::small_vector<folly::CIDRNetwork> syncedPendingPrefixes{};
   // iterate over `pendingUpdates_` to advertise/withdraw incremental changes
-  for (auto const& network : pendingUpdates_.getChangedPrefixes()) {
-    auto it = prefixMap_.find(network);
+  for (auto const& prefix : pendingUpdates_.getChangedPrefixes()) {
+    auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
-      advertisedPrefixes_.erase(network);
+      advertisedPrefixes_.erase(prefix);
       // delete actual keys being advertised in the cache
       //
       // Sample format:
       //  prefix    :    node1    :    0    :    0.0.0.0/32
       //    |              |           |             |
       //  marker        nodeId      areaId        prefixStr
-      auto keysIt = keysInKvStore_.find(network);
+      auto keysIt = keysInKvStore_.find(prefix);
       if (keysIt != keysInKvStore_.end()) {
         deleteKvStoreKeyHelper(keysIt->second.keys);
         if (keysIt->second.installedToFib) {
-          routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
+          routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
         }
         keysInKvStore_.erase(keysIt);
       }
     } else {
       // add/update keys in `KvStore`
-      const auto& typeToPrefixes = it->second;
-
-      // select the best entry/entries by comparing metric_ref() field
-      const auto bestTypes = selectBestPrefixMetrics(typeToPrefixes);
-      auto bestType = *bestTypes.begin();
-      // if best route is BGP, and an equivalent CONFIG route exists,
-      // then prefer config route if knob prefer_openr_originated_config_=true
-      if (bestType == thrift::PrefixType::BGP and
-          preferOpenrOriginatedRoutes_ and
-          bestTypes.count(thrift::PrefixType::CONFIG)) {
-        bestType = thrift::PrefixType::CONFIG;
-      }
-      const PrefixEntry& bestEntry = typeToPrefixes.at(bestType);
-
+      auto bestTypeEntry =
+          getBestPrefixEntry(it->second, preferOpenrOriginatedRoutes_);
+      const PrefixEntry& bestEntry = bestTypeEntry.second;
       if (not prefixEntryReadyToBeAdvertised(bestEntry)) {
         // Skip if the prefix entry is not ready to be advertised yet.
         continue;
       }
-      advertisedPrefixes_.insert(network);
+      advertisedPrefixes_.insert(prefix);
 
       // advertise best-entry for this prefix to `KvStore`
       auto newKeys = updateKvStoreKeyHelper(bestEntry);
 
-      auto keysIt = keysInKvStore_.find(network);
+      auto keysIt = keysInKvStore_.find(prefix);
       if (keysIt != keysInKvStore_.end()) {
         // ATTN: This collection holds "advertised" prefixes in previous round
         // of syncing. By removing prefixes in current run, whatever left in
@@ -553,28 +563,28 @@ PrefixManager::syncKvStore() {
       }
 
       // override `keysInKvStore_` for next-round syncing
-      keysInKvStore_[network].keys = std::move(newKeys);
+      keysInKvStore_[prefix].keys = std::move(newKeys);
       // propogate route update to `KvStore` and `Decision`(if necessary)
       if (bestEntry.shouldInstall()) {
-        keysInKvStore_[network].installedToFib = true;
+        keysInKvStore_[prefix].installedToFib = true;
         // Populate RibUnicastEntry struct
         // ATTN: AREA field is empty for NHs
         // if shouldInstall() is true, nexthops is guaranteed to have value.
-        RibUnicastEntry unicastEntry(network, bestEntry.nexthops.value());
+        RibUnicastEntry unicastEntry(prefix, bestEntry.nexthops.value());
         unicastEntry.bestPrefixEntry = *bestEntry.tPrefixEntry;
         routeUpdatesOut.addRouteToUpdate(std::move(unicastEntry));
       } else {
         // if was installed to fib, but now lose in tie break, withdraw from
         // fib.
-        if (keysInKvStore_[network].installedToFib) {
-          routeUpdatesOut.unicastRoutesToDelete.emplace_back(network);
-          keysInKvStore_[network].installedToFib = false;
+        if (keysInKvStore_[prefix].installedToFib) {
+          routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
+          keysInKvStore_[prefix].installedToFib = false;
         }
       } // else
     } // else
 
     // Record already advertised prefix in pendingUpdates_.
-    syncedPendingPrefixes.emplace_back(network);
+    syncedPendingPrefixes.emplace_back(prefix);
   } // for
   // push originatedRoutes update via replicate queue
   if (routeUpdatesOut.unicastRoutesToUpdate.size() or
@@ -849,17 +859,10 @@ PrefixManager::filterAndAddAreaRoute(
     return;
   }
 
-  const auto bestPrefixTypes = selectBestPrefixMetrics(prefixEntries);
-
-  auto bestPrefixType = *bestPrefixTypes.begin();
-  // if best route is BGP, and an equivalent CONFIG route exists,
-  // then prefer config route if knob prefer_openr_originated_config_=true
-  if (bestPrefixType == thrift::PrefixType::BGP and
-      preferOpenrOriginatedRoutes_ and
-      bestPrefixTypes.count(thrift::PrefixType::CONFIG)) {
-    bestPrefixType = thrift::PrefixType::CONFIG;
-  }
-  const PrefixEntry& bestPrefixEntry = prefixEntries.at(bestPrefixType);
+  auto bestTypeEntry =
+      getBestPrefixEntry(prefixEntries, preferOpenrOriginatedRoutes_);
+  thrift::PrefixType bestPrefixType = bestTypeEntry.first;
+  const auto& bestPrefixEntry = bestTypeEntry.second;
 
   // The prefix will not be advertised to user provided area
   if (not bestPrefixEntry.dstAreas.count(area)) {
