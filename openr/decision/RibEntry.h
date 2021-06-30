@@ -44,6 +44,7 @@ struct RibUnicastEntry : RibEntry {
   bool doNotInstall{false};
 
   // constructor
+  explicit RibUnicastEntry() {}
   explicit RibUnicastEntry(const folly::CIDRNetwork& prefix) : prefix(prefix) {}
 
   RibUnicastEntry(
@@ -100,6 +101,7 @@ struct RibMplsEntry : RibEntry {
   explicit RibMplsEntry(int32_t label) : label(label) {}
 
   // constructor
+  explicit RibMplsEntry() {}
   RibMplsEntry(
       int32_t label, std::unordered_set<thrift::NextHopThrift> nexthops)
       : RibEntry(std::move(nexthops)), label(label) {}
