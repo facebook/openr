@@ -255,14 +255,6 @@ class Config {
     return *config_.segment_routing_config_ref();
   }
 
-  const thrift::SegmentRoutingNodeLabel&
-  getNodeSegmentLabel() const {
-    CHECK(
-        config_.segment_routing_config_ref().has_value() and
-        config_.segment_routing_config_ref()->sr_node_label_ref().has_value());
-    return *config_.segment_routing_config_ref()->sr_node_label_ref();
-  }
-
   const thrift::SegmentRoutingAdjLabel&
   getAdjSegmentLabels() const {
     CHECK(

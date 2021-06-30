@@ -432,13 +432,6 @@ struct SegmentRoutingNodeLabel {
 
 struct SegmentRoutingConfig {
   /**
-   * The way node segment label should be allocated.
-   * This feature is turned off if sr_node_label
-   * is not specified in config.
-   */
-  1: optional SegmentRoutingNodeLabel sr_node_label (deprecated);
-
-  /**
    * Specifies how adj segment label should be allocated.
    * This feature is turned off if:
    *  (a) sr_adj_label is not specified in config.
