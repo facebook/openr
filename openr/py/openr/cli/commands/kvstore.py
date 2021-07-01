@@ -1337,19 +1337,28 @@ class AllocationsUnsetCmd(SetKeyCmd):
 
 
 class SummaryCmd(KvStoreCmdBase):
-    _summary_stats_template = [
-        {
-            "title": "Global Summary Stats",
-            "counters": [],
-            "stats": [
-                ("  Sent Publications", "kvstore.sent_publications.count"),
-                ("  Sent KeyVals", "kvstore.sent_key_vals.sum"),
-                ("  Rcvd Publications", "kvstore.received_publications.count"),
-                ("  Rcvd KeyVals", "kvstore.received_key_vals.sum"),
-                ("  Updates KeyVals", "kvstore.updated_key_vals.sum"),
-            ],
-        },
-    ]
+    def _get_summary_stats_template(self, area: str = "") -> List[Dict[str, Any]]:
+        if area != "":
+            title = " Stats for Area " + area
+            area = "." + area
+        else:
+            title = "Global Summary Stats"
+        return [
+            {
+                "title": title,
+                "counters": [],
+                "stats": [
+                    ("  Sent Publications", f"kvstore.sent_publications{area}.count"),
+                    ("  Sent KeyVals", f"kvstore.sent_key_vals{area}.sum"),
+                    (
+                        "  Rcvd Publications",
+                        f"kvstore.received_publications{area}.count",
+                    ),
+                    ("  Rcvd KeyVals", f"kvstore.received_key_vals{area}.sum"),
+                    ("  Updates KeyVals", f"kvstore.updated_key_vals{area}.sum"),
+                ],
+            },
+        ]
 
     def _get_area_str(self) -> str:
         s = "s" if len(self.areas) != 1 else ""
@@ -1375,9 +1384,9 @@ class SummaryCmd(KvStoreCmdBase):
     def _get_area_summary(self, s: openr_types.KvStoreAreaSummary) -> str:
         return (
             f"\n"
-            f"Area - {s.area}\n"
-            f"  Peers: {len(s.peersMap)} Total - {self._get_peer_state_output(s.peersMap)}\n"
-            f"  Database: {s.keyValsCount} KVs, {self._get_bytes_str(s.keyValsBytes)}\n"
+            f">> Area - {s.area}\n"
+            f"   Peers: {len(s.peersMap)} Total - {self._get_peer_state_output(s.peersMap)}\n"
+            f"   Database: {s.keyValsCount} KVs, {self._get_bytes_str(s.keyValsBytes)}"
         )
 
     def _get_global_summary(
@@ -1403,28 +1412,29 @@ class SummaryCmd(KvStoreCmdBase):
         global_summary.keyValsBytes = sum(s.keyValsBytes for s in summaries)
         return global_summary
 
-    def _get_summarized_output(
+    def _print_summarized_output(
         self,
+        client: OpenrCtrl.Client,
         summaries: List[openr_types.KvStoreAreaSummary],
         input_areas: Set[str],
-    ) -> str:
-        output: str = ""
-        global_output: str = ""
+    ) -> None:
         allFlag: bool = False
         # if no area(s) filter specified in CLI, then get all configured areas
         if len(input_areas) == 0:
             input_areas = set(self.areas)
             allFlag = True
 
-        # build a list of per-area (filtered) summaries first
-        for s in (s for s in summaries if s.area in input_areas):
-            output += self._get_area_summary(s)
-
         # include global summary, if no area(s) filter specified in CLI
         if allFlag:
-            global_output = self._get_area_summary(self._get_global_summary(summaries))
+            print(self._get_area_summary(self._get_global_summary(summaries)))
+            self.print_stats(self._get_summary_stats_template(), client.getCounters())
 
-        return global_output + output
+        # build a list of per-area (filtered) summaries first
+        for s in (s for s in summaries if s.area in input_areas):
+            print(self._get_area_summary(s))
+            self.print_stats(
+                self._get_summary_stats_template(s.area), client.getCounters()
+            )
 
     def _run(
         self,
@@ -1437,7 +1447,5 @@ class SummaryCmd(KvStoreCmdBase):
         # get per-area Summary list from KvStore for all areas
         summaries = client.getKvStoreAreaSummary(areaSet)
         # build summarized output from (filtered) summaries, and print it
-        print(self._get_summarized_output(summaries, input_areas))
-        # print global stats at the end
-        self.print_stats(self._summary_stats_template, client.getCounters())
+        self._print_summarized_output(client, summaries, input_areas)
         print()
