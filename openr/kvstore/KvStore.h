@@ -599,6 +599,35 @@ class KvStore final : public OpenrEventBase {
 
   void processPeerUpdates(PeerEvent&& event);
 
+  // Wrapper function that calls functions to update the kv store based on
+  // type of update
+  void processKeyValueRequest(KeyValueRequest&& kvRequest);
+
+  // Set key-value in KvStore with specified version. If version is 0, the one
+  // greater than the latest known will be used. KvStore will manage
+  // ttl-refreshing for self-originated key-vals, aka, key-vals sent via queue.
+  void setKey(
+      AreaId const& area,
+      std::string const& key,
+      std::string const& value,
+      uint32_t version);
+
+  // Set specified key-value in KvStore. This is an authoratitive call, meaning
+  // if someone else advertises the same key we try to win over it by setting
+  // key-value with higher version. By default key is published to default area.
+  // KvStore will manage ttl-refreshing for self-originated key-vals, aka,
+  // key-vals sent via queue.
+  void persistKey(
+      AreaId const& area, std::string const& key, std::string const& value);
+
+  // Set new value for self-originated key and stop ttl-refreshing by clearing
+  // from local cache.
+  void unsetKey(
+      AreaId const& area, std::string const& key, std::string const& value);
+
+  // Erase key from local cache, thus stopping ttl-refreshing.
+  void eraseKey(AreaId const& area, std::string const& key);
+
   std::map<std::string, int64_t> getGlobalCounters() const;
 
   // helper for public semifuture API. Returns a reference to the relevant

@@ -123,6 +123,28 @@ KvStore::KvStore(
     }
   });
 
+  // Add reader to process key-value requests from PrefixManager and LinkMonitor
+  if (kvParams_.enableKvStoreRequestQueue) {
+    addFiberTask(
+        [kvQueue = std::move(kvRequestQueue), this]() mutable noexcept {
+          LOG(INFO) << "Starting key-value requests processing fiber";
+          while (true) {
+            auto maybeKvRequest = kvQueue.get(); // perform read
+            VLOG(2) << "Received key-value request...";
+            if (maybeKvRequest.hasError()) {
+              LOG(INFO) << "Terminating peer updates processing fiber";
+              break;
+            }
+            try {
+              processKeyValueRequest(std::move(maybeKvRequest).value());
+            } catch (const std::exception& ex) {
+              LOG(ERROR) << "Failed to process key-value request. Exception: "
+                         << ex.what();
+            }
+          }
+        });
+  }
+
   // create KvStoreDb instances
   for (auto const& area : config->getAreaIds()) {
     kvStoreDb_.emplace(
@@ -243,6 +265,62 @@ KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
     }
   }
   return;
+}
+
+void
+KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
+  if (auto pPersistKvRequest =
+          std::get_if<PersistKeyValueRequest>(&kvRequest)) {
+    persistKey(
+        pPersistKvRequest->getArea(),
+        pPersistKvRequest->getKey(),
+        pPersistKvRequest->getValue());
+  } else if (auto pSetKvRequest = std::get_if<SetKeyValueRequest>(&kvRequest)) {
+    setKey(
+        pSetKvRequest->getArea(),
+        pSetKvRequest->getKey(),
+        pSetKvRequest->getValue(),
+        pSetKvRequest->getVersion());
+  } else if (
+      auto pClearKvRequest = std::get_if<ClearKeyValueRequest>(&kvRequest)) {
+    if (pClearKvRequest->getSetValue()) {
+      unsetKey(
+          pClearKvRequest->getArea(),
+          pClearKvRequest->getKey(),
+          pClearKvRequest->getValue());
+    } else {
+      eraseKey(pClearKvRequest->getArea(), pClearKvRequest->getKey());
+    }
+  } else {
+    LOG(ERROR)
+        << "Error processing key value request. Request type not recognized.";
+  }
+}
+
+void
+KvStore::setKey(
+    AreaId const& area,
+    std::string const& key,
+    std::string const& value,
+    uint32_t version) {
+  CHECK(false) << "setKey not implemented.";
+}
+
+void
+KvStore::persistKey(
+    AreaId const& area, std::string const& key, std::string const& value) {
+  CHECK(false) << "persistKey not implemented.";
+}
+
+void
+KvStore::unsetKey(
+    AreaId const& area, std::string const& key, std::string const& value) {
+  CHECK(false) << "unsetKey not implemented.";
+}
+
+void
+KvStore::eraseKey(AreaId const& area, std::string const& key) {
+  CHECK(false) << "eraseKey not implemented.";
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
