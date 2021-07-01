@@ -91,7 +91,8 @@ class OpenrCtrlFixture : public ::testing::Test {
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config);
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
+        context_, config, std::nullopt, kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     // Create Decision module
@@ -118,6 +119,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         staticRoutesUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
+        // TODO: add kvStoreKeyEventsQueue_
         config,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -144,6 +146,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         peerUpdatesQueue_,
         logSampleQueue_,
         neighborUpdatesQueue_.getReader(),
+        // TODO: add kvStoreKeyEventsQueue_
         kvStoreWrapper_->getInitialSyncEventsReader(),
         nlSock_->getReader(),
         false, /* overrideDrainState */
@@ -180,6 +183,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     fibRouteUpdatesQueue_.close();
+    kvRequestQueue_.close();
     logSampleQueue_.close();
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
@@ -234,6 +238,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 

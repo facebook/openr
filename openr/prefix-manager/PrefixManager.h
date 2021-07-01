@@ -10,7 +10,6 @@
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 #include <folly/futures/Future.h>
-#include "openr/if/gen-cpp2/Network_types.h"
 
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>

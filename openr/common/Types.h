@@ -7,10 +7,10 @@
 
 #pragma once
 
-#include <openr/if/gen-cpp2/Network_types.h>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <boost/serialization/strong_typedef.hpp>
@@ -22,6 +22,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
@@ -257,6 +258,163 @@ struct PeerEvent {
       : area(area), peersToAdd(peersToAdd), peersToDel(peersToDel) {}
 };
 
+/**
+ * Advertise the key-value into consumer with specified version.
+ */
+class SetKeyValueRequest {
+ public:
+  SetKeyValueRequest(
+      const AreaId& area,
+      const std::string& key,
+      const std::string& value,
+      const uint32_t version = 0)
+      : area(area), key(key), value(value), version(version) {}
+
+  inline AreaId
+  getArea() const {
+    return area;
+  }
+
+  inline std::string
+  getKey() const {
+    return key;
+  }
+
+  inline std::string
+  getValue() const {
+    return value;
+  }
+
+  inline uint32_t
+  getVersion() const {
+    return version;
+  }
+
+ private:
+  /**
+   * Area identifier.
+   */
+  AreaId area;
+  /**
+   * Key to advertise to the consumer.
+   */
+  std::string key;
+  /**
+   * Value to advertise to the consumer.
+   */
+  std::string value;
+  /**
+   * Version of the key-value pair advertised. Consumer uses the version to
+   * determine which value to keep/advertise in case of conflict.
+   *
+   * If version is not specified, the one greater than the latest known
+   * will be used.
+   */
+  uint32_t version;
+};
+
+/**
+ * Authoritative request to set specified key-value into consumer.
+ *
+ * If someone else advertises the same key we try to win over it
+ * by re-advertising this key-value with a higher version.
+ */
+class PersistKeyValueRequest {
+ public:
+  PersistKeyValueRequest(
+      const AreaId& area, const std::string& key, const std::string& value)
+      : area(area), key(key), value(value) {}
+
+  inline AreaId
+  getArea() const {
+    return area;
+  }
+
+  inline std::string
+  getKey() const {
+    return key;
+  }
+
+  inline std::string
+  getValue() const {
+    return value;
+  }
+
+ private:
+  /**
+   * Area identifier. By default key is published to default area kvstore
+   * instance.
+   */
+  AreaId area;
+  /**
+   * Key to advertise to the consumer.
+   */
+  std::string key;
+  /**
+   * Value to advertise to the consumer.
+   */
+  std::string value;
+};
+
+/**
+ * Request to erase key-value from consumer by setting default value of empty
+ * string or value passed by the caller, cancel ttl timers, and advertise
+ * with higher version.
+ */
+class ClearKeyValueRequest {
+ public:
+  ClearKeyValueRequest(
+      const AreaId& area,
+      const std::string& key,
+      const std::string& value = "",
+      const bool setValue = false)
+      : area(area), key(key), value(value), setValue(setValue) {
+    // Value is required if `setValue` flag is true.
+    CHECK(not(setValue && value.empty()))
+        << "Must specify value in ClearKeyValueRequest when setValue flag is set to true.";
+  }
+
+  inline AreaId
+  getArea() const {
+    return area;
+  }
+
+  inline std::string
+  getKey() const {
+    return key;
+  }
+
+  inline std::string
+  getValue() const {
+    return value;
+  }
+
+  inline bool
+  getSetValue() const {
+    return setValue;
+  }
+
+ private:
+  /**
+   * Area identifier.
+   */
+  AreaId area;
+  /**
+   * Key to clear from consumer.
+   */
+  std::string key;
+  /**
+   * New value to set to key in consumer.
+   */
+  std::string value;
+  /**
+   * Flag to set a new value for given key. Value must be provided.
+   */
+  bool setValue{false};
+};
+
+using KeyValueRequest = std::
+    variant<SetKeyValueRequest, PersistKeyValueRequest, ClearKeyValueRequest>;
 /**
  * Structure to represent interface information from the system, including
  * link status/addresses/etc.

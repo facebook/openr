@@ -265,6 +265,7 @@ main(int argc, char** argv) {
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
+  ReplicateQueue<KeyValueRequest> kvRequestQueue;
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
@@ -379,6 +380,7 @@ main(int argc, char** argv) {
           kvStoreUpdatesQueue,
           kvStoreSyncEventsQueue,
           peerUpdatesQueue.getReader(),
+          kvRequestQueue.getReader(),
           logSampleQueue,
           KvStoreGlobalCmdUrl{fmt::format(
               "tcp://{}:{}",
@@ -402,6 +404,7 @@ main(int argc, char** argv) {
           staticRouteUpdatesQueue,
           prefixUpdatesQueue.getReader(),
           std::move(routeUpdatesQueueReader),
+          // TODO: add kvStoreKeyEventsQueue
           config,
           kvStore,
           initialPrefixHoldTime));
@@ -455,6 +458,7 @@ main(int argc, char** argv) {
           neighborUpdatesQueue.getReader(),
           kvStoreSyncEventsQueue.getReader(),
           netlinkEventsQueue.getReader(),
+          // TODO: add kvStoreKeyEventsQueue
           FLAGS_override_drain_state,
           initialAdjHoldTime));
 
@@ -597,6 +601,7 @@ main(int argc, char** argv) {
   routeUpdatesQueue.close();
   interfaceUpdatesQueue.close();
   peerUpdatesQueue.close();
+  kvRequestQueue.close();
   neighborUpdatesQueue.close();
   kvStoreSyncEventsQueue.close();
   prefixUpdatesQueue.close();

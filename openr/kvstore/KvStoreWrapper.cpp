@@ -17,7 +17,8 @@ namespace openr {
 KvStoreWrapper::KvStoreWrapper(
     fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
-    std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue)
+    std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
+    std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
     : nodeId(config->getNodeName()),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       config_(config) {
@@ -28,6 +29,8 @@ KvStoreWrapper::KvStoreWrapper(
       kvStoreSyncEventsQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
                                    : dummyPeerUpdatesQueue_.getReader(),
+      kvRequestQueue.has_value() ? kvRequestQueue.value()
+                                 : dummyKvRequestQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{globalCmdUrl},
       config_);
@@ -73,6 +76,7 @@ KvStoreWrapper::stop() {
   kvStoreUpdatesQueue_.close();
   kvStoreSyncEventsQueue_.close();
   dummyPeerUpdatesQueue_.close();
+  dummyKvRequestQueue_.close();
   logSampleQueue_.close();
 
   if (thriftServer_) {

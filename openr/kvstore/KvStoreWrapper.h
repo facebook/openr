@@ -35,6 +35,8 @@ class KvStoreWrapper {
       fbzmq::Context& zmqContext,
       std::shared_ptr<const Config> config,
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
+          std::nullopt,
+      std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue =
           std::nullopt);
 
   ~KvStoreWrapper() {
@@ -241,6 +243,10 @@ class KvStoreWrapper {
 
   // Queue for streaming peer updates from LM
   messaging::ReplicateQueue<PeerEvent> dummyPeerUpdatesQueue_;
+
+  // Emtpy queue for streaming key events from sources which persist keys into
+  // KvStore Will be removed once KvStoreClientInternal is deprecated
+  messaging::ReplicateQueue<KeyValueRequest> dummyKvRequestQueue_;
 
   // KvStore owned by this wrapper.
   std::unique_ptr<KvStore> kvStore_;

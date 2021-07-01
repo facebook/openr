@@ -514,6 +514,8 @@ class KvStore final : public OpenrEventBase {
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
       // Queue for receiving peer updates
       messaging::RQueue<PeerEvent> peerUpdatesQueue,
+      // Queue for receiving key-value update requests
+      messaging::RQueue<KeyValueRequest> kvRequestQueue,
       // Queue for publishing the event log
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // the url to receive command from peer instances

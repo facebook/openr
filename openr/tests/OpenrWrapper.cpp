@@ -115,6 +115,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreUpdatesQueue_,
       kvStoreSyncEventsQueue_,
       peerUpdatesQueue_.getReader(),
+      kvRequestQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       config_);
@@ -184,6 +185,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       logSampleQueue_,
       neighborUpdatesQueue_.getReader(),
       kvStoreSyncEventsQueue_.getReader(),
+      // TODO: add kvStoreKeyEventsQueue_
       nlSock_->getReader(),
       false, /* overrideDrainState */
       linkMonitorAdjHoldTime);
@@ -203,6 +205,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       staticRoutesQueue_,
       prefixUpdatesQueue_.getReader(),
       fibRouteUpdatesQueue_.getReader(),
+      // TODO: add kvStoreKeyEventsQueue_
       config_,
       kvStore_.get(),
       std::chrono::seconds(0));
@@ -361,6 +364,7 @@ OpenrWrapper<Serializer>::stop() {
   // Close all queues
   routeUpdatesQueue_.close();
   peerUpdatesQueue_.close();
+  kvRequestQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
   kvStoreSyncEventsQueue_.close();

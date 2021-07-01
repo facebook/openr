@@ -60,7 +60,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
     config_ = std::make_shared<Config>(tConfig);
 
     // Start KvStore and attach a client to it
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(zmqContext_, config_);
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
+        zmqContext_, config_, std::nullopt, kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
     evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
       kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -113,6 +114,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         staticRouteUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
+        // TODO: add kvStoreKeyEventsQueue_
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -128,6 +130,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     fibRouteUpdatesQueue_.close();
+    kvRequestQueue_.close();
     logSampleQueue_.close();
     kvStoreWrapper_->closeQueue();
 
@@ -189,6 +192,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
@@ -278,6 +282,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         fibRouteUpdatesQueues{numAllocators};
     messaging::ReplicateQueue<LogSample> logSampleQueue;
     messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+    messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
     std::vector<std::unique_ptr<PrefixAllocator>> allocators;
     std::vector<std::thread> threads;
 
@@ -442,6 +447,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           staticRouteUpdatesQueue,
           prefixQueues.at(i).getReader(),
           fibRouteUpdatesQueues.at(i).getReader(),
+          // TODO: add kvStoreKeyEventsQueue
           currConfig,
           store->getKvStore(),
           std::chrono::seconds(0));
@@ -516,6 +522,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       queue.close();
     }
     staticRouteUpdatesQueue.close();
+    kvRequestQueue.close();
     logSampleQueue.close();
     store->closeQueue();
 

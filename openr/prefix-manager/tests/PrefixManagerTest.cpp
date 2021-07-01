@@ -83,7 +83,8 @@ class PrefixManagerTestFixture : public testing::Test {
     config = std::make_shared<Config>(createConfig());
 
     // spin up a kvstore
-    kvStoreWrapper = std::make_shared<KvStoreWrapper>(context, config);
+    kvStoreWrapper = std::make_shared<KvStoreWrapper>(
+        context, config, std::nullopt, kvRequestQueue.getReader());
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
@@ -120,6 +121,7 @@ class PrefixManagerTestFixture : public testing::Test {
   void
   closeQueue() {
     prefixUpdatesQueue.close();
+    kvRequestQueue.close();
     staticRouteUpdatesQueue.close();
     fibRouteUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
@@ -141,6 +143,7 @@ class PrefixManagerTestFixture : public testing::Test {
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
         cfg,
+        // TODO: add kvStoreKeyEventsQueue
         kvStoreWrapper->getKvStore(),
         std::chrono::seconds{0});
 
@@ -193,6 +196,7 @@ class PrefixManagerTestFixture : public testing::Test {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 
   // Create the serializer for write/read
   CompactSerializer serializer;

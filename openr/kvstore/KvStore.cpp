@@ -30,6 +30,7 @@ KvStore::KvStore(
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
+    messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
     std::shared_ptr<const Config> config)

@@ -246,6 +246,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     interfaceUpdatesQueue.close();
     peerUpdatesQueue.close();
+    kvRequestQueue.close();
     neighborUpdatesQueue.close();
     kvStoreSyncEventsQueue.close();
     prefixUpdatesQueue.close();
@@ -380,7 +381,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
   void
   createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context, config, peerUpdatesQueue.getReader());
+        context,
+        config,
+        peerUpdatesQueue.getReader(),
+        kvRequestQueue.getReader());
     kvStoreWrapper->run();
   }
 
@@ -395,6 +399,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
+        // TODO: add kvStoreKeyEventsQueue
         logSampleQueue,
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
@@ -612,6 +617,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
   messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
@@ -981,6 +987,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // stop linkMonitor
   LOG(INFO) << "Mock restarting link monitor!";
   peerUpdatesQueue.close();
+  kvRequestQueue.close();
   stopLinkMonitor();
   kvStoreWrapper->stop();
   kvStoreWrapper.reset();
@@ -990,6 +997,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   neighborUpdatesQueue = messaging::ReplicateQueue<NeighborEvent>();
   kvStoreSyncEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
   peerUpdatesQueue = messaging::ReplicateQueue<PeerEvent>();
+  kvRequestQueue = messaging::ReplicateQueue<KeyValueRequest>();
   nlSock->openQueue();
 
   // Recreate KvStore as previous kvStoreUpdatesQueue is closed
@@ -2058,6 +2066,7 @@ TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
+        // TODO: add kvStoreKeyEventsQueue
         logSampleQueue,
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
@@ -2134,6 +2143,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
+        // TODO: add kvStoreKeyEventsQueue
         logSampleQueue,
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),

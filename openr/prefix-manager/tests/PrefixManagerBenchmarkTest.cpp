@@ -33,13 +33,15 @@ class PrefixManagerBenchmarkTestFixture {
     config_ = std::make_shared<Config>(tConfig);
 
     // spawn `KvStore` and `PrefixManager` for benchmarking
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config_);
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
+        context_, config_, std::nullopt, kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
+        // TODO: add kvStoreKeyEventsQueue_
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds{0} /* no delay for initial dump */);
@@ -53,6 +55,7 @@ class PrefixManagerBenchmarkTestFixture {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     fibRouteUpdatesQueue_.close();
+    kvRequestQueue_.close();
     kvStoreWrapper_->closeQueue();
 
     prefixManager_->stop();
@@ -134,6 +137,7 @@ class PrefixManagerBenchmarkTestFixture {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 
   std::shared_ptr<Config> config_;
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
