@@ -816,7 +816,6 @@ struct OpenrConfig {
    * be programmed at originator ahead of being advertised to peers; Reverse
    * order applies to to-withdraw routes. Name the flag as enable_fib_ack since
    * FIB-ACK is required to signal the completion of local programming.
-   * TODO: Deprecate after T78007837 is resolved.
   */
   58: bool enable_fib_ack = false;
 
@@ -825,6 +824,15 @@ struct OpenrConfig {
    * (e.g. PrefixManager, LinkMonitor) via queue.
    */
   59: bool enable_kvstore_request_queue = false;
+
+  /**
+   * Delay in milliseconds for route deletion. Route withdrawal would not get
+   * impacted. This delay would provide remote nodes some time to process
+   * route withdrawal and converge (e.g. next-hop group shrink), while still
+   * keeping the forwarding state intact for specified duration. Value of 0ms
+   * will disable route deletion.
+   */
+  60: i32 route_delete_delay_ms = 1000;
 
   # vip thrift injection service
   90: optional bool enable_vip_service;

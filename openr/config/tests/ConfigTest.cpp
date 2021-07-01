@@ -747,6 +747,19 @@ TEST(ConfigTest, PopulateInternalDb) {
     conf.enable_vip_service_ref() = true;
     EXPECT_TRUE(Config(conf).isVipServiceEnabled());
   }
+
+  // FIB route deletion
+  {
+    auto conf = getBasicOpenrConfig();
+    conf.route_delete_delay_ms_ref() = -1;
+    EXPECT_THROW((Config(conf)), std::invalid_argument);
+
+    conf.route_delete_delay_ms_ref() = 0;
+    EXPECT_NO_THROW((Config(conf)));
+
+    conf.route_delete_delay_ms_ref() = 1000;
+    EXPECT_NO_THROW((Config(conf)));
+  }
 }
 
 TEST(ConfigTest, GeneralGetter) {

@@ -62,11 +62,15 @@ Fib::Fib(
       dryrun_(config->getConfig().dryrun_ref().value_or(false)),
       enableSegmentRouting_(
           config->getConfig().enable_segment_routing_ref().value_or(false)),
+      routeDeleteDelay_(*config->getConfig().route_delete_delay_ms_ref()),
       retryRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       fibRouteUpdatesQueue_(fibRouteUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
   auto& tConfig = config->getConfig();
+
+  CHECK_GE(routeDeleteDelay_.count(), 0)
+      << "Route delete duration must be >= 0ms";
 
   retryRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     if (routeState_.state == RouteState::SYNCING) {
@@ -78,7 +82,7 @@ Fib::Fib(
       auto routeUpdate = routeState_.createUpdate();
       if (not routeUpdate.empty()) {
         LOG(INFO) << "Retry programming of dirty route entries";
-        updateRoutes(std::move(routeUpdate));
+        updateRoutes(std::move(routeUpdate), false /* useDeleteDelay */);
       }
     }
 
@@ -213,7 +217,7 @@ Fib::getRouteDb() {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([p = std::move(p), this]() mutable {
     thrift::RouteDatabase routeDb;
-    *routeDb.thisNodeName_ref() = myNodeName_;
+    routeDb.thisNodeName_ref() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
       routeDb.unicastRoutes_ref()->emplace_back(route.second.toThrift());
     }
@@ -231,7 +235,7 @@ Fib::getRouteDetailDb() {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([p = std::move(p), this]() mutable {
     thrift::RouteDatabaseDetail routeDetailDb;
-    *routeDetailDb.thisNodeName_ref() = myNodeName_;
+    routeDetailDb.thisNodeName_ref() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
       routeDetailDb.unicastRoutes_ref()->emplace_back(
           route.second.toThriftDetail());
@@ -400,56 +404,108 @@ Fib::RouteState::createUpdate() {
   // Return updates based on dirty state
   //
   update.type = DecisionRouteUpdate::INCREMENTAL;
+  auto const currentTime = std::chrono::steady_clock::now();
 
   // Populate unicast routes to add, update, or delete
-  for (auto& prefix : dirtyPrefixes) {
-    auto it = unicastRoutes.find(prefix);
-    if (it == unicastRoutes.end()) { // Delete
-      update.unicastRoutesToDelete.emplace_back(prefix);
+  for (auto itrPrefixes = dirtyPrefixes.begin();
+       itrPrefixes != dirtyPrefixes.end();) {
+    auto iter = unicastRoutes.find(itrPrefixes->first);
+    if (iter == unicastRoutes.end()) { // Delete
+      if (currentTime >= itrPrefixes->second) {
+        // pending delete has waited long enough
+        update.unicastRoutesToDelete.emplace_back(itrPrefixes->first);
+      } else {
+        ++itrPrefixes;
+        continue;
+      }
     } else { // Add or Update
-      update.unicastRoutesToUpdate.emplace(prefix, it->second);
+      update.unicastRoutesToUpdate.emplace(itrPrefixes->first, iter->second);
     }
+    // remove as we are creating a new update to program
+    itrPrefixes = dirtyPrefixes.erase(itrPrefixes);
   }
 
   // Populate mpls routes to add, update, or delete
-  for (auto& label : dirtyLabels) {
-    auto it = mplsRoutes.find(label);
+  for (auto itrLabel = dirtyLabels.begin(); itrLabel != dirtyLabels.end();) {
+    auto it = mplsRoutes.find(itrLabel->first);
     if (it == mplsRoutes.end()) { // Delete
-      update.mplsRoutesToDelete.emplace_back(label);
+      if (currentTime >= itrLabel->second) {
+        // pending delete has waited long enough
+        update.mplsRoutesToDelete.emplace_back(itrLabel->first);
+      } else {
+        ++itrLabel;
+        continue;
+      }
     } else { // Add or Update
-      update.mplsRoutesToUpdate.emplace(label, it->second);
+      update.mplsRoutesToUpdate.emplace(itrLabel->first, it->second);
+    }
+    // remove as we are creating a new update to program
+    itrLabel = dirtyLabels.erase(itrLabel);
+  }
+
+  return update;
+}
+
+// Computes the minimum timestamp among unicast and mpls routes w.r.t
+// current timestamp. In case there is a delete event which expired in the
+// past, retry timer is scheduled immediately.
+std::chrono::milliseconds
+Fib::nextRetryDuration() const {
+  // Schedule retry timer immediately if delayed deletion is not enabled
+  // or if there is no pending (dirty) routes for processing.
+  if (not delayedDeletionEnabled() or
+      (routeState_.state == RouteState::SYNCING) or
+      (routeState_.dirtyPrefixes.empty() and routeState_.dirtyLabels.empty())) {
+    return std::chrono::milliseconds(0);
+  }
+
+  auto const currTime = std::chrono::steady_clock::now();
+  auto nextRetryTime = currTime + routeDeleteDelay_;
+
+  for (auto& [_, addDeleteTime] : routeState_.dirtyPrefixes) {
+    if (addDeleteTime < nextRetryTime) {
+      nextRetryTime = addDeleteTime;
     }
   }
 
-  // Clear dirty state as we've created new update to program
-  dirtyPrefixes.clear();
-  dirtyLabels.clear();
+  for (auto& [_, addDeleteTime] : routeState_.dirtyLabels) {
+    if (addDeleteTime < nextRetryTime) {
+      nextRetryTime = addDeleteTime;
+    }
+  }
 
-  return update;
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::max(nextRetryTime, currTime) - currTime);
 }
 
 void
 Fib::RouteState::processFibUpdateError(
     thrift::PlatformFibUpdateError const& fibError) {
-  // Mark prefixes as dirty
+  const auto currentTime = std::chrono::steady_clock::now();
+  // Mark prefixes as dirty. All newly failed unicast routes are added into
+  // dirtyPrefixes map. We can distinguish between add/update and delete updates
+  // in createUpdate().
   for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes_ref()) {
     for (auto& prefix : prefixes) {
-      dirtyPrefixes.emplace(toIPNetwork(prefix));
+      dirtyPrefixes.emplace(toIPNetwork(prefix), currentTime);
     }
   }
   for (auto& [_, prefixes] : *fibError.vrf2failedDeletePrefixes_ref()) {
     for (auto& prefix : prefixes) {
-      dirtyPrefixes.emplace(toIPNetwork(prefix));
+      dirtyPrefixes.emplace(toIPNetwork(prefix), currentTime);
     }
   }
 
-  // Mark labels as dirty
-  dirtyLabels.insert(
-      fibError.failedAddUpdateMplsLabels_ref()->begin(),
-      fibError.failedAddUpdateMplsLabels_ref()->end());
-  dirtyLabels.insert(
-      fibError.failedDeleteMplsLabels_ref()->begin(),
-      fibError.failedDeleteMplsLabels_ref()->end());
+  // Mark labels as dirty. All newly failed unicast routes are added into
+  // dirtyPrefixes map. We can distinguish between add/update and delete updates
+  // in createUpdate().
+  for (auto& label : *fibError.failedAddUpdateMplsLabels_ref()) {
+    dirtyLabels.emplace(label, currentTime);
+  }
+
+  for (auto& label : *fibError.failedDeleteMplsLabels_ref()) {
+    dirtyLabels.emplace(label, currentTime);
+  }
 }
 
 // Process new route updates received from Decision module.
@@ -552,11 +608,16 @@ Fib::printMplsRoutesAddUpdate(
 }
 
 void
-Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
+Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
   updateRoutesSemaphore_.wait();
+
+  // Return if empty
+  if (routeUpdate.empty()) {
+    return;
+  }
 
   // Backup routes in routeState_. In case update routes failed, routes will be
   // programmed in later scheduled FIB sync.
@@ -572,13 +633,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
     return;
   }
 
-  // Return if empty
-  if (routeUpdate.empty()) {
-    return;
-  }
-
   LOG(INFO) << "Updating routes in FIB";
-  const auto startTime = std::chrono::steady_clock::now();
+  auto const currentTime = std::chrono::steady_clock::now();
 
   // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
   // and MplsRoute with the FibService client APIs
@@ -587,7 +643,24 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
   //
   // Delete Unicast routes
   //
-  auto const& unicastRoutesToDelete = *routeDbDelta.unicastRoutesToDelete_ref();
+  auto& unicastRoutesToDelete = *routeDbDelta.unicastRoutesToDelete_ref();
+  if (delayedDeletionEnabled() and useDeleteDelay) {
+    // Clear the routes to delete
+    unicastRoutesToDelete.clear();
+
+    // Mark dirty state here & set
+    for (auto& prefix : routeUpdate.unicastRoutesToDelete) {
+      const auto [itr, _] = routeState_.dirtyPrefixes.emplace(
+          prefix, currentTime + routeDeleteDelay_);
+      LOG(INFO) << "Will delete unicast route "
+                << folly::IPAddress::networkToString(prefix) << " after "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                       itr->second - currentTime)
+                       .count()
+                << "ms";
+    }
+  }
+
   if (unicastRoutesToDelete.size()) {
     LOG(INFO) << "Deleting " << unicastRoutesToDelete.size()
               << " unicast routes in FIB";
@@ -608,9 +681,9 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
                    << folly::exceptionStr(e);
         // Marked all routes to be deleted as dirty. So we try to remove them
         // again from FIB.
-        routeState_.dirtyPrefixes.insert(
-            routeUpdate.unicastRoutesToDelete.begin(),
-            routeUpdate.unicastRoutesToDelete.end());
+        for (const auto& prefix : routeUpdate.unicastRoutesToDelete) {
+          routeState_.dirtyPrefixes.emplace(prefix, currentTime);
+        }
         // NOTE: We still want to advertise these prefixes as deleted
       }
     }
@@ -647,7 +720,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
         // Next retry should restore, but meanwhile clients can take appropriate
         // action because FIB state is unclear e.g. withdraw route from KvStore
         for (auto& [prefix, _] : routeUpdate.unicastRoutesToUpdate) {
-          routeState_.dirtyPrefixes.emplace(prefix);
+          routeState_.dirtyPrefixes.emplace(prefix, currentTime);
           routeUpdate.unicastRoutesToDelete.emplace_back(prefix);
         }
 
@@ -660,7 +733,23 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
   //
   // Delete Mpls routes
   //
-  auto const& mplsRoutesToDelete = *routeDbDelta.mplsRoutesToDelete_ref();
+  auto& mplsRoutesToDelete = *routeDbDelta.mplsRoutesToDelete_ref();
+  if (enableSegmentRouting_ and useDeleteDelay and delayedDeletionEnabled()) {
+    // Clear the routes to delete
+    mplsRoutesToDelete.clear();
+
+    // Mark dirty state here & set
+    for (auto& mplsRoute : routeUpdate.mplsRoutesToDelete) {
+      const auto [itr, _] = routeState_.dirtyLabels.emplace(
+          mplsRoute, currentTime + routeDeleteDelay_);
+      LOG(INFO) << "Will delete mpls route " << mplsRoute << " after "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                       itr->second - currentTime)
+                       .count()
+                << "ms";
+    }
+  }
+
   if (enableSegmentRouting_ and mplsRoutesToDelete.size()) {
     LOG(INFO) << "Deleting " << mplsRoutesToDelete.size()
               << " mpls routes in FIB";
@@ -681,9 +770,9 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
                    << folly::exceptionStr(e);
         // Marked all routes to be deleted as dirty. So we try to remove them
         // again from FIB.
-        routeState_.dirtyLabels.insert(
-            routeUpdate.mplsRoutesToDelete.begin(),
-            routeUpdate.mplsRoutesToDelete.end());
+        for (const auto& label : routeUpdate.mplsRoutesToDelete) {
+          routeState_.dirtyLabels.emplace(label, currentTime);
+        }
         // NOTE: We still want to advertise these labels as deleted
       }
     }
@@ -720,7 +809,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
         // Next retry should restore, but meanwhile clients can take appropriate
         // action because FIB state is unclear e.g. withdraw route from KvStore
         for (auto& [label, _] : routeUpdate.mplsRoutesToUpdate) {
-          routeState_.dirtyLabels.emplace(label);
+          routeState_.dirtyLabels.emplace(label, currentTime);
           routeUpdate.mplsRoutesToDelete.emplace_back(label);
         }
 
@@ -733,7 +822,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate) {
   // Log statistics
   const auto elapsedTime =
       std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - startTime);
+          std::chrono::steady_clock::now() - currentTime);
   LOG(INFO) << fmt::format(
       "It took {} ms to update routes in FIB", elapsedTime.count());
   fb303::fbData->addStatValue(
@@ -761,7 +850,7 @@ Fib::syncRoutes() {
   const auto& unicastRoutes =
       createUnicastRoutesFromMap(routeState_.unicastRoutes);
   const auto& mplsRoutes = createMplsRoutesFromMap(routeState_.mplsRoutes);
-  auto startTime = std::chrono::steady_clock::now();
+  auto currentTime = std::chrono::steady_clock::now();
   fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
 
   // Create DecisionRouteUpdate that'll be published after successful sync. On
@@ -832,7 +921,7 @@ Fib::syncRoutes() {
   // value of last sync duration
   const auto elapsedTime =
       std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - startTime);
+          std::chrono::steady_clock::now() - currentTime);
   LOG(INFO) << "It took " << elapsedTime.count() << "ms to sync routes in FIB";
   fb303::fbData->setCounter("fib.route_sync.time_ms", elapsedTime.count());
 
@@ -854,7 +943,10 @@ void
 Fib::scheduleRetryRoutesTimer() {
   if (not retryRoutesTimer_->isScheduled()) {
     // Schedule an immediate run if previous one is not scheduled
-    retryRoutesTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+    const auto duration = nextRetryDuration();
+    LOG(INFO) << "Schedule retry timer with period " << duration.count()
+              << " ms";
+    retryRoutesTimer_->scheduleTimeout(duration);
   }
 }
 
@@ -868,7 +960,6 @@ Fib::keepAliveCheck() {
                  << "Performing full route DB sync ...";
     // FibAgent has restarted. Enforce full sync
     transitionRouteState(RouteState::FIB_CONNECTED);
-    retryRoutesExpBackoff_.reportSuccess();
     retryRoutesExpBackoff_.reportSuccess();
     scheduleRetryRoutesTimer();
   }

@@ -152,8 +152,12 @@ class Fib final : public OpenrEventBase {
   /**
    * Incremental route programming. On route programming failure,
    * prefixes/labels are marked dirty and retryRoutesTimer is scheduled.
+   * If useDeleteDelay is false, delete routes without putting them in
+   * dirtyPrefixes/dirtyLabels (i.e., don't delay programming). Otherwise,
+   * delay deletion based on configured duration.
    */
-  void updateRoutes(DecisionRouteUpdate&& routeUpdate);
+  void updateRoutes(
+      DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay = true);
 
   /**
    * Sync the current RouteState with the switch agent.
@@ -198,9 +202,18 @@ class Fib final : public OpenrEventBase {
      * reasons for dirty marking
      * 1) A new update/delete notification is received for Prefix/Label
      * 2) Prefix/Label experienced a programming failure
+     * 3) A delete update needs to be delayed.
+     * Along with prefixes and labels, we also store timestamp when routes are
+     * received or updated.
      */
-    std::unordered_set<folly::CIDRNetwork> dirtyPrefixes;
-    std::unordered_set<uint32_t> dirtyLabels;
+    std::unordered_map<
+        folly::CIDRNetwork,
+        std::chrono::time_point<std::chrono::steady_clock>>
+        dirtyPrefixes;
+    std::unordered_map<
+        uint32_t,
+        std::chrono::time_point<std::chrono::steady_clock>>
+        dirtyLabels;
 
     /**
      * Enumeration depicting the route event that may arrive and affect `State`
@@ -243,8 +256,12 @@ class Fib final : public OpenrEventBase {
     }
 
     /**
-     * Update RouteState with the received route update from Decision or Static
-     * RouteUpdates queue. Update dirty set of prefixes and labels
+     * 1. Update RouteState with the received route update from Decision or
+     * Static RouteUpdates queue. Update - unicastRoutes and mplsRoutes which
+     * are similar to intended FIB tables for unicast and mpls routes
+     * respectively.
+     * 2. Update dirty set of prefixes and labels.
+     * 3. Process delete updates and delay deletion if configured to do so.
      */
     void update(const DecisionRouteUpdate& routeUpdate);
 
@@ -261,6 +278,17 @@ class Fib final : public OpenrEventBase {
      */
     void processFibUpdateError(thrift::PlatformFibUpdateError const& fibError);
   };
+
+  bool
+  delayedDeletionEnabled() const {
+    return routeDeleteDelay_ > std::chrono::milliseconds(0);
+  }
+
+  /**
+   * Get the next earliest timestamps from those routes which are pending
+   * delete.
+   */
+  std::chrono::milliseconds nextRetryDuration() const;
 
   /**
    * Helper function for state transition based on the event. Perform special
@@ -291,6 +319,10 @@ class Fib final : public OpenrEventBase {
   // routes will be programmed only if segment routing is enabled.
   const bool enableSegmentRouting_{false};
 
+  // Config knob - Minimum delay (in milliseconds) to be incurred before
+  // deleting a a route (both unicast and mpls).
+  const std::chrono::milliseconds routeDeleteDelay_{0};
+
   // Thrift client connection to switch FIB Agent using which we actually
   // manipulate routes.
   folly::EventBase evb_;
@@ -303,6 +335,7 @@ class Fib final : public OpenrEventBase {
   // - Program newly received route update
   // - Retry static routes
   // - Retry failed route updates
+  // - Program delete updats which are in pending state
   // We trigger this timer with ExponentialBackoff to ease up things if
   // programming keeps failing.
   std::unique_ptr<folly::AsyncTimeout> retryRoutesTimer_{nullptr};

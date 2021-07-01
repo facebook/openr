@@ -625,5 +625,10 @@ Config::populateInternalDb() {
     }
   }
 
+  // Route Deletion Parameter
+  if (*config_.route_delete_delay_ms_ref() < 0) {
+    throw std::invalid_argument("Route delete duration must be >= 0ms");
+  }
+
 } // namespace openr
 } // namespace openr
