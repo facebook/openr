@@ -226,14 +226,14 @@ class PrefixManager final : public OpenrEventBase {
       const std::vector<thrift::OriginatedPrefix>& prefixes);
 
   /*
-   * Util function to process ribEntry update from `Decision` and populate
-   * aggregates to advertise
+   * Util function to process programmed route update from Fib and populate
+   * aggregates to advertise.
    */
   void aggregatesToAdvertise(const folly::CIDRNetwork& prefix);
 
   /*
-   * Util function to process ribEntry update from `Decision` and populate
-   * aggregates to withdraw
+   * Util function to process programmed route update from Fib and populate
+   * aggregates to withdraw.
    */
   void aggregatesToWithdraw(const folly::CIDRNetwork& prefix);
 
@@ -393,16 +393,16 @@ class PrefixManager final : public OpenrEventBase {
    * prefixes to be originated from prefix-manager
    * ATTN: to support quick information retrieval, cache the mapping:
    *
-   *  OriginatedPrefix -> set of RIB prefixEntry(i.e. supporting routes)
+   *  OriginatedPrefix -> set of FIB prefixEntry(i.e. supporting routes)
    */
   std::unordered_map<folly::CIDRNetwork, OriginatedRoute> originatedPrefixDb_;
 
   /*
-   * prefixes received from decision
+   * prefixes received from OpenR/Fib.
    * ATTN: to avoid loop through ALL entries inside `originatedPrefixes`,
    *       cache the reverse mapping:
    *
-   *  RIB prefixEntry -> vector of OriginatedPrefix(i.e. subnet)
+   *  FIB prefixEntry -> vector of OriginatedPrefix(i.e. supported routes)
    */
   std::unordered_map<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
       ribPrefixDb_;
