@@ -22,6 +22,21 @@ include "OpenrConfig.thrift"
  */
 const string kDefaultArea = "0";
 
+/*
+ * Events in OpenR initialization process.
+ * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html
+ */
+enum InitializationEvent {
+  AGENT_CONFIGURED = 0,
+  LINK_DISCOVERED = 1,
+  NEIGHBOR_DISCOVERED = 2,
+  KVSTORE_SYNCED = 3,
+  RIB_COMPUTED = 4,
+  FIB_SYNCED = 5,
+  PREFIX_DB_SYNCED = 6,
+  ADJACENCY_DB_SYNCED = 7,
+}
+
 /**
  * Event object to track the key attribute and timestamp used for performance
  * measurement.
