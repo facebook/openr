@@ -16,6 +16,7 @@
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
@@ -1527,7 +1528,13 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   prefixEntry1A.area_stack_ref() = {"65000"};
   prefixEntry1A.metrics_ref()->distance_ref() = 1;
   prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
+  // Set non-transitive attributes.
+  prefixEntry1A.forwardingAlgorithm_ref() =
+      thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+  prefixEntry1A.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
+  prefixEntry1A.minNexthop_ref() = 10;
   prefixEntry1A.prependLabel_ref() = 70000;
+
   auto unicast1A = RibUnicastEntry(
       toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, "A", false);
   // expected kvstore announcement to other area, append "A" in area stack
@@ -1535,7 +1542,11 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   expectedPrefixEntry1A.area_stack_ref()->push_back("A");
   ++*expectedPrefixEntry1A.metrics_ref()->distance_ref();
   expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
-  // Prepend label is not expected to be leak into other areas.
+  // Non-transitive attributes should not be reset before redistribution.
+  expectedPrefixEntry1A.forwardingAlgorithm_ref() =
+      thrift::PrefixForwardingAlgorithm();
+  expectedPrefixEntry1A.forwardingType_ref() = thrift::PrefixForwardingType();
+  expectedPrefixEntry1A.minNexthop_ref().reset();
   expectedPrefixEntry1A.prependLabel_ref().reset();
 
   {

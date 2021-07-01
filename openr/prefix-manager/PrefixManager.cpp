@@ -17,6 +17,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace fb303 = facebook::fb303;
@@ -1237,6 +1238,19 @@ PrefixManager::storeProgrammedRoutes(
   // TODO: Handle programmed unicast routes.
 }
 
+namespace {
+void
+resetNonTransitiveAttrs(thrift::PrefixEntry& prefixEntry) {
+  // Reset non-transitive attributes which cannot be redistributed across areas.
+  // Ref: https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html.
+  prefixEntry.forwardingAlgorithm_ref() =
+      thrift::PrefixForwardingAlgorithm::SP_ECMP;
+  prefixEntry.forwardingType_ref() = thrift::PrefixForwardingType::IP;
+  prefixEntry.minNexthop_ref().reset();
+  prefixEntry.prependLabel_ref().reset();
+}
+} // namespace
+
 void
 PrefixManager::redistributePrefixesAcrossAreas(
     DecisionRouteUpdate& fibRouteUpdate) {
@@ -1252,12 +1266,12 @@ PrefixManager::redistributePrefixesAcrossAreas(
     // NOTE: future expansion - run egress policy here
 
     //
-    // cross area, modify attributes
+    // Cross area, modify attributes
     //
     auto& prefixEntry = route.bestPrefixEntry;
 
     if (*prefixEntry.type_ref() == thrift::PrefixType::CONFIG) {
-      // skip local-originated prefix as it won't be considered as
+      // Skip local-originated prefix as it won't be considered as
       // part of its own supporting routes.
       auto originatedPrefixIt = originatedPrefixDb_.find(prefix);
       if (originatedPrefixIt != originatedPrefixDb_.end()) {
@@ -1265,19 +1279,21 @@ PrefixManager::redistributePrefixesAcrossAreas(
       }
     }
 
+    // Update interested mutable transitive attributes.
+    //
+    // For OpenR route representation, referring to
+    // https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html
     // 1. append area stack
     prefixEntry.area_stack_ref()->emplace_back(route.bestArea);
     // 2. increase distance by 1
     ++(*prefixEntry.metrics_ref()->distance_ref());
     // 3. normalize to RIB routes
     prefixEntry.type_ref() = thrift::PrefixType::RIB;
-    // 4. Avoid leaking prepend labels into other areas.
-    // Today prefixes with prepend label are produced in BgpSpeaker and arrive
-    // at prefixUpdatesQueue. Prefixes extracted from fibRouteUpdate are
-    // for the purposes of redistribution from one area to another.
-    prefixEntry.prependLabel_ref().reset();
 
-    // populate routes to be advertised to KvStore
+    // Reset non-transitive attributes before redistribution across areas.
+    resetNonTransitiveAttrs(prefixEntry);
+
+    // Populate routes to be advertised to KvStore
     auto dstAreas = allAreaIds();
     for (const auto& nh : route.nexthops) {
       if (nh.area_ref().has_value()) {
@@ -1288,7 +1304,7 @@ PrefixManager::redistributePrefixesAcrossAreas(
         std::make_shared<thrift::PrefixEntry>(std::move(prefixEntry)),
         std::move(dstAreas));
 
-    // adjust supporting route count due to prefix advertisement
+    // Adjust supporting route count due to prefix advertisement
     aggregatesToAdvertise(prefix);
   }
 
