@@ -115,6 +115,88 @@ Config::createPrefixAllocationParams(
 }
 
 void
+Config::checkPrependLabelConfig(openr::thrift::AreaConfig& areaConf) {
+  // Check label range values for prepend labels
+  if (areaConf.prepend_label_ranges_ref().has_value()) {
+    const auto& v4LblRange = *areaConf.prepend_label_ranges_ref()->v4_ref();
+    if (not isLabelRangeValid(v4LblRange)) {
+      throw std::invalid_argument(fmt::format(
+          "v4: prepend label range [{}, {}] is invalid for area id {}",
+          *v4LblRange.start_label_ref(),
+          *v4LblRange.end_label_ref(),
+          areaConf.get_area_id()));
+    }
+
+    const auto& v6LblRange = *areaConf.prepend_label_ranges_ref()->v6_ref();
+    if (not isLabelRangeValid(v6LblRange)) {
+      throw std::invalid_argument(fmt::format(
+          "v6: prepend label range [{}, {}] is invalid for area id {}",
+          *v6LblRange.start_label_ref(),
+          *v6LblRange.end_label_ref(),
+          areaConf.get_area_id()));
+    }
+  }
+}
+
+void
+Config::checkAdjacencyLabelConfig(openr::thrift::AreaConfig& areaConf) {
+  if (areaConf.sr_adj_label_ref().has_value()) {
+    // Check adj segment labels if configured or if label range is valid
+    if (areaConf.sr_adj_label_ref()->sr_adj_label_type_ref() ==
+        thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX) {
+      if (not areaConf.sr_adj_label_ref()->adj_label_range_ref().has_value()) {
+        throw std::invalid_argument(fmt::format(
+            "label range for adjacency labels is not configured for area id {}",
+            areaConf.get_area_id()));
+      } else if (not isLabelRangeValid(
+                     *areaConf.sr_adj_label_ref()->adj_label_range_ref())) {
+        const auto& label_range =
+            *areaConf.sr_adj_label_ref()->adj_label_range_ref();
+        throw std::invalid_argument(fmt::format(
+            "label range [{}, {}] for adjacency labels is invalid for area id {}",
+            *label_range.start_label_ref(),
+            *label_range.end_label_ref(),
+            areaConf.get_area_id()));
+      }
+    }
+  }
+}
+
+void
+Config::checkNodeSegmentLabelConfig(openr::thrift::AreaConfig& areaConf) {
+  // Check if Node Segment Label is configured or if label range is valid
+  if (areaConf.area_sr_node_label_ref().has_value()) {
+    const auto& srNodeConfig = *areaConf.area_sr_node_label_ref();
+    if (*srNodeConfig.sr_node_label_type_ref() ==
+        thrift::SegmentRoutingNodeLabelType::AUTO) {
+      // Automatic node segment label allocation
+      if (not srNodeConfig.node_segment_label_range_ref().has_value()) {
+        throw std::invalid_argument(fmt::format(
+            "node segment label range is not configured for area id: {}",
+            areaConf.get_area_id()));
+      } else if (not isLabelRangeValid(
+                     *srNodeConfig.node_segment_label_range_ref())) {
+        const auto& label_range = *srNodeConfig.node_segment_label_range_ref();
+        throw std::invalid_argument(fmt::format(
+            "node segment label range [{}, {}] is invalid for area config id: {}",
+            *label_range.start_label_ref(),
+            *label_range.end_label_ref(),
+            areaConf.get_area_id()));
+      }
+    } else if (not srNodeConfig.node_segment_label_ref().has_value()) {
+      throw std::invalid_argument(fmt::format(
+          "static node segment label is not configured for area config id: {}",
+          areaConf.get_area_id()));
+    } else if (not isMplsLabelValid(*srNodeConfig.node_segment_label_ref())) {
+      throw std::invalid_argument(fmt::format(
+          "node segment label {} is invalid for area config id: {}",
+          *srNodeConfig.node_segment_label_ref(),
+          areaConf.get_area_id()));
+    }
+  }
+}
+
+void
 Config::populateAreaConfig() {
   if (config_.get_areas().empty()) {
     // TODO remove once transition to areas is complete
@@ -167,37 +249,9 @@ Config::populateAreaConfig() {
           fmt::format("Duplicate area config id: {}", areaConf.get_area_id()));
     }
 
-    // Check if Node Segment Label is configured or if label range is valid
-    if (areaConf.area_sr_node_label_ref().has_value()) {
-      const auto& srNodeConfig = *areaConf.area_sr_node_label_ref();
-      if (*srNodeConfig.sr_node_label_type_ref() ==
-          thrift::SegmentRoutingNodeLabelType::AUTO) {
-        // Automatic node segment label allocation
-        if (not srNodeConfig.node_segment_label_range_ref().has_value()) {
-          throw std::invalid_argument(fmt::format(
-              "node segment label range is not configured for area config id: {}",
-              areaConf.get_area_id()));
-        } else if (not isLabelRangeValid(
-                       *srNodeConfig.node_segment_label_range_ref())) {
-          const auto& label_range =
-              *srNodeConfig.node_segment_label_range_ref();
-          throw std::invalid_argument(fmt::format(
-              "node segment label range [{}, {}] is invalid for area config id: {}",
-              *label_range.start_label_ref(),
-              *label_range.end_label_ref(),
-              areaConf.get_area_id()));
-        }
-      } else if (not srNodeConfig.node_segment_label_ref().has_value()) {
-        throw std::invalid_argument(fmt::format(
-            "static node segment label is not configured for area config id: {}",
-            areaConf.get_area_id()));
-      } else if (not isMplsLabelValid(*srNodeConfig.node_segment_label_ref())) {
-        throw std::invalid_argument(fmt::format(
-            "node segment label {} is invalid for area config id: {}",
-            *srNodeConfig.node_segment_label_ref(),
-            areaConf.get_area_id()));
-      }
-    }
+    checkNodeSegmentLabelConfig(areaConf);
+    checkAdjacencyLabelConfig(areaConf);
+    checkPrependLabelConfig(areaConf);
   }
 }
 

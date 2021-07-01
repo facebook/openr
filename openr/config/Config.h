@@ -190,6 +190,12 @@ class Config {
 
   void populateAreaConfig();
 
+  void checkPrependLabelConfig(openr::thrift::AreaConfig& areaConf);
+
+  void checkAdjacencyLabelConfig(openr::thrift::AreaConfig& areaConf);
+
+  void checkNodeSegmentLabelConfig(openr::thrift::AreaConfig& areaConf);
+
   const std::unordered_map<std::string, AreaConfiguration>&
   getAreas() const {
     return areaConfigs_;

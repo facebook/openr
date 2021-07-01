@@ -528,6 +528,23 @@ struct AreaConfig {
    * should be unique per device per area.
    */
   8: optional SegmentRoutingNodeLabel area_sr_node_label;
+
+  /**
+   * The way adjacency segment label should be allocated.
+   * This feature is turned off if:
+   *  (a) sr_adj_label is not specified in config.
+   *  (b) type is sr_adj_label.SegmentRoutingAdjLabelType
+   *      is DISABLE
+   */
+  9: optional SegmentRoutingAdjLabel sr_adj_label;
+
+  /**
+   * Specifies the ranges for prepend labels
+   * for v4 and v6 address families.
+   * Relevant for routing scheme with alternative
+   * topology(non-CLOS)
+   */
+  10: optional MplsLabelRanges prepend_label_ranges;
 } (cpp.minimize_padding)
 
 /**

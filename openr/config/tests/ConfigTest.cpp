@@ -5,22 +5,22 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/common/Constants.h>
-#include <openr/common/MplsUtil.h>
-#include <thread>
-#include <utility>
-#include "openr/if/gen-cpp2/BgpConfig_types.h"
-#include "openr/if/gen-cpp2/OpenrConfig_types.h"
-
 #include <folly/FileUtil.h>
 #include <folly/experimental/TestUtil.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <thread>
+#include <utility>
 
+#include <openr/common/Constants.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/config/Config.h>
 #include <openr/config/GflagConfig.h>
 #include <openr/config/tests/Utils.h>
+#include <openr/if/gen-cpp2/BgpConfig_types.h>
+#include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -333,6 +333,72 @@ TEST(ConfigTest, PopulateAreaConfig) {
     }
 
     EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
+  }
+
+  // area prepend label
+  {
+    auto confAreaPolicy = getBasicOpenrConfig();
+    openr::thrift::AreaConfig areaConfig = getAreaConfig("1");
+
+    openr::thrift::MplsLabelRanges prepend_labels;
+    openr::thrift::LabelRange lrp4;
+    openr::thrift::LabelRange lrp6;
+
+    // prepend labels
+    lrp4.start_label_ref() =
+        openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+    lrp4.end_label_ref() =
+        openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+    lrp6.start_label_ref() =
+        openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+    lrp6.end_label_ref() =
+        openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+    prepend_labels.v4_ref() = lrp4;
+    prepend_labels.v6_ref() = lrp6;
+
+    lrp4.start_label_ref() =
+        openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+    lrp4.end_label_ref() =
+        openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+
+    lrp6.start_label_ref() =
+        openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+    lrp6.end_label_ref() =
+        openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+
+    areaConfig.prepend_label_ranges_ref() = prepend_labels;
+
+    // valid prepend label config
+    confAreaPolicy.areas_ref()->emplace_back(areaConfig);
+    EXPECT_NO_THROW((Config(confAreaPolicy)));
+  }
+
+  // area adjacency label
+  {
+    auto confAreaPolicy = getBasicOpenrConfig();
+    openr::thrift::AreaConfig areaConfig = getAreaConfig("1");
+
+    openr::thrift::SegmentRoutingAdjLabel adj_segment_label;
+    openr::thrift::LabelRange adj_label_range;
+    adj_label_range.start_label_ref() =
+        openr::MplsConstants::kSrLocalRange.first;
+    adj_label_range.end_label_ref() =
+        openr::MplsConstants::kSrLocalRange.second;
+    adj_segment_label.sr_adj_label_type_ref() =
+        openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
+    adj_segment_label.adj_label_range_ref() = adj_label_range;
+
+    areaConfig.sr_adj_label_ref() = adj_segment_label;
+
+    // valid adj label config
+    confAreaPolicy.areas_ref()->emplace_back(areaConfig);
+    EXPECT_NO_THROW((Config(confAreaPolicy)));
+
+    // disabled adj label
+    (*confAreaPolicy.areas_ref()).clear();
+    adj_segment_label.sr_adj_label_type_ref() =
+        openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
+    EXPECT_NO_THROW((Config(confAreaPolicy)));
   }
 }
 
