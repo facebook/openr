@@ -630,6 +630,8 @@ class KvStore final : public OpenrEventBase {
 
   std::map<std::string, int64_t> getGlobalCounters() const;
 
+  void initGlobalCounters();
+
   // helper for public semifuture API. Returns a reference to the relevant
   // KvStoreDb (to be captured and operated on in this event loop) or throws an
   // instance of OpenrError

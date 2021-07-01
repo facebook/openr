@@ -373,6 +373,7 @@ INSTANTIATE_TEST_CASE_P(
 //
 TEST_F(KvStoreTestFixture, CounterReport) {
   // clean up counters before testing
+  const std::string& area = kTestingAreaName;
   fb303::fbData->resetAllData();
 
   auto kvStore = createKvStore("node1");
@@ -429,6 +430,13 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(counters.count("kvstore.cmd_key_get.count"));
   ASSERT_TRUE(counters.count("kvstore.sent_key_vals.sum"));
   ASSERT_TRUE(counters.count("kvstore.sent_publications.count"));
+  ASSERT_TRUE(counters.count("kvstore.sent_key_vals." + area + ".sum"));
+  ASSERT_TRUE(counters.count("kvstore.sent_publications." + area + ".count"));
+  ASSERT_TRUE(counters.count("kvstore.updated_key_vals." + area + ".sum"));
+  ASSERT_TRUE(counters.count("kvstore.received_key_vals." + area + ".sum"));
+  ASSERT_TRUE(
+      counters.count("kvstore.received_publications." + area + ".count"));
+
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_peer_dump.count"));
@@ -447,12 +455,16 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(0, counters.at("kvstore.cmd_key_get.count"));
   EXPECT_EQ(0, counters.at("kvstore.sent_key_vals.sum"));
   EXPECT_EQ(0, counters.at("kvstore.sent_publications.count"));
+  EXPECT_EQ(0, counters.at("kvstore.sent_key_vals." + area + ".sum"));
+  EXPECT_EQ(0, counters.at("kvstore.sent_publications." + area + ".count"));
 
   // Verify four keys were set
   ASSERT_EQ(1, counters.count("kvstore.cmd_key_set.count"));
   EXPECT_EQ(4, counters.at("kvstore.cmd_key_set.count"));
   ASSERT_EQ(1, counters.count("kvstore.received_key_vals.sum"));
   EXPECT_EQ(4, counters.at("kvstore.received_key_vals.sum"));
+  ASSERT_EQ(1, counters.count("kvstore.received_key_vals." + area + ".sum"));
+  EXPECT_EQ(4, counters.at("kvstore.received_key_vals." + area + ".sum"));
 
   // Verify the key and the number of key
   ASSERT_TRUE(kvStore->getKey(kTestingAreaName, "test-key2").has_value());
@@ -463,12 +475,17 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   // Verify the number key update
   ASSERT_EQ(1, counters.count("kvstore.updated_key_vals.sum"));
   EXPECT_EQ(2, counters.at("kvstore.updated_key_vals.sum"));
+  ASSERT_EQ(1, counters.count("kvstore.updated_key_vals." + area + ".sum"));
+  EXPECT_EQ(2, counters.at("kvstore.updated_key_vals." + area + ".sum"));
 
   // Verify publication counter
   ASSERT_EQ(1, counters.count("kvstore.looped_publications.count"));
   EXPECT_EQ(1, counters.at("kvstore.looped_publications.count"));
   ASSERT_EQ(1, counters.count("kvstore.received_publications.count"));
   EXPECT_EQ(4, counters.at("kvstore.received_publications.count"));
+  ASSERT_EQ(
+      1, counters.count("kvstore.received_publications." + area + ".count"));
+  EXPECT_EQ(4, counters.at("kvstore.received_publications." + area + ".count"));
 
   // Verify redundant publication counter
   ASSERT_EQ(1, counters.count("kvstore.received_redundant_publications.count"));

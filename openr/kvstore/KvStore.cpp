@@ -145,6 +145,8 @@ KvStore::KvStore(
         });
   }
 
+  initGlobalCounters();
+
   // create KvStoreDb instances
   for (auto const& area : config->getAreaIds()) {
     kvStoreDb_.emplace(
@@ -768,6 +770,83 @@ KvStore::getGlobalCounters() const {
   return flatCounters;
 }
 
+void
+KvStore::initGlobalCounters() {
+  // Initialize fb303 counter keys for thrift
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_full_sync", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_full_sync_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_full_sync_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_pub", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_pub_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_pub_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_finalized_sync", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_finalized_sync_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_finalized_sync_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_dual_msg_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_dual_msg_failure", fb303::COUNT);
+
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.full_sync_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.flood_pub_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.finalized_sync_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.dual_msg_duration_ms", fb303::AVG);
+
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_missing_keys", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_flood_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_keyvals_update", fb303::SUM);
+
+  // TODO: remove `kvstore.zmq.*` counters once ZMQ socket is deprecated
+  fb303::fbData->addStatExportType("kvstore.zmq.num_missing_keys", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.zmq.num_keyvals_update", fb303::SUM);
+
+  // Initialize stats keys
+  fb303::fbData->addStatExportType("kvstore.cmd_hash_dump", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_key_dump", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_key_get", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_key_set", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_peer_add", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_peer_dump", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_per_del", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.expired_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.flood_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("kvstore.full_sync_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("kvstore.looped_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.rate_limit_keys", fb303::AVG);
+  fb303::fbData->addStatExportType("kvstore.rate_limit_suppress", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_dual_messages", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.received_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_redundant_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.sent_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.sent_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.updated_key_vals", fb303::SUM);
+}
+
 // static util function to fetch peers by state
 std::vector<std::string>
 KvStoreDb::getPeersByState(thrift::KvStorePeerState state) {
@@ -1006,79 +1085,16 @@ KvStoreDb::KvStoreDb(
   ttlCountdownTimer_ = folly::AsyncTimeout::make(
       *evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
-  // Initialize fb303 counter keys for thrift
+  // initialize KvStore per-area counters
+  fb303::fbData->addStatExportType("kvstore.sent_key_vals." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
+      "kvstore.sent_publications." + area, fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_full_sync", fb303::COUNT);
+      "kvstore.updated_key_vals." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_full_sync_success", fb303::COUNT);
+      "kvstore.received_key_vals." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_full_sync_failure", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_flood_pub", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_flood_pub_success", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_flood_pub_failure", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_finalized_sync", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_finalized_sync_success", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_finalized_sync_failure", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_dual_msg_success", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_dual_msg_failure", fb303::COUNT);
-
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.full_sync_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.flood_pub_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.finalized_sync_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.dual_msg_duration_ms", fb303::AVG);
-
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_missing_keys", fb303::SUM);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_flood_key_vals", fb303::SUM);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_keyvals_update", fb303::SUM);
-
-  // TODO: remove `kvstore.zmq.*` counters once ZMQ socket is deprecated
-  fb303::fbData->addStatExportType("kvstore.zmq.num_missing_keys", fb303::SUM);
-  fb303::fbData->addStatExportType(
-      "kvstore.zmq.num_keyvals_update", fb303::SUM);
-
-  // Initialize stats keys
-  fb303::fbData->addStatExportType("kvstore.cmd_hash_dump", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.cmd_key_dump", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.cmd_key_get", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.cmd_key_set", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.cmd_peer_add", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.cmd_peer_dump", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.cmd_per_del", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.expired_key_vals", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.flood_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType("kvstore.full_sync_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType("kvstore.looped_publications", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.rate_limit_keys", fb303::AVG);
-  fb303::fbData->addStatExportType("kvstore.rate_limit_suppress", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.received_dual_messages", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.received_key_vals", fb303::SUM);
-  fb303::fbData->addStatExportType(
-      "kvstore.received_publications", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.received_redundant_publications", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.sent_key_vals", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.sent_publications", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.updated_key_vals", fb303::SUM);
+      "kvstore.received_publications." + area, fb303::COUNT);
 }
 
 KvStoreDb::~KvStoreDb() {
@@ -2780,7 +2796,13 @@ KvStoreDb::mergePublication(
   // Add counters
   fb303::fbData->addStatValue("kvstore.received_publications", 1, fb303::COUNT);
   fb303::fbData->addStatValue(
+      "kvstore.received_publications." + area_, 1, fb303::COUNT);
+  fb303::fbData->addStatValue(
       "kvstore.received_key_vals",
+      rcvdPublication.keyVals_ref()->size(),
+      fb303::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.received_key_vals." + area_,
       rcvdPublication.keyVals_ref()->size(),
       fb303::SUM);
 
@@ -2827,6 +2849,8 @@ KvStoreDb::mergePublication(
   const size_t kvUpdateCnt = deltaPublication.keyVals_ref()->size();
   fb303::fbData->addStatValue(
       "kvstore.updated_key_vals", kvUpdateCnt, fb303::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.updated_key_vals." + area_, kvUpdateCnt, fb303::SUM);
 
   // Populate nodeIds and our nodeId_ to the end
   if (rcvdPublication.nodeIds_ref().has_value()) {
