@@ -225,6 +225,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue,
+        kvRequestQueue,
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
         config,
@@ -399,8 +400,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
-        // TODO: add kvStoreKeyEventsQueue
         logSampleQueue,
+        kvRequestQueue,
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
@@ -2066,8 +2067,8 @@ TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
-        // TODO: add kvStoreKeyEventsQueue
         logSampleQueue,
+        kvRequestQueue,
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
@@ -2143,8 +2144,8 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
         peerUpdatesQueue,
-        // TODO: add kvStoreKeyEventsQueue
         logSampleQueue,
+        kvRequestQueue,
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),

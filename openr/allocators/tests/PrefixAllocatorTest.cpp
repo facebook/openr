@@ -112,9 +112,9 @@ class PrefixAllocatorFixture : public ::testing::Test {
   createPrefixManager() {
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
+        kvRequestQueue_,
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
-        // TODO: add kvStoreKeyEventsQueue_
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -445,9 +445,9 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
+          kvRequestQueue,
           prefixQueues.at(i).getReader(),
           fibRouteUpdatesQueues.at(i).getReader(),
-          // TODO: add kvStoreKeyEventsQueue
           currConfig,
           store->getKvStore(),
           std::chrono::seconds(0));

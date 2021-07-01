@@ -42,6 +42,7 @@ PrefixManagerPendingUpdates::applyPrefixChange(
 
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
+    messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
@@ -51,6 +52,7 @@ PrefixManager::PrefixManager(
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
+      kvRequestQueue_(kvRequestQueue),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       kvStore_(kvStore),
       preferOpenrOriginatedRoutes_(

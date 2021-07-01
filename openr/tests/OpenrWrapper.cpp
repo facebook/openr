@@ -183,9 +183,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       prefixUpdatesQueue_,
       peerUpdatesQueue_,
       logSampleQueue_,
+      kvRequestQueue_,
       neighborUpdatesQueue_.getReader(),
       kvStoreSyncEventsQueue_.getReader(),
-      // TODO: add kvStoreKeyEventsQueue_
       nlSock_->getReader(),
       false, /* overrideDrainState */
       linkMonitorAdjHoldTime);
@@ -203,9 +203,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   prefixManager_ = std::make_unique<PrefixManager>(
       staticRoutesQueue_,
+      kvRequestQueue_,
       prefixUpdatesQueue_.getReader(),
       fibRouteUpdatesQueue_.getReader(),
-      // TODO: add kvStoreKeyEventsQueue_
       config_,
       kvStore_.get(),
       std::chrono::seconds(0));

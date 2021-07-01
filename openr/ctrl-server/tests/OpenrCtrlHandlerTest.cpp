@@ -117,9 +117,9 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
         staticRoutesUpdatesQueue_,
+        kvRequestQueue_,
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
-        // TODO: add kvStoreKeyEventsQueue_
         config,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds(0));
@@ -145,8 +145,8 @@ class OpenrCtrlFixture : public ::testing::Test {
         prefixUpdatesQueue_,
         peerUpdatesQueue_,
         logSampleQueue_,
+        kvRequestQueue_,
         neighborUpdatesQueue_.getReader(),
-        // TODO: add kvStoreKeyEventsQueue_
         kvStoreWrapper_->getInitialSyncEventsReader(),
         nlSock_->getReader(),
         false, /* overrideDrainState */

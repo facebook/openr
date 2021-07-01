@@ -39,9 +39,9 @@ class PrefixManagerBenchmarkTestFixture {
 
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
+        kvRequestQueue_,
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
-        // TODO: add kvStoreKeyEventsQueue_
         config_,
         kvStoreWrapper_->getKvStore(),
         std::chrono::seconds{0} /* no delay for initial dump */);

@@ -5,13 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStoreWrapper.h"
-
 #include <memory>
 
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/kvstore/KvStoreWrapper.h>
+
 namespace openr {
 
 KvStoreWrapper::KvStoreWrapper(

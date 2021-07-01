@@ -140,10 +140,10 @@ class PrefixManagerTestFixture : public testing::Test {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue,
+        kvRequestQueue,
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
         cfg,
-        // TODO: add kvStoreKeyEventsQueue
         kvStoreWrapper->getKvStore(),
         std::chrono::seconds{0});
 
@@ -810,6 +810,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   auto config = std::make_shared<Config>(tConfig);
   auto prefixManager2 = std::make_unique<PrefixManager>(
       staticRouteUpdatesQueue,
+      kvRequestQueue,
       prefixUpdatesQueue.getReader(),
       fibRouteUpdatesQueue.getReader(),
       config,

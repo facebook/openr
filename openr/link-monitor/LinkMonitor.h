@@ -106,6 +106,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
       messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
       messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
       messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
@@ -377,6 +378,9 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;
+
+  // Queue to send key-value udpate requests to KvStore
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
   // ser/deser binary data for transmission
   apache::thrift::CompactSerializer serializer_;

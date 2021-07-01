@@ -402,9 +402,9 @@ main(int argc, char** argv) {
       "prefix_manager",
       std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
+          kvRequestQueue,
           prefixUpdatesQueue.getReader(),
           std::move(routeUpdatesQueueReader),
-          // TODO: add kvStoreKeyEventsQueue
           config,
           kvStore,
           initialPrefixHoldTime));
@@ -455,10 +455,10 @@ main(int argc, char** argv) {
           prefixUpdatesQueue,
           peerUpdatesQueue,
           logSampleQueue,
+          kvRequestQueue,
           neighborUpdatesQueue.getReader(),
           kvStoreSyncEventsQueue.getReader(),
           netlinkEventsQueue.getReader(),
-          // TODO: add kvStoreKeyEventsQueue
           FLAGS_override_drain_state,
           initialAdjHoldTime));
 

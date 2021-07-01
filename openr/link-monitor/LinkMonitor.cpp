@@ -68,6 +68,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
+    messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
@@ -97,6 +98,7 @@ LinkMonitor::LinkMonitor(
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
       logSampleQueue_(logSampleQueue),
+      kvRequestQueue_(kvRequestQueue),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff, true),
       configStore_(configStore),
       nlSock_(nlSock) {

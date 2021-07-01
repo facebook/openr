@@ -62,6 +62,7 @@ class PrefixManager final : public OpenrEventBase {
   PrefixManager(
       // producer queue
       messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
@@ -272,6 +273,9 @@ class PrefixManager final : public OpenrEventBase {
 
   // queue to publish originated route updates to decision
   messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue_;
+
+  // queue to send key-value update requests to KvStore
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
   // V4 prefix over V6 nexthop enabled
   const bool v4OverV6Nexthop_{false};
