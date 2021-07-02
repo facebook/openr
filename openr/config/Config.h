@@ -34,9 +34,17 @@ class AreaConfiguration {
  public:
   explicit AreaConfiguration(thrift::AreaConfig const& area)
       : areaId_(area.get_area_id()) {
-    if (area.area_sr_node_label_ref().has_value()) {
-      srNodeLabel_ = *area.area_sr_node_label_ref();
+    if (auto nodeLabel = area.area_sr_node_label_ref()) {
+      srNodeLabel_ = *nodeLabel;
     }
+    if (auto adjLabel = area.sr_adj_label_ref()) {
+      srAdjLabel_ = *adjLabel;
+    }
+
+    if (auto prependLabel = area.prepend_label_ranges_ref()) {
+      srPrependLLabelRanges_ = *prependLabel;
+    }
+
     neighborRegexSet_ = compileRegexSet(area.get_neighbor_regexes());
     interfaceIncludeRegexSet_ =
         compileRegexSet(area.get_include_interface_regexes());
@@ -57,6 +65,16 @@ class AreaConfiguration {
   std::optional<openr::thrift::SegmentRoutingNodeLabel>
   getNodeSegmentLabelConfig() const {
     return srNodeLabel_;
+  }
+
+  std::optional<openr::thrift::SegmentRoutingAdjLabel>
+  getAdjSegmentLabelConfig() const {
+    return srAdjLabel_;
+  }
+
+  std::optional<openr::thrift::MplsLabelRanges>
+  getPrependLabelConfig() const {
+    return srPrependLLabelRanges_;
   }
 
   bool
@@ -83,6 +101,12 @@ class AreaConfiguration {
  private:
   const std::string areaId_;
   std::optional<openr::thrift::SegmentRoutingNodeLabel> srNodeLabel_{
+      std::nullopt};
+
+  std::optional<openr::thrift::SegmentRoutingAdjLabel> srAdjLabel_{
+      std::nullopt};
+
+  std::optional<openr::thrift::MplsLabelRanges> srPrependLLabelRanges_{
       std::nullopt};
 
   std::optional<std::string> importPolicyName_{std::nullopt};

@@ -25,13 +25,27 @@ createAreaConfig(
     const std::string& areaId,
     const std::vector<std::string>& neighborRegexes,
     const std::vector<std::string>& interfaceRegexes,
-    const std::optional<std::string>& policy = std::nullopt) {
+    const std::optional<std::string>& policy = std::nullopt,
+    const bool enableAdjLabels = false) {
   openr::thrift::AreaConfig areaConfig;
   areaConfig.area_id_ref() = areaId;
   areaConfig.neighbor_regexes_ref() = neighborRegexes;
   areaConfig.include_interface_regexes_ref() = interfaceRegexes;
   if (policy) {
     areaConfig.set_import_policy_name(*policy);
+  }
+
+  if (enableAdjLabels) {
+    openr::thrift::SegmentRoutingAdjLabelType sr_adj_label_type;
+    openr::thrift::SegmentRoutingAdjLabel sr_adj_label;
+    openr::thrift::LabelRange lr;
+
+    lr.start_label_ref() = openr::MplsConstants::kSrLocalRange.first;
+    lr.end_label_ref() = openr::MplsConstants::kSrLocalRange.second;
+    sr_adj_label_type = openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
+    sr_adj_label.sr_adj_label_type_ref() = sr_adj_label_type;
+    sr_adj_label.adj_label_range_ref() = lr;
+    areaConfig.sr_adj_label_ref() = sr_adj_label;
   }
   return areaConfig;
 }
@@ -85,25 +99,13 @@ getBasicOpenrConfig(
   config.enable_kvstore_request_queue_ref() = false;
 
   if (areaCfg.empty()) {
-    config.areas_ref() = {createAreaConfig(kTestingAreaName, {".*"}, {".*"})};
+    config.areas_ref() = {createAreaConfig(
+        kTestingAreaName, {".*"}, {".*"}, std::nullopt, enableAdjLabels)};
   } else {
     config.areas_ref() = areaCfg;
   }
 
   openr::thrift::SegmentRoutingConfig srConfig;
-  if (enableAdjLabels) {
-    openr::thrift::SegmentRoutingAdjLabelType sr_adj_label_type;
-    openr::thrift::SegmentRoutingAdjLabel sr_adj_label;
-    openr::thrift::LabelRange lr;
-
-    lr.start_label_ref() = openr::MplsConstants::kSrLocalRange.first;
-    lr.end_label_ref() = openr::MplsConstants::kSrLocalRange.second;
-    sr_adj_label_type = openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-    sr_adj_label.sr_adj_label_type_ref() = sr_adj_label_type;
-    sr_adj_label.adj_label_range_ref() = lr;
-    srConfig.sr_adj_label_ref() = sr_adj_label;
-  }
-
   if (enablePrependLabels) {
     openr::thrift::MplsLabelRanges prepend_label_ranges;
     openr::thrift::LabelRange lr4;

@@ -214,7 +214,8 @@ class Spark final : public OpenrEventBase {
   // Utility function to generate a new label for neighbor on given interface.
   // If there is only one neighbor per interface then labels are expected to be
   // same across process-restarts
-  int32_t getNewLabelForIface(std::string const& ifName);
+  int32_t getNewLabelForIface(
+      std::string const& ifName, std::string const& areaId);
 
   // set flat counter/stats
   void updateGlobalCounters();

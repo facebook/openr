@@ -5039,8 +5039,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   sendKvPublication(publication);
   auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  // self mpls route, node 2 mpls route and adj12 label route
-  EXPECT_EQ(3, routeDbDelta.mplsRoutesToUpdate.size());
+  // self mpls route and node 2 mpls route label route
+  EXPECT_EQ(2, routeDbDelta.mplsRoutesToUpdate.size());
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
 
@@ -5362,8 +5362,8 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   // Receive & verify all the expected updates
   auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  // self mpls route, node 2 mpls route, adj12 label route, static MPLS route
-  EXPECT_EQ(4, routeDbDelta.mplsRoutesToUpdate.size());
+  // self mpls route, node 2 mpls route and static MPLS route
+  EXPECT_EQ(3, routeDbDelta.mplsRoutesToUpdate.size());
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
 }

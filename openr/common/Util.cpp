@@ -583,11 +583,11 @@ createAdjDb(
     bool overLoadBit,
     const std::string& area) {
   thrift::AdjacencyDatabase adjDb;
-  *adjDb.thisNodeName_ref() = nodeName;
+  adjDb.thisNodeName_ref() = nodeName;
   adjDb.isOverloaded_ref() = overLoadBit;
-  *adjDb.adjacencies_ref() = adjs;
+  adjDb.adjacencies_ref() = adjs;
   adjDb.nodeLabel_ref() = nodeLabel;
-  *adjDb.area_ref() = area;
+  adjDb.area_ref() = area;
   return adjDb;
 }
 

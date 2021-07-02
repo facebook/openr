@@ -1205,8 +1205,8 @@ Spark::processHelloMsg(
     // TODO: Spark is yet to support area change due to dynamic configuration.
     //       To avoid running area deducing logic for every single helloMsg,
     //       ONLY deduce for unknown neighbors.
-    auto area = getNeighborArea(neighborName, ifName, config_->getAreas());
-    if (not area.has_value()) {
+    auto areaId = getNeighborArea(neighborName, ifName, config_->getAreas());
+    if (not areaId.has_value()) {
       return;
     }
 
@@ -1226,13 +1226,11 @@ Spark::processHelloMsg(
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
             enableFloodOptimization_, // DUAL supported or NOT
-            config_->isAdjacencyLabelsEnabled()
-                ? getNewLabelForIface(ifName) // label for Segment Routing
-                : 0, // Non-SR mode (will be ignored)
+            getNewLabelForIface(ifName, areaId.value()), // adj label
             remoteSeqNum, // seqNum reported by neighborNode
             keepAliveTime_, // stepDetector sample period
             std::move(rttChangeCb),
-            area.value()));
+            areaId.value()));
 
     auto& neighbor = ifNeighbors.at(neighborName);
     checkNeighborState(neighbor, SparkNeighState::IDLE);
@@ -1982,23 +1980,47 @@ Spark::findInterfaceFromIfindex(int ifIndex) {
 }
 
 int32_t
-Spark::getNewLabelForIface(const std::string& ifName) {
-  // interface must exists. We try to first assign label based on ifIndex if
-  // not already taken.
-  int32_t label =
-      MplsConstants::kSrLocalRange.first + interfaceDb_.at(ifName).ifIndex;
-  if (allocatedLabels_.insert(label).second) { // new value inserted
+Spark::getNewLabelForIface(
+    const std::string& ifName, const std::string& areaId) {
+  int32_t label = 0;
+
+  if (not config_->isSegmentRoutingEnabled()) {
     return label;
   }
 
-  // Label already exists let's try to find out a new one from the back
-  label = MplsConstants::kSrLocalRange.second; // last possible one
-  while (!allocatedLabels_.insert(label).second) { // value already exists
-    label--;
-  }
+  const auto& areaConfig = config_->getAreas().at(areaId);
+  // In absence of adj label config, we should return an invalid label (e.g.,
+  // 0).
+  if (areaConfig.getAdjSegmentLabelConfig().has_value() and
+      (*areaConfig.getAdjSegmentLabelConfig()).sr_adj_label_type_ref() !=
+          thrift::SegmentRoutingAdjLabelType::DISABLED) {
+    const auto labelStart = *((*areaConfig.getAdjSegmentLabelConfig())
+                                  .adj_label_range_ref()
+                                  ->start_label_ref());
+    const auto labelEnd = *((*areaConfig.getAdjSegmentLabelConfig())
+                                .adj_label_range_ref()
+                                ->end_label_ref());
 
-  if (label < MplsConstants::kSrLocalRange.first) {
-    throw std::runtime_error("Ran out of local label allocation space.");
+    // interface must exists. We try to first assign label based on ifIndex if
+    // not already taken.
+    label = labelStart + interfaceDb_.at(ifName).ifIndex;
+    if (allocatedLabels_.insert(label).second) { // new value inserted
+      return label;
+    }
+
+    // Label already exists let's try to find out a new one from the back
+    label = labelEnd; // last possible one
+    while (!allocatedLabels_.insert(label).second) { // value already exists
+      label--;
+    }
+
+    if (label < labelStart) {
+      throw std::runtime_error(fmt::format(
+          "Ran out of local label allocation space [{},{}] in area {}.",
+          labelStart,
+          labelEnd,
+          areaId));
+    }
   }
 
   return label;
