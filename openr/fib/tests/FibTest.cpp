@@ -2014,10 +2014,21 @@ TEST_F(FibTestFixtureWaitOnDecision, RouteProgrammingWithPersistentFailure) {
     // Verify that they're published as part of fib update
     auto publication = fibRouteUpdatesQueueReader.get().value();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-    EXPECT_EQ(2, publication.size()); // modifications
-    EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(0));
-    EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
 
+    EXPECT_TRUE((publication.size() == 2) or (publication.size() == 4));
+    if (publication.size() == 2) {
+      // Programming failure of P2/L2.
+      EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(0));
+      EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
+    } else {
+      // Programming success for P1/L1 and programming failure for P2/L2.
+      EXPECT_EQ(label1, publication.mplsRoutesToDelete.at(0));
+      EXPECT_EQ(toIPNetwork(prefix1), publication.unicastRoutesToDelete.at(0));
+      EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(1));
+      EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(1));
+    }
+
+    // Programming success for P2/L2
     publication = fibRouteUpdatesQueueReader.get().value();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
     EXPECT_EQ(2, publication.size());
