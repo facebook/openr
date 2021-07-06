@@ -276,6 +276,12 @@ main(int argc, char** argv) {
   auto decisionStaticRouteUpdatesQueueReader =
       staticRouteUpdatesQueue.getReader();
   auto fibStaticRouteUpdatesQueueReader = staticRouteUpdatesQueue.getReader();
+  auto fibDecisionRouteUpdatesQueueReader = routeUpdatesQueue.getReader();
+  auto linkMonitorNeighborUpdatesQueueReader = neighborUpdatesQueue.getReader();
+  auto linkMonitorKvStoreSyncEventsQueueReader =
+      kvStoreSyncEventsQueue.getReader();
+  auto linkMonitorNetlinkEventsQueueReader = netlinkEventsQueue.getReader();
+  auto decisionKvStoreUpdatesQueueReader = kvStoreUpdatesQueue.getReader();
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -456,9 +462,9 @@ main(int argc, char** argv) {
           peerUpdatesQueue,
           logSampleQueue,
           kvRequestQueue,
-          neighborUpdatesQueue.getReader(),
-          kvStoreSyncEventsQueue.getReader(),
-          netlinkEventsQueue.getReader(),
+          std::move(linkMonitorNeighborUpdatesQueueReader),
+          std::move(linkMonitorKvStoreSyncEventsQueueReader),
+          std::move(linkMonitorNetlinkEventsQueueReader),
           FLAGS_override_drain_state,
           initialAdjHoldTime));
 
@@ -528,7 +534,7 @@ main(int argc, char** argv) {
       "decision",
       std::make_unique<Decision>(
           config,
-          kvStoreUpdatesQueue.getReader(),
+          std::move(decisionKvStoreUpdatesQueueReader),
           std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));
 
@@ -542,7 +548,7 @@ main(int argc, char** argv) {
           config,
           *config->getConfig().fib_port_ref(),
           std::chrono::seconds(3 * *sparkConf.keepalive_time_s_ref()),
-          routeUpdatesQueue.getReader(),
+          std::move(fibDecisionRouteUpdatesQueueReader),
           std::move(fibStaticRouteUpdatesQueueReader),
           fibRouteUpdatesQueue,
           logSampleQueue));
