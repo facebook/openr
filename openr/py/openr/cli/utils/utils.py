@@ -1338,6 +1338,7 @@ def get_route_as_dict_in_str(
     else:
         assert 0, "Unknown route type %s" % route_type
 
+    # pyre-fixme[7]: Expected `Dict[str, str]` but got `Dict[typing.Any, List[str]]`.
     return routes_dict
 
 

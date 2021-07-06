@@ -542,6 +542,7 @@ class NodesCmd(KvNodesCmd):
                 node_area[node] = area
             nodes.update(node_set)
 
+        # pyre-fixme[61]: `host_id` may not be initialized here.
         self.print_kvstore_nodes(nodes, all_kv, host_id, node_area)
 
 
