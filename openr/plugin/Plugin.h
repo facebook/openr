@@ -28,8 +28,14 @@ struct PluginArgs {
   std::shared_ptr<wangle::SSLContextConfig> sslContext;
 };
 
+struct VipPluginArgs {
+  messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue;
+  std::shared_ptr<const Config> config;
+  std::shared_ptr<wangle::SSLContextConfig> sslContext;
+};
+
 void pluginStart(const PluginArgs& /* pluginArgs */);
 void pluginStop();
-void vipPluginStart(const PluginArgs& /* PluginArgs */);
+void vipPluginStart(const VipPluginArgs& /* PluginArgs */);
 void vipPluginStop();
 } // namespace openr

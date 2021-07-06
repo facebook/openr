@@ -497,6 +497,7 @@ main(int argc, char** argv) {
         sslContext);
   }
 
+  // Create bgp speaker module
   auto pluginArgs = PluginArgs{
       prefixUpdatesQueue,
       staticRouteUpdatesQueue,
@@ -505,15 +506,14 @@ main(int argc, char** argv) {
            : routeUpdatesQueue.getReader()),
       config,
       sslContext};
-
-  // Create bgp speaker module
   if (config->isBgpPeeringEnabled()) {
     pluginStart(pluginArgs);
   }
 
   // Create vip service module
+  auto vipPluginArgs = VipPluginArgs{prefixUpdatesQueue, config, sslContext};
   if (config->isVipServiceEnabled()) {
-    vipPluginStart(pluginArgs);
+    vipPluginStart(vipPluginArgs);
   }
 
   // Wait for the above three modules to start and run before running
