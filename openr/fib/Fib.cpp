@@ -451,10 +451,11 @@ Fib::RouteState::createUpdate() {
 // past, retry timer is scheduled immediately.
 std::chrono::milliseconds
 Fib::nextRetryDuration() const {
-  // Schedule retry timer immediately if delayed deletion is not enabled
-  // or if there is no pending (dirty) routes for processing.
-  if (not delayedDeletionEnabled() or
-      (routeState_.state == RouteState::SYNCING) or
+  // Schedule retry timer immediately if this is initial Fib sync, or delayed
+  // deletion is not enabled, or if there is no pending (dirty) routes for
+  // processing.
+  if ((routeState_.state == RouteState::SYNCING) or
+      not delayedDeletionEnabled() or
       (routeState_.dirtyPrefixes.empty() and routeState_.dirtyLabels.empty())) {
     return std::chrono::milliseconds(0);
   }
@@ -538,10 +539,9 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
     mplsRoute.filterNexthopsToUniqueAction();
   }
 
-  // Update routes,
   updateRoutes(std::move(routeUpdate));
   if (routeState_.needsRetry()) {
-    // Schedule retry routes timer if need be
+    // Trigger initial Fib sync, or schedule retry routes timer if needed.
     scheduleRetryRoutesTimer();
   }
 }
