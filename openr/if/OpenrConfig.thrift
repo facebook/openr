@@ -14,6 +14,28 @@ namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
 include "BgpConfig.thrift"
 include "configerator/structs/neteng/config/routing_policy.thrift"
 
+enum PrefixForwardingType {
+  /** IP nexthop is used for routing to the prefix. */
+  IP = 0,
+  /** MPLS label nexthop is used for routing to the prefix. */
+  SR_MPLS = 1,
+}
+
+enum PrefixForwardingAlgorithm {
+  /** Use Shortest path ECMP as prefix forwarding algorithm. */
+  SP_ECMP = 0,
+  /**
+   * Use 2-Shortest-Path Edge Disjoint ECMP as prefix forwarding algorithm. It
+   * computes edge disjoint second shortest ECMP paths for each destination
+   * prefix. MPLS SR based tunneling is used for forwarding traffic over
+   * non-shortest paths. This can be computationally expensive for networks
+   * exchanging large number of routes. As per current implementation it will
+   * incur one extra SPF run per destination prefix. SR_MPLS must be set if
+   * KSP2_ED_ECMP is set.
+   */
+  KSP2_ED_ECMP = 1,
+}
+
 exception ConfigError {
   1: string message;
 } (message = "message")
@@ -85,6 +107,105 @@ struct KvstoreConfig {
   200: bool enable_thrift_dual_msg = false;
 } (cpp.minimize_padding)
 
+/*
+ * Enum to customize the best route selection algorithm amongst all areas. SHORTEST_DISTANCE
+ * is the default algorithm. K_SHORTEST_DISTANCE_2 and PER_AREA_SHORTEST_DISTANCE
+ * will select both shortest and non shortest distance routes to help form non shortest
+ * path LSPs across areas
+ */
+enum RouteSelectionAlgorithm {
+  /*
+   * In order of priority, selects the best routes with the best:
+   *  1) Path preference
+   *  2) Source preference
+   *  3) Distance
+   *
+   *  Default algorithm.
+   */
+  SHORTEST_DISTANCE = 0,
+
+  /*
+   * In order of priority, selects the best routes with the best:
+   *  1) Path preference
+   *  2) Source preference
+   *  3) Best and second best distance
+   */
+  K_SHORTEST_DISTANCE_2 = 1,
+
+  /*
+   * In order of priority, selects the best routes with the best:
+   *  1) Path preference
+   *  2) Source preference
+   *  3) Best distance for each area
+   */
+  PER_AREA_SHORTEST_DISTANCE = 2,
+}
+
+/* Path computation rules for a specific area */
+struct AreaPathComputationRules {
+  1: PrefixForwardingAlgorithm forwardingAlgo = PrefixForwardingAlgorithm.SP_ECMP;
+  2: PrefixForwardingType forwardingType = PrefixForwardingType.IP;
+} (cpp.minimize_padding)
+
+/* Rules for how the prepend label is allocated and computed
+ *  The prepend label is used to form inter-area LSPs by
+ * being redistributed across areas along with the route.
+ */
+union PrependLabelRules {
+  /* Advertise node segment label of the best route */
+  1: bool bestRouteNodeSegmentLabel;
+
+  /*
+   * Allocate prepend label and use next-hops from given areas.
+   * Areas must be a subset of areaPathComputationRules areas.
+   *
+   * The label is re-used across routes with the same next-hop group
+   * (next-hop IP + label stack)
+   *
+   */
+  2: list<string> nextHopAreas;
+} (cpp.minimize_padding)
+
+struct SrPolicyMatcher {
+  /* SR Policy matcher name */
+  1: string name;
+
+  /* SR Policy matcher description */
+  2: string description;
+
+  /* Route matching filter. All filters must match. Similar to an AND condition */
+  3: list<routing_policy.FilterCriteria> filters;
+} (cpp.minimize_padding)
+
+struct RouteComputationRules {
+  /* Route selection algorithm the route will use */
+  1: RouteSelectionAlgorithm routeSelectinAlgo;
+
+  /* Map of path computation rules per area. Key is the areaId string */
+  2: map<string, AreaPathComputationRules> areaPathComputationRules;
+
+  /* Rules to allocate and compute the route's prepend label */
+  3: optional PrependLabelRules prependLabelRules;
+} (cpp.minimize_padding)
+
+/* SR Policy Configuration defines a route's path computation and LSP setup rules. */
+struct SrPolicy {
+  /* SR Policy name */
+  1: string name;
+
+  /* Description of the SR Policy */
+  2: string description;
+
+  /*
+   * Route matching filter. Policy is applied if at least one of the matchers is a valid match.
+   * Similar to an OR condition between the matchers
+   */
+  3: list<SrPolicyMatcher> matchers;
+
+  /* Route computation rules */
+  4: RouteComputationRules rules;
+} (cpp.minimize_padding)
+
 struct DecisionConfig {
   /** Fast reaction time to update decision SPF upon receiving adj db update
   (in milliseconds). */
@@ -92,6 +213,12 @@ struct DecisionConfig {
   /** Decision debounce time to update SPF in frequent adj db update
     (in milliseconds). */
   2: i32 debounce_max_ms = 250;
+  /*
+   * List of SR Policies. SR Policies defines a route's path computation and LSP setup rules.
+   * For each route, Decision walks the list and tries to match an SR Policy to the route's attributes
+   * using the SR Policy matcher field. The first matching SR Policy is used to compute the route.
+   */
+  3: list<SrPolicy> sr_policies;
 
   /** Knob to enable/disable BGP route programming. */
   101: bool enable_bgp_route_programming = true;
@@ -253,28 +380,6 @@ struct ThriftClientConfig {
   1: bool enable_secure_thrift_client = false;
   /** Verify type for server when enabling secure client. */
   2: VerifyServerType verify_server_type;
-}
-
-enum PrefixForwardingType {
-  /** IP nexthop is used for routing to the prefix. */
-  IP = 0,
-  /** MPLS label nexthop is used for routing to the prefix. */
-  SR_MPLS = 1,
-}
-
-enum PrefixForwardingAlgorithm {
-  /** Use Shortest path ECMP as prefix forwarding algorithm. */
-  SP_ECMP = 0,
-  /**
-   * Use 2-Shortest-Path Edge Disjoint ECMP as prefix forwarding algorithm. It
-   * computes edge disjoint second shortest ECMP paths for each destination
-   * prefix. MPLS SR based tunneling is used for forwarding traffic over
-   * non-shortest paths. This can be computationally expensive for networks
-   * exchanging large number of routes. As per current implementation it will
-   * incur one extra SPF run per destination prefix. SR_MPLS must be set if
-   * KSP2_ED_ECMP is set.
-   */
-  KSP2_ED_ECMP = 1,
 }
 
 enum PrefixAllocationMode {
