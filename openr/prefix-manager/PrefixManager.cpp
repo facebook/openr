@@ -47,8 +47,7 @@ PrefixManager::PrefixManager(
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
-    KvStore* kvStore,
-    const std::chrono::seconds& initialDumpTime)
+    KvStore* kvStore)
     : nodeId_(config->getNodeName()),
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
@@ -73,6 +72,16 @@ PrefixManager::PrefixManager(
   for (const auto& [areaId, areaConf] : config->getAreas()) {
     areaToPolicy_.emplace(areaId, areaConf.getImportPolicyName());
   }
+
+  //
+  // Hold time for synchronizing prefixes in KvStore. We expect all the
+  // prefixes to be recovered (Redistribute, Plugin etc.) within this time
+  // window.
+  // NOTE: Based on signals from sources that advertises the routes we can
+  // synchronize prefixes earlier. This time provides worst case bound.
+  //
+  const std::chrono::seconds initialPrefixHoldTime{
+      *config->getConfig().prefix_hold_time_s_ref()};
 
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -272,7 +281,7 @@ PrefixManager::PrefixManager(
   }
 
   // schedule one-time initial dump
-  initialSyncKvStoreTimer_->scheduleTimeout(initialDumpTime);
+  initialSyncKvStoreTimer_->scheduleTimeout(initialPrefixHoldTime);
 
   // Load openrConfig for local-originated routes
   if (auto prefixes = config->getConfig().originated_prefixes_ref()) {

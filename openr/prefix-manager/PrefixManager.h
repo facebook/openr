@@ -69,8 +69,7 @@ class PrefixManager final : public OpenrEventBase {
       // config
       std::shared_ptr<const Config> config,
       // raw ptr for modules
-      KvStore* kvStore,
-      const std::chrono::seconds& initialDumpTime);
+      KvStore* kvStore);
 
   ~PrefixManager();
 

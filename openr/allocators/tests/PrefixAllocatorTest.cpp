@@ -116,8 +116,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
         config_,
-        kvStoreWrapper_->getKvStore(),
-        std::chrono::seconds(0));
+        kvStoreWrapper_->getKvStore());
     threads_.emplace_back([&]() noexcept {
       LOG(INFO) << "PrefixManager started. TID: " << std::this_thread::get_id();
       prefixManager_->run();
@@ -449,8 +448,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           prefixQueues.at(i).getReader(),
           fibRouteUpdatesQueues.at(i).getReader(),
           currConfig,
-          store->getKvStore(),
-          std::chrono::seconds(0));
+          store->getKvStore());
       threads.emplace_back(
           [&prefixManager]() noexcept { prefixManager->run(); });
       prefixManager->waitUntilRunning();

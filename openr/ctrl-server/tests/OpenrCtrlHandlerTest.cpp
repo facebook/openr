@@ -121,8 +121,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
         config,
-        kvStoreWrapper_->getKvStore(),
-        std::chrono::seconds(0));
+        kvStoreWrapper_->getKvStore());
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 
     // create fakeNetlinkProtocolSocket

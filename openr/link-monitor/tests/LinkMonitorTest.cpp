@@ -229,8 +229,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
         config,
-        kvStoreWrapper->getKvStore(),
-        std::chrono::seconds(0));
+        kvStoreWrapper->getKvStore());
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";
       prefixManager->run();

@@ -97,6 +97,7 @@ getBasicOpenrConfig(
   config.assume_drained_ref() = false;
   config.enable_fib_ack_ref() = true;
   config.enable_kvstore_request_queue_ref() = false;
+  config.prefix_hold_time_s_ref() = 0;
 
   if (areaCfg.empty()) {
     config.areas_ref() = {createAreaConfig(

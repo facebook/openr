@@ -43,8 +43,7 @@ class PrefixManagerBenchmarkTestFixture {
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
         config_,
-        kvStoreWrapper_->getKvStore(),
-        std::chrono::seconds{0} /* no delay for initial dump */);
+        kvStoreWrapper_->getKvStore());
 
     prefixManagerThread_ =
         std::make_unique<std::thread>([this]() { prefixManager_->run(); });

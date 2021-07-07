@@ -145,8 +145,7 @@ class PrefixManagerTestFixture : public testing::Test {
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
         cfg,
-        kvStoreWrapper->getKvStore(),
-        std::chrono::seconds{0});
+        kvStoreWrapper->getKvStore());
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "PrefixManager thread starting";
@@ -815,8 +814,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       prefixUpdatesQueue.getReader(),
       fibRouteUpdatesQueue.getReader(),
       config,
-      kvStoreWrapper->getKvStore(),
-      std::chrono::seconds(0));
+      kvStoreWrapper->getKvStore());
 
   auto prefixManagerThread2 =
       std::make_unique<std::thread>([&]() { prefixManager2->run(); });

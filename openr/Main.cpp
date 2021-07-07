@@ -234,16 +234,6 @@ main(int argc, char** argv) {
   // Reference to spark config
   const auto& sparkConf = config->getSparkConfig();
 
-  //
-  // Hold time for synchronizing prefixes in KvStore. We expect all the
-  // prefixes to be recovered (Redistribute, Plugin etc.) within this time
-  // window.
-  // NOTE: Based on signals from sources that advertises the routes we can
-  // synchronize prefixes earlier. This time provides worst case bound.
-  //
-  const std::chrono::seconds initialPrefixHoldTime{
-      *config->getConfig().prefix_hold_time_s_ref()};
-
   // Set up the zmq context for this process.
   fbzmq::Context context;
 
@@ -405,8 +395,7 @@ main(int argc, char** argv) {
           prefixUpdatesQueue.getReader(),
           std::move(routeUpdatesQueueReader),
           config,
-          kvStore,
-          initialPrefixHoldTime));
+          kvStore));
 
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (config->isPrefixAllocationEnabled()) {

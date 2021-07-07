@@ -205,8 +205,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       prefixUpdatesQueue_.getReader(),
       fibRouteUpdatesQueue_.getReader(),
       config_,
-      kvStore_.get(),
-      std::chrono::seconds(0));
+      kvStore_.get());
 
   //
   // create decision
