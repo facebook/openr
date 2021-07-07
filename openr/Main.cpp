@@ -235,13 +235,6 @@ main(int argc, char** argv) {
   const auto& sparkConf = config->getSparkConfig();
 
   //
-  // Hold time for synchronizing adjacencies in KvStore. We expect all the
-  // adjacencies to be fully established within hold time after Open/R starts
-  //
-  const std::chrono::seconds initialAdjHoldTime{
-      *config->getConfig().adj_hold_time_s_ref()};
-
-  //
   // Hold time for synchronizing prefixes in KvStore. We expect all the
   // prefixes to be recovered (Redistribute, Plugin etc.) within this time
   // window.
@@ -465,8 +458,7 @@ main(int argc, char** argv) {
           std::move(linkMonitorNeighborUpdatesQueueReader),
           std::move(linkMonitorKvStoreSyncEventsQueueReader),
           std::move(linkMonitorNetlinkEventsQueueReader),
-          FLAGS_override_drain_state,
-          initialAdjHoldTime));
+          FLAGS_override_drain_state));
 
   // Setup the SSL policy
   std::shared_ptr<wangle::SSLContextConfig> sslContext;

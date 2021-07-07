@@ -405,9 +405,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
-        overrideDrainState,
-        std::chrono::seconds(1) /* adjHoldTime */
-    );
+        overrideDrainState);
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
       folly::setThreadName("LinkMonitor");
@@ -2072,8 +2070,7 @@ TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
-        false, /* overrideDrainState */
-        std::chrono::seconds(1));
+        false /* overrideDrainState */);
     linkMonitors.emplace_back(std::move(lm));
     configs.emplace_back(std::move(currConfig));
 
@@ -2149,8 +2146,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         neighborUpdatesQueue.getReader(),
         kvStoreSyncEventsQueue.getReader(),
         nlSock->getReader(),
-        false, /* overrideDrainState */
-        std::chrono::seconds(1));
+        false /* overrideDrainState */);
     linkMonitors.emplace_back(std::move(lm));
     configs.emplace_back(std::move(currConfig));
 

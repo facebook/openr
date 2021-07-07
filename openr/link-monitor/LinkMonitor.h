@@ -113,9 +113,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will override drain state from persistent store with
       // assumeDrained value
-      bool overrideDrainState,
-      // how long to wait before initial adjacency advertisement
-      std::chrono::seconds adjHoldTime);
+      bool overrideDrainState);
 
   ~LinkMonitor() override = default;
 
@@ -324,8 +322,6 @@ class LinkMonitor final : public OpenrEventBase {
   // immutable state/invariants
   //
 
-  // config
-  std::shared_ptr<const Config> config_;
   // used to build the key names for this node
   const std::string nodeId_;
   // enable performance measurement

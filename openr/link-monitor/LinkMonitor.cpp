@@ -72,10 +72,8 @@ LinkMonitor::LinkMonitor(
     messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
-    bool overrideDrainState,
-    std::chrono::seconds adjHoldTime)
-    : config_(config),
-      nodeId_(config->getNodeName()),
+    bool overrideDrainState)
+    : nodeId_(config->getNodeName()),
       enablePerfMeasurement_(
           config->getLinkMonitorConfig().get_enable_perf_measurement()),
       enableV4_(config->isV4Enabled()),
@@ -106,6 +104,12 @@ LinkMonitor::LinkMonitor(
   CHECK(kvStore);
   CHECK(configStore_);
   CHECK(nlSock_);
+
+  // Hold time for synchronizing adjacencies in KvStore. We expect all the
+  // adjacencies to be fully established within hold time after Open/R starts.
+  // TODO: remove this with strict Open/R initialization sequence
+  const std::chrono::seconds initialAdjHoldTime{
+      config->getConfig().get_adj_hold_time_s()};
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -206,7 +210,7 @@ LinkMonitor::LinkMonitor(
               rangeAllocator_.at(areaId).startAllocator(
                   getNodeSegmentLabelRange(kv.second), initValue);
             });
-        startAllocTimer->scheduleTimeout(adjHoldTime);
+        startAllocTimer->scheduleTimeout(initialAdjHoldTime);
         startAllocationTimers_.emplace_back(std::move(startAllocTimer));
       } break;
       case openr::thrift::SegmentRoutingNodeLabelType::STATIC: {
@@ -224,7 +228,7 @@ LinkMonitor::LinkMonitor(
   }
 
   // start initial dump timer
-  adjHoldTimer_->scheduleTimeout(adjHoldTime);
+  adjHoldTimer_->scheduleTimeout(initialAdjHoldTime);
 
   // Add fiber to process the neighbor events
   addFiberTask([q = std::move(neighborUpdatesQueue), this]() mutable noexcept {

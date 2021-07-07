@@ -24,7 +24,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds spark2HandshakeHoldTime,
     std::chrono::milliseconds spark2HeartbeatHoldTime,
     std::chrono::milliseconds spark2GRHoldTime,
-    std::chrono::seconds linkMonitorAdjHoldTime,
     std::chrono::milliseconds linkFlapInitialBackoff,
     std::chrono::milliseconds linkFlapMaxBackoff,
     std::chrono::seconds fibColdStartDuration,
@@ -187,8 +186,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       neighborUpdatesQueue_.getReader(),
       kvStoreSyncEventsQueue_.getReader(),
       nlSock_->getReader(),
-      false, /* overrideDrainState */
-      linkMonitorAdjHoldTime);
+      false /* overrideDrainState */);
 
   //
   // create monitor

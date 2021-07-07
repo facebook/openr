@@ -149,8 +149,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         neighborUpdatesQueue_.getReader(),
         kvStoreWrapper_->getInitialSyncEventsReader(),
         nlSock_->getReader(),
-        false, /* overrideDrainState */
-        std::chrono::seconds(1));
+        false /* overrideDrainState */);
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
 
     // spin up an openrThriftServer

@@ -53,7 +53,6 @@ const std::chrono::milliseconds kSpark2HeartbeatTime(20);
 const std::chrono::milliseconds kSpark2HandshakeHoldTime(200);
 const std::chrono::milliseconds kSpark2HeartbeatHoldTime(500);
 const std::chrono::milliseconds kSpark2GRHoldTime(1000);
-const std::chrono::seconds kLinkMonitorAdjHoldTime(1);
 const std::chrono::milliseconds kLinkFlapInitialBackoff(1);
 const std::chrono::milliseconds kLinkFlapMaxBackoff(8);
 const std::chrono::seconds kFibColdStartDuration(1);
@@ -212,7 +211,6 @@ class OpenrFixture : public ::testing::Test {
         kSpark2HandshakeHoldTime,
         kSpark2HeartbeatHoldTime,
         kSpark2GRHoldTime,
-        kLinkMonitorAdjHoldTime,
         kLinkFlapInitialBackoff,
         kLinkFlapMaxBackoff,
         kFibColdStartDuration,
