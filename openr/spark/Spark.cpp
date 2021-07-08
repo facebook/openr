@@ -226,7 +226,7 @@ Spark::SparkNeighbor::SparkNeighbor(
 
 Spark::Spark(
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
-    messaging::ReplicateQueue<NeighborEvent>& neighborUpdatesQueue,
+    messaging::ReplicateQueue<NeighborDiscoveryEvent>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <openr/common/Constants.h>
+#include <openr/common/Types.h>
 #include <openr/config/Config.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/Spark.h>
@@ -84,8 +85,8 @@ class SparkWrapper {
   std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor
-  messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue_;
-  messaging::RQueue<NeighborEvent> neighborUpdatesReader_{
+  messaging::ReplicateQueue<NeighborDiscoveryEvent> neighborUpdatesQueue_;
+  messaging::RQueue<NeighborDiscoveryEvent> neighborUpdatesReader_{
       neighborUpdatesQueue_.getReader()};
 
   // Queue to receive interface update from LinkMonitor

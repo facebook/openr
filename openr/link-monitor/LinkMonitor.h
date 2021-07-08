@@ -22,6 +22,7 @@
 #include <openr/allocators/RangeAllocator.h>
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>
+#include <openr/common/Types.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
@@ -108,7 +109,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
-      messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
+      messaging::RQueue<NeighborDiscoveryEvent> neighborUpdatesQueue,
       messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will override drain state from persistent store with
@@ -172,7 +173,7 @@ class LinkMonitor final : public OpenrEventBase {
    */
 
   // process neighbor event updates from Spark module
-  void processNeighborEvent(NeighborEvent&& event);
+  void processNeighborEvent(NeighborDiscoveryEvent&& eventParam);
 
   // individual neighbor event function
   void neighborUpEvent(const thrift::SparkNeighbor& info);

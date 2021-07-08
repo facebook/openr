@@ -69,7 +69,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
-    messaging::RQueue<NeighborEvent> neighborUpdatesQueue,
+    messaging::RQueue<NeighborDiscoveryEvent> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool overrideDrainState)
@@ -1070,48 +1070,58 @@ LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
 }
 
 void
-LinkMonitor::processNeighborEvent(NeighborEvent&& event) {
-  const auto& info = event.info;
-  const auto& neighborAddrV4 = *info.transportAddressV4_ref();
-  const auto& neighborAddrV6 = *info.transportAddressV6_ref();
-  const auto& localIfName = *info.localIfName_ref();
-  const auto& remoteIfName = *info.remoteIfName_ref();
-  const auto& remoteNodeName = *info.nodeName_ref();
-  const auto& area = *info.area_ref();
+LinkMonitor::processNeighborEvent(NeighborDiscoveryEvent&& event) {
+  if (auto* neighborEvent = std::get_if<NeighborEvent>(&event)) {
+    const auto& info = neighborEvent->info;
+    const auto& neighborAddrV4 = *info.transportAddressV4_ref();
+    const auto& neighborAddrV6 = *info.transportAddressV6_ref();
+    const auto& localIfName = *info.localIfName_ref();
+    const auto& remoteIfName = *info.remoteIfName_ref();
+    const auto& remoteNodeName = *info.nodeName_ref();
+    const auto& area = *info.area_ref();
 
-  VLOG(1) << "Received neighbor event for " << remoteNodeName << " from "
-          << remoteIfName << " at " << localIfName << " with addrs "
-          << toString(neighborAddrV6) << " and "
-          << (enableV4_ or v4OverV6Nexthop_ ? toString(neighborAddrV4) : "")
-          << " Area:" << area << " Event Type: " << toString(event.eventType);
+    VLOG(1) << "Received neighbor event for " << remoteNodeName << " from "
+            << remoteIfName << " at " << localIfName << " with addrs "
+            << toString(neighborAddrV6) << " and "
+            << (enableV4_ or v4OverV6Nexthop_ ? toString(neighborAddrV4) : "")
+            << " Area:" << area
+            << " Event Type: " << toString(neighborEvent->eventType);
 
-  switch (event.eventType) {
-  case NeighborEventType::NEIGHBOR_UP:
-  case NeighborEventType::NEIGHBOR_RESTARTED: {
-    logNeighborEvent(event);
-    neighborUpEvent(info);
-    break;
-  }
-  case NeighborEventType::NEIGHBOR_RESTARTING: {
-    logNeighborEvent(event);
-    neighborRestartingEvent(info);
-    break;
-  }
-  case NeighborEventType::NEIGHBOR_DOWN: {
-    logNeighborEvent(event);
-    neighborDownEvent(info);
-    break;
-  }
-  case NeighborEventType::NEIGHBOR_RTT_CHANGE: {
-    if (!useRttMetric_) {
+    switch (neighborEvent->eventType) {
+    case NeighborEventType::NEIGHBOR_UP:
+    case NeighborEventType::NEIGHBOR_RESTARTED: {
+      logNeighborEvent(*neighborEvent);
+      neighborUpEvent(info);
       break;
     }
-    logNeighborEvent(event);
-    neighborRttChangeEvent(info);
-    break;
-  }
-  default:
-    LOG(ERROR) << "Unknown event type " << (int32_t)event.eventType;
+    case NeighborEventType::NEIGHBOR_RESTARTING: {
+      logNeighborEvent(*neighborEvent);
+      neighborRestartingEvent(info);
+      break;
+    }
+    case NeighborEventType::NEIGHBOR_DOWN: {
+      logNeighborEvent(*neighborEvent);
+      neighborDownEvent(info);
+      break;
+    }
+    case NeighborEventType::NEIGHBOR_RTT_CHANGE: {
+      if (!useRttMetric_) {
+        break;
+      }
+      logNeighborEvent(*neighborEvent);
+      neighborRttChangeEvent(info);
+      break;
+    }
+    default:
+      LOG(ERROR) << "Unknown event type " << (int32_t)neighborEvent->eventType;
+    }
+  } else if (
+      auto* initEvent = std::get_if<thrift::InitializationEvent>(&event)) {
+    // TODO: Handle init event.
+    CHECK(false) << "Unexpected to reach here.";
+  } else {
+    LOG(ERROR) << "Error processing NeighborDiscoveryEvent request. Request "
+               << "type not recognized.";
   }
 }
 

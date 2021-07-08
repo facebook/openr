@@ -616,7 +616,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
-  messaging::ReplicateQueue<NeighborEvent> neighborUpdatesQueue;
+  messaging::ReplicateQueue<NeighborDiscoveryEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
@@ -992,7 +992,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // Create new
   // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
-  neighborUpdatesQueue = messaging::ReplicateQueue<NeighborEvent>();
+  neighborUpdatesQueue = messaging::ReplicateQueue<NeighborDiscoveryEvent>();
   kvStoreSyncEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
   peerUpdatesQueue = messaging::ReplicateQueue<PeerEvent>();
   kvRequestQueue = messaging::ReplicateQueue<KeyValueRequest>();

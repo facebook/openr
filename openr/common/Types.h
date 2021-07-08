@@ -103,6 +103,9 @@ struct NeighborEvent {
       : eventType(eventType), info(info) {}
 };
 
+using NeighborDiscoveryEvent =
+    std::variant<NeighborEvent, thrift::InitializationEvent>;
+
 /**
  * Enum indicating type of request to PrefixManager. Only used for inter
  * module (within a process) communication.
