@@ -106,8 +106,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create Fib moduleKeySyncMultipleArea
     fib = std::make_shared<Fib>(
         config,
-        -1, /* thrift port */
-        std::chrono::seconds(2),
         routeUpdatesQueue_.getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_,

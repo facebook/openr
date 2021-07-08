@@ -37,11 +37,13 @@ namespace openr {
  */
 class Fib final : public OpenrEventBase {
  public:
-  Fib(std::shared_ptr<const Config> config,
-      int32_t thriftPort,
-      std::chrono::seconds coldStartDuration,
+  Fib(
+      // config
+      std::shared_ptr<const Config> config,
+      // consumer queue
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
+      // producer queue
       messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue);
 

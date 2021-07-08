@@ -55,7 +55,6 @@ const std::chrono::milliseconds kSpark2HeartbeatHoldTime(500);
 const std::chrono::milliseconds kSpark2GRHoldTime(1000);
 const std::chrono::milliseconds kLinkFlapInitialBackoff(1);
 const std::chrono::milliseconds kLinkFlapMaxBackoff(8);
-const std::chrono::seconds kFibColdStartDuration(1);
 
 const string iface12{"1/2"};
 const string iface13{"1/3"};
@@ -213,7 +212,6 @@ class OpenrFixture : public ::testing::Test {
         kSpark2GRHoldTime,
         kLinkFlapInitialBackoff,
         kLinkFlapMaxBackoff,
-        kFibColdStartDuration,
         mockIoProvider,
         memLimit);
     openrWrappers_.emplace_back(std::move(ptr));

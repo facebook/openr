@@ -84,14 +84,12 @@ class FibWrapper {
         false /*enableSegmentRouting*/,
         false /*orderedFibProgramming*/,
         false /*dryrun*/);
+    tConfig.fib_port_ref() = fibThriftThread.getAddress()->getPort();
     config = std::make_shared<Config>(tConfig);
 
     // Creat Fib module and start fib thread
-    port = fibThriftThread.getAddress()->getPort();
     fib = std::make_shared<Fib>(
         config,
-        port, // thrift port
-        std::chrono::seconds(2), // coldStartDuration
         routeUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         fibRouteUpdatesQueue,
@@ -180,7 +178,6 @@ class FibWrapper {
     }
   }
 
-  int port{0};
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
 

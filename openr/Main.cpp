@@ -231,9 +231,6 @@ main(int argc, char** argv) {
 
   SYSLOG(INFO) << config->getRunningConfig();
 
-  // Reference to spark config
-  const auto& sparkConf = config->getSparkConfig();
-
   // Set up the zmq context for this process.
   fbzmq::Context context;
 
@@ -527,8 +524,6 @@ main(int argc, char** argv) {
       "fib",
       std::make_unique<Fib>(
           config,
-          *config->getConfig().fib_port_ref(),
-          std::chrono::seconds(3 * *sparkConf.keepalive_time_s_ref()),
           std::move(fibDecisionRouteUpdatesQueueReader),
           std::move(fibStaticRouteUpdatesQueueReader),
           fibRouteUpdatesQueue,

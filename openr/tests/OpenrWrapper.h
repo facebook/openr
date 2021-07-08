@@ -53,7 +53,6 @@ class OpenrWrapper {
       std::chrono::milliseconds spark2GRHoldTime,
       std::chrono::milliseconds linkFlapInitialBackoff,
       std::chrono::milliseconds linkFlapMaxBackoff,
-      std::chrono::seconds fibColdStartDuration,
       std::shared_ptr<IoProvider> ioProvider,
       uint32_t memLimit = openr::memLimitMB);
 

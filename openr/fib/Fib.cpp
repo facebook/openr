@@ -51,14 +51,12 @@ logFibUpdateError(thrift::PlatformFibUpdateError const& error) {
 
 Fib::Fib(
     std::shared_ptr<const Config> config,
-    int32_t thriftPort,
-    std::chrono::seconds coldStartDuration,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
-    : myNodeName_(*config->getConfig().node_name_ref()),
-      thriftPort_(thriftPort),
+    : myNodeName_(config->getConfig().get_node_name()),
+      thriftPort_(config->getConfig().get_fib_port()),
       dryrun_(config->getConfig().dryrun_ref().value_or(false)),
       enableSegmentRouting_(
           config->getConfig().enable_segment_routing_ref().value_or(false)),
@@ -103,6 +101,11 @@ Fib::Fib(
   fb303::fbData->setCounter("fib.synced", 0);
 
   if (not tConfig.eor_time_s_ref()) {
+    // TODO: remove cold-start duration after signal-based Open/R initialization
+    // process being implemented.
+    const std::chrono::seconds coldStartDuration{
+        3 * config->getSparkConfig().get_keepalive_time_s()};
+
     // Force transition to SYNCING state
     transitionRouteState(RouteState::RIB_UPDATE);
     LOG(INFO)

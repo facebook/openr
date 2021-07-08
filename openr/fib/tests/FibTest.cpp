@@ -331,7 +331,6 @@ class FibTestFixture : public ::testing::Test {
     server->setInterface(mockFibHandler_);
 
     fibThriftThread.start(server);
-    port = fibThriftThread.getAddress()->getPort();
 
     auto tConfig = getBasicOpenrConfig(
         "node-1",
@@ -345,13 +344,12 @@ class FibTestFixture : public ::testing::Test {
       tConfig.eor_time_s_ref() = 1;
     }
     tConfig.route_delete_delay_ms_ref() = routeDeleteDelay_;
+    tConfig.fib_port_ref() = fibThriftThread.getAddress()->getPort();
 
     config_ = make_shared<Config>(tConfig);
 
     fib_ = std::make_shared<Fib>(
         config_,
-        port, /* thrift port */
-        std::chrono::seconds(2), /* coldStartDuration */
         routeUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         fibRouteUpdatesQueue,
@@ -532,7 +530,6 @@ class FibTestFixture : public ::testing::Test {
     }
   }
 
-  int port{0};
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
 

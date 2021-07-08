@@ -26,7 +26,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds spark2GRHoldTime,
     std::chrono::milliseconds linkFlapInitialBackoff,
     std::chrono::milliseconds linkFlapMaxBackoff,
-    std::chrono::seconds fibColdStartDuration,
     std::shared_ptr<IoProvider> ioProvider,
     uint32_t memLimit)
     : context_(context),
@@ -221,8 +220,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   fib_ = std::make_unique<Fib>(
       config_,
-      Constants::kFibAgentPort,
-      fibColdStartDuration,
       routeUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       fibRouteUpdatesQueue_,
