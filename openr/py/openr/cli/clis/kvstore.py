@@ -149,7 +149,8 @@ class FloodCli(object):
 
         if roots is not None:
             roots_split = roots.split(",")
-        # pyre-fixme[61]: `roots_split` may not be initialized here.
+        else:
+            roots_split = []
         kvstore.FloodCmd(cli_opts).run(roots_split)
 
 
