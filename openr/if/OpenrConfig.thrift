@@ -163,7 +163,7 @@ union PrependLabelRules {
    * (next-hop IP + label stack)
    *
    */
-  2: list<string> nextHopAreas;
+  2: list<string> nextHopAreas = [];
 } (cpp.minimize_padding)
 
 struct SrPolicyMatcher {
@@ -179,7 +179,7 @@ struct SrPolicyMatcher {
 
 struct RouteComputationRules {
   /* Route selection algorithm the route will use */
-  1: RouteSelectionAlgorithm routeSelectinAlgo;
+  1: RouteSelectionAlgorithm routeSelectionAlgo = RouteSelectionAlgorithm.SHORTEST_DISTANCE;
 
   /* Map of path computation rules per area. Key is the areaId string */
   2: map<string, AreaPathComputationRules> areaPathComputationRules;
@@ -218,7 +218,7 @@ struct DecisionConfig {
    * For each route, Decision walks the list and tries to match an SR Policy to the route's attributes
    * using the SR Policy matcher field. The first matching SR Policy is used to compute the route.
    */
-  3: list<SrPolicy> sr_policies;
+  3: optional list<SrPolicy> sr_policies;
 
   /** Knob to enable/disable BGP route programming. */
   101: bool enable_bgp_route_programming = true;
