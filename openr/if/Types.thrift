@@ -1208,12 +1208,17 @@ struct LinkMonitorState {
   /**
    * Label allocated to node (via RangeAllocator). `0` indicates null value
    */
-  4: i32 nodeLabel = 0;
+  4: i32 nodeLabel = 0 (deprecated);
 
   /**
    * Custom metric override for adjacency
    */
   5: map<AdjKey, i32> adjMetricOverrides;
+
+  /**
+   * Node label allocated to node in each area. `0` indicates null value.
+   */
+  6: map<string, i32> nodeLabelMap;
 } (cpp.minimize_padding)
 
 /**

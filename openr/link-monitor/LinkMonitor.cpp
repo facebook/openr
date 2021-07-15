@@ -37,7 +37,9 @@ getRttMetric(int64_t rttUs) {
 void
 printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   VLOG(1) << "LinkMonitor state .... ";
-  VLOG(1) << "\tnodeLabel: " << *state.nodeLabel_ref();
+  for (auto const& [area, nodeLabel] : *state.nodeLabelMap_ref()) {
+    VLOG(1) << "\tnodeLabel: " << nodeLabel << ", area: " << area;
+  }
   VLOG(1) << "\tisOverloaded: "
           << (*state.isOverloaded_ref() ? "true" : "false");
   if (not state.overloadedLinks_ref()->empty()) {
@@ -179,9 +181,9 @@ LinkMonitor::LinkMonitor(
         continue;
       }
 
+      auto const& areaId = kv.first;
       switch (srNodeLabelCfg->get_sr_node_label_type()) {
       case openr::thrift::SegmentRoutingNodeLabelType::AUTO: {
-        auto const& areaId = kv.first;
         rangeAllocator_.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(areaId),
@@ -191,7 +193,8 @@ LinkMonitor::LinkMonitor(
                 Constants::kNodeLabelRangePrefix.toString(),
                 kvStoreClient_.get(),
                 [&](std::optional<int32_t> newVal) noexcept {
-                  state_.nodeLabel_ref() = newVal ? newVal.value() : 0;
+                  state_.nodeLabelMap_ref()->insert_or_assign(
+                      areaId, newVal ? newVal.value() : 0);
                   advertiseAdjacencies();
                 }, /* callback */
                 std::chrono::milliseconds(100), /* minBackoffDur */
@@ -204,9 +207,11 @@ LinkMonitor::LinkMonitor(
         auto startAllocTimer =
             folly::AsyncTimeout::make(*getEvb(), [this, areaId, kv]() noexcept {
               std::optional<int32_t> initValue;
-              if (*state_.nodeLabel_ref() != 0) {
-                initValue = *state_.nodeLabel_ref();
+              auto it = state_.nodeLabelMap_ref()->find(areaId);
+              if (it != state_.nodeLabelMap_ref()->end() and it->second != 0) {
+                initValue = it->second;
               }
+
               rangeAllocator_.at(areaId).startAllocator(
                   getNodeSegmentLabelRange(kv.second), initValue);
             });
@@ -215,10 +220,11 @@ LinkMonitor::LinkMonitor(
       } break;
       case openr::thrift::SegmentRoutingNodeLabelType::STATIC: {
         // Use statically configured node segment label as node label
-        state_.nodeLabel_ref() = getStaticNodeSegmentLabel(kv.second);
-        LOG(INFO) << "Allocating static node segment label "
-                  << *state_.nodeLabel_ref() << " in area " << kv.first
-                  << " for " << nodeId_;
+        // state_.nodeLabel_ref() = getStaticNodeSegmentLabel(kv.second);
+        auto nodeLbl = getStaticNodeSegmentLabel(kv.second);
+        state_.nodeLabelMap_ref()->insert_or_assign(areaId, nodeLbl);
+        LOG(INFO) << "Allocating static node segment label " << nodeLbl
+                  << " in area " << kv.first << " for " << nodeId_;
       } break;
       default:
         DCHECK("Unknown segment routing node label allocation type");
@@ -867,8 +873,14 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
 
   adjDb.thisNodeName_ref() = nodeId_;
   adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
-  adjDb.nodeLabel_ref() = enableSegmentRouting_ ? *state_.nodeLabel_ref() : 0;
   adjDb.area_ref() = area;
+  adjDb.nodeLabel_ref() = 0;
+  if (enableSegmentRouting_) {
+    auto it = state_.nodeLabelMap_ref()->find(area);
+    if (it != state_.nodeLabelMap_ref()->end()) {
+      adjDb.nodeLabel_ref() = it->second;
+    }
+  }
 
   for (auto& [adjKey, adjValue] : adjacencies_) {
     // ignore unrelated area

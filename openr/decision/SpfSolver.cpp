@@ -422,7 +422,7 @@ SpfSolver::buildRouteDb(
         // Top label is not set => Non-SR mode
         if (topLabel == 0) {
           LOG(INFO) << "Ignoring node label " << topLabel << " of node "
-                    << nodeName;
+                    << nodeName << " in area " << area;
           fb303::fbData->addStatValue(
               "decision.skipped_mpls_route", 1, fb303::COUNT);
           continue;
@@ -430,7 +430,7 @@ SpfSolver::buildRouteDb(
         // If mpls label is not valid then ignore it
         if (not isMplsLabelValid(topLabel)) {
           LOG(ERROR) << "Ignoring invalid node label " << topLabel
-                     << " of node " << nodeName;
+                     << " of node " << nodeName << " in area " << area;
           fb303::fbData->addStatValue(
               "decision.skipped_mpls_route", 1, fb303::COUNT);
           continue;
@@ -443,7 +443,8 @@ SpfSolver::buildRouteDb(
         auto iter = labelToNode.find(topLabel);
         if (iter != labelToNode.end()) {
           LOG(INFO) << "Found duplicate label " << topLabel << "from "
-                    << iter->second.first << " " << nodeName;
+                    << iter->second.first << " " << nodeName << " in area "
+                    << area;
           fb303::fbData->addStatValue(
               "decision.duplicate_node_label", 1, fb303::COUNT);
           if (iter->second.first < nodeName) {
