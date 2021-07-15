@@ -257,6 +257,9 @@ class Fib final : public OpenrEventBase {
       return state == SYNCING or dirtyPrefixes.size() or dirtyLabels.size();
     }
 
+    // Util function to convert ENUM State to string
+    static std::string toStr(const State state);
+
     /**
      * 1. Update RouteState with the received route update from Decision or
      * Static RouteUpdates queue. Update - unicastRoutes and mplsRoutes which

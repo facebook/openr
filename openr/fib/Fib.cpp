@@ -619,6 +619,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
 
   // Return if empty
   if (routeUpdate.empty()) {
+    LOG(INFO) << "No entries in route update";
     return;
   }
 
@@ -633,6 +634,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
   // incremental route programming in AWAITING or SYNCED state. In SYNCING
   // state we let `syncRoutes` do the work instead.
   if (routeState_.state == RouteState::SYNCING) {
+    LOG(INFO) << "Skip route programming in SYNCING state";
     return;
   }
 
@@ -1082,8 +1084,22 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
   logSampleQueue_.push(sample);
 }
 
+std::string
+Fib::RouteState::toStr(RouteState::State state) {
+  switch (state) {
+  case State::AWAITING:
+    return "AWAITING";
+  case State::SYNCING:
+    return "SYNCING";
+  case State::SYNCED:
+    return "SYNCED";
+  default:
+    return "UNKNOWN";
+  }
+}
+
 void
-Fib::transitionRouteState(RouteState::Event event) {
+Fib::transitionRouteState(const RouteState::Event event) {
   // Static matrix representing state transition. Here we handle all events
   // across all states. First index represent the current state, second level
   // index represents the event. Value represents the new state.
@@ -1116,6 +1132,8 @@ Fib::transitionRouteState(RouteState::Event event) {
   const auto prevState = routeState_.state;
   const auto nextState = stateMap.at(prevState).at(event);
   CHECK(nextState.has_value()) << "Next state is 'UNDEFINED'";
+  LOG(INFO) << "Route state transitions from " << routeState_.toStr(prevState)
+            << " to " << routeState_.toStr(nextState.value());
 
   // Update current state
   routeState_.state = nextState.value();
