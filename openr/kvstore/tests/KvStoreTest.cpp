@@ -367,6 +367,74 @@ INSTANTIATE_TEST_CASE_P(
 
 } // namespace
 
+/**
+ * Start single testable store and set key-val. Verify content of KvStore by
+ * querying it.
+ */
+TEST_F(KvStoreTestFixture, BasicSetKey) {
+  // clean up counters before testing
+  const std::string& key{"key1"};
+  fb303::fbData->resetAllData();
+
+  auto kvStore = createKvStore("node1");
+  kvStore->run();
+
+  // Set a key in KvStore
+  const thrift::Value thriftVal = createThriftValue(
+      1 /* version */,
+      "node1" /* originatorId */,
+      std::string("value1") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(
+          1, "node1", thrift::Value().value_ref() = std::string("value1")));
+  kvStore->setKey(kTestingAreaName, key, thriftVal);
+
+  // check stat was updated
+  auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(1, counters.at("kvstore.cmd_key_set.count"));
+
+  // check key was added correctly
+  auto recVal = kvStore->getKey(kTestingAreaName, key);
+  ASSERT_TRUE(recVal.has_value());
+  EXPECT_EQ(0, openr::compareValues(thriftVal, recVal.value()));
+
+  // check only this key exists in kvstore
+  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+  expectedKeyVals[key] = thriftVal;
+  auto allKeyVals = kvStore->dumpAll(kTestingAreaName);
+  EXPECT_EQ(1, allKeyVals.size());
+  EXPECT_EQ(expectedKeyVals, allKeyVals);
+
+  // set the same key with new value
+  auto thriftVal2 = createThriftValue(
+      2 /* version */,
+      "node1" /* originatorId */,
+      std::string("value2") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(
+          2, "node1", thrift::Value().value_ref() = std::string("value2")));
+  kvStore->setKey(kTestingAreaName, key, thriftVal2);
+
+  // check merge occurred correctly -- value overwritten
+  auto recVal2 = kvStore->getKey(kTestingAreaName, key);
+  ASSERT_TRUE(recVal2.has_value());
+  EXPECT_EQ(0, openr::compareValues(thriftVal2, recVal2.value()));
+
+  // check merge occurred correctly -- no duplicate key
+  expectedKeyVals[key] = thriftVal2;
+  allKeyVals = kvStore->dumpAll(kTestingAreaName);
+  EXPECT_EQ(1, allKeyVals.size());
+  EXPECT_EQ(expectedKeyVals, allKeyVals);
+
+  // check stat was updated
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(2, counters.at("kvstore.cmd_key_set.count"));
+
+  kvStore->stop();
+}
+
 //
 // Test counter reporting
 //
@@ -2344,38 +2412,6 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
     EXPECT_EQ(
         emptyKeyVals, myStore->syncKeyVals(kTestingAreaName, peerKeyVals));
   }
-}
-
-/**
- * Start single testable store, and set key values with oneway method. Verify
- * content of KvStore by querying it.
- */
-TEST_F(KvStoreTestFixture, OneWaySetKey) {
-  LOG(INFO) << "Starting test KvStore";
-
-  // set up the store that we'll be testing
-  const auto myNodeId = "test-node1";
-  auto myStore = createKvStore(myNodeId);
-  myStore->run();
-
-  // Set key via KvStoreWrapper::setKey
-  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
-  const auto key = folly::sformat("test-key");
-  const auto thriftVal = createThriftValue(
-      1 /* version */,
-      "gotham_city" /* originatorId */,
-      folly::sformat("test-value"),
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      generateHash(
-          1,
-          "gotham_city",
-          thrift::Value().value_ref() = std::string("test-value")));
-  expectedKeyVals[key] = thriftVal;
-  myStore->setKey(kTestingAreaName, key, thriftVal);
-
-  // Expect both keys in KvStore
-  EXPECT_EQ(expectedKeyVals, myStore->dumpAll(kTestingAreaName));
 }
 
 /*

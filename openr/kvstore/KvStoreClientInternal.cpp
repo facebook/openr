@@ -14,27 +14,6 @@ namespace fb303 = facebook::fb303;
 
 namespace openr {
 
-namespace {
-void
-printKeyValInArea(
-    int logLevel,
-    const std::string& prefixStr,
-    const AreaId& area,
-    const std::string& key,
-    const thrift::Value& val) {
-  VLOG(logLevel) << fmt::format(
-      "{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, "
-      "ttl: {}, area: {}]",
-      prefixStr,
-      key,
-      *val.version_ref(),
-      *val.originatorId_ref(),
-      *val.ttlVersion_ref(),
-      *val.ttl_ref(),
-      area.t);
-}
-} // namespace
-
 KvStoreClientInternal::KvStoreClientInternal(
     OpenrEventBase* eventBase,
     std::string const& nodeId,

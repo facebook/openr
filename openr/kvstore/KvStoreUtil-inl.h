@@ -68,6 +68,25 @@ dumpAllWithPrefixMultipleAndParse(
   return std::make_pair(parseThriftValues<ThriftType>(*res), unreachableAddrs);
 }
 
+void
+printKeyValInArea(
+    int logLevel,
+    const std::string& prefixStr,
+    const std::string& area,
+    const std::string& key,
+    const thrift::Value& val) {
+  VLOG(logLevel) << fmt::format(
+      "{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, "
+      "ttl: {}, area: {}]",
+      prefixStr,
+      key,
+      *val.version_ref(),
+      *val.originatorId_ref(),
+      *val.ttlVersion_ref(),
+      *val.ttl_ref(),
+      area);
+}
+
 // static method to dump KvStore key-val over multiple instances
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,

@@ -140,6 +140,22 @@ dumpAllWithThriftClientFromMultiple(
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
 /*
+ * Static method to retrieve loggable key-value information.
+ *
+ * @param logLevel - VLOG logging level
+ * @param prefixStr - prefix to aid in logging
+ * @param area - area with the key-val
+ * @param key - key of key-val
+ * @param val - thrift Value to log version, originator, ttl
+ */
+static void printKeyValInArea(
+    int logLevel,
+    const std::string& prefixStr,
+    const std::string& area,
+    const std::string& key,
+    const thrift::Value& val);
+
+/*
  * Static method to precess the key-values publication, attempt to merge it
  in
  * the existing map, and return a publication made out of the updated values.

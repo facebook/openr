@@ -251,6 +251,9 @@ class KvStoreDb : public DualNode {
       std::optional<thrift::KvStorePeerState> const& currState,
       KvStorePeerEvent const& event);
 
+  // add new key-vals to kvstore_'s key-vals
+  void setKeyVals(thrift::KeySetParams&& setParams);
+
  private:
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
@@ -495,7 +498,6 @@ class KvStoreDb : public DualNode {
 
   // all self originated key-vals and their backoffs
   // persistKey and setKey will add, clearKey will remove
-  // analogous to keyTtlBackoffs_
   std::unordered_map<std::string /* key */, SelfOriginatedValue>
       selfOriginatedKeyVals_;
 

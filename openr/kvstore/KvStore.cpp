@@ -11,6 +11,7 @@
 #include <folly/GLog.h>
 #include <folly/Random.h>
 #include <folly/String.h>
+#include "openr/common/Util.h"
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
@@ -515,35 +516,7 @@ KvStore::setKvStoreKeyVals(
     VLOG(3) << "Set key requested for AREA: " << area;
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
-      // Update statistics
-      fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
-      if (keySetParams.timestamp_ms_ref().has_value()) {
-        auto floodMs =
-            getUnixTimeStampMs() - keySetParams.timestamp_ms_ref().value();
-        if (floodMs > 0) {
-          fb303::fbData->addStatValue(
-              "kvstore.flood_duration_ms", floodMs, fb303::AVG);
-        }
-      }
-
-      // Update hash for key-values
-      for (auto& [_, value] : *keySetParams.keyVals_ref()) {
-        if (value.value_ref().has_value()) {
-          value.hash_ref() = generateHash(
-              *value.version_ref(),
-              *value.originatorId_ref(),
-              value.value_ref());
-        }
-      }
-
-      // Create publication and merge it with local KvStore
-      thrift::Publication rcvdPublication;
-      rcvdPublication.keyVals_ref() = std::move(*keySetParams.keyVals_ref());
-      rcvdPublication.nodeIds_ref().move_from(keySetParams.nodeIds_ref());
-      rcvdPublication.floodRootId_ref().move_from(
-          keySetParams.floodRootId_ref());
-      kvStoreDb.mergePublication(rcvdPublication);
-
+      kvStoreDb.setKeyVals(std::move(keySetParams));
       // ready to return
       p.setValue();
     } catch (thrift::OpenrError const& e) {
@@ -1122,7 +1095,84 @@ KvStoreDb::~KvStoreDb() {
 
 void
 KvStoreDb::advertiseTtlUpdates() {
-  CHECK(false) << "updateTtls not implemented.";
+  // Build set of keys to advertise ttl updates
+  auto timeout = Constants::kMaxTtlUpdateInterval;
+
+  // all key-vals to advertise ttl updates for
+  std::unordered_map<std::string, thrift::Value> keyVals;
+
+  for (auto& [key, val] : selfOriginatedKeyVals_) {
+    auto& thriftValue = val.value;
+    auto& backoff = val.ttlBackoff;
+    if (not backoff.canTryNow()) {
+      VLOG(2) << "Skipping key: " << key << ", area: " << area_;
+      timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+      continue;
+    }
+
+    // Apply backoff
+    backoff.reportError();
+    timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+
+    // Bump ttl version
+    (*thriftValue.ttlVersion_ref())++;
+
+    // Create copy of thrift::Value without value field for bandwidth efficiency
+    // when advertising
+    auto advertiseValue = createThriftValue(
+        *thriftValue.version_ref(),
+        nodeId,
+        std::nullopt, /* empty value */
+        *thriftValue.ttl_ref(), /* ttl */
+        *thriftValue.ttlVersion_ref()) /* ttl version */;
+
+    // Set in keyVals which will be advertised to the kvStore
+    DCHECK(not advertiseValue.value_ref());
+    printKeyValInArea(
+        1 /* logLevel */, "Advertising ttl update", area_, key, advertiseValue);
+    keyVals.emplace(key, advertiseValue);
+  }
+
+  // Advertise to KvStore
+  if (not keyVals.empty()) {
+    thrift::KeySetParams params;
+    params.keyVals_ref() = std::move(keyVals);
+    setKeyVals(std::move(params));
+  }
+
+  // Schedule next-timeout for processing/clearing backoffs
+  VLOG(2) << "Scheduling ttl timer after " << timeout.count() << "ms.";
+  ttlTimer_->scheduleTimeout(timeout);
+}
+
+void
+KvStoreDb::setKeyVals(thrift::KeySetParams&& setParams) {
+  VLOG(3) << "Set key requested for AREA: " << area_;
+
+  // Update statistics
+  fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
+  if (setParams.timestamp_ms_ref().has_value()) {
+    auto floodMs = getUnixTimeStampMs() - setParams.timestamp_ms_ref().value();
+    if (floodMs > 0) {
+      fb303::fbData->addStatValue(
+          "kvstore.flood_duration_ms", floodMs, fb303::AVG);
+    }
+  }
+
+  // Update hash for key-values
+  for (auto& [_, value] : *setParams.keyVals_ref()) {
+    if (value.value_ref().has_value()) {
+      value.hash_ref() = generateHash(
+          *value.version_ref(), *value.originatorId_ref(), value.value_ref());
+    }
+  }
+
+  // Create publication and merge it with local KvStore
+  thrift::Publication rcvdPublication;
+  rcvdPublication.keyVals_ref() = std::move(*setParams.keyVals_ref());
+  rcvdPublication.nodeIds_ref().move_from(setParams.nodeIds_ref());
+  rcvdPublication.floodRootId_ref().move_from(setParams.floodRootId_ref());
+  mergePublication(rcvdPublication);
 }
 
 void
