@@ -1085,6 +1085,10 @@ KvStoreDb::KvStoreDb(
   ttlCountdownTimer_ = folly::AsyncTimeout::make(
       *evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
+  // Create ttl timer
+  ttlTimer_ = folly::AsyncTimeout::make(
+      *evb->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
+
   // initialize KvStore per-area counters
   fb303::fbData->addStatExportType("kvstore.sent_key_vals." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
@@ -1104,6 +1108,7 @@ KvStoreDb::~KvStoreDb() {
     // Destroy thrift clients associated with peers, which will
     // fulfill promises with exceptions if any.
     thriftPeers_.clear();
+    ttlTimer_.reset();
     LOG(INFO) << "Successfully destroyed thriftPeers and timers";
   });
 
@@ -1113,6 +1118,11 @@ KvStoreDb::~KvStoreDb() {
   }
 
   LOG(INFO) << "Successfully destructed KvStoreDb in area: " << area_;
+}
+
+void
+KvStoreDb::advertiseTtlUpdates() {
+  CHECK(false) << "updateTtls not implemented.";
 }
 
 void

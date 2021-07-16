@@ -62,6 +62,16 @@ struct TtlCountdownQueueEntry {
   }
 };
 
+// Structure for values and their backoffs for self-originated key-vals
+struct SelfOriginatedValue {
+  // Value associated with the self-originated key
+  thrift::Value value;
+  // Backoff for advertising key-val to kvstore_. Only for persisted key-vals.
+  std::optional<ExponentialBackoff<std::chrono::milliseconds>> keyBackoff;
+  // Backoff for advertising ttl updates for this key-val
+  ExponentialBackoff<std::chrono::milliseconds> ttlBackoff;
+};
+
 // TODO: migrate to std::priority_queue
 using TtlCountdownQueue = boost::heap::priority_queue<
     TtlCountdownQueueEntry,
@@ -369,6 +379,9 @@ class KvStoreDb : public DualNode {
   folly::Expected<size_t, fbzmq::Error> sendMessageToPeer(
       const std::string& peerSocketId, const thrift::KvStoreRequest& request);
 
+  // update ttls for all self-originated key-vals
+  void advertiseTtlUpdates();
+
   //
   // Private variables
   //
@@ -476,6 +489,15 @@ class KvStoreDb : public DualNode {
 
   // timer to promote idle peers for initial syncing
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
+
+  // timer to advertise ttl updates for self-originated key-vals
+  std::unique_ptr<folly::AsyncTimeout> ttlTimer_;
+
+  // all self originated key-vals and their backoffs
+  // persistKey and setKey will add, clearKey will remove
+  // analogous to keyTtlBackoffs_
+  std::unordered_map<std::string /* key */, SelfOriginatedValue>
+      selfOriginatedKeyVals_;
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>
