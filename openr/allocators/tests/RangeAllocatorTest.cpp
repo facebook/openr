@@ -22,8 +22,6 @@
 #include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
-using folly::make_optional;
-
 using namespace folly::gen;
 
 namespace openr {

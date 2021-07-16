@@ -27,7 +27,6 @@
 using namespace std;
 using namespace openr;
 
-using apache::thrift::BaseThriftServer;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
 

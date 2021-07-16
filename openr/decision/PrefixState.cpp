@@ -9,8 +9,6 @@
 
 #include <openr/common/Util.h>
 
-using apache::thrift::can_throw;
-
 namespace openr {
 
 std::unordered_set<folly::CIDRNetwork>

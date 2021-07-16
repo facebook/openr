@@ -12,7 +12,6 @@
 
 using namespace std;
 using namespace openr;
-using namespace testing;
 
 TEST(MonitorTestFixture, SystemMetrics) {
   SystemMetrics systemMetrics_{};

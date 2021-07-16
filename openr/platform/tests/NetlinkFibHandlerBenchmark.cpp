@@ -26,9 +26,7 @@
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 
-using namespace openr;
 using namespace openr::fbnl;
-using namespace folly::literals::shell_literals;
 
 namespace {
 // Virtual interfaces

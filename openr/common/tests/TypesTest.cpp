@@ -10,7 +10,6 @@
 
 #include <openr/common/Types.h>
 
-using namespace std;
 using namespace openr;
 
 TEST(TypesTest, fromStrTest) {

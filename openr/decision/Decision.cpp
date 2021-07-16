@@ -31,11 +31,6 @@
 
 namespace fb303 = facebook::fb303;
 
-using apache::thrift::can_throw;
-using folly::gen::as;
-using folly::gen::from;
-using folly::gen::mapped;
-
 namespace openr {
 
 namespace detail {

@@ -12,7 +12,6 @@
 
 #include <openr/common/MplsUtil.h>
 
-using namespace std;
 using namespace openr;
 
 TEST(UtilTest, MplsUtilTest) {

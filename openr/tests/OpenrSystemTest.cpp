@@ -23,7 +23,6 @@
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/Constants.h>

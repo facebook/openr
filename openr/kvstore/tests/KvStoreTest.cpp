@@ -29,7 +29,6 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
-using apache::thrift::CompactSerializer;
 using namespace std::chrono;
 
 namespace fb303 = facebook::fb303;

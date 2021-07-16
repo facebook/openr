@@ -8,8 +8,6 @@
 #include <openr/nl/NetlinkTypes.h>
 
 extern "C" {
-#include <linux/netlink.h>
-#include <linux/types.h>
 #include <net/if.h>
 }
 

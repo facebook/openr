@@ -25,7 +25,6 @@
 
 using namespace openr;
 
-using apache::thrift::CompactSerializer;
 namespace fb303 = facebook::fb303;
 
 namespace {
