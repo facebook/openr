@@ -226,7 +226,7 @@ Spark::SparkNeighbor::SparkNeighbor(
 
 Spark::Spark(
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
-    messaging::ReplicateQueue<NeighborDiscoveryEvent>& neighborUpdatesQueue,
+    messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
@@ -1051,8 +1051,7 @@ Spark::neighborDownWrapper(
 void
 Spark::notifySparkNeighborEvent(
     NeighborEventType eventType, thrift::SparkNeighbor const& info) {
-  NeighborEvent event(eventType, info);
-  neighborUpdatesQueue_.push(std::move(event));
+  neighborUpdatesQueue_.push(NeighborEvents({NeighborEvent(eventType, info)}));
 }
 
 void

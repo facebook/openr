@@ -80,7 +80,7 @@ class Spark final : public OpenrEventBase {
       // consumer Queue
       messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
       // producer Queue
-      messaging::ReplicateQueue<NeighborDiscoveryEvent>& nbrUpdatesQueue,
+      messaging::ReplicateQueue<NeighborEvents>& nbrUpdatesQueue,
       // port for TCP connection
       KvStoreCmdPort kvStoreCmdPort,
       // raw ptr of modules
@@ -504,7 +504,7 @@ class Spark final : public OpenrEventBase {
       stateMap_;
 
   // Queue to publish neighbor events
-  messaging::ReplicateQueue<NeighborDiscoveryEvent>& neighborUpdatesQueue_;
+  messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue_;
 
   // this is used to inform peers about my kvstore tcp ports
   const uint16_t kKvStoreCmdPort_{0};

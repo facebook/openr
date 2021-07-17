@@ -51,7 +51,7 @@ class SparkWrapper {
   void updateInterfaceDb(const InterfaceDatabase& ifDb);
 
   // receive spark neighbor event
-  std::optional<NeighborEvent> recvNeighborEvent(
+  std::optional<NeighborEvents> recvNeighborEvent(
       std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
   std::optional<NeighborEvent> waitForEvent(
@@ -85,8 +85,8 @@ class SparkWrapper {
   std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor
-  messaging::ReplicateQueue<NeighborDiscoveryEvent> neighborUpdatesQueue_;
-  messaging::RQueue<NeighborDiscoveryEvent> neighborUpdatesReader_{
+  messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
+  messaging::RQueue<NeighborEvents> neighborUpdatesReader_{
       neighborUpdatesQueue_.getReader()};
 
   // Queue to receive interface update from LinkMonitor

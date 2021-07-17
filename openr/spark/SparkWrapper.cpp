@@ -73,7 +73,7 @@ SparkWrapper::updateInterfaceDb(const InterfaceDatabase& ifDb) {
   interfaceUpdatesQueue_.push(ifDb);
 }
 
-std::optional<NeighborEvent>
+std::optional<NeighborEvents>
 SparkWrapper::recvNeighborEvent(
     std::optional<std::chrono::milliseconds> timeout) {
   auto startTime = std::chrono::steady_clock::now();
@@ -87,13 +87,7 @@ SparkWrapper::recvNeighborEvent(
     std::this_thread::yield();
   }
 
-  auto readValue = neighborUpdatesReader_.get();
-  if (readValue.hasValue()) {
-    if (auto* event = std::get_if<NeighborEvent>(&readValue.value())) {
-      return *event;
-    }
-  }
-  return std::nullopt;
+  return neighborUpdatesReader_.get().value();
 }
 
 std::optional<NeighborEvent>
@@ -111,10 +105,10 @@ SparkWrapper::waitForEvent(
                  << procTimeout.value().count();
       break;
     }
-    if (auto maybeEvent = recvNeighborEvent(rcvdTimeout)) {
-      auto& event = maybeEvent.value();
-      if (eventType == event.eventType) {
-        return event;
+    if (auto maybeEvents = recvNeighborEvent(rcvdTimeout)) {
+      auto& events = maybeEvents.value();
+      if (events.size() > 0 and eventType == events[0].eventType) {
+        return events[0];
       }
     }
   }

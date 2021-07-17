@@ -33,11 +33,9 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
   SPEC** information to `KvStore` for peer session establishment over TCP
   connection.
 
-- `[Consumer] RQueue<NeighborDiscoveryEvent>`: receive neighbor update sent from
-  `Spark` for adjacency updates. Events include neighbor
-  UP/DOWN/RESTART/RTT-CHANGE and signal NEIGHBOR_DISCOVERED when connections
-  with peers are established at all links. This info will finally lead to **PEER
-  SPEC** propagation towards `KvStore`.
+- `[Consumer] RQueue<NeighborEvents>`: receive neighbor update sent from `Spark`
+  for adjacency updates. Events include neighbor UP/DOWN/RESTART/RTT-CHANGE.
+  This info will finally lead to **PEER SPEC** propagation towards `KvStore`.
 
 - `[Consumer] RQueue<fbnl::NetlinkEvent>`: receive `Netlink` event from
   underneath platform to add/delete/update interface information, which further

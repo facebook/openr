@@ -71,7 +71,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
-    messaging::RQueue<NeighborDiscoveryEvent> neighborUpdatesQueue,
+    messaging::RQueue<NeighborEvents> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool overrideDrainState)
@@ -1082,9 +1082,9 @@ LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
 }
 
 void
-LinkMonitor::processNeighborEvent(NeighborDiscoveryEvent&& event) {
-  if (auto* neighborEvent = std::get_if<NeighborEvent>(&event)) {
-    const auto& info = neighborEvent->info;
+LinkMonitor::processNeighborEvent(NeighborEvents&& events) {
+  for (const auto& event : events) {
+    const auto& info = event.info;
     const auto& neighborAddrV4 = *info.transportAddressV4_ref();
     const auto& neighborAddrV6 = *info.transportAddressV6_ref();
     const auto& localIfName = *info.localIfName_ref();
@@ -1096,23 +1096,22 @@ LinkMonitor::processNeighborEvent(NeighborDiscoveryEvent&& event) {
             << remoteIfName << " at " << localIfName << " with addrs "
             << toString(neighborAddrV6) << " and "
             << (enableV4_ or v4OverV6Nexthop_ ? toString(neighborAddrV4) : "")
-            << " Area:" << area
-            << " Event Type: " << toString(neighborEvent->eventType);
+            << " Area:" << area << " Event Type: " << toString(event.eventType);
 
-    switch (neighborEvent->eventType) {
+    switch (event.eventType) {
     case NeighborEventType::NEIGHBOR_UP:
     case NeighborEventType::NEIGHBOR_RESTARTED: {
-      logNeighborEvent(*neighborEvent);
+      logNeighborEvent(event);
       neighborUpEvent(info);
       break;
     }
     case NeighborEventType::NEIGHBOR_RESTARTING: {
-      logNeighborEvent(*neighborEvent);
+      logNeighborEvent(event);
       neighborRestartingEvent(info);
       break;
     }
     case NeighborEventType::NEIGHBOR_DOWN: {
-      logNeighborEvent(*neighborEvent);
+      logNeighborEvent(event);
       neighborDownEvent(info);
       break;
     }
@@ -1120,21 +1119,14 @@ LinkMonitor::processNeighborEvent(NeighborDiscoveryEvent&& event) {
       if (!useRttMetric_) {
         break;
       }
-      logNeighborEvent(*neighborEvent);
+      logNeighborEvent(event);
       neighborRttChangeEvent(info);
       break;
     }
     default:
-      LOG(ERROR) << "Unknown event type " << (int32_t)neighborEvent->eventType;
+      LOG(ERROR) << "Unknown event type " << (int32_t)event.eventType;
     }
-  } else if (
-      auto* initEvent = std::get_if<thrift::InitializationEvent>(&event)) {
-    // TODO: Handle init event.
-    CHECK(false) << "Unexpected to reach here.";
-  } else {
-    LOG(ERROR) << "Error processing NeighborDiscoveryEvent request. Request "
-               << "type not recognized.";
-  }
+  } // for
 }
 
 // NOTE: add commands which set/unset overload bit or metric values will

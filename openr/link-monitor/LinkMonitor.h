@@ -109,7 +109,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
-      messaging::RQueue<NeighborDiscoveryEvent> neighborUpdatesQueue,
+      messaging::RQueue<NeighborEvents> neighborUpdatesQueue,
       messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will override drain state from persistent store with
@@ -173,7 +173,7 @@ class LinkMonitor final : public OpenrEventBase {
    */
 
   // process neighbor event updates from Spark module
-  void processNeighborEvent(NeighborDiscoveryEvent&& eventParam);
+  void processNeighborEvent(NeighborEvents&& events);
 
   // individual neighbor event function
   void neighborUpEvent(const thrift::SparkNeighbor& info);
