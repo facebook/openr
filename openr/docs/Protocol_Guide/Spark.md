@@ -227,3 +227,10 @@ When a node starts or a new link comes up, we perform fast initial neighbor
 discovery by sending `SparkHelloMsg` with `solicitResponse` bit set. This is to
 request immediate reply, which allows quicker discovery of new
 neighbors(configurable).
+
+## References
+
+---
+
+- Link-local address: https://en.wikipedia.org/wiki/Link-local_address
+- Multicast address: https://en.wikipedia.org/wiki/Multicast_address
