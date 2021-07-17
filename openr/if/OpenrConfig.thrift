@@ -147,9 +147,11 @@ struct AreaPathComputationRules {
   2: PrefixForwardingType forwardingType = PrefixForwardingType.IP;
 } (cpp.minimize_padding)
 
-/* Rules for how the prepend label is allocated and computed
- *  The prepend label is used to form inter-area LSPs by
- * being redistributed across areas along with the route.
+/*
+ * Rules that describe the allocation of prepend-label. This label would be
+ * assigned to RibUnicastEntry, thus available for inter-area route
+ * redistribution. Area policy would govern the advertisement of this prepend
+ * label to other areas on redistribution.
  */
 union PrependLabelRules {
   /* Advertise node segment label of the best route */
