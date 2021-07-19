@@ -72,6 +72,9 @@ struct SelfOriginatedValue {
   ExponentialBackoff<std::chrono::milliseconds> ttlBackoff;
 };
 
+using SelfOriginatedKeyVals =
+    std::unordered_map<std::string, SelfOriginatedValue>;
+
 // TODO: migrate to std::priority_queue
 using TtlCountdownQueue = boost::heap::priority_queue<
     TtlCountdownQueueEntry,
@@ -108,6 +111,8 @@ struct KvStoreParams {
   std::optional<thrift::KvstoreFloodRate> floodRate;
   // TTL decrement factor
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
+  // TTL for self-originated keys
+  std::chrono::milliseconds keyTtl{0};
   // DUAL related config knob
   bool enableFloodOptimization{false};
   bool isFloodRoot{false};
@@ -131,6 +136,8 @@ struct KvStoreParams {
       std::optional<thrift::KvstoreFloodRate> floodrate,
       // TTL decrement factor
       std::chrono::milliseconds ttldecr,
+      // TTL for self-originated keys
+      std::chrono::milliseconds keyTtl,
       // DUAL related config knob
       bool enableFloodOptimization,
       bool isFloodRoot,
@@ -146,6 +153,7 @@ struct KvStoreParams {
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
+        keyTtl(keyTtl),
         enableFloodOptimization(enableFloodOptimization),
         isFloodRoot(isFloodRoot),
         enableThriftDualMsg(enableThriftDualMsg),
@@ -172,6 +180,12 @@ class KvStoreDb : public DualNode {
   std::string const&
   getAreaId() const {
     return area_;
+  }
+
+  // get all active (ttl-refreshable) self-originated key-vals
+  SelfOriginatedKeyVals const&
+  getSelfOriginatedKeyVals() const {
+    return selfOriginatedKeyVals_;
   }
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
@@ -257,7 +271,7 @@ class KvStoreDb : public DualNode {
   // Set key-value in KvStore with specified version. If version is 0, the one
   // greater than the latest known will be used. KvStore will manage
   // ttl-refreshing for self-originated key-vals, aka, key-vals sent via queue.
-  void setKey(
+  void setSelfOriginatedKey(
       std::string const& key, std::string const& value, uint32_t version);
 
   // Set specified key-value in KvStore. This is an authoratitive call, meaning
@@ -265,14 +279,15 @@ class KvStoreDb : public DualNode {
   // key-value with higher version. By default key is published to default area.
   // KvStore will manage ttl-refreshing for self-originated key-vals, aka,
   // key-vals sent via queue.
-  void persistKey(std::string const& key, std::string const& value);
+  void persistSelfOriginatedKey(
+      std::string const& key, std::string const& value);
 
   // Set new value for self-originated key and stop ttl-refreshing by clearing
   // from local cache.
-  void unsetKey(std::string const& key, std::string const& value);
+  void unsetSelfOriginatedKey(std::string const& key, std::string const& value);
 
   // Erase key from local cache, thus stopping ttl-refreshing.
-  void eraseKey(std::string const& key);
+  void eraseSelfOriginatedKey(std::string const& key);
 
  private:
   // disable copying
@@ -404,6 +419,9 @@ class KvStoreDb : public DualNode {
 
   // update ttls for all self-originated key-vals
   void advertiseTtlUpdates();
+
+  // schedule ttl updates for self-originated key-vals
+  void scheduleTtlUpdates(std::string const& key, bool advertiseImmediately);
 
   //
   // Private variables
@@ -586,6 +604,10 @@ class KvStore final : public OpenrEventBase {
   dumpKvStoreKeys(
       thrift::KeyDumpParams keyDumpParams,
       std::set<std::string> selectAreas = {});
+
+  // return self-originated key-vals for given area
+  folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
+  dumpKvStoreSelfOriginatedKeys(std::string area);
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>> dumpKvStoreHashes(
       std::string area, thrift::KeyDumpParams keyDumpParams);

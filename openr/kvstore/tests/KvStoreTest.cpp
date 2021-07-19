@@ -365,7 +365,112 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
 INSTANTIATE_TEST_CASE_P(
     KvStoreTestInstance, KvStoreTestTtlFixture, ::testing::Bool());
 
+/**
+ * Fixture for abstracting out common functionality for unittests.
+ */
+class KvStoreSelfOriginatedKeyValueRequestFixture : public KvStoreTestFixture {
+ public:
+  void
+  SetUp() override {
+    // nothing to do
+  }
+
+  void
+  TearDown() override {
+    // close queue before stopping kvstore so fiber task can end
+    kvRequestQueue_.close();
+    // nothing to do
+    for (auto& store : stores_) {
+      store->stop();
+    }
+  }
+
+  /**
+   * Helper function to create KvStoreWrapper and start the KvStore.
+   * KvStore uses request queue to receive key-value updates from clients.
+   */
+  void
+  initKvStore(
+      std::string nodeId,
+      thrift::KvstoreConfig kvStoreConf = getTestKvConf(),
+      const std::vector<thrift::AreaConfig>& areas = {}) {
+    // enable kvstore request queue in config
+    auto tConfig = getBasicOpenrConfig(nodeId, "domain", areas);
+    tConfig.enable_kvstore_request_queue_ref() = true;
+    tConfig.kvstore_config_ref() = kvStoreConf;
+    config_ = std::make_shared<Config>(tConfig);
+
+    // create kvstore
+    stores_.emplace_back(std::make_unique<KvStoreWrapper>(
+        context,
+        config_,
+        std::nullopt /* peerUpdatesQueue */,
+        kvRequestQueue_.getReader()));
+    kvStore_ = stores_.back().get();
+
+    // start kvstore
+    kvStore_->run();
+  }
+  KvStoreWrapper* kvStore_;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
+};
 } // namespace
+
+/**
+ * Validate SetKeyValueRequest processing, key-setting, and ttl-refreshing.
+ * Send SetKeyValueRequest via queue to KvStore.
+ */
+TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
+  const std::string nodeId = "node21";
+  int64_t ttl = 2000; // 2 seconds
+
+  // Set key-val ttls
+  auto kvConf = getTestKvConf();
+  kvConf.key_ttl_ms_ref() = ttl;
+
+  // create and start kv store with kvRequestQueue enabled
+  initKvStore(nodeId, kvConf);
+
+  // create request to set key-val
+  const std::string key = "key1";
+  const std::string value = "value1";
+  auto setKvRequest = SetKeyValueRequest(kTestingAreaName, key, value);
+
+  // push request to queue -- trigger processKeyValueRequest() in KvStore
+  kvRequestQueue_.push(std::move(setKvRequest));
+
+  OpenrEventBase evb;
+
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    // wait for kvstore handle SetKeyValue request and flood new key-val
+    auto pub = kvStore_->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+    EXPECT_EQ(0, *(pub.keyVals_ref()->at(key).ttlVersion_ref()));
+
+    // check advertised self-originated key-value was stored in kvstore
+    auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+    EXPECT_EQ(1, kvStoreCache.size());
+    EXPECT_EQ(value, kvStoreCache.at(key).value.value_ref());
+
+    // check that ttl version was bumped up and
+    // key-val with updated ttl version was flooded
+    auto pub2 = kvStore_->recvPublication();
+    EXPECT_EQ(1, pub2.keyVals_ref()->size());
+    EXPECT_EQ(1, *(pub2.keyVals_ref()->at(key).ttlVersion_ref()));
+  });
+
+  // check that key-val was not expired after ttl time has passed
+  evb.scheduleTimeout(std::chrono::milliseconds(ttl * 2), [&]() noexcept {
+    auto recVal = kvStore_->getKey(kTestingAreaName, key);
+    EXPECT_TRUE(recVal.has_value());
+    EXPECT_GE(*(recVal.value().ttlVersion_ref()), 4);
+    evb.stop();
+  });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
 
 /**
  * Start single testable store and set key-val. Verify content of KvStore by
@@ -493,6 +598,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(counters.count("kvstore.rate_limit_suppress.count"));
   ASSERT_TRUE(counters.count("kvstore.received_dual_messages.count"));
   ASSERT_TRUE(counters.count("kvstore.cmd_hash_dump.count"));
+  ASSERT_TRUE(counters.count("kvstore.cmd_self_originated_key_dump.count"));
   ASSERT_TRUE(counters.count("kvstore.cmd_key_dump.count"));
   ASSERT_TRUE(counters.count("kvstore.cmd_key_get.count"));
   ASSERT_TRUE(counters.count("kvstore.sent_key_vals.sum"));
@@ -518,6 +624,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(0, counters.at("kvstore.rate_limit_suppress.count"));
   EXPECT_EQ(0, counters.at("kvstore.received_dual_messages.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_hash_dump.count"));
+  EXPECT_EQ(0, counters.at("kvstore.cmd_self_originated_key_dump.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_key_dump.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_key_get.count"));
   EXPECT_EQ(0, counters.at("kvstore.sent_key_vals.sum"));

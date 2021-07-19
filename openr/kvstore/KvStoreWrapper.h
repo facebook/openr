@@ -127,6 +127,11 @@ class KvStoreWrapper {
       AreaId const& area, std::string const& prefix = "");
 
   /**
+   * API to get dump of self originated key-vals from KvStore.
+   */
+  SelfOriginatedKeyVals dumpAllSelfOriginated(AreaId const& area);
+
+  /**
    * API to get key vals on which hash differs from provided keyValHashes.
    */
   std::unordered_map<std::string /* key */, thrift::Value> syncKeyVals(

@@ -13,6 +13,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <stdexcept>
 
+#include <openr/common/Constants.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -293,6 +294,10 @@ Config::populateInternalDb() {
     if (*floodRate->flood_msg_burst_size_ref() <= 0) {
       throw std::out_of_range("kvstore flood_msg_burst_size should be > 0");
     }
+  }
+
+  if (kvConf.key_ttl_ms_ref() == Constants::kTtlInfinity) {
+    throw std::out_of_range("kvstore key_ttl_ms should be a finite number");
   }
 
   //
@@ -629,6 +634,5 @@ Config::populateInternalDb() {
   if (*config_.route_delete_delay_ms_ref() < 0) {
     throw std::invalid_argument("Route delete duration must be >= 0ms");
   }
-
-} // namespace openr
+}
 } // namespace openr

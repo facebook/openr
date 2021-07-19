@@ -184,6 +184,12 @@ KvStoreWrapper::dumpHashes(AreaId const& area, std::string const& prefix) {
   return *pub.keyVals_ref();
 }
 
+SelfOriginatedKeyVals
+KvStoreWrapper::dumpAllSelfOriginated(AreaId const& area) {
+  auto keyVals = *(kvStore_->dumpKvStoreSelfOriginatedKeys(area).get());
+  return keyVals;
+}
+
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::syncKeyVals(
     AreaId const& area, thrift::KeyVals const& keyValHashes) {

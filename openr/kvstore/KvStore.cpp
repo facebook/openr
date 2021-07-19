@@ -53,6 +53,8 @@ KvStore::KvStore(
           config->getKvStoreConfig().flood_rate_ref().to_optional(),
           std::chrono::milliseconds(
               *config->getKvStoreConfig().ttl_decrement_ms_ref()),
+          std::chrono::milliseconds(
+              *config->getKvStoreConfig().key_ttl_ms_ref()),
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
               false),
           config->getKvStoreConfig().is_flood_root_ref().value_or(false),
@@ -133,7 +135,7 @@ KvStore::KvStore(
             auto maybeKvRequest = kvQueue.get(); // perform read
             VLOG(2) << "Received key-value request...";
             if (maybeKvRequest.hasError()) {
-              LOG(INFO) << "Terminating peer updates processing fiber";
+              LOG(INFO) << "Terminating key-value request processing fiber";
               break;
             }
             try {
@@ -280,21 +282,21 @@ KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
     auto& kvStoreDb = getAreaDbOrThrow(area, "processKeyValueRequest");
     if (auto pPersistKvRequest =
             std::get_if<PersistKeyValueRequest>(&kvRequest)) {
-      kvStoreDb.persistKey(
+      kvStoreDb.persistSelfOriginatedKey(
           pPersistKvRequest->getKey(), pPersistKvRequest->getValue());
     } else if (
         auto pSetKvRequest = std::get_if<SetKeyValueRequest>(&kvRequest)) {
-      kvStoreDb.setKey(
+      kvStoreDb.setSelfOriginatedKey(
           pSetKvRequest->getKey(),
           pSetKvRequest->getValue(),
           pSetKvRequest->getVersion());
     } else if (
         auto pClearKvRequest = std::get_if<ClearKeyValueRequest>(&kvRequest)) {
       if (pClearKvRequest->getSetValue()) {
-        kvStoreDb.unsetKey(
+        kvStoreDb.unsetSelfOriginatedKey(
             pClearKvRequest->getKey(), pClearKvRequest->getValue());
       } else {
-        kvStoreDb.eraseKey(pClearKvRequest->getKey());
+        kvStoreDb.eraseSelfOriginatedKey(pClearKvRequest->getKey());
       }
     } else {
       LOG(ERROR)
@@ -373,6 +375,27 @@ KvStore::getKvStoreKeyVals(
       kvStoreDb.updatePublicationTtl(thriftPub);
 
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
+    } catch (thrift::OpenrError const& e) {
+      p.setException(e);
+    }
+  });
+  return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
+KvStore::dumpKvStoreSelfOriginatedKeys(std::string area) {
+  folly::Promise<std::unique_ptr<SelfOriginatedKeyVals>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), area]() mutable {
+    VLOG(3) << "Dump self originated key-vals for AREA: " << area;
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreSelfOriginatedKeys");
+      // track self origin key-val dump calls
+      fb303::fbData->addStatValue(
+          "kvstore.cmd_self_originated_key_dump", 1, fb303::COUNT);
+
+      auto keyVals = kvStoreDb.getSelfOriginatedKeyVals();
+      p.setValue(std::make_unique<SelfOriginatedKeyVals>(keyVals));
     } catch (thrift::OpenrError const& e) {
       p.setException(e);
     }
@@ -773,6 +796,8 @@ KvStore::initGlobalCounters() {
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("kvstore.cmd_hash_dump", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.cmd_self_originated_key_dump", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.cmd_key_dump", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.cmd_key_get", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.cmd_key_set", fb303::COUNT);
@@ -1073,24 +1098,85 @@ KvStoreDb::~KvStoreDb() {
 }
 
 void
-KvStoreDb::setKey(
+KvStoreDb::setSelfOriginatedKey(
     std::string const& key, std::string const& value, uint32_t version) {
-  CHECK(false) << "setKey not implemented.";
+  VLOG(3) << "setSelfOriginatedKey called for key " << key;
+
+  // Create 'thrift::Value' object which will be sent to KvStore
+  thrift::Value thriftValue = createThriftValue(
+      version,
+      nodeId,
+      value,
+      kvParams_.keyTtl.count(),
+      0 /* ttl version */,
+      0 /* hash */);
+  CHECK(thriftValue.value_ref());
+
+  // Use one version number higher than currently in KvStore if not specified
+  if (not version) {
+    auto it = kvStore_.find(key);
+    if (it != kvStore_.end()) {
+      thriftValue.version_ref() = it->second.get_version();
+    } else {
+      thriftValue.version_ref() = 1;
+    }
+  }
+
+  // store self-originated key-vals in cache
+  // ATTN: ttl backoff will be set separately in scheduleTtlUpdates()
+  SelfOriginatedValue selfOriginatedVal;
+  selfOriginatedVal.value = thriftValue;
+  selfOriginatedKeyVals_[key] = std::move(selfOriginatedVal);
+
+  // Advertise key to KvStore
+  std::unordered_map<std::string, thrift::Value> keyVals = {{key, thriftValue}};
+  thrift::KeySetParams params;
+  params.keyVals_ref() = std::move(keyVals);
+  setKeyVals(std::move(params));
+
+  // Add ttl backoff and trigger ttlTimer_
+  scheduleTtlUpdates(key, false /* advertiseImmediately */);
 }
 
 void
-KvStoreDb::persistKey(std::string const& key, std::string const& value) {
+KvStoreDb::persistSelfOriginatedKey(
+    std::string const& key, std::string const& value) {
   CHECK(false) << "persistKey not implemented.";
 }
 
 void
-KvStoreDb::unsetKey(std::string const& key, std::string const& value) {
+KvStoreDb::unsetSelfOriginatedKey(
+    std::string const& key, std::string const& value) {
   CHECK(false) << "unsetKey not implemented.";
 }
 
 void
-KvStoreDb::eraseKey(std::string const& key) {
+KvStoreDb::eraseSelfOriginatedKey(std::string const& key) {
   CHECK(false) << "eraseKey not implemented.";
+}
+
+void
+KvStoreDb::scheduleTtlUpdates(
+    std::string const& key, bool advertiseImmediately) {
+  int64_t ttl = kvParams_.keyTtl.count();
+
+  auto& value = selfOriginatedKeyVals_.at(key);
+
+  // renew before ttl expires. renew every ttl/4, i.e., try 3 times using
+  // ExponetialBackoff to track remaining time before ttl expiration.
+  value.ttlBackoff = ExponentialBackoff<std::chrono::milliseconds>(
+      std::chrono::milliseconds(ttl / 4),
+      std::chrono::milliseconds(ttl / 4 + 1));
+
+  // Delay first ttl advertisement by (ttl / 4). We have just advertised key or
+  // update and would like to avoid sending unncessary immediate ttl update
+  if (not advertiseImmediately) {
+    selfOriginatedKeyVals_[key].ttlBackoff.reportError();
+  }
+
+  // trigger ttl timer
+  ttlTimer_->scheduleTimeout(
+      selfOriginatedKeyVals_[key].ttlBackoff.getTimeRemainingUntilRetry());
 }
 
 void
