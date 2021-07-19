@@ -254,6 +254,26 @@ class KvStoreDb : public DualNode {
   // add new key-vals to kvstore_'s key-vals
   void setKeyVals(thrift::KeySetParams&& setParams);
 
+  // Set key-value in KvStore with specified version. If version is 0, the one
+  // greater than the latest known will be used. KvStore will manage
+  // ttl-refreshing for self-originated key-vals, aka, key-vals sent via queue.
+  void setKey(
+      std::string const& key, std::string const& value, uint32_t version);
+
+  // Set specified key-value in KvStore. This is an authoratitive call, meaning
+  // if someone else advertises the same key we try to win over it by setting
+  // key-value with higher version. By default key is published to default area.
+  // KvStore will manage ttl-refreshing for self-originated key-vals, aka,
+  // key-vals sent via queue.
+  void persistKey(std::string const& key, std::string const& value);
+
+  // Set new value for self-originated key and stop ttl-refreshing by clearing
+  // from local cache.
+  void unsetKey(std::string const& key, std::string const& value);
+
+  // Erase key from local cache, thus stopping ttl-refreshing.
+  void eraseKey(std::string const& key);
+
  private:
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
@@ -626,31 +646,6 @@ class KvStore final : public OpenrEventBase {
   // Wrapper function that calls functions to update the kv store based on
   // type of update
   void processKeyValueRequest(KeyValueRequest&& kvRequest);
-
-  // Set key-value in KvStore with specified version. If version is 0, the one
-  // greater than the latest known will be used. KvStore will manage
-  // ttl-refreshing for self-originated key-vals, aka, key-vals sent via queue.
-  void setKey(
-      AreaId const& area,
-      std::string const& key,
-      std::string const& value,
-      uint32_t version);
-
-  // Set specified key-value in KvStore. This is an authoratitive call, meaning
-  // if someone else advertises the same key we try to win over it by setting
-  // key-value with higher version. By default key is published to default area.
-  // KvStore will manage ttl-refreshing for self-originated key-vals, aka,
-  // key-vals sent via queue.
-  void persistKey(
-      AreaId const& area, std::string const& key, std::string const& value);
-
-  // Set new value for self-originated key and stop ttl-refreshing by clearing
-  // from local cache.
-  void unsetKey(
-      AreaId const& area, std::string const& key, std::string const& value);
-
-  // Erase key from local cache, thus stopping ttl-refreshing.
-  void eraseKey(AreaId const& area, std::string const& key);
 
   std::map<std::string, int64_t> getGlobalCounters() const;
 

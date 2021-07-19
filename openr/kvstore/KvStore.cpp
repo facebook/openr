@@ -272,58 +272,37 @@ KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
 
 void
 KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
-  if (auto pPersistKvRequest =
-          std::get_if<PersistKeyValueRequest>(&kvRequest)) {
-    persistKey(
-        pPersistKvRequest->getArea(),
-        pPersistKvRequest->getKey(),
-        pPersistKvRequest->getValue());
-  } else if (auto pSetKvRequest = std::get_if<SetKeyValueRequest>(&kvRequest)) {
-    setKey(
-        pSetKvRequest->getArea(),
-        pSetKvRequest->getKey(),
-        pSetKvRequest->getValue(),
-        pSetKvRequest->getVersion());
-  } else if (
-      auto pClearKvRequest = std::get_if<ClearKeyValueRequest>(&kvRequest)) {
-    if (pClearKvRequest->getSetValue()) {
-      unsetKey(
-          pClearKvRequest->getArea(),
-          pClearKvRequest->getKey(),
-          pClearKvRequest->getValue());
+  // get area across different variants of KeyValueRequest
+  const auto& area = std::visit(
+      [](auto&& request) -> AreaId { return request.getArea(); }, kvRequest);
+
+  try {
+    auto& kvStoreDb = getAreaDbOrThrow(area, "processKeyValueRequest");
+    if (auto pPersistKvRequest =
+            std::get_if<PersistKeyValueRequest>(&kvRequest)) {
+      kvStoreDb.persistKey(
+          pPersistKvRequest->getKey(), pPersistKvRequest->getValue());
+    } else if (
+        auto pSetKvRequest = std::get_if<SetKeyValueRequest>(&kvRequest)) {
+      kvStoreDb.setKey(
+          pSetKvRequest->getKey(),
+          pSetKvRequest->getValue(),
+          pSetKvRequest->getVersion());
+    } else if (
+        auto pClearKvRequest = std::get_if<ClearKeyValueRequest>(&kvRequest)) {
+      if (pClearKvRequest->getSetValue()) {
+        kvStoreDb.unsetKey(
+            pClearKvRequest->getKey(), pClearKvRequest->getValue());
+      } else {
+        kvStoreDb.eraseKey(pClearKvRequest->getKey());
+      }
     } else {
-      eraseKey(pClearKvRequest->getArea(), pClearKvRequest->getKey());
+      LOG(ERROR)
+          << "Error processing key value request. Request type not recognized.";
     }
-  } else {
-    LOG(ERROR)
-        << "Error processing key value request. Request type not recognized.";
+  } catch (thrift::OpenrError const& e) {
+    LOG(ERROR) << " Failed to find area " << area.t << " in kvStoreDb_.";
   }
-}
-
-void
-KvStore::setKey(
-    AreaId const& area,
-    std::string const& key,
-    std::string const& value,
-    uint32_t version) {
-  CHECK(false) << "setKey not implemented.";
-}
-
-void
-KvStore::persistKey(
-    AreaId const& area, std::string const& key, std::string const& value) {
-  CHECK(false) << "persistKey not implemented.";
-}
-
-void
-KvStore::unsetKey(
-    AreaId const& area, std::string const& key, std::string const& value) {
-  CHECK(false) << "unsetKey not implemented.";
-}
-
-void
-KvStore::eraseKey(AreaId const& area, std::string const& key) {
-  CHECK(false) << "eraseKey not implemented.";
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
@@ -1091,6 +1070,27 @@ KvStoreDb::~KvStoreDb() {
   }
 
   LOG(INFO) << "Successfully destructed KvStoreDb in area: " << area_;
+}
+
+void
+KvStoreDb::setKey(
+    std::string const& key, std::string const& value, uint32_t version) {
+  CHECK(false) << "setKey not implemented.";
+}
+
+void
+KvStoreDb::persistKey(std::string const& key, std::string const& value) {
+  CHECK(false) << "persistKey not implemented.";
+}
+
+void
+KvStoreDb::unsetKey(std::string const& key, std::string const& value) {
+  CHECK(false) << "unsetKey not implemented.";
+}
+
+void
+KvStoreDb::eraseKey(std::string const& key) {
+  CHECK(false) << "eraseKey not implemented.";
 }
 
 void
