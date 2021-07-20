@@ -1459,7 +1459,6 @@ TEST_F(KvStoreTestFixture, DualTest) {
   n0->run();
   n1->run();
 
-  //
   // Add peers to all stores
   EXPECT_TRUE(
       r0->addPeer(kTestingAreaName, n0->getNodeId(), n0->getPeerSpec()));
@@ -1644,11 +1643,10 @@ TEST_F(KvStoreTestFixture, DualTest) {
     }
   };
 
-  // case1. validate all roots up case
+  LOG(INFO) << "Test 1: validate all roots are up...";
   validateAllRootsUpCase();
 
-  // case2. validate r0 down case
-  // everybody should pick r1 as new root
+  // bring r0 down and everyone should choose r1 as new root
   r0->delPeer(kTestingAreaName, "n0");
   r0->delPeer(kTestingAreaName, "n1");
   n0->delPeer(kTestingAreaName, "r0");
@@ -1657,6 +1655,8 @@ TEST_F(KvStoreTestFixture, DualTest) {
   // let kvstore dual sync
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  LOG(INFO) << "Test 2: bring r0 down...";
 
   // validate r1
   {
@@ -1737,8 +1737,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfos.floodPeers_ref()->count("r1"), 1);
   }
 
-  // case3. bring r0 back up, and validate again
-  // everybody should pick r0 as new root
+  // bring r0 up and everyone should choose r0 as new root
   EXPECT_TRUE(
       r0->addPeer(kTestingAreaName, n0->getNodeId(), n0->getPeerSpec()));
   EXPECT_TRUE(
@@ -1751,11 +1750,13 @@ TEST_F(KvStoreTestFixture, DualTest) {
   // let kvstore dual sync
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  LOG(INFO) << "Test 3: bring r0 back up...";
+
   validateAllRootsUpCase();
 
-  // case4. bring link r0-n0 down
-  // verify topology below
-  //  r0    r1
+  // bring link r0-n0 down and verify topology below
+  // r0    r1
   //   \   /|
   //    \_/ |
   //   /  \ |
@@ -1766,6 +1767,8 @@ TEST_F(KvStoreTestFixture, DualTest) {
   // let kvstore dual sync
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  LOG(INFO) << "Test 4: bring link r0-n0 down...";
 
   // validate r0
   {
@@ -1885,7 +1888,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfos.floodPeers_ref()->count("r1"), 1);
   }
 
-  // case5. bring r0-n1 link back up, and validate again
+  // bring r0-n0 link back up, and validate again
   EXPECT_TRUE(
       r0->addPeer(kTestingAreaName, n0->getNodeId(), n0->getPeerSpec()));
   EXPECT_TRUE(
@@ -1894,9 +1897,12 @@ TEST_F(KvStoreTestFixture, DualTest) {
   // let kvstore dual sync
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  LOG(INFO) << "Test 5: bring link r0-n0 up...";
+
   validateAllRootsUpCase();
 
-  // case6. mimic r0 non-graceful shutdown and restart
+  // mimic r0 non-graceful shutdown and restart
   // bring r0 down non-gracefully
   r0->delPeer(kTestingAreaName, "n0");
   r0->delPeer(kTestingAreaName, "n1");
@@ -1905,6 +1911,8 @@ TEST_F(KvStoreTestFixture, DualTest) {
   // wait 1 sec for r0 comes back up
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  LOG(INFO) << "Test 6: r0 non-graceful shutdown...";
 
   // bring r0 back up
   EXPECT_TRUE(

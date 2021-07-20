@@ -1682,11 +1682,19 @@ KvStoreDb::processThriftFailure(
 void
 KvStoreDb::addThriftPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
+  std::vector<std::string> dualPeersToAdd;
+
   // kvstore external sync over thrift port of knob enabled
   for (auto const& [peerName, newPeerSpec] : peers) {
+    bool isNewPeer{false};
     auto const& supportFloodOptimization =
         newPeerSpec.get_supportFloodOptimization();
     auto const& peerAddr = newPeerSpec.get_peerAddr();
+
+    // add dual peers for both new-peer or update-peer event
+    if (supportFloodOptimization) {
+      dualPeersToAdd.emplace_back(peerName);
+    }
 
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
@@ -1701,6 +1709,12 @@ KvStoreDb::addThriftPeers(
         //        potentially have peerSpec updated by LM)
         LOG(INFO) << "[Peer Update] peerAddr is updated from: "
                   << oldPeerSpec.get_peerAddr() << " to: " << peerAddr;
+      } else {
+        // case2. new peer came up (previsously shut down ungracefully)
+        isNewPeer = true;
+
+        LOG(WARNING) << "[Peer Update] new peer " << peerName << ", previously "
+                     << "shutdown non-gracefully";
       }
       logStateTransition(
           peerName,
@@ -1713,7 +1727,9 @@ KvStoreDb::addThriftPeers(
       peerIter->second.keepAliveTimer->cancelTimeout(); // cancel timer
       peerIter->second.client.reset(); // destruct thriftClient
     } else {
-      // case 2: found a new peer coming up
+      // case 3: found a new peer coming up
+      isNewPeer = true;
+
       LOG(INFO) << "[Peer Add] " << peerName << " is added."
                 << " peerAddr: " << peerAddr
                 << " supportFloodOptimization: " << supportFloodOptimization;
@@ -1740,11 +1756,27 @@ KvStoreDb::addThriftPeers(
     // create thrift client and do backoff if can't go through
     auto& thriftPeer = thriftPeers_.at(peerName);
     thriftPeer.getOrCreateThriftClient(evb_, kvParams_.maybeIpTos);
+
+    if (isNewPeer and supportFloodOptimization) {
+      // make sure let peer to unset-child for me for all roots first
+      // after that, I'll be fed with proper dual-events and I'll be
+      // chosing new nexthop if need.
+      unsetChildAll(peerName);
+    }
   } // for loop
 
   // kick off thriftSyncTimer_ if not yet to asyc process full-sync
   if (not thriftSyncTimer_->isScheduled()) {
     thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  }
+
+  // process DUAL peer if flood-optimization is enabled
+  if (kvParams_.enableFloodOptimization) {
+    // process dual events if any
+    for (const auto& peer : dualPeersToAdd) {
+      LOG(INFO) << "dual peer up: " << peer;
+      DualNode::peerUp(peer, 1); // use hop count as metric
+    }
   }
 }
 
@@ -1765,18 +1797,10 @@ KvStoreDb::addPeers(
           Constants::kGlobalCmdLocalIdTemplate.toString(),
           peerName,
           peerAddCounter_);
-      const auto& supportFloodOptimization =
-          newPeerSpec.get_supportFloodOptimization();
 
       try {
         auto it = peers_.find(peerName);
         bool cmdUrlUpdated{false};
-        bool isNewPeer{false};
-
-        // add dual peers for both new-peer or update-peer event
-        if (supportFloodOptimization) {
-          dualPeersToAdd.emplace_back(peerName);
-        }
 
         if (it != peers_.end()) {
           LOG(INFO) << "Updating existing peer " << peerName;
@@ -1801,14 +1825,12 @@ KvStoreDb::addPeers(
             // case2. new peer came up (previsously shut down ungracefully)
             LOG(WARNING) << "new peer " << peerName << ", previously "
                          << "shutdown non-gracefully";
-            isNewPeer = true;
           }
           // Update entry with new data
           it->second.first = newPeerSpec;
         } else {
           // case3. new peer came up
           LOG(INFO) << "Adding new peer " << peerName;
-          isNewPeer = true;
           cmdUrlUpdated = true;
           std::tie(it, std::ignore) = peers_.emplace(
               peerName, std::make_pair(newPeerSpec, newPeerCmdId));
@@ -1830,13 +1852,6 @@ KvStoreDb::addPeers(
                        << *newPeerSpec.cmdUrl_ref() << "'";
           }
         }
-
-        if (isNewPeer and supportFloodOptimization) {
-          // make sure let peer to unset-child for me for all roots first
-          // after that, I'll be fed with proper dual-events and I'll be
-          // chosing new nexthop if need.
-          unsetChildAll(peerName);
-        }
       } catch (std::exception const& e) {
         LOG(ERROR) << "Error connecting to: `" << peerName
                    << "` reason: " << folly::exceptionStr(e);
@@ -1844,12 +1859,6 @@ KvStoreDb::addPeers(
     }
     if (not fullSyncTimer_->isScheduled()) {
       fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-    }
-
-    // process dual events if any
-    for (const auto& peer : dualPeersToAdd) {
-      LOG(INFO) << "dual peer up: " << peer;
-      DualNode::peerUp(peer, 1 /* link-cost */); // use hop count as metric
     }
   }
 }
@@ -1877,6 +1886,8 @@ KvStoreDb::getCounters() const {
 
 void
 KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
+  std::vector<std::string> dualPeersToRemove;
+
   for (auto const& peerName : peers) {
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter == thriftPeers_.end()) {
@@ -1885,6 +1896,9 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
       continue;
     }
     const auto& peerSpec = peerIter->second.peerSpec;
+    if (peerSpec.get_supportFloodOptimization()) {
+      dualPeersToRemove.emplace_back(peerName);
+    }
 
     LOG(INFO) << "[Peer Delete] " << peerName
               << " is detached from: " << peerSpec.get_peerAddr()
@@ -1895,6 +1909,15 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
     peerIter->second.keepAliveTimer.reset();
     peerIter->second.client.reset();
     thriftPeers_.erase(peerIter);
+  }
+
+  // process DUAL peer if flood-optimization is enabled
+  if (kvParams_.enableFloodOptimization) {
+    // remove dual peers if any
+    for (const auto& peer : dualPeersToRemove) {
+      LOG(INFO) << "dual peer down: " << peer;
+      DualNode::peerDown(peer);
+    }
   }
 }
 
@@ -1907,7 +1930,6 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
   // [TO BE DEPRECATED]
   if (kvParams_.enableFloodOptimization) {
     // ZMQ peer deletion
-    std::vector<std::string> dualPeersToRemove;
     for (auto const& peerName : peers) {
       // not currently subscribed
       auto it = peers_.find(peerName);
@@ -1915,11 +1937,7 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
         LOG(ERROR) << "Trying to delete non-existing peer '" << peerName << "'";
         continue;
       }
-
       const auto& peerSpec = it->second.first;
-      if (peerSpec.get_supportFloodOptimization()) {
-        dualPeersToRemove.emplace_back(peerName);
-      }
 
       LOG(INFO) << "Detaching from: " << peerSpec.get_cmdUrl()
                 << ", support-flood-optimization: "
@@ -1936,12 +1954,6 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
         latestSentPeerSync_.erase(peerCmdSocketId);
       }
       peers_.erase(it);
-    }
-
-    // remove dual peers if any
-    for (const auto& peer : dualPeersToRemove) {
-      LOG(INFO) << "dual peer down: " << peer;
-      DualNode::peerDown(peer);
     }
   }
 }
@@ -2241,10 +2253,6 @@ KvStoreDb::sendTopoSetCmd(
     const std::string& peerName,
     bool setChild,
     bool allRoots) noexcept {
-  const auto& dstCmdSocketId = peers_.at(peerName).second;
-  thrift::KvStoreRequest request;
-  request.cmd_ref() = thrift::Command::FLOOD_TOPO_SET;
-
   thrift::FloodTopoSetParams setParams;
   setParams.rootId_ref() = rootId;
   setParams.srcId_ref() = kvParams_.nodeId;
@@ -2252,8 +2260,6 @@ KvStoreDb::sendTopoSetCmd(
   if (allRoots) {
     setParams.allRoots_ref() = allRoots;
   }
-  request.floodTopoSetParams_ref() = setParams;
-  request.area_ref() = area_;
 
   if (kvParams_.enableThriftDualMsg) {
     auto peerIt = thriftPeers_.find(peerName);
@@ -2295,6 +2301,12 @@ KvStoreDb::sendTopoSetCmd(
                   "kvstore.thrift.num_dual_msg_failure", 1, fb303::COUNT);
             });
   } else {
+    thrift::KvStoreRequest request;
+    request.cmd_ref() = thrift::Command::FLOOD_TOPO_SET;
+    request.floodTopoSetParams_ref() = setParams;
+    request.area_ref() = area_;
+
+    const auto& dstCmdSocketId = peers_.at(peerName).second;
     const auto ret = sendMessageToPeer(dstCmdSocketId, request);
     if (ret.hasError()) {
       LOG(ERROR) << rootId << ": failed to " << (setChild ? "set" : "unset")
