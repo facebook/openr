@@ -549,6 +549,33 @@ class Config {
  private:
   void populateInternalDb();
 
+  // validate KvStore confg
+  void checkKvStoreConfig();
+
+  // validate Decision module config
+  void checkDecisionConfig();
+
+  // validate Spark config
+  void checkSparkConfig();
+
+  // validate Monitor config
+  void checkMonitorConfig();
+
+  // validate Link Monitor config
+  void checkLinkMonitorConfig();
+
+  // validate Segment Routing config
+  void checkSegmentRoutingConfig();
+
+  // validate Prefix Allocation config
+  void checkPrefixAllocationConfig();
+
+  // validate BGP Peering config and BGP Translation Config
+  void checkBgpPeeringConfig();
+
+  // validate thrift server config
+  void checkThriftServerConfig();
+
   // thrift config
   thrift::OpenrConfig config_;
   // prefix allocation

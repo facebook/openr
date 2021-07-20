@@ -257,37 +257,9 @@ Config::populateAreaConfig() {
 }
 
 void
-Config::populateInternalDb() {
-  populateAreaConfig();
-
-  // prefix forwarding type and algorithm
-  const auto& pfxType = *config_.prefix_forwarding_type_ref();
-  const auto& pfxAlgo = *config_.prefix_forwarding_algorithm_ref();
-
-  if (not enumName(pfxType) or not enumName(pfxAlgo)) {
-    throw std::invalid_argument(
-        "invalid prefix_forwarding_type or prefix_forwarding_algorithm");
-  }
-
-  if (pfxAlgo == PrefixForwardingAlgorithm::KSP2_ED_ECMP and
-      pfxType != PrefixForwardingType::SR_MPLS) {
-    throw std::invalid_argument(
-        "prefix_forwarding_type must be set to SR_MPLS for KSP2_ED_ECMP");
-  }
-
-  // IP-TOS checking
-  if (const auto& ipTos = config_.ip_tos_ref()) {
-    if (*ipTos < 0 or *ipTos >= 256) {
-      throw std::out_of_range(
-          "ip_tos must be greater or equal to 0 and less than 256");
-    }
-  }
-
-  //
-  // Kvstore
-  //
-  const auto& kvConf = *config_.kvstore_config_ref();
-  if (const auto& floodRate = kvConf.flood_rate_ref()) {
+Config::checkKvStoreConfig() {
+  auto& kvStoreConf = *config_.kvstore_config_ref();
+  if (const auto& floodRate = kvStoreConf.flood_rate_ref()) {
     if (*floodRate->flood_msg_per_sec_ref() <= 0) {
       throw std::out_of_range("kvstore flood_msg_per_sec should be > 0");
     }
@@ -296,26 +268,25 @@ Config::populateInternalDb() {
     }
   }
 
-  if (kvConf.key_ttl_ms_ref() == Constants::kTtlInfinity) {
+  if (kvStoreConf.key_ttl_ms_ref() == Constants::kTtlInfinity) {
     throw std::out_of_range("kvstore key_ttl_ms should be a finite number");
   }
+}
 
-  //
-  // Decision
-  //
-  const auto& decisionConfig = *config_.decision_config_ref();
-  if (*decisionConfig.debounce_min_ms_ref() >
-      *decisionConfig.debounce_max_ms_ref()) {
+void
+Config::checkDecisionConfig() {
+  auto& decisionConf = *config_.decision_config_ref();
+  if (decisionConf.get_debounce_min_ms() > decisionConf.get_debounce_max_ms()) {
     throw std::invalid_argument(fmt::format(
         "decision_config.debounce_min_ms ({}) should be <= decision_config.debounce_max_ms ({})",
-        *decisionConfig.debounce_min_ms_ref(),
-        *decisionConfig.debounce_max_ms_ref()));
+        decisionConf.get_debounce_min_ms(),
+        decisionConf.get_debounce_max_ms()));
   }
+}
 
-  //
-  // Spark
-  //
-  const auto& sparkConfig = *config_.spark_config_ref();
+void
+Config::checkSparkConfig() {
+  auto& sparkConfig = *config_.spark_config_ref();
   if (*sparkConfig.neighbor_discovery_port_ref() <= 0 ||
       *sparkConfig.neighbor_discovery_port_ref() > 65535) {
     throw std::out_of_range(fmt::format(
@@ -410,22 +381,21 @@ Config::populateInternalDb() {
         *sparkConfig.step_detector_conf_ref()->lower_threshold_ref(),
         *sparkConfig.step_detector_conf_ref()->upper_threshold_ref()));
   }
+}
 
-  //
-  // Monitor
-  //
-  const auto& monitorConfig = *config_.monitor_config_ref();
+void
+Config::checkMonitorConfig() {
+  auto& monitorConfig = *config_.monitor_config_ref();
   if (*monitorConfig.max_event_log_ref() < 0) {
     throw std::out_of_range(fmt::format(
         "monitor_max_event_log ({}) should be >= 0",
         *monitorConfig.max_event_log_ref()));
   }
+}
 
-  //
-  // Link Monitor
-  //
-  const auto& lmConf = *config_.link_monitor_config_ref();
-
+void
+Config::checkLinkMonitorConfig() {
+  auto& lmConf = *config_.link_monitor_config_ref();
   // backoff validation
   if (*lmConf.linkflap_initial_backoff_ms_ref() < 0) {
     throw std::out_of_range(fmt::format(
@@ -446,15 +416,14 @@ Config::populateInternalDb() {
         *lmConf.linkflap_initial_backoff_ms_ref(),
         *lmConf.linkflap_max_backoff_ms_ref()));
   }
+}
 
-  //
-  // Segment Routing Config
-  //
-  if (config_.segment_routing_config_ref().has_value()) {
-    const auto& srConfig = *config_.segment_routing_config_ref();
+void
+Config::checkSegmentRoutingConfig() {
+  if (const auto& srConfig = config_.segment_routing_config_ref()) {
     // Check label range values for prepend labels
-    if (srConfig.prepend_label_ranges_ref().has_value()) {
-      const auto& v4LblRange = *srConfig.prepend_label_ranges_ref()->v4_ref();
+    if (srConfig->prepend_label_ranges_ref().has_value()) {
+      const auto& v4LblRange = *srConfig->prepend_label_ranges_ref()->v4_ref();
       if (not isLabelRangeValid(v4LblRange)) {
         throw std::invalid_argument(fmt::format(
             "v4: prepend label range [{}, {}] is invalid",
@@ -462,7 +431,7 @@ Config::populateInternalDb() {
             *v4LblRange.end_label_ref()));
       }
 
-      const auto& v6LblRange = *srConfig.prepend_label_ranges_ref()->v6_ref();
+      const auto& v6LblRange = *srConfig->prepend_label_ranges_ref()->v6_ref();
       if (not isLabelRangeValid(v6LblRange)) {
         throw std::invalid_argument(fmt::format(
             "v6: prepend label range [{}, {}] is invalid",
@@ -471,19 +440,19 @@ Config::populateInternalDb() {
       }
     }
 
-    if (srConfig.sr_adj_label_ref().has_value()) {
+    if (srConfig->sr_adj_label_ref().has_value()) {
       // Check adj segment labels if configured or if label range is valid
-      if (srConfig.sr_adj_label_ref()->sr_adj_label_type_ref() ==
+      if (srConfig->sr_adj_label_ref()->sr_adj_label_type_ref() ==
           thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX) {
-        if (not srConfig.sr_adj_label_ref()
+        if (not srConfig->sr_adj_label_ref()
                     ->adj_label_range_ref()
                     .has_value()) {
-          throw std::invalid_argument(fmt::format(
-              "label range for adjacency labels is not configured"));
+          throw std::invalid_argument(
+              "label range for adjacency labels is not configured");
         } else if (not isLabelRangeValid(
-                       *srConfig.sr_adj_label_ref()->adj_label_range_ref())) {
+                       *srConfig->sr_adj_label_ref()->adj_label_range_ref())) {
           const auto& label_range =
-              *srConfig.sr_adj_label_ref()->adj_label_range_ref();
+              *srConfig->sr_adj_label_ref()->adj_label_range_ref();
           throw std::invalid_argument(fmt::format(
               "label range [{}, {}] for adjacency labels is invalid",
               *label_range.start_label_ref(),
@@ -492,68 +461,55 @@ Config::populateInternalDb() {
       }
     }
   }
+}
 
-  //
-  // Prefix Allocation
-  //
-  if (isPrefixAllocationEnabled()) {
-    // by now areaConfigs_ should be filled.
-    if (areaConfigs_.size() > 1) {
+void
+Config::checkPrefixAllocationConfig() {
+  const auto& paConf = config_.prefix_allocation_config_ref();
+  // check if config exists
+  if (not paConf) {
+    throw std::invalid_argument(
+        "enable_prefix_allocation = true, but prefix_allocation_config is empty");
+  }
+
+  // sanity check enum prefix_allocation_mode
+  if (not enumName(*paConf->prefix_allocation_mode_ref())) {
+    throw std::invalid_argument("invalid prefix_allocation_mode");
+  }
+
+  auto seedPrefix = paConf->seed_prefix_ref().value_or("");
+  auto allocatePfxLen = paConf->allocate_prefix_len_ref().value_or(0);
+
+  switch (*paConf->prefix_allocation_mode_ref()) {
+  case PrefixAllocationMode::DYNAMIC_ROOT_NODE: {
+    // populate prefixAllocationParams_ from seed_prefix and
+    // allocate_prefix_len
+    prefixAllocationParams_ =
+        createPrefixAllocationParams(seedPrefix, allocatePfxLen);
+
+    if (prefixAllocationParams_->first.first.isV4() and not isV4Enabled()) {
       throw std::invalid_argument(
-          "prefix_allocation only support single area config");
+          "v4 seed_prefix detected, but enable_v4 = false");
     }
-    const auto& paConf = config_.prefix_allocation_config_ref();
-    // check if config exists
-    if (not paConf) {
+    break;
+  }
+  case PrefixAllocationMode::DYNAMIC_LEAF_NODE:
+  case PrefixAllocationMode::STATIC: {
+    // seed_prefix and allocate_prefix_len have to to empty
+    if (not seedPrefix.empty() or allocatePfxLen > 0) {
       throw std::invalid_argument(
-          "enable_prefix_allocation = true, but prefix_allocation_config is empty");
+          "prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and allocate_prefix_len must be empty");
     }
+    break;
+  }
+  }
+}
 
-    // sanity check enum prefix_allocation_mode
-    if (not enumName(*paConf->prefix_allocation_mode_ref())) {
-      throw std::invalid_argument("invalid prefix_allocation_mode");
-    }
-
-    auto seedPrefix = paConf->seed_prefix_ref().value_or("");
-    auto allocatePfxLen = paConf->allocate_prefix_len_ref().value_or(0);
-
-    switch (*paConf->prefix_allocation_mode_ref()) {
-    case PrefixAllocationMode::DYNAMIC_ROOT_NODE: {
-      // populate prefixAllocationParams_ from seed_prefix and
-      // allocate_prefix_len
-      prefixAllocationParams_ =
-          createPrefixAllocationParams(seedPrefix, allocatePfxLen);
-
-      if (prefixAllocationParams_->first.first.isV4() and not isV4Enabled()) {
-        throw std::invalid_argument(
-            "v4 seed_prefix detected, but enable_v4 = false");
-      }
-      break;
-    }
-    case PrefixAllocationMode::DYNAMIC_LEAF_NODE:
-    case PrefixAllocationMode::STATIC: {
-      // seed_prefix and allocate_prefix_len have to to empty
-      if (not seedPrefix.empty() or allocatePfxLen > 0) {
-        throw std::invalid_argument(
-            "prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and allocate_prefix_len must be empty");
-      }
-      break;
-    }
-    }
-  } // if enable_prefix_allocation_ref()
-
-  //
-  // bgp peering
-  //
+void
+Config::checkBgpPeeringConfig() {
   if (isBgpPeeringEnabled() and not config_.bgp_config_ref()) {
     throw std::invalid_argument(
         "enable_bgp_peering = true, but bgp_config is empty");
-  }
-  if (isBgpPeeringEnabled() and not config_.bgp_translation_config_ref()) {
-    // Hack for transioning phase. TODO: Remove after coop is on-boarded
-    config_.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
-    // throw std::invalid_argument(
-    //     "enable_bgp_peering = true, but bgp_translation_config is empty");
   }
 
   if (isBgpPeeringEnabled() and config_.bgp_config_ref()) {
@@ -571,9 +527,15 @@ Config::populateInternalDb() {
     }
   }
 
-  //
-  // BGP Translation Config
-  //
+  // Set BGP Translation Config if unset
+  if (isBgpPeeringEnabled() and not config_.bgp_translation_config_ref()) {
+    // Hack for transioning phase. TODO: Remove after coop is on-boarded
+    config_.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
+    // throw std::invalid_argument(
+    //     "enable_bgp_peering = true, but bgp_translation_config is empty");
+  }
+
+  // Validate BGP Translation config
   if (isBgpPeeringEnabled()) {
     const auto& bgpTranslationConf = config_.bgp_translation_config_ref();
     CHECK(bgpTranslationConf.has_value());
@@ -585,6 +547,60 @@ Config::populateInternalDb() {
           "enabled");
     }
   }
+}
+
+void
+Config::checkThriftServerConfig() {
+  const auto& thriftServerConfig = getThriftServerConfig();
+
+  // Checking the fields needed when we enable the secure thrift server
+  const auto& caPath = thriftServerConfig.x509_ca_path_ref();
+  const auto& certPath = thriftServerConfig.x509_cert_path_ref();
+  const auto& eccCurve = thriftServerConfig.ecc_curve_name_ref();
+  if (not(caPath and certPath and eccCurve)) {
+    throw std::invalid_argument(
+        "enable_secure_thrift_server = true, but x509_ca_path, x509_cert_path or ecc_curve_name is empty.");
+  }
+  if ((not fs::exists(caPath.value())) or (not fs::exists(certPath.value()))) {
+    throw std::invalid_argument(
+        "x509_ca_path or x509_cert_path is specified in the config but not found in the disk.");
+  }
+
+  // x509_key_path could be empty. If specified, need to be present in the
+  // file system.
+  const auto& keyPath = getThriftServerConfig().x509_key_path_ref();
+  if (keyPath and (not fs::exists(keyPath.value()))) {
+    throw std::invalid_argument(
+        "x509_key_path is specified in the config but not found in the disk.");
+  }
+}
+
+void
+Config::populateInternalDb() {
+  populateAreaConfig();
+
+  // validate prefix forwarding type and algorithm
+  const auto& pfxType = *config_.prefix_forwarding_type_ref();
+  const auto& pfxAlgo = *config_.prefix_forwarding_algorithm_ref();
+
+  if (not enumName(pfxType) or not enumName(pfxAlgo)) {
+    throw std::invalid_argument(
+        "invalid prefix_forwarding_type or prefix_forwarding_algorithm");
+  }
+
+  if (pfxAlgo == PrefixForwardingAlgorithm::KSP2_ED_ECMP and
+      pfxType != PrefixForwardingType::SR_MPLS) {
+    throw std::invalid_argument(
+        "prefix_forwarding_type must be set to SR_MPLS for KSP2_ED_ECMP");
+  }
+
+  // validate IP-TOS
+  if (const auto& ipTos = config_.ip_tos_ref()) {
+    if (*ipTos < 0 or *ipTos >= 256) {
+      throw std::out_of_range(
+          "ip_tos must be greater or equal to 0 and less than 256");
+    }
+  }
 
   // To avoid bgp and vip service advertise the same prefixes,
   // bgp speaker and vip service shouldn't co-exist
@@ -593,46 +609,51 @@ Config::populateInternalDb() {
         "Bgp Peering and Vip Service can not be both enabled");
   }
 
-  //
-  // watchdog
-  //
+  // check watchdog has config if enabled
   if (isWatchdogEnabled() and not config_.watchdog_config_ref()) {
     throw std::invalid_argument(
         "enable_watchdog = true, but watchdog_config is empty");
   }
 
-  //
-  // thrift server
-  //
-  if (isSecureThriftServerEnabled()) {
-    const auto& thriftServerConfig = getThriftServerConfig();
-
-    // Checking the fields needed when we enable the secure thrift server
-    const auto& caPath = thriftServerConfig.x509_ca_path_ref();
-    const auto& certPath = thriftServerConfig.x509_cert_path_ref();
-    const auto& eccCurve = thriftServerConfig.ecc_curve_name_ref();
-    if (not(caPath and certPath and eccCurve)) {
-      throw std::invalid_argument(
-          "enable_secure_thrift_server = true, but x509_ca_path, x509_cert_path or ecc_curve_name is empty.");
-    }
-    if ((not fs::exists(caPath.value())) or
-        (not fs::exists(certPath.value()))) {
-      throw std::invalid_argument(
-          "x509_ca_path or x509_cert_path is specified in the config but not found in the disk.");
-    }
-
-    // x509_key_path could be empty. If specified, need to be present in the
-    // file system.
-    const auto& keyPath = getThriftServerConfig().x509_key_path_ref();
-    if (keyPath and (not fs::exists(keyPath.value()))) {
-      throw std::invalid_argument(
-          "x509_key_path is specified in the config but not found in the disk.");
-    }
-  }
-
-  // Route Deletion Parameter
+  // Check Route Deletion Parameter
   if (*config_.route_delete_delay_ms_ref() < 0) {
     throw std::invalid_argument("Route delete duration must be >= 0ms");
+  }
+
+  // validate KvStore config (e.g. ttl/flood-rate/etc.)
+  checkKvStoreConfig();
+
+  // validate Decision config (e.g. debounce)
+  checkDecisionConfig();
+
+  // validate Spark config
+  checkSparkConfig();
+
+  // validate Monitor config (e.g. event log)
+  checkMonitorConfig();
+
+  // validate Link Monitor config (e.g. backoff)
+  checkLinkMonitorConfig();
+
+  // validate Segment Routing config
+  checkSegmentRoutingConfig();
+
+  // validate Prefix Allocation config
+  if (isPrefixAllocationEnabled()) {
+    // by now areaConfigs_ should be filled.
+    if (areaConfigs_.size() > 1) {
+      throw std::invalid_argument(
+          "prefix_allocation only support single area config");
+    }
+    checkPrefixAllocationConfig();
+  }
+
+  // validate BGP Peering config and BGP Translation config
+  checkBgpPeeringConfig();
+
+  // validate thrift server config
+  if (isSecureThriftServerEnabled()) {
+    checkThriftServerConfig();
   }
 }
 } // namespace openr
