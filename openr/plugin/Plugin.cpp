@@ -19,7 +19,7 @@ pluginStop() {
 }
 
 void
-vipPluginStart(const PluginArgs& /* pluginArgs*/) {
+vipPluginStart(const VipPluginArgs& /* pluginArgs*/) {
   return;
 }
 
