@@ -178,15 +178,20 @@ thrift::RouteDatabaseDelta findDeltaRoutes(
 thrift::BuildInfo getBuildInfoThrift() noexcept;
 
 /**
- * Get forwarding algorithm and type from list of prefixes. We're taking map as
- * input for efficiency purpose.
+ * Get forwarding algorithm and type from list of prefixes for the given area.
+ * We're taking map as input for efficiency purpose.
  *
- * It is feasible that multiple nodes will advertise a same prefix and
- * will ask to forward on different modes and algorithms. In case of conflict
- * forwarding type and algorithm with the lowest enum value will be picked.
+ * It is feasible that multiple nodes in the same area will advertise a same
+ * prefix and will ask to forward on different modes and algorithms. In case
+ * of conflict forwarding type and algorithm with the lowest enum value will be
+ * picked.
+ *
+ * Returns std::nullopt if there are no best routes in the given area.
  */
-std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>
+std::optional<
+    std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>>
 getPrefixForwardingTypeAndAlgorithm(
+    const std::string& area,
     const PrefixEntries& prefixEntries,
     const std::set<NodeAndArea>& bestNodeAreas);
 

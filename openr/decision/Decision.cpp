@@ -129,7 +129,8 @@ Decision::Decision(
       config->isAdjacencyLabelsEnabled(),
       config->isBgpRouteProgrammingEnabled(),
       config->isBestRouteSelectionEnabled(),
-      config->isV4OverV6NexthopEnabled());
+      config->isV4OverV6NexthopEnabled(),
+      config->getDecisionSrPolicyConfig());
 
   coldStartTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     pendingUpdates_.setNeedsFullRebuild();

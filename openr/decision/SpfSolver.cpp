@@ -78,7 +78,8 @@ SpfSolver::SpfSolver(
     bool enableAdjacencyLabels,
     bool enableBgpRouteProgramming,
     bool enableBestRouteSelection,
-    bool v4OverV6Nexthop)
+    bool v4OverV6Nexthop,
+    const std::optional<std::vector<thrift::SrPolicy>>& srPoliciesConfig)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
@@ -106,6 +107,13 @@ SpfSolver::SpfSolver(
   fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
   fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
+
+  // Create SrPolicy internal classes
+  if (srPoliciesConfig) {
+    for (const auto& srPolicy : *srPoliciesConfig) {
+      srPolicies_.emplace_back(srPolicy);
+    }
+  }
 }
 
 SpfSolver::~SpfSolver() = default;
@@ -294,7 +302,6 @@ SpfSolver::createRouteForPrefix(
     }
   }
 
-  // Perform best route selection from received route announcements
   const auto& bestRouteSelectionResult = selectBestRoutes(
       myNodeName, prefix, prefixEntries, hasBGP, areaLinkStates);
   if (not bestRouteSelectionResult.success) {
@@ -331,10 +338,28 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // Get the forwarding type and algorithm
-  const auto [forwardingType, forwardingAlgo] =
-      getPrefixForwardingTypeAndAlgorithm(
-          prefixEntries, bestRouteSelectionResult.allNodeAreas);
+  // Match the best route's attributes (tags & area stack) to an SR Policy.
+  // If the route doesn't match to any, default rules are returned
+  auto routeComputationRules = getRouteComputationRules(
+      prefixEntries, bestRouteSelectionResult, areaLinkStates);
+
+  // SrPolicy TODO: (T94498227) if routeComputationRules.routeSelectinAlgo is
+  // K_SHORTEST_DISTANCE_2 or PER_AREA_SHORTEST_DISTANCE expand
+  // bestRouteSelectionResult.allNodeAreas.
+  // With the current algorithms bestRouteSelectionResult.bestNodeArea
+  // is guarenteed not to change
+
+  // SrPolicy TODO: (T94499398) SR Policy per area rules allow different
+  // forwarding algorithm and type rules per area. selectBestPathsSpf() and
+  // selectBestPathsKsp2() should be called once per area and then the returned
+  // next-hop sets combined.
+  //
+  // For now get the forwarding algorithm and forwarding type from the first
+  // area in the route computation rules
+  auto firstAreaRules =
+      routeComputationRules.areaPathComputationRules_ref()->begin();
+  auto forwardingAlgo = *firstAreaRules->second.forwardingAlgo_ref();
+  auto forwardingType = *firstAreaRules->second.forwardingType_ref();
 
   //
   // Route computation flow
@@ -369,6 +394,10 @@ SpfSolver::createRouteForPrefix(
                << " for prefix " << folly::IPAddress::networkToString(prefix);
     return std::nullopt;
   }
+
+  // SrPolicy TODO: (T94500292) before returning need to apply prepend label
+  // rules. Prepend label rules, may create a new MPLS route (RibMplsEntry) that
+  // needs to be return along with the IP route (RibUnicastEntry)
 }
 
 std::optional<DecisionRouteDb>
@@ -1113,6 +1142,52 @@ SpfSolver::getNextHopsThrift(
     } // end for linkState ...
   }
   return nextHops;
+}
+
+size_t
+SpfSolver::getNumSrPolicies() const {
+  return srPolicies_.size();
+}
+
+thrift::RouteComputationRules
+SpfSolver::getRouteComputationRules(
+    const PrefixEntries& prefixEntries,
+    const BestRouteSelectionResult& routeSelectionResult,
+    const std::unordered_map<std::string, LinkState>& areaLinkStates) const {
+  // Walk the srPolicies_ list and return the rules of the first one that
+  // matches the route attributes
+  for (const auto& srPolicy : srPolicies_) {
+    auto rules = srPolicy.matchAndGetRules(
+        prefixEntries.at(routeSelectionResult.bestNodeArea));
+    if (rules) {
+      return *rules;
+    }
+  }
+
+  // No SR Policy has matched. Construct default route computation rules.
+  //
+  // 1. Best route selection = SHORTEST_DISTANCE
+  // 2. forwarding algorithm and forwarding type based on PrefixEntry attributes
+  // 3. Prepend label = None
+  thrift::RouteComputationRules defaultRules;
+  defaultRules.routeSelectionAlgo_ref() =
+      thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE;
+  for (const auto& [areaId, _] : areaLinkStates) {
+    const auto areaPathComputationRules = getPrefixForwardingTypeAndAlgorithm(
+        areaId, prefixEntries, routeSelectionResult.allNodeAreas);
+    if (not areaPathComputationRules) {
+      // There are no best routes in this area
+      continue;
+    }
+
+    thrift::AreaPathComputationRules areaRules;
+    areaRules.forwardingType_ref() = areaPathComputationRules->first;
+    areaRules.forwardingAlgo_ref() = areaPathComputationRules->second;
+    defaultRules.areaPathComputationRules_ref()->emplace(
+        areaId, std::move(areaRules));
+  }
+
+  return defaultRules;
 }
 
 } // namespace openr

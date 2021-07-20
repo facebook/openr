@@ -194,6 +194,7 @@ add_library(openrlib
   openr/decision/PrefixState.cpp
   openr/decision/RibPolicy.cpp
   openr/decision/SpfSolver.cpp
+  openr/decision/SrPolicy.cpp
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/dual/Dual.cpp
@@ -561,6 +562,12 @@ if(BUILD_TESTS)
   add_openr_test(RibEntryTest rib_entry_test
     SOURCES
       openr/decision/tests/RibEntryTest.cpp
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_openr_test(SrPolicyTest sr_policy_test
+    SOURCES
+      openr/decision/tests/SrPolicyTest.cpp
     DESTINATION sbin/tests/openr/decision
   )
 
