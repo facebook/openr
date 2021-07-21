@@ -7,9 +7,6 @@
 
 #pragma once
 
-#include <chrono>
-
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 
@@ -32,7 +29,6 @@ namespace openr {
 class KvStoreWrapper {
  public:
   KvStoreWrapper(
-      fbzmq::Context& zmqContext,
       std::shared_ptr<const Config> config,
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
           std::nullopt,

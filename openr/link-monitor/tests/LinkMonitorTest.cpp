@@ -5,10 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <chrono>
-#include <thread>
-
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/Subprocess.h>
 #include <folly/init/Init.h>
@@ -381,10 +377,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   void
   createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context,
-        config,
-        peerUpdatesQueue.getReader(),
-        kvRequestQueue.getReader());
+        config, peerUpdatesQueue.getReader(), kvRequestQueue.getReader());
     kvStoreWrapper->run();
   }
 
@@ -609,7 +602,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     linkMonitor.reset();
   }
 
-  fbzmq::Context context{};
   folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 

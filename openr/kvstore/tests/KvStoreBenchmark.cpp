@@ -9,7 +9,6 @@
 #include <cstdlib>
 #include <unordered_set>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/init/Init.h>
@@ -80,15 +79,12 @@ class KvStoreTestFixture {
     tConfig.kvstore_config_ref()->sync_interval_s_ref() =
         kDbSyncInterval.count();
     config_ = std::make_shared<Config>(tConfig);
-    auto ptr = std::make_unique<KvStoreWrapper>(context, config_);
+    auto ptr = std::make_unique<KvStoreWrapper>(config_);
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
 
  private:
-  // Public member variables
-  fbzmq::Context context;
-
   // Internal stores
   std::shared_ptr<Config> config_;
   std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};

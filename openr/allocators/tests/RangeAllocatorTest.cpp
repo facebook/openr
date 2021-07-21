@@ -58,7 +58,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     for (uint32_t i = 0; i < kNumStores; i++) {
       auto config = std::make_shared<Config>(
           getBasicOpenrConfig(folly::sformat("store{}", i + 1)));
-      auto store = std::make_unique<KvStoreWrapper>(zmqContext, config);
+      auto store = std::make_unique<KvStoreWrapper>(config);
       stores.emplace_back(std::move(store));
       configs.emplace_back(std::move(config));
       stores.back()->run();
@@ -142,9 +142,6 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     return std::move(allocators);
   }
-
-  // ZMQ Context for IO processing
-  fbzmq::Context zmqContext;
 
   // Linear topology of stores. i <--> i+1 <--> i+2 ......
   std::vector<std::unique_ptr<KvStoreWrapper>> stores;

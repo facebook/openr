@@ -8,7 +8,6 @@
 #include <sodium.h>
 #include <thread>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -37,7 +36,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     auto makeStoreWrapper = [this](std::string nodeId) {
       auto tConfig = getBasicOpenrConfig(nodeId);
       config_ = std::make_shared<Config>(tConfig);
-      return std::make_shared<KvStoreWrapper>(context_, config_);
+      return std::make_shared<KvStoreWrapper>(config_);
     };
 
     // spin up kvStore through kvStoreWrapper
@@ -71,7 +70,6 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   const std::string nodeId1_{"test_1"};
   const std::string nodeId2_{"test_2"};
 
-  fbzmq::Context context_{};
   apache::thrift::CompactSerializer serializer;
 
   OpenrEventBase evb;

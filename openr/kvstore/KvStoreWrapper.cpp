@@ -15,7 +15,6 @@
 namespace openr {
 
 KvStoreWrapper::KvStoreWrapper(
-    fbzmq::Context& zmqContext,
     std::shared_ptr<const Config> config,
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
@@ -24,7 +23,6 @@ KvStoreWrapper::KvStoreWrapper(
       config_(config) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(
-      zmqContext,
       kvStoreUpdatesQueue_,
       kvStoreSyncEventsQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
@@ -32,7 +30,6 @@ KvStoreWrapper::KvStoreWrapper(
       kvRequestQueue.has_value() ? kvRequestQueue.value()
                                  : dummyKvRequestQueue_.getReader(),
       logSampleQueue_,
-      KvStoreGlobalCmdUrl{globalCmdUrl},
       config_);
 
   // we need to spin up a thrift server for KvStore clients to connect to. See

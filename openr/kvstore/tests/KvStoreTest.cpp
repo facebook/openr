@@ -12,7 +12,6 @@
 #include <tuple>
 
 #include <fb303/ServiceData.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/Memory.h>
 #include <folly/Random.h>
@@ -112,7 +111,7 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
     *tConfig.kvstore_config_ref() = kvStoreConf;
     config_ = std::make_shared<Config>(tConfig);
 
-    stores_.emplace_back(std::make_unique<KvStoreWrapper>(context, config_));
+    stores_.emplace_back(std::make_unique<KvStoreWrapper>(config_));
     return stores_.back().get();
   }
 
@@ -162,9 +161,6 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
     }
     ASSERT_TRUE(store->getKey(areaId, key).has_value());
   }
-
-  // Public member variables
-  fbzmq::Context context;
 
   // Internal stores
   std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
@@ -402,7 +398,6 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public KvStoreTestFixture {
 
     // create kvstore
     stores_.emplace_back(std::make_unique<KvStoreWrapper>(
-        context,
         config_,
         std::nullopt /* peerUpdatesQueue */,
         kvRequestQueue_.getReader()));

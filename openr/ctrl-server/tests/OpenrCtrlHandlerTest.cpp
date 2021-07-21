@@ -8,7 +8,6 @@
 #include <cstdio>
 #include <thread>
 
-#include <fbzmq/zmq/Context.h>
 #include <folly/init/Init.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -92,7 +91,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create KvStore module
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_, config, std::nullopt, kvRequestQueue_.getReader());
+        config, std::nullopt, kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     // Create Decision module
@@ -238,7 +237,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
-  fbzmq::Context context_{};
   folly::EventBase evb_;
 
   std::thread decisionThread_;

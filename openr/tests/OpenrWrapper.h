@@ -8,7 +8,6 @@
 #pragma once
 
 #include <fb303/BaseService.h>
-#include <fbzmq/zmq/Zmq.h>
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/config/Config.h>
@@ -40,7 +39,6 @@ template <class Serializer>
 class OpenrWrapper {
  public:
   OpenrWrapper(
-      fbzmq::Context& context,
       std::string nodeId,
       bool v4Enabled,
       std::chrono::seconds kvStoreDbSyncInterval,
@@ -118,9 +116,6 @@ class OpenrWrapper {
   // to/from bytes
   Serializer serializer_;
 
-  // ZmqContext to use for IO Processing
-  fbzmq::Context& context_;
-
   // container of all threads
   std::vector<std::thread> allThreads_{};
 
@@ -158,9 +153,7 @@ class OpenrWrapper {
   // thrift server for inter-node communication
   std::unique_ptr<OpenrThriftServerWrapper> thriftServer_;
 
-  // sub module communication zmq urls and ports
-  int kvStoreGlobalCmdPort_{0};
-  const std::string kvStoreGlobalCmdUrl_;
+  // sub module communication queues
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;

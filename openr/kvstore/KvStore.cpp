@@ -6,7 +6,6 @@
  */
 
 #include <fb303/ServiceData.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/GLog.h>
 #include <folly/Random.h>
@@ -27,26 +26,17 @@ namespace openr {
 
 KvStore::KvStore(
     // initializers for immutable state
-    fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
-    KvStoreGlobalCmdUrl globalCmdUrl,
     std::shared_ptr<const Config> config)
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
           kvStoreSyncEventsQueue,
           logSampleQueue,
-          fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
-              zmqContext,
-              fbzmq::IdentityString{
-                  fmt::format("{}::TCP::CMD", config->getNodeName())},
-              folly::none,
-              fbzmq::NonblockingFlag{true}),
-          config->getKvStoreConfig().get_zmq_hwm(),
           std::chrono::seconds(
               *config->getKvStoreConfig().sync_interval_s_ref()),
           getKvStoreFilters(config),
@@ -129,12 +119,6 @@ KvStore::KvStore(
             this,
             kvParams_,
             area,
-            fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT>(
-                zmqContext,
-                fbzmq::IdentityString{folly::to<std::string>(
-                    config->getNodeName(), "::TCP::SYNC::", area)},
-                folly::none,
-                fbzmq::NonblockingFlag{true}),
             config->getKvStoreConfig().is_flood_root_ref().value_or(false),
             config->getNodeName()));
   }
@@ -853,10 +837,7 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
 //
 // KvStoreDb is the class instance that maintains the KV pairs with internal
 // map per AREA. KvStoreDb will sync with peers to maintain eventual
-// consistency. It supports external message exchanging through:
-//
-//  1) ZMQ socket(TO BE DEPRECATED);
-//  2) Thrift channel interface;
+// consistency. It supports external message exchanging through Thrift channel.
 //
 // NOTE Monitoring:
 // This module exposes fb303 counters that can be leveraged for monitoring
@@ -887,13 +868,11 @@ KvStoreDb::KvStoreDb(
     OpenrEventBase* evb,
     KvStoreParams& kvParams,
     const std::string& area,
-    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
     bool isFloodRoot,
     const std::string& nodeId)
     : DualNode(nodeId, isFloodRoot),
       kvParams_(kvParams),
       area_(area),
-      peerSyncSock_(std::move(peersyncSock)),
       evb_(evb) {
   if (kvParams_.floodRate) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
