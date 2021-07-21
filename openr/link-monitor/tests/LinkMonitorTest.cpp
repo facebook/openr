@@ -18,6 +18,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
@@ -833,6 +834,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
     LOG(INFO) << "Sent neighbor UP event.";
+
+    // Makes sure peerUpdatesQueue gets PeerEvent.
+    auto peerEvent = peerUpdatesQueue.getReader().get();
+    ASSERT_TRUE(peerEvent.hasValue());
+    EXPECT_EQ(peerEvent.value().size(), 1);
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());

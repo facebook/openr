@@ -173,7 +173,7 @@ class LinkMonitor final : public OpenrEventBase {
    */
 
   // process neighbor event updates from Spark module
-  void processNeighborEvent(NeighborEvents&& events);
+  void processNeighborEvents(NeighborEvents&& events);
 
   // individual neighbor event function
   void neighborUpEvent(const thrift::SparkNeighbor& info);
@@ -438,6 +438,10 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Timer for initial hold time expiry
   std::unique_ptr<folly::AsyncTimeout> adjHoldTimer_;
+
+  // Boolean flag indicating whether initial neighbors are received in OpenR
+  // initialization procedure.
+  bool initialNeighborsReceived_{false};
 }; // LinkMonitor
 
 } // namespace openr
