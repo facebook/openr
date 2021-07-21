@@ -188,9 +188,6 @@ class KvStoreDb : public DualNode {
     return selfOriginatedKeyVals_;
   }
 
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
-      const std::string& requestId, thrift::KvStoreRequest& thriftReq);
-
   // Extracts the counters
   std::map<std::string, int64_t> getCounters() const;
 
@@ -355,19 +352,6 @@ class KvStoreDb : public DualNode {
   std::unordered_set<std::string> getFloodPeers(
       const std::optional<std::string>& rootId);
 
-  // collect router-client send failure statistics in following form
-  // "kvstore.send_failure.dst-peer-id.error-code"
-  // error: fbzmq-Error
-  // dstSockId: destination socket identity
-  void collectSendFailureStats(
-      const fbzmq::Error& error, const std::string& dstSockId);
-
-  // Process the messages on peerSyncSock_
-  void drainPeerSyncSock();
-
-  // request full-sync (KEY_DUMP) with peersToSyncWith_
-  void requestFullSyncFromPeers();
-
   // add new query entries into ttlCountdownQueue from publication
   // and Reschedule ttl expiry timer if needed
   void updateTtlCountdownQueue(const thrift::Publication& publication);
@@ -390,15 +374,6 @@ class KvStoreDb : public DualNode {
   void finalizeFullSync(
       const std::unordered_set<std::string>& keys, const std::string& senderId);
 
-  // [TO BE DEPRECATED]
-  // process received KV_DUMP from one of our neighbor
-  void processSyncResponse(
-      const std::string& requestId, fbzmq::Message&& syncPubMsg) noexcept;
-
-  // [TO BE DEPRECATED]
-  // this will poll the sockets listening to the requests
-  void attachCallbacks();
-
   // Submit full-sync event to monitor
   void logSyncEvent(
       const std::string& peerNodeName,
@@ -412,10 +387,6 @@ class KvStoreDb : public DualNode {
 
   // flood pending update blocked by rate limiter
   void floodBufferedUpdates(void);
-
-  // Send message via socket
-  folly::Expected<size_t, fbzmq::Error> sendMessageToPeer(
-      const std::string& peerSocketId, const thrift::KvStoreRequest& request);
 
   // update ttls for all self-originated key-vals
   void advertiseTtlUpdates();
@@ -478,26 +449,6 @@ class KvStoreDb : public DualNode {
   // set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
-  // [TO BE DEPRECATED]
-  // The peers we will be talking to: both PUB and CMD URLs for each. We use
-  // peerAddCounter_ to uniquely identify a peering session's socket-id.
-  uint64_t peerAddCounter_{0};
-  std::unordered_map<
-      std::string /* node-name */,
-      std::pair<thrift::PeerSpec, std::string /* socket-id */>>
-      peers_;
-
-  // [TO BE DEPRECATED]
-  // set of peers to perform full sync from. We use exponential backoff to try
-  // repetitively untill we succeeed (without overwhelming anyone with too
-  // many requests).
-  std::unordered_map<std::string, ExponentialBackoff<std::chrono::milliseconds>>
-      peersToSyncWith_{};
-
-  // [TO BE DEPRECATED]
-  // Callback timer to get full KEY_DUMP from peersToSyncWith_
-  std::unique_ptr<folly::AsyncTimeout> fullSyncTimer_;
-
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
@@ -509,15 +460,6 @@ class KvStoreDb : public DualNode {
 
   // TTL count down timer
   std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_;
-
-  // [TO BE DEPRECATED]
-  // Map of latest peer sync up request send to each peer
-  // this is used to measure full-dump sync time between this node and each of
-  // its peers
-  std::unordered_map<
-      std::string,
-      std::chrono::time_point<std::chrono::steady_clock>>
-      latestSentPeerSync_;
 
   // Kvstore rate limiter
   std::unique_ptr<folly::BasicTokenBucket<>> floodLimiter_{nullptr};
@@ -545,13 +487,7 @@ class KvStoreDb : public DualNode {
       unordered_map<std::optional<std::string>, std::unordered_set<std::string>>
           publicationBuffer_{};
 
-  // [TO BE DEPRECATED]
-  // max parallel syncs allowed. It's initialized with '2' and doubles
-  // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
-  // response received
-  size_t parallelSyncLimit_{2};
-
-  // thrift version of "parallelSyncLimit_"
+  // max parallel syncs allowed
   size_t parallelSyncLimitOverThrift_{2};
 
   // event loop
@@ -650,18 +586,6 @@ class KvStore final : public OpenrEventBase {
   //
   // Private methods
   //
-
-  void prepareSocket(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
-      std::string const& url,
-      std::optional<int> maybeIpTos = std::nullopt);
-
-  void processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept;
-
-  // This function wraps `processRequestMsgHelper` and updates send/received
-  // bytes counters.
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      const std::string& requestId, fbzmq::Message&& msg);
 
   void processPeerUpdates(PeerEvent&& event);
 
