@@ -5,7 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "SparkWrapper.h"
+#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/spark/SparkWrapper.h>
 
 namespace openr {
 
@@ -90,8 +91,8 @@ SparkWrapper::recvNeighborEvent(
   return neighborUpdatesReader_.get().value();
 }
 
-std::optional<NeighborEvent>
-SparkWrapper::waitForEvent(
+std::optional<NeighborEvents>
+SparkWrapper::waitForEvents(
     const NeighborEventType eventType,
     std::optional<std::chrono::milliseconds> rcvdTimeout,
     std::optional<std::chrono::milliseconds> procTimeout) noexcept {
@@ -107,8 +108,14 @@ SparkWrapper::waitForEvent(
     }
     if (auto maybeEvents = recvNeighborEvent(rcvdTimeout)) {
       auto& events = maybeEvents.value();
-      if (events.size() > 0 and eventType == events[0].eventType) {
-        return events[0];
+      NeighborEvents retEvents;
+      for (auto& event : events) {
+        if (eventType == event.eventType) {
+          retEvents.emplace_back(std::move(event));
+        }
+      }
+      if (retEvents.size() > 0) {
+        return retEvents;
       }
     }
   }

@@ -72,7 +72,7 @@ getBasicOpenrConfig(
   openr::thrift::SparkConfig sparkConfig;
   sparkConfig.hello_time_s_ref() = 2;
   sparkConfig.keepalive_time_s_ref() = 1;
-  sparkConfig.fastinit_hello_time_ms_ref() = 50;
+  sparkConfig.fastinit_hello_time_ms_ref() = 100;
   sparkConfig.hold_time_s_ref() = 2;
   sparkConfig.graceful_restart_time_s_ref() = 6;
 

@@ -24,8 +24,10 @@
 #include <openr/common/EventLogger.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/spark/Spark.h>
 
 #include <thrift/lib/cpp/protocol/TProtocolException.h>
@@ -242,6 +244,7 @@ Spark::Spark(
           *config->getSparkConfig().fastinit_hello_time_ms_ref())),
       handshakeTime_(std::chrono::milliseconds(
           *config->getSparkConfig().fastinit_hello_time_ms_ref())),
+      initializationHoldTime_(3 * fastInitHelloTime_ + handshakeTime_),
       keepAliveTime_(std::chrono::seconds(
           *config->getSparkConfig().keepalive_time_s_ref())),
       handshakeHoldTime_(std::chrono::seconds(
@@ -284,6 +287,31 @@ Spark::Spark(
               numBuckets, sec));
     }
   }
+  // Timer for collecting neighbors successfully discovered and publishing them
+  // to neighborUpdatesQueue_ in OpenR initialization procedure.
+  initializationHoldTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+        NeighborEvents upNeighbors;
+        int totalNeighborCnt = 0;
+        for (auto& [ifName, neighborMap] : sparkNeighbors_) {
+          totalNeighborCnt += neighborMap.size();
+          for (auto& [neighborName, neighbor] : neighborMap) {
+            if (neighbor.state == SparkNeighState::ESTABLISHED) {
+              upNeighbors.emplace_back(NeighborEvent(
+                  NeighborEventType::NEIGHBOR_UP, neighbor.toThrift()));
+            }
+          } // for
+        } // for
+
+        LOG(INFO) << fmt::format(
+            "[Initialization] NEIGHBOR_DISCOVERY is complete. Announcing {} UP "
+            "neighbors out of {}",
+            upNeighbors.size(),
+            totalNeighborCnt);
+        // NOTE: In scenarios of standalone node or first node coming up in the
+        // network, there are none announced neighbors.
+        neighborUpdatesQueue_.push(std::move(upNeighbors));
+      });
 
   // Fiber to process interface updates from LinkMonitor
   addFiberTask([q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
@@ -293,6 +321,13 @@ Spark::Spark(
       if (interfaceUpdates.hasError()) {
         LOG(INFO) << "Terminating interface update processing fiber";
         break;
+      }
+
+      if (not initialInterfacesReceived_) {
+        // In OpenR initialization procedure, set up reasonable long enough
+        // timer to handle neighbor discovery.
+        initializationHoldTimer_->scheduleTimeout(initializationHoldTime_);
+        initialInterfacesReceived_ = true;
       }
 
       processInterfaceUpdates(std::move(interfaceUpdates).value());
@@ -1051,6 +1086,12 @@ Spark::neighborDownWrapper(
 void
 Spark::notifySparkNeighborEvent(
     NeighborEventType eventType, thrift::SparkNeighbor const& info) {
+  // In OpenR initialization procedure, initializationHoldTimer_ publishes the
+  // first batch of discovered neighbors.
+  if ((not initialInterfacesReceived_) or
+      initializationHoldTimer_->isScheduled()) {
+    return;
+  }
   neighborUpdatesQueue_.push(NeighborEvents({NeighborEvent(eventType, info)}));
 }
 

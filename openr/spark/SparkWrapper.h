@@ -54,8 +54,8 @@ class SparkWrapper {
   std::optional<NeighborEvents> recvNeighborEvent(
       std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
-  std::optional<NeighborEvent> waitForEvent(
-      const NeighborEventType eventType,
+  std::optional<NeighborEvents> waitForEvents(
+      const NeighborEventType neighborEventType,
       std::optional<std::chrono::milliseconds> rcvdTimeout = std::nullopt,
       std::optional<std::chrono::milliseconds> procTimeout =
           Constants::kPlatformRoutesProcTimeout) noexcept;

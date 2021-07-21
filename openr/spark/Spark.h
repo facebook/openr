@@ -387,11 +387,6 @@ class Spark final : public OpenrEventBase {
     std::string area{};
   };
 
-  std::unordered_map<
-      std::string /* ifName */,
-      std::unordered_map<std::string /* neighborName */, SparkNeighbor>>
-      sparkNeighbors_{};
-
   // util function to log Spark neighbor state transition
   void logStateTransition(
       std::string const& neighborName,
@@ -470,6 +465,12 @@ class Spark final : public OpenrEventBase {
   // Spark handshake msg sendout interval
   const std::chrono::milliseconds handshakeTime_{0};
 
+  // Interval that Spark holds before publishing discovered neighbors in OpenR
+  // initialization procedure. It is set as '3 * fastInitHelloTime_ +
+  // handshakeTime_' to make sure Spark has enough time to process fast neighbor
+  // discovery among all received interfaces.
+  const std::chrono::milliseconds initializationHoldTime_{0};
+
   // Spark heartbeat msg sendout interval (keepAliveTime)
   const std::chrono::milliseconds keepAliveTime_{0};
 
@@ -516,6 +517,11 @@ class Spark final : public OpenrEventBase {
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};
 
+  std::unordered_map<
+      std::string /* ifName */,
+      std::unordered_map<std::string /* neighborName */, SparkNeighbor>>
+      sparkNeighbors_{};
+
   // Hello packet send timers for each interface
   std::unordered_map<
       std::string /* ifName */,
@@ -555,6 +561,14 @@ class Spark final : public OpenrEventBase {
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
+
+  // Timer for collecting neighbors successfully discovered and publishing them
+  // to neighborUpdatesQueue_ in OpenR initialization procedure.
+  std::unique_ptr<folly::AsyncTimeout> initializationHoldTimer_{nullptr};
+
+  // Boolean flag indicating whether initial interfaces are received in OpenR
+  // initialization procedure.
+  bool initialInterfacesReceived_{false};
 
   // Optional rate-limit on processing inbound Spark messages
   std::optional<uint32_t> maybeMaxAllowedPps_;
