@@ -409,7 +409,6 @@ main(int argc, char** argv) {
       std::make_unique<Spark>(
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
-          KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
           std::make_shared<IoProvider>(),
           config));
 

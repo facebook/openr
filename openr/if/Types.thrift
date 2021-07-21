@@ -468,7 +468,7 @@ struct PrefixDatabase {
 } (cpp.minimize_padding)
 
 /**
- * @deprecated - DUAL message type
+ * DUAL message type
  */
 enum DualMessageType {
   UPDATE = 1,
@@ -477,7 +477,7 @@ enum DualMessageType {
 }
 
 /**
- * @deprecated - A single DUAL message
+ * A single DUAL message
  */
 struct DualMessage {
   /**
@@ -497,7 +497,7 @@ struct DualMessage {
 }
 
 /**
- * @deprecated - Container representing multiple dual messages
+ * Container representing multiple dual messages
  */
 struct DualMessages {
   /**
@@ -512,7 +512,7 @@ struct DualMessages {
 }
 
 /**
- * @deprecated - Number of packets and dual-messages sent/recv for a neighbor
+ * Number of packets and dual-messages sent/recv for a neighbor
  * one packet may contain multiple messages
  */
 struct DualPerNeighborCounters {
@@ -523,7 +523,7 @@ struct DualPerNeighborCounters {
 }
 
 /**
- * @deprecated - Dual exchange message counters for a given root per neighbor
+ * Dual exchange message counters for a given root per neighbor
  */
 struct DualPerRootCounters {
   1: i64 querySent = 0;
@@ -537,21 +537,21 @@ struct DualPerRootCounters {
 }
 
 /**
- * @deprecated - Map of neighbor-node to neighbor-counters
+ * Map of neighbor-node to neighbor-counters
  */
 typedef map<string, DualPerNeighborCounters> (
   cpp.type = "std::unordered_map<std::string, /* neighbor */ openr::thrift::DualPerNeighborCounters>",
 ) NeighborCounters
 
 /**
- * @deprecated - Map of root-node to root-counters
+ * Map of root-node to root-counters
  */
 typedef map<string, map<string, DualPerRootCounters>> (
   cpp.type = "std::unordered_map<std::string, /* root */ std::map<std::string /* neighbor */, openr::thrift::DualPerRootCounters>>",
 ) RootCounters
 
 /**
- * @deprecated - All DUAL related counters
+ * All DUAL related counters
  */
 struct DualCounters {
   1: NeighborCounters neighborCounters;
@@ -621,28 +621,6 @@ struct Value {
 typedef map<string, Value> (
   cpp.type = "std::unordered_map<std::string, openr::thrift::Value>",
 ) KeyVals
-
-/**
- * @deprecated - Enum describing KvStore command type. This becomes obsolete
- * with the removal of dual functionality.
- */
-enum Command {
-  /**
-   * Operations on keys in the store
-   */
-  KEY_SET = 1,
-  KEY_DUMP = 3,
-
-  /**
-   * Dual message
-   */
-  DUAL = 10,
-
-  /**
-   * Set or uunset flooding-topology child
-   */
-  FLOOD_TOPO_SET = 11,
-}
 
 /**
  * Logical operator enum for querying
@@ -798,7 +776,7 @@ typedef map<string, PeerSpec> (
 ) PeersMap
 
 /**
- * @deprecated - set/unset flood-topo child
+ * set/unset flood-topo child
  */
 struct FloodTopoSetParams {
   /**
@@ -854,7 +832,7 @@ struct SptInfo {
 }
 
 /**
- * @deprecated - map<root-id: SPT-info>
+ * map<root-id: SPT-info>
  */
 typedef map<string, SptInfo> (
   cpp.type = "std::unordered_map<std::string, openr::thrift::SptInfo>",
@@ -883,27 +861,6 @@ struct SptInfos {
    * current flooding peers
    */
   4: PeerNames floodPeers;
-}
-
-/**
- * KvStore Request specification. A request to the server (tagged union)
- */
-struct KvStoreRequest {
-  /**
-   * Command type. Set one of the optional parameter based on command
-   */
-  1: Command cmd;
-
-  /**
-   * area identifier to identify the KvStoreDb instance (mandatory)
-   */
-  11: string area;
-
-  2: optional KeySetParams keySetParams;
-  3: optional KeyGetParams keyGetParams;
-  6: optional KeyDumpParams keyDumpParams;
-  9: optional DualMessages dualMessages;
-  10: optional FloodTopoSetParams floodTopoSetParams;
 }
 
 /**

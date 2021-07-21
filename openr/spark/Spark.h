@@ -81,8 +81,6 @@ class Spark final : public OpenrEventBase {
       messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
       // producer Queue
       messaging::ReplicateQueue<NeighborEvents>& nbrUpdatesQueue,
-      // port for TCP connection
-      KvStoreCmdPort kvStoreCmdPort,
       // raw ptr of modules
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<const Config> config,
@@ -298,7 +296,6 @@ class Spark final : public OpenrEventBase {
       info.transportAddressV4_ref() = transportAddressV4;
       info.transportAddressV6_ref() = transportAddressV6;
       info.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
-      info.kvStoreCmdPort_ref() = kvStoreCmdPort;
 
       // populate interface info
       info.localIfName_ref() = localIfName;
@@ -347,7 +344,6 @@ class Spark final : public OpenrEventBase {
     std::unique_ptr<folly::AsyncTimeout> gracefulRestartHoldTimer{nullptr};
 
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
-    int32_t kvStoreCmdPort{0};
     int32_t openrCtrlThriftPort{0};
 
     // flag to indicate if flood-optimization is supported or NOT
@@ -508,7 +504,6 @@ class Spark final : public OpenrEventBase {
   messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue_;
 
   // this is used to inform peers about my kvstore tcp ports
-  const uint16_t kKvStoreCmdPort_{0};
   const uint16_t kOpenrCtrlThriftPort_{0};
 
   // current version and supported version

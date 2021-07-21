@@ -11,16 +11,6 @@
 namespace openr {
 
 namespace {
-int
-getZmqSocketFd(uintptr_t socketPtr) {
-  int socketFd{-1};
-  size_t fdLen = sizeof(socketFd);
-  const auto rc = zmq_getsockopt(
-      reinterpret_cast<void*>(socketPtr), ZMQ_FD, &socketFd, &fdLen);
-  CHECK_EQ(0, rc) << "Can't get fd for socket. " << fbzmq::Error();
-  return socketFd;
-}
-
 folly::fibers::FiberManager::Options
 getFmOptions() {
   folly::fibers::FiberManager::Options options;
@@ -197,27 +187,8 @@ OpenrEventBase::addSocketFd(
 }
 
 void
-OpenrEventBase::addSocket(
-    uintptr_t socketPtr, int events, fbzmq::SocketCallback callback) {
-  int socketFd = getZmqSocketFd(socketPtr);
-  if (fdHandlers_.count(socketFd)) {
-    throw std::runtime_error("Socket is already registered");
-  }
-  fdHandlers_.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(socketFd),
-      std::forward_as_tuple(
-          &evb_, socketFd, socketPtr, events, std::move(callback)));
-}
-
-void
 OpenrEventBase::removeSocketFd(int socketFd) {
   fdHandlers_.erase(socketFd);
-}
-
-void
-OpenrEventBase::removeSocket(uintptr_t socketPtr) {
-  fdHandlers_.erase(getZmqSocketFd(socketPtr));
 }
 
 } // namespace openr

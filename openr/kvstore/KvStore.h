@@ -7,11 +7,6 @@
 
 #pragma once
 
-#include <chrono>
-#include <map>
-#include <memory>
-#include <string>
-
 #include <boost/heap/priority_queue.hpp>
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
@@ -19,7 +14,6 @@
 #include <folly/gen/Base.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/async/AsyncTimeout.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
@@ -218,15 +212,8 @@ class KvStoreDb : public DualNode {
   // add new peers to sync with
   void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
 
-  // thrift flavor of peer adding
-  void addThriftPeers(
-      std::unordered_map<std::string, thrift::PeerSpec> const& peers);
-
   // delete some peers we are subscribed to
   void delPeers(std::vector<std::string> const& peers);
-
-  // thrift flavor of peer deletion
-  void delThriftPeers(std::vector<std::string> const& peers);
 
   // dump all peers we are subscribed to
   thrift::PeersMap dumpPeers();
@@ -433,9 +420,6 @@ class KvStoreDb : public DualNode {
   // set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
-  // the serializer/deserializer helper we'll be using
-  apache::thrift::CompactSerializer serializer_;
-
   // store keys mapped to (version, originatoId, value)
   std::unordered_map<std::string, thrift::Value> kvStore_;
 
@@ -450,9 +434,6 @@ class KvStoreDb : public DualNode {
 
   // timer to send pending kvstore publication
   std::unique_ptr<folly::AsyncTimeout> pendingPublicationTimer_{nullptr};
-
-  // timer for requesting full-sync
-  std::unique_ptr<folly::AsyncTimeout> requestSyncTimer_{nullptr};
 
   // timer to promote idle peers for initial syncing
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
@@ -598,8 +579,5 @@ class KvStore final : public OpenrEventBase {
 
   // map of area IDs and instance of KvStoreDb
   std::unordered_map<std::string /* area ID */, KvStoreDb> kvStoreDb_{};
-
-  // the serializer/deserializer helper we'll be using
-  apache::thrift::CompactSerializer serializer_;
 };
 } // namespace openr

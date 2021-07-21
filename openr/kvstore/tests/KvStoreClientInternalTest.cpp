@@ -961,13 +961,9 @@ TEST(KvStoreClientInternal, ApiTest) {
   // Schedule callback to add/del peer via client-1 (will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
     EXPECT_TRUE(store->addPeer(
-        kTestingAreaName,
-        "peer1",
-        createPeerSpec("inproc://fake_cmd_url_1", "fake_thrift_url_1")));
+        kTestingAreaName, "peer1", createPeerSpec("fake_thrift_url_1")));
     EXPECT_TRUE(store->addPeer(
-        kTestingAreaName,
-        "peer2",
-        createPeerSpec("inproc://fake_cmd_url_2", "fake_thrift_url_1")));
+        kTestingAreaName, "peer2", createPeerSpec("fake_thrift_url_1")));
     EXPECT_TRUE(store->delPeer(kTestingAreaName, "peer1"));
   });
 

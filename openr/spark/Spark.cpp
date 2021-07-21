@@ -229,7 +229,6 @@ Spark::SparkNeighbor::SparkNeighbor(
 Spark::Spark(
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue,
-    KvStoreCmdPort kvStoreCmdPort,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
     std::pair<uint32_t, uint32_t> version,
@@ -258,7 +257,6 @@ Spark::Spark(
       enableFloodOptimization_(
           config->getKvStoreConfig().get_enable_flood_optimization()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
-      kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(
           config->getThriftServerConfig().get_openr_ctrl_port()),
       kVersion_(createOpenrVersions(version.first, version.second)),
@@ -811,7 +809,6 @@ Spark::sendHandshakeMsg(
   handshakeMsg.transportAddressV6_ref() = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort_ref() = kOpenrCtrlThriftPort_;
-  handshakeMsg.kvStoreCmdPort_ref() = kKvStoreCmdPort_;
   // ATTN: send neighborAreaId deduced locally
   handshakeMsg.area_ref() = neighborAreaId;
   handshakeMsg.neighborNodeName_ref() = neighborName;
@@ -1516,7 +1513,6 @@ Spark::processHandshakeMsg(
   }
 
   // update Spark neighborState
-  neighbor.kvStoreCmdPort = *handshakeMsg.kvStoreCmdPort_ref();
   neighbor.openrCtrlThriftPort = *handshakeMsg.openrCtrlThriftPort_ref();
   neighbor.transportAddressV4 = *handshakeMsg.transportAddressV4_ref();
   neighbor.transportAddressV6 = *handshakeMsg.transportAddressV6_ref();

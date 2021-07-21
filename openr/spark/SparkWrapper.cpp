@@ -25,7 +25,6 @@ SparkWrapper::SparkWrapper(
       ? std::make_shared<Spark>(
             interfaceUpdatesQueue_.getReader(),
             neighborUpdatesQueue_,
-            KvStoreCmdPort{10002},
             std::move(ioProvider),
             config,
             version,
@@ -33,7 +32,6 @@ SparkWrapper::SparkWrapper(
       : std::make_shared<Spark>(
             interfaceUpdatesQueue_.getReader(),
             neighborUpdatesQueue_,
-            KvStoreCmdPort{10002},
             std::move(ioProvider),
             config,
             version

@@ -588,24 +588,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // Peers APIs
   //
   const thrift::PeersMap peers{
-      {"peer1",
-       createPeerSpec(
-           "inproc://peer1-cmd", Constants::kPlatformHost.toString())},
-      {"peer2",
-       createPeerSpec(
-           "inproc://peer2-cmd", Constants::kPlatformHost.toString())},
-      {"peer3",
-       createPeerSpec(
-           "inproc://peer3-cmd", Constants::kPlatformHost.toString())}};
+      {"peer1", createPeerSpec(Constants::kPlatformHost.toString())},
+      {"peer2", createPeerSpec(Constants::kPlatformHost.toString())},
+      {"peer3", createPeerSpec(Constants::kPlatformHost.toString())}};
 
   // do the same with non-default area
   const thrift::PeersMap peersPod{
-      {"peer11",
-       createPeerSpec(
-           "inproc://peer11-cmd", Constants::kPlatformHost.toString())},
-      {"peer21",
-       createPeerSpec(
-           "inproc://peer21-cmd", Constants::kPlatformHost.toString())},
+      {"peer11", createPeerSpec(Constants::kPlatformHost.toString())},
+      {"peer21", createPeerSpec(Constants::kPlatformHost.toString())},
   };
 
   {

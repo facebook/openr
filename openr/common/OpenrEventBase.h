@@ -107,11 +107,7 @@ class OpenrEventBase {
    */
 
   void addSocketFd(int socketFd, int events, fbzmq::SocketCallback callback);
-  void addSocket(
-      uintptr_t socketPtr, int events, fbzmq::SocketCallback callback);
-
   void removeSocketFd(int socketFd);
-  void removeSocket(uintptr_t socketPtr);
 
   /**
    * Eventbase name related APIs

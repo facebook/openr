@@ -50,28 +50,17 @@ const auto if_2_2 = "iface_2_2";
 const auto if_3_1 = "iface_3_1";
 const auto if_3_2 = "iface_3_2";
 
-const auto kvStoreCmdPort = 10002;
-
-const auto peerSpec_2_1 = createPeerSpec(
-    fmt::format("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_1, kvStoreCmdPort),
-    fmt::format("{}%{}", nb2_v6_addr, if_2_1),
-    1);
-
-const auto peerSpec_2_2 = createPeerSpec(
-    fmt::format("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_2, kvStoreCmdPort),
-    fmt::format("{}%{}", nb2_v6_addr, if_2_2),
-    1);
-
-const auto peerSpec_3_1 = createPeerSpec(
-    fmt::format("tcp://[{}%{}]:{}", nb3_v6_addr, if_3_1, kvStoreCmdPort),
-    fmt::format("{}%{}", nb3_v6_addr, if_3_1),
-    2);
+const auto peerSpec_2_1 =
+    createPeerSpec(folly::sformat("{}%{}", nb2_v6_addr, if_2_1), 1);
+const auto peerSpec_2_2 =
+    createPeerSpec(folly::sformat("{}%{}", nb2_v6_addr, if_2_2), 1);
+const auto peerSpec_3_1 =
+    createPeerSpec(folly::sformat("{}%{}", nb3_v6_addr, if_3_1), 2);
 
 const auto nb2 = createSparkNeighbor(
     "node-2",
     toBinaryAddress(folly::IPAddress(nb2_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb2_v6_addr)),
-    kvStoreCmdPort,
     1, /* openrCtrlThriftPort */
     1, /* label */
     100, /* rtt */
@@ -82,7 +71,6 @@ const auto nb3 = createSparkNeighbor(
     "node-3",
     toBinaryAddress(folly::IPAddress(nb3_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb3_v6_addr)),
-    kvStoreCmdPort,
     2, /* openrCtrlThriftPort */
     1, /* label */
     100, /* rtt */

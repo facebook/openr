@@ -158,7 +158,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   spark_ = std::make_unique<Spark>(
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
-      KvStoreCmdPort{0},
       ioProvider_,
       config_);
 

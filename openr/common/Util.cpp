@@ -489,13 +489,11 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
 
 thrift::PeerSpec
 createPeerSpec(
-    const std::string& cmdUrl,
     const std::string& peerAddr,
     const int32_t port,
     const thrift::KvStorePeerState state,
     const bool supportFloodOptimization) {
   thrift::PeerSpec peerSpec;
-  peerSpec.cmdUrl_ref() = cmdUrl;
   peerSpec.peerAddr_ref() = peerAddr;
   peerSpec.ctrlPort_ref() = port;
   peerSpec.state_ref() = state;
@@ -508,7 +506,6 @@ createSparkNeighbor(
     const std::string& nodeName,
     const thrift::BinaryAddress& v4Addr,
     const thrift::BinaryAddress& v6Addr,
-    const int64_t kvStoreCmdPort,
     const int64_t openrCtrlThriftPort,
     const int32_t label,
     const int64_t rttUs,
@@ -520,7 +517,6 @@ createSparkNeighbor(
   neighbor.nodeName_ref() = nodeName;
   neighbor.transportAddressV4_ref() = v4Addr;
   neighbor.transportAddressV6_ref() = v6Addr;
-  neighbor.kvStoreCmdPort_ref() = kvStoreCmdPort;
   neighbor.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
   neighbor.remoteIfName_ref() = remoteIfName;
   neighbor.localIfName_ref() = localIfName;
