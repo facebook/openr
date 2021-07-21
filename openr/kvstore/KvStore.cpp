@@ -207,13 +207,14 @@ KvStore::getKvStoreUpdatesReader() {
 
 void
 KvStore::processPeerUpdates(PeerEvent&& event) {
-  CHECK(not event.area.empty());
-  // Event can contain peerAdd/peerDel simultaneously
-  if (not event.peersToAdd.empty()) {
-    addUpdateKvStorePeers(event.area, event.peersToAdd).get();
-  }
-  if (not event.peersToDel.empty()) {
-    deleteKvStorePeers(event.area, event.peersToDel).get();
+  for (const auto& [area, areaPeerEvent] : event) {
+    // Event can contain peerAdd/peerDel simultaneously
+    if (not areaPeerEvent.peersToAdd.empty()) {
+      addUpdateKvStorePeers(area, areaPeerEvent.peersToAdd).get();
+    }
+    if (not areaPeerEvent.peersToDel.empty()) {
+      deleteKvStorePeers(area, areaPeerEvent.peersToDel).get();
+    }
   }
 }
 

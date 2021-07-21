@@ -12,6 +12,7 @@
 #include <openr/common/EventLogger.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -572,7 +573,8 @@ LinkMonitor::updateKvStorePeerNeighborUp(
   peersToAdd.emplace(remoteNodeName, adjVal.peerSpec);
   logPeerEvent("ADD_PEER", remoteNodeName, adjVal.peerSpec);
 
-  PeerEvent event(area, peersToAdd, {});
+  PeerEvent event;
+  event.emplace(area, AreaPeerEvent(peersToAdd, {} /* peersToDel */));
   peerUpdatesQueue_.push(std::move(event));
 }
 
@@ -613,7 +615,9 @@ LinkMonitor::updateKvStorePeerNeighborDown(
 
     // send peer del event
     std::vector<std::string> peersToDel{remoteNodeName};
-    PeerEvent event(area, {} /* peersToAdd */, peersToDel);
+
+    PeerEvent event;
+    event.emplace(area, AreaPeerEvent({} /* peersToAdd */, peersToDel));
     peerUpdatesQueue_.push(std::move(event));
 
     // remove kvstore peer from internal store.
@@ -639,7 +643,8 @@ LinkMonitor::updateKvStorePeerNeighborDown(
 
   thrift::PeersMap peersToAdd;
   peersToAdd.emplace(remoteNodeName, peer.tPeerSpec);
-  PeerEvent event(area, peersToAdd, {});
+  PeerEvent event;
+  event.emplace(area, AreaPeerEvent(peersToAdd, {} /* peersToDel */));
   peerUpdatesQueue_.push(std::move(event));
 }
 

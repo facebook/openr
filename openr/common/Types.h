@@ -233,14 +233,9 @@ struct PrefixEvent {
 };
 
 /**
- * Structure defining KvStore peer update event.
+ * Structure defining KvStore peer update event in one area.
  */
-struct PeerEvent {
-  /**
-   * Area identifier
-   */
-  std::string area{""};
-
+struct AreaPeerEvent {
   /**
    * Map from nodeName to peer spec, which is expected to be
    * learnt from Spark neighbor discovery. Information will
@@ -253,12 +248,16 @@ struct PeerEvent {
    */
   std::vector<std::string> peersToDel{};
 
-  explicit PeerEvent(
-      const std::string& area,
+  explicit AreaPeerEvent(
       const thrift::PeersMap& peersToAdd,
       const std::vector<std::string>& peersToDel)
-      : area(area), peersToAdd(peersToAdd), peersToDel(peersToDel) {}
+      : peersToAdd(peersToAdd), peersToDel(peersToDel) {}
 };
+
+/**
+ * Define peer update event in all areas.
+ */
+using PeerEvent = std::unordered_map<std::string, AreaPeerEvent>;
 
 /**
  * Advertise the key-value into consumer with specified version.
