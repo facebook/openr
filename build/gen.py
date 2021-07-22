@@ -16,7 +16,6 @@ def generate_thrift_files():
     thrift_dirs = [
         "openr-thrift",
         "fb303-thrift",
-        "fbzmq-thrift",
         "fbthrift-thrift",
         "neteng-thrift",
     ]
@@ -24,7 +23,6 @@ def generate_thrift_files():
     includes = [
         "openr-thrift",
         "fb303-thrift",
-        "fbzmq-thrift",
         "neteng-thrift",
         "fbthrift-thrift",
         ".",

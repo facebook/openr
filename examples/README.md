@@ -3,7 +3,7 @@
 ---
 
 One of OpenR's main offers is its modular design and extensibility. Here are a
-few examples that illustrate how one can use the OpenR and fbzmq libraries to
+few examples that illustrate how one can use the OpenR libraries to
 write switch agents or centralized controllers that disseminate or query state
 in the network. In fact, we use code very similar to these examples in
 production networks here at Facebook.

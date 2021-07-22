@@ -39,7 +39,6 @@ find_library(ASYNC async PATHS)
 find_package(Boost REQUIRED COMPONENTS ${REQ_BOOST_COMPONENTS})
 find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
-find_package(fbzmq REQUIRED)
 find_package(folly REQUIRED)
 find_package(fb303 CONFIG REQUIRED)
 find_package(fizz REQUIRED)
@@ -51,12 +50,10 @@ find_library(SODIUM sodium)
 find_package(FBThrift REQUIRED)
 find_package(wangle REQUIRED)
 find_package(Threads REQUIRED)
-find_library(ZMQ zmq)
 find_library(ZSTD zstd)
 find_library(BENCHMARK follybenchmark PATHS)
 
 find_path(RE2_INCLUDE_DIR re2/re2.h)
-find_path(ZMQ_INCLUDE_DIR zmq.h)
 
 set(FOLLY_EXCEPTION_TRACER)
 if (TARGET Folly::folly_exception_tracer)
@@ -72,7 +69,6 @@ include_directories(
   ${FBTHRIFT_INCLUDE_DIR}
   ${FOLLY_INCLUDE_DIR}
   ${RE2_INCLUDE_DIR}
-  ${ZMQ_INCLUDE_DIR}
 )
 
 SET(OPENR_THRIFT_LIBS)
@@ -238,9 +234,7 @@ endif()
 target_link_libraries(openrlib
   build_info
   ${OPENR_THRIFT_LIBS}
-  fbzmq::fbzmq
   ${DOUBLE-CONVERSION}
-  ${ZMQ}
   glog::glog
   gflags
   FBThrift::thriftcpp2
@@ -271,8 +265,6 @@ add_executable(openr_bin
 target_link_libraries(openr_bin
   openrlib
   ${OPENR_THRIFT_LIBS}
-  fbzmq::fbzmq
-  ${ZMQ}
   ${GLOG}
   ${GFLAGS}
   ${THRIFT}
@@ -334,7 +326,6 @@ add_executable(platform_linux
 target_link_libraries(platform_linux
   openrlib
   ${OPENR_THRIFT_LIBS}
-  ${FBZMQ}
   ${GLOG}
   ${GFLAGS}
   Folly::folly
@@ -344,7 +335,6 @@ target_link_libraries(platform_linux
   ${ASYNC}
   ${CONCURRENCY}
   ${SODIUM}
-  ${ZMQ}
   ${Boost_LIBRARIES}
   -lpthread
 )
@@ -452,8 +442,6 @@ if(BUILD_TESTS)
       openr/tests/mocks/MockIoProvider.cpp
       openr/tests/mocks/MockIoProviderUtils.cpp
     LIBRARIES
-      fbzmq::fbzmq
-      ${ZMQ}
       ${GLOG}
       ${GFLAGS}
       FBThrift::thriftcpp2

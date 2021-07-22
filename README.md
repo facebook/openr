@@ -19,7 +19,7 @@ Please refer to our extensive [Documentation](https://openr.readthedocs.io/) to 
 ---
 
 Please refer to the [`examples`](examples) directory to see some useful ways to
-leverage the openr and fbzmq libraries to build software to run with OpenR.
+leverage the libraries to build software to run with OpenR.
 
 ## Resources
 
@@ -53,7 +53,6 @@ We have tried `OpenR` on Ubuntu-16.04, Ubuntu-18.04 and CentOS 7/8.
 OpenR should work on all Linux based platforms.
 
 - Compiler supporting C++17 or higher
-- libzmq-4.0.6 or greater
 
 ## Build
 
@@ -74,11 +73,9 @@ your system and follows the traditional cmake build steps below.
 - `gflags`
 - `gtest`
 - `libsodium`
-- `libzmq`
 - `zstd`
 - `folly`
 - `fbthrift`
-- `fbzmq`
 - `re2-devel`
 
 ### One Step Build - Ubuntu
