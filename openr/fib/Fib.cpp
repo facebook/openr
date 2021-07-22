@@ -114,25 +114,25 @@ Fib::Fib(
     retryRoutesTimer_->scheduleTimeout(coldStartDuration);
   }
 
-  keepAliveTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    // Make thrift calls to do real programming
-    try {
-      keepAliveCheck();
-    } catch (const std::exception& e) {
-      fb303::fbData->addStatValue(
-          "fib.thrift.failure.keepalive", 1, fb303::COUNT);
-      client_.reset();
-      LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
-                 << folly::exceptionStr(e);
-    }
-    // schedule periodically
-    keepAliveTimer_->scheduleTimeout(Constants::kKeepAliveCheckInterval);
-  });
-
-  // Only schedule health checker in non dry run mode
-  if (not dryrun_) {
-    keepAliveTimer_->scheduleTimeout(Constants::kKeepAliveCheckInterval);
-  }
+  //
+  // Create KeepAlive task with stop signal. Signalling part consists of two
+  // - Promise retained in state variable of Fib module. Fiber awaits on it. The
+  //   promise is fulfilled in Fib::stop()
+  // - SemiFuture is passed to fiber for awaiting
+  //
+  auto keepAliveContract = folly::makePromiseContract<folly::Unit>();
+  keepAliveStopSignal_ = std::move(keepAliveContract.first);
+  addFiberTask(
+      [this,
+       stopSignal = std::move(keepAliveContract.second)]() mutable noexcept {
+        LOG(INFO) << "Starting KeepAlive fiber task";
+        while (not stopSignal.isReady()) { // Break when stop signal is ready
+          // Sleep & perform check
+          folly::futures::sleep(Constants::kKeepAliveCheckInterval).get();
+          keepAliveCheck();
+        } // while
+        LOG(INFO) << "KeepAlive fiber task got stopped";
+      });
 
   // Fiber to process route updates from Decision
   addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
@@ -185,6 +185,12 @@ Fib::Fib(
 
 void
 Fib::stop() {
+  // Send stop signal to internal fibers
+  keepAliveStopSignal_.setValue(folly::Unit());
+
+  // Reset client to drop all on-going requests
+  // TODO
+
   // Invoke stop method of super class
   OpenrEventBase::stop();
   VLOG(1) << "Stopped FIB event base";
@@ -956,9 +962,20 @@ Fib::scheduleRetryRoutesTimer() {
 }
 
 void
-Fib::keepAliveCheck() {
-  createFibClient(evb_, socket_, client_, thriftPort_);
-  int64_t aliveSince = client_->sync_aliveSince();
+Fib::keepAliveCheck() noexcept {
+  int64_t aliveSince{0};
+  if (not dryrun_) {
+    try {
+      createFibClient(evb_, socket_, client_, thriftPort_);
+      aliveSince = client_->sync_aliveSince();
+    } catch (const std::exception& e) {
+      fb303::fbData->addStatValue(
+          "fib.thrift.failure.keepalive", 1, fb303::COUNT);
+      client_.reset();
+      LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
+                 << folly::exceptionStr(e);
+    }
+  }
   // Check if switch agent has restarted or not
   if (aliveSince != latestAliveSince_) {
     LOG(WARNING) << "FibAgent seems to have restarted. "

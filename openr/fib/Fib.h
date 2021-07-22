@@ -179,7 +179,7 @@ class Fib final : public OpenrEventBase {
    * Get aliveSince from FibService, and check if Fib restarts
    * If so, push syncFib to FibService
    */
-  void keepAliveCheck();
+  void keepAliveCheck() noexcept;
 
   /**
    * Update flat counter/stats in fb303
@@ -346,8 +346,8 @@ class Fib final : public OpenrEventBase {
   std::unique_ptr<folly::AsyncTimeout> retryRoutesTimer_{nullptr};
   ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
 
-  // periodically send alive msg to switch agent
-  std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
+  // Stop signal for KeepAlive fiber
+  folly::Promise<folly::Unit> keepAliveStopSignal_;
 
   // Queues to publish programmed incremental IP/label routes or those from Fib
   // sync. (Fib streaming)
