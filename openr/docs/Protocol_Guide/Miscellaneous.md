@@ -156,14 +156,6 @@ have alternate paths.
 
 ---
 
-Currently, openr assumes it is running on a trusted network and makes no effort
-to authenticate incoming connections. We hope to address this in the short term
-by enabling [CurveZmq](http://curvezmq.org/) on sockets reachable from off box.
-CurveZmq by itself makes no attempt at solving the hard problem of
-authentication and accepts connections from a configurable list of public keys.
-To address this, we may add to our peering protocol the ability to present and
-verify certificates.
-
 We understand that this is a difficult problem with subtle pitfalls. Going
 forward we hope to move towards an approach built on top of widely deployed and
 well verified solutions such as OpenSSL.

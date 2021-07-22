@@ -19,7 +19,6 @@ KvStoreWrapper::KvStoreWrapper(
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
     : nodeId(config->getNodeName()), config_(config) {
-  VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(
       kvStoreUpdatesQueue_,
       kvStoreSyncEventsQueue_,

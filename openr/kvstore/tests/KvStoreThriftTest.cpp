@@ -246,11 +246,7 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     stores_.back()->stop();
     stores_.back().reset();
     stores_.pop_back();
-  });
 
-  // ATTN: give 1000ms margin before recreate kvstore instance to avoid
-  //       situation of INPROC_URL of ZMQ still being occupied
-  evb.scheduleTimeout(std::chrono::milliseconds(1000), [&]() noexcept {
     // recreate store2 and corresponding thriftServer
     createKvStore(node2);
     store2 = stores_.back();

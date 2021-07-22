@@ -1330,11 +1330,6 @@ struct SparkHandshakeMsg {
   7: i32 openrCtrlThriftPort;
 
   /**
-   * @deprecated - Neighbor's kvstore global CMD port, for ZMQ communication.
-   */
-  9: i32 kvStoreCmdPort;
-
-  /**
    * Area identifier for establishing adjacency with neighbor.
    */
   10: string area;
@@ -1410,11 +1405,6 @@ struct SparkNeighbor {
    * Neighbor's thrift server port
    */
   6: i32 openrCtrlThriftPort = 0;
-
-  /**
-   * @deprecated - Neighbor's kvstore global CMD port, for ZMQ communication.
-   */
-  7: i32 kvStoreCmdPort = 0;
 
   /**
    * Remote interface name

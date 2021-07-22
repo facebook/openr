@@ -35,7 +35,7 @@ node. For `AREA` concept, see `Area.md` for more details.
   peers.
 - `[Consumer] RQueue<thrift::PeerUpdateRequest>`: receive **PEER SPEC**
   information from `LinkMonitor` to know how to establish TCP connection with
-  peers over both Thrift and ZMQ sockect(to be deprecated).
+  peers over Thrift channel.
 
 ## Operations
 

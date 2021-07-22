@@ -18,8 +18,6 @@
 #include <openr/tests/mocks/MockIoProvider.h>
 #include <openr/tests/mocks/MockIoProviderUtils.h>
 
-#include <fbzmq/zmq/Zmq.h>
-
 namespace {
 
 const int kMinIpv6PktSize{1280};
@@ -38,10 +36,25 @@ checkPacketContent(const std::string& packet, const struct msghdr& msg) {
 
 void
 waitForDataToRead(const int fd) {
-  std::vector<fbzmq::PollItem> items = {{nullptr, fd, ZMQ_POLLIN, 0}};
+  while (true) {
+    folly::netops::PollDescriptor pfd;
+    pfd.fd = folly::NetworkSocket::fromFd(fd);
+    pfd.events = POLLIN;
+    int ret = folly::netops::poll(
+        &pfd, 1, -1 /* negative value means infinite timeout */);
 
-  // poll until we have received any message.
-  fbzmq::poll(items, folly::none);
+    if (ret > 0) {
+      return;
+    } else if (ret == EINTR) {
+      // A signal occurred while the system call was in progress.
+      // No error actually occurred.
+      continue;
+    } else {
+      throw folly::AsyncSocketException(
+          folly::AsyncSocketException::INTERNAL_ERROR,
+          fmt::format("poll fd: {} failed", fd));
+    }
+  }
 }
 } // anonymous namespace.
 

@@ -2,15 +2,14 @@
 
 Each module internally generates its own list of counters using the `ThreadData`
 library (which has supports for stats like SUM/RATE/COUNT over various
-durations). These counters are periodically submitted to the `ZmqMonitor` store
-(singleton) which in turn publishes them on it's `PUB` channel. A Monitoring
-agent on the node or remotely can connect to `ZmqMonitor` and query the counters
-to perform monitoring on the top of these counters or build interactive
-dashboards.
+durations). These counters are periodically submitted to the `Monitor` store
+(singleton) via replicate queue called `LogSampleQueue`. A Monitoring agent on
+the node or remotely can connect to `Monitor` and query the counters to perform
+monitoring on the top of these counters or build interactive dashboards.
 
 Further, each module logs important events like `IFACE_UP` or `NEIGHBOR_DOWN` in
-a structured fashion via ZmqMonitor which can be logged to data stores like
-`Druid` to do real-time monitoring of log events across the fleet.
+a structured fashion via Monitor which can be logged to data stores like `Druid`
+to do real-time monitoring of log events across the fleet.
 
 ## Understanding Counters
 

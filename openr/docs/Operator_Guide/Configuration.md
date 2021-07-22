@@ -177,25 +177,13 @@ operations of Open/R
 IP_TOS=192
 ```
 
-### KVSTORE_ZMQ_HWM
-
-Set buffering size for KvStore socket communication. Updates to neighbor node
-during flooding can be buffered upto this number. For larger networks where
-burst of updates can be high having high value makes sense. For smaller networks
-where burst of updates are low, having low value makes more sense. Defaults
-to 65536.
-
-```shell
-KVSTORE_ZMQ_HWM=65536
-```
-
 ### TLS Related Flags
 
 We are in the process of adding TLS for all openr traffic. This will be
 implemented with secure [Thrift](https://github.com/facebook/fbthrift).
 
 The following flags allow you to enable TLS for your openr network. Note: for a
-time while we transition, the plaintext zmq endpoints will remain reachable.
+time while we transition, the plaintext thrift endpoint will remain reachable.
 
 To enable security, please pass the flags detailed below. For authentication,
 specify acceptable common names via TLS_ACCEPTABLE_PEERS

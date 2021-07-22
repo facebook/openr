@@ -62,7 +62,7 @@ class MockIoProvider final : public IoProvider {
   }
 
   /**
-   * Busy spin until the zmq thread is running. this is called from external
+   * Busy spin until the thread is running. this is called from external
    * threads to synchronize with this thread's main loop
    */
   void
