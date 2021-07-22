@@ -688,12 +688,6 @@ struct BgpRouteTranslationConfig {
   6: set<i64> asns_to_ignore_for_distance;
 
   /**
-   * Deprecated. Use enabled_bgp_to_openr instead.
-   * Knob to enable BGP -> Open/R translation incrementally.
-   */
-  7: bool is_enabled = 0 (deprecated);
-
-  /**
    * Knob to enable BGP -> Open/R translation incrementally
    */
   8: bool enable_bgp_to_openr = 0;
@@ -709,6 +703,18 @@ struct BgpRouteTranslationConfig {
    * of the above route translation options must be enabled.
    */
   10: bool disable_legacy_translation = 0;
+
+  /**
+   * Translate path preference to local_preference and vice versa.
+   * This is the desired behavior with IBN policy.
+   * IBN generates same preference value, assign it to local pref in
+   * bgp context; to path preference in openr context.
+   *
+   * Current implementation is translating path preference to origin.
+   * This is a migration knob for transition from legacy behavior to
+   * new behavior.
+   */
+  11: bool enable_path_pref_to_local_pref_translation = 0;
 } (cpp.minimize_padding)
 
 struct OpenrConfig {
