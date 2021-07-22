@@ -315,10 +315,8 @@ checkEqualDecisionRouteUpdate(
 
 class FibTestFixture : public ::testing::Test {
  public:
-  explicit FibTestFixture(
-      bool waitOnDecision = false, int32_t routeDeleteDelayMs = 1000)
-      : waitOnDecision_(waitOnDecision),
-        routeDeleteDelay_(routeDeleteDelayMs) {}
+  explicit FibTestFixture(int32_t routeDeleteDelayMs = 1000)
+      : routeDeleteDelay_(routeDeleteDelayMs) {}
   void
   SetUp() override {
     mockFibHandler_ = std::make_shared<MockNetlinkFibHandler>();
@@ -339,9 +337,6 @@ class FibTestFixture : public ::testing::Test {
         true /*enableSegmentRouting*/,
         false /*orderedFibProgramming*/,
         false /*dryrun*/);
-    if (waitOnDecision_) {
-      tConfig.eor_time_s_ref() = 1;
-    }
     tConfig.route_delete_delay_ms_ref() = routeDeleteDelay_;
     tConfig.fib_port_ref() = fibThriftThread.getAddress()->getPort();
 
@@ -552,7 +547,6 @@ class FibTestFixture : public ::testing::Test {
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
  private:
-  bool waitOnDecision_{false};
   const int32_t routeDeleteDelay_{0};
 };
 
@@ -862,6 +856,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   EXPECT_EQ(mplsRoutes.size(), 0);
 
   // initial syncFib debounce
+  routeUpdatesQueue.push(DecisionRouteUpdate());
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
   // Empty routes are sent fi tobRouteUpdatesQueue_.
@@ -968,12 +963,7 @@ TEST_F(FibTestFixture, processRouteDb) {
       checkEqualRouteDatabaseUnicastDetail(routeDetailDb, getRouteDetailDb()));
 }
 
-class FibTestFixtureWaitOnDecision : public FibTestFixture {
- public:
-  FibTestFixtureWaitOnDecision() : FibTestFixture(true) {}
-};
-
-TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
+TEST_F(FibTestFixture, WaitOnDecision) {
   // Make sure fib starts with clean route database
   std::vector<thrift::UnicastRoute> routes;
   std::vector<thrift::MplsRoute> mplsRoutes;
@@ -1020,6 +1010,7 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   EXPECT_EQ(mplsRoutes.size(), 0);
 
   // initial syncFib debounce
+  routeUpdatesQueue.push(DecisionRouteUpdate());
   mockFibHandler_->waitForSyncFib();
   mockFibHandler_->waitForSyncMplsFib();
   // Empty routes are sent fi tobRouteUpdatesQueue_.
@@ -1099,6 +1090,7 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
   EXPECT_EQ(routes.size(), 0);
 
   // initial syncFib debounce
+  routeUpdatesQueue.push(DecisionRouteUpdate());
   mockFibHandler_->waitForSyncFib();
   // Empty routes are sent fi tobRouteUpdatesQueue_.
   DecisionRouteUpdate emptyUpdate;
@@ -1330,7 +1322,7 @@ TEST_F(FibTestFixture, doNotInstall) {
  * - Static routes are only processed before first RIB instance
  * - Fiber terminates after receipt of first RIB instance
  */
-TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
+TEST_F(FibTestFixture, StaticRouteUpdates) {
   // Make sure fib starts with clean route database
   std::vector<thrift::UnicastRoute> routes;
   std::vector<thrift::MplsRoute> mplsRoutes;
@@ -1419,8 +1411,7 @@ TEST_F(FibTestFixtureWaitOnDecision, StaticRouteUpdates) {
  * 5. Backed MPLS routes are programmed successfully, while existing routes are
  *    still kept.
  */
-TEST_F(
-    FibTestFixtureWaitOnDecision, StaticMplsRoutesUpdateRetryTillSuccessful) {
+TEST_F(FibTestFixture, StaticMplsRoutesUpdateRetryTillSuccessful) {
   // 1. Initially there are 1 unicast and 1 MPLS routes in FIB agent.
   DecisionRouteUpdate initialRoutes;
   initialRoutes.addRouteToUpdate(
@@ -1489,7 +1480,7 @@ TEST_F(
  * 2) Trigger FIB sync (Fib Restart) with std::exception failure injection
  * 3) Trigger FIB sync (Fib Restart) with FibUpdateError failure injection
  */
-TEST_F(FibTestFixtureWaitOnDecision, SyncFibProgramming) {
+TEST_F(FibTestFixture, SyncFibProgramming) {
   std::vector<thrift::UnicastRoute> routes;
   std::vector<thrift::MplsRoute> mplsRoutes;
 
@@ -1648,7 +1639,7 @@ TEST_F(FibTestFixtureWaitOnDecision, SyncFibProgramming) {
  * - Delete P2/L2 - with std::exception failure injection
  * - Delete P1/P1
  */
-TEST_F(FibTestFixtureWaitOnDecision, IncrementalRouteProgramming) {
+TEST_F(FibTestFixture, IncrementalRouteProgramming) {
   std::vector<thrift::UnicastRoute> routes;
   std::vector<thrift::MplsRoute> mplsRoutes;
 
@@ -1883,7 +1874,7 @@ TEST_F(FibTestFixtureWaitOnDecision, IncrementalRouteProgramming) {
  * - Mark P2/L2 as good
  * - See that they gets programmed
  */
-TEST_F(FibTestFixtureWaitOnDecision, RouteProgrammingWithPersistentFailure) {
+TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
   std::vector<thrift::UnicastRoute> routes;
   std::vector<thrift::MplsRoute> mplsRoutes;
 

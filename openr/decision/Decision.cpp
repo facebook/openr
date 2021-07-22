@@ -136,9 +136,10 @@ Decision::Decision(
     pendingUpdates_.setNeedsFullRebuild();
     rebuildRoutes("COLD_START_UPDATE");
   });
-  if (auto eor = config->getConfig().eor_time_s_ref()) {
-    coldStartTimer_->scheduleTimeout(std::chrono::seconds(*eor));
-  }
+
+  auto eorTimeRef = config->getConfig().eor_time_s_ref();
+  CHECK(eorTimeRef.has_value());
+  coldStartTimer_->scheduleTimeout(std::chrono::seconds(*eorTimeRef));
 
   // Schedule periodic timer for counter submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {

@@ -65,8 +65,6 @@ Fib::Fib(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       fibRouteUpdatesQueue_(fibRouteUpdatesQueue),
       logSampleQueue_(logSampleQueue) {
-  auto& tConfig = config->getConfig();
-
   CHECK_GE(routeDeleteDelay_.count(), 0)
       << "Route delete duration must be >= 0ms";
 
@@ -99,20 +97,6 @@ Fib::Fib(
   });
   // On startup we do require routedb_sync so explicitly set the counter to 0
   fb303::fbData->setCounter("fib.synced", 0);
-
-  if (not tConfig.eor_time_s_ref()) {
-    // TODO: remove cold-start duration after signal-based Open/R initialization
-    // process being implemented.
-    const std::chrono::seconds coldStartDuration{
-        3 * config->getSparkConfig().get_keepalive_time_s()};
-
-    // Force transition to SYNCING state
-    transitionRouteState(RouteState::RIB_UPDATE);
-    LOG(INFO)
-        << "EOR time is not configured; schedule fib sync of routeDb with "
-        << "cold-start duration " << coldStartDuration.count() << "secs";
-    retryRoutesTimer_->scheduleTimeout(coldStartDuration);
-  }
 
   //
   // Create KeepAlive task with stop signal. Signalling part consists of two

@@ -947,4 +947,26 @@ TEST(ConfigTest, AddPathConfig) {
   EXPECT_NO_THROW((Config(tConfig)));
 }
 
+TEST(ConfigTest, EorTime) {
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.spark_config_ref()->keepalive_time_s_ref() = 2;
+
+  // Create config without any explicit EOR and ensure that it is implicitly set
+  {
+    EXPECT_FALSE(tConfig.eor_time_s_ref());
+    auto config = Config(tConfig);
+    ASSERT_TRUE(config.getConfig().eor_time_s_ref());
+    EXPECT_EQ(6, *config.getConfig().eor_time_s_ref());
+  }
+
+  // Explicitly set eor time and make sure it is not altered
+  {
+    EXPECT_FALSE(tConfig.eor_time_s_ref());
+    tConfig.eor_time_s_ref() = 2;
+    auto config = Config(tConfig);
+    ASSERT_TRUE(config.getConfig().eor_time_s_ref());
+    EXPECT_EQ(2, *config.getConfig().eor_time_s_ref());
+  }
+}
+
 } // namespace openr

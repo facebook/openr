@@ -655,5 +655,16 @@ Config::populateInternalDb() {
   if (isSecureThriftServerEnabled()) {
     checkThriftServerConfig();
   }
+
+  //
+  // Set an implicit value for eor_time_s (Decision Hold time) if not specified
+  // explicitly.
+  // NOTE: `eor_time_s` variable would go away once new initialization process
+  // is completely implemented & rolled out.
+  //
+  if (not config_.eor_time_s_ref()) {
+    config_.eor_time_s_ref() = 3 * getSparkConfig().get_keepalive_time_s();
+  }
 }
+
 } // namespace openr
