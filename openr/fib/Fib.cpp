@@ -402,15 +402,13 @@ Fib::RouteState::createUpdate() {
   // Populate unicast routes to add, update, or delete
   for (auto itrPrefixes = dirtyPrefixes.begin();
        itrPrefixes != dirtyPrefixes.end();) {
+    if (currentTime < itrPrefixes->second) {
+      ++itrPrefixes;
+      continue; // Route is not yet ready for retry
+    }
     auto iter = unicastRoutes.find(itrPrefixes->first);
     if (iter == unicastRoutes.end()) { // Delete
-      if (currentTime >= itrPrefixes->second) {
-        // pending delete has waited long enough
-        update.unicastRoutesToDelete.emplace_back(itrPrefixes->first);
-      } else {
-        ++itrPrefixes;
-        continue;
-      }
+      update.unicastRoutesToDelete.emplace_back(itrPrefixes->first);
     } else { // Add or Update
       update.unicastRoutesToUpdate.emplace(itrPrefixes->first, iter->second);
     }
@@ -420,15 +418,13 @@ Fib::RouteState::createUpdate() {
 
   // Populate mpls routes to add, update, or delete
   for (auto itrLabel = dirtyLabels.begin(); itrLabel != dirtyLabels.end();) {
+    if (currentTime < itrLabel->second) {
+      ++itrLabel;
+      continue; // Route is not yet ready for retry
+    }
     auto it = mplsRoutes.find(itrLabel->first);
     if (it == mplsRoutes.end()) { // Delete
-      if (currentTime >= itrLabel->second) {
-        // pending delete has waited long enough
-        update.mplsRoutesToDelete.emplace_back(itrLabel->first);
-      } else {
-        ++itrLabel;
-        continue;
-      }
+      update.mplsRoutesToDelete.emplace_back(itrLabel->first);
     } else { // Add or Update
       update.mplsRoutesToUpdate.emplace(itrLabel->first, it->second);
     }
@@ -448,27 +444,23 @@ Fib::nextRetryDuration() const {
   // deletion is not enabled, or if there is no pending (dirty) routes for
   // processing.
   if ((routeState_.state == RouteState::SYNCING) or
-      not delayedDeletionEnabled() or
       (routeState_.dirtyPrefixes.empty() and routeState_.dirtyLabels.empty())) {
     return std::chrono::milliseconds(0);
   }
 
   auto const currTime = std::chrono::steady_clock::now();
-  auto nextRetryTime = currTime + routeDeleteDelay_;
+  auto nextRetryTime =
+      std::chrono::time_point<std::chrono::steady_clock>::max();
 
-  for (auto& [_, addDeleteTime] : routeState_.dirtyPrefixes) {
-    if (addDeleteTime < nextRetryTime) {
-      nextRetryTime = addDeleteTime;
-    }
+  for (auto& [prefix, addDeleteTime] : routeState_.dirtyPrefixes) {
+    nextRetryTime = std::min(addDeleteTime, nextRetryTime);
   }
 
-  for (auto& [_, addDeleteTime] : routeState_.dirtyLabels) {
-    if (addDeleteTime < nextRetryTime) {
-      nextRetryTime = addDeleteTime;
-    }
+  for (auto& [label, addDeleteTime] : routeState_.dirtyLabels) {
+    nextRetryTime = std::min(addDeleteTime, nextRetryTime);
   }
 
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
+  return std::chrono::ceil<std::chrono::milliseconds>(
       std::max(nextRetryTime, currTime) - currTime);
 }
 
@@ -815,9 +807,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
   }
 
   // Log statistics
-  const auto elapsedTime =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - currentTime);
+  const auto elapsedTime = std::chrono::ceil<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - currentTime);
   LOG(INFO) << fmt::format(
       "It took {} ms to update routes in FIB", elapsedTime.count());
   fb303::fbData->addStatValue(
@@ -914,9 +905,8 @@ Fib::syncRoutes() {
   // Some statistics
   // NOTE: We set counter for sync time as it is one time event. We report the
   // value of last sync duration
-  const auto elapsedTime =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - currentTime);
+  const auto elapsedTime = std::chrono::ceil<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - currentTime);
   LOG(INFO) << "It took " << elapsedTime.count() << "ms to sync routes in FIB";
   fb303::fbData->setCounter("fib.route_sync.time_ms", elapsedTime.count());
 
