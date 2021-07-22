@@ -3340,12 +3340,6 @@ main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   folly::init(&argc, &argv);
 
-  // init sodium security library
-  if (::sodium_init() == -1) {
-    LOG(ERROR) << "Failed initializing sodium";
-    return 1;
-  }
-
   // Run the tests
   return RUN_ALL_TESTS();
 }

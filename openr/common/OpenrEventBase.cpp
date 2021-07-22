@@ -34,79 +34,24 @@ EventBaseStopSignalHandler::signalReceived(int signal) noexcept {
   LOG(INFO) << "Openr event-base stopped";
 }
 
-OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
-    folly::EventBase* evb,
-    int fd,
-    uintptr_t socketPtr,
-    int zmqEvents,
-    fbzmq::SocketCallback callback)
+OpenrEventBase::OpenrEventHandler::OpenrEventHandler(
+    folly::EventBase* evb, int fd, int events, SocketCallback callback)
     : folly::EventHandler(evb, folly::NetworkSocket::fromFd(fd)),
       callback_(std::move(callback)),
-      zmqEvents_(zmqEvents),
-      ptr_(reinterpret_cast<void*>(socketPtr)) {
+      events_(events) {
+  // Make sure evb is not nullptr
   CHECK(evb);
-  // Register handler
-  uint16_t events{folly::EventHandler::PERSIST};
-  if (zmqEvents & ZMQ_POLLIN) {
-    events |= folly::EventHandler::READ;
-  }
-  if (zmqEvents & ZMQ_POLLOUT) {
-    events |= folly::EventHandler::WRITE;
-  }
-  registerHandler(events);
 
-  // ZMQ is edge triggerred. In some cases zmq fd doesn't trigger read events if
-  // message is already pending to read before socket is registered for polling.
-  // To avoid such corner cases, we explicitly perform check to read pending
-  // events.
-  if (ptr_) {
-    timeout_ = folly::AsyncTimeout::schedule(
-        std::chrono::seconds(0), *evb, [&]() noexcept {
-          // Invoke handler to process already pending events if any
-          handlerReady(0); // events will be read by zmq_getsockopt
-        });
-  }
+  // Register handler
+  registerHandler(folly::EventHandler::PERSIST | events_);
 }
 
 void
-OpenrEventBase::ZmqEventHandler::handlerReady(uint16_t events) noexcept {
-  int zmqEvents{0};
-  size_t zmqEventsLen = sizeof(zmqEvents);
-
-  if (ptr_) {
-    // ZMQ Socket - Read events via zmq_getsockopt
-    auto err = zmq_getsockopt(ptr_, ZMQ_EVENTS, &zmqEvents, &zmqEventsLen);
-    CHECK_EQ(0, err) << "Got error while reading events from zmq socket";
-  } else {
-    // Usual socket/event fd - Use signalled events
-    if (events & folly::EventHandler::READ) {
-      zmqEvents |= ZMQ_POLLIN;
-    }
-    if (events & folly::EventHandler::WRITE) {
-      zmqEvents |= ZMQ_POLLOUT;
-    }
+OpenrEventBase::OpenrEventHandler::handlerReady(uint16_t events) noexcept {
+  // Invoke callback if there is an overlap
+  if (events & events_) {
+    callback_(events);
   }
-
-  // Return if no events
-  if (not zmqEvents) {
-    return;
-  }
-
-  do {
-    // Invoke callback if there is an overlap
-    if (zmqEvents_ & zmqEvents) {
-      callback_(zmqEvents);
-    }
-
-    if (ptr_ and (zmqEvents & ZMQ_POLLIN)) {
-      // Get socket events after the read
-      auto err = zmq_getsockopt(ptr_, ZMQ_EVENTS, &zmqEvents, &zmqEventsLen);
-      CHECK_EQ(0, err) << "Got error while reading events from zmq socket";
-    } else {
-      zmqEvents = 0;
-    }
-    // We loop again only for ZMQ_POLLIN events
-  } while (zmqEvents & ZMQ_POLLIN);
 }
 
 OpenrEventBase::OpenrEventBase()
@@ -170,20 +115,14 @@ OpenrEventBase::scheduleTimeoutAt(
 }
 
 void
-OpenrEventBase::addSocketFd(
-    int socketFd, int events, fbzmq::SocketCallback callback) {
+OpenrEventBase::addSocketFd(int socketFd, int events, SocketCallback callback) {
   if (fdHandlers_.count(socketFd)) {
     throw std::runtime_error("Socket-fd is already registered");
   }
   fdHandlers_.emplace(
       std::piecewise_construct,
       std::forward_as_tuple(socketFd),
-      std::forward_as_tuple(
-          &evb_,
-          socketFd,
-          reinterpret_cast<uintptr_t>(nullptr),
-          events,
-          std::move(callback)));
+      std::forward_as_tuple(&evb_, socketFd, events, std::move(callback)));
 }
 
 void

@@ -7,8 +7,6 @@
 
 #include <sys/eventfd.h>
 
-#include <fbzmq/zmq/Context.h>
-#include <fbzmq/zmq/Socket.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
 #include <folly/synchronization/Baton.h>
@@ -37,7 +35,6 @@ class OpenrEventBaseTestFixture : public ::testing::Test {
   std::thread evbThread_;
 
  public:
-  fbzmq::Context context;
   OpenrEventBase evb;
 };
 
@@ -162,8 +159,8 @@ TEST_F(OpenrEventBaseTestFixture, SocketFdPollTest) {
   // create signalfd and register for polling. unblock baton on successful poll
   int testFd = eventfd(0 /* initial value */, 0 /* flags */);
   evb.getEvb()->runInEventBaseThreadAndWait([&]() {
-    evb.addSocketFd(testFd, ZMQ_POLLIN, [&](int revents) {
-      EXPECT_TRUE(revents & ZMQ_POLLIN);
+    evb.addSocketFd(testFd, folly::EventHandler::READ, [&](uint32_t revents) {
+      EXPECT_TRUE(revents & folly::EventHandler::READ);
       waitBaton.post();
       uint64_t buf;
       EXPECT_EQ(

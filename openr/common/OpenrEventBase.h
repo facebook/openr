@@ -9,13 +9,13 @@
 
 #include <csignal>
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/zmq/Socket.h>
 #include <folly/fibers/FiberManager.h>
 #include <folly/io/async/AsyncSignalHandler.h>
 #include <folly/io/async/EventHandler.h>
 
 namespace openr {
+
+using SocketCallback = folly::Function<void(uint16_t revents) noexcept>;
 
 class EventBaseStopSignalHandler : public folly::AsyncSignalHandler {
  public:
@@ -106,7 +106,7 @@ class OpenrEventBase {
    * Socket/FD polling APIs
    */
 
-  void addSocketFd(int socketFd, int events, fbzmq::SocketCallback callback);
+  void addSocketFd(int socketFd, int events, SocketCallback callback);
   void removeSocketFd(int socketFd);
 
   /**
@@ -127,32 +127,22 @@ class OpenrEventBase {
   /**
    * Event handler class for sockets and fds
    */
-  class ZmqEventHandler : public folly::EventHandler {
+  class OpenrEventHandler : public folly::EventHandler {
    public:
-    ZmqEventHandler(
-        folly::EventBase* evb,
-        int fd,
-        uintptr_t socketPtr,
-        int zmqEvents,
-        fbzmq::SocketCallback callback);
+    OpenrEventHandler(
+        folly::EventBase* evb, int fd, int events, SocketCallback callback);
 
-    virtual ~ZmqEventHandler() {}
+    virtual ~OpenrEventHandler() override {}
 
    private:
     // EventHandler callback. Unblocks read/write wait
     void handlerReady(uint16_t events) noexcept override;
 
     // Callback for handling event
-    fbzmq::SocketCallback callback_;
+    SocketCallback callback_;
 
     // Subscribed events
-    const int zmqEvents_{0};
-
-    // fbzmq socket pointer if fd is socket
-    void* ptr_{nullptr};
-
-    // AsyncTimeout for reading first set of events
-    std::unique_ptr<folly::AsyncTimeout> timeout_;
+    const int events_{0};
   };
 
   // EventBase object for async event polling/scheduling
@@ -163,7 +153,7 @@ class OpenrEventBase {
   std::vector<folly::Future<folly::Unit>> fiberTaskFutures_;
 
   // Data structure to hold fd and their handlers
-  std::unordered_map<int /* fd */, ZmqEventHandler> fdHandlers_;
+  std::unordered_map<int /* fd */, OpenrEventHandler> fdHandlers_;
 
   // Timestamp
   std::atomic<std::chrono::steady_clock::duration::rep> timestamp_;
