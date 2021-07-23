@@ -384,9 +384,10 @@ Decision::getRibPolicy() {
 
 void
 Decision::processPublication(Publication&& publication) {
-  processPublication(std::move(publication.tPublication));
   if (publication.kvStoreSynced) {
     // Handle KvStore synced event.
+  } else {
+    processPublication(std::move(publication.tPublication));
   }
 }
 
