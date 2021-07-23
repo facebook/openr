@@ -159,6 +159,29 @@ struct DecisionRouteUpdate {
       mplsRoutesToDelete.emplace_back(label);
     }
   }
+
+  /**
+   * Print to log for debugging
+   */
+  std::string
+  str() {
+    std::stringstream ss;
+    ss << "DecisionRouteUpdate follows" << std::boolalpha;
+    ss << "\n  Sync: " << (type == DecisionRouteUpdate::FULL_SYNC);
+    for (auto const& [prefix, _] : unicastRoutesToUpdate) {
+      ss << "\n  ADD prefix " << folly::IPAddress::networkToString(prefix);
+    }
+    for (auto const& [label, _] : mplsRoutesToUpdate) {
+      ss << "\n  ADD label " << label;
+    }
+    for (auto const& prefix : unicastRoutesToDelete) {
+      ss << "\n  DEL prefix " << folly::IPAddress::networkToString(prefix);
+    }
+    for (auto const& label : mplsRoutesToDelete) {
+      ss << "\n  DEL label " << label;
+    }
+    return ss.str();
+  }
 };
 
 } // namespace openr
