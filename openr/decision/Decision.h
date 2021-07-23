@@ -24,6 +24,7 @@
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/OpenrEventBase.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/decision/LinkState.h>
@@ -140,7 +141,7 @@ class Decision : public OpenrEventBase {
  public:
   Decision(
       std::shared_ptr<const Config> config,
-      messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
+      messaging::RQueue<Publication> kvStoreUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
 
@@ -196,16 +197,19 @@ class Decision : public OpenrEventBase {
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
 
-  // process publication from KvStore
+  // Process Publication from KvStore
+  void processPublication(Publication&& publication);
+
+  // Process thrift publication from KvStore
   void processPublication(thrift::Publication&& thriftPub);
 
-  // process publication from PrefixManager
+  // Process publication from PrefixManager
   void processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate);
 
-  // openr config
+  // Openr config
   std::shared_ptr<const Config> config_;
 
-  // callback timer used on startup to publish routes after
+  // Callback timer used on startup to publish routes after
   // gracefulRestartDuration
   std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
 

@@ -14,6 +14,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/kvstore/KvStore.h>
@@ -26,7 +27,7 @@ namespace openr {
 
 KvStore::KvStore(
     // initializers for immutable state
-    messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
+    messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue,
     messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
@@ -200,7 +201,7 @@ KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
   }
 }
 
-messaging::RQueue<thrift::Publication>
+messaging::RQueue<Publication>
 KvStore::getKvStoreUpdatesReader() {
   return kvParams_.kvStoreUpdatesQueue.getReader();
 }
@@ -2164,7 +2165,9 @@ KvStoreDb::floodPublication(
   publication.nodeIds_ref()->emplace_back(kvParams_.nodeId);
 
   // Flood publication to internal subscribers
-  kvParams_.kvStoreUpdatesQueue.push(publication);
+  Publication pub;
+  pub.tPublication = publication;
+  kvParams_.kvStoreUpdatesQueue.push(pub);
   fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
 
   // Flood keyValue ONLY updates to external neighbors

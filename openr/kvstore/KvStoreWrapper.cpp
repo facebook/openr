@@ -202,8 +202,7 @@ KvStoreWrapper::recvPublication() {
   if (maybePublication.hasError()) {
     throw std::runtime_error(std::string("recvPublication failed"));
   }
-  auto pub = maybePublication.value();
-  return pub;
+  return maybePublication.value().tPublication;
 }
 
 KvStoreSyncEvent

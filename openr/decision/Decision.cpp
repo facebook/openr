@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "Decision.h"
-
 #include <chrono>
 #include <set>
 #include <string>
@@ -26,6 +24,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/decision/Decision.h>
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
 
@@ -105,7 +104,7 @@ DecisionPendingUpdates::addUpdate(
 Decision::Decision(
     std::shared_ptr<const Config> config,
     // consumer queue
-    messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
+    messaging::RQueue<Publication> kvStoreUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     // producer queue
     messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
@@ -153,14 +152,14 @@ Decision::Decision(
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
     LOG(INFO) << "Starting KvStore updates processing fiber";
     while (true) {
-      auto maybeThriftPub = q.get(); // perform read
+      auto maybePub = q.get(); // perform read
       VLOG(2) << "Received KvStore update";
-      if (maybeThriftPub.hasError()) {
+      if (maybePub.hasError()) {
         LOG(INFO) << "Terminating KvStore updates processing fiber";
         break;
       }
       try {
-        processPublication(std::move(maybeThriftPub).value());
+        processPublication(std::move(maybePub).value());
       } catch (const std::exception& e) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
         // collect stack strace then fail the process
@@ -381,6 +380,14 @@ Decision::getRibPolicy() {
     }
   });
   return std::move(sf);
+}
+
+void
+Decision::processPublication(Publication&& publication) {
+  processPublication(std::move(publication.tPublication));
+  if (publication.kvStoreSynced) {
+    // Handle KvStore synced event.
+  }
 }
 
 void

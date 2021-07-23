@@ -1555,10 +1555,10 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     expected.emplace(keyStrB, expectedPrefixEntry1A);
     expected.emplace(keyStrC, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value();
+    auto pub2 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub2, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1595,13 +1595,13 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     expected.emplace(keyStrA, expectedPrefixEntry1B);
     expected.emplace(keyStrC, expectedPrefixEntry1B);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value();
+    auto pub2 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub2, got, gotDeleted);
 
-    auto pub3 = kvStoreUpdatesQueue.get().value();
+    auto pub3 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub3, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1620,10 +1620,10 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
 
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value();
+    auto pub2 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub2, got, gotDeleted);
 
     EXPECT_EQ(0, got.size());
@@ -1683,7 +1683,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
     expected.emplace(keyStrC, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1703,7 +1703,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(0, got.size());
@@ -1724,7 +1724,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
     expected.emplace(keyStrB, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1761,7 +1761,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     // here skip ttl updates
     int expectedPubCnt{3}, gotPubCnt{0};
     while (gotPubCnt < expectedPubCnt) {
-      auto pub = kvStoreUpdatesQueue.get().value();
+      auto pub = kvStoreUpdatesQueue.get().value().tPublication;
       gotPubCnt += readPublication(pub, got, gotDeleted);
     }
 
@@ -1783,7 +1783,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
 
     while (gotDeleted.size() < 2) {
-      auto pub = kvStoreUpdatesQueue.get().value();
+      auto pub = kvStoreUpdatesQueue.get().value().tPublication;
       readPublication(pub, got, gotDeleted);
     }
 
@@ -1849,12 +1849,12 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
   // return false if publication is tll update.
   void
   waitForKvStorePublication(
-      messaging::RQueue<thrift::Publication>& reader,
+      messaging::RQueue<Publication>& reader,
       std::unordered_map<std::string, thrift::PrefixEntry>& exp,
       std::unordered_set<std::string>& expDeleted) {
     while (exp.size() or expDeleted.size()) {
       auto pub = reader.get().value();
-      for (const auto& [key, thriftVal] : *pub.keyVals_ref()) {
+      for (const auto& [key, thriftVal] : *pub.tPublication.keyVals_ref()) {
         if (not thriftVal.value_ref().has_value()) {
           // skip TTL update
           continue;

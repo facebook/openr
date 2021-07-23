@@ -15,12 +15,12 @@ programmed and/or redistributed.
 
 ![Decision Intermodule Communication](https://user-images.githubusercontent.com/51382140/102831445-b70f6580-43a0-11eb-8a8e-190df6c13ec5.png)
 
-- `[Consumer] ReplicateQueue<openr::thrift::Publication>`: read publications
-  (updates) from the `KvStore` to learn Topology and Reachability information
+- `[Consumer] ReplicateQueue<Publication>`: read publications (updates) from the
+  `KvStore` to learn Topology/Reachability information and kvStoreSynced signal.
 
-- `[Consumer] ReplicateQueue<openr::thrift::RouteDatabaseDelta>`: static route
-  updates written by `PrefixManager`. The route delta will be applied to the RIB
-  output by `Decision` module
+- `[Consumer] ReplicateQueue<thrift::RouteDatabaseDelta>`: static route updates
+  written by `PrefixManager`. The route delta will be applied to the RIB output
+  by `Decision` module
 
 - `[Producer] ReplicateQueue<DecisionRouteUpdate>`: the RIB delta consumed by
   the `Fib` module for programming to the underlying platform and the

@@ -25,8 +25,8 @@ node. For `AREA` concept, see `Area.md` for more details.
 
 ![KvStore flow diagram](https://user-images.githubusercontent.com/51382140/102562658-68a25400-408c-11eb-92f2-002a63b3831d.png)
 
-- `[Producer] ReplicateQueue<thrift::Publication>`: propagate
-  `thrift::Publication` to local subscribers( i.e. `Decision`) for any delta
+- `[Producer] ReplicateQueue<Publication>`: propagate `thrift::Publication` and
+  kvStoreSynced signal to local subscribers( i.e. `Decision`) for any delta
   update it notices. Those updates can come from either locally(e.g. prefix
   change from `PrefixManager` or adjacency change from `LinkMonitor`) or
   remotely.

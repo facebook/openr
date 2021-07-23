@@ -105,9 +105,10 @@ class PrefixManagerBenchmarkTestFixture {
       // stop measuring time as this is just parsing
       suspender.rehire();
       if (not checkDeletion) {
-        total += thriftPub.value().keyVals_ref()->size();
+        total += thriftPub.value().tPublication.keyVals_ref()->size();
       } else {
-        for (const auto& [key, tVal] : *thriftPub.value().keyVals_ref()) {
+        for (const auto& [key, tVal] :
+             *thriftPub.value().tPublication.keyVals_ref()) {
           if (auto value = tVal.value_ref()) {
             const auto prefixDb =
                 readThriftObjStr<thrift::PrefixDatabase>(*value, serializer_);

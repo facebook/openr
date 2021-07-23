@@ -4715,8 +4715,10 @@ class DecisionTestFixture : public ::testing::Test {
 
   // publish routeDb
   void
-  sendKvPublication(const thrift::Publication& publication) {
-    kvStoreUpdatesQueue.push(publication);
+  sendKvPublication(const thrift::Publication& tPublication) {
+    Publication publication;
+    publication.tPublication = tPublication;
+    kvStoreUpdatesQueue.push(std::move(publication));
   }
 
   void
@@ -4826,7 +4828,7 @@ class DecisionTestFixture : public ::testing::Test {
   CompactSerializer serializer{};
 
   std::shared_ptr<Config> config;
-  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
@@ -6098,7 +6100,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
       debounceTimeoutMax.count();
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
-  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   auto decision = std::make_unique<Decision>(

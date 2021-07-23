@@ -509,6 +509,14 @@ struct KvStoreSyncEvent {
   }
 };
 
+struct Publication {
+  thrift::Publication tPublication;
+
+  // Boolean flag indicating whether KvStoreDb is synced with all peers among
+  // all areas.
+  bool kvStoreSynced{false};
+};
+
 /**
  * Provides match capability on list of regexes. Will default to prefix match
  * if regex is normal string.

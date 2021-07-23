@@ -36,12 +36,12 @@ KvStoreClientInternal::KvStoreClientInternal(
        this]() mutable noexcept {
         LOG(INFO) << "Starting KvStore updates processing fiber";
         while (true) {
-          auto maybePublication = q.get(); // perform read
-          if (maybePublication.hasError()) {
+          auto maybePub = q.get(); // perform read
+          if (maybePub.hasError()) {
             LOG(INFO) << "Terminating KvStore updates processing fiber";
             break;
           }
-          processPublication(maybePublication.value());
+          processPublication(maybePub.value().tPublication);
         }
       });
 

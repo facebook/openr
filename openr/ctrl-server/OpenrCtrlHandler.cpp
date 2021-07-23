@@ -67,22 +67,23 @@ OpenrCtrlHandler::OpenrCtrlHandler(
          this]() mutable noexcept {
           LOG(INFO) << "Starting KvStore updates processing fiber";
           while (true) {
-            auto maybePublication = q.get(); // perform read
+            auto maybePub = q.get(); // perform read
             VLOG(2) << "Received publication from KvStore";
-            if (maybePublication.hasError()) {
+            if (maybePub.hasError()) {
               LOG(INFO) << "Terminating KvStore publications processing fiber";
               break;
             }
 
             kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
               for (auto& [_, publisher] : kvStorePublishers_) {
-                publisher->publish(maybePublication.value());
+                publisher->publish(maybePub.value().tPublication);
               }
             });
 
             bool isAdjChanged = false;
             // check if any of KeyVal has 'adj' update
-            for (auto& [key, val] : *maybePublication.value().keyVals_ref()) {
+            for (auto& [key, val] :
+                 maybePub.value().tPublication.get_keyVals()) {
               // check if we have any value update.
               // Ttl refreshing won't update any value.
               if (!val.value_ref().has_value()) {
@@ -101,7 +102,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               // thrift::Publication contains "adj:*" key change.
               // Clean ALL pending promises
               longPollReqs_.withWLock([&](auto& longPollReqs) {
-                for (auto& kv : longPollReqs[maybePublication->get_area()]) {
+                for (auto& kv :
+                     longPollReqs[maybePub->tPublication.get_area()]) {
                   auto& p = kv.second.first;
                   p.setValue(true);
                 }
@@ -111,7 +113,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               longPollReqs_.withWLock([&](auto& longPollReqs) {
                 auto now = getUnixTimeStampMs();
                 std::vector<int64_t> reqsToClean;
-                for (auto& kv : longPollReqs[maybePublication->get_area()]) {
+                for (auto& kv :
+                     longPollReqs[maybePub->tPublication.get_area()]) {
                   auto& clientId = kv.first;
                   auto& req = kv.second;
 
@@ -129,7 +132,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 
                 // cleanup expired requests since no ADJ change observed
                 for (auto& clientId : reqsToClean) {
-                  longPollReqs[maybePublication->get_area()].erase(clientId);
+                  longPollReqs[maybePub->tPublication.get_area()].erase(
+                      clientId);
                 }
               });
             }
