@@ -155,7 +155,8 @@ class KvStoreDb : public DualNode {
       KvStoreParams& kvParams,
       const std::string& area,
       bool isFloodRoot,
-      const std::string& nodeId);
+      const std::string& nodeId,
+      std::function<void()> initialKvStoreSyncedCallback);
 
   ~KvStoreDb() override;
 
@@ -232,6 +233,11 @@ class KvStoreDb : public DualNode {
   // util function to fetch peer by its state
   std::vector<std::string> getPeersByState(thrift::KvStorePeerState state);
 
+  inline bool
+  getInitialSyncedWithPeers() const {
+    return initialSyncCompleted_;
+  }
+
   // util function for state transition
   static thrift::KvStorePeerState getNextState(
       std::optional<thrift::KvStorePeerState> const& currState,
@@ -271,6 +277,12 @@ class KvStoreDb : public DualNode {
       std::string const& peerName,
       thrift::KvStorePeerState oldState,
       thrift::KvStorePeerState newState);
+
+  // Process KvStore sync event in OpenR initialization procedure. A syncing
+  // completion signal will be marked for either:
+  // 1) achieving INITIALIZED state or
+  // 2) running into THRIFT_API_ERROR
+  void processInitializationEvent();
 
   // method to scan over thriftPeers to send full-dump request
   void requestThriftPeerSync();
@@ -415,10 +427,17 @@ class KvStoreDb : public DualNode {
     // peer. Will flood to them in finalizeFullSync(), the last step of initial
     // sync.
     std::unordered_set<std::string> pendingKeysDuringInitialization;
+
+    // Number of occured Thrift API errors in the process of syncing with peer.
+    int64_t numThriftApiErrors{0};
   };
 
-  // set of peers with all info over thrift channel
+  // Set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
+
+  // Boolean flag indicating whether initial KvStoreDb sync with all peers
+  // completed in OpenR initialization procedure.
+  bool initialSyncCompleted_{false};
 
   // store keys mapped to (version, originatoId, value)
   std::unordered_map<std::string, thrift::Value> kvStore_;
@@ -451,6 +470,10 @@ class KvStoreDb : public DualNode {
   std::
       unordered_map<std::optional<std::string>, std::unordered_set<std::string>>
           publicationBuffer_{};
+
+  // Callback function to signal KvStore that KvStoreDb sync with all peers are
+  // completed.
+  std::function<void()> initialKvStoreSyncedCallback_;
 
   // max parallel syncs allowed
   size_t parallelSyncLimitOverThrift_{2};
@@ -538,6 +561,10 @@ class KvStore final : public OpenrEventBase {
   // API to fetch state of peerNode, used for unit-testing
   folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
   getKvStorePeerState(std::string const& area, std::string const& peerName);
+
+  // Callback function for KvStoreDb to indicate initial KvStore sync is
+  // is done within configured area during Open/R initialization procedure.
+  void initialKvStoreDbSynced();
 
  private:
   // disable copying

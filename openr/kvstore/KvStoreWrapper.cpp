@@ -205,6 +205,16 @@ KvStoreWrapper::recvPublication() {
   return maybePublication.value().tPublication;
 }
 
+void
+KvStoreWrapper::recvKvStoreSyncedSignal() {
+  // Read publication from queue, and make sure kvStoreSynced flag is set.
+  auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
+  if (maybePublication.hasError()) {
+    throw std::runtime_error(std::string("recvPublication failed"));
+  }
+  CHECK(maybePublication.value().kvStoreSynced);
+}
+
 KvStoreSyncEvent
 KvStoreWrapper::recvSyncEvent() {
   auto maybeEvent = kvStoreSyncEventsQueueReader_.get(); // perform read
@@ -224,12 +234,14 @@ KvStoreWrapper::getFloodTopo(AreaId const& area) {
 bool
 KvStoreWrapper::addPeer(
     AreaId const& area, std::string peerName, thrift::PeerSpec spec) {
-  // Prepare peerAddParams
-  thrift::PeersMap peersMap;
-  peersMap.emplace(peerName, spec);
+  thrift::PeersMap peers{{peerName, spec}};
+  return addPeers(area, peers);
+}
 
+bool
+KvStoreWrapper::addPeers(AreaId const& area, thrift::PeersMap& peers) {
   try {
-    kvStore_->addUpdateKvStorePeers(area, peersMap).get();
+    kvStore_->addUpdateKvStorePeers(area, peers).get();
   } catch (std::exception const& e) {
     LOG(ERROR) << "Failed to add peers: " << folly::exceptionStr(e);
     return false;

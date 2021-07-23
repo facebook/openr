@@ -73,6 +73,10 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
           stores[i - 1]->getPeerSpec());
     }
 
+    for (const auto& store : stores) {
+      store->recvKvStoreSyncedSignal();
+    }
+
     for (uint32_t i = 0; i < kNumClients; i++) {
       auto const& store = stores[i % kNumStores];
       auto client = std::make_unique<KvStoreClientInternal>(

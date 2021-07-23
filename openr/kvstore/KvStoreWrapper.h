@@ -138,6 +138,11 @@ class KvStoreWrapper {
    */
   thrift::Publication recvPublication();
 
+  /**
+   * API to listen for KvStore sync signal on PUB queue.
+   */
+  void recvKvStoreSyncedSignal();
+
   /*
    * API to read initial sync event from kvStoreSyncEventsQueue
    */
@@ -153,6 +158,7 @@ class KvStoreWrapper {
    * returns false.
    */
   bool addPeer(AreaId const& area, std::string peerName, thrift::PeerSpec spec);
+  bool addPeers(AreaId const& area, thrift::PeersMap& peers);
   bool delPeer(AreaId const& area, std::string peerName);
 
   std::optional<thrift::KvStorePeerState> getPeerState(

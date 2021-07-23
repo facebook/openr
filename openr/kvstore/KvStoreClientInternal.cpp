@@ -41,7 +41,11 @@ KvStoreClientInternal::KvStoreClientInternal(
             LOG(INFO) << "Terminating KvStore updates processing fiber";
             break;
           }
-          processPublication(maybePub.value().tPublication);
+          // Publication.kvStoreSynced is published dedicatedly in OpenR
+          // initialization procedure without any thrift::Publication.
+          if (not maybePub.value().kvStoreSynced) {
+            processPublication(maybePub.value().tPublication);
+          }
         }
       });
 

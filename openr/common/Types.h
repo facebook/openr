@@ -514,7 +514,12 @@ struct Publication {
 
   // Boolean flag indicating whether KvStoreDb is synced with all peers among
   // all areas.
-  bool kvStoreSynced{false};
+  bool kvStoreSynced;
+
+  explicit Publication(const thrift::Publication& tPub)
+      : tPublication(tPub), kvStoreSynced(false) {}
+
+  explicit Publication(bool kvStoreSynced) : kvStoreSynced(kvStoreSynced) {}
 };
 
 /**

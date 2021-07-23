@@ -138,9 +138,7 @@ class DecisionWrapper {
   // publish routeDb
   void
   sendKvPublication(const thrift::Publication& publication) {
-    Publication pub;
-    pub.tPublication = publication;
-    kvStoreUpdatesQueue.push(pub);
+    kvStoreUpdatesQueue.push(Publication(publication));
   }
 
  private:

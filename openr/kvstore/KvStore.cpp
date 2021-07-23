@@ -121,7 +121,8 @@ KvStore::KvStore(
             kvParams_,
             area,
             config->getKvStoreConfig().is_flood_root_ref().value_or(false),
-            config->getNodeName()));
+            config->getNodeName(),
+            std::bind(&KvStore::initialKvStoreDbSynced, this)));
   }
 }
 
@@ -579,6 +580,21 @@ KvStore::processKvStoreDualMessage(
   return sf;
 }
 
+void
+KvStore::initialKvStoreDbSynced() {
+  for (auto& [_, kvStoreDb] : kvStoreDb_) {
+    if (not kvStoreDb.getInitialSyncedWithPeers()) {
+      return;
+    }
+  }
+  LOG(INFO) << fmt::format(
+      "[Initialization] KvStoreDb sync is completed in all {} areas.",
+      kvStoreDb_.size());
+
+  // Publish KvStore synced signal.
+  kvParams_.kvStoreUpdatesQueue.push(Publication(true /*kvStoreSynced*/));
+}
+
 folly::SemiFuture<std::map<std::string, int64_t>>
 KvStore::getCounters() {
   auto pf = folly::makePromiseContract<std::map<std::string, int64_t>>();
@@ -871,10 +887,12 @@ KvStoreDb::KvStoreDb(
     KvStoreParams& kvParams,
     const std::string& area,
     bool isFloodRoot,
-    const std::string& nodeId)
+    const std::string& nodeId,
+    std::function<void()> initialKvStoreSyncedCallback)
     : DualNode(nodeId, isFloodRoot),
       kvParams_(kvParams),
       area_(area),
+      initialKvStoreSyncedCallback_(initialKvStoreSyncedCallback),
       evb_(evb) {
   if (kvParams_.floodRate) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
@@ -1476,6 +1494,44 @@ KvStoreDb::processThriftSuccess(
   } else {
     thriftSyncTimer_->cancelTimeout();
   }
+
+  // Fully synced with peers, check whether initial sync is completed.
+  if (not initialSyncCompleted_) {
+    processInitializationEvent();
+  }
+}
+
+void
+KvStoreDb::processInitializationEvent() {
+  int initialSyncSuccessCnt = 0;
+  int initialSyncFailureCnt = 0;
+  for (const auto& [peerName, peerStore] : thriftPeers_) {
+    if (peerStore.peerSpec.get_state() ==
+        thrift::KvStorePeerState::INITIALIZED) {
+      // Achieved INITIALIZED state.
+      ++initialSyncSuccessCnt;
+    } else if (peerStore.numThriftApiErrors > 0) {
+      // Running into THRIFT_API_ERROR is treated as sync completion signal.
+      ++initialSyncFailureCnt;
+    } else {
+      // Return if there are peers still in IDLE/SYNCING state and no thrift
+      // errors have occured yet.
+      return;
+    }
+  }
+
+  // Sync with all peers are completed.
+  initialSyncCompleted_ = true;
+
+  LOG(INFO) << fmt::format(
+      "[Initialization] KvStore area {} synchronization completed, with {} "
+      "peers fully synced and {} peers failed with Thrift errors.",
+      area_,
+      initialSyncSuccessCnt,
+      initialSyncFailureCnt);
+
+  // Trigger KvStore callback.
+  initialKvStoreSyncedCallback_();
 }
 
 // This function will process the exception hit during full-dump:
@@ -1506,7 +1562,14 @@ KvStoreDb::processThriftFailure(
   auto oldState = peer.peerSpec.get_state();
   peer.peerSpec.state_ref() =
       getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR);
+  ++peer.numThriftApiErrors;
   logStateTransition(peerName, oldState, peer.peerSpec.get_state());
+
+  // Thrift error is treated as a completion signal of syncing with peer. Check
+  // whether initial sync is completed.
+  if (not initialSyncCompleted_) {
+    processInitializationEvent();
+  }
 
   // Schedule another round of `thriftSyncTimer_` in case it is
   // NOT scheduled.
@@ -2165,9 +2228,7 @@ KvStoreDb::floodPublication(
   publication.nodeIds_ref()->emplace_back(kvParams_.nodeId);
 
   // Flood publication to internal subscribers
-  Publication pub;
-  pub.tPublication = publication;
-  kvParams_.kvStoreUpdatesQueue.push(pub);
+  kvParams_.kvStoreUpdatesQueue.push(Publication(publication));
   fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
 
   // Flood keyValue ONLY updates to external neighbors

@@ -174,6 +174,10 @@ class MultipleAreaFixture : public MultipleStoreFixture {
     for (auto& [peerName, peerSpec] : peers3) {
       EXPECT_TRUE(store3->addPeer(podArea, peerName, peerSpec));
     }
+
+    store1->recvKvStoreSyncedSignal();
+    store2->recvKvStoreSyncedSignal();
+    store3->recvKvStoreSyncedSignal();
   }
 
   void
@@ -610,6 +614,9 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
   store2->addPeer(kTestingAreaName, store1->getNodeId(), store1->getPeerSpec());
   store2->addPeer(kTestingAreaName, store3->getNodeId(), store3->getPeerSpec());
   store3->addPeer(kTestingAreaName, store2->getNodeId(), store2->getPeerSpec());
+  store1->recvKvStoreSyncedSignal();
+  store2->recvKvStoreSyncedSignal();
+  store3->recvKvStoreSyncedSignal();
 
   // add key in store1, check for the key in all stores
   // Create another OpenrEventBase instance for looping clients

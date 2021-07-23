@@ -4716,9 +4716,7 @@ class DecisionTestFixture : public ::testing::Test {
   // publish routeDb
   void
   sendKvPublication(const thrift::Publication& tPublication) {
-    Publication publication;
-    publication.tPublication = tPublication;
-    kvStoreUpdatesQueue.push(std::move(publication));
+    kvStoreUpdatesQueue.push(Publication(tPublication));
   }
 
   void

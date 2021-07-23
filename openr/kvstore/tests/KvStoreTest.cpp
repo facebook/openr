@@ -106,12 +106,15 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   createKvStore(
       std::string nodeId,
       thrift::KvstoreConfig kvStoreConf = getTestKvConf(),
-      const std::vector<thrift::AreaConfig>& areas = {}) {
+      const std::vector<thrift::AreaConfig>& areas = {},
+      std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
+          std::nullopt) {
     auto tConfig = getBasicOpenrConfig(nodeId, "domain", areas);
     *tConfig.kvstore_config_ref() = kvStoreConf;
     config_ = std::make_shared<Config>(tConfig);
 
-    stores_.emplace_back(std::make_unique<KvStoreWrapper>(config_));
+    stores_.emplace_back(
+        std::make_unique<KvStoreWrapper>(config_, peerUpdatesQueue));
     return stores_.back().get();
   }
 
@@ -1170,21 +1173,34 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   EXPECT_GE(kTtlMs, *maybeThriftVal->ttl_ref());
   maybeThriftVal->ttl_ref() = kTtlMs;
   EXPECT_EQ(thriftVal2, *maybeThriftVal);
-  /* sleep override */
+  // sleep override
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   EXPECT_TRUE(store1->addPeer(
       kTestingAreaName, store0->getNodeId(), store0->getPeerSpec()));
-  // wait to sync kvstore
-  std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  // key 'test1' should be added with remaining TTL
-  maybeThriftVal = store1->getKey(kTestingAreaName, "test1");
-  ASSERT_TRUE(maybeThriftVal.has_value());
-  EXPECT_GE(kTtlMs - 200, *maybeThriftVal.value().ttl_ref());
 
-  // key 'test2' should not be updated, it should have kTtlMs
-  maybeThriftVal = store1->getKey(kTestingAreaName, "test2");
-  ASSERT_TRUE(maybeThriftVal.has_value());
-  EXPECT_GE(kTtlMs, *maybeThriftVal.value().ttl_ref());
+  OpenrEventBase evb;
+  folly::Baton waitBaton;
+  int scheduleAt{0};
+  // wait to sync kvstore. Set as 100ms sine p99 of KvStore convergece completed
+  // within 99ms. Ref: https://fburl.com/unidash/htfg4joa.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 100), [&]() noexcept {
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // key 'test1' should be added with remaining TTL
+        maybeThriftVal = store1->getKey(kTestingAreaName, "test1");
+        ASSERT_TRUE(maybeThriftVal.has_value());
+        EXPECT_GE(kTtlMs - 200, *maybeThriftVal.value().ttl_ref());
+
+        // key 'test2' should not be updated, it should have kTtlMs
+        maybeThriftVal = store1->getKey(kTestingAreaName, "test2");
+        ASSERT_TRUE(maybeThriftVal.has_value());
+        EXPECT_GE(kTtlMs, *maybeThriftVal.value().ttl_ref());
+        evb.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
 }
 
 /**
@@ -1369,25 +1385,21 @@ TEST_F(KvStoreTestFixture, FloodOptimizationWithBackwardCompatibility) {
   rsw002->run();
 
   // Add peers to all stores
-  EXPECT_TRUE(fsw001->addPeer(
-      kTestingAreaName, rsw001->getNodeId(), rsw001->getPeerSpec()));
-  EXPECT_TRUE(fsw001->addPeer(
-      kTestingAreaName, rsw002->getNodeId(), rsw002->getPeerSpec()));
+  thrift::PeersMap rswPeers = {
+      {rsw001->getNodeId(), rsw001->getPeerSpec()},
+      {rsw002->getNodeId(), rsw002->getPeerSpec()}};
+  EXPECT_TRUE(fsw001->addPeers(kTestingAreaName, rswPeers));
+  EXPECT_TRUE(fsw002->addPeers(kTestingAreaName, rswPeers));
 
-  EXPECT_TRUE(fsw002->addPeer(
-      kTestingAreaName, rsw001->getNodeId(), rsw001->getPeerSpec()));
-  EXPECT_TRUE(fsw002->addPeer(
-      kTestingAreaName, rsw002->getNodeId(), rsw002->getPeerSpec()));
-
-  EXPECT_TRUE(rsw001->addPeer(
-      kTestingAreaName, fsw001->getNodeId(), fsw001->getPeerSpec()));
-  EXPECT_TRUE(rsw001->addPeer(
-      kTestingAreaName, fsw002->getNodeId(), fsw002->getPeerSpec()));
-
-  EXPECT_TRUE(rsw002->addPeer(
-      kTestingAreaName, fsw001->getNodeId(), fsw001->getPeerSpec()));
-  EXPECT_TRUE(rsw002->addPeer(
-      kTestingAreaName, fsw002->getNodeId(), fsw002->getPeerSpec()));
+  thrift::PeersMap fswPeers = {
+      {fsw001->getNodeId(), fsw001->getPeerSpec()},
+      {fsw002->getNodeId(), fsw002->getPeerSpec()}};
+  EXPECT_TRUE(rsw001->addPeers(kTestingAreaName, fswPeers));
+  EXPECT_TRUE(rsw002->addPeers(kTestingAreaName, fswPeers));
+  fsw001->recvKvStoreSyncedSignal();
+  fsw002->recvKvStoreSyncedSignal();
+  rsw001->recvKvStoreSyncedSignal();
+  rsw002->recvKvStoreSyncedSignal();
 
   // need to wait on this for the list of nodeIds to be as expected.
   waitForAllPeersInitialized();
@@ -1455,25 +1467,20 @@ TEST_F(KvStoreTestFixture, DualTest) {
   n1->run();
 
   // Add peers to all stores
-  EXPECT_TRUE(
-      r0->addPeer(kTestingAreaName, n0->getNodeId(), n0->getPeerSpec()));
-  EXPECT_TRUE(
-      r0->addPeer(kTestingAreaName, n1->getNodeId(), n1->getPeerSpec()));
-
-  EXPECT_TRUE(
-      r1->addPeer(kTestingAreaName, n0->getNodeId(), n0->getPeerSpec()));
-  EXPECT_TRUE(
-      r1->addPeer(kTestingAreaName, n1->getNodeId(), n1->getPeerSpec()));
-
-  EXPECT_TRUE(
-      n0->addPeer(kTestingAreaName, r0->getNodeId(), r0->getPeerSpec()));
-  EXPECT_TRUE(
-      n0->addPeer(kTestingAreaName, r1->getNodeId(), r1->getPeerSpec()));
-
-  EXPECT_TRUE(
-      n1->addPeer(kTestingAreaName, r0->getNodeId(), r0->getPeerSpec()));
-  EXPECT_TRUE(
-      n1->addPeer(kTestingAreaName, r1->getNodeId(), r1->getPeerSpec()));
+  thrift::PeersMap nPeers = {
+      {n0->getNodeId(), n0->getPeerSpec()},
+      {n1->getNodeId(), n1->getPeerSpec()}};
+  EXPECT_TRUE(r0->addPeers(kTestingAreaName, nPeers));
+  EXPECT_TRUE(r1->addPeers(kTestingAreaName, nPeers));
+  thrift::PeersMap rPeers = {
+      {r0->getNodeId(), r0->getPeerSpec()},
+      {r1->getNodeId(), r1->getPeerSpec()}};
+  EXPECT_TRUE(n0->addPeers(kTestingAreaName, rPeers));
+  EXPECT_TRUE(n1->addPeers(kTestingAreaName, rPeers));
+  r0->recvKvStoreSyncedSignal();
+  r1->recvKvStoreSyncedSignal();
+  n0->recvKvStoreSyncedSignal();
+  n1->recvKvStoreSyncedSignal();
 
   // let kvstore dual sync
   /* sleep override */
@@ -2055,18 +2062,25 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "Starting store under test";
 
   // set up the store that we'll be testing
+  messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue;
   auto myNodeId = getNodeId(kOriginBase, kNumStores);
-  auto myStore = createKvStore(myNodeId);
+  auto myStore = createKvStore(
+      myNodeId, getTestKvConf(), {} /*areas*/, myPeerUpdatesQueue.getReader());
   myStore->run();
 
   // NOTE: It is important to add peers after starting our store to avoid
   // race condition where certain updates are lost over PUB/SUB channel
+  thrift::PeersMap myPeers;
   for (auto& store : peerStores) {
-    myStore->addPeer(
-        kTestingAreaName, store->getNodeId(), store->getPeerSpec());
+    myPeers.emplace(store->getNodeId(), store->getPeerSpec());
     store->addPeer(
         kTestingAreaName, myStore->getNodeId(), myStore->getPeerSpec());
   }
+
+  // Push peer event to myPeerUpdatesQueue.
+  PeerEvent myPeerEvent{
+      {kTestingAreaName, AreaPeerEvent(myPeers, {} /*peersToDel*/)}};
+  myPeerUpdatesQueue.push(myPeerEvent);
 
   // Wait for full-sync to complete. Full-sync is complete when all of our
   // neighbors receive all the keys and we must receive `kNumStores`
@@ -2083,6 +2097,10 @@ TEST_F(KvStoreTestFixture, BasicSync) {
       }
     }
   }
+
+  // Expect myStore publishing KVSTORE_SYNCED after initial KvStoreDb sync with
+  // peers.
+  myStore->recvKvStoreSyncedSignal();
 
   // Verify myStore database
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll(kTestingAreaName));
@@ -2242,6 +2260,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
       EXPECT_TRUE(store->addPeer(
           kTestingAreaName, peerStore->getNodeId(), peerStore->getPeerSpec()));
     }
+    store->recvKvStoreSyncedSignal();
   }
 
   // need to wait on this for the list of nodeIds to be as expected.
@@ -2538,6 +2557,8 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
 
   store0->addPeer(kTestingAreaName, store1->getNodeId(), store1->getPeerSpec());
   store1->addPeer(kTestingAreaName, store0->getNodeId(), store0->getPeerSpec());
+  store0->recvKvStoreSyncedSignal();
+  store1->recvKvStoreSyncedSignal();
 
   /**
    * check sync works fine, add a key with TTL > ttlDecr in store1,
