@@ -4604,7 +4604,7 @@ class DecisionTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
-    // reset all global counters
+    // Reset all global counters
     fb303::fbData->resetAllData();
 
     auto tConfig = createConfig();
@@ -4622,6 +4622,9 @@ class DecisionTestFixture : public ::testing::Test {
       LOG(INFO) << "Decision thread finishing";
     });
     decision->waitUntilRunning();
+
+    // Reset initial KvStore sync event as not sent.
+    kvStoreSyncEventSent = false;
   }
 
   void
@@ -4653,9 +4656,7 @@ class DecisionTestFixture : public ::testing::Test {
         debounceTimeoutMin.count();
     tConfig.decision_config_ref()->debounce_max_ms_ref() =
         debounceTimeoutMax.count();
-
-    // set coldstart to be longer than debounce time
-    tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
+    tConfig.enable_initialization_process_ref() = true;
     return tConfig;
   }
 
@@ -4715,8 +4716,15 @@ class DecisionTestFixture : public ::testing::Test {
 
   // publish routeDb
   void
-  sendKvPublication(const thrift::Publication& tPublication) {
+  sendKvPublication(
+      const thrift::Publication& tPublication, bool prefixPubExists = true) {
     kvStoreUpdatesQueue.push(Publication(tPublication));
+    if (prefixPubExists and (not kvStoreSyncEventSent)) {
+      // Send KvStore initial synced event.
+      kvStoreUpdatesQueue.push(Publication(true /*kvStoreSynced*/));
+
+      kvStoreSyncEventSent = true;
+    }
   }
 
   void
@@ -4837,6 +4845,9 @@ class DecisionTestFixture : public ::testing::Test {
 
   // Thread in which decision will be running.
   std::unique_ptr<std::thread> decisionThread{nullptr};
+
+  // Initial KvStore synced signal is sent.
+  bool kvStoreSyncEventSent{false};
 };
 
 /*
@@ -5328,22 +5339,15 @@ TEST_F(DecisionTestFixture, BasicOperations) {
  */
 TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   // Send adj publication
-  sendKvPublication(createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
-      {},
-      {},
-      {},
-      std::string("")));
-
-  // Send prefix publication
-  sendKvPublication(createThriftPublication(
-      {createPrefixKeyValue("1", 1, addr1),
-       createPrefixKeyValue("2", 1, addr2)},
-      {},
-      {},
-      {},
-      std::string("")));
+  sendKvPublication(
+      createThriftPublication(
+          {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+           {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
+          {},
+          {},
+          {},
+          std::string("")),
+      false /*prefixPubExists*/);
 
   // Send static MPLS routes
   thrift::RouteDatabaseDelta staticRoutes;
@@ -5358,6 +5362,15 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
     staticRoutes.mplsRoutesToUpdate_ref()->push_back(mplsRoute);
   }
   sendStaticRoutesUpdate(staticRoutes);
+
+  // Send prefix publication
+  sendKvPublication(createThriftPublication(
+      {createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {},
+      {},
+      {},
+      std::string("")));
 
   // Receive & verify all the expected updates
   auto routeDbDelta = recvRouteUpdates();
@@ -5429,7 +5442,6 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
   // Test1: advertise prefixes from `PrefixManager`
   //
   evb.scheduleTimeout(scheduleAt += 3 * debounceTimeoutMax, [&]() noexcept {
-    // wait for initial cold-timer to fire
     auto routeDbDelta = recvRouteUpdates();
 
     LOG(INFO) << "Advertising static prefixes from PrefixManager";
@@ -6700,9 +6712,6 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   thrift::Publication initialPub;
   initialPub.area_ref() = kTestingAreaName;
 
-  // wait for the inital coldstart sync, expect it to be empty
-  EXPECT_EQ(0, recvRouteUpdates().unicastRoutesToUpdate.size());
-
   std::string keyToDup;
 
   // Create full topology
@@ -7045,8 +7054,6 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
         false, // enableBgpRouteProgramming
         true // enableV4OverV6Nexthop
     );
-    // set coldstart to be longer than debounce time
-    tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
     tConfig.decision_config_ref()->debounce_min_ms_ref() =
         debounceTimeoutMin.count();
     tConfig.decision_config_ref()->debounce_max_ms_ref() =
@@ -7173,8 +7180,6 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
         false, // enableBgpRouteProgramming
         true // enableV4OverV6Nexthop
     );
-    // set coldstart to be longer than debounce time
-    tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
     tConfig.decision_config_ref()->debounce_min_ms_ref() =
         debounceTimeoutMin.count();
     tConfig.decision_config_ref()->debounce_max_ms_ref() =

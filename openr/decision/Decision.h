@@ -197,9 +197,6 @@ class Decision : public OpenrEventBase {
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
 
-  // Process Publication from KvStore
-  void processPublication(Publication&& publication);
-
   // Process thrift publication from KvStore
   void processPublication(thrift::Publication&& thriftPub);
 
@@ -273,6 +270,10 @@ class Decision : public OpenrEventBase {
    * queue and static routes update queue
    */
   AsyncDebounce<std::chrono::milliseconds> rebuildRoutesDebounced_;
+
+  // Boolean flag indicating whether KvStore synced signal is received in OpenR
+  // initialization procedure.
+  bool initialKvStoreSynced_{false};
 };
 
 } // namespace openr

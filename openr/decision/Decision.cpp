@@ -131,14 +131,19 @@ Decision::Decision(
       config->isV4OverV6NexthopEnabled(),
       config->getDecisionSrPolicyConfig());
 
+  // TODO: Remove coldStartTimer_ and eor_time_s_ref from config after OpenR
+  // initialization procedure.
   coldStartTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     pendingUpdates_.setNeedsFullRebuild();
     rebuildRoutes("COLD_START_UPDATE");
   });
 
-  auto eorTimeRef = config->getConfig().eor_time_s_ref();
-  CHECK(eorTimeRef.has_value());
-  coldStartTimer_->scheduleTimeout(std::chrono::seconds(*eorTimeRef));
+  // Do not activate coldStartTimer_ if new OpenR initialization is enabled.
+  if (not config_->getConfig().get_enable_initialization_process()) {
+    auto eorTimeRef = config->getConfig().eor_time_s_ref();
+    CHECK(eorTimeRef.has_value());
+    coldStartTimer_->scheduleTimeout(std::chrono::seconds(*eorTimeRef));
+  }
 
   // Schedule periodic timer for counter submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -159,7 +164,18 @@ Decision::Decision(
         break;
       }
       try {
-        processPublication(std::move(maybePub).value());
+        auto& pub = maybePub.value();
+        // kvStoreSynced and tPublication are exclusive with each other.
+        if (pub.kvStoreSynced) {
+          // In OpenR initialization procedure, receiving kvStoreSynced signal
+          // indicates Decision has received all KvStore publications, and is
+          // ready to start initial RIB computation.
+          LOG(INFO) << "[Initialization] KVSOTORE_SYNCED signal is received";
+          initialKvStoreSynced_ = true;
+          pendingUpdates_.setNeedsFullRebuild();
+        } else {
+          processPublication(std::move(pub.tPublication));
+        }
       } catch (const std::exception& e) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
         // collect stack strace then fail the process
@@ -383,15 +399,6 @@ Decision::getRibPolicy() {
 }
 
 void
-Decision::processPublication(Publication&& publication) {
-  if (publication.kvStoreSynced) {
-    // Handle KvStore synced event.
-  } else {
-    processPublication(std::move(publication.tPublication));
-  }
-}
-
-void
 Decision::processPublication(thrift::Publication&& thriftPub) {
   CHECK(not thriftPub.area_ref()->empty());
   auto const& area = *thriftPub.area_ref();
@@ -537,7 +544,14 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
 
 void
 Decision::rebuildRoutes(std::string const& event) {
-  if (coldStartTimer_->isScheduled()) {
+  // If OpenR initialization procedure is enable, donot trigger initial route
+  // computation until KvStoreSynced_ signal is received.
+  // Otherwise, wait for coldStartTimer_ before initial route computation.
+  if (config_->getConfig().get_enable_initialization_process()) {
+    if (not initialKvStoreSynced_) {
+      return;
+    }
+  } else if (coldStartTimer_->isScheduled()) {
     return;
   }
 
