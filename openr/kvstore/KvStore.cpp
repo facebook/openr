@@ -591,8 +591,11 @@ KvStore::initialKvStoreDbSynced() {
       "[Initialization] KvStoreDb sync is completed in all {} areas.",
       kvStoreDb_.size());
 
-  // Publish KvStore synced signal.
-  kvParams_.kvStoreUpdatesQueue.push(Publication(true /*kvStoreSynced*/));
+  if (not initialSyncSignalSent_) {
+    // Publish KvStore synced signal.
+    kvParams_.kvStoreUpdatesQueue.push(Publication(true /*kvStoreSynced*/));
+    initialSyncSignalSent_ = true;
+  }
 }
 
 folly::SemiFuture<std::map<std::string, int64_t>>

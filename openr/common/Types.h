@@ -509,17 +509,24 @@ struct KvStoreSyncEvent {
   }
 };
 
+/**
+ * Structure defining KvStore publication, either kvStoreSynced signal or
+ * Thrift format KvStore publication.
+ * NOTE: kvStoreSynced{true} is published once only in OpenR initialization
+ * process. kvStoreSynced and tPublication are exclusive, aka, only one of them
+ * should be set in the struct. Defined explicit constructor to realize that.
+ */
 struct Publication {
-  thrift::Publication tPublication;
-
   // Boolean flag indicating whether KvStoreDb is synced with all peers among
   // all areas.
-  bool kvStoreSynced;
+  bool kvStoreSynced{false};
 
-  explicit Publication(const thrift::Publication& tPub)
-      : tPublication(tPub), kvStoreSynced(false) {}
+  // Thrift format KvStore publication.
+  thrift::Publication tPublication;
 
   explicit Publication(bool kvStoreSynced) : kvStoreSynced(kvStoreSynced) {}
+
+  explicit Publication(const thrift::Publication& tPub) : tPublication(tPub) {}
 };
 
 /**

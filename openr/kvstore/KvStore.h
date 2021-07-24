@@ -606,5 +606,9 @@ class KvStore final : public OpenrEventBase {
 
   // map of area IDs and instance of KvStoreDb
   std::unordered_map<std::string /* area ID */, KvStoreDb> kvStoreDb_{};
+
+  // Boolean flag to indicate if kvStoreSynced signal is published in OpenR
+  // initialization process.
+  bool initialSyncSignalSent_{false};
 };
 } // namespace openr
