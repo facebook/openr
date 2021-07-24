@@ -951,4 +951,15 @@ struct OpenrConfig {
    * NOTE: This must be specified if bgp_peering is enabled
    */
   104: optional BgpRouteTranslationConfig bgp_translation_config;
+
+  /**
+   * ATTN: All of the temp config knobs serving for gradual rollout purpose use
+   * id range of 200 - 300
+   */
+
+  /**
+   * Flag to indicate if signal based OpenR initialization process is enabled.
+   * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html.
+   */
+  200: bool enable_initialization_process = false;
 } (cpp.minimize_padding)
