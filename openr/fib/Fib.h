@@ -343,7 +343,6 @@ class Fib final : public OpenrEventBase {
 
   // Thrift client connection to switch FIB Agent using which we actually
   // manipulate routes.
-  folly::EventBase evb_;
   folly::AsyncSocket* socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 

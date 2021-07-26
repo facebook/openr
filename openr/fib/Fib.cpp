@@ -640,7 +640,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
       LOG(INFO) << "Skipping deletion of unicast routes in dryrun ... ";
     } else {
       try {
-        createFibClient(evb_, socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), socket_, client_, thriftPort_);
         client_->sync_deleteUnicastRoutes(kFibId_, unicastRoutesToDelete);
       } catch (std::exception& e) {
         success = false;
@@ -671,7 +671,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
       LOG(INFO) << "Skipping add/update of unicast routes in dryrun ... ";
     } else {
       try {
-        createFibClient(evb_, socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), socket_, client_, thriftPort_);
         client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
         success = false;
@@ -732,7 +732,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
       LOG(INFO) << "Skipping deletion of mpls routes in dryrun ... ";
     } else {
       try {
-        createFibClient(evb_, socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), socket_, client_, thriftPort_);
         client_->sync_deleteMplsRoutes(kFibId_, mplsRoutesToDelete);
       } catch (std::exception const& e) {
         success = false;
@@ -763,7 +763,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
       LOG(INFO) << "Skipping add/update of mpls routes in dryrun ... ";
     } else {
       try {
-        createFibClient(evb_, socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), socket_, client_, thriftPort_);
         client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
         success = false;
@@ -847,7 +847,7 @@ Fib::syncRoutes() {
     LOG(INFO) << "Skipping programming of unicast routes in dryrun ... ";
   } else {
     try {
-      createFibClient(evb_, socket_, client_, thriftPort_);
+      createFibClient(*getEvb(), socket_, client_, thriftPort_);
       client_->sync_syncFib(kFibId_, unicastRoutes);
     } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
       logFibUpdateError(fibUpdateError);
@@ -875,7 +875,7 @@ Fib::syncRoutes() {
       LOG(INFO) << "Skipping programming of mpls routes in dryrun ...";
     } else {
       try {
-        createFibClient(evb_, socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), socket_, client_, thriftPort_);
         client_->sync_syncMplsFib(kFibId_, mplsRoutes);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
         logFibUpdateError(fibUpdateError);
@@ -987,7 +987,7 @@ Fib::keepAlive() noexcept {
   int64_t aliveSince{0};
   if (not dryrun_) {
     try {
-      createFibClient(evb_, socket_, client_, thriftPort_);
+      createFibClient(*getEvb(), socket_, client_, thriftPort_);
       aliveSince = client_->sync_aliveSince();
     } catch (const std::exception& e) {
       fb303::fbData->addStatValue(
