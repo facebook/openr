@@ -553,12 +553,6 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/decision
   )
 
-  add_openr_test(SrPolicyTest sr_policy_test
-    SOURCES
-      openr/decision/tests/SrPolicyTest.cpp
-    DESTINATION sbin/tests/openr/decision
-  )
-
   add_openr_test(KvStoreTest kvstore_test
     SOURCES
       openr/kvstore/tests/KvStoreTest.cpp

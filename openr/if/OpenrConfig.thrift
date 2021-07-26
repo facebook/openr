@@ -160,17 +160,6 @@ union PrependLabelRules {
   2: list<string> nextHopAreas = [];
 } (cpp.minimize_padding)
 
-struct SrPolicyMatcher {
-  /* SR Policy matcher name */
-  1: string name;
-
-  /* SR Policy matcher description */
-  2: string description;
-
-  /* Route matching filter. All filters must match. Similar to an AND condition */
-  3: list<routing_policy.FilterCriteria> filters;
-} (cpp.minimize_padding)
-
 struct RouteComputationRules {
   /* Route selection algorithm the route will use */
   1: RouteSelectionAlgorithm routeSelectionAlgo = RouteSelectionAlgorithm.SHORTEST_DISTANCE;
@@ -191,10 +180,9 @@ struct SrPolicy {
   2: string description;
 
   /*
-   * Route matching filter. Policy is applied if at least one of the matchers is a valid match.
-   * Similar to an OR condition between the matchers
+   * Route matching filter. Policy is applied all criterias return a successful match
    */
-  3: list<SrPolicyMatcher> matchers;
+  3: list<routing_policy.FilterCriteria> criterias;
 
   /* Route computation rules */
   4: RouteComputationRules rules;

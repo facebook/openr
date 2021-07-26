@@ -129,7 +129,8 @@ Decision::Decision(
       config->isBgpRouteProgrammingEnabled(),
       config->isBestRouteSelectionEnabled(),
       config->isV4OverV6NexthopEnabled(),
-      config->getDecisionSrPolicyConfig());
+      config->getDecisionSrPolicyConfig(),
+      config->getAreaPolicies());
 
   // TODO: Remove coldStartTimer_ and eor_time_s_ref from config after OpenR
   // initialization procedure.

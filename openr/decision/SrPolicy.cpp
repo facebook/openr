@@ -9,18 +9,16 @@
 
 namespace openr {
 
-SrPolicy::SrPolicy(const thrift::SrPolicy& config)
-    : name_(*config.name_ref()),
-      description_(*config.description_ref()),
-      rules_(*config.rules_ref()) {}
+class SrPolicyImpl {};
 
+SrPolicy::SrPolicy(
+    const thrift::SrPolicy& config,
+    const neteng::config::routing_policy::PolicyDefinitions& definitions) {}
 SrPolicy::~SrPolicy() = default;
 
 std::optional<thrift::RouteComputationRules>
 SrPolicy::matchAndGetRules(
     const std::shared_ptr<thrift::PrefixEntry>& prefixEntry) const {
-  // TODO: Walk matchers and check if they all match. If they do return
-  // rules
   return std::nullopt;
 }
 
