@@ -459,8 +459,9 @@ OpenrWrapper<Serializer>::fibDumpRouteDatabase() {
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::addPrefixEntries(
+    const thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  PrefixEvent event(PrefixEventType::ADD_PREFIXES, std::nullopt, prefixes);
+  PrefixEvent event(PrefixEventType::ADD_PREFIXES, type, prefixes);
   prefixUpdatesQueue_.push(std::move(event));
   return true;
 }
@@ -468,8 +469,9 @@ OpenrWrapper<Serializer>::addPrefixEntries(
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::withdrawPrefixEntries(
+    const thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  PrefixEvent event(PrefixEventType::WITHDRAW_PREFIXES, std::nullopt, prefixes);
+  PrefixEvent event(PrefixEventType::WITHDRAW_PREFIXES, type, prefixes);
   prefixUpdatesQueue_.push(std::move(event));
   return true;
 }

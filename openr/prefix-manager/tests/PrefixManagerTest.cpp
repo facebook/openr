@@ -949,7 +949,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     // Send update request in queue
     PrefixEvent event(
         PrefixEventType::ADD_PREFIXES,
-        std::nullopt,
+        thrift::PrefixType::BGP,
         {prefixEntry1, prefixEntry7});
     prefixUpdatesQueue.push(std::move(event));
 
@@ -1012,7 +1012,9 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   {
     // Send update request in queue
     PrefixEvent event(
-        PrefixEventType::WITHDRAW_PREFIXES, std::nullopt, {prefixEntry3});
+        PrefixEventType::WITHDRAW_PREFIXES,
+        thrift::PrefixType::DEFAULT,
+        {prefixEntry3});
     prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
@@ -1092,7 +1094,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
     // PrefixManager receives updates of prefixes with prepend label.
     PrefixEvent prefixEvent(
         PrefixEventType::ADD_PREFIXES,
-        std::nullopt,
+        thrift::PrefixType::BGP,
         {prefixEntry1WithLabel1,
          prefixEntry2WithLabel1,
          prefixEntry3WithLabel2});
@@ -1128,7 +1130,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
     // PrefixManager receives prefix updates of  with prepend label.
     PrefixEvent prefixEvent(
         PrefixEventType::ADD_PREFIXES,
-        std::nullopt,
+        thrift::PrefixType::BGP,
         {prefixEntry4WithLabel1, prefixEntry5WithLabel2});
     prefixUpdatesQueue.push(std::move(prefixEvent));
 
@@ -1167,7 +1169,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
     // PrefixManager receives prefix updates of  with prepend label.
     PrefixEvent prefixEvent(
         PrefixEventType::ADD_PREFIXES,
-        std::nullopt,
+        thrift::PrefixType::BGP,
         {prefixEntry6WithLabel1, prefixEntry7WithLabel2});
     prefixUpdatesQueue.push(std::move(prefixEvent));
 
@@ -1215,7 +1217,9 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
         // 1. PrefixManager receives updates of one prefix without label.
         PrefixEvent prefixEvent(
-            PrefixEventType::ADD_PREFIXES, std::nullopt, {prefixEntry1Bgp});
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1Bgp});
         prefixUpdatesQueue.push(std::move(prefixEvent));
 
         // Wait for update in KvStore
@@ -1235,7 +1239,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
         // 2.1. PrefixManager receives <Prefix, Label1>.
         PrefixEvent prefixEvent1(
             PrefixEventType::ADD_PREFIXES,
-            std::nullopt,
+            thrift::PrefixType::BGP,
             {prefixEntry1WithLabel1});
         prefixUpdatesQueue.push(std::move(prefixEvent1));
       });
@@ -1278,7 +1282,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
         // 4.1. PrefixManager receives <Prefix, Label2>.
         prefixUpdatesQueue.push(PrefixEvent(
             PrefixEventType::ADD_PREFIXES,
-            std::nullopt,
+            thrift::PrefixType::BGP,
             {prefixEntry1WithLabel2}));
       });
 
@@ -1300,7 +1304,9 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
 
         // 5.1. PrefixManager receives <Prefix, Label=none>.
         prefixUpdatesQueue.push(PrefixEvent(
-            PrefixEventType::ADD_PREFIXES, std::nullopt, {prefixEntry1}));
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1}));
 
         // Wait for update in KvStore
         auto pub = kvStoreWrapper->recvPublication();
@@ -1331,12 +1337,16 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
   //
   auto const prefix = toIpPrefix("10.0.0.0/8");
   {
-    PrefixEvent event(
+    PrefixEvent event1(
         PrefixEventType::ADD_PREFIXES,
-        std::nullopt,
-        {createPrefixEntry(prefix, thrift::PrefixType::DEFAULT),
-         createPrefixEntry(prefix, thrift::PrefixType::LOOPBACK)});
-    prefixUpdatesQueue.push(std::move(event));
+        thrift::PrefixType::DEFAULT,
+        {createPrefixEntry(prefix, thrift::PrefixType::DEFAULT)});
+    PrefixEvent event2(
+        PrefixEventType::ADD_PREFIXES,
+        thrift::PrefixType::LOOPBACK,
+        {createPrefixEntry(prefix, thrift::PrefixType::LOOPBACK)});
+    prefixUpdatesQueue.push(std::move(event1));
+    prefixUpdatesQueue.push(std::move(event2));
   }
 
   //

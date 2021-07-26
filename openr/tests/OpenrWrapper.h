@@ -84,12 +84,16 @@ class OpenrWrapper {
   /**
    * add prefix entries into prefix manager using prefix manager client
    */
-  bool addPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool addPrefixEntries(
+      const thrift::PrefixType type,
+      const std::vector<thrift::PrefixEntry>& prefixes);
 
   /**
    * withdraw prefix entries into prefix manager using prefix manager client
    */
-  bool withdrawPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool withdrawPrefixEntries(
+      const thrift::PrefixType type,
+      const std::vector<thrift::PrefixEntry>& prefixes);
 
   /**
    * check if a given prefix exists in routeDb

@@ -131,12 +131,10 @@ PrefixManager::PrefixManager(
         withdrawPrefixEntriesImpl(update.prefixEntries);
         break;
       case PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE:
-        CHECK(update.type.has_value());
-        withdrawPrefixesByTypeImpl(update.type.value());
+        withdrawPrefixesByTypeImpl(update.type);
         break;
       case PrefixEventType::SYNC_PREFIXES_BY_TYPE:
-        CHECK(update.type.has_value());
-        syncPrefixesByTypeImpl(update.type.value(), update.prefixes, dstAreas);
+        syncPrefixesByTypeImpl(update.type, update.prefixes, dstAreas);
         break;
       default:
         LOG(ERROR) << "Unknown command received. "

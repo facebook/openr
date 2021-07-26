@@ -192,12 +192,12 @@ struct PrefixEvent {
   PrefixEventType eventType;
 
   /**
-   * Source of prefix update request. Each source must use a unique type
+   * Source of prefix update request. Each source must use a unique type.
    */
-  std::optional<thrift::PrefixType> type = std::nullopt;
+  thrift::PrefixType type;
 
   /**
-   * List of prefix-entries to advertise or withdraw
+   * List of prefix-entries of above `type` to advertise or withdraw.
    */
   std::vector<thrift::PrefixEntry> prefixes{};
 
@@ -214,7 +214,7 @@ struct PrefixEvent {
 
   explicit PrefixEvent(
       const PrefixEventType& eventType,
-      const std::optional<thrift::PrefixType>& type = std::nullopt,
+      const thrift::PrefixType type,
       std::vector<thrift::PrefixEntry> prefixes = {},
       std::unordered_set<std::string> dstAreas = {})
       : eventType(eventType),
