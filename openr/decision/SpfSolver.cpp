@@ -272,11 +272,11 @@ SpfSolver::createRouteForPrefix(
     }
     if (isBGP and not prefixEntry->mv_ref().has_value()) {
       missingMv = true;
-      LOG(ERROR) << "Prefix entry for "
-                 << folly::IPAddress::networkToString(prefix)
-                 << " advertised by " << nodeAndArea.first << ", area "
-                 << nodeAndArea.second
-                 << " is of type BGP and missing the metric vector.";
+      LOG_IF(ERROR, not enableBestRouteSelection_)
+          << "Prefix entry for " << folly::IPAddress::networkToString(prefix)
+          << " advertised by " << nodeAndArea.first << ", area "
+          << nodeAndArea.second
+          << " is of type BGP and missing the metric vector.";
     }
   }
 
