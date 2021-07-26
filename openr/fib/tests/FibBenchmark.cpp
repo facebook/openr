@@ -213,6 +213,7 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
   auto fibWrapper = std::make_unique<FibWrapper>();
 
   // Initial syncFib debounce
+  fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
   fibWrapper->mockFibHandler->waitForSyncFib();
 
   // Generate random prefixes

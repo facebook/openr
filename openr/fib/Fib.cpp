@@ -68,35 +68,18 @@ Fib::Fib(
   CHECK_GE(routeDeleteDelay_.count(), 0)
       << "Route delete duration must be >= 0ms";
 
-  retryRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    if (routeState_.state == RouteState::SYNCING) {
-      // SYNC routes if we've RIB snapshot from Decision
-      syncRoutes();
-    } else {
-      // We retry incremental update of routes based on dirty state in AWAITING
-      // & SYNCED states
-      auto routeUpdate = routeState_.createUpdate();
-      if (not routeUpdate.empty()) {
-        LOG(INFO) << "Retry programming of dirty route entries";
-        updateRoutes(std::move(routeUpdate), false /* useDeleteDelay */);
-      }
-    }
-
-    // Update backoff and retry if not successful
-    if (not routeState_.needsRetry()) {
-      retryRoutesExpBackoff_.reportSuccess();
-    } else {
-      retryRoutesExpBackoff_.reportError();
-      const auto period = retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
-      LOG(INFO) << "Scheduling retry timer after " << period.count() << "ms";
-      retryRoutesTimer_->scheduleTimeout(period);
-    }
-
-    fb303::fbData->setCounter(
-        "fib.synced", routeState_.state == RouteState::SYNCED);
-  });
   // On startup we do require routedb_sync so explicitly set the counter to 0
   fb303::fbData->setCounter("fib.synced", 0);
+
+  //
+  // Start RetryRoute fiber with stop signal.
+  //
+  auto retryRoutesContract = folly::makePromiseContract<folly::Unit>();
+  retryRoutesStopSignal_ = std::move(retryRoutesContract.first);
+  addFiberTask(
+      [this, sf = std::move(retryRoutesContract.second)]() mutable noexcept {
+        retryRoutesTask(std::move(sf));
+      });
 
   //
   // Create KeepAlive task with stop signal. Signalling part consists of two
@@ -107,15 +90,8 @@ Fib::Fib(
   auto keepAliveContract = folly::makePromiseContract<folly::Unit>();
   keepAliveStopSignal_ = std::move(keepAliveContract.first);
   addFiberTask(
-      [this,
-       stopSignal = std::move(keepAliveContract.second)]() mutable noexcept {
-        LOG(INFO) << "Starting KeepAlive fiber task";
-        while (not stopSignal.isReady()) { // Break when stop signal is ready
-          // Sleep & perform check
-          folly::futures::sleep(Constants::kKeepAliveCheckInterval).get();
-          keepAliveCheck();
-        } // while
-        LOG(INFO) << "KeepAlive fiber task got stopped";
+      [this, sf = std::move(keepAliveContract.second)]() mutable noexcept {
+        keepAliveTask(std::move(sf));
       });
 
   // Fiber to process route updates from Decision
@@ -171,6 +147,8 @@ void
 Fib::stop() {
   // Send stop signal to internal fibers
   keepAliveStopSignal_.setValue(folly::Unit());
+  retryRoutesStopSignal_.setValue(folly::Unit());
+  retryRoutesSignal_.signal();
 
   // Reset client to drop all on-going requests
   // TODO
@@ -445,7 +423,8 @@ Fib::nextRetryDuration() const {
   // processing.
   if ((routeState_.state == RouteState::SYNCING) or
       (routeState_.dirtyPrefixes.empty() and routeState_.dirtyLabels.empty())) {
-    return std::chrono::milliseconds(0);
+    // Return backoff duration if any
+    return retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
   }
 
   auto const currTime = std::chrono::steady_clock::now();
@@ -466,19 +445,19 @@ Fib::nextRetryDuration() const {
 
 void
 Fib::RouteState::processFibUpdateError(
-    thrift::PlatformFibUpdateError const& fibError) {
-  const auto currentTime = std::chrono::steady_clock::now();
+    thrift::PlatformFibUpdateError const& fibError,
+    std::chrono::time_point<std::chrono::steady_clock> retryAt) {
   // Mark prefixes as dirty. All newly failed unicast routes are added into
   // dirtyPrefixes map. We can distinguish between add/update and delete updates
   // in createUpdate().
   for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes_ref()) {
     for (auto& prefix : prefixes) {
-      dirtyPrefixes.emplace(toIPNetwork(prefix), currentTime);
+      dirtyPrefixes.insert_or_assign(toIPNetwork(prefix), retryAt);
     }
   }
   for (auto& [_, prefixes] : *fibError.vrf2failedDeletePrefixes_ref()) {
     for (auto& prefix : prefixes) {
-      dirtyPrefixes.emplace(toIPNetwork(prefix), currentTime);
+      dirtyPrefixes.insert_or_assign(toIPNetwork(prefix), retryAt);
     }
   }
 
@@ -486,11 +465,11 @@ Fib::RouteState::processFibUpdateError(
   // dirtyPrefixes map. We can distinguish between add/update and delete updates
   // in createUpdate().
   for (auto& label : *fibError.failedAddUpdateMplsLabels_ref()) {
-    dirtyLabels.emplace(label, currentTime);
+    dirtyLabels.insert_or_assign(label, retryAt);
   }
 
   for (auto& label : *fibError.failedDeleteMplsLabels_ref()) {
-    dirtyLabels.emplace(label, currentTime);
+    dirtyLabels.insert_or_assign(label, retryAt);
   }
 }
 
@@ -527,7 +506,7 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   updateRoutes(std::move(routeUpdate));
   if (routeState_.needsRetry()) {
     // Trigger initial Fib sync, or schedule retry routes timer if needed.
-    scheduleRetryRoutesTimer();
+    retryRoutesSignal_.signal();
   }
 }
 
@@ -546,7 +525,7 @@ Fib::processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   updateRoutes(std::move(routeUpdate));
   if (routeState_.needsRetry()) {
     // Schedule retry routes timer if need be
-    retryRoutesTimer_->scheduleTimeout(Constants::kFibInitialBackoff);
+    retryRoutesSignal_.signal();
   }
 }
 
@@ -592,7 +571,7 @@ Fib::printMplsRoutesAddUpdate(
   }
 }
 
-void
+bool
 Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
@@ -602,7 +581,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
   // Return if empty
   if (routeUpdate.empty()) {
     LOG(INFO) << "No entries in route update";
-    return;
+    return true;
   }
 
   // Backup routes in routeState_. In case update routes failed, routes will be
@@ -617,11 +596,14 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
   // state we let `syncRoutes` do the work instead.
   if (routeState_.state == RouteState::SYNCING) {
     LOG(INFO) << "Skip route programming in SYNCING state";
-    return;
+    return true;
   }
 
   LOG(INFO) << "Updating routes in FIB";
   auto const currentTime = std::chrono::steady_clock::now();
+  auto const retryAt =
+      currentTime + retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
+  bool success{true};
 
   // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
   // and MplsRoute with the FibService client APIs
@@ -637,7 +619,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
 
     // Mark dirty state here & set
     for (auto& prefix : routeUpdate.unicastRoutesToDelete) {
-      const auto [itr, _] = routeState_.dirtyPrefixes.emplace(
+      const auto [itr, _] = routeState_.dirtyPrefixes.insert_or_assign(
           prefix, currentTime + routeDeleteDelay_);
       LOG(INFO) << "Will delete unicast route "
                 << folly::IPAddress::networkToString(prefix) << " after "
@@ -661,6 +643,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         createFibClient(evb_, socket_, client_, thriftPort_);
         client_->sync_deleteUnicastRoutes(kFibId_, unicastRoutesToDelete);
       } catch (std::exception& e) {
+        success = false;
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
@@ -669,7 +652,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         // Marked all routes to be deleted as dirty. So we try to remove them
         // again from FIB.
         for (const auto& prefix : routeUpdate.unicastRoutesToDelete) {
-          routeState_.dirtyPrefixes.emplace(prefix, currentTime);
+          routeState_.dirtyPrefixes.insert_or_assign(prefix, retryAt);
         }
         // NOTE: We still want to advertise these prefixes as deleted
       }
@@ -691,12 +674,14 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         createFibClient(evb_, socket_, client_, thriftPort_);
         client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
+        success = false;
         logFibUpdateError(fibUpdateError);
         // Remove failed routes from fibRouteUpdates
         routeUpdate.processFibUpdateError(fibUpdateError);
         // Mark failed routes as dirty in route state
-        routeState_.processFibUpdateError(fibUpdateError);
+        routeState_.processFibUpdateError(fibUpdateError, retryAt);
       } catch (std::exception const& e) {
+        success = false;
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
@@ -707,7 +692,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         // Next retry should restore, but meanwhile clients can take appropriate
         // action because FIB state is unclear e.g. withdraw route from KvStore
         for (auto& [prefix, _] : routeUpdate.unicastRoutesToUpdate) {
-          routeState_.dirtyPrefixes.emplace(prefix, currentTime);
+          routeState_.dirtyPrefixes.insert_or_assign(prefix, retryAt);
           routeUpdate.unicastRoutesToDelete.emplace_back(prefix);
         }
 
@@ -727,7 +712,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
 
     // Mark dirty state here & set
     for (auto& mplsRoute : routeUpdate.mplsRoutesToDelete) {
-      const auto [itr, _] = routeState_.dirtyLabels.emplace(
+      const auto [itr, _] = routeState_.dirtyLabels.insert_or_assign(
           mplsRoute, currentTime + routeDeleteDelay_);
       LOG(INFO) << "Will delete mpls route " << mplsRoute << " after "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -750,6 +735,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         createFibClient(evb_, socket_, client_, thriftPort_);
         client_->sync_deleteMplsRoutes(kFibId_, mplsRoutesToDelete);
       } catch (std::exception const& e) {
+        success = false;
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
@@ -758,7 +744,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         // Marked all routes to be deleted as dirty. So we try to remove them
         // again from FIB.
         for (const auto& label : routeUpdate.mplsRoutesToDelete) {
-          routeState_.dirtyLabels.emplace(label, currentTime);
+          routeState_.dirtyLabels.insert_or_assign(label, retryAt);
         }
         // NOTE: We still want to advertise these labels as deleted
       }
@@ -780,12 +766,14 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         createFibClient(evb_, socket_, client_, thriftPort_);
         client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
+        success = false;
         logFibUpdateError(fibUpdateError);
         // Remove failed routes from fibRouteUpdates
         routeUpdate.processFibUpdateError(fibUpdateError);
         // Mark failed routes as dirty in route state
-        routeState_.processFibUpdateError(fibUpdateError);
+        routeState_.processFibUpdateError(fibUpdateError, retryAt);
       } catch (std::exception const& e) {
+        success = false;
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
@@ -796,7 +784,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         // Next retry should restore, but meanwhile clients can take appropriate
         // action because FIB state is unclear e.g. withdraw route from KvStore
         for (auto& [label, _] : routeUpdate.mplsRoutesToUpdate) {
-          routeState_.dirtyLabels.emplace(label, currentTime);
+          routeState_.dirtyLabels.insert_or_assign(label, retryAt);
           routeUpdate.mplsRoutesToDelete.emplace_back(label);
         }
 
@@ -823,9 +811,11 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
     routeUpdate.mplsRoutesToDelete.clear();
   }
   fibRouteUpdatesQueue_.push(std::move(routeUpdate));
+
+  return success;
 }
 
-void
+bool
 Fib::syncRoutes() {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
@@ -836,7 +826,9 @@ Fib::syncRoutes() {
   const auto& unicastRoutes =
       createUnicastRoutesFromMap(routeState_.unicastRoutes);
   const auto& mplsRoutes = createMplsRoutesFromMap(routeState_.mplsRoutes);
-  auto currentTime = std::chrono::steady_clock::now();
+  const auto currentTime = std::chrono::steady_clock::now();
+  const auto retryAt =
+      currentTime + retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
   fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
 
   // Create DecisionRouteUpdate that'll be published after successful sync. On
@@ -862,14 +854,14 @@ Fib::syncRoutes() {
       // Remove failed routes from fibRouteUpdates
       fibRouteUpdates.processFibUpdateError(fibUpdateError);
       // Mark failed routes as dirty in route state
-      routeState_.processFibUpdateError(fibUpdateError);
+      routeState_.processFibUpdateError(fibUpdateError, retryAt);
     } catch (std::exception const& e) {
       client_.reset();
       fb303::fbData->addStatValue(
           "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
       LOG(ERROR) << "Failed to sync unicast routes in FIB. Error: "
                  << folly::exceptionStr(e);
-      return;
+      return false;
     }
   }
 
@@ -890,14 +882,14 @@ Fib::syncRoutes() {
         // Remove failed routes from fibRouteUpdates
         fibRouteUpdates.processFibUpdateError(fibUpdateError);
         // Mark failed routes as dirty in route state
-        routeState_.processFibUpdateError(fibUpdateError);
+        routeState_.processFibUpdateError(fibUpdateError, retryAt);
       } catch (std::exception const& e) {
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
         LOG(ERROR) << "Failed to sync unicast routes in FIB. Error: "
                    << folly::exceptionStr(e);
-        return;
+        return false;
       }
     } // else
   } // if enableSegmentRouting_
@@ -922,21 +914,76 @@ Fib::syncRoutes() {
   // Transition state on successful sync. Also record our first sync
   transitionRouteState(RouteState::FIB_SYNCED);
   routeState_.isInitialSynced = true;
+  return true;
 }
 
 void
-Fib::scheduleRetryRoutesTimer() {
-  if (not retryRoutesTimer_->isScheduled()) {
-    // Schedule an immediate run if previous one is not scheduled
-    const auto duration = nextRetryDuration();
-    LOG(INFO) << "Schedule retry timer with period " << duration.count()
-              << " ms";
-    retryRoutesTimer_->scheduleTimeout(duration);
+Fib::retryRoutesTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept {
+  LOG(INFO) << "Starting RetryRoutes fiber task";
+  auto timeout = folly::AsyncTimeout::make(
+      *getEvb(), [this]() noexcept { retryRoutesSignal_.signal(); });
+
+  // Repeat in loop
+  while (not stopSignal.isReady()) {
+    // Wait for signal & retry routes
+    retryRoutesSignal_.wait();
+    retryRoutes();
+
+    // Add async sleep signal for next invocation. Add only if non zero wait
+    if (routeState_.needsRetry()) {
+      auto retryDuration = nextRetryDuration();
+      LOG(INFO) << "Scheduling timer after " << retryDuration.count() << "ms";
+      timeout->scheduleTimeout(retryDuration);
+    }
+  } // while
+  LOG(INFO) << "RetryRoutes fiber task got stopped";
+}
+
+void
+Fib::retryRoutes() noexcept {
+  bool success{false};
+  retryRoutesExpBackoff_.reportError(); // We increase backoff on every retry
+  LOG(INFO) << "Increasing backoff "
+            << retryRoutesExpBackoff_.getCurrentBackoff().count() << "ms";
+  if (routeState_.state == RouteState::SYNCING) {
+    // SYNC routes if we've RIB snapshot from Decision
+    success |= syncRoutes();
+  } else {
+    // We retry incremental update of routes based on dirty state in AWAITING
+    // & SYNCED states
+    auto routeUpdate = routeState_.createUpdate();
+    if (routeUpdate.empty()) {
+      LOG(INFO) << "Returning because of empty updates";
+      return; // Do not process further as this incurred no change
+    }
+    LOG(INFO) << "Retry programming of dirty route entries";
+    success |= updateRoutes(std::move(routeUpdate), false /* useDeleteDelay */);
   }
+
+  // Clear backoff if programming is successful
+  if (success) {
+    LOG(INFO) << "Clearing backoff";
+    retryRoutesExpBackoff_.reportSuccess();
+  }
+
+  // Set sync state
+  fb303::fbData->setCounter(
+      "fib.synced", routeState_.state == RouteState::SYNCED);
 }
 
 void
-Fib::keepAliveCheck() noexcept {
+Fib::keepAliveTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept {
+  LOG(INFO) << "Starting KeepAlive fiber task";
+  while (not stopSignal.isReady()) { // Break when stop signal is ready
+    keepAlive();
+    // Sleep before next check
+    folly::futures::sleep(Constants::kKeepAliveCheckInterval).get();
+  } // while
+  LOG(INFO) << "KeepAlive fiber task got stopped";
+}
+
+void
+Fib::keepAlive() noexcept {
   int64_t aliveSince{0};
   if (not dryrun_) {
     try {
@@ -950,14 +997,15 @@ Fib::keepAliveCheck() noexcept {
                  << folly::exceptionStr(e);
     }
   }
-  // Check if switch agent has restarted or not
-  if (aliveSince != latestAliveSince_) {
+  // Check if switch agent has restarted or not. Applicable only if we have
+  // initialized alive-since
+  if (latestAliveSince_ != 0 && aliveSince != latestAliveSince_) {
     LOG(WARNING) << "FibAgent seems to have restarted. "
                  << "Performing full route DB sync ...";
     // FibAgent has restarted. Enforce full sync
     transitionRouteState(RouteState::FIB_CONNECTED);
     retryRoutesExpBackoff_.reportSuccess();
-    scheduleRetryRoutesTimer();
+    retryRoutesSignal_.signal();
   }
   latestAliveSince_ = aliveSince;
 }

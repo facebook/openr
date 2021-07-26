@@ -21,10 +21,7 @@ using folly::gen::from;
 using folly::gen::mapped;
 
 namespace openr {
-MockNetlinkFibHandler::MockNetlinkFibHandler()
-    : startTime_(std::chrono::duration_cast<std::chrono::seconds>(
-                     std::chrono::system_clock::now().time_since_epoch())
-                     .count()) {
+MockNetlinkFibHandler::MockNetlinkFibHandler() : startTime_(1) {
   VLOG(3) << "Building Mock NL Route Db";
 }
 
@@ -375,9 +372,7 @@ MockNetlinkFibHandler::restart() {
   mplsRouteDb_->clear();
 
   SYNCHRONIZED(startTime_) {
-    startTime_ = std::chrono::duration_cast<std::chrono::seconds>(
-                     std::chrono::system_clock::now().time_since_epoch())
-                     .count();
+    startTime_ += 1; // Always increment on retart for unique number
   }
   fibSyncCount_ = 0;
   addRoutesCount_ = 0;

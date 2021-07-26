@@ -11,6 +11,7 @@
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
+#include <chrono>
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
@@ -153,33 +154,43 @@ class Fib final : public OpenrEventBase {
 
   /**
    * Incremental route programming. On route programming failure,
-   * prefixes/labels are marked dirty and retryRoutesTimer is scheduled.
+   * prefixes/labels are marked dirty and retryRoutesSignal is invoked.
    * If useDeleteDelay is false, delete routes without putting them in
    * dirtyPrefixes/dirtyLabels (i.e., don't delay programming). Otherwise,
    * delay deletion based on configured duration.
+   * @return true if all routes are successfully programmed
    */
-  void updateRoutes(
+  bool updateRoutes(
       DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay = true);
 
   /**
    * Sync the current RouteState with the switch agent.
    * - On complete failure retry is scheduled
    * - On partial failure, the failed prefixes/labels are marked dirty and
-   *   retryRoutesTimer is scheduled.
+   *   retryRoutesSignal is invoked.
    */
-  void syncRoutes();
+  bool syncRoutes();
 
   /**
-   * Asynchrounsly schedules the retry routes timer call and returns
-   * immediately. All APIs should call this function to schedule retry-timer.
+   * Implements route re-programming logic, for failed routes and delayed route
+   * deletion.
+   * The routes updates to agent would be derived from RouteState. It'll handle
+   * all cases for route update e.g.
+   * - Sync initial route database
+   * - Program newly received route update
+   * - Retry static routes
+   * - Retry failed route updates
+   * - Program delete updats which are in pending state
    */
-  void scheduleRetryRoutesTimer();
+  void retryRoutes() noexcept;
+  void retryRoutesTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept;
 
   /**
    * Get aliveSince from FibService, and check if Fib restarts
    * If so, push syncFib to FibService
    */
-  void keepAliveCheck() noexcept;
+  void keepAlive() noexcept;
+  void keepAliveTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept;
 
   /**
    * Update flat counter/stats in fb303
@@ -281,7 +292,9 @@ class Fib final : public OpenrEventBase {
      * Update state as a result of PlatformFibUpdateError. This will populate
      * the dirty state.
      */
-    void processFibUpdateError(thrift::PlatformFibUpdateError const& fibError);
+    void processFibUpdateError(
+        thrift::PlatformFibUpdateError const& fibError,
+        std::chrono::time_point<std::chrono::steady_clock> retryAt);
   };
 
   bool
@@ -334,16 +347,12 @@ class Fib final : public OpenrEventBase {
   folly::AsyncSocket* socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 
-  // Callback timer to program routes to SwitchAgent. The updates to agent
-  // would be based on RouteState. It'll handle all cases for route update e.g.
-  // - Sync initial route database
-  // - Program newly received route update
-  // - Retry static routes
-  // - Retry failed route updates
-  // - Program delete updats which are in pending state
-  // We trigger this timer with ExponentialBackoff to ease up things if
-  // programming keeps failing.
-  std::unique_ptr<folly::AsyncTimeout> retryRoutesTimer_{nullptr};
+  // State variables for RetryRoutes programming fiber.
+  // - Stop signal to terminate retryRoutesFiber, sent only once
+  // - Semaphore used for signalling when routes are available for programming
+  // - Exponential backoff to ease of things on repetitive failures
+  folly::Promise<folly::Unit> retryRoutesStopSignal_;
+  folly::fibers::Semaphore retryRoutesSignal_{1};
   ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
 
   // Stop signal for KeepAlive fiber
