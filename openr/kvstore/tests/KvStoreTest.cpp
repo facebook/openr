@@ -391,11 +391,13 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public KvStoreTestFixture {
   void
   initKvStore(
       std::string nodeId,
-      thrift::KvstoreConfig kvStoreConf = getTestKvConf(),
+      uint32_t keyTtl = kLongTtl,
       const std::vector<thrift::AreaConfig>& areas = {}) {
     // enable kvstore request queue in config
     auto tConfig = getBasicOpenrConfig(nodeId, "domain", areas);
     tConfig.enable_kvstore_request_queue_ref() = true;
+    auto kvStoreConf = getTestKvConf();
+    kvStoreConf.key_ttl_ms_ref() = keyTtl;
     tConfig.kvstore_config_ref() = kvStoreConf;
     config_ = std::make_shared<Config>(tConfig);
 
@@ -411,6 +413,8 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public KvStoreTestFixture {
   }
   KvStoreWrapper* kvStore_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
+  const static uint32_t kShortTtl{2000}; // 2 seconds
+  const static uint32_t kLongTtl{300000}; // 5 minutes
 };
 } // namespace
 
@@ -419,15 +423,9 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public KvStoreTestFixture {
  * Send SetKeyValueRequest via queue to KvStore.
  */
 TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
-  const std::string nodeId = "node21";
-  int64_t ttl = 2000; // 2 seconds
-
-  // Set key-val ttls
-  auto kvConf = getTestKvConf();
-  kvConf.key_ttl_ms_ref() = ttl;
-
   // create and start kv store with kvRequestQueue enabled
-  initKvStore(nodeId, kvConf);
+  const std::string nodeId = "node21";
+  initKvStore(nodeId, kShortTtl);
 
   // create request to set key-val
   const std::string key = "key1";
@@ -438,7 +436,6 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
   kvRequestQueue_.push(std::move(setKvRequest));
 
   OpenrEventBase evb;
-
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     // wait for kvstore handle SetKeyValue request and flood new key-val
     auto pub = kvStore_->recvPublication();
@@ -458,7 +455,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
   });
 
   // check that key-val was not expired after ttl time has passed
-  evb.scheduleTimeout(std::chrono::milliseconds(ttl * 2), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(kShortTtl * 2), [&]() noexcept {
     auto recVal = kvStore_->getKey(kTestingAreaName, key);
     EXPECT_TRUE(recVal.has_value());
     EXPECT_GE(*(recVal.value().ttlVersion_ref()), 4);
@@ -474,15 +471,9 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
  * Validate versioning for receiving multiple SetKeyValueRequests.
  */
 TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
-  const std::string nodeId = "black-widow";
-  int64_t ttl = 2000; // 2 seconds
-
-  // Set key-val ttls
-  auto kvConf = getTestKvConf();
-  kvConf.key_ttl_ms_ref() = ttl;
-
   // create and start kv store with kvRequestQueue enabled
-  initKvStore(nodeId, kvConf);
+  const std::string nodeId = "black-widow";
+  initKvStore(nodeId, kShortTtl);
 
   // Push first request to set key-val.
   const std::string key = "key-settwice";
@@ -520,15 +511,9 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
  * Validate versioning for receiving multiple SetKeyValueRequests.
  */
 TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
-  const std::string nodeId = "yelena";
-  int64_t ttl = 2000; // 2 seconds
-
-  // Set key-val ttls
-  auto kvConf = getTestKvConf();
-  kvConf.key_ttl_ms_ref() = ttl;
-
   // create and start kv store with kvRequestQueue enabled
-  initKvStore(nodeId, kvConf);
+  const std::string nodeId = "yelena";
+  initKvStore(nodeId, kShortTtl);
 
   // Push first request to set key-val.
   const std::string key = "key-red-guardian";
@@ -555,22 +540,15 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
 TEST_F(
     KvStoreSelfOriginatedKeyValueRequestFixture,
     ProcessPersistKeyValueRequest) {
-  const std::string nodeId = "node22";
-  int64_t ttl = 2000; // 2 seconds
-
-  // Set key-val ttls
-  auto kvConf = getTestKvConf();
-  kvConf.key_ttl_ms_ref() = ttl;
-
   // create and start kv store with kvRequestQueue enabled
-  initKvStore(nodeId, kvConf);
+  const std::string nodeId = "node22";
+  initKvStore(nodeId, kShortTtl);
 
   const std::string key = "persist-key";
   const std::string value = "persist-value";
   const std::string newValue = "persist-changedvalue";
 
   OpenrEventBase evb;
-
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     // Test 1: - persist key (first-time persisting)
     //         - check key-value advertisement
@@ -632,7 +610,7 @@ TEST_F(
     }
   });
 
-  evb.scheduleTimeout(std::chrono::milliseconds(ttl * 2), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(kShortTtl * 2), [&]() noexcept {
     // Check that key-val was not expired after ttl time has passed.
     auto recVal = kvStore_->getKey(kTestingAreaName, key);
     EXPECT_TRUE(recVal.has_value());
@@ -658,11 +636,10 @@ TEST_F(
     PersistKeyWithValueOverriding) {
   const std::string otherNodeId = "node-other";
   const std::string myNodeId = "node-myself";
+  initKvStore(myNodeId);
 
   const std::string key = "persist-override-key";
   const std::string value = "value-to-override";
-
-  initKvStore(myNodeId);
 
   // Set a key in KvStore with other node as originator.
   const thrift::Value thriftVal = createThriftValue(
@@ -696,6 +673,95 @@ TEST_F(
   EXPECT_EQ(0, *(persistPub.keyVals_ref()->at(key).ttlVersion_ref()));
   EXPECT_EQ(2, *(persistPub.keyVals_ref()->at(key).version_ref()));
   EXPECT_EQ(myNodeId, *(persistPub.keyVals_ref()->at(key).originatorId_ref()));
+}
+
+/**
+ * Validate EraseKeyValue request removes from self originated cache and stops
+ * ttl refreshing of erased key-val.
+ *
+ */
+TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValueRequest) {
+  // Create and start kv store with kvRequestQueue enabled with 2 second ttl.
+  const std::string nodeId = "node-testerasekey";
+  initKvStore(nodeId, kShortTtl);
+
+  const std::string eraseKey = "erase-key";
+  const std::string eraseValue = "erase-value";
+  const std::string setKey = "set-key";
+  const std::string setValue = "set-value";
+
+  OpenrEventBase evb;
+  folly::Baton waitBatonAfterErase;
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    /** Set 2 key-vals. Check that they are set correctly. **/
+
+    // Push SetKeyValue request for "erase-key" key to queue.
+    auto setKvRequestToErase =
+        SetKeyValueRequest(kTestingAreaName, eraseKey, eraseValue);
+    kvRequestQueue_.push(std::move(setKvRequestToErase));
+
+    // Receive publication for "erase-key" key.
+    auto pubSetKey = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKey.keyVals_ref()->size());
+    EXPECT_EQ(0, *(pubSetKey.keyVals_ref()->at(eraseKey).ttlVersion_ref()));
+    EXPECT_EQ(1, *(pubSetKey.keyVals_ref()->at(eraseKey).version_ref()));
+
+    // Push SetKeyValue request for "set-key" key to queue.
+    auto setKvRequest = SetKeyValueRequest(kTestingAreaName, setKey, setValue);
+    kvRequestQueue_.push(std::move(setKvRequest));
+
+    // Receive publication for "set-key" key.
+    auto pubSetKey2 = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKey2.keyVals_ref()->size());
+    EXPECT_EQ(0, *(pubSetKey2.keyVals_ref()->at(setKey).ttlVersion_ref()));
+    EXPECT_EQ(1, *(pubSetKey2.keyVals_ref()->at(setKey).version_ref()));
+
+    // Make sure "erase-key" key is in self-originated cache.
+    auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+    EXPECT_EQ(2, kvStoreCache.size());
+    EXPECT_EQ(1, kvStoreCache.count(eraseKey));
+    EXPECT_EQ(eraseValue, *kvStoreCache.at(eraseKey).value.value_ref());
+
+    /** Erase one key. Check that erased key does NOT emit ttl updates. **/
+
+    // Push EraseKeyValue request
+    auto eraseKvRequest = ClearKeyValueRequest(kTestingAreaName, eraseKey);
+    kvRequestQueue_.push(std::move(eraseKvRequest));
+
+    // Receive ttl refresh publication for "set-key" (ttl version 1).
+    auto pubSetKeyTtlUpdate = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals_ref()->size());
+    EXPECT_EQ(
+        1, *(pubSetKeyTtlUpdate.keyVals_ref()->at(setKey).ttlVersion_ref()));
+    EXPECT_EQ(1, *(pubSetKeyTtlUpdate.keyVals_ref()->at(setKey).version_ref()));
+
+    // Erased key is still in KvStore but not in self-originated cache.
+    auto recVal = kvStore_->getKey(kTestingAreaName, eraseKey);
+    EXPECT_TRUE(recVal.has_value());
+
+    auto updatedCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+    EXPECT_EQ(1, updatedCache.size());
+    EXPECT_EQ(0, updatedCache.count(eraseKey));
+
+    // Receive ttl refresh publication for "set-key" (ttl version 2).
+    auto pubSetKeyTtlUpdate2 = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals_ref()->size());
+    EXPECT_EQ(
+        2, *(pubSetKeyTtlUpdate2.keyVals_ref()->at(setKey).ttlVersion_ref()));
+    EXPECT_EQ(
+        1, *(pubSetKeyTtlUpdate2.keyVals_ref()->at(setKey).version_ref()));
+  });
+
+  // After ttl time, erased key should expire.
+  evb.scheduleTimeout(std::chrono::milliseconds(kShortTtl * 2), [&]() noexcept {
+    auto recVal = kvStore_->getKey(kTestingAreaName, eraseKey);
+    EXPECT_FALSE(recVal.has_value());
+    evb.stop();
+  });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
 }
 
 /**

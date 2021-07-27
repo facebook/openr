@@ -1146,7 +1146,9 @@ KvStoreDb::unsetSelfOriginatedKey(
 
 void
 KvStoreDb::eraseSelfOriginatedKey(std::string const& key) {
-  CHECK(false) << "eraseKey not implemented.";
+  VLOG(3) << "eraseSelfOriginatedKey called for key " << key
+          << ", area: " << area_;
+  selfOriginatedKeyVals_.erase(key);
 }
 
 void
