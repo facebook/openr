@@ -304,7 +304,7 @@ SpfSolver::createRouteForPrefix(
     }
   }
 
-  const auto& routeSelectionResult = selectBestRoutes(
+  auto routeSelectionResult = selectBestRoutes(
       myNodeName, prefix, prefixEntries, hasBGP, areaLinkStates);
   if (not routeSelectionResult.success) {
     return std::nullopt;
@@ -345,11 +345,13 @@ SpfSolver::createRouteForPrefix(
   auto routeComputationRules = getRouteComputationRules(
       prefixEntries, routeSelectionResult, areaLinkStates);
 
-  // SrPolicy TODO: (T94498227) if routeComputationRules.routeSelectinAlgo is
-  // K_SHORTEST_DISTANCE_2 or PER_AREA_SHORTEST_DISTANCE expand
-  // routeSelectionResult.allNodeAreas.
-  // With the current algorithms routeSelectionResult.bestNodeArea
-  // is guarenteed not to change
+  // Avoid duplicated efforts with selectBestRoutes() in case of
+  // SHORTEST_DISTANCE route selection algorithm.
+  auto routeSelectionAlgo = routeComputationRules.get_routeSelectionAlgo();
+  if (routeSelectionAlgo !=
+      thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE) {
+    extendRoutes(routeSelectionAlgo, prefixEntries, routeSelectionResult);
+  }
 
   // SrPolicy TODO: (T94499398) SR Policy per area rules allow different
   // forwarding algorithm and type rules per area. selectBestPathsSpf() and
@@ -615,6 +617,30 @@ SpfSolver::selectBestRoutes(
   }
 
   return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
+}
+
+void
+SpfSolver::extendRoutes(
+    const thrift::RouteSelectionAlgorithm algorithm,
+    const PrefixEntries& prefixEntries,
+    RouteSelectionResult& selectedRoutes) {
+  switch (algorithm) {
+  case thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE:
+    LOG(INFO) << fmt::format(
+        "Skip {} since best routes should already have been selected.",
+        apache::thrift::util::enumNameSafe(algorithm));
+    return;
+  case thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2:
+    // TODO
+    break;
+  case thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE:
+    // TODO
+    break;
+  default:
+    LOG(ERROR) << "Unsupported route selection algorithm "
+               << apache::thrift::util::enumNameSafe(algorithm);
+    break;
+  }
 }
 
 std::optional<int64_t>
