@@ -304,12 +304,12 @@ SpfSolver::createRouteForPrefix(
     }
   }
 
-  const auto& bestRouteSelectionResult = selectBestRoutes(
+  const auto& routeSelectionResult = selectBestRoutes(
       myNodeName, prefix, prefixEntries, hasBGP, areaLinkStates);
-  if (not bestRouteSelectionResult.success) {
+  if (not routeSelectionResult.success) {
     return std::nullopt;
   }
-  if (bestRouteSelectionResult.allNodeAreas.empty()) {
+  if (routeSelectionResult.allNodeAreas.empty()) {
     LOG(WARNING) << "No route to prefix "
                  << folly::IPAddress::networkToString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
@@ -317,7 +317,7 @@ SpfSolver::createRouteForPrefix(
   }
 
   // Set best route selection in prefix state
-  bestRoutesCache_.insert_or_assign(prefix, bestRouteSelectionResult);
+  bestRoutesCache_.insert_or_assign(prefix, routeSelectionResult);
 
   // Skip adding route for one prefix advertised by current node in all
   // following scenarios:
@@ -334,7 +334,7 @@ SpfSolver::createRouteForPrefix(
   // TODO: We program self advertise prefix only iff, we're advertising our
   // prefix-entry with the prepend label. Once we support multi-area routing,
   // we can deprecate the check of hasSelfPrependLabel
-  if (bestRouteSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
+  if (routeSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
     VLOG(3) << "Skip adding route for prefixes advertised by " << myNodeName
             << " " << folly::IPAddress::networkToString(prefix);
     return std::nullopt;
@@ -343,12 +343,12 @@ SpfSolver::createRouteForPrefix(
   // Match the best route's attributes (tags & area stack) to an SR Policy.
   // If the route doesn't match to any, default rules are returned
   auto routeComputationRules = getRouteComputationRules(
-      prefixEntries, bestRouteSelectionResult, areaLinkStates);
+      prefixEntries, routeSelectionResult, areaLinkStates);
 
   // SrPolicy TODO: (T94498227) if routeComputationRules.routeSelectinAlgo is
   // K_SHORTEST_DISTANCE_2 or PER_AREA_SHORTEST_DISTANCE expand
-  // bestRouteSelectionResult.allNodeAreas.
-  // With the current algorithms bestRouteSelectionResult.bestNodeArea
+  // routeSelectionResult.allNodeAreas.
+  // With the current algorithms routeSelectionResult.bestNodeArea
   // is guarenteed not to change
 
   // SrPolicy TODO: (T94499398) SR Policy per area rules allow different
@@ -374,7 +374,7 @@ SpfSolver::createRouteForPrefix(
     return selectBestPathsSpf(
         myNodeName,
         prefix,
-        bestRouteSelectionResult,
+        routeSelectionResult,
         prefixEntries,
         hasBGP,
         forwardingType,
@@ -384,7 +384,7 @@ SpfSolver::createRouteForPrefix(
     return selectBestPathsKsp2(
         myNodeName,
         prefix,
-        bestRouteSelectionResult,
+        routeSelectionResult,
         prefixEntries,
         hasBGP,
         forwardingType,
@@ -588,7 +588,7 @@ SpfSolver::buildRouteDb(
   return routeDb;
 } // buildRouteDb
 
-BestRouteSelectionResult
+RouteSelectionResult
 SpfSolver::selectBestRoutes(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
@@ -596,7 +596,7 @@ SpfSolver::selectBestRoutes(
     bool const isBgp,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
-  BestRouteSelectionResult ret;
+  RouteSelectionResult ret;
 
   if (enableBestRouteSelection_) {
     // Perform best route selection based on metrics
@@ -619,7 +619,7 @@ SpfSolver::selectBestRoutes(
 
 std::optional<int64_t>
 SpfSolver::getMinNextHopThreshold(
-    BestRouteSelectionResult nodes, PrefixEntries const& prefixEntries) {
+    RouteSelectionResult nodes, PrefixEntries const& prefixEntries) {
   std::optional<int64_t> maxMinNexthopForPrefix = std::nullopt;
   for (const auto& nodeArea : nodes.allNodeAreas) {
     const auto& prefixEntry = prefixEntries.at(nodeArea);
@@ -633,11 +633,11 @@ SpfSolver::getMinNextHopThreshold(
   return maxMinNexthopForPrefix;
 }
 
-BestRouteSelectionResult
+RouteSelectionResult
 SpfSolver::maybeFilterDrainedNodes(
-    BestRouteSelectionResult&& result,
+    RouteSelectionResult&& result,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  BestRouteSelectionResult filtered = folly::copy(result);
+  RouteSelectionResult filtered = folly::copy(result);
   for (auto iter = filtered.allNodeAreas.cbegin();
        iter != filtered.allNodeAreas.cend();) {
     const auto& [node, area] = *iter;
@@ -657,12 +657,12 @@ SpfSolver::maybeFilterDrainedNodes(
   return filtered.allNodeAreas.empty() ? result : filtered;
 }
 
-BestRouteSelectionResult
+RouteSelectionResult
 SpfSolver::runBestPathSelectionBgp(
     folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
-  BestRouteSelectionResult ret;
+  RouteSelectionResult ret;
   std::optional<thrift::MetricVector> bestVector;
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
     switch (bestVector.has_value()
@@ -699,7 +699,7 @@ std::optional<RibUnicastEntry>
 SpfSolver::selectBestPathsSpf(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
-    BestRouteSelectionResult const& bestRouteSelectionResult,
+    RouteSelectionResult const& routeSelectionResult,
     PrefixEntries const& prefixEntries,
     bool const isBgp,
     thrift::PrefixForwardingType const& forwardingType,
@@ -716,8 +716,8 @@ SpfSolver::selectBestPathsSpf(
   // TODO: This is one off the hack to unblock special routing needs. With
   // complete support of multi-area setup, we can delete the following code
   // block.
-  auto filteredBestNodeAreas = bestRouteSelectionResult.allNodeAreas;
-  if (bestRouteSelectionResult.hasNode(myNodeName) and perDestination) {
+  auto filteredBestNodeAreas = routeSelectionResult.allNodeAreas;
+  if (routeSelectionResult.hasNode(myNodeName) and perDestination) {
     for (const auto& [nodeAndArea, prefixEntry] : prefixEntries) {
       if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel_ref()) {
         filteredBestNodeAreas.erase(nodeAndArea);
@@ -739,12 +739,12 @@ SpfSolver::selectBestPathsSpf(
   return addBestPaths(
       myNodeName,
       prefix,
-      bestRouteSelectionResult,
+      routeSelectionResult,
       prefixEntries,
       isBgp,
       getNextHopsThrift(
           myNodeName,
-          bestRouteSelectionResult.allNodeAreas,
+          routeSelectionResult.allNodeAreas,
           isV4Prefix,
           v4OverV6Nexthop_,
           perDestination,
@@ -759,7 +759,7 @@ std::optional<RibUnicastEntry>
 SpfSolver::selectBestPathsKsp2(
     const std::string& myNodeName,
     const folly::CIDRNetwork& prefix,
-    BestRouteSelectionResult const& bestRouteSelectionResult,
+    RouteSelectionResult const& routeSelectionResult,
     PrefixEntries const& prefixEntries,
     bool isBgp,
     thrift::PrefixForwardingType const& forwardingType,
@@ -782,7 +782,7 @@ SpfSolver::selectBestPathsKsp2(
 
   for (const auto& [area, linkState] : areaLinkStates) {
     // find shortest and sec shortest routes towards each node.
-    for (const auto& [node, bestArea] : bestRouteSelectionResult.allNodeAreas) {
+    for (const auto& [node, bestArea] : routeSelectionResult.allNodeAreas) {
       // if ourself is considered as ECMP nodes.
       if (node == myNodeName and bestArea == area) {
         continue;
@@ -796,7 +796,7 @@ SpfSolver::selectBestPathsKsp2(
     // route is not part of second shortest route to avoid double spraying
     // issue
     size_t const firstPathsSize = paths.size();
-    for (const auto& [node, bestArea] : bestRouteSelectionResult.allNodeAreas) {
+    for (const auto& [node, bestArea] : routeSelectionResult.allNodeAreas) {
       if (area != bestArea) {
         continue;
       }
@@ -887,7 +887,7 @@ SpfSolver::selectBestPathsKsp2(
   return addBestPaths(
       myNodeName,
       prefix,
-      bestRouteSelectionResult,
+      routeSelectionResult,
       prefixEntries,
       isBgp,
       std::move(nextHops));
@@ -897,7 +897,7 @@ std::optional<RibUnicastEntry>
 SpfSolver::addBestPaths(
     const std::string& myNodeName,
     const folly::CIDRNetwork& prefixThrift,
-    const BestRouteSelectionResult& bestRouteSelectionResult,
+    const RouteSelectionResult& routeSelectionResult,
     const PrefixEntries& prefixEntries,
     const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops) {
@@ -905,8 +905,7 @@ SpfSolver::addBestPaths(
 
   // Apply min-nexthop requirements. Ignore the route from programming if
   // min-nexthop requirement is not met.
-  auto minNextHop =
-      getMinNextHopThreshold(bestRouteSelectionResult, prefixEntries);
+  auto minNextHop = getMinNextHopThreshold(routeSelectionResult, prefixEntries);
   if (minNextHop.has_value() and minNextHop.value() > nextHops.size()) {
     LOG(WARNING) << "Ignore programming of route to "
                  << folly::IPAddress::networkToString(prefixThrift)
@@ -921,7 +920,7 @@ SpfSolver::addBestPaths(
   // importing route, along with the computed next-hops.
   // TODO: This is one off the hack to unblock special routing needs. With
   // complete support of multi-area setup, we won't need this any longer.
-  if (bestRouteSelectionResult.hasNode(myNodeName)) {
+  if (routeSelectionResult.hasNode(myNodeName)) {
     std::optional<int32_t> prependLabel;
     for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
       if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel_ref()) {
@@ -950,8 +949,8 @@ SpfSolver::addBestPaths(
   return RibUnicastEntry(
       prefix,
       std::move(nextHops),
-      *(prefixEntries.at(bestRouteSelectionResult.bestNodeArea)),
-      bestRouteSelectionResult.bestNodeArea.second,
+      *(prefixEntries.at(routeSelectionResult.bestNodeArea)),
+      routeSelectionResult.bestNodeArea.second,
       isBgp & (not enableBgpRouteProgramming_)); // doNotInstall
 }
 
@@ -1154,7 +1153,7 @@ SpfSolver::getNumSrPolicies() const {
 thrift::RouteComputationRules
 SpfSolver::getRouteComputationRules(
     const PrefixEntries& prefixEntries,
-    const BestRouteSelectionResult& routeSelectionResult,
+    const RouteSelectionResult& routeSelectionResult,
     const std::unordered_map<std::string, LinkState>& areaLinkStates) const {
   // Walk the srPolicies_ list and return the rules of the first one that
   // matches the route attributes

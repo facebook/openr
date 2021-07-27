@@ -25,25 +25,25 @@ using StaticUnicastRoutes =
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>;
 
 /**
- * Captures the best route selection result. Especially highlights
- * - Best announcing `pair<area, node>`
- * - All best entries `list<pair<area, node>>`
+ * Captures the route selection result. Especially highlights
+ * - Best announcing `pair<Node, Area>`
+ * - All selected entries `list<pair<Node, Area>>`
  */
-struct BestRouteSelectionResult {
+struct RouteSelectionResult {
   // TODO: Remove once we move to metrics selection
   bool success{false};
 
-  // Representing all `<Node, Area>` pair announcing the best-metrics
+  // Representing the selected set of `<Node, Area>`.
   // NOTE: Using `std::set` helps ensuring uniqueness and ease code for electing
-  // the best entry in some-cases.
+  // unique `<Node, Area>` in some-cases.
   std::set<NodeAndArea> allNodeAreas;
 
-  // The best entry among all entries with best-metrics. This should be used
-  // for re-distributing across areas.
+  // The `pair<Node, Area>` with best metrics. This should be used for
+  // redistribution across areas.
   NodeAndArea bestNodeArea;
 
   /**
-   * Function to check if provide node is one of the best node
+   * Function to check if provide node is one of the selected nodes.
    */
   bool
   hasNode(const std::string& node) const {
@@ -145,7 +145,7 @@ class SpfSolver {
       PrefixState const& prefixState,
       folly::CIDRNetwork const& prefix);
 
-  std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult> const&
+  std::unordered_map<folly::CIDRNetwork, RouteSelectionResult> const&
   getBestRoutesCache() const {
     return bestRoutesCache_;
   }
@@ -158,7 +158,7 @@ class SpfSolver {
   // rules are returned
   thrift::RouteComputationRules getRouteComputationRules(
       const PrefixEntries& prefixEntries,
-      const BestRouteSelectionResult& routeSelectionResult,
+      const RouteSelectionResult& routeSelectionResult,
       const std::unordered_map<std::string, LinkState>& areaLinkStates) const;
 
  private:
@@ -181,7 +181,7 @@ class SpfSolver {
   std::optional<RibUnicastEntry> selectBestPathsSpf(
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
-      BestRouteSelectionResult const& bestRouteSelectionResult,
+      RouteSelectionResult const& routeSelectionResult,
       PrefixEntries const& prefixEntries,
       bool const isBgp,
       thrift::PrefixForwardingType const& forwardingType,
@@ -193,7 +193,7 @@ class SpfSolver {
   std::optional<RibUnicastEntry> selectBestPathsKsp2(
       const std::string& myNodeName,
       const folly::CIDRNetwork& prefix,
-      BestRouteSelectionResult const& bestRouteSelectionResult,
+      RouteSelectionResult const& routeSelectionResult,
       PrefixEntries const& prefixEntries,
       bool isBgp,
       thrift::PrefixForwardingType const& forwardingType,
@@ -203,21 +203,21 @@ class SpfSolver {
   std::optional<RibUnicastEntry> addBestPaths(
       const std::string& myNodeName,
       const folly::CIDRNetwork& prefixThrift,
-      const BestRouteSelectionResult& bestRouteSelectionResult,
+      const RouteSelectionResult& routeSelectionResult,
       const PrefixEntries& prefixEntries,
       const bool isBgp,
       std::unordered_set<thrift::NextHopThrift>&& nextHops);
 
-  // helper function to find the nodes for the nexthop for bgp route
-  BestRouteSelectionResult runBestPathSelectionBgp(
+  // Helper function to find the nodes for the nexthop for bgp route
+  RouteSelectionResult runBestPathSelectionBgp(
       folly::CIDRNetwork const& prefix,
       PrefixEntries const& prefixEntries,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
   /**
-   * Performs best route selection from received route announcements
+   * Performs best route selection from received route announcements.
    */
-  BestRouteSelectionResult selectBestRoutes(
+  RouteSelectionResult selectBestRoutes(
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       PrefixEntries const& prefixEntries,
@@ -226,14 +226,14 @@ class SpfSolver {
 
   // helper to get min nexthop for a prefix, used in selectKsp2
   std::optional<int64_t> getMinNextHopThreshold(
-      BestRouteSelectionResult nodes, PrefixEntries const& prefixEntries);
+      RouteSelectionResult nodes, PrefixEntries const& prefixEntries);
 
   // Helper to filter overloaded nodes for anycast addresses
   //
   // TODO: This should go away, once Open/R policy is in place. The overloaded
   // nodes will stop advertising specific prefixes if they're overloaded
-  BestRouteSelectionResult maybeFilterDrainedNodes(
-      BestRouteSelectionResult&& result,
+  RouteSelectionResult maybeFilterDrainedNodes(
+      RouteSelectionResult&& result,
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 
   // Give source node-name and dstNodeNames, this function returns the set of
@@ -276,8 +276,7 @@ class SpfSolver {
   // Cache of best route selection.
   // - Cleared when topology changes
   // - Updated for the prefix whenever a route is created for it
-  std::unordered_map<folly::CIDRNetwork, BestRouteSelectionResult>
-      bestRoutesCache_;
+  std::unordered_map<folly::CIDRNetwork, RouteSelectionResult> bestRoutesCache_;
 
   const std::string myNodeName_;
 
