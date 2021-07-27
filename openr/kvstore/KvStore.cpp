@@ -923,8 +923,8 @@ KvStoreDb::KvStoreDb(
   ttlCountdownTimer_ = folly::AsyncTimeout::make(
       *evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
-  // Create ttl timer
-  ttlTimer_ = folly::AsyncTimeout::make(
+  // Create ttl timer for refreshing ttls of self-originated key-vals
+  selfOriginatedKeyTtlTimer_ = folly::AsyncTimeout::make(
       *evb->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
 
   // initialize KvStore per-area counters
@@ -946,7 +946,7 @@ KvStoreDb::~KvStoreDb() {
     // Destroy thrift clients associated with peers, which will
     // fulfill promises with exceptions if any.
     thriftPeers_.clear();
-    ttlTimer_.reset();
+    selfOriginatedKeyTtlTimer_.reset();
     LOG(INFO) << "Successfully destroyed thriftPeers and timers";
   });
 
@@ -990,7 +990,7 @@ KvStoreDb::setSelfOriginatedKey(
   params.keyVals_ref() = std::move(keyVals);
   setKeyVals(std::move(params));
 
-  // Add ttl backoff and trigger ttlTimer_
+  // Add ttl backoff and trigger selfOriginatedKeyTtlTimer_
   scheduleTtlUpdates(key, false /* advertiseImmediately */);
 }
 
@@ -1089,7 +1089,7 @@ KvStoreDb::persistSelfOriginatedKey(
   // Advertise this key.
   advertiseSelfOriginatedKeys(pendingKeysToAdvertise);
 
-  // Add ttl backoff and trigger ttlTimer_
+  // Add ttl backoff and trigger selfOriginatedKeyTtlTimer_
   scheduleTtlUpdates(key, false /* advertiseImmediately */);
 }
 
@@ -1170,8 +1170,8 @@ KvStoreDb::scheduleTtlUpdates(
     selfOriginatedKeyVals_[key].ttlBackoff.reportError();
   }
 
-  // trigger ttl timer
-  ttlTimer_->scheduleTimeout(
+  // trigger self-originated key-val ttl refreshing timer
+  selfOriginatedKeyTtlTimer_->scheduleTimeout(
       selfOriginatedKeyVals_[key].ttlBackoff.getTimeRemainingUntilRetry());
 }
 
@@ -1224,7 +1224,7 @@ KvStoreDb::advertiseTtlUpdates() {
 
   // Schedule next-timeout for processing/clearing backoffs
   VLOG(2) << "Scheduling ttl timer after " << timeout.count() << "ms.";
-  ttlTimer_->scheduleTimeout(timeout);
+  selfOriginatedKeyTtlTimer_->scheduleTimeout(timeout);
 }
 
 void

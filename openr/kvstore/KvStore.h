@@ -463,7 +463,7 @@ class KvStoreDb : public DualNode {
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
 
   // timer to advertise ttl updates for self-originated key-vals
-  std::unique_ptr<folly::AsyncTimeout> ttlTimer_;
+  std::unique_ptr<folly::AsyncTimeout> selfOriginatedKeyTtlTimer_;
 
   // all self originated key-vals and their backoffs
   // persistKey and setKey will add, clearKey will remove
