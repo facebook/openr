@@ -232,7 +232,6 @@ KvStore::getKvStoreKeyVals(
     VLOG(3) << "Get key requested for AREA: " << area;
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "getKvStoreKeyVals");
-      fb303::fbData->addStatValue("kvstore.cmd_key_get", 1, fb303::COUNT);
 
       auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys_ref());
       kvStoreDb.updatePublicationTtl(thriftPub);
@@ -957,7 +956,8 @@ KvStoreDb::~KvStoreDb() {
 void
 KvStoreDb::setSelfOriginatedKey(
     std::string const& key, std::string const& value, uint32_t version) {
-  VLOG(3) << "setSelfOriginatedKey called for key " << key;
+  VLOG(3) << "setSelfOriginatedKey called for key: " << key
+          << ", area: " << area_;
 
   // Create 'thrift::Value' object which will be sent to KvStore
   thrift::Value thriftValue = createThriftValue(
@@ -973,16 +973,15 @@ KvStoreDb::setSelfOriginatedKey(
   if (not version) {
     auto it = kvStore_.find(key);
     if (it != kvStore_.end()) {
-      thriftValue.version_ref() = it->second.get_version();
+      thriftValue.version_ref() = it->second.get_version() + 1;
     } else {
       thriftValue.version_ref() = 1;
     }
   }
 
-  // store self-originated key-vals in cache
+  // Store self-originated key-vals in cache
   // ATTN: ttl backoff will be set separately in scheduleTtlUpdates()
-  SelfOriginatedValue selfOriginatedVal;
-  selfOriginatedVal.value = thriftValue;
+  auto selfOriginatedVal = SelfOriginatedValue(thriftValue);
   selfOriginatedKeyVals_[key] = std::move(selfOriginatedVal);
 
   // Advertise key to KvStore
@@ -998,7 +997,145 @@ KvStoreDb::setSelfOriginatedKey(
 void
 KvStoreDb::persistSelfOriginatedKey(
     std::string const& key, std::string const& value) {
-  CHECK(false) << "persistKey not implemented.";
+  VLOG(3) << "persistSelfOriginatedKey called for key: " << key
+          << ", area: " << area_;
+
+  // Local variable to hold pending keys to advertise
+  std::unordered_set<std::string> pendingKeysToAdvertise{};
+
+  // Look key up in local cached storage
+  auto selfOriginatedKeyIt = selfOriginatedKeyVals_.find(key);
+
+  // Advertise key-val if old key-val needs to be overridden or key does not
+  // exist in KvStore already.
+  bool shouldAdvertise = false;
+
+  // Override thrift::Value if SAME key is already in KvStore with another
+  // originator or if value has changed.
+  bool shouldOverride = false;
+
+  // Default thrift value to use with invalid version(0)
+  thrift::Value thriftValue =
+      createThriftValue(0, nodeId, value, kvParams_.keyTtl.count());
+  CHECK(thriftValue.value_ref());
+
+  // Two cases for this particular (k, v) pair:
+  //  1) Key is first-time persisted:
+  //     Retrieve it from `kvStore_`.
+  //      <1> Key is NOT found in `KvStore` (ATTN:
+  //          new key advertisement)
+  //      <2> Key is found in `KvStore`. Override the
+  //          value with authoritative operation.
+  //  2) Key has been persisted before:
+  //     Retrieve it from cached self-originated key-vals;
+  if (selfOriginatedKeyIt == selfOriginatedKeyVals_.end()) {
+    // Key is first-time persisted. Check if key is in KvStore.
+    auto keyIt = kvStore_.find(key);
+    if (keyIt == kvStore_.end()) {
+      // Key is not in KvStore. Advertise key-value.
+      thriftValue.version_ref() = 1;
+      shouldAdvertise = true;
+    } else {
+      // Key is in KvStore, but it is NOT self-originated, i.e., someone else is
+      // advertising the SAME key.
+      thriftValue = keyIt->second;
+      if (thriftValue.get_originatorId() != nodeId) {
+        shouldOverride = true;
+      }
+      // TTL update pub is never saved in kvstore. Value is not std::nullopt.
+      DCHECK(thriftValue.value_ref());
+    }
+  } else {
+    // Key has been persisted before
+    thriftValue = selfOriginatedKeyIt->second.value;
+    if (*thriftValue.value_ref() == value) {
+      // this is a no op, return early and change no state
+      return;
+    }
+  }
+
+  // Override `thrift::Value` if we detect Value field has changed
+  if (*thriftValue.value_ref() != value) {
+    shouldOverride = true;
+  }
+
+  // Perform value and version override
+  if (shouldOverride) {
+    (*thriftValue.version_ref())++;
+    thriftValue.ttlVersion_ref() = 0;
+    thriftValue.value_ref() = value;
+    thriftValue.originatorId_ref() = nodeId;
+    shouldAdvertise = true;
+  }
+
+  // Cache it in selfOriginatedKeyVals. Override the existing one.
+  if (selfOriginatedKeyIt == selfOriginatedKeyVals_.end()) {
+    auto selfOriginatedVal = SelfOriginatedValue(std::move(thriftValue));
+    selfOriginatedKeyVals_.emplace(key, std::move(selfOriginatedVal));
+  } else {
+    selfOriginatedKeyIt->second.value = std::move(thriftValue);
+  }
+
+  // Override existing backoff as well
+  selfOriginatedKeyVals_[key].keyBackoff =
+      ExponentialBackoff<std::chrono::milliseconds>(
+          Constants::kInitialBackoff, Constants::kMaxBackoff);
+
+  // Add keys to list of pending keys
+  if (shouldAdvertise) {
+    pendingKeysToAdvertise.insert(key);
+  }
+
+  // Advertise this key.
+  advertiseSelfOriginatedKeys(pendingKeysToAdvertise);
+
+  // Add ttl backoff and trigger ttlTimer_
+  scheduleTtlUpdates(key, false /* advertiseImmediately */);
+}
+
+void
+KvStoreDb::advertiseSelfOriginatedKeys(
+    const std::unordered_set<std::string>& pendingKeysToAdvertise) {
+  std::chrono::milliseconds timeout = Constants::kMaxBackoff;
+
+  // advertise pending key for each area
+  if (pendingKeysToAdvertise.empty()) {
+    return;
+  }
+
+  // Build set of keys to advertise
+  std::unordered_map<std::string, thrift::Value> keyVals{};
+
+  for (auto const& key : pendingKeysToAdvertise) {
+    // Each key was introduced through a persistSelfOriginatedKey() call.
+    // Therefore, each key is in selfOriginatedKeyVals_ and has a keyBackoff.
+    auto& selfOriginatedValue = selfOriginatedKeyVals_.at(key);
+    const auto& thriftValue = selfOriginatedValue.value;
+    CHECK(selfOriginatedValue.keyBackoff.has_value());
+
+    auto& backoff = selfOriginatedValue.keyBackoff.value();
+
+    // Proceed only if key backoff is active
+    if (not backoff.canTryNow()) {
+      timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+      VLOG(2) << "Skipping key: " << key << ", area: " << area_;
+      continue;
+    }
+
+    // Apply backoff
+    backoff.reportError();
+    timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+
+    printKeyValInArea(1 /*logLevel*/, "Advertising", area_, key, thriftValue);
+
+    // Set in keyVals which is going to be advertise to the kvStore.
+    DCHECK(thriftValue.value_ref());
+    keyVals.emplace(key, thriftValue);
+  }
+
+  thrift::KeySetParams params;
+  params.keyVals_ref() = std::move(keyVals);
+  setKeyVals(std::move(params));
 }
 
 void

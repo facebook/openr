@@ -63,6 +63,9 @@ struct SelfOriginatedValue {
   std::optional<ExponentialBackoff<std::chrono::milliseconds>> keyBackoff;
   // Backoff for advertising ttl updates for this key-val
   ExponentialBackoff<std::chrono::milliseconds> ttlBackoff;
+
+  SelfOriginatedValue() {}
+  explicit SelfOriginatedValue(const thrift::Value& val) : value(val) {}
 };
 
 using SelfOriginatedKeyVals =
@@ -381,6 +384,8 @@ class KvStoreDb : public DualNode {
   // schedule ttl updates for self-originated key-vals
   void scheduleTtlUpdates(std::string const& key, bool advertiseImmediately);
 
+  void advertiseSelfOriginatedKeys(
+      const std::unordered_set<std::string>& pendingKeysToAdvertise);
   //
   // Private variables
   //

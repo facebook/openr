@@ -448,7 +448,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
     // check advertised self-originated key-value was stored in kvstore
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(1, kvStoreCache.size());
-    EXPECT_EQ(value, kvStoreCache.at(key).value.value_ref());
+    EXPECT_EQ(value, *kvStoreCache.at(key).value.value_ref());
 
     // check that ttl version was bumped up and
     // key-val with updated ttl version was flooded
@@ -468,6 +468,234 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
   // Start the event loop and wait until it is finished execution.
   evb.run();
   evb.waitUntilStopped();
+}
+
+/**
+ * Validate versioning for receiving multiple SetKeyValueRequests.
+ */
+TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
+  const std::string nodeId = "black-widow";
+  int64_t ttl = 2000; // 2 seconds
+
+  // Set key-val ttls
+  auto kvConf = getTestKvConf();
+  kvConf.key_ttl_ms_ref() = ttl;
+
+  // create and start kv store with kvRequestQueue enabled
+  initKvStore(nodeId, kvConf);
+
+  // Push first request to set key-val.
+  const std::string key = "key-settwice";
+  const std::string valueFirst = "value-first";
+  auto setFirstKvRequest =
+      SetKeyValueRequest(kTestingAreaName, key, valueFirst);
+  kvRequestQueue_.push(std::move(setFirstKvRequest));
+
+  // Key is new to KvStore. Value version should be 1.
+  auto pubFirst = kvStore_->recvPublication();
+  EXPECT_EQ(1, pubFirst.keyVals_ref()->size());
+  EXPECT_EQ(1, pubFirst.keyVals_ref()->at(key).get_version());
+  EXPECT_EQ(valueFirst, *pubFirst.keyVals_ref()->at(key).value_ref());
+
+  // Create request to set same key, different value.
+  const std::string valueSecond = "value-second";
+  auto setSecondKvRequest =
+      SetKeyValueRequest(kTestingAreaName, key, valueSecond);
+  kvRequestQueue_.push(std::move(setSecondKvRequest));
+
+  // Check value is updated and version is bumped.
+  auto pubSecond = kvStore_->recvPublication();
+  EXPECT_EQ(1, pubSecond.keyVals_ref()->size());
+  EXPECT_EQ(2, pubSecond.keyVals_ref()->at(key).get_version());
+  EXPECT_EQ(valueSecond, *pubSecond.keyVals_ref()->at(key).value_ref());
+
+  // Validate that advertised self-originated key-value matches KvStore cache.
+  auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+  EXPECT_EQ(1, kvStoreCache.size());
+  EXPECT_EQ(2, kvStoreCache.at(key).value.get_version());
+  EXPECT_EQ(valueSecond, *kvStoreCache.at(key).value.value_ref());
+}
+
+/**
+ * Validate versioning for receiving multiple SetKeyValueRequests.
+ */
+TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
+  const std::string nodeId = "yelena";
+  int64_t ttl = 2000; // 2 seconds
+
+  // Set key-val ttls
+  auto kvConf = getTestKvConf();
+  kvConf.key_ttl_ms_ref() = ttl;
+
+  // create and start kv store with kvRequestQueue enabled
+  initKvStore(nodeId, kvConf);
+
+  // Push first request to set key-val.
+  const std::string key = "key-red-guardian";
+  const std::string value = "value-red-guardian";
+  const uint32_t version = 10;
+  auto setKvRequest = SetKeyValueRequest(kTestingAreaName, key, value, version);
+  kvRequestQueue_.push(std::move(setKvRequest));
+
+  // Key is new to KvStore. Value version should be 1.
+  auto pubFirst = kvStore_->recvPublication();
+  EXPECT_EQ(1, pubFirst.keyVals_ref()->size());
+  EXPECT_EQ(version, pubFirst.keyVals_ref()->at(key).get_version());
+
+  // Validate that advertised self-originated key-value matches KvStore cache.
+  auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+  EXPECT_EQ(1, kvStoreCache.size());
+  EXPECT_EQ(version, kvStoreCache.at(key).value.get_version());
+}
+
+/**
+ * Validate PersistKeyValueRequest advertisement, version overriding, and
+ * ttl-refreshing. Send PersistKeyValueRequest via queue to KvStore.
+ */
+TEST_F(
+    KvStoreSelfOriginatedKeyValueRequestFixture,
+    ProcessPersistKeyValueRequest) {
+  const std::string nodeId = "node22";
+  int64_t ttl = 2000; // 2 seconds
+
+  // Set key-val ttls
+  auto kvConf = getTestKvConf();
+  kvConf.key_ttl_ms_ref() = ttl;
+
+  // create and start kv store with kvRequestQueue enabled
+  initKvStore(nodeId, kvConf);
+
+  const std::string key = "persist-key";
+  const std::string value = "persist-value";
+  const std::string newValue = "persist-changedvalue";
+
+  OpenrEventBase evb;
+
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    // Test 1: - persist key (first-time persisting)
+    //         - check key-value advertisement
+    //         - check ttl version update advertisement
+    {
+      // create request to persist key-val
+      auto persistKvRequest =
+          PersistKeyValueRequest(kTestingAreaName, key, value);
+      // push request to queue -- trigger processKeyValueRequest() in KvStore
+      kvRequestQueue_.push(std::move(persistKvRequest));
+
+      // wait for kvstore handle PersistKeyValue request and flood new key-val
+      auto pub = kvStore_->recvPublication();
+      EXPECT_EQ(1, pub.keyVals_ref()->size());
+      EXPECT_EQ(0, *(pub.keyVals_ref()->at(key).ttlVersion_ref()));
+      EXPECT_EQ(1, *(pub.keyVals_ref()->at(key).version_ref()));
+
+      // check advertised self-originated key-value was stored in kvstore
+      auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+      EXPECT_EQ(1, kvStoreCache.size());
+      EXPECT_EQ(value, *kvStoreCache.at(key).value.value_ref());
+
+      // check that ttl version was bumped up and
+      // key-val with updated ttl version was flooded
+      auto pub2 = kvStore_->recvPublication();
+      EXPECT_EQ(1, pub2.keyVals_ref()->size());
+      EXPECT_EQ(1, *(pub2.keyVals_ref()->at(key).ttlVersion_ref()));
+    }
+
+    // Test 2: - persist same key with a different value
+    //         - check that new key was advertised
+    //         - check that version was bumped up
+    {
+      // persist key with new value
+      auto persistSameKeyRequest =
+          PersistKeyValueRequest(kTestingAreaName, key, newValue);
+      kvRequestQueue_.push(std::move(persistSameKeyRequest));
+
+      // new key-value will be advertised and version will be bumped up
+      auto newValPub = kvStore_->recvPublication();
+      EXPECT_EQ(1, newValPub.keyVals_ref()->size());
+      EXPECT_EQ(0, *(newValPub.keyVals_ref()->at(key).ttlVersion_ref()));
+      EXPECT_EQ(2, *(newValPub.keyVals_ref()->at(key).version_ref()));
+
+      // check cache of self-originated key-vals has stored the new value
+      auto updatedCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+      EXPECT_EQ(1, updatedCache.size());
+      EXPECT_EQ(newValue, *updatedCache.at(key).value.value_ref());
+    }
+
+    // Test 3: - persist same key with same value
+    //         - check that version is the same and ttl version
+    //           continues being bumped
+    {
+      // persist key with same value
+      auto persistSameValueRequest =
+          PersistKeyValueRequest(kTestingAreaName, key, newValue);
+      kvRequestQueue_.push(std::move(persistSameValueRequest));
+    }
+  });
+
+  evb.scheduleTimeout(std::chrono::milliseconds(ttl * 2), [&]() noexcept {
+    // Check that key-val was not expired after ttl time has passed.
+    auto recVal = kvStore_->getKey(kTestingAreaName, key);
+    EXPECT_TRUE(recVal.has_value());
+
+    // Test 3 (continued):
+    // Check that version is the same and ttl version has been bumped.
+    EXPECT_EQ(2, *(recVal.value().version_ref()));
+    EXPECT_GE(*(recVal.value().ttlVersion_ref()), 4);
+    evb.stop();
+  });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
+
+/**
+ * Validate PersistKeyValueRequest version overriding of self-originated key-val
+ * if another originator has advertised same key.
+ */
+TEST_F(
+    KvStoreSelfOriginatedKeyValueRequestFixture,
+    PersistKeyWithValueOverriding) {
+  const std::string otherNodeId = "node-other";
+  const std::string myNodeId = "node-myself";
+
+  const std::string key = "persist-override-key";
+  const std::string value = "value-to-override";
+
+  initKvStore(myNodeId);
+
+  // Set a key in KvStore with other node as originator.
+  const thrift::Value thriftVal = createThriftValue(
+      1 /* version */,
+      otherNodeId /* originatorId */,
+      value /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(
+          1, otherNodeId, thrift::Value().value_ref() = std::string(value)));
+  kvStore_->setKey(kTestingAreaName, key, thriftVal);
+
+  // First publication is from flooding the set key. Check that originator is
+  // other node.
+  auto setPub = kvStore_->recvPublication();
+  EXPECT_EQ(1, setPub.keyVals_ref()->size());
+  EXPECT_EQ(0, *(setPub.keyVals_ref()->at(key).ttlVersion_ref()));
+  EXPECT_EQ(1, *(setPub.keyVals_ref()->at(key).version_ref()));
+  EXPECT_EQ(otherNodeId, *(setPub.keyVals_ref()->at(key).originatorId_ref()));
+
+  // Persist key-val using request queue.
+  auto persistKvRequest = PersistKeyValueRequest(kTestingAreaName, key, value);
+  kvRequestQueue_.push(std::move(persistKvRequest));
+
+  // Second publication is from flooding the persist key originator change.
+  // Check that key-val has been overridden and originator has changed to my
+  // node.
+  // potential race: ttl refresh happens before persist publication.
+  auto persistPub = kvStore_->recvPublication();
+  EXPECT_EQ(1, persistPub.keyVals_ref()->size());
+  EXPECT_EQ(0, *(persistPub.keyVals_ref()->at(key).ttlVersion_ref()));
+  EXPECT_EQ(2, *(persistPub.keyVals_ref()->at(key).version_ref()));
+  EXPECT_EQ(myNodeId, *(persistPub.keyVals_ref()->at(key).originatorId_ref()));
 }
 
 /**
