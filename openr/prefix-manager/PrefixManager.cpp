@@ -368,8 +368,54 @@ PrefixManager::buildOriginatedPrefixDb(
   }
 }
 
+void
+PrefixManager::updatePrefixKeysInKvStore(
+    const folly::CIDRNetwork& prefix,
+    const PrefixEntry& prefixEntry,
+    DecisionRouteUpdate& routeUpdatesOut) {
+  // advertise best-entry for this prefix to `KvStore`
+  auto newKeys = addKvStoreKeyHelper(prefixEntry);
+
+  auto keysIt = keysInKvStore_.find(prefix);
+  if (keysIt != keysInKvStore_.end()) {
+    // ATTN: This collection holds "advertised" prefixes in previous round
+    // of syncing. By removing prefixes in current run, whatever left in
+    // `keysInKvStore_` will be the delta to be removed.
+    for (const auto& key : newKeys) {
+      keysIt->second.keys.erase(key);
+    }
+
+    // remove keys which are no longer advertised
+    // e.g.
+    // t0: prefix_1 => {area_1, area_2}
+    // t1: prefix_1 => {area_1, area_3}
+    //     (prefix_1, area_2) will be removed
+    deleteKvStoreKeyHelper(keysIt->second.keys);
+  }
+
+  // override `keysInKvStore_` for next-round syncing
+  keysInKvStore_[prefix].keys = std::move(newKeys);
+  // propogate route update to `KvStore` and `Decision`(if necessary)
+  if (prefixEntry.shouldInstall()) {
+    keysInKvStore_[prefix].installedToFib = true;
+    // Populate RibUnicastEntry struct
+    // ATTN: AREA field is empty for NHs
+    // if shouldInstall() is true, nexthops is guaranteed to have value.
+    RibUnicastEntry unicastEntry(prefix, prefixEntry.nexthops.value());
+    unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
+    routeUpdatesOut.addRouteToUpdate(std::move(unicastEntry));
+  } else {
+    // if was installed to fib, but now lose in tie break, withdraw from
+    // fib.
+    if (keysInKvStore_[prefix].installedToFib) {
+      routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
+      keysInKvStore_[prefix].installedToFib = false;
+    }
+  } // else
+}
+
 std::unordered_set<std::string>
-PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
+PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
   std::unordered_set<std::string> prefixKeys;
   const auto& tPrefixEntry = entry.tPrefixEntry;
   const auto& type = *tPrefixEntry->type_ref();
@@ -432,6 +478,25 @@ PrefixManager::updateKvStoreKeyHelper(const PrefixEntry& entry) {
     prefixKeys.emplace(prefixKeyStr);
   }
   return prefixKeys;
+}
+
+void
+PrefixManager::deletePrefixKeysInKvStore(
+    const folly::CIDRNetwork& prefix, DecisionRouteUpdate& routeUpdatesOut) {
+  // delete actual keys being advertised in the cache
+  //
+  // Sample format:
+  //  prefix    :    node1    :    0    :    0.0.0.0/32
+  //    |              |           |             |
+  //  marker        nodeId      areaId        prefixStr
+  auto keysIt = keysInKvStore_.find(prefix);
+  if (keysIt != keysInKvStore_.end()) {
+    deleteKvStoreKeyHelper(keysIt->second.keys);
+    if (keysIt->second.installedToFib) {
+      routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
+    }
+    keysInKvStore_.erase(keysIt);
+  }
 }
 
 void
@@ -526,21 +591,10 @@ PrefixManager::syncKvStore() {
   for (auto const& prefix : pendingUpdates_.getChangedPrefixes()) {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
+      // Delete prefixes that do not exist in prefixMap_.
+      VLOG(1) << fmt::format("Deleting keys for {}", prefix.first.str());
       advertisedPrefixes_.erase(prefix);
-      // delete actual keys being advertised in the cache
-      //
-      // Sample format:
-      //  prefix    :    node1    :    0    :    0.0.0.0/32
-      //    |              |           |             |
-      //  marker        nodeId      areaId        prefixStr
-      auto keysIt = keysInKvStore_.find(prefix);
-      if (keysIt != keysInKvStore_.end()) {
-        deleteKvStoreKeyHelper(keysIt->second.keys);
-        if (keysIt->second.installedToFib) {
-          routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
-        }
-        keysInKvStore_.erase(keysIt);
-      }
+      deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
     } else {
       // add/update keys in `KvStore`
       auto bestTypeEntry =
@@ -552,53 +606,15 @@ PrefixManager::syncKvStore() {
       }
       advertisedPrefixes_.insert(prefix);
 
-      // advertise best-entry for this prefix to `KvStore`
-      auto newKeys = updateKvStoreKeyHelper(bestEntry);
-
-      auto keysIt = keysInKvStore_.find(prefix);
-      if (keysIt != keysInKvStore_.end()) {
-        // ATTN: This collection holds "advertised" prefixes in previous round
-        // of syncing. By removing prefixes in current run, whatever left in
-        // `keysInKvStore_` will be the delta to be removed.
-        for (const auto& key : newKeys) {
-          keysIt->second.keys.erase(key);
-        }
-
-        // remove keys which are no longer advertised
-        // e.g.
-        // t0: prefix_1 => {area_1, area_2}
-        // t1: prefix_1 => {area_1, area_3}
-        //     (prefix_1, area_2) will be removed
-        deleteKvStoreKeyHelper(keysIt->second.keys);
-      }
-
-      // override `keysInKvStore_` for next-round syncing
-      keysInKvStore_[prefix].keys = std::move(newKeys);
-      // propogate route update to `KvStore` and `Decision`(if necessary)
-      if (bestEntry.shouldInstall()) {
-        keysInKvStore_[prefix].installedToFib = true;
-        // Populate RibUnicastEntry struct
-        // ATTN: AREA field is empty for NHs
-        // if shouldInstall() is true, nexthops is guaranteed to have value.
-        RibUnicastEntry unicastEntry(prefix, bestEntry.nexthops.value());
-        unicastEntry.bestPrefixEntry = *bestEntry.tPrefixEntry;
-        routeUpdatesOut.addRouteToUpdate(std::move(unicastEntry));
-      } else {
-        // if was installed to fib, but now lose in tie break, withdraw from
-        // fib.
-        if (keysInKvStore_[prefix].installedToFib) {
-          routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
-          keysInKvStore_[prefix].installedToFib = false;
-        }
-      } // else
+      updatePrefixKeysInKvStore(prefix, bestEntry, routeUpdatesOut);
     } // else
 
     // Record already advertised prefix in pendingUpdates_.
     syncedPendingPrefixes.emplace_back(prefix);
   } // for
+
   // push originatedRoutes update via replicate queue
-  if (routeUpdatesOut.unicastRoutesToUpdate.size() or
-      routeUpdatesOut.unicastRoutesToDelete.size()) {
+  if (not routeUpdatesOut.empty()) {
     CHECK(routeUpdatesOut.mplsRoutesToUpdate.empty());
     CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));

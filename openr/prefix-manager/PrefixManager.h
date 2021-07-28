@@ -204,8 +204,18 @@ class PrefixManager final : public OpenrEventBase {
    */
   void syncKvStore();
 
-  std::unordered_set<std::string> updateKvStoreKeyHelper(
-      const PrefixEntry& entry);
+  // Update KvStore keys of one prefix entry.
+  void updatePrefixKeysInKvStore(
+      const folly::CIDRNetwork& prefix,
+      const PrefixEntry& prefixEntry,
+      DecisionRouteUpdate& routeUpdatesOut);
+
+  // Add KvStore keys of one prefix entry.
+  std::unordered_set<std::string> addKvStoreKeyHelper(const PrefixEntry& entry);
+
+  // Delete KvStore keys of one prefix entry.
+  void deletePrefixKeysInKvStore(
+      const folly::CIDRNetwork& prefix, DecisionRouteUpdate& routeUpdatesOut);
 
   void deleteKvStoreKeyHelper(
       const std::unordered_set<std::string>& deletedKeys);

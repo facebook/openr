@@ -1250,6 +1250,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
       [&]() {
         // 2.2. Donot advertise prefix update of <Prefix, Label1> since label
         // routes has not programmed yet.
+        // Note: previously advertised prefix with null label still persists.
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
