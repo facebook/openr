@@ -113,12 +113,18 @@ class AdvertisedRoutesCli(object):
         default=False,
         help="Show all details including tags and area-stack",
     )
+    @click.option(
+        "--tag2name/--no-tag2name",
+        default=False,
+        help="Translate tag string to human readable name",
+    )
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
     @click.pass_obj
     def show(
         cli_opts: bunch.Bunch,  # noqa: B902
         prefix_type: Optional[str],
         detail: bool,
+        tag2name: bool,
         json: bool,
     ) -> None:
         """
@@ -131,6 +137,7 @@ class AdvertisedRoutesCli(object):
             prefix_type=prefix_type,
             detail=detail,
             json=json,
+            tag2name=tag2name,
         )
         print(cli_opts.advertised_routes_options.keys())
 
@@ -219,10 +226,19 @@ class OriginatedRoutesCli(object):
         default=False,
         help="Show all details including tags and area-stack",
     )
+    @click.option(
+        "--tag2name/--no-tag2name",
+        default=False,
+        help="Translate tag string to human readable name",
+    )
     @click.pass_obj
-    def show(cli_opts: bunch.Bunch, detail: bool) -> None:  # noqa: B902
+    def show(
+        cli_opts: bunch.Bunch,  # noqa: B902
+        detail: bool,
+        tag2name: bool,
+    ) -> None:
         """
         Show originated routes configured on this node. Will show all by default
         """
 
-        prefix_mgr.OriginatedRoutesCmd(cli_opts).run(detail)
+        prefix_mgr.OriginatedRoutesCmd(cli_opts).run(detail, tag2name)

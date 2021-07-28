@@ -203,6 +203,11 @@ class ReceivedRoutesCli(object):
         default=False,
         help="Show all details including tags and area-stack",
     )
+    @click.option(
+        "--tag2name/--no-tag2name",
+        default=False,
+        help="Translate tag string to human readable name",
+    )
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
     @click.pass_obj
     def show(
@@ -211,9 +216,12 @@ class ReceivedRoutesCli(object):
         node: Optional[str],
         area: Optional[str],
         detail: bool,
+        tag2name: bool,
         json: bool,
     ) -> None:
         """
         Show routes this node is advertising. Will show all by default
         """
-        decision.ReceivedRoutesCmd(cli_opts).run(prefix, node, area, json, detail)
+        decision.ReceivedRoutesCmd(cli_opts).run(
+            prefix, node, area, json, detail, tag2name
+        )

@@ -4,10 +4,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.cli.utils.utils import (
+    get_tag_to_name_map,
     PrintAdvertisedTypes,
     print_route_details,
     print_advertised_routes,
@@ -188,7 +189,10 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         """
         Render advertised routes
         """
-        print_route_details(routes, prefix_type_key_fn, detailed)
+        tag_to_name = None
+        if self.cli_opts["advertised_routes_options"]["tag2name"]:
+            tag_to_name = get_tag_to_name_map(self._get_config())
+        print_route_details(routes, prefix_type_key_fn, detailed, tag_to_name)
 
 
 class OriginatedRoutesCmd(PrefixMgrCmd):
@@ -196,27 +200,30 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         self,
         client: OpenrCtrl.Client,
         detailed: bool,
+        tag2name: bool,
         *args,
         **kwargs,
     ) -> None:
 
         # Get data
-        self._render(client.getOriginatedPrefixes(), detailed)
+        self._render(client.getOriginatedPrefixes(), detailed, tag2name)
 
     def _render(
         self,
         originated_prefixes: List[openr_types.OriginatedPrefixEntry],
         detailed: bool,
+        tag2name: bool,
     ) -> None:
         """
         Render advertised routes
         """
         rows = [""]
 
+        tag_to_name = get_tag_to_name_map(self._get_config()) if tag2name else None
         if detailed:
-            self._print_orig_routes_detailed(rows, originated_prefixes)
+            self._print_orig_routes_detailed(rows, originated_prefixes, tag_to_name)
         else:
-            self._print_orig_routes(rows, originated_prefixes)
+            self._print_orig_routes(rows, originated_prefixes, tag_to_name)
 
         print("\n".join(rows))
 
@@ -224,13 +231,16 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         self,
         rows: List[str],
         originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+        tag_to_name: Optional[Dict[str, str]] = None,
     ):
         """
         Construct print lines of originated route in tabular fashion
+        if tag_to_name is provided, translate tag/comm value to its name
 
         Output format example with table heading:
         Prefix                                     Community     SR    MSR      I
         2401:db00:30:40::/59                     65529:26730      2      1    1/1
+                                        FABRIC_POD_CLUSTER_PRIVATE_SUBAGG (if tag_to_name is providied)
 
         """
         rows.append(
@@ -247,11 +257,12 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
             f"{'I':>6} "
         )
         rows.append("")
+        tag_to_name = tag_to_name if tag_to_name is not None else {}
         for prefix_entry in originated_prefixes:
             tag: List[str] = [""]
             prefix_tags = prefix_entry.prefix.tags
             if prefix_tags:
-                tag = list(prefix_tags)
+                tag = [tag_to_name.get(t, t) for t in prefix_tags]
 
             installed: bool = False
             if prefix_entry.prefix.install_to_fib:
@@ -271,6 +282,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         self,
         rows: List[str],
         originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+        tag_to_name: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Construct print lines of originated route, append to rows
@@ -285,6 +297,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
                 Min Supporting Routes <min-supporting-routes>
                 Install to FIB <install-to-fib?>
         """
+        tag_to_name = tag_to_name if tag_to_name is not None else {}
 
         for prefix_entry in originated_prefixes:
             rows.append(f"> {prefix_entry.prefix.prefix}")
@@ -303,7 +316,9 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
             )
             prefix_tags = prefix_entry.prefix.tags
             if prefix_tags:
-                rows.append(f"     Tags - {', '.join(prefix_tags)}")
+                rows.append(
+                    f"     Tags - {', '.join([tag_to_name.get(t,t) for t in prefix_tags])}"
+                )
             area_stack = prefix_entry.prefix.area_stack
             if area_stack:
                 rows.append(f"     Area Stack - {', '.join(area_stack)}")
@@ -376,4 +391,7 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         """
         Render advertised routes
         """
-        print_advertised_routes(routes, prefix_type_key_fn, detailed)
+        tag_to_name = None
+        if self.cli_opts["advertised_routes_options"]["tag2name"]:
+            tag_to_name = get_tag_to_name_map(self._get_config())
+        print_advertised_routes(routes, prefix_type_key_fn, detailed, tag_to_name)

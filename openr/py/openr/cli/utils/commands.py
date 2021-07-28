@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import json
 from typing import Any, Callable, Dict, Set, Optional
 
 import bunch
@@ -26,6 +27,7 @@ class OpenrCtrlCmd(object):
         self.host = cli_opts.host
         self.timeout = cli_opts.timeout
         self.fib_agent_port = cli_opts.fib_agent_port
+        self._config = None
 
     def run(self, *args, **kwargs) -> None:
         """
@@ -46,6 +48,13 @@ class OpenrCtrlCmd(object):
         """
 
         raise NotImplementedError
+
+    def _get_config(self) -> Dict[str, Any]:
+        if self._config is None:
+            with get_openr_ctrl_client(self.host, self.cli_opts) as client:
+                resp = client.getRunningConfig()
+                self._config = json.loads(resp)
+        return self._config
 
     def iter_dbs(
         self,

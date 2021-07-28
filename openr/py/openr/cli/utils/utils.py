@@ -1970,6 +1970,7 @@ def print_route_details(
     ],
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
     detailed: bool,
+    tag_map: Optional[Dict[str, str]] = None,
 ) -> None:
     """
     Print advertised or received route.
@@ -2004,7 +2005,7 @@ def print_route_details(
         # Add all entries associated with routes
         for route in route_detail.routes:
             markers = f"{'*' if key_to_str_fn(route.key) in best_keys else ''}{'@' if key_to_str_fn(route.key) == best_key else ' '}"
-            print_route_helper(rows, route, key_to_str_fn, detailed, markers)
+            print_route_helper(rows, route, key_to_str_fn, detailed, markers, tag_map)
         rows.append("")
 
     print("\n".join(rows))
@@ -2014,12 +2015,16 @@ def print_advertised_routes(
     routes: List[ctrl_types.AdvertisedRoute],
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
     detailed: bool,
+    tag_map: Optional[Dict[str, str]] = None,
 ) -> None:
     """
     Print postfilter advertised or rejected route.
 
     `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
     strings
+
+    @param:
+        -tag_map: If present, translate the tag value using the map
 
     Output format
       > 10.0.0.0/8, entries=10, best-entries(*)=1, best-entry(@)
@@ -2038,7 +2043,7 @@ def print_advertised_routes(
     for route in routes:
         # Create a title for the route
         rows.append(f"> {ipnetwork.sprint_prefix(route.route.prefix)}")
-        print_route_helper(rows, route, key_to_str_fn, detailed, "{*@}")
+        print_route_helper(rows, route, key_to_str_fn, detailed, "{*@}", tag_map)
         rows.append("")
 
     print("\n".join(rows))
@@ -2080,6 +2085,7 @@ def print_route_helper(
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
     detailed: bool,
     markers: str,
+    tag_map: Optional[Dict[str, str]] = None,
 ) -> None:
     """
     Construct print lines of advertised route, append to rows
@@ -2087,6 +2093,7 @@ def print_route_helper(
     `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
     strings
     `markers` argument specifies [@*] to indicate route is ecmp/best entry
+    `tag_map` if present, map tag string to its name for readability
 
     Output format
         [@*] source <key>
@@ -2116,7 +2123,10 @@ def print_route_helper(
             rows.append(f"     Performance - min-nexthops: {route.route.minNexthop}")
         if route.route.prependLabel:
             rows.append(f"     Misc - prepend-label: {route.route.prependLabel}")
-        rows.append(f"     Tags - {', '.join(route.route.tags)}")
+        tag_map = tag_map if tag_map is not None else {}
+        rows.append(
+            f"     Tags - {', '.join([tag_map.get(t,t) for t in route.route.tags])}"
+        )
         rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
         if (
             isinstance(route, ctrl_types.AdvertisedRoute)
@@ -2140,3 +2150,12 @@ def print_route_helper(
             f"{min_nexthop:<6}"
             f"{prepend_label:<6}"
         )
+
+
+def get_tag_to_name_map(config) -> Dict[str, str]:
+    """
+    Get mapping from tag_value to tag_name. e.g
+    65527:36706 -> FABRIC_POST_FSW_LOOP_AGG
+    """
+    tag_def = config["area_policies"]["definitions"]["openrTag"]["objects"]
+    return {v["tagSet"][0]: k for k, v in tag_def.items()}

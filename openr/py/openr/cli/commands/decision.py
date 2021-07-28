@@ -729,6 +729,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         area: Optional[str],
         json: bool,
         detailed: bool,
+        tag2name: bool,
         *args,
         **kwargs,
     ) -> None:
@@ -741,7 +742,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
             # TODO: Print routes in json
             raise NotImplementedError()
         else:
-            self.render(routes, detailed)
+            self.render(routes, detailed, tag2name)
 
     def fetch(
         self,
@@ -770,6 +771,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         self,
         routes: List[ctrl_types.ReceivedRouteDetail],
         detailed: bool,
+        tag2name: bool,
     ) -> None:
         """
         Render received routes
@@ -780,4 +782,8 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
                 return ("", "")
             return (key.node, key.area)
 
-        utils.print_route_details(routes, key_fn, detailed)
+        tag_to_name = (
+            utils.get_tag_to_name_map(self._get_config()) if tag2name else None
+        )
+
+        utils.print_route_details(routes, key_fn, detailed, tag_to_name)
