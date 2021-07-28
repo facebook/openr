@@ -520,6 +520,15 @@ class Config {
   }
 
   //
+  // VIP thrift injection config
+  //
+  const vipconfig::config::VipServiceConfig&
+  getVipServiceConfig() const {
+    CHECK(isVipServiceEnabled());
+    return *config_.vip_service_config_ref();
+  }
+
+  //
   // Drain state
   //
   bool
@@ -577,6 +586,9 @@ class Config {
   // validate Prefix Allocation config
   void checkPrefixAllocationConfig();
 
+  // validate VipService Config
+  void checkVipServiceConfig();
+
   // validate BGP Peering config and BGP Translation Config
   void checkBgpPeeringConfig();
 
@@ -590,6 +602,12 @@ class Config {
 
   // areaId -> neighbor regex and interface regex mapped
   std::unordered_map<std::string /* areaId */, AreaConfiguration> areaConfigs_;
+
+// per class placeholder for test code
+// only need to be setup once here
+#ifdef Config_TEST_FRIENDS
+  Config_TEST_FRIENDS
+#endif
 };
 
 } // namespace openr

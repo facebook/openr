@@ -13,6 +13,8 @@
 #include <thread>
 #include <utility>
 
+#define Config_TEST_FRIENDS FRIEND_TEST(ConfigTest, PopulateInternalDb);
+
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/config/Config.h>
@@ -744,8 +746,29 @@ TEST(ConfigTest, PopulateInternalDb) {
   // vip service
   {
     auto conf = getBasicOpenrConfig();
+    EXPECT_FALSE(Config(conf).isVipServiceEnabled());
     conf.enable_vip_service_ref() = true;
-    EXPECT_TRUE(Config(conf).isVipServiceEnabled());
+    EXPECT_THROW(Config(conf).isVipServiceEnabled(), std::invalid_argument);
+    EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
+    conf.vip_service_config_ref() = {};
+    conf.vip_service_config_ref()->ingress_policy_ref() = "test_policy";
+    // There is no area_policies, so should throw.
+    EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
+    conf.area_policies_ref() = neteng::config::routing_policy::PolicyConfig();
+    conf.area_policies_ref()->filters_ref() =
+        neteng::config::routing_policy::PolicyFilters();
+    conf.area_policies_ref()->filters_ref()->routePropagationPolicy_ref() =
+        neteng::config::routing_policy::Filters();
+    // There is policies, but no vip ingress policy, should throw
+    EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
+    std::map<std::string, neteng::config::routing_policy::Filter> policy;
+    policy["test_policy"] = neteng::config::routing_policy::Filter();
+    conf.area_policies_ref()
+        ->filters_ref()
+        ->routePropagationPolicy_ref()
+        ->objects_ref() = policy;
+    // There is vip ingress policy in area_policies, should pass
+    EXPECT_NO_THROW(Config(conf).checkVipServiceConfig());
   }
 
   // FIB route deletion

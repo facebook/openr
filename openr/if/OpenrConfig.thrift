@@ -13,6 +13,7 @@ namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
 
 include "BgpConfig.thrift"
 include "configerator/structs/neteng/config/routing_policy.thrift"
+include "configerator/structs/neteng/config/vip_service_config.thrift"
 
 enum PrefixForwardingType {
   /** IP nexthop is used for routing to the prefix. */
@@ -937,6 +938,7 @@ struct OpenrConfig {
 
   # vip thrift injection service
   90: optional bool enable_vip_service;
+  91: optional vip_service_config.VipServiceConfig vip_service_config;
 
   # bgp
   100: optional bool enable_bgp_peering;

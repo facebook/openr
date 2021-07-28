@@ -506,6 +506,33 @@ Config::checkPrefixAllocationConfig() {
 }
 
 void
+Config::checkVipServiceConfig() {
+  if (isVipServiceEnabled()) {
+    if (not config_.vip_service_config_ref()) {
+      throw std::invalid_argument(
+          "enable_vip_service = true, but vip_service_config is empty");
+    } else {
+      if (config_.vip_service_config_ref()->ingress_policy_ref().has_value()) {
+        std::optional<neteng::config::routing_policy::Filters>
+            propagationPolicy{std::nullopt};
+        if (auto areaPolicies = getAreaPolicies()) {
+          propagationPolicy = areaPolicies->filters_ref()
+                                  ->routePropagationPolicy_ref()
+                                  .to_optional();
+        }
+        auto ingress_policy =
+            *config_.vip_service_config_ref()->ingress_policy_ref();
+        if (not propagationPolicy or
+            propagationPolicy->objects_ref()->count(ingress_policy) == 0) {
+          throw std::invalid_argument(fmt::format(
+              "No area policy definition found for {}", ingress_policy));
+        }
+      }
+    }
+  }
+}
+
+void
 Config::checkBgpPeeringConfig() {
   if (isBgpPeeringEnabled() and not config_.bgp_config_ref()) {
     throw std::invalid_argument(
@@ -647,6 +674,9 @@ Config::populateInternalDb() {
     }
     checkPrefixAllocationConfig();
   }
+
+  // validate VipServiceConfig config
+  checkVipServiceConfig();
 
   // validate BGP Peering config and BGP Translation config
   checkBgpPeeringConfig();
