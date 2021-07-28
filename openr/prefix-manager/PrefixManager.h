@@ -162,6 +162,36 @@ class PrefixManager final : public OpenrEventBase {
       folly::CIDRNetwork const& prefix,
       std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries);
 
+  /*
+   * Dump routes from prefixEvent that are subject to origination policy.
+   *
+   * @param routeFilterType
+   * - pre-policy: return all received prefixes before applying origination
+   * policy
+   * - post-policy: return all accepted prefixes after applying policy
+   * - rejected: return all prefixes rejected by policy
+   * @param filter
+   *    filter prefixes by prefixes and/or prefix-type
+   *
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+  getAdvertisedRoutesWithOriginationPolicy(
+      thrift::RouteFilterType routeFilterType,
+      thrift::AdvertisedRouteFilter filter);
+
+  /**
+   * Helper functinon used in getAdvertisedRoutesFiltered()
+   * Filter routes with 1. <type> attribute
+   */
+  void filterAndAddOriginatedRoute(
+      std::vector<thrift::AdvertisedRoute>& routes,
+      const thrift::RouteFilterType& routeFilterType,
+      std::unordered_map<
+          thrift::PrefixType,
+          std::pair<PrefixEntry, std::string>> const& prefixEntries,
+      apache::thrift::optional_field_ref<thrift::PrefixType&> const&
+          typeFilter);
+
  private:
   /*
    * Private helpers to update `prefixMap_`
@@ -275,6 +305,16 @@ class PrefixManager final : public OpenrEventBase {
   // get all areaIds
   std::unordered_set<std::string> allAreaIds();
 
+  // Record originated prefixes with origination policy name for to be exposed
+  // by Cli for debugging purpose
+  void storeOriginatedPrefixes(
+      std::vector<PrefixEntry> prefixEntries, const std::string& policyName);
+
+  void removeOriginatedPrefixes(
+      const std::vector<thrift::PrefixEntry>& prefixEntries);
+
+  void removeOriginatedPrefixes(const std::vector<PrefixEntry>& prefixEntries);
+
   /*
    * Private variables/Structures
    */
@@ -318,6 +358,16 @@ class PrefixManager final : public OpenrEventBase {
       prefixMap_;
   // The collection of prefixes advertised to KvStore.
   std::unordered_set<folly::CIDRNetwork> advertisedPrefixes_;
+
+  // For prefixes came from PrefixEvent with an origination policy,
+  // store the pre-policy version in originatedPrefixMap_.
+  // Used in thrift request getAdvertisedRoutesWithOriginationPolicy().
+  std::unordered_map<
+      folly::CIDRNetwork,
+      std::unordered_map<
+          thrift::PrefixType,
+          std::pair<PrefixEntry, std::string>>>
+      originatedPrefixMap_;
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;

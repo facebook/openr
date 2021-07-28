@@ -7,6 +7,8 @@
 
 #include "PrefixManager.h"
 #include "folly/IPAddress.h"
+#include "openr/common/Types.h"
+#include "openr/if/gen-cpp2/Types_types.h"
 
 #include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
@@ -566,6 +568,8 @@ std::vector<PrefixEntry>
 PrefixManager::applyOriginationPolicy(
     const std::vector<PrefixEntry>& prefixEntries,
     const std::string& policyName) {
+  // Store them before applying origination policy for future debugging purpose
+  storeOriginatedPrefixes(prefixEntries, policyName);
   std::vector<PrefixEntry> postOriginationPrefixes = {};
   for (auto prefix : prefixEntries) {
     auto [postPolicyTPrefixEntry, _] =
@@ -795,6 +799,148 @@ PrefixManager::getAdvertisedRoutesFiltered(
         p.setValue(std::move(routes));
       });
   return std::move(sf);
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+PrefixManager::getAdvertisedRoutesWithOriginationPolicy(
+    thrift::RouteFilterType routeFilterType,
+    thrift::AdvertisedRouteFilter filter) {
+  auto [p, sf] = folly::makePromiseContract<
+      std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        filter = std::move(filter),
+                        routeFilterType = routeFilterType]() mutable noexcept {
+    auto routes = std::make_unique<std::vector<thrift::AdvertisedRoute>>();
+    if (filter.prefixes_ref()) {
+      // Explicitly lookup the requested prefixes
+      for (auto& prefix : filter.prefixes_ref().value()) {
+        auto it = originatedPrefixMap_.find(toIPNetwork(prefix));
+        if (it == originatedPrefixMap_.end()) {
+          continue;
+        }
+        filterAndAddOriginatedRoute(
+            *routes, routeFilterType, it->second, filter.prefixType_ref());
+      }
+    } else {
+      for (auto& [prefix, prefixEntries] : originatedPrefixMap_) {
+        filterAndAddOriginatedRoute(
+            *routes, routeFilterType, prefixEntries, filter.prefixType_ref());
+      }
+    }
+    p.setValue(std::move(routes));
+  });
+  return std::move(sf);
+}
+
+void
+PrefixManager::removeOriginatedPrefixes(
+    const std::vector<thrift::PrefixEntry>& prefixEntries) {
+  // Remove entry from originatedPrefixMap, regardless of policy
+  for (const auto& entry : prefixEntries) {
+    const auto& prefixCidr = toIPNetwork(*entry.prefix_ref());
+    auto typeIt = originatedPrefixMap_.find(prefixCidr);
+    if (typeIt == originatedPrefixMap_.end()) {
+      continue;
+    }
+
+    const auto& type = *entry.type_ref();
+    typeIt->second.erase(type);
+    // clean up data structure
+    if (typeIt->second.empty()) {
+      originatedPrefixMap_.erase(prefixCidr);
+    }
+  }
+}
+
+void
+PrefixManager::removeOriginatedPrefixes(
+    const std::vector<PrefixEntry>& prefixEntries) {
+  // Remove entry from originatedPrefixMap, regardless of policy
+  for (const auto& entry : prefixEntries) {
+    const auto& prefixCidr = entry.network;
+    auto typeIt = originatedPrefixMap_.find(prefixCidr);
+    if (typeIt == originatedPrefixMap_.end()) {
+      continue;
+    }
+    const auto& type = *entry.tPrefixEntry->type_ref();
+    typeIt->second.erase(type);
+    // clean up data structure
+    if (typeIt->second.empty()) {
+      originatedPrefixMap_.erase(prefixCidr);
+    }
+  }
+}
+
+void
+PrefixManager::storeOriginatedPrefixes(
+    std::vector<PrefixEntry> prefixEntries, const std::string& policyName) {
+  // store prefixes that came with origination policy
+  for (auto& entry : prefixEntries) {
+    const auto& type = *entry.tPrefixEntry->type_ref();
+    const auto& prefixCidr = entry.network;
+    originatedPrefixMap_[prefixCidr].insert_or_assign(
+        type, std::make_pair(std::move(entry), policyName));
+  }
+}
+
+void
+PrefixManager::filterAndAddOriginatedRoute(
+    std::vector<thrift::AdvertisedRoute>& routes,
+    const thrift::RouteFilterType& routeFilterType,
+    std::unordered_map<
+        thrift::PrefixType,
+        std::pair<PrefixEntry, std::string>> const& prefixEntries,
+    apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter) {
+  // Return immediately if no prefix-entry
+  if (prefixEntries.empty()) {
+    return;
+  }
+
+  // Loop entire map since we need to dump prefixes from all prefix type
+  for (auto& [prefixType, prefixEntryPolicyPair] : prefixEntries) {
+    if (typeFilter && *typeFilter != prefixType) {
+      continue;
+    }
+
+    auto [prePolicyPrefixEntry, policy] = prefixEntryPolicyPair;
+    const auto& prePolicyTPrefixEntry = prePolicyPrefixEntry.tPrefixEntry;
+
+    // prefilter advertised route
+    if (routeFilterType == thrift::RouteFilterType::PREFILTER_ADVERTISED) {
+      thrift::AdvertisedRoute route;
+      route.key_ref() = prePolicyTPrefixEntry->get_type();
+      route.route_ref() = *prePolicyTPrefixEntry;
+      routes.emplace_back(std::move(route));
+      continue;
+    }
+
+    auto [postPolicyTPrefixEntry, hitPolicyName] =
+        policyManager_->applyPolicy(policy, prePolicyTPrefixEntry);
+
+    if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED and
+        postPolicyTPrefixEntry) {
+      // add post filter advertised route
+      thrift::AdvertisedRoute route;
+      route.key_ref() = prePolicyTPrefixEntry->get_type();
+      route.route_ref() = *postPolicyTPrefixEntry;
+      if (not hitPolicyName.empty()) {
+        route.hitPolicy_ref() = hitPolicyName;
+      }
+      routes.emplace_back(std::move(route));
+      continue;
+    }
+
+    if (routeFilterType == thrift::RouteFilterType::REJECTED_ON_ADVERTISE and
+        not postPolicyTPrefixEntry) {
+      // add post filter rejected route
+      thrift::AdvertisedRoute route;
+      route.key_ref() = prePolicyTPrefixEntry->get_type();
+      route.route_ref() = *prePolicyTPrefixEntry;
+      route.hitPolicy_ref() = hitPolicyName;
+      routes.emplace_back(std::move(route));
+    }
+  }
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
@@ -1065,6 +1211,10 @@ PrefixManager::withdrawPrefixesImpl(
   if (tPrefixEntries.empty()) {
     return false;
   }
+
+  // Remove prefix from originated prefixes map
+  removeOriginatedPrefixes(tPrefixEntries);
+
   folly::small_vector<folly::CIDRNetwork> changed{};
 
   for (const auto& prefixEntry : tPrefixEntries) {
@@ -1103,6 +1253,10 @@ PrefixManager::withdrawPrefixEntriesImpl(
   if (prefixEntries.empty()) {
     return false;
   }
+
+  // Remove prefix from originated prefixes map
+  removeOriginatedPrefixes(prefixEntries);
+
   folly::small_vector<folly::CIDRNetwork> changed{};
 
   for (const auto& prefixEntry : prefixEntries) {
@@ -1272,7 +1426,8 @@ PrefixManager::processOriginatedPrefixes() {
 void
 PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   if (fibAckEnabled_) {
-    // Store programmed label/unicast routes info if FIB-ACK feature is enabled.
+    // Store programmed label/unicast routes info if FIB-ACK feature is
+    // enabled.
     storeProgrammedRoutes(fibRouteUpdate);
   }
 
@@ -1306,8 +1461,9 @@ PrefixManager::storeProgrammedRoutes(
 namespace {
 void
 resetNonTransitiveAttrs(thrift::PrefixEntry& prefixEntry) {
-  // Reset non-transitive attributes which cannot be redistributed across areas.
-  // Ref: https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html.
+  // Reset non-transitive attributes which cannot be redistributed across
+  // areas. Ref:
+  // https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html.
   prefixEntry.forwardingAlgorithm_ref() =
       thrift::PrefixForwardingAlgorithm::SP_ECMP;
   prefixEntry.forwardingType_ref() = thrift::PrefixForwardingType::IP;
