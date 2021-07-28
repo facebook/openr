@@ -212,15 +212,22 @@ struct PrefixEvent {
    */
   std::unordered_set<std::string> dstAreas{};
 
+  /**
+   * Origination policy to be ran before applying area policy
+   */
+  std::optional<std::string> policyName = std::nullopt;
+
   explicit PrefixEvent(
       const PrefixEventType& eventType,
       const thrift::PrefixType type,
       std::vector<thrift::PrefixEntry> prefixes = {},
-      std::unordered_set<std::string> dstAreas = {})
+      std::unordered_set<std::string> dstAreas = {},
+      const std::optional<std::string>& policyName = std::nullopt)
       : eventType(eventType),
         type(type),
         prefixes(std::move(prefixes)),
-        dstAreas(std::move(dstAreas)) {}
+        dstAreas(std::move(dstAreas)),
+        policyName(policyName) {}
 };
 
 /**

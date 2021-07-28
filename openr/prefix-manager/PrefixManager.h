@@ -175,11 +175,15 @@ class PrefixManager final : public OpenrEventBase {
    */
   bool advertisePrefixesImpl(
       std::vector<thrift::PrefixEntry>&& tPrefixEntries,
-      const std::unordered_set<std::string>& dstAreas);
+      const std::unordered_set<std::string>& dstAreas,
+      const std::optional<std::string>& policyName = std::nullopt);
   bool advertisePrefixesImpl(
       std::vector<PrefixEntry>&& tPrefixEntries,
-      const std::unordered_set<std::string>& dstAreas);
-  bool advertisePrefixesImpl(const std::vector<PrefixEntry>& prefixEntries);
+      const std::unordered_set<std::string>& dstAreas,
+      const std::optional<std::string>& policyName = std::nullopt);
+  bool advertisePrefixesImpl(
+      const std::vector<PrefixEntry>& prefixEntries,
+      const std::optional<std::string>& policyName = std::nullopt);
   bool withdrawPrefixesImpl(
       const std::vector<thrift::PrefixEntry>& tPrefixEntries);
   bool withdrawPrefixEntriesImpl(const std::vector<PrefixEntry>& prefixEntries);
@@ -187,7 +191,11 @@ class PrefixManager final : public OpenrEventBase {
   bool syncPrefixesByTypeImpl(
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& tPrefixEntries,
-      const std::unordered_set<std::string>& dstAreas);
+      const std::unordered_set<std::string>& dstAreas,
+      const std::optional<std::string>& policyName = std::nullopt);
+  std::vector<PrefixEntry> applyOriginationPolicy(
+      const std::vector<PrefixEntry>& prefixEntries,
+      const std::string& policyName);
 
   /*
    * One prefixEntry is ready to be advertised iff

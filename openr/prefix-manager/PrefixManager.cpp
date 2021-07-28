@@ -6,6 +6,7 @@
  */
 
 #include "PrefixManager.h"
+#include "folly/IPAddress.h"
 
 #include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
@@ -124,7 +125,10 @@ PrefixManager::PrefixManager(
       switch (update.eventType) {
       case PrefixEventType::ADD_PREFIXES:
         advertisePrefixesImpl(std::move(update.prefixes), dstAreas);
-        advertisePrefixesImpl(std::move(update.prefixEntries), dstAreas);
+        advertisePrefixesImpl(
+            std::move(std::move(update.prefixEntries)),
+            dstAreas,
+            update.policyName);
         break;
       case PrefixEventType::WITHDRAW_PREFIXES:
         withdrawPrefixesImpl(update.prefixes);
@@ -134,7 +138,8 @@ PrefixManager::PrefixManager(
         withdrawPrefixesByTypeImpl(update.type);
         break;
       case PrefixEventType::SYNC_PREFIXES_BY_TYPE:
-        syncPrefixesByTypeImpl(update.type, update.prefixes, dstAreas);
+        syncPrefixesByTypeImpl(
+            update.type, update.prefixes, dstAreas, update.policyName);
         break;
       default:
         LOG(ERROR) << "Unknown command received. "
@@ -557,6 +562,32 @@ PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   return true;
 }
 
+std::vector<PrefixEntry>
+PrefixManager::applyOriginationPolicy(
+    const std::vector<PrefixEntry>& prefixEntries,
+    const std::string& policyName) {
+  std::vector<PrefixEntry> postOriginationPrefixes = {};
+  for (auto prefix : prefixEntries) {
+    auto [postPolicyTPrefixEntry, _] =
+        policyManager_->applyPolicy(policyName, prefix.tPrefixEntry);
+    if (postPolicyTPrefixEntry) {
+      VLOG(1) << fmt::format(
+          "Prefixes {} : accepted/modified by origination policy {}",
+          folly::IPAddress::networkToString(prefix.network),
+          policyName);
+      auto dstAreasCp = prefix.dstAreas;
+      postOriginationPrefixes.emplace_back(
+          std::move(postPolicyTPrefixEntry), std::move(dstAreasCp));
+    } else {
+      VLOG(1) << fmt::format(
+          "Not processing prefixes {} : denied by origination policy {}",
+          folly::IPAddress::networkToString(prefix.network),
+          policyName);
+    }
+  }
+  return postOriginationPrefixes;
+}
+
 namespace {
 
 std::pair<thrift::PrefixType, const PrefixEntry>
@@ -949,7 +980,8 @@ PrefixManager::filterAndAddAreaRoute(
 bool
 PrefixManager::advertisePrefixesImpl(
     std::vector<thrift::PrefixEntry>&& tPrefixEntries,
-    const std::unordered_set<std::string>& dstAreas) {
+    const std::unordered_set<std::string>& dstAreas,
+    const std::optional<std::string>& policyName) {
   if (tPrefixEntries.empty()) {
     return false;
   }
@@ -960,13 +992,14 @@ PrefixManager::advertisePrefixesImpl(
         std::make_shared<thrift::PrefixEntry>(std::move(tPrefixEntry)),
         std::move(dstAreasCp));
   }
-  return advertisePrefixesImpl(toAddOrUpdate);
+  return advertisePrefixesImpl(toAddOrUpdate, policyName);
 }
 
 bool
 PrefixManager::advertisePrefixesImpl(
     std::vector<PrefixEntry>&& prefixEntries,
-    const std::unordered_set<std::string>& dstAreas) {
+    const std::unordered_set<std::string>& dstAreas,
+    const std::optional<std::string>& policyName) {
   if (prefixEntries.empty()) {
     return false;
   }
@@ -979,15 +1012,21 @@ PrefixManager::advertisePrefixesImpl(
     // Create PrefixEntry and set unicastRotues
     toAddOrUpdate.push_back(std::move(prefixEntry));
   }
-  return advertisePrefixesImpl(toAddOrUpdate);
+  return advertisePrefixesImpl(toAddOrUpdate, policyName);
 }
 
 bool
 PrefixManager::advertisePrefixesImpl(
-    const std::vector<PrefixEntry>& prefixEntries) {
+    const std::vector<PrefixEntry>& prefixEntries,
+    const std::optional<std::string>& policyName) {
   folly::small_vector<folly::CIDRNetwork> changed{};
 
-  for (const auto& entry : prefixEntries) {
+  // Apply origination policy first if event came with one
+  const auto& postOriginationPrefixes = policyName
+      ? applyOriginationPolicy(prefixEntries, *policyName)
+      : prefixEntries;
+
+  for (const auto& entry : postOriginationPrefixes) {
     const auto& type = *entry.tPrefixEntry->type_ref();
     const auto& prefixCidr = entry.network;
 
@@ -1098,7 +1137,8 @@ bool
 PrefixManager::syncPrefixesByTypeImpl(
     thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& tPrefixEntries,
-    const std::unordered_set<std::string>& dstAreas) {
+    const std::unordered_set<std::string>& dstAreas,
+    const std::optional<std::string>& policyName) {
   VLOG(1) << "Syncing prefixes of type " << toString(type);
   // building these lists so we can call add and remove and get detailed
   // logging
@@ -1119,7 +1159,9 @@ PrefixManager::syncPrefixesByTypeImpl(
   }
   bool updated = false;
   updated |=
-      ((advertisePrefixesImpl(std::move(toAddOrUpdate), dstAreas)) ? 1 : 0);
+      ((advertisePrefixesImpl(std::move(toAddOrUpdate), dstAreas, policyName))
+           ? 1
+           : 0);
   updated |= ((withdrawPrefixesImpl(toRemove)) ? 1 : 0);
   return updated;
 }
