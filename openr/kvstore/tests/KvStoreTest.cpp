@@ -676,11 +676,11 @@ TEST_F(
 }
 
 /**
- * Validate EraseKeyValue request removes from self originated cache and stops
- * ttl refreshing of erased key-val.
+ * Validate ClearKeyValue request to erase a key. Removes key-val from self
+ * originated cache and stops ttl refreshing of erased key-val.
  *
  */
-TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValueRequest) {
+TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
   // Create and start kv store with kvRequestQueue enabled with 2 second ttl.
   const std::string nodeId = "node-testerasekey";
   initKvStore(nodeId, kShortTtl);
@@ -691,7 +691,6 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValueRequest) {
   const std::string setValue = "set-value";
 
   OpenrEventBase evb;
-  folly::Baton waitBatonAfterErase;
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     /** Set 2 key-vals. Check that they are set correctly. **/
 
@@ -755,6 +754,97 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValueRequest) {
   // After ttl time, erased key should expire.
   evb.scheduleTimeout(std::chrono::milliseconds(kShortTtl * 2), [&]() noexcept {
     auto recVal = kvStore_->getKey(kTestingAreaName, eraseKey);
+    EXPECT_FALSE(recVal.has_value());
+    evb.stop();
+  });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
+
+/**
+ * Validate ClearKeyValue request that unsets the key. Floods a new value,
+ * removes the key-val from the self-originated cache, and stops ttl refreshing
+ * of unset key-val.
+ */
+TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
+  // Create and start kv store with kvRequestQueue enabled with 2 second ttl.
+  const std::string nodeId = "node-testunsetkey";
+  const uint32_t ttl = 2000; // 2 seconds
+  initKvStore(nodeId, ttl);
+
+  const std::string unsetKey = "unset-key";
+  const std::string valueBeforeUnset = "value-before-unset";
+  const std::string valueAfterUnset = "value-after-unset";
+  const std::string setKey = "set-key";
+  const std::string setValue = "set-value";
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    /** Set 2 key-vals. Check that they are set correctly. **/
+
+    // Push SetKeyValue request for "unset-key" key to queue. Check key was set
+    // correctly.
+    auto setKvRequestToUnset =
+        SetKeyValueRequest(kTestingAreaName, unsetKey, valueBeforeUnset);
+    kvRequestQueue_.push(std::move(setKvRequestToUnset));
+    auto pubSetKey = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKey.keyVals_ref()->count(unsetKey));
+
+    // Push SetKeyValue request for "set-key" key to queue. Check key was set
+    // correctly.
+    auto setKvRequest = SetKeyValueRequest(kTestingAreaName, setKey, setValue);
+    kvRequestQueue_.push(std::move(setKvRequest));
+    auto pubSetKey2 = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKey2.keyVals_ref()->count(setKey));
+
+    // Make sure "unset-key" key is in self-originated cache.
+    auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+    EXPECT_EQ(1, kvStoreCache.count(unsetKey));
+    EXPECT_EQ(valueBeforeUnset, *kvStoreCache.at(unsetKey).value.value_ref());
+
+    /** Unset one key. Check that unset key does NOT emit ttl updates. **/
+
+    // Push ClearKeyValue request to unset the key
+    auto unsetKvRequest =
+        ClearKeyValueRequest(kTestingAreaName, unsetKey, valueAfterUnset, true);
+    kvRequestQueue_.push(std::move(unsetKvRequest));
+
+    // Receive publication for new value set to "unset-key". Version should be
+    // bumped up and ttl version should be reset.
+    auto pubUnsetKey = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubUnsetKey.keyVals_ref()->count(unsetKey));
+    EXPECT_EQ(2, pubUnsetKey.keyVals_ref()->at(unsetKey).get_version());
+    EXPECT_EQ(0, pubUnsetKey.keyVals_ref()->at(unsetKey).get_ttlVersion());
+    EXPECT_EQ(
+        valueAfterUnset, *pubUnsetKey.keyVals_ref()->at(unsetKey).value_ref());
+
+    // "unset-key" should still be in KvStore with new value but NOT in
+    // self-originated cache.
+    auto recVal = kvStore_->getKey(kTestingAreaName, unsetKey);
+    auto updatedCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
+    EXPECT_TRUE(recVal.has_value());
+    EXPECT_EQ(valueAfterUnset, *recVal.value().value_ref());
+    EXPECT_EQ(1, updatedCache.size());
+    EXPECT_EQ(0, updatedCache.count(unsetKey));
+
+    // Receive ttl refresh publication for "set-key" (version 1).
+    auto pubSetKeyTtlUpdate = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals_ref()->count(setKey));
+    EXPECT_EQ(
+        1, *(pubSetKeyTtlUpdate.keyVals_ref()->at(setKey).ttlVersion_ref()));
+
+    // Receive ttl refresh publication for "set-key" (version 2).
+    auto pubSetKeyTtlUpdate2 = kvStore_->recvPublication();
+    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals_ref()->count(setKey));
+    EXPECT_EQ(
+        2, *(pubSetKeyTtlUpdate2.keyVals_ref()->at(setKey).ttlVersion_ref()));
+  });
+
+  // After ttl time, unset key should expire.
+  evb.scheduleTimeout(std::chrono::milliseconds(ttl * 2), [&]() noexcept {
+    auto recVal = kvStore_->getKey(kTestingAreaName, unsetKey);
     EXPECT_FALSE(recVal.has_value());
     evb.stop();
   });

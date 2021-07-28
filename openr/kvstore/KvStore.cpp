@@ -1141,12 +1141,36 @@ KvStoreDb::advertiseSelfOriginatedKeys(
 void
 KvStoreDb::unsetSelfOriginatedKey(
     std::string const& key, std::string const& value) {
-  CHECK(false) << "unsetKey not implemented.";
+  VLOG(3) << "unsetSelfOriginatedKey called for key: " << key
+          << ", area: " << area_;
+
+  // erase key
+  eraseSelfOriginatedKey(key);
+
+  // Check if key is in KvStore. If key doesn't exist in KvStore no need to add
+  // it as "empty". This condition should not exist.
+  auto keyIt = kvStore_.find(key);
+  if (keyIt == kvStore_.end()) {
+    return;
+  }
+
+  // Overwrite all values and increment version.
+  auto thriftValue = keyIt->second;
+  thriftValue.originatorId_ref() = nodeId;
+  (*thriftValue.version_ref())++;
+  thriftValue.ttlVersion_ref() = 0;
+  thriftValue.value_ref() = value;
+
+  // Send updates to KvStore
+  std::unordered_map<std::string, thrift::Value> keyVals = {{key, thriftValue}};
+  thrift::KeySetParams params;
+  params.keyVals_ref() = std::move(keyVals);
+  setKeyVals(std::move(params));
 }
 
 void
 KvStoreDb::eraseSelfOriginatedKey(std::string const& key) {
-  VLOG(3) << "eraseSelfOriginatedKey called for key " << key
+  VLOG(3) << "eraseSelfOriginatedKey called for key: " << key
           << ", area: " << area_;
   selfOriginatedKeyVals_.erase(key);
 }
