@@ -147,7 +147,7 @@ class AdvertisedRoutesCli(object):
     def all(cli_opts: bunch.Bunch, prefix: List[str]) -> None:  # noqa: B902
         """
         Show routes that this node should be advertising across all areas. This
-        is pre-policy routes
+        is pre-area-policy routes. Note this does not show routes denied by origination policy
         """
 
         opts = cli_opts.advertised_routes_options
@@ -155,15 +155,16 @@ class AdvertisedRoutesCli(object):
             prefix, opts.prefix_type, opts.json, opts.detail
         )
 
-    @show.command("pre-policy")
+    @show.command("pre-area-policy")
     @click.argument("area", type=str)
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
-    def pre_policy(
+    def pre_area_policy(
         cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
     ) -> None:
         """
         Show pre-policy routes for advertisment of specified area
+        but after applying origination, if applicable
         """
 
         opts = cli_opts.advertised_routes_options
@@ -176,11 +177,11 @@ class AdvertisedRoutesCli(object):
             opts.detail,
         )
 
-    @show.command("post-policy")
+    @show.command("post-area-policy")
     @click.argument("area", type=str)
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
-    def post_policy(
+    def post_area_policy(
         cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
     ) -> None:
         """
@@ -197,11 +198,11 @@ class AdvertisedRoutesCli(object):
             opts.detail,
         )
 
-    @show.command("rejected")
+    @show.command("rejected_on_area")
     @click.argument("area", type=str)
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
-    def rejected(
+    def rejected_on_area(
         cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
     ) -> None:
         """
@@ -211,6 +212,101 @@ class AdvertisedRoutesCli(object):
         opts = cli_opts.advertised_routes_options
         prefix_mgr.AreaAdvertisedRoutesCmd(cli_opts).run(
             area,
+            ctrl_types.RouteFilterType.REJECTED_ON_ADVERTISE,
+            prefix,
+            opts.prefix_type,
+            opts.json,
+            opts.detail,
+        )
+
+    @show.command("pre-policy")
+    @click.argument("area", type=str)
+    @click.argument("prefix", nargs=-1, type=str, required=False)
+    @click.pass_obj
+    def pre_policy(
+        cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
+    ) -> None:
+        """
+        DEPRECATED. use pre-area-policy
+        """
+        click.secho("pre-policy is deprecated, use pre-area-policy", fg="red")
+
+    @show.command("post-policy")
+    @click.argument("area", type=str)
+    @click.argument("prefix", nargs=-1, type=str, required=False)
+    @click.pass_obj
+    def post_policy(
+        cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
+    ) -> None:
+        """
+        DEPRECATED. use post-area-policy
+        """
+        click.secho("post-policy is deprecated, use post-area-policy", fg="red")
+
+    @show.command("rejected")
+    @click.argument("area", type=str)
+    @click.argument("prefix", nargs=-1, type=str, required=False)
+    @click.pass_obj
+    def rejected(
+        cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
+    ) -> None:
+        """
+        DEPRECATED. use rejected_on_area
+        """
+        click.secho("rejected is deprecated, use rejected_on_area", fg="red")
+
+    @show.command("pre-origination-policy")
+    @click.argument("prefix", nargs=-1, type=str, required=False)
+    @click.pass_obj
+    def pre_origination_policy(
+        cli_opts: bunch.Bunch, prefix: List[str]  # noqa: B902
+    ) -> None:
+        """
+        Show pre-origination-policy routes.
+        Note: Only displays routes that came with an origination policy.
+        """
+
+        opts = cli_opts.advertised_routes_options
+        prefix_mgr.AdvertisedRoutesWithOriginationPolicyCmd(cli_opts).run(
+            ctrl_types.RouteFilterType.PREFILTER_ADVERTISED,
+            prefix,
+            opts.prefix_type,
+            opts.json,
+            opts.detail,
+        )
+
+    @show.command("post-origination-policy")
+    @click.argument("prefix", nargs=-1, type=str, required=False)
+    @click.pass_obj
+    def post_origination_policy(
+        cli_opts: bunch.Bunch, prefix: List[str]  # noqa: B902
+    ) -> None:
+        """
+        Show post-policy routes that are accepted by origination policy. Only
+        displays routes that came with an origination policy
+        """
+
+        opts = cli_opts.advertised_routes_options
+        prefix_mgr.AdvertisedRoutesWithOriginationPolicyCmd(cli_opts).run(
+            ctrl_types.RouteFilterType.POSTFILTER_ADVERTISED,
+            prefix,
+            opts.prefix_type,
+            opts.json,
+            opts.detail,
+        )
+
+    @show.command("rejected-on-origination")
+    @click.argument("prefix", nargs=-1, type=str, required=False)
+    @click.pass_obj
+    def rejected_on_origination(
+        cli_opts: bunch.Bunch, prefix: List[str]  # noqa: B902
+    ) -> None:
+        """
+        Show routes rejected by origination policy
+        """
+
+        opts = cli_opts.advertised_routes_options
+        prefix_mgr.AdvertisedRoutesWithOriginationPolicyCmd(cli_opts).run(
             ctrl_types.RouteFilterType.REJECTED_ON_ADVERTISE,
             prefix,
             opts.prefix_type,

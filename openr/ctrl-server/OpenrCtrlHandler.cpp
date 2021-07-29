@@ -486,6 +486,15 @@ OpenrCtrlHandler::semifuture_getAreaAdvertisedRoutesFiltered(
       std::move(*areaName), std::move(routeFilterType), std::move(*filter));
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+OpenrCtrlHandler::semifuture_getAdvertisedRoutesWithOriginationPolicy(
+    thrift::RouteFilterType routeFilterType,
+    std::unique_ptr<thrift::AdvertisedRouteFilter> filter) {
+  CHECK(prefixManager_);
+  return prefixManager_->getAdvertisedRoutesWithOriginationPolicy(
+      std::move(routeFilterType), std::move(*filter));
+}
+
 //
 // Fib APIs
 //

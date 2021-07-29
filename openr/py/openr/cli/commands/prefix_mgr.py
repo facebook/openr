@@ -26,42 +26,57 @@ def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
     return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
 
 
+def get_advertised_route_filter(
+    prefixes: List[str], prefix_type: Optional[str]
+) -> ctrl_types.AdvertisedRouteFilter:
+    route_filter = ctrl_types.AdvertisedRouteFilter()
+    if prefixes:
+        route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+    if prefix_type:
+        route_filter.prefixType = to_thrift_prefix_type(prefix_type)
+    return route_filter
+
+
+def to_thrift_prefixes(
+    prefixes: List[str],
+    prefix_type: network_types.PrefixType,
+    forwarding_type: PrefixForwardingType = PrefixForwardingType.IP,
+) -> List[openr_types.PrefixEntry]:
+    return [
+        openr_types.PrefixEntry(
+            prefix=ipnetwork.ip_str_to_prefix(prefix),
+            type=prefix_type,
+            forwardingType=forwarding_type,
+        )
+        for prefix in prefixes
+    ]
+
+
+def to_thrift_prefix_type(prefix_type: str) -> network_types.PrefixType:
+    PREFIX_TYPE_TO_VALUES = network_types.PrefixType._NAMES_TO_VALUES
+    if prefix_type.upper() not in PREFIX_TYPE_TO_VALUES:
+        raise Exception(
+            "Unknown type {}. Use any of {}".format(
+                prefix_type, ", ".join(PREFIX_TYPE_TO_VALUES.keys())
+            )
+        )
+
+    return PREFIX_TYPE_TO_VALUES[prefix_type.upper()]
+
+
+def to_thrift_forwarding_type(forwarding_type: str) -> PrefixForwardingType:
+    FORWARDING_TYPE_TO_VALUES = PrefixForwardingType._NAMES_TO_VALUES
+    if forwarding_type not in FORWARDING_TYPE_TO_VALUES:
+        raise Exception(
+            "Unknown forwarding type {}. Use any of {}".format(
+                forwarding_type, ", ".join(FORWARDING_TYPE_TO_VALUES.keys())
+            )
+        )
+    return FORWARDING_TYPE_TO_VALUES[forwarding_type]
+
+
 class PrefixMgrCmd(OpenrCtrlCmd):
-    def to_thrift_prefixes(
-        self,
-        prefixes: List[str],
-        prefix_type: network_types.PrefixType,
-        forwarding_type: PrefixForwardingType = PrefixForwardingType.IP,
-    ) -> List[openr_types.PrefixEntry]:
-        return [
-            openr_types.PrefixEntry(
-                prefix=ipnetwork.ip_str_to_prefix(prefix),
-                type=prefix_type,
-                forwardingType=forwarding_type,
-            )
-            for prefix in prefixes
-        ]
-
-    def to_thrift_prefix_type(self, prefix_type: str) -> network_types.PrefixType:
-        PREFIX_TYPE_TO_VALUES = network_types.PrefixType._NAMES_TO_VALUES
-        if prefix_type.upper() not in PREFIX_TYPE_TO_VALUES:
-            raise Exception(
-                "Unknown type {}. Use any of {}".format(
-                    prefix_type, ", ".join(PREFIX_TYPE_TO_VALUES.keys())
-                )
-            )
-
-        return PREFIX_TYPE_TO_VALUES[prefix_type.upper()]
-
-    def to_thrift_forwarding_type(self, forwarding_type: str) -> PrefixForwardingType:
-        FORWARDING_TYPE_TO_VALUES = PrefixForwardingType._NAMES_TO_VALUES
-        if forwarding_type not in FORWARDING_TYPE_TO_VALUES:
-            raise Exception(
-                "Unknown forwarding type {}. Use any of {}".format(
-                    forwarding_type, ", ".join(FORWARDING_TYPE_TO_VALUES.keys())
-                )
-            )
-        return FORWARDING_TYPE_TO_VALUES[forwarding_type]
+    pass
 
 
 class WithdrawCmd(PrefixMgrCmd):
@@ -73,9 +88,7 @@ class WithdrawCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> None:
-        tprefixes = self.to_thrift_prefixes(
-            prefixes, self.to_thrift_prefix_type(prefix_type)
-        )
+        tprefixes = to_thrift_prefixes(prefixes, to_thrift_prefix_type(prefix_type))
         client.withdrawPrefixes(tprefixes)
         print(f"Withdrew {len(prefixes)} prefixes")
 
@@ -90,10 +103,10 @@ class AdvertiseCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> None:
-        tprefixes = self.to_thrift_prefixes(
+        tprefixes = to_thrift_prefixes(
             prefixes,
-            self.to_thrift_prefix_type(prefix_type),
-            self.to_thrift_forwarding_type(forwarding_type),
+            to_thrift_prefix_type(prefix_type),
+            to_thrift_forwarding_type(forwarding_type),
         )
         client.advertisePrefixes(tprefixes)
         print(f"Advertised {len(prefixes)} prefixes with type {prefix_type}")
@@ -109,9 +122,9 @@ class SyncCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> None:
-        tprefix_type = self.to_thrift_prefix_type(prefix_type)
-        tprefixes = self.to_thrift_prefixes(
-            prefixes, tprefix_type, self.to_thrift_forwarding_type(forwarding_type)
+        tprefix_type = to_thrift_prefix_type(prefix_type)
+        tprefixes = to_thrift_prefixes(
+            prefixes, tprefix_type, to_thrift_forwarding_type(forwarding_type)
         )
         client.syncPrefixesByType(tprefix_type, tprefixes)
         print(f"Synced {len(prefixes)} prefixes with type {prefix_type}")
@@ -174,11 +187,7 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         """
 
         # Create filter
-        route_filter = ctrl_types.AdvertisedRouteFilter()
-        if prefixes:
-            route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
-        if prefix_type:
-            route_filter.prefixType = self.to_thrift_prefix_type(prefix_type)
+        route_filter = get_advertised_route_filter(prefixes, prefix_type)
 
         # Get routes
         return client.getAdvertisedRoutesFiltered(route_filter)
@@ -337,6 +346,60 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
             rows.append("")
 
 
+class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
+
+    # @override
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        route_filter_type: ctrl_types.RouteFilterType,
+        prefixes: List[str],
+        prefix_type: Optional[str],
+        json: bool,
+        detailed: bool,
+        *args,
+        **kwargs,
+    ) -> None:
+
+        # Get data
+        routes = self.fetch(client, route_filter_type, prefixes, prefix_type)
+
+        # Print json if
+        if json:
+            # TODO: Print routes in json
+            raise NotImplementedError()
+        else:
+            self.render(routes, detailed)
+
+    def fetch(
+        self,
+        client: OpenrCtrl.Client,
+        route_filter_type: ctrl_types.RouteFilterType,
+        prefixes: List[str],
+        prefix_type: Optional[str],
+    ) -> List[ctrl_types.AdvertisedRoute]:
+        """
+        Fetch the requested data
+        """
+
+        # Create filter
+        route_filter = get_advertised_route_filter(prefixes, prefix_type)
+
+        # Get routes
+        return client.getAdvertisedRoutesWithOriginationPolicy(
+            route_filter_type, route_filter
+        )
+
+    def render(self, routes: List[ctrl_types.AdvertisedRoute], detailed: bool) -> None:
+        """
+        Render advertised routes
+        """
+        tag_to_name = None
+        if self.cli_opts["advertised_routes_options"]["tag2name"]:
+            tag_to_name = get_tag_to_name_map(self._get_config())
+        print_advertised_routes(routes, prefix_type_key_fn, detailed, tag_to_name)
+
+
 class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
 
     # @override
@@ -376,11 +439,7 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         """
 
         # Create filter
-        route_filter = ctrl_types.AdvertisedRouteFilter()
-        if prefixes:
-            route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
-        if prefix_type:
-            route_filter.prefixType = self.to_thrift_prefix_type(prefix_type)
+        route_filter = get_advertised_route_filter(prefixes, prefix_type)
 
         # Get routes
         return client.getAreaAdvertisedRoutesFiltered(

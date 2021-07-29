@@ -120,6 +120,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       thrift::RouteFilterType routeFilterType,
       std::unique_ptr<thrift::AdvertisedRouteFilter> filter) override;
 
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+  semifuture_getAdvertisedRoutesWithOriginationPolicy(
+      thrift::RouteFilterType routeFilterType,
+      std::unique_ptr<thrift::AdvertisedRouteFilter> filter) override;
+
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
   semifuture_getOriginatedPrefixes() override;
 

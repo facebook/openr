@@ -320,6 +320,14 @@ service OpenrCtrl extends fb303_core.BaseService {
   ) throws (1: OpenrError error);
 
   /**
+   * For node, show pre/post origination policy routes.
+   */
+  list<AdvertisedRoute> getAdvertisedRoutesWithOriginationPolicy(
+    1: RouteFilterType routeFilterType,
+    2: AdvertisedRouteFilter filter,
+  ) throws (1: OpenrError error);
+
+  /**
    * Get received routes, aka Adjacency RIB. Filter parameters if specified will
    * follow `AND` operator
    */
