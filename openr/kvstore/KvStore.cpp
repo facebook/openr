@@ -1711,7 +1711,10 @@ KvStoreDb::requestThriftPeerSync() {
           auto timeDelta =
               std::chrono::duration_cast<std::chrono::milliseconds>(
                   endTime - startTime);
-          processThriftFailure(peer, ew.what(), timeDelta);
+          processThriftFailure(
+              peer,
+              fmt::format("FULL_SYNC failure with {}, {}", peer, ew.what()),
+              timeDelta);
 
           // record telemetry for thrift calls
           fb303::fbData->addStatValue(
@@ -1876,9 +1879,8 @@ KvStoreDb::processThriftFailure(
     return;
   }
 
-  LOG(INFO) << "[Thrift Sync] Exception: " << exceptionStr
-            << ". Peer name: " << peerName
-            << ". Processing time: " << timeDelta.count() << "ms.";
+  LOG(INFO) << fmt::format(
+      "Exception: {}. Processing time: {}ms.", exceptionStr, timeDelta.count());
 
   // reset client to reconnect later in next batch of thriftSyncTimer_
   // scanning
@@ -2514,7 +2516,11 @@ KvStoreDb::sendTopoSetCmd(
               auto timeDelta =
                   std::chrono::duration_cast<std::chrono::milliseconds>(
                       endTime - startTime);
-              processThriftFailure(peerName, ew.what(), timeDelta);
+              processThriftFailure(
+                  peerName,
+                  fmt::format(
+                      "DUAL TOPO_SET failure with {}, {}", peerName, ew.what()),
+                  timeDelta);
 
               // record telemetry for thrift calls
               fb303::fbData->addStatValue(
@@ -2984,7 +2990,11 @@ KvStoreDb::finalizeFullSync(
         auto endTime = std::chrono::steady_clock::now();
         auto timeDelta = std::chrono::duration_cast<std::chrono::milliseconds>(
             endTime - startTime);
-        processThriftFailure(senderId, ew.what(), timeDelta);
+        processThriftFailure(
+            senderId,
+            fmt::format(
+                "Finalized FULL_SYNC failure with {}, {}", senderId, ew.what()),
+            timeDelta);
 
         // record telemetry for thrift calls
         fb303::fbData->addStatValue(
@@ -3151,19 +3161,22 @@ KvStoreDb::floodPublication(
               timeDelta.count(),
               fb303::AVG);
         })
-        .thenError(
-            [this, peerName, startTime](const folly::exception_wrapper& ew) {
-              // state transition to IDLE
-              auto endTime = std::chrono::steady_clock::now();
-              auto timeDelta =
-                  std::chrono::duration_cast<std::chrono::milliseconds>(
-                      endTime - startTime);
-              processThriftFailure(peerName, ew.what(), timeDelta);
+        .thenError([this, peerName, startTime](
+                       const folly::exception_wrapper& ew) {
+          // state transition to IDLE
+          auto endTime = std::chrono::steady_clock::now();
+          auto timeDelta =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endTime - startTime);
+          processThriftFailure(
+              peerName,
+              fmt::format("FLOOD_PUB failure with {}, {}", peerName, ew.what()),
+              timeDelta);
 
-              // record telemetry for thrift calls
-              fb303::fbData->addStatValue(
-                  "kvstore.thrift.num_flood_pub_failure", 1, fb303::COUNT);
-            });
+          // record telemetry for thrift calls
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.num_flood_pub_failure", 1, fb303::COUNT);
+        });
   }
 }
 
@@ -3311,19 +3324,22 @@ KvStoreDb::sendDualMessages(
               timeDelta.count(),
               fb303::AVG);
         })
-        .thenError(
-            [this, neighbor, startTime](const folly::exception_wrapper& ew) {
-              // state transition to IDLE
-              auto endTime = std::chrono::steady_clock::now();
-              auto timeDelta =
-                  std::chrono::duration_cast<std::chrono::milliseconds>(
-                      endTime - startTime);
-              processThriftFailure(neighbor, ew.what(), timeDelta);
+        .thenError([this, neighbor, startTime](
+                       const folly::exception_wrapper& ew) {
+          // state transition to IDLE
+          auto endTime = std::chrono::steady_clock::now();
+          auto timeDelta =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endTime - startTime);
+          processThriftFailure(
+              neighbor,
+              fmt::format("DUAL MSG failure with {}, {}", neighbor, ew.what()),
+              timeDelta);
 
-              // record telemetry for thrift calls
-              fb303::fbData->addStatValue(
-                  "kvstore.thrift.num_dual_msg_failure", 1, fb303::COUNT);
-            });
+          // record telemetry for thrift calls
+          fb303::fbData->addStatValue(
+              "kvstore.thrift.num_dual_msg_failure", 1, fb303::COUNT);
+        });
   } else {
     if (peers_.count(neighbor) == 0) {
       LOG(ERROR) << "fail to send dual messages to " << neighbor
