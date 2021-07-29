@@ -35,6 +35,9 @@ using NodeAndArea = std::pair<std::string, std::string>;
 using PrefixEntries =
     std::unordered_map<NodeAndArea, std::shared_ptr<thrift::PrefixEntry>>;
 
+// KvStore URLs
+BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);
+
 // markers for some of KvStore keys
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);

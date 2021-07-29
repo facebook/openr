@@ -16,6 +16,7 @@ namespace fs = std::experimental::filesystem;
 #include <fstream>
 #include <stdexcept>
 
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
@@ -227,6 +228,9 @@ main(int argc, char** argv) {
 
   SYSLOG(INFO) << config->getRunningConfig();
 
+  // Set up the zmq context for this process.
+  fbzmq::Context context;
+
   // Set main thread name
   folly::setThreadName("openr");
 
@@ -355,11 +359,16 @@ main(int argc, char** argv) {
       watchdog,
       "kvstore",
       std::make_unique<KvStore>(
+          context,
           kvStoreUpdatesQueue,
           kvStoreSyncEventsQueue,
           peerUpdatesQueue.getReader(),
           kvRequestQueue.getReader(),
           logSampleQueue,
+          KvStoreGlobalCmdUrl{fmt::format(
+              "tcp://{}:{}",
+              *config->getConfig().listen_addr_ref(),
+              Constants::kKvStoreRepPort)},
           config));
 
   // If FIB-ACK feature is enabled, Fib publishes routes to PrefixManager

@@ -8,6 +8,7 @@
 #include <sodium.h>
 #include <thread>
 
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -49,7 +50,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
   createKvStore(const std::string& nodeId) {
     auto tConfig = getBasicOpenrConfig(nodeId);
     stores_.emplace_back(std::make_shared<KvStoreWrapper>(
-        std::make_shared<Config>(tConfig), std::nullopt));
+        context_, std::make_shared<Config>(tConfig), std::nullopt));
     stores_.back()->run();
   }
 
@@ -111,6 +112,9 @@ class KvStoreThriftTestFixture : public ::testing::Test {
     }
     return false;
   }
+
+  // zmqContext
+  fbzmq::Context context_;
 
   // initialize maximum waiting time to check key-val:
   const std::chrono::milliseconds waitTime_{1000};

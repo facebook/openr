@@ -6,11 +6,12 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/GLog.h>
 #include <folly/Random.h>
 #include <folly/String.h>
-#include "openr/common/Util.h"
+#include <openr/common/Util.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
@@ -27,17 +28,26 @@ namespace openr {
 
 KvStore::KvStore(
     // initializers for immutable state
+    fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue,
     messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
+    KvStoreGlobalCmdUrl globalCmdUrl,
     std::shared_ptr<const Config> config)
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
           kvStoreSyncEventsQueue,
           logSampleQueue,
+          fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
+              zmqContext,
+              fbzmq::IdentityString{
+                  fmt::format("{}::TCP::CMD", config->getNodeName())},
+              folly::none,
+              fbzmq::NonblockingFlag{true}),
+          config->getKvStoreConfig().get_zmq_hwm(),
           std::chrono::seconds(
               *config->getKvStoreConfig().sync_interval_s_ref()),
           getKvStoreFilters(config),
@@ -120,6 +130,12 @@ KvStore::KvStore(
             this,
             kvParams_,
             area,
+            fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT>(
+                zmqContext,
+                fbzmq::IdentityString{folly::to<std::string>(
+                    config->getNodeName(), "::TCP::SYNC::", area)},
+                folly::none,
+                fbzmq::NonblockingFlag{true}),
             config->getKvStoreConfig().is_flood_root_ref().value_or(false),
             config->getNodeName(),
             std::bind(&KvStore::initialKvStoreDbSynced, this)));
@@ -888,12 +904,14 @@ KvStoreDb::KvStoreDb(
     OpenrEventBase* evb,
     KvStoreParams& kvParams,
     const std::string& area,
+    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock,
     bool isFloodRoot,
     const std::string& nodeId,
     std::function<void()> initialKvStoreSyncedCallback)
     : DualNode(nodeId, isFloodRoot),
       kvParams_(kvParams),
       area_(area),
+      peerSyncSock_(std::move(peerSyncSock)),
       initialKvStoreSyncedCallback_(initialKvStoreSyncedCallback),
       evb_(evb) {
   if (kvParams_.floodRate) {

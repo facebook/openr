@@ -330,6 +330,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   const auto& remoteIfName = *info.remoteIfName_ref();
   const auto& remoteNodeName = *info.nodeName_ref();
   const auto& area = *info.area_ref();
+  const auto kvStoreCmdPort = Constants::kKvStoreRepPort;
   const auto openrCtrlThriftPort = *info.openrCtrlThriftPort_ref();
   const auto rttUs = *info.rttUs_ref();
   const auto supportFloodOptimization = *info.enableFloodOptimization_ref();
@@ -363,15 +364,26 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
                << supportFloodOptimization;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
+  std::string repUrl{""};
   std::string peerAddr{""};
-  if (not mockMode_) {
+  if (!mockMode_) {
+    // peer address used for KvStore external sync over ZMQ
+    repUrl = fmt::format(
+        "tcp://[{}%{}]:{}",
+        toString(neighborAddrV6),
+        localIfName,
+        kvStoreCmdPort);
     // peer address used for KvStore external sync over thrift
     peerAddr = fmt::format("{}%{}", toString(neighborAddrV6), localIfName);
   } else {
+    // use inproc address
+    repUrl = fmt::format("inproc://{}-kvstore-cmd-global", remoteNodeName);
     // TODO: address value of peerAddr under system test environment
     peerAddr =
         fmt::format("{}%{}", Constants::kPlatformHost.toString(), localIfName);
   }
+
+  CHECK(not repUrl.empty()) << "Got empty repUrl";
   CHECK(not peerAddr.empty()) << "Got empty peerAddr";
 
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
@@ -390,6 +402,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   adjacencies_[adjId] = AdjacencyValue(
       area,
       createPeerSpec(
+          repUrl,
           peerAddr,
           openrCtrlThriftPort,
           thrift::KvStorePeerState::IDLE,

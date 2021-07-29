@@ -13,6 +13,7 @@ namespace openr {
 
 template <class Serializer>
 OpenrWrapper<Serializer>::OpenrWrapper(
+    fbzmq::Context& context,
     std::string nodeId,
     bool v4Enabled,
     std::chrono::seconds kvStoreDbSyncInterval,
@@ -27,7 +28,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds linkFlapMaxBackoff,
     std::shared_ptr<IoProvider> ioProvider,
     uint32_t memLimit)
-    : nodeId_(nodeId), ioProvider_(std::move(ioProvider)) {
+    : context_(context),
+      nodeId_(nodeId),
+      ioProvider_(std::move(ioProvider)),
+      kvStoreGlobalCmdUrl_(
+          folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)) {
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
@@ -104,11 +109,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // create and start kvstore thread
   kvStore_ = std::make_unique<KvStore>(
+      context_,
       kvStoreUpdatesQueue_,
       kvStoreSyncEventsQueue_,
       peerUpdatesQueue_.getReader(),
       kvRequestQueue_.getReader(),
       logSampleQueue_,
+      KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       config_);
   std::thread kvStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " KvStore running.";

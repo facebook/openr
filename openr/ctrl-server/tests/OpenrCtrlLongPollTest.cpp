@@ -27,7 +27,7 @@ class LongPollFixture : public ::testing::Test {
     config_ = std::make_shared<Config>(tConfig);
 
     // Create KvStore module
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(config_);
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config_);
     kvStoreWrapper_->run();
 
     // initialize openrCtrlClient talking to server
@@ -57,6 +57,7 @@ class LongPollFixture : public ::testing::Test {
   }
 
  private:
+  fbzmq::Context context_;
   folly::EventBase evb_;
 
  public:

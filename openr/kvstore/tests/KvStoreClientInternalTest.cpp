@@ -9,6 +9,7 @@
 #include <thread>
 #include <unordered_set>
 
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/init/Init.h>
 #include <gmock/gmock.h>
@@ -83,7 +84,7 @@ class MultipleStoreFixture : public ::testing::Test {
     // wrapper to spin up a kvstore through KvStoreWrapper
     auto makeStoreWrapper = [this](std::string nodeId) {
       config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-      return std::make_shared<KvStoreWrapper>(config);
+      return std::make_shared<KvStoreWrapper>(context, config);
     };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -126,6 +127,7 @@ class MultipleStoreFixture : public ::testing::Test {
   OpenrEventBase evb;
   std::thread evbThread;
   apache::thrift::CompactSerializer serializer;
+  fbzmq::Context context;
 
   std::shared_ptr<Config> config;
   std::shared_ptr<KvStoreWrapper> store1, store2, store3;
@@ -195,7 +197,7 @@ class MultipleAreaFixture : public MultipleStoreFixture {
           }
           auto tConfig = getBasicOpenrConfig(nodeId, "domain", areaConfig);
           config = std::make_shared<Config>(tConfig);
-          return std::make_shared<KvStoreWrapper>(config);
+          return std::make_shared<KvStoreWrapper>(context, config);
         };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -418,6 +420,7 @@ TEST_F(
 
 TEST(KvStoreClientInternal, CounterReport) {
   OpenrEventBase evb;
+  fbzmq::Context context;
   const std::string evbName{"testEvb"};
   folly::Baton waitBaton;
 
@@ -427,7 +430,7 @@ TEST(KvStoreClientInternal, CounterReport) {
 
   // start kvstore for interaction
   auto config = std::make_shared<Config>(getBasicOpenrConfig("node1"));
-  auto store = std::make_unique<KvStoreWrapper>(config);
+  auto store = std::make_unique<KvStoreWrapper>(context, config);
   store->run();
 
   evb.setEvbName(evbName);
@@ -501,6 +504,7 @@ TEST(KvStoreClientInternal, CounterReport) {
 
 TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
   OpenrEventBase evb;
+  fbzmq::Context context;
   folly::Baton waitBaton;
 
   int scheduleAt{0};
@@ -510,7 +514,7 @@ TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
 
   // start kvstore for interaction
   auto config = std::make_shared<Config>(getBasicOpenrConfig("node1"));
-  auto store = std::make_unique<KvStoreWrapper>(config);
+  auto store = std::make_unique<KvStoreWrapper>(context, config);
   store->run();
 
   auto client = std::make_shared<KvStoreClientInternal>(
@@ -596,17 +600,18 @@ TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
 }
 
 TEST(KvStoreClientInternal, EmptyValueKey) {
+  fbzmq::Context context;
   folly::Baton waitBaton;
 
   // start store1, store2, store 3
   auto config1 = std::make_shared<Config>(getBasicOpenrConfig("node1"));
-  auto store1 = std::make_unique<KvStoreWrapper>(config1);
+  auto store1 = std::make_unique<KvStoreWrapper>(context, config1);
   store1->run();
   auto config2 = std::make_shared<Config>(getBasicOpenrConfig("node2"));
-  auto store2 = std::make_unique<KvStoreWrapper>(config2);
+  auto store2 = std::make_unique<KvStoreWrapper>(context, config2);
   store2->run();
   auto config3 = std::make_shared<Config>(getBasicOpenrConfig("node3"));
-  auto store3 = std::make_unique<KvStoreWrapper>(config3);
+  auto store3 = std::make_unique<KvStoreWrapper>(context, config3);
   store3->run();
 
   // add peers store1 <---> store2 <---> store3
@@ -742,12 +747,13 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
 }
 
 TEST(KvStoreClientInternal, PersistKeyTest) {
+  fbzmq::Context context;
   folly::Baton waitBaton;
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with one fake peer
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(config);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -836,6 +842,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
  *   - Verify "1s < ttl"
  */
 TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
+  fbzmq::Context context;
   folly::Baton waitBaton;
   const std::string nodeId{"test_store"};
   const std::string testKey{"test-key"};
@@ -843,7 +850,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
 
   // Initialize and start KvStore
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(config);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -932,11 +939,12 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
  * KvStore. Further key-2 from client-2 should win over key from client-1
  */
 TEST(KvStoreClientInternal, ApiTest) {
+  fbzmq::Context context;
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with one fake peer
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(config);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Define and start evb for KvStoreClientInternal usage.
@@ -968,9 +976,13 @@ TEST(KvStoreClientInternal, ApiTest) {
   // Schedule callback to add/del peer via client-1 (will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
     EXPECT_TRUE(store->addPeer(
-        kTestingAreaName, "peer1", createPeerSpec("fake_thrift_url_1")));
+        kTestingAreaName,
+        "peer1",
+        createPeerSpec("inproc://fake_cmd_url_1", "fake_thrift_url_1")));
     EXPECT_TRUE(store->addPeer(
-        kTestingAreaName, "peer2", createPeerSpec("fake_thrift_url_1")));
+        kTestingAreaName,
+        "peer2",
+        createPeerSpec("inproc://fake_cmd_url_2", "fake_thrift_url_1")));
     EXPECT_TRUE(store->delPeer(kTestingAreaName, "peer1"));
   });
 
@@ -1143,12 +1155,13 @@ TEST(KvStoreClientInternal, ApiTest) {
 }
 
 TEST(KvStoreClientInternal, SubscribeApiTest) {
+  fbzmq::Context context;
   folly::Baton waitBaton;
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with empty peer
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(config);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -1285,12 +1298,13 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
 }
 
 TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
+  fbzmq::Context context;
   folly::Baton waitBaton;
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with empty peer
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(config);
+  auto store = std::make_shared<KvStoreWrapper>(context, config);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients

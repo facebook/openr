@@ -91,7 +91,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create KvStore module
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        config, std::nullopt, kvRequestQueue_.getReader());
+        context_, config, std::nullopt, kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     // Create Decision module
@@ -237,6 +237,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
+  fbzmq::Context context_{};
   folly::EventBase evb_;
 
   std::thread decisionThread_;
@@ -588,14 +589,24 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // Peers APIs
   //
   const thrift::PeersMap peers{
-      {"peer1", createPeerSpec(Constants::kPlatformHost.toString())},
-      {"peer2", createPeerSpec(Constants::kPlatformHost.toString())},
-      {"peer3", createPeerSpec(Constants::kPlatformHost.toString())}};
+      {"peer1",
+       createPeerSpec(
+           "inproc://peer1-cmd", Constants::kPlatformHost.toString())},
+      {"peer2",
+       createPeerSpec(
+           "inproc://peer2-cmd", Constants::kPlatformHost.toString())},
+      {"peer3",
+       createPeerSpec(
+           "inproc://peer3-cmd", Constants::kPlatformHost.toString())}};
 
   // do the same with non-default area
   const thrift::PeersMap peersPod{
-      {"peer11", createPeerSpec(Constants::kPlatformHost.toString())},
-      {"peer21", createPeerSpec(Constants::kPlatformHost.toString())},
+      {"peer11",
+       createPeerSpec(
+           "inproc://peer11-cmd", Constants::kPlatformHost.toString())},
+      {"peer21",
+       createPeerSpec(
+           "inproc://peer21-cmd", Constants::kPlatformHost.toString())},
   };
 
   {

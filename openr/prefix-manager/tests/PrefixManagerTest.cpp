@@ -85,7 +85,7 @@ class PrefixManagerTestFixture : public testing::Test {
 
     // spin up a kvstore
     kvStoreWrapper = std::make_shared<KvStoreWrapper>(
-        config, std::nullopt, kvRequestQueue.getReader());
+        context, config, std::nullopt, kvRequestQueue.getReader());
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
@@ -188,6 +188,7 @@ class PrefixManagerTestFixture : public testing::Test {
   // NodeId to initialize
   const std::string nodeId_{"node-1"};
 
+  fbzmq::Context context;
   OpenrEventBase evb;
   std::thread evbThread;
 

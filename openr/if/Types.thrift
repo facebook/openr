@@ -623,6 +623,28 @@ typedef map<string, Value> (
 ) KeyVals
 
 /**
+ * @deprecated - Enum describing KvStore command type. This becomes obsolete
+ * with the removal of dual functionality.
+ */
+enum Command {
+  /**
+   * Operations on keys in the store
+   */
+  KEY_SET = 1,
+  KEY_DUMP = 3,
+
+  /**
+   * Dual message
+   */
+  DUAL = 10,
+
+  /**
+   * Set or uunset flooding-topology child
+   */
+  FLOOD_TOPO_SET = 11,
+}
+
+/**
  * Logical operator enum for querying
  */
 enum FilterOperator {
@@ -861,6 +883,27 @@ struct SptInfos {
    * current flooding peers
    */
   4: PeerNames floodPeers;
+}
+
+/**
+ * KvStore Request specification. A request to the server (tagged union)
+ */
+struct KvStoreRequest {
+  /**
+   * Command type. Set one of the optional parameter based on command
+   */
+  1: Command cmd;
+
+  /**
+   * area identifier to identify the KvStoreDb instance (mandatory)
+   */
+  11: string area;
+
+  2: optional KeySetParams keySetParams;
+  3: optional KeyGetParams keyGetParams;
+  6: optional KeyDumpParams keyDumpParams;
+  9: optional DualMessages dualMessages;
+  10: optional FloodTopoSetParams floodTopoSetParams;
 }
 
 /**

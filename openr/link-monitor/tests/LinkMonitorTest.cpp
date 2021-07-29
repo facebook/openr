@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
@@ -51,12 +52,22 @@ const auto if_2_2 = "iface_2_2";
 const auto if_3_1 = "iface_3_1";
 const auto if_3_2 = "iface_3_2";
 
-const auto peerSpec_2_1 =
-    createPeerSpec(folly::sformat("{}%{}", nb2_v6_addr, if_2_1), 1);
-const auto peerSpec_2_2 =
-    createPeerSpec(folly::sformat("{}%{}", nb2_v6_addr, if_2_2), 1);
-const auto peerSpec_3_1 =
-    createPeerSpec(folly::sformat("{}%{}", nb3_v6_addr, if_3_1), 2);
+const auto kvStoreCmdPort = Constants::kKvStoreRepPort;
+
+const auto peerSpec_2_1 = createPeerSpec(
+    fmt::format("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_1, kvStoreCmdPort),
+    fmt::format("{}%{}", nb2_v6_addr, if_2_1),
+    1);
+
+const auto peerSpec_2_2 = createPeerSpec(
+    fmt::format("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_2, kvStoreCmdPort),
+    fmt::format("{}%{}", nb2_v6_addr, if_2_2),
+    1);
+
+const auto peerSpec_3_1 = createPeerSpec(
+    fmt::format("tcp://[{}%{}]:{}", nb3_v6_addr, if_3_1, kvStoreCmdPort),
+    fmt::format("{}%{}", nb3_v6_addr, if_3_1),
+    2);
 
 const auto nb2 = createSparkNeighbor(
     "node-2",
@@ -366,7 +377,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
   void
   createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        config, peerUpdatesQueue.getReader(), kvRequestQueue.getReader());
+        context,
+        config,
+        peerUpdatesQueue.getReader(),
+        kvRequestQueue.getReader());
     kvStoreWrapper->run();
   }
 
@@ -591,6 +605,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     linkMonitor.reset();
   }
 
+  fbzmq::Context context{};
   folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 

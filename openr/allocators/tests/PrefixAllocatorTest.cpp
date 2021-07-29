@@ -7,6 +7,7 @@
 
 #include <atomic>
 
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <folly/synchronization/Baton.h>
 #include <glog/logging.h>
@@ -60,7 +61,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
     // Start KvStore and attach a client to it
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        config_, std::nullopt, kvRequestQueue_.getReader());
+        zmqContext_, config_, std::nullopt, kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
     evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
       kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -168,6 +169,9 @@ class PrefixAllocatorFixture : public ::testing::Test {
   }
 
  protected:
+  // ZMQ Context for IO processing
+  fbzmq::Context zmqContext_;
+
   OpenrEventBase evb_;
   std::thread evbThread_;
 
@@ -227,6 +231,9 @@ class PrefixAllocTest : public ::testing::TestWithParam<bool> {
 
   // serializer object for parsing kvstore key/values
   apache::thrift::CompactSerializer serializer_;
+
+  // ZMQ Context for IO processing
+  fbzmq::Context zmqContext;
 };
 
 INSTANTIATE_TEST_CASE_P(
@@ -351,7 +358,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     const auto nodeId = folly::sformat("test_store{}", round);
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
-    auto store = std::make_shared<KvStoreWrapper>(config);
+    auto store = std::make_shared<KvStoreWrapper>(zmqContext, config);
     store->run();
 
     // Attach a kvstore client in main event loop

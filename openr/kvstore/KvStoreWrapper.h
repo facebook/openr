@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 
@@ -29,6 +30,7 @@ namespace openr {
 class KvStoreWrapper {
  public:
   KvStoreWrapper(
+      fbzmq::Context& zmqContext,
       std::shared_ptr<const Config> config,
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
           std::nullopt,
@@ -182,6 +184,7 @@ class KvStoreWrapper {
   thrift::PeerSpec
   getPeerSpec(thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE) {
     return createPeerSpec(
+        globalCmdUrl, /* cmdUrl for ZMQ */
         Constants::kPlatformHost.toString(), /* peerAddr for thrift */
         getThriftPort(),
         state,
@@ -224,6 +227,9 @@ class KvStoreWrapper {
 
  private:
   const std::string nodeId;
+
+  // Global URLs could be created outside of kvstore, mainly for testing
+  const std::string globalCmdUrl;
 
   std::shared_ptr<const Config> config_;
 

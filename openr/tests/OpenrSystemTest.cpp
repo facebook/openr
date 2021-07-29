@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
@@ -197,6 +198,7 @@ class OpenrFixture : public ::testing::Test {
       bool v4Enabled,
       uint32_t memLimit = openr::memLimitMB) {
     auto ptr = std::make_unique<OpenrWrapper<CompactSerializer>>(
+        context,
         nodeId,
         v4Enabled,
         kKvStoreDbSyncInterval,
@@ -216,6 +218,7 @@ class OpenrFixture : public ::testing::Test {
   }
 
   // public member variables
+  fbzmq::Context context;
   std::shared_ptr<MockIoProvider> mockIoProvider{nullptr};
   std::unique_ptr<std::thread> mockIoProviderThread{nullptr};
 

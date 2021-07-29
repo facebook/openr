@@ -8,12 +8,14 @@
 #pragma once
 
 #include <boost/heap/priority_queue.hpp>
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
 #include <folly/futures/Future.h>
 #include <folly/gen/Base.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/async/AsyncTimeout.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
@@ -92,6 +94,13 @@ struct KvStoreParams {
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue;
 
+  // [TO BE DEPRECATED]
+  // socket for remote & local commands
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock;
+
+  // [TO BE DEPRECATED]
+  // ZMQ high water
+  int zmqHwm;
   // IP ToS
   std::optional<int> maybeIpTos;
   // how often to request full db sync from peers
@@ -117,6 +126,9 @@ struct KvStoreParams {
       messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue,
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
+      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
+      // ZMQ high water mark
+      int zmqhwm,
       // how often to request full db sync from peers
       std::chrono::seconds dbsyncInterval,
       std::optional<KvStoreFilters> filter,
@@ -135,6 +147,8 @@ struct KvStoreParams {
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         kvStoreSyncEventsQueue(kvStoreSyncEventsQueue),
         logSampleQueue(logSampleQueue),
+        globalCmdSock(std::move(globalCmdSock)),
+        zmqHwm(zmqhwm),
         dbSyncInterval(dbsyncInterval),
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
@@ -157,6 +171,7 @@ class KvStoreDb : public DualNode {
       OpenrEventBase* evb,
       KvStoreParams& kvParams,
       const std::string& area,
+      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
       bool isFloodRoot,
       const std::string& nodeId,
       std::function<void()> initialKvStoreSyncedCallback);
@@ -221,6 +236,13 @@ class KvStoreDb : public DualNode {
 
   // dump all peers we are subscribed to
   thrift::PeersMap dumpPeers();
+
+  // thrift flavor of peer adding
+  void addThriftPeers(
+      std::unordered_map<std::string, thrift::PeerSpec> const& peers);
+
+  // thrift flavor of peer deletion
+  void delThriftPeers(std::vector<std::string> const& peers);
 
   // util funtion to fetch KvStorePeerState
   std::optional<thrift::KvStorePeerState> getCurrentState(
@@ -396,6 +418,10 @@ class KvStoreDb : public DualNode {
   // area identified of this KvStoreDb instance
   const std::string area_;
 
+  // [TO BE DEPRECATED]
+  // zmq ROUTER socket for requesting full dumps from peers
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
+
   //
   // Mutable state
   //
@@ -440,6 +466,9 @@ class KvStoreDb : public DualNode {
   // Set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
+  // the serializer/deserializer helper we'll be using
+  apache::thrift::CompactSerializer serializer_;
+
   // Boolean flag indicating whether initial KvStoreDb sync with all peers
   // completed in OpenR initialization procedure.
   bool initialSyncCompleted_{false};
@@ -458,6 +487,9 @@ class KvStoreDb : public DualNode {
 
   // timer to send pending kvstore publication
   std::unique_ptr<folly::AsyncTimeout> pendingPublicationTimer_{nullptr};
+
+  // timer for requesting full-sync
+  std::unique_ptr<folly::AsyncTimeout> requestSyncTimer_{nullptr};
 
   // timer to promote idle peers for initial syncing
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
@@ -497,6 +529,8 @@ class KvStoreDb : public DualNode {
 class KvStore final : public OpenrEventBase {
  public:
   KvStore(
+      // the zmq context to use for IO
+      fbzmq::Context& zmqContext,
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue,
       // Queue for publishing kvstore peer initial sync events
@@ -507,6 +541,8 @@ class KvStore final : public OpenrEventBase {
       messaging::RQueue<KeyValueRequest> kvRequestQueue,
       // Queue for publishing the event log
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
+      // the url to receive command from peer instances
+      KvStoreGlobalCmdUrl globalCmdUrl,
       // openr config
       std::shared_ptr<const Config> config);
 
@@ -611,6 +647,9 @@ class KvStore final : public OpenrEventBase {
 
   // map of area IDs and instance of KvStoreDb
   std::unordered_map<std::string /* area ID */, KvStoreDb> kvStoreDb_{};
+
+  // the serializer/deserializer helper we'll be using
+  apache::thrift::CompactSerializer serializer_;
 
   // Boolean flag to indicate if kvStoreSynced signal is published in OpenR
   // initialization process.
