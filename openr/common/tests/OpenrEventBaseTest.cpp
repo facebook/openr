@@ -35,6 +35,7 @@ class OpenrEventBaseTestFixture : public ::testing::Test {
   std::thread evbThread_;
 
  public:
+  fbzmq::Context context;
   OpenrEventBase evb;
 };
 
@@ -153,14 +154,77 @@ TEST_F(OpenrEventBaseTestFixture, TimeoutTest) {
   EXPECT_LE(std::chrono::milliseconds(200), elapsedMs);
 }
 
+TEST_F(OpenrEventBaseTestFixture, ZmqSocketPollTest) {
+  const auto msg = fbzmq::Message::from(std::string("test message")).value();
+  const size_t expectedMsgs{16};
+  std::atomic<size_t> rcvdMsgs{0};
+  folly::Baton waitBaton;
+
+  // Create PUB socket (ZMQ_PUB)
+  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> pubSocket{context};
+  ASSERT_TRUE(pubSocket.bind(fbzmq::SocketUrl{"inproc://test"}).hasValue());
+
+  // Define sub socket
+  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> subSocket{
+      context, folly::none, folly::none, fbzmq::NonblockingFlag{true}};
+  ASSERT_TRUE(subSocket.connect(fbzmq::SocketUrl{"inproc://test"}).hasValue());
+  ASSERT_TRUE(subSocket.setSockOpt(ZMQ_SUBSCRIBE, "", 0).hasValue());
+
+  // Add sub socket to polling
+  evb.getEvb()->runInEventBaseThreadAndWait([&]() {
+    evb.addSocket(*subSocket, ZMQ_POLLIN, [&](int revents) {
+      EXPECT_TRUE(revents & ZMQ_POLLIN);
+      auto msg = subSocket.recvOne();
+      ASSERT_TRUE(msg.hasValue());
+      if (msg.hasValue()) {
+        ++rcvdMsgs;
+      }
+      VLOG(3) << "Received " << rcvdMsgs.load();
+      if (rcvdMsgs == expectedMsgs) {
+        waitBaton.post();
+      }
+    });
+  });
+
+  // Send messages on pub socket
+  for (size_t i = 0; i < expectedMsgs; ++i) {
+    VLOG(3) << "Sending " << i + 1;
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EXPECT_TRUE(pubSocket.sendOne(msg).hasValue());
+  }
+
+  // Wait and verify messages are received
+  waitBaton.wait();
+  EXPECT_EQ(rcvdMsgs, expectedMsgs);
+
+  // Remove socket from polling
+  evb.getEvb()->runInEventBaseThreadAndWait(
+      [&]() { evb.removeSocket(*subSocket); });
+
+  // Send messages again
+  rcvdMsgs = 0;
+  for (size_t i = 0; i < expectedMsgs; ++i) {
+    EXPECT_TRUE(pubSocket.sendOne(msg).hasValue());
+  }
+
+  // Wait and verify that no new messages are received
+  waitBaton.reset();
+  evb.getEvb()->runInEventBaseThread([&]() {
+    evb.scheduleTimeout(std::chrono::seconds(1), [&]() { waitBaton.post(); });
+  });
+  waitBaton.wait();
+  EXPECT_EQ(0, rcvdMsgs);
+}
+
 TEST_F(OpenrEventBaseTestFixture, SocketFdPollTest) {
   folly::Baton waitBaton;
 
   // create signalfd and register for polling. unblock baton on successful poll
   int testFd = eventfd(0 /* initial value */, 0 /* flags */);
   evb.getEvb()->runInEventBaseThreadAndWait([&]() {
-    evb.addSocketFd(testFd, folly::EventHandler::READ, [&](uint32_t revents) {
-      EXPECT_TRUE(revents & folly::EventHandler::READ);
+    evb.addSocketFd(testFd, ZMQ_POLLIN, [&](uint32_t revents) {
+      EXPECT_TRUE(revents & ZMQ_POLLIN);
       waitBaton.post();
       uint64_t buf;
       EXPECT_EQ(

@@ -57,6 +57,10 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests wangle
     - name: Fetch fbthrift
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests fbthrift
+    - name: Fetch libzmq
+      run: python3 build/fbcode_builder/getdeps.py fetch --no-tests libzmq
+    - name: Fetch fbzmq
+      run: python3 build/fbcode_builder/getdeps.py fetch --no-tests fbzmq
     - name: Fetch fb303
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests fb303
     - name: Build boost
@@ -107,6 +111,10 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py build --no-tests wangle
     - name: Build fbthrift
       run: python3 build/fbcode_builder/getdeps.py build --no-tests fbthrift
+    - name: Build libzmq
+      run: python3 build/fbcode_builder/getdeps.py build --no-tests libzmq
+    - name: Build fbzmq
+      run: python3 build/fbcode_builder/getdeps.py build --no-tests fbzmq
     - name: Build fb303
       run: python3 build/fbcode_builder/getdeps.py build --no-tests fb303
     - name: Build openr

@@ -11,6 +11,16 @@
 namespace openr {
 
 namespace {
+int
+getZmqSocketFd(uintptr_t socketPtr) {
+  int socketFd{-1};
+  size_t fdLen = sizeof(socketFd);
+  const auto rc = zmq_getsockopt(
+      reinterpret_cast<void*>(socketPtr), ZMQ_FD, &socketFd, &fdLen);
+  CHECK_EQ(0, rc) << "Can't get fd for socket. " << fbzmq::Error();
+  return socketFd;
+}
+
 folly::fibers::FiberManager::Options
 getFmOptions() {
   folly::fibers::FiberManager::Options options;
@@ -34,24 +44,79 @@ EventBaseStopSignalHandler::signalReceived(int signal) noexcept {
   LOG(INFO) << "Openr event-base stopped";
 }
 
-OpenrEventBase::OpenrEventHandler::OpenrEventHandler(
-    folly::EventBase* evb, int fd, int events, SocketCallback callback)
+OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
+    folly::EventBase* evb,
+    int fd,
+    uintptr_t socketPtr,
+    int zmqEvents,
+    fbzmq::SocketCallback callback)
     : folly::EventHandler(evb, folly::NetworkSocket::fromFd(fd)),
       callback_(std::move(callback)),
-      events_(events) {
-  // Make sure evb is not nullptr
+      zmqEvents_(zmqEvents),
+      ptr_(reinterpret_cast<void*>(socketPtr)) {
   CHECK(evb);
-
   // Register handler
-  registerHandler(folly::EventHandler::PERSIST | events_);
+  uint16_t events{folly::EventHandler::PERSIST};
+  if (zmqEvents & ZMQ_POLLIN) {
+    events |= folly::EventHandler::READ;
+  }
+  if (zmqEvents & ZMQ_POLLOUT) {
+    events |= folly::EventHandler::WRITE;
+  }
+  registerHandler(events);
+
+  // ZMQ is edge triggerred. In some cases zmq fd doesn't trigger read events if
+  // message is already pending to read before socket is registered for polling.
+  // To avoid such corner cases, we explicitly perform check to read pending
+  // events.
+  if (ptr_) {
+    timeout_ = folly::AsyncTimeout::schedule(
+        std::chrono::seconds(0), *evb, [&]() noexcept {
+          // Invoke handler to process already pending events if any
+          handlerReady(0); // events will be read by zmq_getsockopt
+        });
+  }
 }
 
 void
-OpenrEventBase::OpenrEventHandler::handlerReady(uint16_t events) noexcept {
-  // Invoke callback if there is an overlap
-  if (events & events_) {
-    callback_(events);
+OpenrEventBase::ZmqEventHandler::handlerReady(uint16_t events) noexcept {
+  int zmqEvents{0};
+  size_t zmqEventsLen = sizeof(zmqEvents);
+
+  if (ptr_) {
+    // ZMQ Socket - Read events via zmq_getsockopt
+    auto err = zmq_getsockopt(ptr_, ZMQ_EVENTS, &zmqEvents, &zmqEventsLen);
+    CHECK_EQ(0, err) << "Got error while reading events from zmq socket";
+  } else {
+    // Usual socket/event fd - Use signalled events
+    if (events & folly::EventHandler::READ) {
+      zmqEvents |= ZMQ_POLLIN;
+    }
+    if (events & folly::EventHandler::WRITE) {
+      zmqEvents |= ZMQ_POLLOUT;
+    }
   }
+
+  // Return if no events
+  if (not zmqEvents) {
+    return;
+  }
+
+  do {
+    // Invoke callback if there is an overlap
+    if (zmqEvents_ & zmqEvents) {
+      callback_(zmqEvents);
+    }
+
+    if (ptr_ and (zmqEvents & ZMQ_POLLIN)) {
+      // Get socket events after the read
+      auto err = zmq_getsockopt(ptr_, ZMQ_EVENTS, &zmqEvents, &zmqEventsLen);
+      CHECK_EQ(0, err) << "Got error while reading events from zmq socket";
+    } else {
+      zmqEvents = 0;
+    }
+    // We loop again only for ZMQ_POLLIN events
+  } while (zmqEvents & ZMQ_POLLIN);
 }
 
 OpenrEventBase::OpenrEventBase()
@@ -122,12 +187,36 @@ OpenrEventBase::addSocketFd(int socketFd, int events, SocketCallback callback) {
   fdHandlers_.emplace(
       std::piecewise_construct,
       std::forward_as_tuple(socketFd),
-      std::forward_as_tuple(&evb_, socketFd, events, std::move(callback)));
+      std::forward_as_tuple(
+          &evb_,
+          socketFd,
+          reinterpret_cast<uintptr_t>(nullptr),
+          events,
+          std::move(callback)));
+}
+
+void
+OpenrEventBase::addSocket(
+    uintptr_t socketPtr, int events, fbzmq::SocketCallback callback) {
+  int socketFd = getZmqSocketFd(socketPtr);
+  if (fdHandlers_.count(socketFd)) {
+    throw std::runtime_error("Socket is already registered");
+  }
+  fdHandlers_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(socketFd),
+      std::forward_as_tuple(
+          &evb_, socketFd, socketPtr, events, std::move(callback)));
 }
 
 void
 OpenrEventBase::removeSocketFd(int socketFd) {
   fdHandlers_.erase(socketFd);
+}
+
+void
+OpenrEventBase::removeSocket(uintptr_t socketPtr) {
+  fdHandlers_.erase(getZmqSocketFd(socketPtr));
 }
 
 } // namespace openr

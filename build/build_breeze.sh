@@ -20,6 +20,10 @@ cp -r \
 mkdir -p ./fb303-thrift
 cp -r  /opt/facebook/fb303/include/thrift-files/fb303 ./fb303-thrift/
 
+# fbzmq thrift
+mkdir -p ./fbzmq-thrift/fbzmq
+cp -r  /opt/facebook/fbzmq/include/fbzmq/service ./fbzmq-thrift/fbzmq/
+
 # fbthrift Cython and thrift
 cp -r  /opt/facebook/fbthrift/include/thrift/lib/ ./thrift
 touch ./thrift/py3/__init__.py
@@ -69,7 +73,7 @@ python3 /src/build/cython_compile.py
 env \
 CC="/usr/bin/gcc-10" \
 CXX="/usr/bin/g++-10" \
-CFLAGS="-I. -Iopenr-thrift -Ifb303-thrift -Ineteng-thrift -std=c++20 -fcoroutines " \
+CFLAGS="-I. -Iopenr-thrift -Ifb303-thrift -Ifbzmq-thrift -Ineteng-thrift -std=c++20 -fcoroutines " \
 CFLAGS="$CFLAGS -w -D_CPPLIB_VER=20" \
 CXXFLAGS="$CFLAGS" \
 python3 openr/py/setup.py build -j10

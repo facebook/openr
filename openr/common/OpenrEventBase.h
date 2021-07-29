@@ -9,6 +9,8 @@
 
 #include <csignal>
 
+#include <fbzmq/async/ZmqEventLoop.h>
+#include <fbzmq/zmq/Socket.h>
 #include <folly/fibers/FiberManager.h>
 #include <folly/io/async/AsyncSignalHandler.h>
 #include <folly/io/async/EventHandler.h>
@@ -107,7 +109,11 @@ class OpenrEventBase {
    */
 
   void addSocketFd(int socketFd, int events, SocketCallback callback);
+  void addSocket(
+      uintptr_t socketPtr, int events, fbzmq::SocketCallback callback);
+
   void removeSocketFd(int socketFd);
+  void removeSocket(uintptr_t socketPtr);
 
   /**
    * Eventbase name related APIs
@@ -127,22 +133,32 @@ class OpenrEventBase {
   /**
    * Event handler class for sockets and fds
    */
-  class OpenrEventHandler : public folly::EventHandler {
+  class ZmqEventHandler : public folly::EventHandler {
    public:
-    OpenrEventHandler(
-        folly::EventBase* evb, int fd, int events, SocketCallback callback);
+    ZmqEventHandler(
+        folly::EventBase* evb,
+        int fd,
+        uintptr_t socketPtr,
+        int zmqEvents,
+        fbzmq::SocketCallback callback);
 
-    virtual ~OpenrEventHandler() override {}
+    virtual ~ZmqEventHandler() override {}
 
    private:
     // EventHandler callback. Unblocks read/write wait
     void handlerReady(uint16_t events) noexcept override;
 
     // Callback for handling event
-    SocketCallback callback_;
+    fbzmq::SocketCallback callback_;
 
     // Subscribed events
-    const int events_{0};
+    const int zmqEvents_{0};
+
+    // fbzmq socket pointer if fd is socket
+    void* ptr_{nullptr};
+
+    // AsyncTimeout for reading first set of events
+    std::unique_ptr<folly::AsyncTimeout> timeout_;
   };
 
   // EventBase object for async event polling/scheduling
@@ -153,7 +169,7 @@ class OpenrEventBase {
   std::vector<folly::Future<folly::Unit>> fiberTaskFutures_;
 
   // Data structure to hold fd and their handlers
-  std::unordered_map<int /* fd */, OpenrEventHandler> fdHandlers_;
+  std::unordered_map<int /* fd */, ZmqEventHandler> fdHandlers_;
 
   // Timestamp
   std::atomic<std::chrono::steady_clock::duration::rep> timestamp_;

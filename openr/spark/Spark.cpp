@@ -491,7 +491,7 @@ Spark::prepareSocket() noexcept {
   LOG(INFO) << "Spark thread attaching socket/events callbacks...";
 
   // Listen for incoming messages on multicast FD
-  addSocketFd(mcastFd_, folly::EventHandler::READ, [this](uint16_t) noexcept {
+  addSocketFd(mcastFd_, ZMQ_POLLIN, [this](uint16_t) noexcept {
     try {
       processPacket();
     } catch (std::exception const& err) {
