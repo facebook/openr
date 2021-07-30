@@ -4,15 +4,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
-#
-# Set encoding to UTF-8 for all modules as it is needed for click in python3
-#
-import locale
-
-#
-# Disable click unicode literals warning before importing other modules
-#
 import click
 from openr.cli.clis import (
     config,
@@ -36,16 +27,6 @@ try:
     from openr.cli.clis import plugin
 except ImportError:
     pass
-
-
-click.disable_unicode_literals_warning = True
-
-
-def getpreferredencoding(do_setlocale=True):
-    return "utf-8"
-
-
-locale.getpreferredencoding = getpreferredencoding
 
 
 @click.group(name="breeze")
