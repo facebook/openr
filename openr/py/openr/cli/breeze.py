@@ -23,12 +23,19 @@ from openr.cli.clis import (
     monitor,
     openr,
     perf,
-    plugin,
     prefix_mgr,
     spark,
     tech_support,
 )
 from openr.cli.utils.options import OPTIONS, breeze_option, str2cert
+
+
+# Plugin module is optional
+plugin = None
+try:
+    from openr.cli.clis import plugin
+except ImportError:
+    pass
 
 
 click.disable_unicode_literals_warning = True
@@ -97,7 +104,8 @@ def get_breeze_cli():
     cli.add_command(prefix_mgr.PrefixMgrCli().prefixmgr)
     cli.add_command(spark.SparkCli().spark)
     cli.add_command(tech_support.TechSupportCli().tech_support)
-    plugin.plugin_start(cli)
+    if plugin:
+        plugin.plugin_start(cli)
 
     return cli
 
