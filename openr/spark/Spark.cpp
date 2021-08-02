@@ -809,6 +809,7 @@ Spark::sendHandshakeMsg(
   handshakeMsg.transportAddressV6_ref() = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort_ref() = kOpenrCtrlThriftPort_;
+  handshakeMsg.kvStoreCmdPort_ref() = Constants::kKvStoreRepPort;
   // ATTN: send neighborAreaId deduced locally
   handshakeMsg.area_ref() = neighborAreaId;
   handshakeMsg.neighborNodeName_ref() = neighborName;
@@ -1513,6 +1514,7 @@ Spark::processHandshakeMsg(
   }
 
   // update Spark neighborState
+  neighbor.kvStoreCmdPort = *handshakeMsg.kvStoreCmdPort_ref();
   neighbor.openrCtrlThriftPort = *handshakeMsg.openrCtrlThriftPort_ref();
   neighbor.transportAddressV4 = *handshakeMsg.transportAddressV4_ref();
   neighbor.transportAddressV6 = *handshakeMsg.transportAddressV6_ref();

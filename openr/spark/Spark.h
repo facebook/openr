@@ -296,6 +296,7 @@ class Spark final : public OpenrEventBase {
       info.transportAddressV4_ref() = transportAddressV4;
       info.transportAddressV6_ref() = transportAddressV6;
       info.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
+      info.kvStoreCmdPort_ref() = kvStoreCmdPort;
 
       // populate interface info
       info.localIfName_ref() = localIfName;
@@ -344,6 +345,7 @@ class Spark final : public OpenrEventBase {
     std::unique_ptr<folly::AsyncTimeout> gracefulRestartHoldTimer{nullptr};
 
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
+    int32_t kvStoreCmdPort{0};
     int32_t openrCtrlThriftPort{0};
 
     // flag to indicate if flood-optimization is supported or NOT

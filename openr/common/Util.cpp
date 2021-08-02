@@ -508,6 +508,7 @@ createSparkNeighbor(
     const std::string& nodeName,
     const thrift::BinaryAddress& v4Addr,
     const thrift::BinaryAddress& v6Addr,
+    const int64_t kvStoreCmdPort,
     const int64_t openrCtrlThriftPort,
     const int32_t label,
     const int64_t rttUs,
@@ -519,6 +520,7 @@ createSparkNeighbor(
   neighbor.nodeName_ref() = nodeName;
   neighbor.transportAddressV4_ref() = v4Addr;
   neighbor.transportAddressV6_ref() = v6Addr;
+  neighbor.kvStoreCmdPort_ref() = kvStoreCmdPort;
   neighbor.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
   neighbor.remoteIfName_ref() = remoteIfName;
   neighbor.localIfName_ref() = localIfName;

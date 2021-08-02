@@ -330,7 +330,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   const auto& remoteIfName = *info.remoteIfName_ref();
   const auto& remoteNodeName = *info.nodeName_ref();
   const auto& area = *info.area_ref();
-  const auto kvStoreCmdPort = Constants::kKvStoreRepPort;
+  const auto kvStoreCmdPort = *info.kvStoreCmdPort_ref();
   const auto openrCtrlThriftPort = *info.openrCtrlThriftPort_ref();
   const auto rttUs = *info.rttUs_ref();
   const auto supportFloodOptimization = *info.enableFloodOptimization_ref();

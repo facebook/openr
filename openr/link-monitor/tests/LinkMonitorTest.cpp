@@ -73,6 +73,7 @@ const auto nb2 = createSparkNeighbor(
     "node-2",
     toBinaryAddress(folly::IPAddress(nb2_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb2_v6_addr)),
+    kvStoreCmdPort, /* ZMQ kvstore port */
     1, /* openrCtrlThriftPort */
     1, /* label */
     100, /* rtt */
@@ -83,6 +84,7 @@ const auto nb3 = createSparkNeighbor(
     "node-3",
     toBinaryAddress(folly::IPAddress(nb3_v4_addr)),
     toBinaryAddress(folly::IPAddress(nb3_v6_addr)),
+    kvStoreCmdPort, /* ZMQ kvstore port */
     2, /* openrCtrlThriftPort */
     1, /* label */
     100, /* rtt */

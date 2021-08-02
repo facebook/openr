@@ -260,6 +260,7 @@ thrift::SparkNeighbor createSparkNeighbor(
     const std::string& nodeName,
     const thrift::BinaryAddress& v4Addr,
     const thrift::BinaryAddress& v6Addr,
+    const int64_t kvStoreCmdPort,
     const int64_t openrCtrlThriftPort,
     const int32_t label,
     const int64_t rttUs,
