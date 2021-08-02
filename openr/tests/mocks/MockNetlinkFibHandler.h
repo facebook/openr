@@ -7,10 +7,12 @@
 
 #pragma once
 
+#include <folly/IPAddress.h>
+
 #include <openr/if/gen-cpp2/FibService.h>
+#include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-#include "folly/IPAddress.h"
-#include "openr/if/gen-cpp2/Platform_types.h"
+#include <openr/messaging/Queue.h>
 
 namespace openr {
 
@@ -74,7 +76,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   void waitForUpdateMplsRoutes();
   void waitForDeleteMplsRoutes();
   void waitForSyncMplsFib();
-  void waitForUnhealthyException();
+  void waitForUnhealthyException(size_t count = 1);
 
   int64_t aliveSince() override;
 
@@ -164,7 +166,10 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Baton<> updateMplsRoutesBaton_;
   folly::Baton<> deleteMplsRoutesBaton_;
   folly::Baton<> syncMplsFibBaton_;
-  folly::Baton<> unhealthyExceptionBaton_;
+
+  // We use queue for signalling & waiting for unhealthy exceptions as it can
+  // be repetitive
+  messaging::RWQueue<folly::Unit> unhealthyExceptionQueue_;
 };
 
 } // namespace openr

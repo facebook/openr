@@ -1698,11 +1698,9 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they don't get programmed. Wait for exception for each type
-    // and that too twice, to make sure it retries.
-    mockFibHandler_->waitForUnhealthyException();
-    mockFibHandler_->waitForUnhealthyException();
-    mockFibHandler_->waitForUnhealthyException();
-    mockFibHandler_->waitForUnhealthyException();
+    // and that too twice, to make sure it retries. And also for backoff to
+    // increase
+    mockFibHandler_->waitForUnhealthyException(6 * 2);
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(1, routes.size());
     mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
@@ -1710,13 +1708,13 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
 
     // Verify that update is reflected as route withdraws in fib publication
     // NOTE: We'll receive update twice
-    auto publication = fibRouteUpdatesQueueReader.get().value();
-    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-    EXPECT_EQ(2, publication.size());
-    EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
-    EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(0));
-    auto publication2 = fibRouteUpdatesQueueReader.get().value();
-    EXPECT_TRUE(checkEqualDecisionRouteUpdate(publication, publication2));
+    for (auto i = 0; i < 6; ++i) {
+      auto publication = fibRouteUpdatesQueueReader.get().value();
+      EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
+      EXPECT_EQ(2, publication.size());
+      EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
+      EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(0));
+    }
 
     // Set handler healthy
     mockFibHandler_->setHandlerHealthyState(true);
@@ -1730,7 +1728,7 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     EXPECT_EQ(2, mplsRoutes.size());
 
     // Verify that update is reflected as is in fib publication
-    publication = fibRouteUpdatesQueueReader.get().value();
+    auto publication = fibRouteUpdatesQueueReader.get().value();
     routeUpdate.type = DecisionRouteUpdate::INCREMENTAL;
     EXPECT_TRUE(checkEqualDecisionRouteUpdate(routeUpdate, publication));
   }
@@ -1752,10 +1750,12 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     // Wait for route programming to proceed. Let it repeat a few times.
     // Verify that update is reflected as route withdraws in fib publication
     // NOTE: We'll receive publication multiple times (because of multiple
-    // retries)
-    for (int i = 0; i < 8; i++) {
+    // retries). Read publications later on
+    for (int i = 0; i < 6; i++) {
       mockFibHandler_->waitForUpdateUnicastRoutes();
       mockFibHandler_->waitForUpdateMplsRoutes();
+    }
+    for (int i = 0; i < 6; i++) {
       auto publication = fibRouteUpdatesQueueReader.get().value();
       EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
       EXPECT_EQ(2, publication.size());
@@ -1802,9 +1802,11 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
 
     // Verify that they don't get programmed. Wait for exception for each
     // type for multiple times, to make sure it retries.
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 6; i++) {
       mockFibHandler_->waitForUnhealthyException(); // Unicast route
       mockFibHandler_->waitForUnhealthyException(); // Mpls route
+    }
+    for (int i = 0; i < 6; i++) {
       publication = fibRouteUpdatesQueueReader.get().value();
       routeUpdate.type = DecisionRouteUpdate::INCREMENTAL;
       EXPECT_TRUE(checkEqualDecisionRouteUpdate(routeUpdate, publication));

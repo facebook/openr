@@ -335,9 +335,10 @@ MockNetlinkFibHandler::waitForSyncMplsFib() {
 }
 
 void
-MockNetlinkFibHandler::waitForUnhealthyException() {
-  unhealthyExceptionBaton_.wait();
-  unhealthyExceptionBaton_.reset();
+MockNetlinkFibHandler::waitForUnhealthyException(size_t count) {
+  while (count--) {
+    unhealthyExceptionQueue_.get();
+  }
 }
 
 void
@@ -385,7 +386,7 @@ MockNetlinkFibHandler::restart() {
 void
 MockNetlinkFibHandler::ensureHealthy() {
   if (not isHealthy_) {
-    unhealthyExceptionBaton_.post();
+    unhealthyExceptionQueue_.push(folly::Unit());
     throw std::runtime_error("Handler rejects routes since it is unhealthy");
   }
 }
