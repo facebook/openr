@@ -183,14 +183,14 @@ class Fib final : public OpenrEventBase {
    * - Program delete updats which are in pending state
    */
   void retryRoutes() noexcept;
-  void retryRoutesTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept;
+  void retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept;
 
   /**
    * Get aliveSince from FibService, and check if Fib restarts
    * If so, push syncFib to FibService
    */
   void keepAlive() noexcept;
-  void keepAliveTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept;
+  void keepAliveTask(folly::fibers::Baton& stopSignal) noexcept;
 
   /**
    * Update flat counter/stats in fb303
@@ -350,12 +350,12 @@ class Fib final : public OpenrEventBase {
   // - Stop signal to terminate retryRoutesFiber, sent only once
   // - Semaphore used for signalling when routes are available for programming
   // - Exponential backoff to ease of things on repetitive failures
-  folly::Promise<folly::Unit> retryRoutesStopSignal_;
+  folly::fibers::Baton retryRoutesStopSignal_;
   folly::fibers::Semaphore retryRoutesSignal_{1};
   ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
 
   // Stop signal for KeepAlive fiber
-  folly::Promise<folly::Unit> keepAliveStopSignal_;
+  folly::fibers::Baton keepAliveStopSignal_;
 
   // Queues to publish programmed incremental IP/label routes or those from Fib
   // sync. (Fib streaming)

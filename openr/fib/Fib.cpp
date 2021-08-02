@@ -74,12 +74,8 @@ Fib::Fib(
   //
   // Start RetryRoute fiber with stop signal.
   //
-  auto retryRoutesContract = folly::makePromiseContract<folly::Unit>();
-  retryRoutesStopSignal_ = std::move(retryRoutesContract.first);
   addFiberTask(
-      [this, sf = std::move(retryRoutesContract.second)]() mutable noexcept {
-        retryRoutesTask(std::move(sf));
-      });
+      [this]() mutable noexcept { retryRoutesTask(retryRoutesStopSignal_); });
 
   //
   // Create KeepAlive task with stop signal. Signalling part consists of two
@@ -87,12 +83,8 @@ Fib::Fib(
   //   promise is fulfilled in Fib::stop()
   // - SemiFuture is passed to fiber for awaiting
   //
-  auto keepAliveContract = folly::makePromiseContract<folly::Unit>();
-  keepAliveStopSignal_ = std::move(keepAliveContract.first);
   addFiberTask(
-      [this, sf = std::move(keepAliveContract.second)]() mutable noexcept {
-        keepAliveTask(std::move(sf));
-      });
+      [this]() mutable noexcept { keepAliveTask(keepAliveStopSignal_); });
 
   // Fiber to process route updates from Decision
   addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
@@ -146,12 +138,9 @@ Fib::Fib(
 void
 Fib::stop() {
   // Send stop signal to internal fibers
-  keepAliveStopSignal_.setValue(folly::Unit());
-  retryRoutesStopSignal_.setValue(folly::Unit());
+  keepAliveStopSignal_.post();
+  retryRoutesStopSignal_.post();
   retryRoutesSignal_.signal();
-
-  // Reset client to drop all on-going requests
-  // TODO
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
@@ -918,13 +907,13 @@ Fib::syncRoutes() {
 }
 
 void
-Fib::retryRoutesTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept {
+Fib::retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept {
   LOG(INFO) << "Starting RetryRoutes fiber task";
   auto timeout = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { retryRoutesSignal_.signal(); });
 
   // Repeat in loop
-  while (not stopSignal.isReady()) {
+  while (not stopSignal.ready()) {
     // Wait for signal & retry routes
     retryRoutesSignal_.wait();
     retryRoutes();
@@ -972,12 +961,16 @@ Fib::retryRoutes() noexcept {
 }
 
 void
-Fib::keepAliveTask(folly::SemiFuture<folly::Unit> stopSignal) noexcept {
+Fib::keepAliveTask(folly::fibers::Baton& stopSignal) noexcept {
   LOG(INFO) << "Starting KeepAlive fiber task";
-  while (not stopSignal.isReady()) { // Break when stop signal is ready
+  while (true) { // Break when stop signal is ready
     keepAlive();
-    // Sleep before next check
-    folly::futures::sleep(Constants::kKeepAliveCheckInterval).get();
+    // Wait for a second. Will terminate if wait completes or signal is ready
+    if (stopSignal.try_wait_for(Constants::kKeepAliveCheckInterval)) {
+      break; // Baton was posted
+    } else {
+      stopSignal.reset(); // Baton experienced timeout
+    }
   } // while
   LOG(INFO) << "KeepAlive fiber task got stopped";
 }
