@@ -1528,8 +1528,9 @@ Spark::processHandshakeMsg(
       std::chrono::milliseconds(*handshakeMsg.gracefulRestartTime_ref()),
       gracefulRestartTime_);
 
-  // v4 subnet validation if enabled
-  if (enableV4_ or v4OverV6Nexthop_) {
+  // v4 subnet validation if v4 is enabled. If we're using v4-over-v6 we no
+  // longer need to validate the address reported by neighbor node
+  if (enableV4_ and not v4OverV6Nexthop_) {
     if (PacketValidationResult::FAILURE ==
         validateV4AddressSubnet(
             ifName, *handshakeMsg.transportAddressV4_ref())) {
@@ -1839,7 +1840,7 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
       //    1). v6Addr is empty for this neighbor;
       //    2). v4 enabled and v4Addr is empty for this neighbor;
       if (neighbor.transportAddressV6.addr_ref()->empty() ||
-          ((enableV4_ or v4OverV6Nexthop_) &&
+          ((enableV4_ and not v4OverV6Nexthop_) &&
            neighbor.transportAddressV4.addr_ref()->empty())) {
         continue;
       }
