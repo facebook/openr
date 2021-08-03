@@ -270,13 +270,6 @@ class Config {
   }
 
   //
-  // decision SrPolicy config
-  const std::optional<std::vector<thrift::SrPolicy>>
-  getDecisionSrPolicyConfig() const {
-    return config_.get_decision_config().sr_policies_ref().to_optional();
-  }
-
-  //
   // link monitor
   //
   const thrift::LinkMonitorConfig&
@@ -303,6 +296,17 @@ class Config {
   bool
   isSegmentRoutingConfigured() const {
     return config_.segment_routing_config_ref().has_value();
+  }
+
+  //
+  // Segment-Routing Policy
+  //
+  const std::optional<std::vector<thrift::SrPolicy>>
+  getSegmentRoutingPolicyConfig() const {
+    if (not isSegmentRoutingConfigured()) {
+      return std::nullopt;
+    }
+    return getSegmentRoutingConfig().sr_policies_ref().to_optional();
   }
 
   //
