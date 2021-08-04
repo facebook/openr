@@ -474,14 +474,21 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     // advertise key to `KvStore`
-    bool changed = kvStoreClient_->persistKey(
-        AreaId{toArea}, prefixKeyStr, prefixDbStr, ttlKeyInKvStore_);
+    if (enableKvStoreRequestQueue_) {
+      auto persistPrefixKeyVal =
+          PersistKeyValueRequest(AreaId{toArea}, prefixKeyStr, prefixDbStr);
+      kvRequestQueue_.push(std::move(persistPrefixKeyVal));
+    } else {
+      kvStoreClient_->persistKey(
+          AreaId{toArea}, prefixKeyStr, prefixDbStr, ttlKeyInKvStore_);
+    }
+
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
-    VLOG_IF(1, changed) << "[Prefix Advertisement] "
-                        << "Area: " << toArea << ", "
-                        << "Type: " << toString(type) << ", "
-                        << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
+    VLOG(1) << "[Prefix Advertisement] "
+            << "Area: " << toArea << ", "
+            << "Type: " << toString(type) << ", "
+            << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
     prefixKeys.emplace(prefixKeyStr);
   }
   return prefixKeys;
@@ -532,16 +539,27 @@ PrefixManager::deleteKvStoreKeyHelper(
     thrift::PrefixEntry entry;
     entry.prefix_ref() = toIpPrefix(network);
     deletedPrefixDb.prefixEntries_ref() = {entry};
+
+    // Remove prefix from KvStore and flood deletion by setting deleted value.
+    if (enableKvStoreRequestQueue_) {
+      auto unsetPrefixRequest = ClearKeyValueRequest(
+          AreaId{area},
+          prefixStr,
+          writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
+          true);
+      kvRequestQueue_.push(std::move(unsetPrefixRequest));
+    } else {
+      kvStoreClient_->clearKey(
+          AreaId{area},
+          prefixStr,
+          writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
+          ttlKeyInKvStore_);
+    }
+
     VLOG(1) << "[Prefix Withdraw] "
             << "Area: " << area << ", " << toString(*entry.prefix_ref());
     fb303::fbData->addStatValue(
         "prefix_manager.route_withdraws", 1, fb303::SUM);
-
-    kvStoreClient_->clearKey(
-        AreaId{area},
-        prefixStr,
-        writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
-        ttlKeyInKvStore_);
   }
 }
 

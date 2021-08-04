@@ -3072,6 +3072,190 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   }
 }
 
+class PrefixManagerKeyValRequestQueueTestFixture
+    : public PrefixManagerTestFixture {
+ public:
+  virtual thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = getBasicOpenrConfig(nodeId_);
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    tConfig.enable_fib_ack_ref() = true;
+    tConfig.enable_kvstore_request_queue_ref() = true;
+    return tConfig;
+  }
+};
+
+TEST_F(PrefixManagerKeyValRequestQueueTestFixture, BasicKeyValueRequestQueue) {
+  const auto prefixKey = "prefixKeyStr";
+  const auto prefixVal = "prefixDbStr";
+  const auto prefixDeletedVal = "prefixDeletedStr";
+  int scheduleAt{0};
+  // Persist key.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        auto persistPrefixKeyVal =
+            PersistKeyValueRequest(kTestingAreaName, prefixKey, prefixVal);
+        kvRequestQueue.push(std::move(persistPrefixKeyVal));
+      });
+
+  // Check that key was correctly persisted. Wait for throttling in KvStore.
+  // TODO: Implement KvStore throttling.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKey);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_version(), 1);
+      });
+
+  // Send an unset key request.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        auto unsetPrefixRequest = ClearKeyValueRequest(
+            kTestingAreaName, prefixKey, prefixDeletedVal, true);
+        kvRequestQueue.push(std::move(unsetPrefixRequest));
+      });
+
+  // Check that key was unset properly. Key is still in KvStore because TTL has
+  // not expired yet. TTL refreshing has stopped so TTL version remains at 0.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKey);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_version(), 2);
+        EXPECT_EQ(maybeValue.value().get_ttlVersion(), 0);
+        evb.stop();
+      });
+
+  evb.run();
+}
+
+TEST_F(PrefixManagerKeyValRequestQueueTestFixture, AdvertisePrefixes) {
+  int scheduleAt{0};
+  auto prefixKey1 = PrefixKey(
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(prefixEntry1.get_prefix())),
+      kTestingAreaName);
+  auto prefixKey2 = PrefixKey(
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(prefixEntry2.get_prefix())),
+      kTestingAreaName);
+
+  // 1. Advertise prefix entry.
+  // 2. Check that prefix entry is in KvStore.
+  // 3. Advertise two prefix entries: previously advertised one and new one.
+  // 4. Check that both prefixes are in KvStore. Neither's version are bumped.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
+      });
+
+  // Wait for throttling. Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistKey()` inside `KvStore` (TODO: implement)
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // Check that prefix entry is in KvStore.
+        auto prefixKeyStr = prefixKey1.getPrefixKey();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
+
+        // Advertise one previously advertised prefix and one new prefix.
+        prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2}).get();
+      });
+
+  // Check that both prefixes are in KvStore. Wait for throttling.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // First prefix was re-advertised with same value. Version should not
+        // have been bumped.
+        auto prefixKeyStr = prefixKey1.getPrefixKey();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_version(), 1);
+
+        // Verify second prefix was advertised.
+        prefixKeyStr = prefixKey2.getPrefixKey();
+        auto maybeValue2 =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue2.has_value());
+        EXPECT_EQ(maybeValue2.value().get_version(), 1);
+        evb.stop();
+      });
+
+  evb.run();
+}
+
+TEST_F(PrefixManagerKeyValRequestQueueTestFixture, WithdrawPrefix) {
+  int scheduleAt{0};
+  auto prefixKeyStr =
+      PrefixKey(
+          nodeId_,
+          folly::IPAddress::createNetwork(toString(prefixEntry1.get_prefix())),
+          kTestingAreaName)
+          .getPrefixKey();
+
+  // 1. Advertise prefix entry.
+  // 2. Check that prefix entry is in KvStore.
+  // 3. Withdraw prefix entry.
+  // 4. Check that prefix is withdrawn.
+
+  // Advertise prefix entry.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
+      });
+
+  // Wait for throttling. Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistKey()` inside `KvStore` (TODO: implement)
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // Check that prefix is in KvStore.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+
+        // Withdraw prefix.
+        prefixManager->withdrawPrefixes({prefixEntry1}).get();
+      });
+
+  // Wait for throttling. Verify key is withdrawn.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // Key is still in KvStore because TTL has not expired yet. TTL
+        // refreshing has stopped so TTL version remains at 0.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_ttlVersion(), 0);
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(db.get_deletePrefix());
+
+        evb.stop();
+      });
+
+  evb.run();
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
