@@ -15,6 +15,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <wangle/ssl/SSLContextConfig.h>
+#include "openr/common/Types.h"
 
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
@@ -446,16 +447,12 @@ std::set<Key> selectBestPrefixMetrics(
     std::unordered_map<Key, MetricsWrapper> const& prefixes);
 
 /**
- * One user of selectBestPrefixMetrics() is Decision (PrefixManager is the
- * other). Decision's PrefixState now uses shared_ptr<thrift::PrefixEntry>. The
- * overloaded version below accommodates the change in PrefixState
- * TODO: Merge these two functions once the shared_ptr<thrift::PrefixEntry>
- * change has been extended to other modules (BgpRib, Fib, possibly
- * PrefixManager too)
+ * Selected routes from received prefix entry announcements of one prefix,
+ * following the instruction of route selection algorithm.
  */
-template <typename Key, typename MetricsWrapper>
-std::set<Key> selectBestPrefixMetrics(
-    std::unordered_map<Key, std::shared_ptr<MetricsWrapper>> const& prefixes);
+std::set<NodeAndArea> selectRoutes(
+    const PrefixEntries& prefixEntries,
+    thrift::RouteSelectionAlgorithm algorithm);
 
 // Deterministically choose one as best path from multipaths. Used in Decision.
 // Choose local if local node is a part of the multipaths.
@@ -529,41 +526,6 @@ selectBestPrefixMetrics(
   std::set<Key> bestKeys;
   for (auto& [key, metricsWrapper] : prefixes) {
     auto& metrics = metricsWrapper.metrics_ref().value();
-    std::tuple<int32_t, int32_t, int32_t> metricsTuple{
-        metrics.path_preference_ref().value(), /* prefer-higher */
-        metrics.source_preference_ref().value(), /* prefer-higher */
-        metrics.distance_ref().value() * -1 /* prefer-lower */};
-
-    // Skip if this is less than best metrics we've seen so far
-    if (metricsTuple < bestMetricsTuple) {
-      continue;
-    }
-
-    // Clear set and update best metric if this is a new best metric
-    if (metricsTuple > bestMetricsTuple) {
-      bestMetricsTuple = metricsTuple;
-      bestKeys.clear();
-    }
-
-    // Current metrics is either best or same as best metrics we've seen so far
-    bestKeys.emplace(key);
-  }
-
-  return bestKeys;
-}
-
-template <typename Key, typename MetricsWrapper>
-std::set<Key>
-selectBestPrefixMetrics(
-    std::unordered_map<Key, std::shared_ptr<MetricsWrapper>> const& prefixes) {
-  // Leveraging tuple for ease of comparision
-  std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{
-      std::numeric_limits<int32_t>::min(),
-      std::numeric_limits<int32_t>::min(),
-      std::numeric_limits<int32_t>::min()};
-  std::set<Key> bestKeys;
-  for (auto& [key, metricsWrapper] : prefixes) {
-    auto& metrics = metricsWrapper->metrics_ref().value();
     std::tuple<int32_t, int32_t, int32_t> metricsTuple{
         metrics.path_preference_ref().value(), /* prefer-higher */
         metrics.source_preference_ref().value(), /* prefer-higher */

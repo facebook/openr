@@ -6,6 +6,8 @@
  */
 
 #include <stdlib.h>
+#include <memory>
+#include <utility>
 
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
@@ -14,6 +16,7 @@
 #include <sodium.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
@@ -21,6 +24,17 @@ using namespace std;
 using namespace openr;
 using FwdType = openr::thrift::PrefixForwardingType;
 using FwdAlgo = openr::thrift::PrefixForwardingAlgorithm;
+
+const auto node11Area1 =
+    std::make_pair<std::string, std::string>("node11", "area1");
+const auto node12Area1 =
+    std::make_pair<std::string, std::string>("node12", "area1");
+const auto node13Area1 =
+    std::make_pair<std::string, std::string>("node13", "area1");
+const auto node21Area2 =
+    std::make_pair<std::string, std::string>("node21", "area2");
+const auto node22Area2 =
+    std::make_pair<std::string, std::string>("node22", "area2");
 
 const auto prefix1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto prefix2 = toIpPrefix("::ffff:10.2.2.2/128");
@@ -114,6 +128,18 @@ struct PrefixKeyEntry {
   thrift::IpPrefix ipPrefix;
   folly::IPAddress addr;
   int plen{0};
+};
+
+thrift::PrefixEntry
+createPrefixEntry(int32_t pp, int32_t sp, int32_t d) {
+  thrift::PrefixEntry prefixEntry;
+  prefixEntry.metrics_ref() = createMetrics(pp, sp, d);
+  return prefixEntry;
+};
+
+std::shared_ptr<thrift::PrefixEntry>
+createPrefixEntryPtr(int32_t pp, int32_t sp, int32_t d) {
+  return std::make_shared<thrift::PrefixEntry>(createPrefixEntry(pp, sp, d));
 };
 
 TEST(UtilTest, NetworkUtilTest) {
@@ -897,14 +923,6 @@ TEST(UtilTest, AddJitter) {
 }
 
 TEST(UtilTest, BestMetricsSelection) {
-  auto createMetrics = [](int32_t pp, int32_t sp, int32_t d) {
-    thrift::PrefixEntry prefixEntry;
-    prefixEntry.metrics_ref()->path_preference_ref() = pp;
-    prefixEntry.metrics_ref()->source_preference_ref() = sp;
-    prefixEntry.metrics_ref()->distance_ref() = d;
-    return prefixEntry;
-  };
-
   //
   // No entry. Returns empty set
   //
@@ -918,35 +936,34 @@ TEST(UtilTest, BestMetricsSelection) {
   //
   {
     std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
-        {"KEY1", createMetrics(0, 0, 0)}};
+        {"KEY1", createPrefixEntry(0, 0, 0)}};
     const auto bestKeys = selectBestPrefixMetrics(prefixes);
     EXPECT_EQ(1, bestKeys.size());
     EXPECT_EQ(1, bestKeys.count("KEY1"));
   }
 
   //
-  // Multiple entries. Single best route, tie on source-preference
-  // (prefer higher)
+  // Multiple entries. Single best route, tie on path-preference (prefer higher)
   //
   {
     std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
-        {"KEY1", createMetrics(100, 0, 0)},
-        {"KEY2", createMetrics(200, 0, 0)},
-        {"KEY3", createMetrics(300, 0, 0)}};
+        {"KEY1", createPrefixEntry(100, 0, 0)},
+        {"KEY2", createPrefixEntry(200, 0, 0)},
+        {"KEY3", createPrefixEntry(300, 0, 0)}};
     const auto bestKeys = selectBestPrefixMetrics(prefixes);
     EXPECT_EQ(1, bestKeys.size());
     EXPECT_EQ(1, bestKeys.count("KEY3"));
   }
 
   //
-  // Multiple entries. Single best route, tie on local-preference
-  // (prefer higher)
+  // Multiple entries. Single best route, tie on source-preference (prefer
+  // higher)
   //
   {
     std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
-        {"KEY1", createMetrics(100, 10, 0)},
-        {"KEY2", createMetrics(100, 200, 0)},
-        {"KEY3", createMetrics(100, 30, 0)}};
+        {"KEY1", createPrefixEntry(100, 10, 0)},
+        {"KEY2", createPrefixEntry(100, 200, 0)},
+        {"KEY3", createPrefixEntry(100, 30, 0)}};
     const auto bestKeys = selectBestPrefixMetrics(prefixes);
     EXPECT_EQ(1, bestKeys.size());
     EXPECT_EQ(1, bestKeys.count("KEY2"));
@@ -957,9 +974,9 @@ TEST(UtilTest, BestMetricsSelection) {
   //
   {
     std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
-        {"KEY1", createMetrics(100, 10, 1)},
-        {"KEY2", createMetrics(100, 10, 2)},
-        {"KEY3", createMetrics(100, 10, 3)}};
+        {"KEY1", createPrefixEntry(100, 10, 1)},
+        {"KEY2", createPrefixEntry(100, 10, 2)},
+        {"KEY3", createPrefixEntry(100, 10, 3)}};
     const auto bestKeys = selectBestPrefixMetrics(prefixes);
     EXPECT_EQ(1, bestKeys.size());
     EXPECT_EQ(1, bestKeys.count("KEY1"));
@@ -970,11 +987,11 @@ TEST(UtilTest, BestMetricsSelection) {
   //
   {
     std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
-        {"KEY1", createMetrics(100, 10, 1)},
-        {"KEY2", createMetrics(100, 10, 2)},
-        {"KEY3", createMetrics(100, 10, 1)},
-        {"KEY4", createMetrics(100, 10, 1)},
-        {"KEY5", createMetrics(100, 10, 2)}};
+        {"KEY1", createPrefixEntry(100, 10, 1)},
+        {"KEY2", createPrefixEntry(100, 10, 2)},
+        {"KEY3", createPrefixEntry(100, 10, 1)},
+        {"KEY4", createPrefixEntry(100, 10, 1)},
+        {"KEY5", createPrefixEntry(100, 10, 2)}};
     const auto bestKeys = selectBestPrefixMetrics(prefixes);
     EXPECT_EQ(3, bestKeys.size());
     EXPECT_EQ(1, bestKeys.count("KEY1"));
@@ -989,9 +1006,9 @@ TEST(UtilTest, BestMetricsSelection) {
   //
   {
     std::unordered_map<NodeAndArea, thrift::PrefixEntry> prefixes = {
-        {{"node1", "area1"}, createMetrics(100, 10, 1)},
-        {{"node1", "area2"}, createMetrics(100, 10, 1)},
-        {{"node2", "area1"}, createMetrics(100, 10, 1)}};
+        {{"node1", "area1"}, createPrefixEntry(100, 10, 1)},
+        {{"node1", "area2"}, createPrefixEntry(100, 10, 1)},
+        {{"node2", "area1"}, createPrefixEntry(100, 10, 1)}};
     const auto bestKeys = selectBestPrefixMetrics(prefixes);
     EXPECT_EQ(3, bestKeys.size());
     const auto node1bestKey =
@@ -1000,6 +1017,164 @@ TEST(UtilTest, BestMetricsSelection) {
     const auto node2bestKey =
         std::make_pair<std::string, std::string>("node2", "area1");
     EXPECT_EQ(node2bestKey, selectBestNodeArea(bestKeys, "node2"));
+  }
+}
+
+TEST(UtilTest, SelectRoutesShortestDistance) {
+  const auto kShortestAlgorithm =
+      thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE;
+  // No entry. Returns empty set
+  {
+    PrefixEntries prefixes;
+    EXPECT_EQ(0, selectRoutes(prefixes, kShortestAlgorithm).size());
+  }
+
+  // Single entry. Returns the entry itself
+  {
+    PrefixEntries prefixes = {{node11Area1, createPrefixEntryPtr(0, 0, 0)}};
+    const auto ret = selectRoutes(prefixes, kShortestAlgorithm);
+    EXPECT_EQ(1, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+  }
+
+  // Multiple entries. Single best route, tie on path-preference (prefer higher)
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 0, 0)},
+        {node12Area1, createPrefixEntryPtr(200, 0, 0)},
+        {node21Area2, createPrefixEntryPtr(300, 0, 0)}};
+    const auto ret = selectRoutes(prefixes, kShortestAlgorithm);
+    EXPECT_EQ(1, ret.size());
+    EXPECT_EQ(1, ret.count(node21Area2));
+  }
+
+  // Multiple entries. Single best route, tie on source-preference (prefer
+  // higher)
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 0)},
+        {node12Area1, createPrefixEntryPtr(100, 200, 0)},
+        {node21Area2, createPrefixEntryPtr(100, 30, 0)}};
+    const auto ret = selectRoutes(prefixes, kShortestAlgorithm);
+    EXPECT_EQ(1, ret.size());
+    EXPECT_EQ(1, ret.count(node12Area1));
+  }
+
+  // Multiple entries. Single best route, tie on distance (prefer lower)
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node12Area1, createPrefixEntryPtr(100, 10, 2)},
+        {node21Area2, createPrefixEntryPtr(100, 10, 3)}};
+    const auto ret = selectRoutes(prefixes, kShortestAlgorithm);
+    EXPECT_EQ(1, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+  }
+
+  // Multiple entries. Multiple best routes
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node12Area1, createPrefixEntryPtr(100, 10, 2)},
+        {node13Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node21Area2, createPrefixEntryPtr(100, 10, 1)},
+        {node22Area2, createPrefixEntryPtr(100, 10, 2)}};
+    const auto ret = selectRoutes(prefixes, kShortestAlgorithm);
+    EXPECT_EQ(3, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+    EXPECT_EQ(1, ret.count(node13Area1));
+    EXPECT_EQ(1, ret.count(node21Area2));
+  }
+}
+
+TEST(UtilTest, SelectRoutesShortestDistance2) {
+  const auto kAlgorithm =
+      thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2;
+
+  // Single entry. Returns the entry itself
+  {
+    PrefixEntries prefixes = {{node11Area1, createPrefixEntryPtr(0, 0, 0)}};
+    const auto ret = selectRoutes(prefixes, kAlgorithm);
+    EXPECT_EQ(1, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+  }
+
+  // Multiple entries. Single best and second best routes, tie on distance
+  // (select shortest-distance-2)
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node12Area1, createPrefixEntryPtr(100, 10, 3)},
+        {node13Area1, createPrefixEntryPtr(100, 10, 2)},
+        {node21Area2, createPrefixEntryPtr(100, 10, 4)}};
+    const auto ret = selectRoutes(prefixes, kAlgorithm);
+    EXPECT_EQ(2, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+    EXPECT_EQ(1, ret.count(node13Area1));
+  }
+
+  // Multiple entries. Multi best and second best routes, tie on distance
+  // (select shortest-distance-2)
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node12Area1, createPrefixEntryPtr(100, 10, 3)},
+        {node13Area1, createPrefixEntryPtr(100, 10, 2)},
+        {node21Area2, createPrefixEntryPtr(100, 10, 1)},
+        {node22Area2, createPrefixEntryPtr(100, 10, 2)}};
+    const auto ret = selectRoutes(prefixes, kAlgorithm);
+    EXPECT_EQ(4, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+    EXPECT_EQ(1, ret.count(node13Area1));
+    EXPECT_EQ(1, ret.count(node21Area2));
+    EXPECT_EQ(1, ret.count(node22Area2));
+  }
+}
+
+TEST(UtilTest, SelectRoutesPerAreaShortestDistance) {
+  const auto kAlgorithm =
+      thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE;
+  // Single area multiple entries. Tie on distance (prefer lower)
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node12Area1, createPrefixEntryPtr(100, 10, 3)},
+        {node13Area1, createPrefixEntryPtr(100, 10, 2)}};
+    const auto ret = selectRoutes(prefixes, kAlgorithm);
+    EXPECT_EQ(1, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+  }
+
+  // Multi areas multiple entries. Single best entry is selected in each area.
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node12Area1, createPrefixEntryPtr(100, 10, 3)},
+        {node13Area1, createPrefixEntryPtr(100, 10, 2)},
+        {node21Area2, createPrefixEntryPtr(100, 10, 10)},
+        {node22Area2, createPrefixEntryPtr(100, 10, 20)}};
+    const auto ret = selectRoutes(prefixes, kAlgorithm);
+    EXPECT_EQ(2, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+    EXPECT_EQ(1, ret.count(node21Area2));
+  }
+
+  //
+  // Multi areas multiple entries. Multi best entries are selected in each area.
+  //
+  {
+    PrefixEntries prefixes = {
+        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node12Area1, createPrefixEntryPtr(100, 10, 3)},
+        {node13Area1, createPrefixEntryPtr(100, 10, 1)},
+        {node21Area2, createPrefixEntryPtr(100, 10, 10)},
+        {node22Area2, createPrefixEntryPtr(100, 10, 10)}};
+    const auto ret = selectRoutes(prefixes, kAlgorithm);
+    EXPECT_EQ(4, ret.size());
+    EXPECT_EQ(1, ret.count(node11Area1));
+    EXPECT_EQ(1, ret.count(node13Area1));
+    EXPECT_EQ(1, ret.count(node21Area2));
+    EXPECT_EQ(1, ret.count(node22Area2));
   }
 }
 

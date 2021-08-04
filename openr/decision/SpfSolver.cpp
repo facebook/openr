@@ -5,10 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fb303/ServiceData.h>
+
+#include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/SpfSolver.h>
-
-#include <fb303/ServiceData.h>
 
 namespace fb303 = facebook::fb303;
 
@@ -350,7 +351,11 @@ SpfSolver::createRouteForPrefix(
   auto routeSelectionAlgo = routeComputationRules.get_routeSelectionAlgo();
   if (routeSelectionAlgo !=
       thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE) {
-    extendRoutes(routeSelectionAlgo, prefixEntries, routeSelectionResult);
+    extendRoutes(
+        routeSelectionAlgo,
+        prefixEntries,
+        areaLinkStates,
+        routeSelectionResult);
   }
 
   // SrPolicy TODO: (T94499398) SR Policy per area rules allow different
@@ -602,7 +607,8 @@ SpfSolver::selectBestRoutes(
 
   if (enableBestRouteSelection_) {
     // Perform best route selection based on metrics
-    ret.allNodeAreas = selectBestPrefixMetrics(prefixEntries);
+    ret.allNodeAreas = selectRoutes(
+        prefixEntries, thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE);
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
     ret.success = true;
   } else if (isBgp) {
@@ -623,24 +629,15 @@ void
 SpfSolver::extendRoutes(
     const thrift::RouteSelectionAlgorithm algorithm,
     const PrefixEntries& prefixEntries,
+    const std::unordered_map<std::string, LinkState>& areaLinkStates,
     RouteSelectionResult& selectedRoutes) {
-  switch (algorithm) {
-  case thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE:
-    LOG(INFO) << fmt::format(
-        "Skip {} since best routes should already have been selected.",
-        apache::thrift::util::enumNameSafe(algorithm));
-    return;
-  case thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2:
-    // TODO
-    break;
-  case thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE:
-    // TODO
-    break;
-  default:
-    LOG(ERROR) << "Unsupported route selection algorithm "
-               << apache::thrift::util::enumNameSafe(algorithm);
-    break;
+  // Select rouets according to specified algorithm, and store the results in
+  // selectedRoutes.allNodeAreas.
+  for (const auto& nodeArea : selectRoutes(prefixEntries, algorithm)) {
+    selectedRoutes.allNodeAreas.insert(nodeArea);
   }
+  selectedRoutes =
+      maybeFilterDrainedNodes(std::move(selectedRoutes), areaLinkStates);
 }
 
 std::optional<int64_t>

@@ -956,6 +956,121 @@ selectBestNodeArea(
   return bestNodeArea;
 }
 
+namespace {
+
+std::set<NodeAndArea>
+selectShortestDistance(
+    const PrefixEntries& prefixEntries,
+    const std::set<NodeAndArea>& nodeAreaSet) {
+  std::set<NodeAndArea> ret;
+  int32_t shortestDist = std::numeric_limits<int32_t>::max();
+  for (const auto& nodeArea : nodeAreaSet) {
+    if (prefixEntries.count(nodeArea) == 0) {
+      continue;
+    }
+    int32_t dist = prefixEntries.at(nodeArea)->get_metrics().get_distance();
+    if (dist > shortestDist) {
+      continue;
+    }
+    if (dist < shortestDist) {
+      shortestDist = dist;
+      ret.clear();
+    }
+    ret.emplace(nodeArea);
+  }
+  return ret;
+}
+
+std::set<NodeAndArea>
+selectShortestDistance2(
+    const PrefixEntries& prefixEntries, std::set<NodeAndArea>& nodeAreaSet) {
+  // Get results with shortest distance.
+  std::set<NodeAndArea> shortestSet =
+      selectShortestDistance(prefixEntries, nodeAreaSet);
+  // Remove NodeAndArea with shortest distance.
+  for (const auto& nodeArea : shortestSet) {
+    nodeAreaSet.erase(nodeArea);
+  }
+  // Get results with second shortest distance.
+  std::set<NodeAndArea> secShortestSet =
+      selectShortestDistance(prefixEntries, nodeAreaSet);
+
+  std::set<NodeAndArea> ret;
+  std::merge(
+      shortestSet.begin(),
+      shortestSet.end(),
+      secShortestSet.begin(),
+      secShortestSet.end(),
+      std::inserter(ret, ret.begin()));
+  return ret;
+}
+
+std::set<NodeAndArea>
+selectShortestDistancePerArea(
+    const PrefixEntries& prefixEntries,
+    const std::set<NodeAndArea>& nodeAreaSet) {
+  // Split nodeAreaSet based on area.
+  std::unordered_map<std::string /*area*/, std::set<NodeAndArea>> areaMap;
+  for (const auto& nodeArea : nodeAreaSet) {
+    areaMap[nodeArea.second].emplace(nodeArea);
+  }
+  std::set<NodeAndArea> ret;
+  // Get shortest distance result in each area.
+  for (const auto& [_, setInArea] : areaMap) {
+    auto shortestRet = selectShortestDistance(prefixEntries, setInArea);
+    for (const auto& nodeArea : shortestRet) {
+      ret.insert(nodeArea);
+    }
+  }
+  return ret;
+}
+
+} // namespace
+
+std::set<NodeAndArea>
+selectRoutes(
+    const PrefixEntries& prefixEntries,
+    thrift::RouteSelectionAlgorithm algorithm) {
+  // First, select prefixEntries with best <path_preference, source_preference>
+  // tuples. This is a must-have regardless of route selection algorithms.
+  // Leverage tuple for ease of comparision.
+  std::tuple<int32_t, int32_t> bestMetricsTuple{
+      std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::min()};
+  std::set<NodeAndArea> nodeAreaSet;
+  for (auto& [key, metricsWrapper] : prefixEntries) {
+    auto& metrics = metricsWrapper->get_metrics();
+    std::tuple<int32_t, int32_t> metricsTuple{
+        metrics.get_path_preference(), /* prefer-higher */
+        metrics.get_source_preference() /* prefer-higher */};
+
+    if (metricsTuple < bestMetricsTuple) {
+      continue;
+    }
+    if (metricsTuple > bestMetricsTuple) {
+      // Clear set and update best metric if this is a new best metric
+      bestMetricsTuple = metricsTuple;
+      nodeAreaSet.clear();
+    }
+    nodeAreaSet.emplace(key);
+  }
+
+  // Second, select routes based on selection algorithm.
+  switch (algorithm) {
+  case thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE:
+    return selectShortestDistance(prefixEntries, nodeAreaSet);
+  case thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2:
+    return selectShortestDistance2(prefixEntries, nodeAreaSet);
+  case thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE:
+    return selectShortestDistancePerArea(prefixEntries, nodeAreaSet);
+  default:
+    LOG(INFO) << "Unsupported route selection algorithm "
+              << apache::thrift::util::enumNameSafe(algorithm);
+    break;
+  }
+
+  return std::set<NodeAndArea>();
+}
+
 namespace MetricVectorUtils {
 
 std::optional<const openr::thrift::MetricEntity>

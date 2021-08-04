@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/decision/LinkState.h"
-
 #include <algorithm>
 #include <functional>
 #include <utility>
@@ -14,6 +12,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/Format.h>
 #include <openr/common/Util.h>
+#include <openr/decision/LinkState.h>
 
 namespace fb303 = facebook::fb303;
 
