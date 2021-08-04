@@ -76,4 +76,4 @@ CXX="/usr/bin/g++-10" \
 CFLAGS="-I. -Iopenr-thrift -Ifb303-thrift -Ifbzmq-thrift -Ineteng-thrift -std=c++20 -fcoroutines " \
 CFLAGS="$CFLAGS -w -D_CPPLIB_VER=20" \
 CXXFLAGS="$CFLAGS" \
-python3 openr/py/setup.py build -j10
+python3 openr/py/setup.py build -j$(nproc)
