@@ -259,6 +259,7 @@ main(int argc, char** argv) {
       kvStoreSyncEventsQueue.getReader();
   auto linkMonitorNetlinkEventsQueueReader = netlinkEventsQueue.getReader();
   auto decisionKvStoreUpdatesQueueReader = kvStoreUpdatesQueue.getReader();
+  auto PrefixManagerKvStoreUpdatesReader = kvStoreUpdatesQueue.getReader();
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -386,6 +387,7 @@ main(int argc, char** argv) {
       std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           kvRequestQueue,
+          PrefixManagerKvStoreUpdatesReader,
           prefixUpdatesQueue.getReader(),
           std::move(routeUpdatesQueueReader),
           config,

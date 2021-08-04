@@ -143,6 +143,7 @@ class PrefixManagerTestFixture : public testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue,
         kvRequestQueue,
+        kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
         cfg,
@@ -812,6 +813,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   auto prefixManager2 = std::make_unique<PrefixManager>(
       staticRouteUpdatesQueue,
       kvRequestQueue,
+      kvStoreWrapper->getReader(),
       prefixUpdatesQueue.getReader(),
       fibRouteUpdatesQueue.getReader(),
       config,

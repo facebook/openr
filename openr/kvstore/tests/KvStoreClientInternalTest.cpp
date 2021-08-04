@@ -110,6 +110,7 @@ class MultipleStoreFixture : public ::testing::Test {
         &evb,
         node2,
         store2->getKvStore(),
+        true /* createKvStoreUpdatesReader */,
         false, /* useThrottle */
         persistKeyTimer /* checkPersistKeyPeriod */);
 
@@ -438,6 +439,7 @@ TEST(KvStoreClientInternal, CounterReport) {
       &evb,
       store->getNodeId(),
       store->getKvStore(),
+      true /* createKvStoreUpdatesReader */,
       false /* do NOT use throttle */);
 
   evb.scheduleTimeout(
@@ -521,6 +523,7 @@ TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
       &evb,
       store->getNodeId(),
       store->getKvStore(),
+      true /* createKvStoreUpdatesReader */,
       true, /* use throttle */
       100s /* NOTE: explicitly set big number */);
 
@@ -630,7 +633,12 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
 
   // create kvstore client for store 1
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      &evb, store1->getNodeId(), store1->getKvStore(), false, 1000ms);
+      &evb,
+      store1->getNodeId(),
+      store1->getKvStore(),
+      true /* createKvStoreUpdatesReader */,
+      false,
+      1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(
@@ -761,7 +769,12 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      &evb, nodeId, store->getKvStore(), false, 1000ms);
+      &evb,
+      nodeId,
+      store->getKvStore(),
+      true /* createKvStoreUpdatesReader */,
+      false,
+      1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
@@ -858,7 +871,12 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_unique<KvStoreClientInternal>(
-      &evb, nodeId, store->getKvStore(), false, 1000ms);
+      &evb,
+      nodeId,
+      store->getKvStore(),
+      true /* createKvStoreUpdatesReader */,
+      false,
+      1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(std::chrono::seconds(0), [&]() noexcept {

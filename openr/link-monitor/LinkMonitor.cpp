@@ -168,6 +168,7 @@ LinkMonitor::LinkMonitor(
       this,
       nodeId_,
       kvStore,
+      true /* createKvStoreUpdatesReader */,
       false, /* useThrottle */
       std::nullopt /* persist key timer */);
 

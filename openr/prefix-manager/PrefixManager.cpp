@@ -47,6 +47,7 @@ PrefixManagerPendingUpdates::applyPrefixChange(
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+    messaging::RQueue<Publication> kvStoreUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
@@ -88,7 +89,11 @@ PrefixManager::PrefixManager(
 
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      this, nodeId_, kvStore_, true /* useThrottle */);
+      this,
+      nodeId_,
+      kvStore_,
+      false /* createKvStoreUpdatesReader */,
+      true /* useThrottle */);
 
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
   initialSyncKvStoreTimer_ = folly::AsyncTimeout::make(
@@ -170,6 +175,33 @@ PrefixManager::PrefixManager(
         }
 #endif
         throw;
+      }
+    }
+  });
+
+  // Fiber to process publication from KvStore
+  addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
+    LOG(INFO) << "Starting KvStore updates processing fiber";
+    while (true) {
+      auto maybePub = q.get(); // perform read
+      if (maybePub.hasError()) {
+        VLOG(1) << fmt::format(
+            "Terminating KvStore updates processing fiber, error: {}",
+            maybePub.error());
+        break;
+      }
+      if (not maybePub.hasValue()) {
+        continue;
+      }
+      auto& pub = maybePub.value();
+      if (pub.kvStoreSynced) {
+        // TODO: process kvStoreSynced signal.
+      } else {
+        // TODO: Do not call KvStoreClient_ to process publications after
+        // persistKey() and clearKey() are natively supported in KvStore.
+        kvStoreClient_->processPublication(pub.tPublication);
+
+        // TODO: process publication in PrefixManager.
       }
     }
   });

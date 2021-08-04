@@ -8,11 +8,11 @@
 #pragma once
 
 #include <chrono>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
 #include <folly/Function.h>
-#include <folly/Optional.h>
 #include <folly/SocketAddress.h>
 
 #include <openr/common/AsyncThrottle.h>
@@ -52,6 +52,7 @@ class KvStoreClientInternal {
       OpenrEventBase* eventBase,
       std::string const& nodeId,
       KvStore* kvStore,
+      bool createKvStoreUpdatesReader = true,
       bool useThrottle = false,
       std::optional<std::chrono::milliseconds> checkPersistKeyPeriod = 60000ms);
 
@@ -205,7 +206,6 @@ class KvStoreClientInternal {
     return getCount(keyTtlBackoffs_);
   }
 
- private:
   /**
    * Function to process received publication over SUB channel which are
    * changes of KvStore. It re-advertises the keys with higher version number
@@ -213,6 +213,7 @@ class KvStoreClientInternal {
    */
   void processPublication(thrift::Publication const& publication);
 
+ private:
   /**
    * Function to process received expired keys
    */

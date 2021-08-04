@@ -18,6 +18,7 @@ KvStoreClientInternal::KvStoreClientInternal(
     OpenrEventBase* eventBase,
     std::string const& nodeId,
     KvStore* kvStore,
+    bool createKvStoreUpdatesReader,
     bool useThrottle,
     std::optional<std::chrono::milliseconds> checkPersistKeyPeriod)
     : nodeId_(nodeId),
@@ -30,24 +31,26 @@ KvStoreClientInternal::KvStoreClientInternal(
   CHECK(not nodeId.empty());
   CHECK(kvStore_);
 
-  // Fiber to process thrift::Publication from KvStore
-  taskFuture_ = eventBase_->addFiberTaskFuture(
-      [q = std::move(kvStore_->getKvStoreUpdatesReader()),
-       this]() mutable noexcept {
-        LOG(INFO) << "Starting KvStore updates processing fiber";
-        while (true) {
-          auto maybePub = q.get(); // perform read
-          if (maybePub.hasError()) {
-            LOG(INFO) << "Terminating KvStore updates processing fiber";
-            break;
+  if (createKvStoreUpdatesReader) {
+    // Fiber to process thrift::Publication from KvStore
+    taskFuture_ = eventBase_->addFiberTaskFuture(
+        [q = std::move(kvStore_->getKvStoreUpdatesReader()),
+         this]() mutable noexcept {
+          LOG(INFO) << "Starting KvStore updates processing fiber";
+          while (true) {
+            auto maybePub = q.get(); // perform read
+            if (maybePub.hasError()) {
+              LOG(INFO) << "Terminating KvStore updates processing fiber";
+              break;
+            }
+            // Publication.kvStoreSynced is published dedicatedly in OpenR
+            // initialization procedure without any thrift::Publication.
+            if (not maybePub.value().kvStoreSynced) {
+              processPublication(maybePub.value().tPublication);
+            }
           }
-          // Publication.kvStoreSynced is published dedicatedly in OpenR
-          // initialization procedure without any thrift::Publication.
-          if (not maybePub.value().kvStoreSynced) {
-            processPublication(maybePub.value().tPublication);
-          }
-        }
-      });
+        });
+  }
 
   if (useThrottle_) {
     // create throttled fashion of pending keys advertisement

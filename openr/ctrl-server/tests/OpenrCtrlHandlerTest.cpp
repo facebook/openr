@@ -115,6 +115,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManager = std::make_shared<PrefixManager>(
         staticRoutesUpdatesQueue_,
         kvRequestQueue_,
+        kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
         config,
