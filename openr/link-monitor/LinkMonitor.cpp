@@ -197,6 +197,8 @@ LinkMonitor::LinkMonitor(
                       areaId, newVal ? newVal.value() : 0);
                   advertiseAdjacencies();
                 }, /* callback */
+                kvRequestQueue_,
+                enableKvStoreRequestQueue_,
                 std::chrono::milliseconds(100), /* minBackoffDur */
                 std::chrono::seconds(2), /* maxBackoffDur */
                 false /* override owner */,

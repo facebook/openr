@@ -99,6 +99,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         configStore_.get(),
         prefixUpdatesQueue_,
         logSampleQueue_,
+        kvRequestQueue_,
         kSyncInterval);
     threads_.emplace_back([&]() noexcept {
       LOG(INFO) << "PrefixAllocator started. TID: "
@@ -462,6 +463,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           configStore.get(),
           prefixQueues.at(i),
           logSampleQueue,
+          kvRequestQueue,
           kSyncInterval);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();

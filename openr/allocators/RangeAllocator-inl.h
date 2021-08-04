@@ -42,6 +42,8 @@ RangeAllocator<T>::RangeAllocator(
     const std::string& keyPrefix,
     KvStoreClientInternal* const kvStoreClient,
     std::function<void(std::optional<T>)> callback,
+    messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+    const bool enableKvRequestQueue,
     const std::chrono::milliseconds minBackoffDur /* = 50ms */,
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
     const bool overrideOwner /* = true */,
@@ -53,7 +55,9 @@ RangeAllocator<T>::RangeAllocator(
       eventBase_(kvStoreClient->getOpenrEventBase()),
       callback_(std::move(callback)),
       overrideOwner_(overrideOwner),
+      enableKvRequestQueue_(enableKvRequestQueue),
       backoff_(minBackoffDur, maxBackoffDur),
+      kvRequestQueue_(kvRequestQueue),
       checkValueInUseCb_(std::move(checkValueInUseCb)),
       rangeAllocTtl_(rangeAllocTtl),
       area_(area) {

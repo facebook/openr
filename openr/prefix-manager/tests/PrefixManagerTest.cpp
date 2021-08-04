@@ -121,8 +121,8 @@ class PrefixManagerTestFixture : public testing::Test {
 
   void
   closeQueue() {
-    prefixUpdatesQueue.close();
     kvRequestQueue.close();
+    prefixUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     fibRouteUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
@@ -130,6 +130,7 @@ class PrefixManagerTestFixture : public testing::Test {
 
   void
   openQueue() {
+    kvRequestQueue.open();
     prefixUpdatesQueue.open();
     staticRouteUpdatesQueue.open();
     fibRouteUpdatesQueue.open();

@@ -235,6 +235,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       configStore_.get(),
       prefixUpdatesQueue_,
       logSampleQueue_,
+      kvRequestQueue_,
       Constants::kPrefixAllocatorSyncInterval);
 
   // create thrift-server for this openr node

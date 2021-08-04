@@ -233,7 +233,8 @@ class LinkMonitor final : public OpenrEventBase {
       const AdjacencyValue& adjVal);
 
   /*
-   * [Kvstore] Advertise my adjacencies_ (kvStoreClient_->persistKey)
+   * [Kvstore] Advertise my adjacencies_
+   * kvStoreClient_->persistKey OR kvRequestQueue.push(PersistKeyValueRequest)
    *
    * Called upon spark neighbor events: up/down/rtt (restarting does not trigger
    * adj update)

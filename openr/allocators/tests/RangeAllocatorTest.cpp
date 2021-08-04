@@ -131,6 +131,8 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
           [callback, i](std::optional<T> newVal) noexcept {
             callback(i, newVal);
           },
+          kvRequestQueue,
+          false, /* enableKvRequestQueue_ */
           10ms /* min backoff */,
           100ms /* max backoff */,
           overrideOwner /* override allowed */,
@@ -149,6 +151,9 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   // ZMQ Context for IO processing
   fbzmq::Context zmqContext;
+
+  // key-value request queue
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 
   // Linear topology of stores. i <--> i+1 <--> i+2 ......
   std::vector<std::unique_ptr<KvStoreWrapper>> stores;

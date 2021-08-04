@@ -52,6 +52,8 @@ class RangeAllocator {
       const std::string& keyPrefix,
       KvStoreClientInternal* const kvStoreClient,
       std::function<void(std::optional<T>)> callback,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+      const bool enableKvRequestQueue,
       const std::chrono::milliseconds minBackoffDur =
           std::chrono::milliseconds(50),
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
@@ -145,6 +147,9 @@ class RangeAllocator {
   // propogated to the former yet
   const bool overrideOwner_{true};
 
+  // config knob for enabling key-val request queue
+  const bool enableKvRequestQueue_;
+
   //
   // Mutable state
   //
@@ -170,6 +175,9 @@ class RangeAllocator {
 
   // if allocator has started
   bool hasStarted_{false};
+
+  // queue for sending key-value requests to KvStore
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
   // callback to check if value already exists
   const std::function<bool(T)> checkValueInUseCb_{nullptr};

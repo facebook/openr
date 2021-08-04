@@ -406,6 +406,7 @@ main(int argc, char** argv) {
             configStore,
             prefixUpdatesQueue,
             logSampleQueue,
+            kvRequestQueue,
             Constants::kPrefixAllocatorSyncInterval));
   }
 
