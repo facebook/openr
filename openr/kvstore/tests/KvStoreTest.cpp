@@ -860,6 +860,64 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
 }
 
 /**
+ * Verify KvStore publishes kvStoreSynced signal even when receiving empty peers
+ * in initialization process.
+ */
+TEST_F(KvStoreTestFixture, PublishKvStoreSyncedForEmptyPeerEvent) {
+  messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue;
+  auto myStore = createKvStore(
+      "node1", getTestKvConf(), {} /*areas*/, myPeerUpdatesQueue.getReader());
+  myStore->run();
+  // Publish empty peers.
+  myPeerUpdatesQueue.push(PeerEvent());
+  // Expect to receive kvStoreSynced signal.
+  myStore->recvKvStoreSyncedSignal();
+}
+
+/**
+ * Verify KvStore publishes kvStoreSynced signal when receiving peers in some
+ * configured areas but not others.
+ */
+TEST_F(KvStoreTestFixture, PublishKvStoreSyncedIfNoPeersInSomeAreas) {
+  thrift::AreaConfig area1Config, area2Config;
+  area1Config.area_id_ref() = "area1";
+  area2Config.area_id_ref() = "area2";
+  AreaId area1Id{area1Config.get_area_id()};
+
+  messaging::ReplicateQueue<PeerEvent> storeAPeerUpdatesQueue;
+  messaging::ReplicateQueue<PeerEvent> storeBPeerUpdatesQueue;
+  auto* storeA = createKvStore(
+      "storeA",
+      getTestKvConf(),
+      {area1Config},
+      storeAPeerUpdatesQueue.getReader());
+  // storeB is configured with two areas.
+  auto* storeB = createKvStore(
+      "storeB",
+      getTestKvConf(),
+      {area1Config, area2Config},
+      storeBPeerUpdatesQueue.getReader());
+  storeA->run();
+  storeB->run();
+
+  // storeA receives peers in the only "area1", and published kvStoreSynced
+  // signal.
+  thrift::PeersMap peersA;
+  peersA.emplace(storeB->getNodeId(), storeB->getPeerSpec());
+  PeerEvent peerEventA{{"area1", AreaPeerEvent(peersA, {} /*peersToDel*/)}};
+  storeAPeerUpdatesQueue.push(peerEventA);
+  storeA->recvKvStoreSyncedSignal();
+
+  // storeB receives one peer in "area1" but empty peers in "area2". OpenR
+  // initialization is converged and kvStoreSynced signal is published.
+  thrift::PeersMap peersB;
+  peersB.emplace(storeA->getNodeId(), storeA->getPeerSpec());
+  PeerEvent peerEventB{{"area1", AreaPeerEvent(peersB, {} /*peersToDel*/)}};
+  storeBPeerUpdatesQueue.push(peerEventB);
+  storeB->recvKvStoreSyncedSignal();
+}
+
+/**
  * Start single testable store and set key-val. Verify content of KvStore by
  * querying it.
  */
@@ -3398,9 +3456,9 @@ TEST_F(KvStoreTestFixture, FullSync) {
  */
 TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   thrift::AreaConfig pod, plane;
-  *pod.area_id_ref() = "pod-area";
+  pod.area_id_ref() = "pod-area";
   pod.neighbor_regexes_ref()->emplace_back(".*");
-  *plane.area_id_ref() = "plane-area";
+  plane.area_id_ref() = "plane-area";
   plane.neighbor_regexes_ref()->emplace_back(".*");
   AreaId podAreaId{pod.get_area_id()};
   AreaId planeAreaId{plane.get_area_id()};

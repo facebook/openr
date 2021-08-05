@@ -358,6 +358,26 @@ KvStore::processPeerUpdates(PeerEvent&& event) {
       deleteKvStorePeers(area, areaPeerEvent.peersToDel).get();
     }
   }
+
+  if ((not initialSyncSignalSent_)) {
+    // In OpenR initialization process, first PeerEvent publishment from
+    // LinkMonitor includes peers in all areas. However, KvStore could receive
+    // empty peers in one configured area in following scenarios,
+    // - The device is running in standalone mode,
+    // - The configured area just spawns without any peer yet.
+    // In order to make KvStore converge in initialization process, KvStoreDb
+    // with no peers in the area is treated as syncing completed. Otherwise,
+    // 'initialKvStoreDbSynced()' will not publish kvStoreSynced signal, and
+    // downstream modules cannot proceed to complete initialization.
+    for (auto& [area, kvStoreDb] : kvStoreDb_) {
+      if (kvStoreDb.getPeerCnt() != 0) {
+        continue;
+      }
+      LOG(INFO)
+          << fmt::format("[Initialization] Received 0 peers in area {}.", area);
+      kvStoreDb.processInitializationEvent();
+    }
+  }
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>

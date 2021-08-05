@@ -188,6 +188,11 @@ class KvStoreDb : public DualNode {
     return areaTag_;
   }
 
+  inline int32_t
+  getPeerCnt() const {
+    return thriftPeers_.size();
+  }
+
   // get all active (ttl-refreshable) self-originated key-vals
   SelfOriginatedKeyVals const&
   getSelfOriginatedKeyVals() const {
@@ -271,6 +276,17 @@ class KvStoreDb : public DualNode {
     return initialSyncCompleted_;
   }
 
+  /*
+   * [Open/R Initialization]
+   *
+   * Process KvStore sync event in OpenR initialization procedure.
+   * A syncing completion signal will be marked in following cases:
+   *    1) No peers in the area thus syncing is not needed, or
+   *    2) achieving INITIALIZED state, or
+   *    3) running into THRIFT_API_ERROR
+   */
+  void processInitializationEvent();
+
   // util function for state transition
   static thrift::KvStorePeerState getNextState(
       std::optional<thrift::KvStorePeerState> const& currState,
@@ -310,16 +326,6 @@ class KvStoreDb : public DualNode {
       std::string const& peerName,
       thrift::KvStorePeerState oldState,
       thrift::KvStorePeerState newState);
-
-  /*
-   * [Open/R Initialization]
-   *
-   * Process KvStore sync event in OpenR initialization procedure.
-   * A syncing completion signal will be marked for either:
-   *    1) achieving INITIALIZED state or
-   *    2) running into THRIFT_API_ERROR
-   */
-  void processInitializationEvent();
 
   /*
    * [Initial Sync]
