@@ -311,67 +311,164 @@ class KvStoreDb : public DualNode {
       thrift::KvStorePeerState oldState,
       thrift::KvStorePeerState newState);
 
-  // Process KvStore sync event in OpenR initialization procedure. A syncing
-  // completion signal will be marked for either:
-  // 1) achieving INITIALIZED state or
-  // 2) running into THRIFT_API_ERROR
+  /*
+   * [Open/R Initialization]
+   *
+   * Process KvStore sync event in OpenR initialization procedure.
+   * A syncing completion signal will be marked for either:
+   *    1) achieving INITIALIZED state or
+   *    2) running into THRIFT_API_ERROR
+   */
   void processInitializationEvent();
 
-  // method to scan over thriftPeers to send full-dump request
+  /*
+   * [Initial Sync]
+   *
+   * util method to scan over thrift peers in IDLE state.
+   *
+   * perform initial step of a 3-way full-sync request
+   */
   void requestThriftPeerSync();
 
-  // util function to process when sync response received
+  /*
+   * [Initial Sync]
+   *
+   * perform last step as a 3-way full-sync request:
+   * the full-sync initiator sends back key-val to senderId (where we made
+   * full-sync request to) who need to update those keys due to:
+   *    1) it doesn't have the keys;
+   *    2) it has outdated version of keys;
+   */
+  void finalizeFullSync(
+      const std::unordered_set<std::string>& keys, const std::string& senderId);
+
+  /*
+   * [Initial Sync]
+   *
+   * util method to process thrift sync response in:
+   *    1) Success
+   *    2) Failure
+   */
   void processThriftSuccess(
       std::string const& peerName,
       thrift::Publication&& pub,
       std::chrono::milliseconds timeDelta);
 
-  // util function to process when exception encountered
   void processThriftFailure(
       std::string const& peerName,
       folly::fbstring const& exceptionStr,
       std::chrono::milliseconds timeDelta);
 
-  // send dual messages over syncSock
+  /*
+   * [Incremental flooding]
+   *
+   * util method to flood publication to neighbors
+   *
+   * @param: publication => data element to flood
+   * @param: rateLimit => if 'false', publication will not be rate limited
+   * @param: setFloodRoot => if 'false', floodRootId will not be set
+   */
+  void floodPublication(
+      thrift::Publication&& publication,
+      bool rateLimit = true,
+      bool setFloodRoot = true);
+
+  /*
+   * [Incremental flooding]
+   *
+   * util method to get flooding peers for a given spt-root-id.
+   * @param: rootId =>
+   *    std::nullopt: flood to all physical peers
+   *    not std::nullopt: only flood to formed SPT-peers for rootId
+   */
+  std::unordered_set<std::string> getFloodPeers(
+      const std::optional<std::string>& rootId);
+
+  /*
+   * [Incremental flooding]
+   *
+   * buffer publications blocked by the rate limiter
+   * flood pending update blocked by rate limiter
+   */
+  void bufferPublication(thrift::Publication&& publication);
+  void floodBufferedUpdates();
+
+  /*
+   * [Dual]
+   *
+   * Dual is the flood optimization mechanism KvStoreDb leverages to
+   * form SPTs to optimize flooding toplogy.
+   *
+   * ATTN: this is an overriding method for DUAL I/O usage to send
+   * DUAL-specific messages.
+   */
   bool sendDualMessages(
       const std::string& neighbor,
       const thrift::DualMessages& msgs) noexcept override;
 
-  // send topology-set command to peer, peer will set/unset me as child
-  // rootId: action will applied on given rootId
-  // peerName: peer name
-  // setChild: true if set, false if unset
-  // allRoots: if true, rootId will be ignored, action will be applied to all
-  //           roots. (currently used for initial unsetChildAll() cmd)
+  /*
+   * [Dual]
+   *
+   * Dual is the flood optimization mechanism KvStoreDb leverages to
+   * form SPTs to optimize flooding toplogy.
+   *
+   * ATTN: this is an overriding method for DUAL I/O usage.
+   * It serves as the callbacks when nexthop changed for a given root-id.
+   */
+  void processNexthopChange(
+      const std::string& rootId,
+      const std::optional<std::string>& oldNh,
+      const std::optional<std::string>& newNh) noexcept override;
+
+  /*
+   * [Dual]
+   *
+   * KvStoreDb util method to send topology-set command to peer.
+   * Peer will set/unset me as child
+   *
+   * @param: rootId => action will applied on given rootId
+   * @param: peerName => peer name
+   * @param: setChild => true if set, false if unset
+   * @param: allRoots => if set to true, rootId will be ignored,
+   *                     action will be applied to all roots.
+   *                     (currently used for initial unsetChildAll() cmd)
+   */
   void sendTopoSetCmd(
       const std::string& rootId,
       const std::string& peerName,
       bool setChild,
       bool allRoots) noexcept;
 
-  // set child on given rootId
+  /*
+   * [Dual]
+   *
+   * util methods called from sendTopoSetCmd():
+   *    1) set child on given rootId
+   *    2) unset child on given rootId
+   *    3) unset child on all rootIds
+   */
   void setChild(
       const std::string& rootId, const std::string& peerName) noexcept;
-
-  // unset child on given rootId
   void unsetChild(
       const std::string& rootId, const std::string& peerName) noexcept;
-
-  // unset child on all rootIds
   void unsetChildAll(const std::string& peerName) noexcept;
 
-  // callbacks when nexthop changed for a given root-id
-  void processNexthopChange(
-      const std::string& rootId,
-      const std::optional<std::string>& oldNh,
-      const std::optional<std::string>& newNh) noexcept override;
+  /*
+   * [Ttl Management]
+   *
+   * add new query entries into ttlCountdownQueue from publication
+   * and reschedule ttl expiry timer if needed
+   */
+  void updateTtlCountdownQueue(const thrift::Publication& publication);
 
-  // get flooding peers for a given spt-root-id
-  // if rootId is none => flood to all physical peers
-  // else only flood to formed SPT-peers for rootId
-  std::unordered_set<std::string> getFloodPeers(
-      const std::optional<std::string>& rootId);
+  /*
+   * [Ttl Management]
+   *
+   * periodically count down and purge expired keys from CountdownQueue
+   */
+  void cleanupTtlCountdownQueue();
 
+  // [TO BE DEPRECATED]
   // collect router-client send failure statistics in following form
   // "kvstore.send_failure.dst-peer-id.error-code"
   // error: fbzmq-Error
@@ -379,33 +476,13 @@ class KvStoreDb : public DualNode {
   void collectSendFailureStats(
       const fbzmq::Error& error, const std::string& dstSockId);
 
+  // [TO BE DEPRECATED]
   // Process the messages on peerSyncSock_
   void drainPeerSyncSock();
 
+  // [TO BE DEPRECATED]
   // request full-sync (KEY_DUMP) with peersToSyncWith_
   void requestFullSyncFromPeers();
-
-  // add new query entries into ttlCountdownQueue from publication
-  // and Reschedule ttl expiry timer if needed
-  void updateTtlCountdownQueue(const thrift::Publication& publication);
-
-  // periodically count down and purge expired keys from CountdownQueue
-  void cleanupTtlCountdownQueue();
-
-  // Function to flood publication to neighbors
-  // publication => data element to flood
-  // rateLimit => if 'false', publication will not be rate limited
-  // setFloodRoot => if 'false', floodRootId will not be set
-  void floodPublication(
-      thrift::Publication&& publication,
-      bool rateLimit = true,
-      bool setFloodRoot = true);
-
-  // perform last step as a 3-way full-sync request
-  // full-sync initiator sends back key-val to senderId (where we made
-  // full-sync request to) who need to update those keys
-  void finalizeFullSync(
-      const std::unordered_set<std::string>& keys, const std::string& senderId);
 
   // [TO BE DEPRECATED]
   // process received KV_DUMP from one of our neighbor
@@ -416,32 +493,35 @@ class KvStoreDb : public DualNode {
   // this will poll the sockets listening to the requests
   void attachCallbacks();
 
-  // Submit full-sync event to monitor
-  void logSyncEvent(
-      const std::string& peerNodeName,
-      const std::chrono::milliseconds syncDuration);
-
-  // Submit events to monitor
-  void logKvEvent(const std::string& event, const std::string& key);
-
-  // buffer publications blocked by the rate limiter
-  void bufferPublication(thrift::Publication&& publication);
-
-  // flood pending update blocked by rate limiter
-  void floodBufferedUpdates(void);
-
+  // [TO BE DEPRECATED]
   // Send message via socket
   folly::Expected<size_t, fbzmq::Error> sendMessageToPeer(
       const std::string& peerSocketId, const thrift::KvStoreRequest& request);
 
-  // update ttls for all self-originated key-vals
+  /*
+   * [Logging]
+   *
+   * Submit events to monitor
+   */
+  void logSyncEvent(
+      const std::string& peerNodeName,
+      const std::chrono::milliseconds syncDuration);
+  void logKvEvent(const std::string& event, const std::string& key);
+
+  /*
+   * [Self Originated Key Management]
+   *
+   * set of util method to manage self-originiated keys with:
+   *    1) key persistence
+   *    2) key ttl-refreshing
+   * update ttls for all self-originated key-vals
+   * schedule ttl updates for self-originated key-vals
+   */
   void advertiseTtlUpdates();
-
-  // schedule ttl updates for self-originated key-vals
   void scheduleTtlUpdates(std::string const& key, bool advertiseImmediately);
-
   void advertiseSelfOriginatedKeys(
       const std::unordered_set<std::string>& pendingKeysToAdvertise);
+
   //
   // Private variables
   //
