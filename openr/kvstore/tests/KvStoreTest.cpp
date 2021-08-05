@@ -329,7 +329,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         // wait for all keys to expire
         size_t iter{0};
         while (true) {
-          LOG(INFO) << "Checking for empty stores. Iter#" << ++iter;
+          VLOG(2) << "Checking for empty stores. Iter#" << ++iter;
           bool allStoreEmpty = true;
           for (auto& store : stores) {
             auto keyVals = store->dumpAll(kTestingAreaName);

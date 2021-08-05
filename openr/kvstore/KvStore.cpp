@@ -178,8 +178,9 @@ KvStore::stop() {
     // NOTE: destructor of every instance inside `kvStoreDb_` will gracefully
     //       exit and wait for all pending thrift requests to be processed
     //       before eventbase stops.
-    kvStoreDb_.clear();
-    VLOG(1) << "Instance inside KvStoreDb stopped";
+    for (auto& [area, kvDb] : kvStoreDb_) {
+      kvDb.stop();
+    }
   });
 
   // Invoke stop method of super class
@@ -1093,6 +1094,12 @@ KvStoreDb::KvStoreDb(
   LOG(INFO) << AreaTag()
             << fmt::format("Starting kvstore DB instance for node: {}", nodeId);
 
+  //
+  // Create flood topo task within its own fiber to periodically dump
+  // flooding topology.
+  //
+  evb_->addFiberTask([this]() mutable noexcept { floodTopoDumpTask(); });
+
   if (kvParams_.enableFloodOptimization) {
     // [TO BE DEPRECATED]
     // Attach socket callbacks/schedule events
@@ -1129,14 +1136,19 @@ KvStoreDb::KvStoreDb(
       "kvstore.received_publications." + area, fb303::COUNT);
 }
 
-KvStoreDb::~KvStoreDb() {
+void
+KvStoreDb::stop() {
   LOG(INFO) << AreaTag() << "Terminating KvStoreDb.";
+
+  // Send stop signal for internal fibers
+  floodTopoStopSignal_.post();
 
   evb_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // Destroy thrift clients associated with peers, which will
     // fulfill promises with exceptions if any.
     thriftPeers_.clear();
     selfOriginatedKeyTtlTimer_.reset();
+
     LOG(INFO) << AreaTag() << "Successfully destroyed thriftPeers and timers";
   });
 
@@ -1145,7 +1157,39 @@ KvStoreDb::~KvStoreDb() {
     evb_->removeSocket(fbzmq::RawZmqSocketPtr{*peerSyncSock_});
   }
 
-  LOG(INFO) << AreaTag() << "Successfully destructed KvStoreDb.";
+  LOG(INFO) << AreaTag() << "Successfully stopped KvStoreDb.";
+}
+
+void
+KvStoreDb::floodTopoDumpTask() noexcept {
+  LOG(INFO) << AreaTag() << "Starting flood-topo dump fiber task";
+
+  while (true) { // Break when stop signal is ready
+    // Sleep before next check
+    // ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
+    if (floodTopoStopSignal_.try_wait_for(Constants::kFloodTopoDumpInterval)) {
+      break; // Baton was posted
+    } else {
+      floodTopoStopSignal_.reset(); // Baton experienced timeout
+    }
+    floodTopoDump();
+  } // while
+
+  LOG(INFO) << AreaTag() << "Flood-topo dump fiber task got stopped.";
+}
+
+void
+KvStoreDb::floodTopoDump() noexcept {
+  const auto floodRootId = DualNode::getSptRootId();
+  const auto& floodPeers = getFloodPeers(floodRootId);
+
+  LOG(INFO)
+      << AreaTag()
+      << fmt::format(
+             "[Flood Topo] NodeId: {}, SptRootId: {}, flooding peers: [{}]",
+             kvParams_.nodeId,
+             floodRootId.has_value() ? floodRootId.value() : "NA",
+             folly::join(",", floodPeers));
 }
 
 void

@@ -176,7 +176,10 @@ class KvStoreDb : public DualNode {
       const std::string& nodeId,
       std::function<void()> initialKvStoreSyncedCallback);
 
-  ~KvStoreDb() override;
+  ~KvStoreDb() override = default;
+
+  // shutdown fiber/timer/etc.
+  void stop();
 
   inline std::string const&
   getAreaId() const {
@@ -389,6 +392,19 @@ class KvStoreDb : public DualNode {
    */
   std::unordered_set<std::string> getFloodPeers(
       const std::optional<std::string>& rootId);
+
+  /*
+   * [Incremental flooding]
+   *
+   * fiber task and util function to periodically dump flooding topology.
+   *
+   * Signaling part consists of:
+   *  - Promise retained in state variable of KvStoreDb. Fiber awaits on it.
+   *    The promise is fulfilled in destructor of KvStoreDb.
+   *  - SemiFuture is passed to fiber for awaiting.
+   */
+  void floodTopoDump() noexcept;
+  void floodTopoDumpTask() noexcept;
 
   /*
    * [Incremental flooding]
@@ -677,6 +693,9 @@ class KvStoreDb : public DualNode {
 
   // max parallel syncs allowed
   size_t parallelSyncLimitOverThrift_{2};
+
+  // Stop signal for fiber to periodically dump flood topology
+  folly::fibers::Baton floodTopoStopSignal_;
 
   // event loop
   OpenrEventBase* evb_{nullptr};

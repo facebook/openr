@@ -77,9 +77,13 @@ class Constants {
 
   //
   // KvStore specific
+  //
 
   // default interval for kvstore to sync with peers
   static constexpr std::chrono::seconds kStoreSyncInterval{60};
+
+  // default interval for flooding topology dump
+  static constexpr std::chrono::seconds kFloodTopoDumpInterval{60};
 
   // default thrift client keep alive interval to avoid idle timeout
   static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{30};
@@ -90,6 +94,7 @@ class Constants {
 
   //
   // PrefixAllocator specific
+  //
 
   // default interval for prefix allocator to sync with kvstore
   static constexpr std::chrono::milliseconds kPrefixAllocatorSyncInterval{1000};
