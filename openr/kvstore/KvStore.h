@@ -178,9 +178,14 @@ class KvStoreDb : public DualNode {
 
   ~KvStoreDb() override;
 
-  std::string const&
+  inline std::string const&
   getAreaId() const {
     return area_;
+  }
+
+  inline std::string const&
+  AreaTag() const {
+    return areaTag_;
   }
 
   // get all active (ttl-refreshable) self-originated key-vals
@@ -301,7 +306,7 @@ class KvStoreDb : public DualNode {
   KvStoreDb& operator=(KvStoreDb const&) = delete;
 
   // util function to log state transition
-  static void logStateTransition(
+  void logStateTransition(
       std::string const& peerName,
       thrift::KvStorePeerState oldState,
       thrift::KvStorePeerState newState);
@@ -447,6 +452,9 @@ class KvStoreDb : public DualNode {
   // area identified of this KvStoreDb instance
   const std::string area_;
 
+  // area id tag for logging purpose
+  const std::string areaTag_;
+
   // [TO BE DEPRECATED]
   // zmq ROUTER socket for requesting full dumps from peers
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
@@ -459,6 +467,7 @@ class KvStoreDb : public DualNode {
   struct KvStorePeer {
     KvStorePeer(
         const std::string& nodeName,
+        const std::string& areaTag,
         const thrift::PeerSpec& ps,
         const ExponentialBackoff<std::chrono::milliseconds>& expBackoff);
 
@@ -468,6 +477,9 @@ class KvStoreDb : public DualNode {
 
     // node name
     const std::string nodeName;
+
+    // area tag
+    const std::string areaTag;
 
     // peer spec(peerSpec can be modified as peerAddr can change)
     thrift::PeerSpec peerSpec;

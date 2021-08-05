@@ -71,20 +71,19 @@ dumpAllWithPrefixMultipleAndParse(
 void
 printKeyValInArea(
     int logLevel,
-    const std::string& prefixStr,
-    const std::string& area,
+    const std::string& logStr,
+    const std::string& areaTag,
     const std::string& key,
     const thrift::Value& val) {
   VLOG(logLevel) << fmt::format(
-      "{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, "
-      "ttl: {}, area: {}]",
-      prefixStr,
+      "{}{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, ttl: {}]",
+      areaTag,
+      logStr,
       key,
       *val.version_ref(),
       *val.originatorId_ref(),
       *val.ttlVersion_ref(),
-      *val.ttl_ref(),
-      area);
+      *val.ttl_ref());
 }
 
 // static method to dump KvStore key-val over multiple instances

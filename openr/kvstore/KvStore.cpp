@@ -863,12 +863,14 @@ KvStoreDb::logStateTransition(
     thrift::KvStorePeerState oldState,
     thrift::KvStorePeerState newState) {
   SYSLOG(INFO)
-      << EventTag() << "State change: ["
-      << apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(oldState)
-      << "] -> ["
-      << apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(newState)
-      << "] "
-      << "for peer: " << peerName;
+      << EventTag() << AreaTag()
+      << fmt::format(
+             "State change: [{}] -> [{}] for peer: {}",
+             apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(
+                 oldState),
+             apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(
+                 newState),
+             peerName);
 }
 
 // static util function to fetch current peer state
@@ -940,11 +942,16 @@ KvStoreDb::getNextState(
 //
 KvStoreDb::KvStorePeer::KvStorePeer(
     const std::string& nodeName,
+    const std::string& areaTag,
     const thrift::PeerSpec& ps,
     const ExponentialBackoff<std::chrono::milliseconds>& expBackoff)
-    : nodeName(nodeName), peerSpec(ps), expBackoff(expBackoff) {
+    : nodeName(nodeName),
+      areaTag(areaTag),
+      peerSpec(ps),
+      expBackoff(expBackoff) {
   peerSpec.state_ref() = thrift::KvStorePeerState::IDLE;
   CHECK(not this->nodeName.empty());
+  CHECK(not this->areaTag.empty());
   CHECK(not this->peerSpec.peerAddr_ref()->empty());
   CHECK(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
@@ -959,10 +966,12 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
   }
 
   try {
-    LOG(INFO) << "[Thrift Sync] Creating thrift client with addr: "
-              << peerSpec.get_peerAddr()
-              << ", port: " << peerSpec.get_ctrlPort()
-              << ", peerName: " << nodeName;
+    LOG(INFO) << fmt::format(
+        "{} [Thrift Sync] Creating thrift client with addr: {}, port: {}, peerName: {}",
+        areaTag,
+        peerSpec.get_peerAddr(),
+        peerSpec.get_ctrlPort(),
+        nodeName);
 
     // TODO: migrate to secure thrift connection
     auto thriftClient = getOpenrCtrlPlainTextClient(
@@ -980,11 +989,13 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
         Constants::kThriftClientKeepAliveInterval, 20.0);
     keepAliveTimer->scheduleTimeout(period);
   } catch (std::exception const& e) {
-    LOG(ERROR) << "[Thrift Sync] Failed creating thrift client with addr: "
-               << peerSpec.get_peerAddr()
-               << ", port: " << peerSpec.get_ctrlPort()
-               << ", peerName: " << nodeName
-               << ". Exception: " << folly::exceptionStr(e);
+    LOG(ERROR) << fmt::format(
+        "{} [Thrift Sync] Failed creating thrift client with addr: {}, port: {}, peerName: {}. Exception: {}",
+        areaTag,
+        peerSpec.get_peerAddr(),
+        peerSpec.get_ctrlPort(),
+        nodeName,
+        folly::exceptionStr(e));
 
     // record telemetry for thrift calls
     fb303::fbData->addStatValue(
@@ -1040,6 +1051,7 @@ KvStoreDb::KvStoreDb(
     : DualNode(nodeId, isFloodRoot),
       kvParams_(kvParams),
       area_(area),
+      areaTag_(fmt::format("[Area {}] ", area)),
       peerSyncSock_(std::move(peerSyncSock)),
       initialKvStoreSyncedCallback_(initialKvStoreSyncedCallback),
       evb_(evb) {
@@ -1058,8 +1070,8 @@ KvStoreDb::KvStoreDb(
         });
   }
 
-  LOG(INFO) << "Starting kvstore DB instance for node " << nodeId << " area "
-            << area;
+  LOG(INFO) << AreaTag()
+            << fmt::format("Starting kvstore DB instance for node: {}", nodeId);
 
   if (kvParams_.enableFloodOptimization) {
     // [TO BE DEPRECATED]
@@ -1098,14 +1110,14 @@ KvStoreDb::KvStoreDb(
 }
 
 KvStoreDb::~KvStoreDb() {
-  LOG(INFO) << "Terminating KvStoreDb with areaId: " << area_;
+  LOG(INFO) << AreaTag() << "Terminating KvStoreDb.";
 
   evb_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // Destroy thrift clients associated with peers, which will
     // fulfill promises with exceptions if any.
     thriftPeers_.clear();
     selfOriginatedKeyTtlTimer_.reset();
-    LOG(INFO) << "Successfully destroyed thriftPeers and timers";
+    LOG(INFO) << AreaTag() << "Successfully destroyed thriftPeers and timers";
   });
 
   // remove ZMQ socket
@@ -1113,14 +1125,14 @@ KvStoreDb::~KvStoreDb() {
     evb_->removeSocket(fbzmq::RawZmqSocketPtr{*peerSyncSock_});
   }
 
-  LOG(INFO) << "Successfully destructed KvStoreDb in area: " << area_;
+  LOG(INFO) << AreaTag() << "Successfully destructed KvStoreDb.";
 }
 
 void
 KvStoreDb::setSelfOriginatedKey(
     std::string const& key, std::string const& value, uint32_t version) {
-  VLOG(3) << "setSelfOriginatedKey called for key: " << key
-          << ", area: " << area_;
+  VLOG(3) << AreaTag()
+          << fmt::format("{} called for key: {}", __FUNCTION__, key);
 
   // Create 'thrift::Value' object which will be sent to KvStore
   thrift::Value thriftValue = createThriftValue(
@@ -1160,8 +1172,8 @@ KvStoreDb::setSelfOriginatedKey(
 void
 KvStoreDb::persistSelfOriginatedKey(
     std::string const& key, std::string const& value) {
-  VLOG(3) << "persistSelfOriginatedKey called for key: " << key
-          << ", area: " << area_;
+  VLOG(3) << AreaTag()
+          << fmt::format("{} called for key: {}", __FUNCTION__, key);
 
   // Local variable to hold pending keys to advertise
   std::unordered_set<std::string> pendingKeysToAdvertise{};
@@ -1280,8 +1292,9 @@ KvStoreDb::advertiseSelfOriginatedKeys(
 
     // Proceed only if key backoff is active
     if (not backoff.canTryNow()) {
+      VLOG(2) << AreaTag() << fmt::format("Skipping key: {}", key);
+
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
-      VLOG(2) << "Skipping key: " << key << ", area: " << area_;
       continue;
     }
 
@@ -1289,7 +1302,8 @@ KvStoreDb::advertiseSelfOriginatedKeys(
     backoff.reportError();
     timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
-    printKeyValInArea(1 /*logLevel*/, "Advertising", area_, key, thriftValue);
+    printKeyValInArea(
+        1 /*logLevel*/, "Advertising key update", AreaTag(), key, thriftValue);
 
     // Set in keyVals which is going to be advertise to the kvStore.
     DCHECK(thriftValue.value_ref());
@@ -1304,8 +1318,8 @@ KvStoreDb::advertiseSelfOriginatedKeys(
 void
 KvStoreDb::unsetSelfOriginatedKey(
     std::string const& key, std::string const& value) {
-  VLOG(3) << "unsetSelfOriginatedKey called for key: " << key
-          << ", area: " << area_;
+  VLOG(3) << AreaTag()
+          << fmt::format("{} called for key: {}", __FUNCTION__, key);
 
   // erase key
   eraseSelfOriginatedKey(key);
@@ -1333,8 +1347,9 @@ KvStoreDb::unsetSelfOriginatedKey(
 
 void
 KvStoreDb::eraseSelfOriginatedKey(std::string const& key) {
-  VLOG(3) << "eraseSelfOriginatedKey called for key: " << key
-          << ", area: " << area_;
+  VLOG(3) << AreaTag()
+          << fmt::format("{} called for key: {}", __FUNCTION__, key);
+
   selfOriginatedKeyVals_.erase(key);
 }
 
@@ -1374,7 +1389,8 @@ KvStoreDb::advertiseTtlUpdates() {
     auto& thriftValue = val.value;
     auto& backoff = val.ttlBackoff;
     if (not backoff.canTryNow()) {
-      VLOG(2) << "Skipping key: " << key << ", area: " << area_;
+      VLOG(2) << AreaTag() << fmt::format("Skipping key: {}", key);
+
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
       continue;
     }
@@ -1398,7 +1414,11 @@ KvStoreDb::advertiseTtlUpdates() {
     // Set in keyVals which will be advertised to the kvStore
     DCHECK(not advertiseValue.value_ref());
     printKeyValInArea(
-        1 /* logLevel */, "Advertising ttl update", area_, key, advertiseValue);
+        1 /* logLevel */,
+        "Advertising ttl update",
+        AreaTag(),
+        key,
+        advertiseValue);
     keyVals.emplace(key, advertiseValue);
   }
 
@@ -1410,14 +1430,14 @@ KvStoreDb::advertiseTtlUpdates() {
   }
 
   // Schedule next-timeout for processing/clearing backoffs
-  VLOG(2) << "Scheduling ttl timer after " << timeout.count() << "ms.";
+  VLOG(2) << AreaTag()
+          << fmt::format("Scheduling ttl timer after {}ms.", timeout.count());
+
   selfOriginatedKeyTtlTimer_->scheduleTimeout(timeout);
 }
 
 void
 KvStoreDb::setKeyVals(thrift::KeySetParams&& setParams) {
-  VLOG(3) << "Set key requested for AREA: " << area_;
-
   // Update statistics
   fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
   if (setParams.timestamp_ms_ref().has_value()) {
@@ -1684,8 +1704,10 @@ KvStoreDb::requestThriftPeerSync() {
     fb303::fbData->addStatValue(
         "kvstore.thrift.num_full_sync", 1, fb303::COUNT);
 
-    LOG(INFO) << "[Thrift Sync] Initiating full-sync request for peer: "
-              << peerName;
+    LOG(INFO) << AreaTag()
+              << fmt::format(
+                     "[Thrift Sync] Initiating full-sync request for peer: {}",
+                     peerName);
 
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
@@ -1725,9 +1747,12 @@ KvStoreDb::requestThriftPeerSync() {
     // wait until kMaxBackoff before sending next round of sync
     if (numThriftPeersInSync > parallelSyncLimitOverThrift_) {
       timeout = Constants::kMaxBackoff;
-      LOG(INFO) << "[Thrift Sync] " << numThriftPeersInSync
-                << " peers are syncing in progress. Over parallel sync limit: "
-                << parallelSyncLimitOverThrift_;
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[Thrift Sync] {} peers are syncing in progress. Over limit: {}",
+                 numThriftPeersInSync,
+                 parallelSyncLimitOverThrift_);
       break;
     }
   } // for loop
@@ -1738,9 +1763,11 @@ KvStoreDb::requestThriftPeerSync() {
   if (numThriftPeersInIdle > 0 or
       numThriftPeersInSync > parallelSyncLimitOverThrift_) {
     LOG_IF(INFO, numThriftPeersInIdle)
-        << "[Thrift Sync] " << numThriftPeersInIdle
-        << " idle peers require full-sync. Schedule full-sync after: "
-        << timeout.count() << "ms.";
+        << AreaTag()
+        << fmt::format(
+               "[Thrift Sync] {} idle peers require full-sync. Schedule after: {}ms",
+               numThriftPeersInIdle,
+               timeout.count());
     thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(timeout));
   }
 }
@@ -1757,8 +1784,11 @@ KvStoreDb::processThriftSuccess(
     std::chrono::milliseconds timeDelta) {
   // check if it is valid peer(i.e. peer removed in process of syncing)
   if (not thriftPeers_.count(peerName)) {
-    LOG(WARNING) << "Received async full-sync response from invalid peer: "
-                 << peerName << ". Ignore state transition.";
+    LOG(WARNING)
+        << AreaTag()
+        << fmt::format(
+               "[Thrift Sync] Invalid peer: {}. Skip state transition.",
+               peerName);
     return;
   }
 
@@ -1769,8 +1799,11 @@ KvStoreDb::processThriftSuccess(
   //       promote the state.
   auto& peer = thriftPeers_.at(peerName);
   if (peer.peerSpec.get_state() == thrift::KvStorePeerState::IDLE) {
-    LOG(WARNING) << "Ignore response from: " << peerName
-                 << " as it is in IDLE state";
+    LOG(WARNING)
+        << AreaTag()
+        << fmt::format(
+               "[Thrift Sync] Ignore response from: {} due to IDLE state.",
+               peerName);
     return;
   }
 
@@ -1792,11 +1825,18 @@ KvStoreDb::processThriftSuccess(
   fb303::fbData->addStatValue(
       "kvstore.thrift.num_keyvals_update", kvUpdateCnt, fb303::SUM);
 
-  LOG(INFO) << "[Thrift Sync] Full-sync response received from: " << peerName
-            << " with " << pub.keyVals_ref()->size() << " key-vals and "
-            << numMissingKeys << " missing keys. Incurred " << kvUpdateCnt
-            << " key-value updates."
-            << " Processing time: " << timeDelta.count() << "ms.";
+  LOG(INFO)
+      << AreaTag()
+      << fmt::format(
+             "[Thrift Sync] Full-sync response received from: {}", peerName)
+      << fmt::format(
+             " with {} key-vals and {} missing keys. ",
+             pub.keyVals_ref()->size(),
+             numMissingKeys)
+      << fmt::format(
+             "Incurred {} key-value updates. Processing time: {}ms",
+             kvUpdateCnt,
+             timeDelta.count());
 
   // State transition
   auto oldState = peer.peerSpec.get_state();
@@ -1804,6 +1844,7 @@ KvStoreDb::processThriftSuccess(
       getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
   logStateTransition(peerName, oldState, peer.peerSpec.get_state());
 
+  // Notify subscribers of KVSTORE_SYNC event
   kvParams_.kvStoreSyncEventsQueue.push(KvStoreSyncEvent(peerName, area_));
 
   // Log full-sync event via replicate queue
@@ -1855,12 +1896,12 @@ KvStoreDb::processInitializationEvent() {
   // Sync with all peers are completed.
   initialSyncCompleted_ = true;
 
-  LOG(INFO) << fmt::format(
-      "[Initialization] KvStore area {} synchronization completed, with {} "
-      "peers fully synced and {} peers failed with Thrift errors.",
-      area_,
-      initialSyncSuccessCnt,
-      initialSyncFailureCnt);
+  LOG(INFO)
+      << AreaTag() << "[Initialization] KvStore synchronization completed with "
+      << fmt::format(
+             "{} peers fully synced and {} peers failed with Thrift errors.",
+             initialSyncSuccessCnt,
+             initialSyncFailureCnt);
 
   // Trigger KvStore callback.
   initialKvStoreSyncedCallback_();
@@ -1879,8 +1920,11 @@ KvStoreDb::processThriftFailure(
     return;
   }
 
-  LOG(INFO) << fmt::format(
-      "Exception: {}. Processing time: {}ms.", exceptionStr, timeDelta.count());
+  LOG(INFO) << AreaTag()
+            << fmt::format(
+                   "Exception: {}. Processing time: {}ms.",
+                   exceptionStr,
+                   timeDelta.count());
 
   // reset client to reconnect later in next batch of thriftSyncTimer_
   // scanning
@@ -1921,20 +1965,30 @@ KvStoreDb::addThriftPeers(
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter != thriftPeers_.end()) {
-      LOG(INFO) << "[Peer Update] " << peerName << " is updated."
-                << " peerAddr: " << peerAddr
-                << " supportFloodOptimization: " << supportFloodOptimization;
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[Peer Update] {} is updated with peerAddr: {}, supportFloodOptimization: {}",
+                 peerName,
+                 peerAddr,
+                 supportFloodOptimization);
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
       if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr_ref()) {
         // case1: peerSpec updated(i.e. parallel adjacencies can
         //        potentially have peerSpec updated by LM)
-        LOG(INFO) << "[Peer Update] peerAddr is updated from: "
-                  << oldPeerSpec.get_peerAddr() << " to: " << peerAddr;
+        LOG(INFO) << AreaTag()
+                  << fmt::format(
+                         "[Peer Update] peerAddr is updated from: {} to: {}",
+                         oldPeerSpec.get_peerAddr(),
+                         peerAddr);
       } else {
         // case2. new peer came up (previsously shut down ungracefully)
-        LOG(WARNING) << "[Peer Update] new peer " << peerName << ", previously "
-                     << "shutdown non-gracefully";
+        LOG(WARNING)
+            << AreaTag()
+            << fmt::format(
+                   "[Peer Update] new peer {} comes up. Previously shutdown non-gracefully",
+                   peerName);
       }
       logStateTransition(
           peerName,
@@ -1948,12 +2002,17 @@ KvStoreDb::addThriftPeers(
       peerIter->second.client.reset(); // destruct thriftClient
     } else {
       // case 3: found a new peer coming up
-      LOG(INFO) << "[Peer Add] " << peerName << " is added."
-                << " peerAddr: " << peerAddr
-                << " supportFloodOptimization: " << supportFloodOptimization;
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[Peer Add] {} is added with peerAddr: {}, supportFloodOptimization: {}",
+                 peerName,
+                 peerAddr,
+                 supportFloodOptimization);
 
       KvStorePeer peer(
           peerName,
+          AreaTag(),
           newPeerSpec,
           ExponentialBackoff<std::chrono::milliseconds>(
               Constants::kInitialBackoff, Constants::kMaxBackoff));
@@ -2013,35 +2072,47 @@ KvStoreDb::addPeers(
         }
 
         if (it != peers_.end()) {
-          LOG(INFO) << "Updating existing peer " << peerName;
+          LOG(INFO) << AreaTag()
+                    << fmt::format("[ZMQ] Updating existing peer {}", peerName);
 
           const auto& peerSpec = it->second.first;
 
           if (*peerSpec.cmdUrl_ref() != *newPeerSpec.cmdUrl_ref()) {
             // case1: peer-spec updated (e.g parallel cases)
             cmdUrlUpdated = true;
-            LOG(INFO) << "Disconnecting from " << *peerSpec.cmdUrl_ref()
-                      << " with id " << it->second.second;
+            LOG(INFO) << AreaTag()
+                      << fmt::format(
+                             "[ZMQ] Disconnecting from {} with id {}",
+                             peerSpec.get_cmdUrl(),
+                             it->second.second);
             const auto ret = peerSyncSock_.disconnect(
                 fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
             if (ret.hasError()) {
-              LOG(ERROR) << "Error Disconnecting to URL '"
-                         << *peerSpec.cmdUrl_ref() << "' " << ret.error();
+              LOG(ERROR)
+                  << AreaTag()
+                  << fmt::format(
+                         "[ZMQ] Error Disconnecting to URL {}. Error: {}",
+                         peerSpec.get_cmdUrl(),
+                         ret.error().errString);
             }
             // Remove any pending expected response for old socket-id
             latestSentPeerSync_.erase(it->second.second);
             it->second.second = newPeerCmdId;
           } else {
             // case2. new peer came up (previsously shut down ungracefully)
-            LOG(WARNING) << "new peer " << peerName << ", previously "
-                         << "shutdown non-gracefully";
+            LOG(WARNING)
+                << AreaTag()
+                << fmt::format(
+                       "[ZMQ] New peer {}. Previously shutdown non-gracefully",
+                       peerName);
             isNewPeer = true;
           }
           // Update entry with new data
           it->second.first = newPeerSpec;
         } else {
           // case3. new peer came up
-          LOG(INFO) << "Adding new peer " << peerName;
+          LOG(INFO) << AreaTag()
+                    << fmt::format("[ZMQ] Adding new peer {}", peerName);
           isNewPeer = true;
           cmdUrlUpdated = true;
           std::tie(it, std::ignore) = peers_.emplace(
@@ -2050,18 +2121,26 @@ KvStoreDb::addPeers(
 
         if (cmdUrlUpdated) {
           CHECK(newPeerCmdId == it->second.second);
-          LOG(INFO) << "Connecting sync channel to "
-                    << *newPeerSpec.cmdUrl_ref() << " with id " << newPeerCmdId;
+          LOG(INFO) << AreaTag()
+                    << fmt::format(
+                           "[ZMQ] Connecting sync channel to {} with id: {}",
+                           newPeerSpec.get_cmdUrl(),
+                           newPeerCmdId);
           auto const optStatus = peerSyncSock_.setSockOpt(
               ZMQ_CONNECT_RID, newPeerCmdId.data(), newPeerCmdId.size());
           if (optStatus.hasError()) {
-            LOG(ERROR) << "Error setting ZMQ_CONNECT_RID with value "
-                       << newPeerCmdId;
+            LOG(ERROR)
+                << AreaTag()
+                << fmt::format(
+                       "[ZMQ] Error setting ZMQ_CONNECT_RID with value {}",
+                       newPeerCmdId);
           }
           if (peerSyncSock_.connect(fbzmq::SocketUrl{*newPeerSpec.cmdUrl_ref()})
                   .hasError()) {
-            LOG(ERROR) << "Error connecting to URL '"
-                       << *newPeerSpec.cmdUrl_ref() << "'";
+            LOG(ERROR) << AreaTag()
+                       << fmt::format(
+                              "[ZMQ] Error connecting to URL {}",
+                              newPeerSpec.get_cmdUrl());
           }
         }
 
@@ -2072,8 +2151,11 @@ KvStoreDb::addPeers(
           unsetChildAll(peerName);
         }
       } catch (std::exception const& e) {
-        LOG(ERROR) << "Error connecting to: `" << peerName
-                   << "` reason: " << folly::exceptionStr(e);
+        LOG(ERROR) << AreaTag()
+                   << fmt::format(
+                          "[ZMQ] Error connecting to {}, reason: {}",
+                          peerName,
+                          folly::exceptionStr(e));
       }
     }
     if (not fullSyncTimer_->isScheduled()) {
@@ -2082,7 +2164,7 @@ KvStoreDb::addPeers(
 
     // process dual events if any
     for (const auto& peer : dualPeersToAdd) {
-      LOG(INFO) << "dual peer up: " << peer;
+      LOG(INFO) << AreaTag() << fmt::format("[Dual] peer up: {}", peer);
       DualNode::peerUp(peer, 1 /* link-cost */); // use hop count as metric
     }
   }
@@ -2106,6 +2188,7 @@ KvStoreDb::getCounters() const {
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
   counters["kvstore.num_peers"] = thriftPeers_.size();
+  counters["kvstore.num_zmq_peers"] = peers_.size();
   return counters;
 }
 
@@ -2114,16 +2197,22 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
   for (auto const& peerName : peers) {
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter == thriftPeers_.end()) {
-      LOG(ERROR) << "[Peer Delete] try to delete non-existing peer: "
-                 << peerName << ". Skip.";
+      LOG(ERROR)
+          << AreaTag()
+          << fmt::format(
+                 "[Peer Delete] try to delete non-existing peer: {}. Skip.",
+                 peerName);
       continue;
     }
     const auto& peerSpec = peerIter->second.peerSpec;
 
-    LOG(INFO) << "[Peer Delete] " << peerName
-              << " is detached from: " << peerSpec.get_peerAddr()
-              << ", supportFloodOptimization: "
-              << peerSpec.get_supportFloodOptimization();
+    LOG(INFO)
+        << AreaTag()
+        << fmt::format(
+               "[Peer Delete] {} is detached from peerAddr: {}, supportFloodOptimization: {}",
+               peerName,
+               peerSpec.get_peerAddr(),
+               peerSpec.get_supportFloodOptimization());
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
@@ -2146,7 +2235,10 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
       // not currently subscribed
       auto it = peers_.find(peerName);
       if (it == peers_.end()) {
-        LOG(ERROR) << "Trying to delete non-existing peer '" << peerName << "'";
+        LOG(ERROR)
+            << AreaTag()
+            << fmt::format(
+                   "[ZMQ] Trying to delete non-existing peer {}", peerName);
         continue;
       }
 
@@ -2155,13 +2247,20 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
         dualPeersToRemove.emplace_back(peerName);
       }
 
-      LOG(INFO) << "Detaching from: " << peerSpec.get_cmdUrl()
-                << ", support-flood-optimization: "
-                << peerSpec.get_supportFloodOptimization();
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[ZMQ] Detaching from: {}, support-flood-optimization: {}",
+                 peerSpec.get_cmdUrl(),
+                 peerSpec.get_supportFloodOptimization());
       auto syncRes =
           peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
       if (syncRes.hasError()) {
-        LOG(ERROR) << "Failed to detach. " << syncRes.error();
+        LOG(ERROR) << AreaTag()
+                   << fmt::format(
+                          "[ZMQ] Failed to detach from {}. Error: {}",
+                          peerSpec.get_cmdUrl(),
+                          syncRes.error().errString);
       }
 
       peersToSyncWith_.erase(peerName);
@@ -2174,7 +2273,7 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
 
     // remove dual peers if any
     for (const auto& peer : dualPeersToRemove) {
-      LOG(INFO) << "dual peer down: " << peer;
+      LOG(INFO) << AreaTag() << fmt::format("[Dual] peer down: {}", peer);
       DualNode::peerDown(peer);
     }
   }
@@ -2223,15 +2322,23 @@ KvStoreDb::requestFullSyncFromPeers() {
     dumpRequest.keyDumpParams_ref() = params;
     dumpRequest.area_ref() = area_;
 
-    VLOG(1) << "Sending full-sync request to peer " << peerName << " using id "
-            << peerCmdSocketId;
+    VLOG(1) << AreaTag()
+            << fmt::format(
+                   "[ZMQ] Sending full-sync request to peer {} using id {}",
+                   peerName,
+                   peerCmdSocketId);
     auto const ret = sendMessageToPeer(peerCmdSocketId, dumpRequest);
 
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
-      LOG(ERROR) << "Failed to send full-sync request to peer " << peerName
-                 << " using id " << peerCmdSocketId << " (will try again). "
-                 << ret.error();
+      LOG(ERROR)
+          << AreaTag()
+          << fmt::format(
+                 "[ZMQ] Failed to send full-sync request to peer {} ", peerName)
+          << fmt::format(
+                 " using id {}. Error:{}",
+                 peerCmdSocketId,
+                 ret.error().errString);
       collectSendFailureStats(ret.error(), peerCmdSocketId);
       expBackoff.reportError(); // Apply exponential backoff
       timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
@@ -2246,10 +2353,14 @@ KvStoreDb::requestFullSyncFromPeers() {
     // if pending response is above the limit wait until kMaxBackoff before
     // sending next sync request
     if (latestSentPeerSync_.size() >= parallelSyncLimit_) {
-      LOG(INFO) << latestSentPeerSync_.size() << " full-sync in progress which "
-                << " is above limit: " << parallelSyncLimit_ << ". Will send "
-                << "sync request after max timeout or on receipt of sync "
-                << "response";
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[ZMQ] {} full-sync in progress which is above limit: {}. ",
+                 latestSentPeerSync_.size(),
+                 parallelSyncLimit_)
+          << "Will send sync request after max timeout or "
+          << "on receipt of syncing response.";
       timeout = Constants::kMaxBackoff;
       break;
     }
@@ -2261,8 +2372,14 @@ KvStoreDb::requestFullSyncFromPeers() {
   if (not peersToSyncWith_.empty() ||
       latestSentPeerSync_.size() >= parallelSyncLimit_) {
     LOG_IF(INFO, peersToSyncWith_.size())
-        << peersToSyncWith_.size() << " peers still require full-sync.";
-    LOG(INFO) << "Scheduling full-sync after " << timeout.count() << "ms.";
+        << AreaTag()
+        << fmt::format(
+               "[ZMQ] {} peers still require full-sync.",
+               peersToSyncWith_.size());
+    LOG(INFO) << AreaTag()
+              << fmt::format(
+                     "[ZMQ] Scheduling full-sync after {}ms", timeout.count());
+
     // schedule next timeout
     fullSyncTimer_->scheduleTimeout(timeout);
   }
@@ -2318,10 +2435,11 @@ KvStoreDb::updatePublicationTtl(
 folly::Expected<fbzmq::Message, fbzmq::Error>
 KvStoreDb::processRequestMsgHelper(
     const std::string& requestId, thrift::KvStoreRequest& thriftReq) {
-  VLOG(3) << "processRequest: command: `"
-          << apache::thrift::TEnumTraits<thrift::Command>::findName(
-                 *thriftReq.cmd_ref())
-          << "` received";
+  VLOG(3) << AreaTag()
+          << fmt::format(
+                 "[ZMQ] processRequest: command: {} received.",
+                 apache::thrift::TEnumTraits<thrift::Command>::findName(
+                     *thriftReq.cmd_ref()));
 
   std::vector<std::string> keys;
   switch (*thriftReq.cmd_ref()) {
@@ -2362,12 +2480,16 @@ KvStoreDb::processRequestMsgHelper(
       if (thriftPub.tobeUpdatedKeys_ref().has_value()) {
         numMissingKeys = thriftPub.tobeUpdatedKeys_ref()->size();
       }
-      LOG(INFO) << "[ZMQ Sync] Processed full-sync request from peer "
-                << requestId << " with "
-                << (*keyDumpParamsVal.keyValHashes_ref()).size()
-                << " keyValHashes item(s). Sending "
-                << thriftPub.keyVals_ref()->size() << " key-vals and "
-                << numMissingKeys << " missing keys";
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[ZMQ Sync] Processed full-sync request from peer {} with {} keyValHashes item(s). ",
+                 requestId,
+                 (*keyDumpParamsVal.keyValHashes_ref()).size())
+          << fmt::format(
+                 "Sending {} key-vals and {} missing keys.",
+                 thriftPub.keyVals_ref()->size(),
+                 numMissingKeys);
     }
     return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
@@ -2378,7 +2500,7 @@ KvStoreDb::processRequestMsgHelper(
       return fbzmq::Message(); // ignore it
     }
     if (thriftReq.dualMessages_ref().value().messages_ref()->empty()) {
-      LOG(ERROR) << "received empty dualMessages";
+      LOG(WARNING) << AreaTag() << "[ZMQ Sync] received empty dualMessages";
       return fbzmq::Message(); // ignore it
     }
     fb303::fbData->addStatValue(
@@ -2389,14 +2511,14 @@ KvStoreDb::processRequestMsgHelper(
   case thrift::Command::FLOOD_TOPO_SET: {
     VLOG(2) << "FLOOD_TOPO_SET command requested";
     if (not thriftReq.floodTopoSetParams_ref().has_value()) {
-      LOG(ERROR) << "received none floodTopoSetParams";
+      LOG(ERROR) << AreaTag() << "[ZMQ Sync] received none floodTopoSetParams";
       return fbzmq::Message(); // ignore it
     }
     processFloodTopoSet(std::move(*thriftReq.floodTopoSetParams_ref()));
     return fbzmq::Message();
   }
   default: {
-    LOG(ERROR) << "Unknown command received";
+    LOG(ERROR) << AreaTag() << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
   }
   }
@@ -2450,21 +2572,29 @@ KvStoreDb::processFloodTopoSet(
   }
 
   if (not DualNode::hasDual(*setParams.rootId_ref())) {
-    LOG(ERROR) << "processFloodTopoSet unknown root-id: "
-               << *setParams.rootId_ref();
+    LOG(ERROR) << AreaTag()
+               << fmt::format(
+                      "[Dual] processFloodTopoSet unknown root-id: {}",
+                      *setParams.rootId_ref());
     return;
   }
   auto& dual = DualNode::getDual(*setParams.rootId_ref());
   const auto& child = *setParams.srcId_ref();
   if (*setParams.setChild_ref()) {
     // set child command
-    LOG(INFO) << "dual child set: root-id: (" << *setParams.rootId_ref()
-              << ") child: " << *setParams.srcId_ref();
+    LOG(INFO) << AreaTag()
+              << fmt::format(
+                     "[Dual] child set: root-id: {}, child: {}",
+                     *setParams.rootId_ref(),
+                     *setParams.srcId_ref());
     dual.addChild(child);
   } else {
     // unset child command
-    LOG(INFO) << "dual child unset: root-id: (" << *setParams.rootId_ref()
-              << ") child: " << *setParams.srcId_ref();
+    LOG(INFO) << AreaTag()
+              << fmt::format(
+                     "[Dual] child unset: root-id: {}, child: {}",
+                     *setParams.rootId_ref(),
+                     *setParams.srcId_ref());
     dual.removeChild(child);
   }
 }
@@ -2486,8 +2616,10 @@ KvStoreDb::sendTopoSetCmd(
   if (kvParams_.enableThriftDualMsg) {
     auto peerIt = thriftPeers_.find(peerName);
     if (peerIt == thriftPeers_.end() or (not peerIt->second.client)) {
-      LOG(ERROR) << "Invalid dual peer: " << peerName
-                 << " to set topo cmd. Skip it.";
+      LOG(ERROR) << AreaTag()
+                 << fmt::format(
+                        "[Dual] Invalid dual peer: {} to set topo cmd. Skip.",
+                        peerName);
       return;
     }
     auto& client = peerIt->second.client;
@@ -2535,8 +2667,13 @@ KvStoreDb::sendTopoSetCmd(
     const auto& dstCmdSocketId = peers_.at(peerName).second;
     const auto ret = sendMessageToPeer(dstCmdSocketId, request);
     if (ret.hasError()) {
-      LOG(ERROR) << rootId << ": failed to " << (setChild ? "set" : "unset")
-                 << " spt-parent " << peerName << ", error: " << ret.error();
+      LOG(ERROR) << AreaTag()
+                 << fmt::format(
+                        "{}: failed to {} spt-parent {}. Error: {}",
+                        rootId,
+                        (setChild ? "set" : "unset"),
+                        peerName,
+                        ret.error().errString);
       collectSendFailureStats(ret.error(), dstCmdSocketId);
     }
   }
@@ -2572,8 +2709,13 @@ KvStoreDb::processNexthopChange(
       << ": callback invoked while nexthop does not change: " << oldNhStr;
   // root should NEVER change its nexthop (nexthop always equal to myself)
   CHECK_NE(kvParams_.nodeId, rootId);
-  LOG(INFO) << "dual nexthop change: root-id (" << rootId << ") " << oldNhStr
-            << " -> " << newNhStr;
+
+  LOG(INFO) << AreaTag()
+            << fmt::format(
+                   "[Dual] nexthop change: root-id ({}), {} -> {}",
+                   rootId,
+                   oldNhStr,
+                   newNhStr);
 
   // set new parent if any
   if (newNh.has_value()) {
@@ -2597,6 +2739,13 @@ KvStoreDb::processNexthopChange(
       //
       // state transition to IDLE to initiate full-sync
       auto& peerSpec = thriftPeers_.at(*newNh).peerSpec;
+
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[Dual] Toggle state to idle for peer: {} with dual nexthop change.",
+                 *newNh);
+
       logStateTransition(
           *newNh, peerSpec.get_state(), thrift::KvStorePeerState::IDLE);
 
@@ -2614,7 +2763,11 @@ KvStoreDb::processNexthopChange(
       CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
       setChild(rootId, *newNh);
 
-      LOG(INFO) << "[ZMQ Sync] Enqueuing full-sync request for peer " << *newNh;
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "[Dual] Enqueuing full-sync request for peer {}", *newNh);
+
       peersToSyncWith_.emplace(
           *newNh,
           ExponentialBackoff<std::chrono::milliseconds>(
@@ -2673,15 +2826,22 @@ KvStoreDb::processSyncResponse(
   const size_t kvUpdateCnt = mergePublication(syncPub, requestId);
   size_t numMissingKeys = 0;
 
-  LOG(INFO) << "[ZMQ Sync]: Full-sync response received from " << requestId
-            << " with " << syncPub.keyVals_ref()->size()
-            << " key-vals. Incurred " << kvUpdateCnt << " key-value updates";
+  LOG(INFO)
+      << AreaTag()
+      << fmt::format(
+             "[ZMQ Sync]: Full-sync response received from {} with {} key-vals. ",
+             requestId,
+             syncPub.keyVals_ref()->size())
+      << fmt::format("Incurred {} key-value updates.", kvUpdateCnt);
 
   if (syncPub.tobeUpdatedKeys_ref().has_value()) {
     numMissingKeys = syncPub.tobeUpdatedKeys_ref()->size();
 
-    LOG(INFO) << "[ZMQ Sync]: " << numMissingKeys << " missing keys observed: "
-              << folly::join(",", *syncPub.tobeUpdatedKeys_ref());
+    LOG(INFO) << AreaTag()
+              << fmt::format(
+                     "[ZMQ Sync]: {} missing keys observed: {}",
+                     numMissingKeys,
+                     folly::join(",", *syncPub.tobeUpdatedKeys_ref()));
   }
 
   fb303::fbData->addStatValue(
@@ -2694,8 +2854,11 @@ KvStoreDb::processSyncResponse(
         std::chrono::steady_clock::now() - latestSentPeerSync_.at(requestId));
     fb303::fbData->addStatValue(
         "kvstore.full_sync_duration_ms", syncDuration.count(), fb303::AVG);
-    VLOG(1) << "It took " << syncDuration.count() << " ms to sync with "
-            << requestId;
+    VLOG(1) << AreaTag()
+            << fmt::format(
+                   "It took {}ms to sync with {}.",
+                   syncDuration.count(),
+                   requestId);
     latestSentPeerSync_.erase(requestId);
   }
 
@@ -2819,17 +2982,16 @@ KvStoreDb::cleanupTtlCountdownQueue() {
         *it->second.ttlVersion_ref() == top.ttlVersion) {
       expiredKeys.emplace_back(top.key);
       LOG(WARNING)
-          << "Delete expired (key, version, originatorId, ttlVersion, ttl, "
-          << "node, area) "
+          << AreaTag()
+          << "Delete expired (key, version, originatorId, ttlVersion, ttl, node) "
           << fmt::format(
-                 "({}, {}, {}, {}, {}, {}, {})",
+                 "({}, {}, {}, {}, {}, {})",
                  top.key,
                  *it->second.version_ref(),
                  *it->second.originatorId_ref(),
                  *it->second.ttlVersion_ref(),
                  *it->second.ttl_ref(),
-                 kvParams_.nodeId,
-                 area_);
+                 kvParams_.nodeId);
       logKvEvent("KEY_EXPIRE", top.key);
       kvStore_.erase(it);
     }
@@ -2946,8 +3108,11 @@ KvStoreDb::finalizeFullSync(
 
   auto peerIt = thriftPeers_.find(senderId);
   if (peerIt == thriftPeers_.end()) {
-    LOG(ERROR) << "Invalid peer: " << senderId
-               << " to do finalize sync with. Skip it.";
+    LOG(ERROR)
+        << AreaTag()
+        << fmt::format(
+               "[Thrift Sync] Invalid peer: {} to do finalize sync with. Skip it.",
+               senderId);
     return;
   }
 
@@ -2959,8 +3124,11 @@ KvStoreDb::finalizeFullSync(
     return;
   }
 
-  LOG(INFO) << "[Thrift Sync] Finalize full-sync back to: " << senderId
-            << " with keys: " << folly::join(",", keys);
+  LOG(INFO) << AreaTag()
+            << fmt::format(
+                   "[Thrift Sync] Finalize full-sync back to: {} with keys: {}",
+                   senderId,
+                   folly::join(",", keys));
 
   // record telemetry for thrift calls
   fb303::fbData->addStatValue(
@@ -2970,8 +3138,13 @@ KvStoreDb::finalizeFullSync(
   auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
   std::move(sf)
       .via(evb_->getEvb())
-      .thenValue([senderId, startTime](folly::Unit&&) {
-        VLOG(4) << "Finalize full-sync ack received from peer: " << senderId;
+      .thenValue([this, senderId, startTime](folly::Unit&&) {
+        VLOG(4)
+            << AreaTag()
+            << fmt::format(
+                   "[Thrift Sync] Finalize full-sync ack received from peer: {}",
+                   senderId);
+
         auto endTime = std::chrono::steady_clock::now();
         auto timeDelta = std::chrono::duration_cast<std::chrono::milliseconds>(
             endTime - startTime);
@@ -3085,9 +3258,12 @@ KvStoreDb::floodPublication(
   auto keysToUpdate = folly::gen::from(*publication.keyVals_ref()) |
       folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
 
-  VLOG(2) << "Flood publication from: " << kvParams_.nodeId
-          << " to peers with: " << keysToUpdate.size()
-          << " key-vals. Updated keys: " << folly::join(",", keysToUpdate);
+  VLOG(2) << AreaTag()
+          << fmt::format(
+                 "Flood publication from: {} to peers with: {} key-vals. ",
+                 kvParams_.nodeId,
+                 keysToUpdate.size())
+          << fmt::format("Updated keys: {}", folly::join(",", keysToUpdate));
 
   if (setFloodRoot and not senderId.has_value()) {
     // I'm the initiator, set flood-root-id
@@ -3110,7 +3286,9 @@ KvStoreDb::floodPublication(
   for (const auto& peerName : floodPeers) {
     auto peerIt = thriftPeers_.find(peerName);
     if (peerIt == thriftPeers_.end()) {
-      LOG(ERROR) << "Invalid flooding peer: " << peerName << ". Skip it.";
+      LOG(ERROR)
+          << AreaTag()
+          << fmt::format("Invalid flooding peer: {}. Skip it.", peerName);
       continue;
     }
 
@@ -3275,6 +3453,7 @@ KvStoreDb::logSyncEvent(
     const std::chrono::milliseconds syncDuration) {
   LogSample sample{};
 
+  sample.addString("area", AreaTag());
   sample.addString("event", "KVSTORE_FULL_SYNC");
   sample.addString("node_name", kvParams_.nodeId);
   sample.addString("neighbor", peerNodeName);
@@ -3287,6 +3466,7 @@ void
 KvStoreDb::logKvEvent(const std::string& event, const std::string& key) {
   LogSample sample{};
 
+  sample.addString("area", AreaTag());
   sample.addString("event", event);
   sample.addString("node_name", kvParams_.nodeId);
   sample.addString("key", key);
@@ -3300,8 +3480,11 @@ KvStoreDb::sendDualMessages(
   if (kvParams_.enableThriftDualMsg) {
     auto peerIt = thriftPeers_.find(neighbor);
     if (peerIt == thriftPeers_.end() or (not peerIt->second.client)) {
-      LOG(ERROR) << "Invalid dual peer: " << neighbor
-                 << " to set topo cmd. Skip it.";
+      LOG(ERROR)
+          << AreaTag()
+          << fmt::format(
+                 "[Dual] Invalid dual peer: {} to set topo cmd. Skip it.",
+                 neighbor);
       return false;
     }
 
@@ -3342,10 +3525,14 @@ KvStoreDb::sendDualMessages(
         });
   } else {
     if (peers_.count(neighbor) == 0) {
-      LOG(ERROR) << "fail to send dual messages to " << neighbor
-                 << ", not exist";
+      LOG(ERROR)
+          << AreaTag()
+          << fmt::format(
+                 "[Dual] Invalid dual peer: {} to set topo cmd. Skip it.",
+                 neighbor);
       return false;
     }
+
     const auto& neighborCmdSocketId = peers_.at(neighbor).second;
     thrift::KvStoreRequest dualRequest;
     dualRequest.cmd_ref() = thrift::Command::DUAL;
@@ -3359,9 +3546,13 @@ KvStoreDb::sendDualMessages(
     // neighor will inform us it's gone. and we will delete it from our dual
     // peers.
     if (ret.hasError()) {
-      LOG(ERROR) << "failed to send dual messages to " << neighbor
-                 << " using id " << neighborCmdSocketId
-                 << ", error: " << ret.error();
+      LOG(ERROR)
+          << AreaTag()
+          << fmt::format(
+                 "[Dual] Failed to send dual messages to {}  using id: {}. ",
+                 neighbor,
+                 neighborCmdSocketId)
+          << fmt::format("Error: {}", ret.error().errString);
       collectSendFailureStats(ret.error(), neighborCmdSocketId);
       return false;
     }

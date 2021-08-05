@@ -143,15 +143,15 @@ dumpAllWithThriftClientFromMultiple(
  * Static method to retrieve loggable key-value information.
  *
  * @param logLevel - VLOG logging level
- * @param prefixStr - prefix to aid in logging
+ * @param logStr - prefix to aid in logging
  * @param area - area with the key-val
  * @param key - key of key-val
  * @param val - thrift Value to log version, originator, ttl
  */
 static void printKeyValInArea(
     int logLevel,
-    const std::string& prefixStr,
-    const std::string& area,
+    const std::string& logStr,
+    const std::string& areaTag,
     const std::string& key,
     const thrift::Value& val);
 
