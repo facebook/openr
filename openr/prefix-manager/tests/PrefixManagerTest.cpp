@@ -428,18 +428,6 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += Constants::kKvStoreSyncThrottleTimeout.count() / 2),
-      [&]() {
-        // Verify that before throttle expires, we don't see any update
-        auto maybeValue1 = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
-        EXPECT_TRUE(maybeValue1.has_value());
-        auto db1 = readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue1.value().value_ref().value(), serializer);
-        EXPECT_EQ(1, getNumPrefixes(prefixDbMarker));
-      });
-
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(
           scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore

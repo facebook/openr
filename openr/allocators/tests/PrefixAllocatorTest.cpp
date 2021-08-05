@@ -61,7 +61,10 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
     // Start KvStore and attach a client to it
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        zmqContext_, config_, std::nullopt, kvRequestQueue_.getReader());
+        zmqContext_,
+        config_,
+        myPeerUpdatesQueue_.getReader(),
+        kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
     evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
       kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -133,6 +136,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
     fibRouteUpdatesQueue_.close();
     kvRequestQueue_.close();
     logSampleQueue_.close();
+    myPeerUpdatesQueue_.close();
     kvStoreWrapper_->closeQueue();
 
     kvStoreClient_->stop();
@@ -194,6 +198,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
+  messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue_;
 
   // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
@@ -700,9 +705,14 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   hasAllocPrefix.store(true, std::memory_order_relaxed);
   createPrefixManager();
   createPrefixAllocator();
+  // KvStore receives empty peers after reboot. This will have PrefixManager
+  // load prefix keys in kvStoreClient_.
+  myPeerUpdatesQueue_.push(PeerEvent());
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
+  // PrefixManager clears  prefixes previously advertised but not
+  // allocated/originated after reboot.
   EXPECT_FALSE(allocPrefix->has_value());
   LOG(INFO) << "Step-2: Lost allocated prefix";
 
@@ -1035,9 +1045,14 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   hasAllocPrefix.store(true, std::memory_order_relaxed);
   createPrefixManager();
   createPrefixAllocator();
+  // KvStore receives empty peers after reboot. This will have PrefixManager
+  // load prefix keys in kvStoreClient_.
+  myPeerUpdatesQueue_.push(PeerEvent());
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
+  // PrefixManager clears  prefixes previously advertised but not
+  // allocated/originated after reboot.
   EXPECT_FALSE(allocPrefix->has_value());
   LOG(INFO) << "Step-2: Lost allocated prefix";
 

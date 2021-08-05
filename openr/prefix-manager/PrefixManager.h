@@ -194,6 +194,12 @@ class PrefixManager final : public OpenrEventBase {
           typeFilter);
 
  private:
+  // Dump self originated prefix keys from KvStore.
+  void dumpSelfOriginatedPrefixes();
+
+  // Process thrift publication from KvStore.
+  void processPublication(thrift::Publication&& thriftPub);
+
   /*
    * Private helpers to update `prefixMap_`
    *
@@ -340,6 +346,10 @@ class PrefixManager final : public OpenrEventBase {
 
   // module ptr to interact with KvStore
   KvStore* kvStore_{nullptr};
+
+  // Boolean flag indicating whether KvStore synced signal is received in OpenR
+  // initialization procedure.
+  bool initialKvStoreSynced_{false};
 
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!

@@ -98,6 +98,7 @@ PrefixManager::PrefixManager(
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
   initialSyncKvStoreTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { syncKvStore(); });
+  initialSyncKvStoreTimer_->scheduleTimeout(initialPrefixHoldTime);
 
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
@@ -108,6 +109,17 @@ PrefixManager::PrefixManager(
         }
         syncKvStore();
       });
+
+  // Load openrConfig for local-originated routes
+  if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
+    // read originated prefixes from OpenrConfig
+    buildOriginatedPrefixDb(*prefixes);
+
+    // ATTN: consider min_supporting_route = 0, immediately advertise
+    // originated routes to `KvStore`
+    processOriginatedPrefixes();
+    LOG(INFO) << "[Initialization] Originated prefixes processed.";
+  }
 
   // Schedule fiber to read prefix updates messages
   addFiberTask([q = std::move(prefixUpdatesQueue), this]() mutable noexcept {
@@ -194,84 +206,35 @@ PrefixManager::PrefixManager(
         continue;
       }
       auto& pub = maybePub.value();
+      // kvStoreSynced and tPublication are exclusive with each other.
       if (pub.kvStoreSynced) {
-        // TODO: process kvStoreSynced signal.
+        // "kvStoreSynced" signal is used to mark initial KvStore sync stage
+        // done during Open/R initialization process. PrefixManager could dump
+        // all prefixes advertised by itself previously.
+        dumpSelfOriginatedPrefixes();
+        LOG(INFO)
+            << "[Initialization] All prefix keys are retrieved from KvStore.";
+        initialKvStoreSynced_ = true;
       } else {
         // TODO: Do not call KvStoreClient_ to process publications after
         // persistKey() and clearKey() are natively supported in KvStore.
         kvStoreClient_->processPublication(pub.tPublication);
 
-        // TODO: process publication in PrefixManager.
+        // Process KvStore Thrift publication.
+        processPublication(std::move(pub.tPublication));
       }
     }
   });
+}
 
-  // register kvstore publication callback
-  // ATTN: in case of receiving update from `KvStore` for keys we didn't
-  // persist, subscribe update to delete this key.
-  const auto keyPrefix =
-      fmt::format("{}{}:", Constants::kPrefixDbMarker.toString(), nodeId_);
-  kvStoreClient_->subscribeKeyFilter(
-      KvStoreFilters(
-          {keyPrefix},
-          {nodeId_},
-          thrift::FilterOperator::AND /* match both keyPrefix and nodeId_ */),
-      [this](
-          const std::string& prefixStr,
-          std::optional<thrift::Value> val) noexcept {
-        // Ignore update if:
-        //  1) val is std::nullopt;
-        //  2) val has no value field inside `thrift::Value`(e.g. ttl update)
-        if ((not val.has_value()) or (not val.value().value_ref())) {
-          return;
-        }
-
-        // TODO: avoid decoding keys
-        auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
-        if (maybePrefixKey.hasError()) {
-          // this is bad format of key.
-          LOG(ERROR) << fmt::format(
-              "Unable to parse prefix key: {} with error: {}",
-              prefixStr,
-              maybePrefixKey.error());
-          return;
-        }
-
-        // ATTN: to avoid prefix churn, skip processing prefixes from previous
-        // incarnation with different prefix key format.
-        if (enableNewPrefixFormat_ != maybePrefixKey.value().isPrefixKeyV2()) {
-          const std::string version =
-              maybePrefixKey.value().isPrefixKeyV2() ? "v2" : "v1";
-          LOG(INFO) << fmt::format(
-              "Skip processing {} format of prefix: {}", version, prefixStr);
-          return;
-        }
-
-        try {
-          const auto network = maybePrefixKey->getCIDRNetwork();
-          const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-              *val.value().value_ref(), serializer_);
-          if (not *prefixDb.deletePrefix_ref()) {
-            VLOG(2) << "Learning previously announced prefix: " << prefixStr;
-
-            // populate keysInKvStore_ collection to make sure we can find
-            // key when clear key from `KvStore`
-            keysInKvStore_[network].keys.emplace(prefixStr);
-
-            // Populate pendingState to check keys
-            folly::small_vector<folly::CIDRNetwork> changed{network};
-            pendingUpdates_.applyPrefixChange(changed);
-            syncKvStoreThrottled_->operator()();
-          }
-        } catch (const std::exception& ex) {
-          LOG(ERROR) << "Failed to deserialize corresponding value for key "
-                     << prefixStr << ". Exception: " << folly::exceptionStr(ex);
-        }
-      });
-
+void
+PrefixManager::dumpSelfOriginatedPrefixes() {
   // get initial dump of keys related to `myNodeId_`.
   // ATTN: when Open/R restarts, newly started prefixManager will need to
   // understand what it has previously advertised.
+  const auto keyPrefix =
+      fmt::format("{}{}:", Constants::kPrefixDbMarker.toString(), nodeId_);
+
   for (const auto& [area, _] : areaToPolicy_) {
     auto result = kvStoreClient_->dumpAllWithPrefix(AreaId{area}, keyPrefix);
     if (not result.has_value()) {
@@ -281,14 +244,14 @@ PrefixManager::PrefixManager(
     }
 
     folly::small_vector<folly::CIDRNetwork> changed;
-    for (auto const& [prefixStr, _] : result.value()) {
+    for (auto const& [keyStr, _] : result.value()) {
       // TODO: avoid decoding keys
-      auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
+      auto maybePrefixKey = PrefixKey::fromStr(keyStr);
       if (maybePrefixKey.hasError()) {
         // this is bad format of key.
         LOG(ERROR) << fmt::format(
             "Unable to parse prefix key: {} with error: {}",
-            prefixStr,
+            keyStr,
             maybePrefixKey.error());
         continue;
       }
@@ -299,35 +262,80 @@ PrefixManager::PrefixManager(
         const std::string version =
             maybePrefixKey.value().isPrefixKeyV2() ? "v2" : "v1";
         LOG(INFO) << fmt::format(
-            "Skip processing {} format of prefix: {}", version, prefixStr);
+            "Skip processing {} format of prefix: {}", version, keyStr);
         continue;
       }
 
       // populate keysInKvStore_ collection to make sure we can find
       // key when clear key from `KvStore`
       const auto network = maybePrefixKey->getCIDRNetwork();
-      keysInKvStore_[network].keys.emplace(prefixStr);
+      keysInKvStore_[network].keys.emplace(keyStr);
 
       // Populate pendingState to check keys
       changed.emplace_back(network);
     }
-
     // populate pending update in one shot
     pendingUpdates_.applyPrefixChange(changed);
     syncKvStoreThrottled_->operator()();
   }
+}
 
-  // schedule one-time initial dump
-  initialSyncKvStoreTimer_->scheduleTimeout(initialPrefixHoldTime);
+void
+PrefixManager::processPublication(thrift::Publication&& thriftPub) {
+  folly::small_vector<folly::CIDRNetwork> changed{};
+  for (const auto& [keyStr, val] : *thriftPub.keyVals_ref()) {
+    // Only interested in prefix updates.
+    // Ignore if val has no value field inside `thrift::Value`(e.g. ttl update)
+    if (not(keyStr.find(Constants::kPrefixDbMarker.toString()) == 0) or
+        (not val.value_ref())) {
+      continue;
+    }
+    auto prefixKey = PrefixKey::fromStr(keyStr);
+    // Skip bad format of key.
+    if (prefixKey.hasError()) {
+      LOG(ERROR) << fmt::format(
+          "Unable to parse prefix key: {} with error: {}",
+          keyStr,
+          prefixKey.error());
+      continue;
+    }
+    // Skip none-self advertised prefixes or already persisted keys.
+    if (prefixKey->getNodeName() != nodeId_ or
+        keysInKvStore_.count(prefixKey->getCIDRNetwork()) > 0) {
+      continue;
+    }
+    // ATTN: to avoid prefix churn, skip processing prefixes from previous
+    // incarnation with different prefix key format.
+    if (enableNewPrefixFormat_ != prefixKey.value().isPrefixKeyV2()) {
+      const std::string version =
+          prefixKey.value().isPrefixKeyV2() ? "v2" : "v1";
+      LOG(INFO) << fmt::format(
+          "Skip processing {} format of prefix: {}", version, keyStr);
+      return;
+    }
+    try {
+      const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+          *val.value_ref(), serializer_);
+      if (not *prefixDb.deletePrefix_ref()) {
+        VLOG(2) << "Learning previously announced prefix: " << keyStr;
+        // populate keysInKvStore_ collection to make sure we can find
+        // key when clear key from `KvStore`
+        const auto network = prefixKey->getCIDRNetwork();
+        keysInKvStore_[network].keys.emplace(keyStr);
 
-  // Load openrConfig for local-originated routes
-  if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
-    // read originated prefixes from OpenrConfig
-    buildOriginatedPrefixDb(*prefixes);
+        // Populate pendingState to check keys
+        changed.emplace_back(network);
+      }
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << "Failed to deserialize corresponding value for key "
+                 << keyStr << ". Exception: " << folly::exceptionStr(ex);
+    }
+  } // for
 
-    // ATTN: consider min_supporting_route = 0, immediately advertise
-    // originated routes to `KvStore`
-    processOriginatedPrefixes();
+  if (not changed.empty()) {
+    // populate pending update in one shot
+    pendingUpdates_.applyPrefixChange(changed);
+    syncKvStoreThrottled_->operator()();
   }
 }
 
