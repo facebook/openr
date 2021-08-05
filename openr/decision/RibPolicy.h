@@ -55,6 +55,9 @@ class RibPolicyStatement {
 
   // PolicyAction operation
   const thrift::RibRouteAction action_;
+
+  // Route counter Id
+  const std::optional<thrift::RouteCounterID> counterID_;
 };
 
 /**

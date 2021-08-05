@@ -17,7 +17,9 @@ namespace openr {
 //
 
 RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
-    : name_(*stmt.name_ref()), action_(*stmt.action_ref()) {
+    : name_(*stmt.name_ref()),
+      action_(*stmt.action_ref()),
+      counterID_(stmt.counterID_ref().to_optional()) {
   // Verify that at-least one action must be specified
   if (not stmt.action_ref()->set_weight_ref()) {
     thrift::OpenrError error;
@@ -53,6 +55,7 @@ RibPolicyStatement::toThrift() const {
   thrift::RibPolicyStatement stmt;
   *stmt.name_ref() = name_;
   *stmt.action_ref() = action_;
+  stmt.counterID_ref().from_optional(counterID_);
   if (!prefixSet_.empty()) {
     stmt.matcher_ref()->prefixes_ref() = std::vector<thrift::IpPrefix>();
     for (auto const& prefix : prefixSet_) {
@@ -109,6 +112,9 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   if (not match(route)) {
     return false;
   }
+
+  // Assign RibPolicyStatement route counter ID to the route
+  route.counterID = counterID_;
 
   // Iterate over all next-hops. NOTE that we iterate over rvalue
   CHECK(action_.set_weight_ref().has_value());

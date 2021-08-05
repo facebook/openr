@@ -146,6 +146,9 @@ struct RibPolicyStatement {
 
   // Transform operation for a single route object
   3: RibRouteAction action;
+
+  // Counter Id assigned to the routes that fit the RibPolicyStatement matcher
+  4: optional Network.RouteCounterID counterID;
 }
 
 /**

@@ -135,10 +135,14 @@ enum PrefixType {
   TYPE_5 = 25,
 }
 
+// Route counter ID type
+typedef string RouteCounterID
+
 struct UnicastRoute {
   1: IpPrefix dest;
   3: optional AdminDistance adminDistance;
   4: list<NextHopThrift> nextHops;
+  7: optional RouteCounterID counterID;
 } (cpp.minimize_padding)
 
 // For mimicing FBOSS agent thrift interfaces

@@ -25,7 +25,8 @@ createPolicyStatement(
     std::optional<std::vector<std::string>> const& tags,
     int32_t defaultWeight,
     std::map<std::string, int32_t> areaToWeight,
-    std::map<std::string, int32_t> nbrToWeight = {}) {
+    std::map<std::string, int32_t> nbrToWeight = {},
+    std::optional<thrift::RouteCounterID> const& counterID = std::nullopt) {
   thrift::RibPolicyStatement p;
   *p.name_ref() = "TestPolicyStatement";
   p.matcher_ref()->prefixes_ref().from_optional(prefixes);
@@ -34,6 +35,7 @@ createPolicyStatement(
   p.action_ref()->set_weight_ref()->default_weight_ref() = defaultWeight;
   *p.action_ref()->set_weight_ref()->area_to_weight_ref() = areaToWeight;
   *p.action_ref()->set_weight_ref()->neighbor_to_weight_ref() = nbrToWeight;
+  p.counterID_ref().from_optional(counterID);
   return p;
 }
 
@@ -75,7 +77,7 @@ TEST(RibPolicy, Error) {
 TEST(RibPolicyStatement, ApplyAction) {
   std::vector<thrift::IpPrefix> prefixes{toIpPrefix("fc00::/64")};
   const auto thriftPolicyStatement = createPolicyStatement(
-      prefixes, std::nullopt, 1, {{"area1", 0}, {"area2", 2}});
+      prefixes, std::nullopt, 1, {{"area1", 0}, {"area2", 2}}, {}, "COUNTER_0");
   auto policyStatement = RibPolicyStatement(thriftPolicyStatement);
 
   const auto nhDefault =
@@ -94,6 +96,7 @@ TEST(RibPolicyStatement, ApplyAction) {
 
     EXPECT_FALSE(policyStatement.applyAction(entry));
     EXPECT_EQ(constEntry, entry); // Route shouldn't be modified
+    EXPECT_FALSE(entry.counterID);
   }
 
   // Test with matching prefix. Expect transformed nexthops
@@ -116,6 +119,7 @@ TEST(RibPolicyStatement, ApplyAction) {
     EXPECT_THAT(
         entry.nexthops,
         testing::UnorderedElementsAre(nhDefaultModified, nh2Modified));
+    EXPECT_EQ("COUNTER_0", *entry.counterID);
   }
 }
 

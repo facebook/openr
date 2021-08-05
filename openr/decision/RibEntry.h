@@ -42,6 +42,9 @@ struct RibUnicastEntry : RibEntry {
   std::string bestArea;
   // install to fib or not
   bool doNotInstall{false};
+  // Counter Id assigned to this route. Assignment comes from the
+  // RibPolicyStatement that matches to this route.
+  std::optional<thrift::RouteCounterID> counterID{std::nullopt};
 
   // constructor
   explicit RibUnicastEntry() {}
@@ -67,7 +70,8 @@ struct RibUnicastEntry : RibEntry {
   bool
   operator==(const RibUnicastEntry& other) const {
     return prefix == other.prefix && bestPrefixEntry == other.bestPrefixEntry &&
-        doNotInstall == other.doNotInstall && RibEntry::operator==(other);
+        doNotInstall == other.doNotInstall && counterID == other.counterID &&
+        RibEntry::operator==(other);
   }
 
   bool
@@ -82,6 +86,7 @@ struct RibUnicastEntry : RibEntry {
     tUnicast.dest_ref() = toIpPrefix(prefix);
     tUnicast.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
+    tUnicast.counterID_ref().from_optional(counterID);
     return tUnicast;
   }
 
