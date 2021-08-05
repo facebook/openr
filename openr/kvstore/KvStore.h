@@ -196,12 +196,18 @@ class KvStoreDb : public DualNode {
     return thriftPeers_.size();
   }
 
+  inline bool
+  getInitialSyncedWithPeers() const {
+    return initialSyncCompleted_;
+  }
+
   // get all active (ttl-refreshable) self-originated key-vals
   SelfOriginatedKeyVals const&
   getSelfOriginatedKeyVals() const {
     return selfOriginatedKeyVals_;
   }
 
+  // [TO BE DEPRECATED]
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
       const std::string& requestId, thrift::KvStoreRequest& thriftReq);
 
@@ -213,6 +219,9 @@ class KvStoreDb : public DualNode {
 
   // get multiple keys at once
   thrift::Publication getKeyVals(std::vector<std::string> const& keys);
+
+  // add new key-vals to kvstore_'s key-vals
+  void setKeyVals(thrift::KeySetParams&& setParams);
 
   // dump the entries of my KV store whose keys match the filter
   thrift::Publication dumpAllWithFilters(
@@ -244,25 +253,30 @@ class KvStoreDb : public DualNode {
   void updatePublicationTtl(
       thrift::Publication& thriftPub, bool removeAboutToExpire = false);
 
-  // add new peers to sync with
+  /*
+   * [Peer Management]
+   *
+   * KvStoreDb keeps synchronizing with peers via TCP session through thrift
+   * client connection. It provides multiple util functions to interact with
+   * peers including:
+   *    1) addPeers(ZMQ) + addThriftPeers(Thrift)
+   *    2) delPeers(ZMQ) + delThriftPeers(Thrift)
+   *    3) dumpPeers(ZMQ + Thrift)
+   */
   void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
-
-  // delete some peers we are subscribed to
   void delPeers(std::vector<std::string> const& peers);
 
-  // dump all peers we are subscribed to
   thrift::PeersMap dumpPeers();
 
-  // thrift flavor of peer adding
   void addThriftPeers(
       std::unordered_map<std::string, thrift::PeerSpec> const& peers);
-
-  // thrift flavor of peer deletion
   void delThriftPeers(std::vector<std::string> const& peers);
 
-  // util funtion to fetch KvStorePeerState
-  std::optional<thrift::KvStorePeerState> getCurrentState(
-      std::string const& peerName);
+  /*
+   * [Dual]
+   *
+   * util function to interact with upper dual library for flood topo
+   */
 
   // process spanning-tree-set command to set/unset a child for a given root
   void processFloodTopoSet(
@@ -271,13 +285,24 @@ class KvStoreDb : public DualNode {
   // get current snapshot of SPT(s) information
   thrift::SptInfos processFloodTopoGet() noexcept;
 
+  /*
+   * [KvStore Peer State]
+   *
+   * KvStore maintains Finite State Machine(FSM) to manage peer state.
+   * It exposes multiple helper functions.
+   */
+
   // util function to fetch peer by its state
   std::vector<std::string> getPeersByState(thrift::KvStorePeerState state);
 
-  inline bool
-  getInitialSyncedWithPeers() const {
-    return initialSyncCompleted_;
-  }
+  // util funtion to fetch KvStorePeerState
+  std::optional<thrift::KvStorePeerState> getCurrentState(
+      std::string const& peerName);
+
+  // util function for state transition
+  static thrift::KvStorePeerState getNextState(
+      std::optional<thrift::KvStorePeerState> const& currState,
+      KvStorePeerEvent const& event);
 
   /*
    * [Open/R Initialization]
@@ -290,39 +315,40 @@ class KvStoreDb : public DualNode {
    */
   void processInitializationEvent();
 
-  // util function for state transition
-  static thrift::KvStorePeerState getNextState(
-      std::optional<thrift::KvStorePeerState> const& currState,
-      KvStorePeerEvent const& event);
-
-  // add new key-vals to kvstore_'s key-vals
-  void setKeyVals(thrift::KeySetParams&& setParams);
-
-  // Set key-value in KvStore with specified version. If version is 0, the one
-  // greater than the latest known will be used. KvStore will manage
-  // ttl-refreshing for self-originated key-vals, aka, key-vals sent via queue.
-  void setSelfOriginatedKey(
-      std::string const& key, std::string const& value, uint32_t version);
-
-  // Set specified key-value in KvStore. This is an authoratitive call, meaning
-  // if someone else advertises the same key we try to win over it by setting
-  // key-value with higher version. By default key is published to default area.
-  // KvStore will manage ttl-refreshing for self-originated key-vals, aka,
-  // key-vals sent via queue.
+  /*
+   * [Self Originated Key Management]
+   *
+   * Public API used for self-originated key management including:
+   *    1) persistSelfOriginatedKey
+   *      Set specified key-value in KvStore. This is an authoratitive call,
+   *      meaning if someone else advertises the same key we try to win over
+   *      it by setting key-value with higher version. By default key is
+   *      published to default area.
+   *    2) setSelfOriginatedKey
+   *      Set key-value in KvStore with specified version. If version is 0,
+   *      the one greater than the latest known will be used.
+   *    3) unsetSelfOriginatedKey
+   *      Set new value for self-originated key and stop ttl-refreshing by
+   *      clearing from local cache.
+   *    4) eraseSelfOriginatedKey
+   *      Erase key from local cache(DO NOT SET NEW VALUE), thus stopping
+   *      ttl-refreshing.
+   */
   void persistSelfOriginatedKey(
       std::string const& key, std::string const& value);
-
-  // Set new value for self-originated key and stop ttl-refreshing by clearing
-  // from local cache.
+  void setSelfOriginatedKey(
+      std::string const& key, std::string const& value, uint32_t version);
   void unsetSelfOriginatedKey(std::string const& key, std::string const& value);
-
-  // Erase key from local cache, thus stopping ttl-refreshing.
   void eraseSelfOriginatedKey(std::string const& key);
 
  private:
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
   KvStoreDb& operator=(KvStoreDb const&) = delete;
+
+  /*
+   * Private methods
+   */
 
   // util function to log state transition
   void logStateTransition(
@@ -533,7 +559,10 @@ class KvStoreDb : public DualNode {
   /*
    * [Self Originated Key Management]
    *
-   * set of util method to manage self-originiated keys with:
+   * KvStoreDb will manage ttl-refreshing for self-originated key-vals sent via
+   * queue.
+   *
+   * It provides set of util methods to manage self-originiated keys with:
    *    1) key persistence
    *    2) key ttl-refreshing
    * update ttls for all self-originated key-vals
@@ -544,9 +573,9 @@ class KvStoreDb : public DualNode {
   void advertiseSelfOriginatedKeys(
       const std::unordered_set<std::string>& pendingKeysToAdvertise);
 
-  //
-  // Private variables
-  //
+  /*
+   * Private variables
+   */
 
   // Kv store parameters
   KvStoreParams& kvParams_;
@@ -560,10 +589,6 @@ class KvStoreDb : public DualNode {
   // [TO BE DEPRECATED]
   // zmq ROUTER socket for requesting full dumps from peers
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
-
-  //
-  // Mutable state
-  //
 
   // KvStore peer struct to convey peer information
   struct KvStorePeer {
@@ -701,12 +726,12 @@ class KvStoreDb : public DualNode {
   OpenrEventBase* evb_{nullptr};
 };
 
-// The class represent a server on either the thrift server port or the
-// it listens for submission on REP socket. The configuration
-// is passed via constructor arguments. This class instantiates KV Store DB
-// for each area. The list of areas is passed in the constructor.
-// The messages received are either sent to a specific instance of
-// KvStore DB or to all instances.
+/*
+ * The class represents a server on which the requests are listened via thrift
+ * or ZMQ channel. The configuration is passed via constructor arguments.
+ * This class instantiates individual KvStoreDb per area. Area config is
+ * passed in the constructor.
+ */
 
 class KvStore final : public OpenrEventBase {
  public:
@@ -730,36 +755,48 @@ class KvStore final : public OpenrEventBase {
 
   ~KvStore() override = default;
 
-  // override stop() method of OpenrEventBase
   void stop() override;
 
-  // Public APIs
+  /*
+   * [Open/R Initialization]
+   *
+   * This is the callback function used by KvStoreDb to mark initial
+   * KVSTORE_SYNC stage done during Open/R initialization sequence.
+   */
+  void initialKvStoreDbSynced();
 
+  /*
+   * [Public APIs]
+   *
+   * KvStore exposes multiple public APIs for external caller to be able to
+   *  1) dump/get/set keys;
+   *  2) dump hashes;
+   *  3) dump self-originated keys;
+   */
   folly::SemiFuture<std::unique_ptr<thrift::Publication>> getKvStoreKeyVals(
       std::string area, thrift::KeyGetParams keyGetParams);
 
   folly::SemiFuture<folly::Unit> setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
 
-  // return publication for each area in selectAreas or all areas if select
-  // areas is empty
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
   dumpKvStoreKeys(
       thrift::KeyDumpParams keyDumpParams,
       std::set<std::string> selectAreas = {});
 
-  // return self-originated key-vals for given area
   folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
   dumpKvStoreSelfOriginatedKeys(std::string area);
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>> dumpKvStoreHashes(
       std::string area, thrift::KeyDumpParams keyDumpParams);
 
+  /*
+   * [Public APIs]
+   *
+   * Set of APIs to interact with KvStore peers
+   */
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>> getKvStorePeers(
       std::string area);
-
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
-  getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
 
   folly::SemiFuture<folly::Unit> addUpdateKvStorePeers(
       std::string area, thrift::PeersMap peersToAdd);
@@ -767,6 +804,11 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<folly::Unit> deleteKvStorePeers(
       std::string area, std::vector<std::string> peersToDel);
 
+  /*
+   * [Public APIs]
+   *
+   * Set of APIs to interact with DUAL(flooding-optimization) related structure.
+   */
   folly::SemiFuture<std::unique_ptr<thrift::SptInfos>> getSpanningTreeInfos(
       std::string area);
 
@@ -775,6 +817,14 @@ class KvStore final : public OpenrEventBase {
 
   folly::SemiFuture<folly::Unit> processKvStoreDualMessage(
       std::string area, thrift::DualMessages dualMessages);
+
+  /*
+   * [Public APIs]
+   *
+   * Set of APIs to retrieve internal state including: state/counter/reader/etc.
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+  getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
 
   folly::SemiFuture<std::map<std::string, int64_t>> getCounters();
 
@@ -785,18 +835,14 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
   getKvStorePeerState(std::string const& area, std::string const& peerName);
 
-  // Callback function for KvStoreDb to indicate initial KvStore sync is
-  // is done within configured area during Open/R initialization procedure.
-  void initialKvStoreDbSynced();
-
  private:
   // disable copying
   KvStore(KvStore const&) = delete;
   KvStore& operator=(KvStore const&) = delete;
 
-  //
-  // Private methods
-  //
+  /*
+   * Private methods
+   */
 
   // [TO BE DEPRECATED]
   void prepareSocket(
@@ -813,28 +859,38 @@ class KvStore final : public OpenrEventBase {
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       const std::string& requestId, fbzmq::Message&& msg);
 
+  // util function to process peer updates
   void processPeerUpdates(PeerEvent&& event);
 
-  // Wrapper function that calls functions to update the kv store based on
-  // type of update
+  /*
+   * [Self Originated Key Management]
+   *
+   * Wrapper function to redirect request to update specific kvStoreDb
+   */
   void processKeyValueRequest(KeyValueRequest&& kvRequest);
 
+  /*
+   * [Counter]
+   *
+   * util methods called by getCounters() public API
+   */
   std::map<std::string, int64_t> getGlobalCounters() const;
-
   void initGlobalCounters();
 
-  // helper for public semifuture API. Returns a reference to the relevant
-  // KvStoreDb (to be captured and operated on in this event loop) or throws an
-  // instance of OpenrError
-  // for backward compaytibilty, will allow getting single configured area if
-  // default area is requested or is the only one configured
-  // pass in id for caller for counting backward compatibility requests
+  /*
+   * This is a helper function which returns a reference to the relevant
+   * KvStoreDb or throws an instance of OpenrError for backward compaytibilty.
+   *
+   * Backward compatibility:
+   * It allows getting single configured area if default area is requested or
+   * is the only one configured areaId for areaId migration purpose.
+   */
   KvStoreDb& getAreaDbOrThrow(
       std::string const& areaId, std::string const& caller);
 
-  //
-  // Private variables
-  //
+  /*
+   * Private variables
+   */
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
