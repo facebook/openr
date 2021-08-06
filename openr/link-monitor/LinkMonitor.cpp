@@ -286,7 +286,7 @@ LinkMonitor::LinkMonitor(
       "link_monitor.advertise_adjacencies", fb303::SUM);
   fb303::fbData->addStatExportType("link_monitor.advertise_links", fb303::SUM);
   fb303::fbData->addStatExportType(
-      "link_monitor.thrift.failure.getAllLinks", fb303::SUM);
+      "link_monitor.sync_interface.failure", fb303::SUM);
 }
 
 void
@@ -966,7 +966,7 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
 
 void
 LinkMonitor::syncInterfaceTask() noexcept {
-  LOG(INFO) << "Starting interface syncing fiber task";
+  LOG(INFO) << "[Interface Sync] Starting interface syncing fiber task";
 
   // ATTN: use initial timeoff as the default value to wait for
   // small amount of time when thread starts before syncing
@@ -985,45 +985,57 @@ LinkMonitor::syncInterfaceTask() noexcept {
       expBackoff_.reportSuccess();
       timeout = std::chrono::milliseconds(Constants::kPlatformSyncInterval);
 
-      VLOG(2) << "InterfaceDb Sync is successful";
+      VLOG(2) << fmt::format(
+          "[Interface Sync] Successfully synced interfaceDb. Schedule next sync in {}ms",
+          timeout.count());
     } else {
       // Apply exponential backoff and schedule next run
       expBackoff_.reportError();
       timeout = expBackoff_.getTimeRemainingUntilRetry();
 
       fb303::fbData->addStatValue(
-          "link_monitor.thrift.failure.getAllLinks", 1, fb303::SUM);
+          "link_monitor.sync_interface.failure", 1, fb303::SUM);
 
       LOG(ERROR) << fmt::format(
-          "InterfaceDb Sync failed, apply exp backoff and retry in {}ms",
+          "[Interface Sync] Failed to sync interfaceDb, apply exp backoff and retry in {}ms",
           timeout.count());
     }
   } // while
 
-  LOG(INFO) << "Interface-syncing fiber task got stopped.";
+  LOG(INFO) << "[Interface Sync] Interface-syncing fiber task got stopped.";
 }
 
 bool
 LinkMonitor::syncInterfaces() {
-  VLOG(1) << "Syncing Interface DB from Netlink Platform";
-
   // Retrieve latest link snapshot from NetlinkProtocolSocket
-  InterfaceDatabase ifDb;
+  folly::Try<InterfaceDatabase> maybeIfDb;
   try {
-    ifDb = getAllLinks().get();
-  } catch (const std::exception& e) {
-    LOG(ERROR) << "Failed to sync linkDb from NetlinkProtocolSocket. Error: "
-               << folly::exceptionStr(e);
+    maybeIfDb = semifuture_getAllLinks().getTry(Constants::kReadTimeout);
+    if (not maybeIfDb.hasValue()) {
+      LOG(ERROR) << fmt::format(
+          "[Interface Sync] Failed to sync interfaceDb. Exception: {}",
+          folly::exceptionStr(maybeIfDb.exception()));
+
+      return false;
+    }
+  } catch (const folly::FutureTimeout&) {
+    LOG(ERROR)
+        << "[Interface Sync] Timeout retrieving links. Retry in a moment.";
+
     return false;
   }
 
-  LOG(INFO)
-      << fmt::format("Retrieved {} links from system Netlink.", ifDb.size());
-
+  // ATTN: treat empty link as failure to make sure LinkMonitor can keep
+  // retrying to retrieve data from underneath platform.
+  InterfaceDatabase ifDb = maybeIfDb.value();
   if (ifDb.empty()) {
-    LOG(ERROR) << "No interface found.";
+    LOG(ERROR) << "[Interface Sync] No interface found. Retry in a moment.";
     return false;
   }
+
+  LOG(INFO) << fmt::format(
+      "[Interface Sync] Successfully retrieved {} links from netlink.",
+      ifDb.size());
 
   // Make updates in InterfaceEntry objects
   for (const auto& info : ifDb) {
@@ -1435,7 +1447,7 @@ LinkMonitor::getAdjacencies(thrift::AdjacenciesFilter filter) {
 }
 
 folly::SemiFuture<InterfaceDatabase>
-LinkMonitor::getAllLinks() {
+LinkMonitor::semifuture_getAllLinks() {
   VLOG(2) << "Querying all links and their addresses from system";
   return collectAll(nlSock_->getAllLinks(), nlSock_->getAllIfAddresses())
       .deferValue(

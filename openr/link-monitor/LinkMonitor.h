@@ -35,8 +35,8 @@
 
 namespace openr {
 
-// Pair <remoteNodeName, interface>
-using AdjacencyKey = std::pair<std::string, std::string>;
+using AdjacencyKey = std::
+    pair<std::string /* remoteNodeName */, std::string /* localInterfaceName*/>;
 
 struct AdjacencyValue {
   thrift::PeerSpec peerSpec;
@@ -86,13 +86,16 @@ struct KvStorePeerValue {
         establishedSparkNeighbors(std::move(establishedSparkNeighbors)) {}
 };
 
-//
-// This class is responsible for reacting to neighbor
-// up and down events. The reaction constitutes of starting
-// a peering session on the new link and reporting the link
-// as an adjacency.
-//
-
+/*
+ * This class is mainly responsible for
+ *    - Monitor system interface status & address;
+ *    - Initiate neighbor discovery for newly added links;
+ *    - Maintain KvStore peering with discovered neighbors;
+ *    - Maintain `AdjacencyDatabase` of current node in KvStore by injecting
+ *      `adj:<node-name>`;
+ *
+ * Please refer to `openr/docs/Protocol_Guide/LinkMonitor.md` for more details.
+ */
 class LinkMonitor final : public OpenrEventBase {
  public:
   LinkMonitor(
@@ -155,7 +158,7 @@ class LinkMonitor final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   getAdjacencies(thrift::AdjacenciesFilter filter = {});
-  folly::SemiFuture<InterfaceDatabase> getAllLinks();
+  folly::SemiFuture<InterfaceDatabase> semifuture_getAllLinks();
 
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
   static std::unordered_map<std::string, thrift::PeerSpec>

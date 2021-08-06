@@ -2355,7 +2355,7 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
   SetUp({});
 
   // Empty links
-  auto links = linkMonitor->getAllLinks().get();
+  auto links = linkMonitor->semifuture_getAllLinks().get();
   EXPECT_EQ(0, links.size());
 
   // Set addresses and links
@@ -2371,7 +2371,7 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
       nlSock->addIfAddress(fbnl::utils::createIfAddress(2, v6Addr)).get());
 
   // Verify link status and addresses shows up
-  links = linkMonitor->getAllLinks().get();
+  links = linkMonitor->semifuture_getAllLinks().get();
   ASSERT_EQ(1, links.size());
 
   const auto& link = links.at(0);
