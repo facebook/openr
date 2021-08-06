@@ -1629,7 +1629,7 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   folly::Baton waitBaton;
   int scheduleAt{0};
   // wait to sync kvstore. Set as 100ms sine p99 of KvStore convergece completed
-  // within 99ms. Ref: https://fburl.com/unidash/htfg4joa.
+  // within 99ms as of today.
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 100), [&]() noexcept {
         // std::this_thread::sleep_for(std::chrono::milliseconds(100));

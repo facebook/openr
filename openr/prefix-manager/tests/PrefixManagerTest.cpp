@@ -15,6 +15,7 @@
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
+#include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -684,7 +685,7 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
       [&]() noexcept {
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
-        EXPECT_TRUE(maybeValue.has_value());
+        ASSERT_TRUE(maybeValue.has_value());
         keyVersion = *maybeValue.value().version_ref();
         auto db = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
@@ -1462,7 +1463,6 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
 
     auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A, B, C});
     tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
-
     return tConfig;
   }
 
@@ -3243,6 +3243,85 @@ TEST_F(PrefixManagerKeyValRequestQueueTestFixture, WithdrawPrefix) {
         evb.stop();
       });
 
+  evb.run();
+}
+
+class PrefixManagerInitialKvStoreSyncTestFixture
+    : public PrefixManagerTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = getBasicOpenrConfig(nodeId_);
+    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    tConfig.enable_fib_ack_ref() = true;
+    // Enable BGP peering.
+    tConfig.enable_bgp_peering_ref() = true;
+    tConfig.bgp_config_ref() = thrift::BgpConfig();
+    tConfig.enable_initialization_process_ref() = true;
+    return tConfig;
+  }
+};
+
+/**
+ * Verifies that in OpenR initialization procedure, initial syncKvStore() is
+ * triggered after all dependent signals are received.
+ */
+TEST_F(PrefixManagerInitialKvStoreSyncTestFixture, TriggerInitialKvStoreTest) {
+  int scheduleAt{0};
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
+
+  auto prefixKey = PrefixKey(
+      nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix_ref()), kTestingAreaName);
+  auto prefixKeyStr = prefixKey.getPrefixKey();
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // Initial prefix updates from BgpSpeaker
+        PrefixEvent bgpPrefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1Bgp, prefixEntry7});
+        prefixUpdatesQueue.push(std::move(bgpPrefixEvent));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // No pprefixes advertised into KvStore.
+        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+
+        // Initial full Fib sync.
+        DecisionRouteUpdate fullSyncUpdates;
+        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+        fullSyncUpdates.mplsRoutesToUpdate = {
+            {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // No pprefixes advertised into KvStore.
+        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+
+        // Publish initial kvStoreSynced signal.
+        kvStoreWrapper->publishKvStoreSynced();
+        kvStoreWrapper->recvKvStoreSyncedSignal();
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // Initial KvStore sync happens after initial full Fib updates and all
+        // prefix updates are received.
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(2, pub.keyVals_ref()->size());
+        evb.stop();
+      });
+  // let magic happen
   evb.run();
 }
 

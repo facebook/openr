@@ -235,6 +235,12 @@ class PrefixManager final : public OpenrEventBase {
       const std::string& policyName);
 
   /*
+   * Trigger inital prefix sync after all dependent OpenR initialization signals
+   * are reveived.
+   */
+  void triggerInitialPrefixDbSync();
+
+  /*
    * One prefixEntry is ready to be advertised iff
    * - If prependLabel is set, the associated label route should have been
    *   programmed locally.
@@ -329,6 +335,9 @@ class PrefixManager final : public OpenrEventBase {
   // this node name
   const std::string nodeId_;
 
+  // Openr config
+  std::shared_ptr<const Config> config_;
+
   // map from area id to area policy
   std::unordered_map<std::string, std::optional<std::string>> areaToPolicy_;
 
@@ -346,10 +355,6 @@ class PrefixManager final : public OpenrEventBase {
 
   // module ptr to interact with KvStore
   KvStore* kvStore_{nullptr};
-
-  // Boolean flag indicating whether KvStore synced signal is received in OpenR
-  // initialization procedure.
-  bool initialKvStoreSynced_{false};
 
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
@@ -492,12 +497,26 @@ class PrefixManager final : public OpenrEventBase {
    */
   std::unordered_set<int32_t> programmedLabels_;
 
-  // Enable FIB-ACK to enforce route program ordering, aka, to-add routes should
-  // be programmed at originator ahead of being advertised to peers.
-  bool fibAckEnabled_{false};
+  // Boolean flag indicating if kvStoreSynced signal is received from KvStore in
+  // OpenR initialization procedure.
+  bool initialKvStoreSynced_{false};
 
-  // Send update requests to KvStore via queue
-  bool enableKvStoreRequestQueue_{false};
+  /*
+   * Set of prefix types for which PrefixManager awaits in OpenR initialization
+   * procedure. This would be populated based on config
+   * - `RIB` is always added to set. For standalone node or first node brought
+   *   up in the network, there will be empty RIB route updates from OpenR/Fib
+   *   in initialization procedure.
+   * - `BGP` is added if BGP peering is enabled in config.
+   * - `VIP` is added is VIP plugin is enabled in config.
+   *
+   * As we receive the first prefix update request from these types we remove
+   * them from this set. Empty set indicates all expected prefix types are
+   * initialized. First update from Fib will remove `RIB` from this set (Note
+   * Fib sends routes rather than prefixes to PrefixManager, here we leverage
+   * the concept of `RIB` for simplicity).
+   */
+  std::unordered_set<thrift::PrefixType> uninitializedPrefixTypes_{};
 }; // PrefixManager
 
 } // namespace openr

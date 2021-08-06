@@ -178,6 +178,11 @@ class KvStoreWrapper {
   std::vector<thrift::KvStoreAreaSummary> getSummary(
       std::set<std::string> selectAreas);
 
+  void
+  publishKvStoreSynced() {
+    kvStoreUpdatesQueue_.push(Publication(true /*kvStoreSynced*/));
+  }
+
   /**
    * Utility function to get peer-spec for owned KvStore
    */

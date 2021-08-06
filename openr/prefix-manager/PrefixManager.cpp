@@ -20,6 +20,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/kvstore/KvStore.h>
 
@@ -53,6 +54,7 @@ PrefixManager::PrefixManager(
     std::shared_ptr<const Config> config,
     KvStore* kvStore)
     : nodeId_(config->getNodeName()),
+      config_(config),
       ttlKeyInKvStore_(std::chrono::milliseconds(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
@@ -62,12 +64,17 @@ PrefixManager::PrefixManager(
       preferOpenrOriginatedRoutes_(
           config->getConfig().get_prefer_openr_originated_routes()),
       enableNewPrefixFormat_(
-          config->getConfig().get_enable_new_prefix_format()),
-      fibAckEnabled_(config->getConfig().get_enable_fib_ack()),
-      enableKvStoreRequestQueue_(
-          config->getConfig().get_enable_kvstore_request_queue()) {
+          config->getConfig().get_enable_new_prefix_format()) {
   CHECK(kvStore_);
   CHECK(config);
+
+  // Always add RIB type prefixes, since Fib routes updates are always expected
+  // in OpenR initialization procedure.
+  uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
+  if (config->getConfig().get_enable_bgp_peering()) {
+    uninitializedPrefixTypes_.emplace(thrift::PrefixType::BGP);
+  }
+  // TODO: Handle VIP after VipInjector supports GR.
 
   if (auto policyConf = config->getAreaPolicies()) {
     policyManager_ = std::make_unique<PolicyManager>(*policyConf);
@@ -96,17 +103,34 @@ PrefixManager::PrefixManager(
       true /* useThrottle */);
 
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
-  initialSyncKvStoreTimer_ = folly::AsyncTimeout::make(
-      *getEvb(), [this]() noexcept { syncKvStore(); });
-  initialSyncKvStoreTimer_->scheduleTimeout(initialPrefixHoldTime);
+  // TODO: deprecate this after prefix_hold_time_s after OpenR initialization
+  // procedure is stable.
+  if (not config_->getConfig().get_enable_initialization_process()) {
+    initialSyncKvStoreTimer_ =
+        folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+          LOG(INFO) << "syncKvStore() from initialSyncKvStoreTimer_.";
+          syncKvStore();
+        });
+    initialSyncKvStoreTimer_->scheduleTimeout(initialPrefixHoldTime);
+  }
 
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kKvStoreSyncThrottleTimeout, [this]() noexcept {
         // No write to KvStore before initial KvStore sync
-        if (initialSyncKvStoreTimer_->isScheduled()) {
-          return;
+        if (config_->getConfig().get_enable_initialization_process()) {
+          // Signal based initialization process.
+          if ((not uninitializedPrefixTypes_.empty()) or
+              (not initialKvStoreSynced_)) {
+            return;
+          }
+        } else {
+          // Timer based initialization process.
+          if (initialSyncKvStoreTimer_->isScheduled()) {
+            return;
+          }
         }
+
         syncKvStore();
       });
 
@@ -142,13 +166,25 @@ PrefixManager::PrefixManager(
       }
 
       switch (update.eventType) {
-      case PrefixEventType::ADD_PREFIXES:
+      case PrefixEventType::ADD_PREFIXES: {
         advertisePrefixesImpl(std::move(update.prefixes), dstAreas);
         advertisePrefixesImpl(
             std::move(std::move(update.prefixEntries)),
             dstAreas,
             update.policyName);
+
+        if (uninitializedPrefixTypes_.erase(update.type)) {
+          // Received initial prefixes of certain type in OpenR initialization
+          // process.
+          LOG(INFO) << fmt::format(
+              "[Initialization] Received {} prefixes of type {}.",
+              update.prefixes.size() + update.prefixEntries.size(),
+              apache::thrift::util::enumNameSafe<thrift::PrefixType>(
+                  update.type));
+          triggerInitialPrefixDbSync();
+        }
         break;
+      }
       case PrefixEventType::WITHDRAW_PREFIXES:
         withdrawPrefixesImpl(update.prefixes);
         withdrawPrefixEntriesImpl(update.prefixEntries);
@@ -215,6 +251,7 @@ PrefixManager::PrefixManager(
         LOG(INFO)
             << "[Initialization] All prefix keys are retrieved from KvStore.";
         initialKvStoreSynced_ = true;
+        triggerInitialPrefixDbSync();
       } else {
         // TODO: Do not call KvStoreClient_ to process publications after
         // persistKey() and clearKey() are natively supported in KvStore.
@@ -514,7 +551,7 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     // advertise key to `KvStore`
-    if (enableKvStoreRequestQueue_) {
+    if (config_->getConfig().get_enable_kvstore_request_queue()) {
       auto persistPrefixKeyVal =
           PersistKeyValueRequest(AreaId{toArea}, prefixKeyStr, prefixDbStr);
       kvRequestQueue_.push(std::move(persistPrefixKeyVal));
@@ -581,7 +618,7 @@ PrefixManager::deleteKvStoreKeyHelper(
     deletedPrefixDb.prefixEntries_ref() = {entry};
 
     // Remove prefix from KvStore and flood deletion by setting deleted value.
-    if (enableKvStoreRequestQueue_) {
+    if (config_->getConfig().get_enable_kvstore_request_queue()) {
       auto unsetPrefixRequest = ClearKeyValueRequest(
           AreaId{area},
           prefixStr,
@@ -603,10 +640,23 @@ PrefixManager::deleteKvStoreKeyHelper(
   }
 }
 
+void
+PrefixManager::triggerInitialPrefixDbSync() {
+  if (not config_->getConfig().get_enable_initialization_process()) {
+    return;
+  }
+  if (uninitializedPrefixTypes_.empty() and initialKvStoreSynced_) {
+    // Trigger initial syncKvStore(), after receiving prefixes of all expected
+    // types and all inital prefix keys from KvStore.
+    LOG(INFO) << "[Initialization] Triggering initial syncKvStore().";
+    syncKvStore();
+  }
+}
+
 bool
 PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   // Skip the check if FIB-ACK feature is disabled.
-  if (not fibAckEnabled_) {
+  if (not config_->getConfig().get_enable_fib_ack()) {
     return true;
   }
   // If prepend label is set, the associated label route should have been
@@ -1483,9 +1533,8 @@ PrefixManager::processOriginatedPrefixes() {
 
 void
 PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
-  if (fibAckEnabled_) {
-    // Store programmed label/unicast routes info if FIB-ACK feature is
-    // enabled.
+  if (config_->getConfig().get_enable_fib_ack()) {
+    // Store programmed label/unicast routes info if FIB-ACK feature is enabled.
     storeProgrammedRoutes(fibRouteUpdate);
   }
 
@@ -1499,6 +1548,11 @@ PrefixManager::storeProgrammedRoutes(
   // In case of full sync, reset previous stored programmed routes.
   if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC) {
     programmedLabels_.clear();
+
+    if (uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
+      LOG(INFO) << "[Initialization] Received initial RIB routes.";
+      triggerInitialPrefixDbSync();
+    }
   }
 
   // Handle programmed MPLS routes.
