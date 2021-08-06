@@ -126,9 +126,12 @@ class LinkMonitor final : public OpenrEventBase {
    */
   void stop() override;
 
-  // set in mock mode
-  // under mock mode, will report tcp://[::]:port as kvstore communication
-  // URL instead of using link local address
+  /*
+   * Mock mode
+   *
+   * under mock mode, LinkMonitor will report tcp://[::]:port as kvstore
+   * communication URL instead of using link local address
+   */
   void
   setAsMockMode() {
     mockMode_ = true;
@@ -146,25 +149,20 @@ class LinkMonitor final : public OpenrEventBase {
    * - Dump adjacency database information
    * - Dump links information from netlinkProtocolSocket
    */
-  folly::SemiFuture<folly::Unit> setNodeOverload(bool isOverloaded);
-  folly::SemiFuture<folly::Unit> setInterfaceOverload(
+  folly::SemiFuture<folly::Unit> semifuture_setNodeOverload(bool isOverloaded);
+  folly::SemiFuture<folly::Unit> semifuture_setInterfaceOverload(
       std::string interfaceName, bool isOverloaded);
-  folly::SemiFuture<folly::Unit> setLinkMetric(
+  folly::SemiFuture<folly::Unit> semifuture_setLinkMetric(
       std::string interfaceName, std::optional<int32_t> overrideMetric);
-  folly::SemiFuture<folly::Unit> setAdjacencyMetric(
+  folly::SemiFuture<folly::Unit> semifuture_setAdjacencyMetric(
       std::string interfaceName,
       std::string adjNodeName,
       std::optional<int32_t> overrideMetric);
-  folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
+  folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
+  semifuture_getInterfaces();
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
-  getAdjacencies(thrift::AdjacenciesFilter filter = {});
+  semifuture_getAdjacencies(thrift::AdjacenciesFilter filter = {});
   folly::SemiFuture<InterfaceDatabase> semifuture_getAllLinks();
-
-  // create required peers <nodeName: PeerSpec> map from current adjacencies_
-  static std::unordered_map<std::string, thrift::PeerSpec>
-  getPeersFromAdjacencies(
-      const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
-      const std::string& area);
 
  private:
   // make no-copy
@@ -207,30 +205,26 @@ class LinkMonitor final : public OpenrEventBase {
   InterfaceEntry* FOLLY_NULLABLE
   getOrCreateInterfaceEntry(const std::string& ifName);
 
-  // call advertiseInterfaces() and advertiseRedistAddrs()
-  // throttle updates if there's any unstable interface by
-  // getRetryTimeOnUnstableInterfaces() time
-  // used in advertiseIfaceAddrThrottled_ and advertiseIfaceAddrTimer_
-  // called upon interface change in getOrCreateInterfaceEntry()
-  void advertiseIfaceAddr();
-
   /*
    * [Kvstore] PEER UP/DOWN events sent to Kvstore over peerUpdatesQueue_
+   *
+   * 1) updateKvStorePeerNeighborUp:
+   *    Called upon Spark neighborUp events.
+   *    - If there's only one adj for this peer, we create new KvStorePeerValue
+   *      and send ADD_PEER request to KvStore;
+   *    - If there are established adjs, just update the existing KvStorePeer
+   *      struct. DO NOT report ADD_PEER event again.
+   * 2) updateKvStorePeerNeighborDown:
+   *    Called upon Spark neighborRestarting, neighborDown events.
+   *    - In single adj case, send DEL_PEER request;
+   *    - In parallel adj case, update peer spec with left adj peer spec, send
+   *      ADD_PEER request if new peer spec is different;
    */
-
-  // Called upon spark neighborUp events
-  // If there's only one adj for this peer, we create new KvStorePeerValue and
-  // send peer add requrest to KvStore. If there are established adjs, only
-  // update establishedSparkNeighbors in existing KvStorePeer struct
   void updateKvStorePeerNeighborUp(
       const std::string& area,
       const AdjacencyKey& adjId,
       const AdjacencyValue& adjVal);
 
-  // Called upon spark neighborRestarting, neighborDown events
-  // In single adj case, send KvStorePeer Delete Request.
-  // In parallel adj case, update peer spec with left adj peer spec, send
-  // KvStore Peer Add request if new peer spec is different.
   void updateKvStorePeerNeighborDown(
       const std::string& area,
       const AdjacencyKey& adjId,
@@ -268,6 +262,13 @@ class LinkMonitor final : public OpenrEventBase {
    * [Util function] general function used for util purpose
    */
 
+  // call advertiseInterfaces() and advertiseRedistAddrs()
+  // throttle updates if there's any unstable interface by
+  // getRetryTimeOnUnstableInterfaces() time
+  // used in advertiseIfaceAddrThrottled_ and advertiseIfaceAddrTimer_
+  // called upon interface change in getOrCreateInterfaceEntry()
+  void advertiseIfaceAddr();
+
   // get next try time, which should be the minimum remaining time among
   // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
   // return 0 if no more unstable interface
@@ -276,53 +277,40 @@ class LinkMonitor final : public OpenrEventBase {
   // build AdjacencyDatabase
   thrift::AdjacencyDatabase buildAdjacencyDatabase(const std::string& area);
 
-  // submit events to monitor
-  void logNeighborEvent(NeighborEvent const& event);
-
-  // link events
-  void logLinkEvent(
-      const std::string& iface,
-      bool wasUp,
-      bool isUp,
-      std::chrono::milliseconds backoffTime);
-
-  // peer events
-  void logPeerEvent(
-      const std::string& event,
-      const std::string& peerName,
-      const thrift::PeerSpec& peerSpec);
-
   // returns any(a.shouldDiscoverOnIface(iface) for a in areas_)
   bool anyAreaShouldDiscoverOnIface(std::string const& iface) const;
 
   // returns any(a.anyAreaShouldRedistributeIface(iface) for a in areas_)
   bool anyAreaShouldRedistributeIface(std::string const& iface) const;
 
+  /*
+   * [Logging]
+   *
+   * events logging submitted to Monitor
+   */
+  void logNeighborEvent(NeighborEvent const& event);
+  void logLinkEvent(
+      const std::string& iface,
+      bool wasUp,
+      bool isUp,
+      std::chrono::milliseconds backoffTime);
+  void logPeerEvent(
+      const std::string& event,
+      const std::string& peerName,
+      const thrift::PeerSpec& peerSpec);
+
+  /*
+   * [Segment Routing]
+   *
+   * util functions to support label allocation in dynamic/static way
+   */
+
   // Get the label range from the configuration
-  const std::pair<int32_t, int32_t>
-  getNodeSegmentLabelRange(AreaConfiguration const& areaConfig) const {
-    CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
-    std::pair<int32_t, int32_t> labelRange{
-        *areaConfig.getNodeSegmentLabelConfig()
-             ->get_node_segment_label_range()
-             ->start_label_ref(),
-        *areaConfig.getNodeSegmentLabelConfig()
-             ->get_node_segment_label_range()
-             ->end_label_ref()};
-    return labelRange;
-  }
+  const std::pair<int32_t, int32_t> getNodeSegmentLabelRange(
+      AreaConfiguration const& areaConfig) const;
 
   // Get static area node segment label
-  int32_t
-  getStaticNodeSegmentLabel(AreaConfiguration const& areaConfig) const {
-    CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
-    if (areaConfig.getNodeSegmentLabelConfig()
-            ->node_segment_label_ref()
-            .has_value()) {
-      return *areaConfig.getNodeSegmentLabelConfig()->node_segment_label_ref();
-    }
-    return 0;
-  }
+  int32_t getStaticNodeSegmentLabel(AreaConfiguration const& areaConfig) const;
 
   //
   // immutable state/invariants
@@ -361,7 +349,6 @@ class LinkMonitor final : public OpenrEventBase {
   //
 
   // flag to indicate whether it's running in mock mode or not
-  // TODO: Get rid of mockMode_
   bool mockMode_{false};
 
   // LinkMonitor config attributes

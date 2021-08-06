@@ -997,41 +997,45 @@ OpenrCtrlHandler::semifuture_subscribeAndGetFibDetail() {
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setNodeOverload() {
   CHECK(linkMonitor_);
-  return linkMonitor_->setNodeOverload(true);
+  return linkMonitor_->semifuture_setNodeOverload(true);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetNodeOverload() {
   CHECK(linkMonitor_);
-  return linkMonitor_->setNodeOverload(false);
+  return linkMonitor_->semifuture_setNodeOverload(false);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceOverload(
     std::unique_ptr<std::string> interfaceName) {
   CHECK(linkMonitor_);
-  return linkMonitor_->setInterfaceOverload(std::move(*interfaceName), true);
+  return linkMonitor_->semifuture_setInterfaceOverload(
+      std::move(*interfaceName), true);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetInterfaceOverload(
     std::unique_ptr<std::string> interfaceName) {
   CHECK(linkMonitor_);
-  return linkMonitor_->setInterfaceOverload(std::move(*interfaceName), false);
+  return linkMonitor_->semifuture_setInterfaceOverload(
+      std::move(*interfaceName), false);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceMetric(
     std::unique_ptr<std::string> interfaceName, int32_t overrideMetric) {
   CHECK(linkMonitor_);
-  return linkMonitor_->setLinkMetric(std::move(*interfaceName), overrideMetric);
+  return linkMonitor_->semifuture_setLinkMetric(
+      std::move(*interfaceName), overrideMetric);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetInterfaceMetric(
     std::unique_ptr<std::string> interfaceName) {
   CHECK(linkMonitor_);
-  return linkMonitor_->setLinkMetric(std::move(*interfaceName), std::nullopt);
+  return linkMonitor_->semifuture_setLinkMetric(
+      std::move(*interfaceName), std::nullopt);
 }
 
 folly::SemiFuture<folly::Unit>
@@ -1040,7 +1044,7 @@ OpenrCtrlHandler::semifuture_setAdjacencyMetric(
     std::unique_ptr<std::string> adjNodeName,
     int32_t overrideMetric) {
   CHECK(linkMonitor_);
-  return linkMonitor_->setAdjacencyMetric(
+  return linkMonitor_->semifuture_setAdjacencyMetric(
       std::move(*interfaceName), std::move(*adjNodeName), overrideMetric);
 }
 
@@ -1049,14 +1053,14 @@ OpenrCtrlHandler::semifuture_unsetAdjacencyMetric(
     std::unique_ptr<std::string> interfaceName,
     std::unique_ptr<std::string> adjNodeName) {
   CHECK(linkMonitor_);
-  return linkMonitor_->setAdjacencyMetric(
+  return linkMonitor_->semifuture_setAdjacencyMetric(
       std::move(*interfaceName), std::move(*adjNodeName), std::nullopt);
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
 OpenrCtrlHandler::semifuture_getInterfaces() {
   CHECK(linkMonitor_);
-  return linkMonitor_->getInterfaces();
+  return linkMonitor_->semifuture_getInterfaces();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
@@ -1080,7 +1084,7 @@ folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacenciesFiltered(
     std::unique_ptr<thrift::AdjacenciesFilter> filter) {
   CHECK(linkMonitor_);
-  return linkMonitor_->getAdjacencies(std::move(*filter));
+  return linkMonitor_->semifuture_getAdjacencies(std::move(*filter));
 }
 
 //

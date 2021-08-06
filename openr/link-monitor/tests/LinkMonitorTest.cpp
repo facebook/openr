@@ -662,7 +662,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   // 1. default setup:
   // persistent store == null, assume_drain = false, override_drain_state =
   // isOverloaded should be read from assume_drain, = false
-  auto res = linkMonitor->getInterfaces().get();
+  auto res = linkMonitor->semifuture_getInterfaces().get();
   ASSERT_NE(nullptr, res);
   EXPECT_FALSE(*res->isOverloaded_ref());
 
@@ -687,7 +687,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   createLinkMonitor(config, false /*overrideDrainState*/);
   // checkNextAdjPub("adj:node-1");
 
-  res = linkMonitor->getInterfaces().get();
+  res = linkMonitor->semifuture_getInterfaces().get();
   ASSERT_NE(nullptr, res);
   EXPECT_TRUE(*res->isOverloaded_ref());
 
@@ -704,7 +704,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   kvStoreWrapper->openQueue();
   createLinkMonitor(config, true /*overrideDrainState*/);
 
-  res = linkMonitor->getInterfaces().get();
+  res = linkMonitor->semifuture_getInterfaces().get();
   ASSERT_NE(nullptr, res);
   EXPECT_FALSE(*res->isOverloaded_ref());
 }
@@ -885,11 +885,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     const std::string nodeName = "node-2";
 
     LOG(INFO) << "Testing set node overload command!";
-    auto ret = linkMonitor->setNodeOverload(true).get();
+    auto ret = linkMonitor->semifuture_setNodeOverload(true).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    auto res = linkMonitor->getInterfaces().get();
+    auto res = linkMonitor->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
     EXPECT_TRUE(*res->isOverloaded_ref());
     EXPECT_EQ(1, res->interfaceDetails_ref()->size());
@@ -901,15 +901,17 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
                      .has_value());
 
     LOG(INFO) << "Testing set link metric command!";
-    ret = linkMonitor->setLinkMetric(interfaceName, linkMetric).get();
+    ret =
+        linkMonitor->semifuture_setLinkMetric(interfaceName, linkMetric).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing set link overload command!";
-    ret = linkMonitor->setInterfaceOverload(interfaceName, true).get();
+    ret =
+        linkMonitor->semifuture_setInterfaceOverload(interfaceName, true).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
-    res = linkMonitor->getInterfaces().get();
+    res = linkMonitor->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
     EXPECT_TRUE(*res->isOverloaded_ref());
     EXPECT_TRUE(
@@ -922,10 +924,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
             .value());
 
     LOG(INFO) << "Testing unset node overload command!";
-    ret = linkMonitor->setNodeOverload(false).get();
+    ret = linkMonitor->semifuture_setNodeOverload(false).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
-    res = linkMonitor->getInterfaces().get();
+    res = linkMonitor->semifuture_getInterfaces().get();
     EXPECT_FALSE(*res->isOverloaded_ref());
     EXPECT_TRUE(
         *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
@@ -937,16 +939,18 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
             .value());
 
     LOG(INFO) << "Testing unset link overload command!";
-    ret = linkMonitor->setInterfaceOverload(interfaceName, false).get();
+    ret = linkMonitor->semifuture_setInterfaceOverload(interfaceName, false)
+              .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing unset link metric command!";
-    ret = linkMonitor->setLinkMetric(interfaceName, std::nullopt).get();
+    ret = linkMonitor->semifuture_setLinkMetric(interfaceName, std::nullopt)
+              .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    res = linkMonitor->getInterfaces().get();
+    res = linkMonitor->semifuture_getInterfaces().get();
     EXPECT_FALSE(*res->isOverloaded_ref());
     EXPECT_FALSE(
         *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
@@ -956,23 +960,28 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
                      .has_value());
 
     LOG(INFO) << "Testing set node overload command( AGAIN )!";
-    ret = linkMonitor->setNodeOverload(true).get();
+    ret = linkMonitor->semifuture_setNodeOverload(true).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing set link metric command( AGAIN )!";
-    ret = linkMonitor->setLinkMetric(interfaceName, linkMetric).get();
+    ret =
+        linkMonitor->semifuture_setLinkMetric(interfaceName, linkMetric).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing set adj metric command!";
-    ret = linkMonitor->setAdjacencyMetric(interfaceName, nodeName, adjMetric)
-              .get();
+    ret =
+        linkMonitor
+            ->semifuture_setAdjacencyMetric(interfaceName, nodeName, adjMetric)
+            .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing unset adj metric command!";
-    ret = linkMonitor->setAdjacencyMetric(interfaceName, nodeName, std::nullopt)
+    ret = linkMonitor
+              ->semifuture_setAdjacencyMetric(
+                  interfaceName, nodeName, std::nullopt)
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
@@ -1062,7 +1071,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
 
     // nodeLabel is non-zero value read from config_, override to 0 to
     // honor flag.
-    auto thriftAdjDbs = linkMonitor->getAdjacencies().get();
+    auto thriftAdjDbs = linkMonitor->semifuture_getAdjacencies().get();
     EXPECT_EQ(1, thriftAdjDbs->size());
     EXPECT_EQ(0, thriftAdjDbs->at(0).get_nodeLabel());
   }
@@ -1607,7 +1616,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   recvAndReplyIfUpdate(); // Updates will be coalesced by throttling
 
   // at this point, both interface should have no backoff
-  auto links = linkMonitor->getInterfaces().get();
+  auto links = linkMonitor->semifuture_getInterfaces().get();
   EXPECT_EQ(2, links->interfaceDetails_ref()->size());
   for (const auto& ifName : ifNames) {
     EXPECT_FALSE(links->interfaceDetails_ref()
@@ -1634,7 +1643,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
     // we expect all interfaces are down at this point because backoff hasn't
     // been cleared up yet
     auto res = collateIfUpdates(sparkIfDb);
-    auto links1 = linkMonitor->getInterfaces().get();
+    auto links1 = linkMonitor->semifuture_getInterfaces().get();
     EXPECT_EQ(2, res.size());
     EXPECT_EQ(2, links1->interfaceDetails_ref()->size());
     for (const auto& ifName : ifNames) {
@@ -1715,7 +1724,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   {
     // expect sparkIfDb to have two interfaces DOWN
     auto res = collateIfUpdates(sparkIfDb);
-    auto links2 = linkMonitor->getInterfaces().get();
+    auto links2 = linkMonitor->semifuture_getInterfaces().get();
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());
@@ -1771,7 +1780,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
     // expect sparkIfDb to have two interfaces UP
     // Make sure to wait long enough to clear out backoff timers
     auto res = collateIfUpdates(sparkIfDb);
-    auto links3 = linkMonitor->getInterfaces().get();
+    auto links3 = linkMonitor->semifuture_getInterfaces().get();
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());

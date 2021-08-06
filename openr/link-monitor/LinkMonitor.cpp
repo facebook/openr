@@ -1200,7 +1200,7 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
 // NOTE: add commands which set/unset overload bit or metric values will
 // immediately advertise new adjacencies into the KvStore.
 folly::SemiFuture<folly::Unit>
-LinkMonitor::setNodeOverload(bool isOverloaded) {
+LinkMonitor::semifuture_setNodeOverload(bool isOverloaded) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), isOverloaded]() mutable {
@@ -1221,7 +1221,7 @@ LinkMonitor::setNodeOverload(bool isOverloaded) {
 }
 
 folly::SemiFuture<folly::Unit>
-LinkMonitor::setInterfaceOverload(
+LinkMonitor::semifuture_setInterfaceOverload(
     std::string interfaceName, bool isOverloaded) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -1268,7 +1268,7 @@ LinkMonitor::setInterfaceOverload(
 }
 
 folly::SemiFuture<folly::Unit>
-LinkMonitor::setLinkMetric(
+LinkMonitor::semifuture_setLinkMetric(
     std::string interfaceName, std::optional<int32_t> overrideMetric) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -1320,7 +1320,7 @@ LinkMonitor::setLinkMetric(
 }
 
 folly::SemiFuture<folly::Unit>
-LinkMonitor::setAdjacencyMetric(
+LinkMonitor::semifuture_setAdjacencyMetric(
     std::string interfaceName,
     std::string adjNodeName,
     std::optional<int32_t> overrideMetric) {
@@ -1380,7 +1380,7 @@ LinkMonitor::setAdjacencyMetric(
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
-LinkMonitor::getInterfaces() {
+LinkMonitor::semifuture_getInterfaces() {
   VLOG(2) << "Dump Links requested, replying withV " << interfaces_.size()
           << " links";
 
@@ -1423,7 +1423,7 @@ LinkMonitor::getInterfaces() {
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
-LinkMonitor::getAdjacencies(thrift::AdjacenciesFilter filter) {
+LinkMonitor::semifuture_getAdjacencies(thrift::AdjacenciesFilter filter) {
   VLOG(2) << "Dump adj requested, reply with " << adjacencies_.size()
           << " adjs";
 
@@ -1562,4 +1562,29 @@ LinkMonitor::anyAreaShouldRedistributeIface(std::string const& iface) const {
   return anyMatch;
 }
 
+const std::pair<int32_t, int32_t>
+LinkMonitor::getNodeSegmentLabelRange(
+    AreaConfiguration const& areaConfig) const {
+  CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
+  std::pair<int32_t, int32_t> labelRange{
+      *areaConfig.getNodeSegmentLabelConfig()
+           ->get_node_segment_label_range()
+           ->start_label_ref(),
+      *areaConfig.getNodeSegmentLabelConfig()
+           ->get_node_segment_label_range()
+           ->end_label_ref()};
+  return labelRange;
+}
+
+int32_t
+LinkMonitor::getStaticNodeSegmentLabel(
+    AreaConfiguration const& areaConfig) const {
+  CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
+  if (areaConfig.getNodeSegmentLabelConfig()
+          ->node_segment_label_ref()
+          .has_value()) {
+    return *areaConfig.getNodeSegmentLabelConfig()->node_segment_label_ref();
+  }
+  return 0;
+}
 } // namespace openr
