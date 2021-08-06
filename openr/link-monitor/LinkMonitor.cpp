@@ -99,7 +99,7 @@ LinkMonitor::LinkMonitor(
       peerUpdatesQueue_(peerUpdatesQueue),
       logSampleQueue_(logSampleQueue),
       kvRequestQueue_(kvRequestQueue),
-      expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff, true),
+      expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
       configStore_(configStore),
       nlSock_(nlSock) {
   // Check non-empty module ptr
@@ -276,28 +276,8 @@ LinkMonitor::LinkMonitor(
     }
   });
 
-  // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
-  interfaceDbSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    auto success = syncInterfaces();
-    if (success) {
-      VLOG(2) << "InterfaceDb Sync is successful";
-      expBackoff_.reportSuccess();
-      interfaceDbSyncTimer_->scheduleTimeout(Constants::kPlatformSyncInterval);
-    } else {
-      fb303::fbData->addStatValue(
-          "link_monitor.thrift.failure.getAllLinks", 1, fb303::SUM);
-      // Apply exponential backoff and schedule next run
-      expBackoff_.reportError();
-      interfaceDbSyncTimer_->scheduleTimeout(
-          expBackoff_.getTimeRemainingUntilRetry());
-      LOG(ERROR)
-          << "InterfaceDb Sync failed, apply exponential backoff and retry in "
-          << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
-    }
-  });
-
-  // schedule immediate with small timeout
-  interfaceDbSyncTimer_->scheduleTimeout(std::chrono::milliseconds(100));
+  // Add fiber to process interfaceDb syning from netlink platform
+  addFiberTask([this]() mutable noexcept { syncInterfaceTask(); });
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("link_monitor.neighbor_up", fb303::SUM);
@@ -311,6 +291,10 @@ LinkMonitor::LinkMonitor(
 
 void
 LinkMonitor::stop() {
+  // Send stop signal for internal fibers
+  syncInterfaceStopSignal_.post();
+  LOG(INFO) << "Successfully posted stop signal for interface-syncing fiber";
+
   // Stop KvStoreClient first
   kvStoreClient_->stop();
   LOG(INFO) << "KvStoreClient successfully stopped in LinkMonitor";
@@ -978,6 +962,45 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
           *advertiseIfaceAddrTimer_));
 
   return &(res.first->second);
+}
+
+void
+LinkMonitor::syncInterfaceTask() noexcept {
+  LOG(INFO) << "Starting interface syncing fiber task";
+
+  // ATTN: use initial timeoff as the default value to wait for
+  // small amount of time when thread starts before syncing
+  std::chrono::milliseconds timeout{expBackoff_.getInitialBackoff()};
+
+  while (true) { // Break when stop signal is ready
+    // Sleep before next check
+    if (syncInterfaceStopSignal_.try_wait_for(timeout)) {
+      break; // Baton was posted
+    } else {
+      syncInterfaceStopSignal_.reset(); // Baton experienced timeout
+    }
+
+    auto success = syncInterfaces();
+    if (success) {
+      expBackoff_.reportSuccess();
+      timeout = std::chrono::milliseconds(Constants::kPlatformSyncInterval);
+
+      VLOG(2) << "InterfaceDb Sync is successful";
+    } else {
+      // Apply exponential backoff and schedule next run
+      expBackoff_.reportError();
+      timeout = expBackoff_.getTimeRemainingUntilRetry();
+
+      fb303::fbData->addStatValue(
+          "link_monitor.thrift.failure.getAllLinks", 1, fb303::SUM);
+
+      LOG(ERROR) << fmt::format(
+          "InterfaceDb Sync failed, apply exp backoff and retry in {}ms",
+          timeout.count());
+    }
+  } // while
+
+  LOG(INFO) << "Interface-syncing fiber task got stopped.";
 }
 
 bool

@@ -187,14 +187,15 @@ class LinkMonitor final : public OpenrEventBase {
   void processKvStoreSyncEvent(KvStoreSyncEvent&& event);
 
   /*
-   * [Netlink Platform] related functions
+   * [Netlink Platform]
+   *
+   * LinkMonitor maintains multiple fiber tasks to:
+   *  1) retrieve interface from netlink for initial/periodic interface sync;
+   *  2) process LINK/ADDR event updates from platform
    */
-
-  // process LINK/ADDR event updates from platform
   void processNetlinkEvent(fbnl::NetlinkEvent&& event);
 
-  // Used for initial interface discovery and periodic sync with system handler
-  // return true if sync is successful
+  void syncInterfaceTask() noexcept;
   bool syncInterfaces();
 
   // Get or create InterfaceEntry object.
@@ -412,8 +413,7 @@ class LinkMonitor final : public OpenrEventBase {
   // Timer for processing interfaces which are in backoff states
   std::unique_ptr<folly::AsyncTimeout> advertiseIfaceAddrTimer_;
 
-  // Timer for resyncing InterfaceDb from netlink
-  std::unique_ptr<folly::AsyncTimeout> interfaceDbSyncTimer_;
+  // Exp backoff for resyncing InterfaceDb from netlink
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
 
   // client to interact with KvStore
@@ -441,6 +441,9 @@ class LinkMonitor final : public OpenrEventBase {
   // Boolean flag indicating whether initial neighbors are received in OpenR
   // initialization procedure.
   bool initialNeighborsReceived_{false};
+
+  // Stop signal for fiber to periodically dump interface info from platform
+  folly::fibers::Baton syncInterfaceStopSignal_;
 }; // LinkMonitor
 
 } // namespace openr
