@@ -1074,116 +1074,111 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
  *    of all labels are received.
  * 2. INCREMENTAL delete of label route updates blocks the advertisement of
  *    follow-up prefix updates with deleted label routes.
- * 3. Next INCREMENTAL route update for above deleted label triggers the
- *    advertisement of above cached prefixes with prepend label.
- * 4. Follow-up FULL_SYNC route updates reset previously stored programmed
+ * 3. In follow-up prefix updates, those with programmed label routes were
+ *    advertised; those with programmed-then-deleted label routes were not
+ *    advertised.
+ * 4. Next INCREMENTAL route update for previously deleted label triggers the
+ *    advertisement of above cached prefixes with the prepend label.
+ * 5. Follow-up FULL_SYNC route updates reset previously stored programmed
  *    labels in PrefixManager. Only prefixes with newly programmed label routes
  *    will be advertised.
  */
+
 TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
-  // 1. Prefixes with prepend labels are advertised after FULL_SYNC route
-  // updates of all labels are received.
-  {
-    // PrefixManager receives updates of prefixes with prepend label.
-    PrefixEvent prefixEvent(
-        PrefixEventType::ADD_PREFIXES,
-        thrift::PrefixType::BGP,
-        {prefixEntry1WithLabel1,
-         prefixEntry2WithLabel1,
-         prefixEntry3WithLabel2});
-    prefixUpdatesQueue.push(std::move(prefixEvent));
+  int scheduleAt{0};
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
 
-    // Full sync of programmed routes for label1/2 arrives.
-    DecisionRouteUpdate fullSyncUpdates;
-    fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
-    fullSyncUpdates.mplsRoutesToUpdate = {
-        {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
-    fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // 1.1 PrefixManager received prefix updates with prepend labels.
+        PrefixEvent prefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1WithLabel1,
+             prefixEntry2WithLabel1,
+             prefixEntry3WithLabel2});
+        prefixUpdatesQueue.push(std::move(prefixEvent));
 
-    // Wait for update in KvStore
-    // ATTN: prefixes with label1/2 should be updated via throttle.
-    auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_EQ(3, pub.keyVals_ref()->size());
-  }
+        // 1.2 Full sync of programmed routes for label1/2 arrived.
+        DecisionRouteUpdate fullSyncUpdates;
+        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+        fullSyncUpdates.mplsRoutesToUpdate = {
+            {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+      });
 
-  // 2. INCREMENTAL delete of label route updates blocks the advertisement of
-  // follow-up prefix updates with deleted label routes.
-  // NOTE: In practice, prefixes with deleting label should not appear in
-  // prefixUpdatesQueue. BgpSpeaker replaces deleting label with new one in
-  // prefix attributes. It sends new label routes for programming, meanwhile
-  // sending prefixes with new label to prefixUpdatesQueue. Added the scenario
-  // here just for test purposes.
-  {
-    // Route of label1 was deleted.
-    DecisionRouteUpdate deletedRoutes;
-    deletedRoutes.type = DecisionRouteUpdate::INCREMENTAL;
-    deletedRoutes.mplsRoutesToDelete = {label1};
-    fibRouteUpdatesQueue.push(std::move(deletedRoutes));
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 1.3 Advertised prefixEntry1WithLabel1, prefixEntry2WithLabel1,
+        // prefixEntry3WithLabel2
+        EXPECT_EQ(3, getNumPrefixes(prefixDbMarker));
 
-    // PrefixManager receives prefix updates of  with prepend label.
-    PrefixEvent prefixEvent(
-        PrefixEventType::ADD_PREFIXES,
-        thrift::PrefixType::BGP,
-        {prefixEntry4WithLabel1, prefixEntry5WithLabel2});
-    prefixUpdatesQueue.push(std::move(prefixEvent));
+        // 2.1 INCREMENTAL delete of label route for label1.
+        DecisionRouteUpdate deletedRoutes;
+        deletedRoutes.type = DecisionRouteUpdate::INCREMENTAL;
+        deletedRoutes.mplsRoutesToDelete = {label1};
+        fibRouteUpdatesQueue.push(std::move(deletedRoutes));
+      });
 
-    // Wait for update in KvStore
-    // ATTN: prefixes with label2 should be updated via throttle.
-    auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_EQ(1, pub.keyVals_ref()->size());
-  }
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 2.2. Withdrew prefixEntry1WithLabel1, prefixEntry2WithLabel1
+        EXPECT_EQ(1, getNumPrefixes(prefixDbMarker));
 
-  // 3. Next INCREMENTAL route update including above deleted label triggers the
-  // advertisement of above cached prefixes with prepend label.
-  {
-    // Routes of label1/2 was programmed.
-    DecisionRouteUpdate updateRoutes;
-    updateRoutes.type = DecisionRouteUpdate::INCREMENTAL;
-    updateRoutes.mplsRoutesToUpdate = {
-        {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
-    fibRouteUpdatesQueue.push(std::move(updateRoutes));
+        // 3.1 PrefixManager received prefix updates with prepend labels.
+        PrefixEvent prefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry4WithLabel1, prefixEntry5WithLabel2});
+        prefixUpdatesQueue.push(std::move(prefixEvent));
+      });
 
-    // Wait for update in KvStore
-    // ATTN: prefixes with label1 should be updated via throttle.
-    auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_EQ(1, pub.keyVals_ref()->size());
-  }
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 3.2 Advertised prefixEntry5WithLabel2
+        EXPECT_EQ(2, getNumPrefixes(prefixDbMarker));
 
-  // 4. Follow-up FULL_SYNC route updates reset previously
-  // stored programmed labels in PrefixManager. Only prefixes with newly
-  // programmed label routes will be advertised.
-  {
-    // Full sync of programmed routes for label2 arrives.
-    DecisionRouteUpdate fullSyncUpdates;
-    fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
-    fullSyncUpdates.mplsRoutesToUpdate = {{label2, RibMplsEntry(label2)}};
-    fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+        // 4.1 INCREMENTAL update of programmed routes for label1.
+        DecisionRouteUpdate updateRoutes;
+        updateRoutes.type = DecisionRouteUpdate::INCREMENTAL;
+        updateRoutes.mplsRoutesToUpdate = {{label1, RibMplsEntry(label1)}};
+        fibRouteUpdatesQueue.push(std::move(updateRoutes));
+      });
 
-    // PrefixManager receives prefix updates of  with prepend label.
-    PrefixEvent prefixEvent(
-        PrefixEventType::ADD_PREFIXES,
-        thrift::PrefixType::BGP,
-        {prefixEntry6WithLabel1, prefixEntry7WithLabel2});
-    prefixUpdatesQueue.push(std::move(prefixEvent));
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 4.2 Readvertised prefixEntry1WithLabel1, prefixEntry2WithLabel1;
+        // Advertised prefixEntry4WithLabel1.
+        EXPECT_EQ(5, getNumPrefixes(prefixDbMarker));
 
-    // Wait for update in KvStore
-    // ATTN: prefixes with label2 should be updated via throttle.
-    auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_EQ(1, pub.keyVals_ref()->size());
-  }
+        // 5.1 FULL_SYNC update of programmed routes for label2.
+        DecisionRouteUpdate fullSyncUpdates;
+        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+        fullSyncUpdates.mplsRoutesToUpdate = {{label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+      });
 
-  auto prefixes = prefixManager->getPrefixes().get();
-  EXPECT_EQ(7, prefixes->size());
-  EXPECT_THAT(
-      *prefixes,
-      testing::UnorderedElementsAre(
-          prefixEntry1WithLabel1,
-          prefixEntry2WithLabel1,
-          prefixEntry3WithLabel2,
-          prefixEntry4WithLabel1,
-          prefixEntry5WithLabel2,
-          prefixEntry6WithLabel1,
-          prefixEntry7WithLabel2));
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 5.2 Withdrew prefixEntry1WithLabel1, prefixEntry2WithLabel1,
+        // prefixEntry4WithLabel1.
+        EXPECT_EQ(2, getNumPrefixes(prefixDbMarker));
+
+        evb.stop();
+      });
+
+  // let magic happen
+  evb.run();
 }
 
 /**
@@ -1192,12 +1187,11 @@ TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
  * programmed.
  * 1. Advertise <Prefix, Label=none>
  * 2. Donot advertise prefix update of <Prefix, Label1>
- * 3. Recived Label1 routes programmed signal; <Prefix, Label1> gets advertised.
+ * 3. Received Label1 route programmed signal; <Prefix, Label1> gets advertised.
  * 4. Prefix Update <Prefix, Label2> not advertised
- * 5. Prefix Update <Prefix, Label=none> gets updated again.
- *
- * TODO: PrefixManager needs to purge already advertised prefixes if associated
- * prefixes are unprogrammed later.
+ * 5. Received Label1 routes deleted signal; <Prefix, Label1> gets removed.
+ * 6. Received Label2 route programmed signal; <Prefix, Label2> gets advertised.
+ * 7. Prefix Update <Prefix, Label=none> gets updated again.
  */
 TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
   int scheduleAt{0};
@@ -1230,11 +1224,10 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
         EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
 
         // 2.1. PrefixManager receives <Prefix, Label1>.
-        PrefixEvent prefixEvent1(
+        prefixUpdatesQueue.push(PrefixEvent(
             PrefixEventType::ADD_PREFIXES,
             thrift::PrefixType::BGP,
-            {prefixEntry1WithLabel1});
-        prefixUpdatesQueue.push(std::move(prefixEvent1));
+            {prefixEntry1WithLabel1}));
       });
 
   evb.scheduleTimeout(
@@ -1254,7 +1247,7 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
         // Prepend label is still unset.
         EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
 
-        // 3.1. Recived route programmed signal of Label1.
+        // 3.1. Received route programmed signal of Label1.
         DecisionRouteUpdate routeUpdates;
         routeUpdates.type = DecisionRouteUpdate::INCREMENTAL;
         routeUpdates.mplsRoutesToUpdate = {{label1, RibMplsEntry(label1)}};
@@ -1296,17 +1289,57 @@ TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
         // Prepend label is still label1.
         EXPECT_EQ(db.prefixEntries_ref()[0].prependLabel_ref().value(), label1);
 
-        // 5.1. PrefixManager receives <Prefix, Label=none>.
-        prefixUpdatesQueue.push(PrefixEvent(
-            PrefixEventType::ADD_PREFIXES,
-            thrift::PrefixType::BGP,
-            {prefixEntry1}));
+        // 5.1. Received route delete signal of Label1.
+        DecisionRouteUpdate deleteRouteUpdates;
+        deleteRouteUpdates.type = DecisionRouteUpdate::INCREMENTAL;
+        deleteRouteUpdates.mplsRoutesToDelete = {label1};
+        fibRouteUpdatesQueue.push(std::move(deleteRouteUpdates));
 
         // Wait for update in KvStore
         auto pub = kvStoreWrapper->recvPublication();
         EXPECT_EQ(1, pub.keyVals_ref()->size());
 
-        // 5.2. <Prefix, Label=none> gets advertised.
+        // 5.2. <Prefix, Label1> gets deleted.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_TRUE(db.get_deletePrefix()); // Prefix is indicated as deleted.
+
+        // 6.1. Received route programmed signal of Label2.
+        DecisionRouteUpdate addRouteUpdates;
+        addRouteUpdates.type = DecisionRouteUpdate::INCREMENTAL;
+        addRouteUpdates.mplsRoutesToUpdate = {{label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(addRouteUpdates));
+
+        // Wait for update in KvStore
+        pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+        // 6.2. <Prefix, Label2> gets advertised.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0].prependLabel_ref().value(), label2);
+        EXPECT_FALSE(db.get_deletePrefix());
+
+        pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size()); // ttl update.
+
+        // 7.1. PrefixManager receives <Prefix, Label=none>.
+        prefixUpdatesQueue.push(PrefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1Bgp}));
+
+        // Wait for update in KvStore
+        pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // 7.2. <Prefix, Label=none> gets advertised.
         maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         db = readThriftObjStr<thrift::PrefixDatabase>(
@@ -2552,7 +2585,7 @@ TEST(PrefixManagerPendingUpdates, updatePrefixes) {
       testing::UnorderedElementsAre(network1, network2));
 
   // cleanup
-  updates.reset();
+  updates.clear();
   EXPECT_TRUE(updates.getChangedPrefixes().empty());
 }
 

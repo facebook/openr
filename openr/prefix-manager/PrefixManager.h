@@ -32,27 +32,52 @@ class PrefixManagerPendingUpdates {
  public:
   explicit PrefixManagerPendingUpdates() : changedPrefixes_{} {}
 
-  std::unordered_set<folly::CIDRNetwork> const&
-  getChangedPrefixes() const {
+  void
+  clear() {
+    changedPrefixes_.clear();
+    changedLabels_.clear();
+  }
+
+  size_t
+  size() {
+    return changedPrefixes_.size() + changedLabels_.size();
+  }
+
+  const std::unordered_set<folly::CIDRNetwork>&
+  getChangedPrefixes() {
     return changedPrefixes_;
   }
 
-  void reset();
+  bool
+  hasPrefix(const folly::CIDRNetwork& prefix) {
+    return changedPrefixes_.count(prefix) > 0;
+  }
 
-  void applyPrefixChange(const folly::small_vector<folly::CIDRNetwork>& change);
+  bool
+  hasLabel(const int32_t label) {
+    return changedLabels_.count(label) > 0;
+  }
 
   void
-  removePrefixChange(const folly::CIDRNetwork& prefix) {
-    changedPrefixes_.erase(prefix);
+  applyPrefixChange(const folly::small_vector<folly::CIDRNetwork>& change) {
+    for (const auto& network : change) {
+      changedPrefixes_.insert(network);
+    }
+  }
+
+  void
+  addLabelChange(const int32_t label) {
+    changedLabels_.emplace(label);
   }
 
  private:
-  // track prefixes that have changed within this batch
+  // Track prefixes (MPLS labels) that have changed within this batch
   // ATTN: this collection contains:
-  //  - newly added prefixes
-  //  - updated prefixes
-  //  - prefixes being withdrawn
+  //  - newly added prefixes (labels)
+  //  - updated prefixes (labels)
+  //  - prefixes (labels) being withdrawn
   std::unordered_set<folly::CIDRNetwork> changedPrefixes_{};
+  std::unordered_set<int32_t> changedLabels_{};
 };
 
 } // namespace detail
@@ -372,8 +397,8 @@ class PrefixManager final : public OpenrEventBase {
       folly::CIDRNetwork,
       std::unordered_map<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
-  // The collection of prefixes advertised to KvStore.
-  std::unordered_set<folly::CIDRNetwork> advertisedPrefixes_;
+  // Advertised prefixes in KvStore and associated best PrefixEntry.
+  std::unordered_map<folly::CIDRNetwork, PrefixEntry> advertisedPrefixes_;
 
   // For prefixes came from PrefixEvent with an origination policy,
   // store the pre-policy version in originatedPrefixMap_.

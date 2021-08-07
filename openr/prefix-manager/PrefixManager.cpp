@@ -14,6 +14,7 @@
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <optional>
+#include <utility>
 #ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
@@ -24,26 +25,9 @@
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/kvstore/KvStore.h>
 
-namespace fb303 = facebook::fb303;
-
 namespace openr {
 
-namespace detail {
-
-void
-PrefixManagerPendingUpdates::reset() {
-  changedPrefixes_.clear();
-}
-
-void
-PrefixManagerPendingUpdates::applyPrefixChange(
-    const folly::small_vector<folly::CIDRNetwork>& change) {
-  for (const auto& network : change) {
-    changedPrefixes_.insert(network);
-  }
-}
-
-} // namespace detail
+namespace fb303 = facebook::fb303;
 
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
@@ -723,70 +707,93 @@ getBestPrefixEntry(
 
 void
 PrefixManager::syncKvStore() {
-  VLOG(1)
-      << "[KvStore Sync] Syncing "
-      << pendingUpdates_.getChangedPrefixes().size()
-      << " changed prefixes. Total prefixes advertised: " << prefixMap_.size();
+  VLOG(1) << "[KvStore Sync] Syncing " << pendingUpdates_.size()
+          << " pending updates.";
   DecisionRouteUpdate routeUpdatesOut;
-  // Prefixes in pendingUpdates_ that are synced to KvStore.
-  folly::small_vector<folly::CIDRNetwork> syncedPendingPrefixes{};
-  // iterate over `pendingUpdates_` to advertise/withdraw incremental changes
+  size_t receivedPrefixCnt = 0;
+  size_t syncedPrefixCnt = 0;
+  size_t awaitingPrefixCnt = 0;
+
+  // Withdraw prefixes that no longer exist.
   for (auto const& prefix : pendingUpdates_.getChangedPrefixes()) {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
       // Delete prefixes that do not exist in prefixMap_.
-      VLOG(1) << fmt::format("Deleting keys for {}", prefix.first.str());
-      advertisedPrefixes_.erase(prefix);
+      VLOG(1) << fmt::format(
+          "Deleting keys for {}", folly::IPAddress::networkToString(prefix));
       deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
-    } else {
-      // add/update keys in `KvStore`
-      auto bestTypeEntry =
-          getBestPrefixEntry(it->second, preferOpenrOriginatedRoutes_);
-      const PrefixEntry& bestEntry = bestTypeEntry.second;
-      if (not prefixEntryReadyToBeAdvertised(bestEntry)) {
-        // Skip if the prefix entry is not ready to be advertised yet.
-        continue;
-      }
-      advertisedPrefixes_.insert(prefix);
+      advertisedPrefixes_.erase(prefix);
+      ++syncedPrefixCnt;
+    }
+  }
 
+  for (const auto& [prefix, prefixEntries] : prefixMap_) {
+    receivedPrefixCnt += prefixEntries.size();
+
+    // Check if prefix is updated and ready to be advertised.
+    auto [_, bestEntry] =
+        getBestPrefixEntry(prefixEntries, preferOpenrOriginatedRoutes_);
+    const auto& labelRef = bestEntry.tPrefixEntry->prependLabel_ref();
+    bool hasPrefixUpdate = pendingUpdates_.hasPrefix(prefix);
+    bool haslabelUpdate =
+        labelRef.has_value() ? pendingUpdates_.hasLabel(*labelRef) : false;
+    bool readyToBeAdvertised = prefixEntryReadyToBeAdvertised(bestEntry);
+    bool needToAdvertise =
+        ((hasPrefixUpdate or haslabelUpdate) and readyToBeAdvertised);
+    if (needToAdvertise) {
+      VLOG(1) << fmt::format(
+          "Adding/updating keys for {}",
+          folly::IPAddress::networkToString(prefix));
       updatePrefixKeysInKvStore(prefix, bestEntry, routeUpdatesOut);
-    } // else
+      advertisedPrefixes_[prefix] = bestEntry;
+      ++syncedPrefixCnt;
+      continue;
+    } else if (readyToBeAdvertised) {
+      // Skip still-ready-to-be and previously advertised prefix.
+      CHECK(advertisedPrefixes_.count(prefix));
+      continue;
+    }
 
-    // Record already advertised prefix in pendingUpdates_.
-    syncedPendingPrefixes.emplace_back(prefix);
+    // The prefix is awaiting to be advertised.
+    ++awaitingPrefixCnt;
+
+    // Check if previously advertised prefix is no longer ready to be
+    // advertised.
+    if (advertisedPrefixes_.count(prefix) and
+        (not prefixEntryReadyToBeAdvertised(advertisedPrefixes_.at(prefix)))) {
+      VLOG(1) << fmt::format(
+          "Deleting advertised keys for {}",
+          folly::IPAddress::networkToString(prefix));
+      deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
+      advertisedPrefixes_.erase(prefix);
+      ++syncedPrefixCnt;
+    }
   } // for
 
-  // push originatedRoutes update via replicate queue
+  // Reset pendingUpdates_ since all pending updates are processed.
+  pendingUpdates_.clear();
+
+  // Push originatedRoutes update to staticRouteUpdatesQueue_.
   if (not routeUpdatesOut.empty()) {
     CHECK(routeUpdatesOut.mplsRoutesToUpdate.empty());
     CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
   }
 
-  // NOTE: Prefixes with label/unicast routes programmed locally are advertised
-  // to KvStore; Other prefixes are kept in pendingUpdates_ for future
-  // advertisement.
-  for (const auto& prefix : syncedPendingPrefixes) {
-    pendingUpdates_.removePrefixChange(prefix);
-  }
   VLOG(1) << fmt::format(
       "[KvStore Sync] Updated {} prefixes in KvStore; {} more awaiting FIB-ACK.",
-      syncedPendingPrefixes.size(),
-      pendingUpdates_.getChangedPrefixes().size());
+      syncedPrefixCnt,
+      awaitingPrefixCnt);
 
   // Update flat counters
-  size_t num_prefixes = 0;
-  for (auto const& [_, typeToPrefixes] : prefixMap_) {
-    num_prefixes += typeToPrefixes.size();
-  }
-  fb303::fbData->setCounter("prefix_manager.received_prefixes", num_prefixes);
+  fb303::fbData->setCounter(
+      "prefix_manager.received_prefixes", receivedPrefixCnt);
   // TODO: report per-area advertised prefixes if openr is running in
   // multi-areas.
   fb303::fbData->setCounter(
       "prefix_manager.advertised_prefixes", advertisedPrefixes_.size());
   fb303::fbData->setCounter(
-      "prefix_manager.awaiting_prefixes",
-      pendingUpdates_.getChangedPrefixes().size());
+      "prefix_manager.awaiting_prefixes", awaitingPrefixCnt);
 }
 
 folly::SemiFuture<bool>
@@ -1547,6 +1554,10 @@ PrefixManager::storeProgrammedRoutes(
     const DecisionRouteUpdate& fibRouteUpdates) {
   // In case of full sync, reset previous stored programmed routes.
   if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC) {
+    // Adding all previously programmed routes as pending updates.
+    for (const auto& deletedLabel : programmedLabels_) {
+      pendingUpdates_.addLabelChange(deletedLabel);
+    }
     programmedLabels_.clear();
 
     if (uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
@@ -1555,19 +1566,20 @@ PrefixManager::storeProgrammedRoutes(
     }
   }
 
-  // Handle programmed MPLS routes.
-  if (not fibRouteUpdates.mplsRoutesToUpdate.empty() or
-      not fibRouteUpdates.mplsRoutesToDelete.empty()) {
-    for (auto& [label, _] : fibRouteUpdates.mplsRoutesToUpdate) {
-      programmedLabels_.insert(label);
+  // Record MPLS label routes from OpenR/Fib.
+  for (auto& [label, _] : fibRouteUpdates.mplsRoutesToUpdate) {
+    if (programmedLabels_.insert(label).second /*inserted*/) {
+      pendingUpdates_.addLabelChange(label);
     }
-    for (auto& deletedLabel : fibRouteUpdates.mplsRoutesToDelete) {
-      programmedLabels_.erase(deletedLabel);
-    }
-    // schedule `syncKvStore` after throttled timeout
-    syncKvStoreThrottled_->operator()();
   }
-  // TODO: Handle programmed unicast routes.
+  for (auto& deletedLabel : fibRouteUpdates.mplsRoutesToDelete) {
+    if (programmedLabels_.erase(deletedLabel) > 0 /*deleted*/) {
+      pendingUpdates_.addLabelChange(deletedLabel);
+    }
+  }
+
+  // schedule `syncKvStore` after throttled timeout
+  syncKvStoreThrottled_->operator()();
 }
 
 namespace {
