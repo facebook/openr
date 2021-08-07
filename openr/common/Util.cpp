@@ -946,17 +946,24 @@ selectBestNodeArea(
   for (const auto& nodeAndArea : allNodeAreas) {
     const auto& [node, area] = nodeAndArea;
     if (node == myNodeName) {
-      bestNodeArea = nodeAndArea;
-      break;
-    }
-    CHECK(areaLinkStates.count(area));
-    const auto& mySpfResult = areaLinkStates.at(area).getSpfResult(myNodeName);
-    CHECK(mySpfResult.count(node));
-    const auto& metric = mySpfResult.at(node).metric();
-    // Perfer NodeArea with smaller IGP distance within the area.
-    if (metric < shortestIgpDist) {
-      shortestIgpDist = metric;
-      bestNodeArea = nodeAndArea;
+      // Always prefer local node with lowest area-ID.
+
+      // Deterministically select bestNodeArea if local node advertises prefix
+      // into multiple areas with same metrics.
+      if (bestNodeArea.first != myNodeName or bestNodeArea.second > area) {
+        bestNodeArea = nodeAndArea;
+      }
+    } else {
+      CHECK(areaLinkStates.count(area));
+      const auto& mySpfResult =
+          areaLinkStates.at(area).getSpfResult(myNodeName);
+      CHECK(mySpfResult.count(node));
+      const auto& metric = mySpfResult.at(node).metric();
+      // Perfer NodeArea with smaller IGP distance within the area.
+      if (bestNodeArea.first != myNodeName and metric < shortestIgpDist) {
+        shortestIgpDist = metric;
+        bestNodeArea = nodeAndArea;
+      }
     }
   }
   return bestNodeArea;
