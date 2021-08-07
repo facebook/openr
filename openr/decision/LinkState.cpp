@@ -11,7 +11,7 @@
 
 #include <fb303/ServiceData.h>
 #include <folly/Format.h>
-#include <openr/common/Util.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/decision/LinkState.h>
 
 namespace fb303 = facebook::fb303;

@@ -697,7 +697,7 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* link = std::get_if<Link>(&req.value())) {
+      if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
         if (link->getLinkName() == ifName and link->isUp() == isUp and
             link->getLinkKind().value_or("") == kind) {
           return;
@@ -1838,7 +1838,7 @@ TEST_F(NlMessageFixture, LinkFlapScaleTest) {
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* link = std::get_if<Link>(&req.value())) {
+      if (auto* link = std::get_if<openr::fbnl::Link>(&req.value())) {
         --cnt;
       }
     }

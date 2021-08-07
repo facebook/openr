@@ -83,3 +83,15 @@ hash<openr::thrift::UnicastRoute>::operator()(
 }
 
 } // namespace std
+
+namespace openr {
+
+std::string
+getRemoteIfName(const thrift::Adjacency& adj) {
+  if (not adj.otherIfName_ref()->empty()) {
+    return *adj.otherIfName_ref();
+  }
+  return fmt::format("neigh-{}", *adj.ifName_ref());
+}
+
+} // namespace openr

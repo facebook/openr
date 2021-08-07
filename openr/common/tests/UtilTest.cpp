@@ -998,26 +998,6 @@ TEST(UtilTest, BestMetricsSelection) {
     EXPECT_EQ(1, bestKeys.count("KEY3"));
     EXPECT_EQ(1, bestKeys.count("KEY4"));
   }
-
-  //
-  // Multiple entries. Each node will choose local as best. If a node announce
-  // best entry to two areas, choose the one with lower area id
-  // (based on std::map key hash)
-  //
-  {
-    std::unordered_map<NodeAndArea, thrift::PrefixEntry> prefixes = {
-        {{"node1", "area1"}, createPrefixEntry(100, 10, 1)},
-        {{"node1", "area2"}, createPrefixEntry(100, 10, 1)},
-        {{"node2", "area1"}, createPrefixEntry(100, 10, 1)}};
-    const auto bestKeys = selectBestPrefixMetrics(prefixes);
-    EXPECT_EQ(3, bestKeys.size());
-    const auto node1bestKey =
-        std::make_pair<std::string, std::string>("node1", "area1");
-    EXPECT_EQ(node1bestKey, selectBestNodeArea(bestKeys, "node1"));
-    const auto node2bestKey =
-        std::make_pair<std::string, std::string>("node2", "area1");
-    EXPECT_EQ(node2bestKey, selectBestNodeArea(bestKeys, "node2"));
-  }
 }
 
 TEST(UtilTest, SelectRoutesShortestDistance) {
@@ -1175,6 +1155,79 @@ TEST(UtilTest, SelectRoutesPerAreaShortestDistance) {
     EXPECT_EQ(1, ret.count(node13Area1));
     EXPECT_EQ(1, ret.count(node21Area2));
     EXPECT_EQ(1, ret.count(node22Area2));
+  }
+}
+
+TEST(UtilTest, SelectBestNodeAreaTest) {
+  // Topology
+  // Area A: node1-node2
+  // Area B: node1-node3-node2
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+
+  // Area A
+  LinkState linkStateAreaA{"areaA"};
+  // node1
+  auto adj12 = createAdjacency(
+      "node2", "1/2", "2/1", "fe80::11", "192.168.0.2", 1, 10001);
+  auto adjDbNode1AreaA = createAdjDb("node1", {adj12}, 101, false, "areaA");
+  linkStateAreaA.updateAdjacencyDatabase(adjDbNode1AreaA);
+  // node2
+  auto adj21 = createAdjacency(
+      "node1", "2/1", "1/2", "fe80::21", "192.168.0.1", 1, 10002);
+  auto adjDbNode2AreaA = createAdjDb("node2", {adj21}, 102, false, "areaA");
+  linkStateAreaA.updateAdjacencyDatabase(adjDbNode2AreaA);
+  areaLinkStates.emplace("areaA", linkStateAreaA);
+
+  // Area B
+  LinkState linkStateAreaB{"areaB"};
+  // node1
+  auto adj13 = createAdjacency(
+      "node3", "1/3", "3/1", "fe80::13", "192.168.0.3", 1, 10003);
+  auto adjDbNode1AreaB = createAdjDb("node1", {adj13}, 201, false, "areaB");
+  linkStateAreaB.updateAdjacencyDatabase(adjDbNode1AreaB);
+  // node2
+  auto adj23 = createAdjacency(
+      "node3", "2/3", "3/2", "fe80::23", "192.168.0.1", 1, 10003);
+  auto adjDbNode2AreaB = createAdjDb("node2", {adj23}, 202, false, "areaB");
+  linkStateAreaB.updateAdjacencyDatabase(adjDbNode2AreaB);
+  // node3
+  auto adj31 = createAdjacency(
+      "node1", "3/1", "1/3", "fe80::31", "192.168.0.2", 1, 10003);
+  auto adj32 = createAdjacency(
+      "node2", "3/2", "2/3", "fe80::32", "192.168.0.2", 1, 10003);
+  auto adjDbNode3AreaB =
+      createAdjDb("node3", {adj31, adj32}, 203, false, "areaB");
+  linkStateAreaB.updateAdjacencyDatabase(adjDbNode3AreaB);
+  areaLinkStates.emplace("areaB", linkStateAreaB);
+
+  {
+    // Multiple entries. Each node will choose local as best. If a node announce
+    // best entry to two areas, choose the one with lower area id
+    // (based on std::map key hash)
+    std::set<NodeAndArea> nodeAreaSet{
+        {"node1", "areaA"}, {"node1", "areaB"}, {"node2", "areaA"}};
+
+    const auto node1bestKey =
+        std::make_pair<std::string, std::string>("node1", "areaA");
+    EXPECT_EQ(
+        node1bestKey, selectBestNodeArea(nodeAreaSet, "node1", areaLinkStates));
+
+    const auto node2bestKey =
+        std::make_pair<std::string, std::string>("node2", "areaA");
+    EXPECT_EQ(
+        node2bestKey, selectBestNodeArea(nodeAreaSet, "node2", areaLinkStates));
+  }
+
+  {
+    // Multiple entries from areas. Prefer NodeAndArea with smallest IGP
+    // distance. IGP distances of node2-node1 are 1/2 in areaA/areaB
+    // respectively.
+    std::set<NodeAndArea> nodeAreaSet{{"node1", "areaA"}, {"node1", "areaB"}};
+
+    const auto node1bestKey =
+        std::make_pair<std::string, std::string>("node1", "areaA");
+    EXPECT_EQ(
+        node1bestKey, selectBestNodeArea(nodeAreaSet, "node2", areaLinkStates));
   }
 }
 
