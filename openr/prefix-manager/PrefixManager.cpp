@@ -7,8 +7,6 @@
 
 #include "PrefixManager.h"
 #include "folly/IPAddress.h"
-#include "openr/common/Types.h"
-#include "openr/if/gen-cpp2/Types_types.h"
 
 #include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
@@ -21,8 +19,10 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {
@@ -293,10 +293,9 @@ PrefixManager::dumpSelfOriginatedPrefixes() {
       keysInKvStore_[network].keys.emplace(keyStr);
 
       // Populate pendingState to check keys
-      changed.emplace_back(network);
+      pendingUpdates_.addPrefixChange(network);
     }
     // populate pending update in one shot
-    pendingUpdates_.applyPrefixChange(changed);
     syncKvStoreThrottled_->operator()();
   }
 }
@@ -345,19 +344,14 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
         keysInKvStore_[network].keys.emplace(keyStr);
 
         // Populate pendingState to check keys
-        changed.emplace_back(network);
+        pendingUpdates_.addPrefixChange(network);
+        syncKvStoreThrottled_->operator()();
       }
     } catch (const std::exception& ex) {
       LOG(ERROR) << "Failed to deserialize corresponding value for key "
                  << keyStr << ". Exception: " << folly::exceptionStr(ex);
     }
   } // for
-
-  if (not changed.empty()) {
-    // populate pending update in one shot
-    pendingUpdates_.applyPrefixChange(changed);
-    syncKvStoreThrottled_->operator()();
-  }
 }
 
 PrefixManager::~PrefixManager() {
@@ -1280,13 +1274,12 @@ bool
 PrefixManager::advertisePrefixesImpl(
     const std::vector<PrefixEntry>& prefixEntries,
     const std::optional<std::string>& policyName) {
-  folly::small_vector<folly::CIDRNetwork> changed{};
-
   // Apply origination policy first if event came with one
   const auto& postOriginationPrefixes = policyName
       ? applyOriginationPolicy(prefixEntries, *policyName)
       : prefixEntries;
 
+  bool updated{false};
   for (const auto& entry : postOriginationPrefixes) {
     const auto& type = *entry.tPrefixEntry->type_ref();
     const auto& prefixCidr = entry.network;
@@ -1304,15 +1297,12 @@ PrefixManager::advertisePrefixesImpl(
       // Case 2: update existing `PrefixEntry`
       it->second = entry;
     }
-    // Case 3: create new `PrefixEntry`
-    changed.emplace_back(prefixCidr);
+    // Case 3: store pendingUpdate for batch processing
+    pendingUpdates_.addPrefixChange(prefixCidr);
+    updated = true;
   }
 
-  bool updated = (not changed.empty()) ? true : false;
   if (updated) {
-    // store pendingUpdate for batch processing
-    pendingUpdates_.applyPrefixChange(changed);
-
     // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
   }
@@ -1330,8 +1320,7 @@ PrefixManager::withdrawPrefixesImpl(
   // Remove prefix from originated prefixes map
   removeOriginatedPrefixes(tPrefixEntries);
 
-  folly::small_vector<folly::CIDRNetwork> changed{};
-
+  bool updated{false};
   for (const auto& prefixEntry : tPrefixEntries) {
     const auto& type = *prefixEntry.type_ref();
     const auto& prefixCidr = toIPNetwork(*prefixEntry.prefix_ref());
@@ -1341,8 +1330,9 @@ PrefixManager::withdrawPrefixesImpl(
 
     // ONLY populate changed collection when successfully erased key
     if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
-      changed.emplace_back(prefixCidr);
-
+      updated = true;
+      // store pendingUpdate for batch processing
+      pendingUpdates_.addPrefixChange(prefixCidr);
       // clean up data structure
       if (typeIt->second.empty()) {
         prefixMap_.erase(prefixCidr);
@@ -1350,11 +1340,7 @@ PrefixManager::withdrawPrefixesImpl(
     }
   }
 
-  bool updated = (not changed.empty()) ? true : false;
   if (updated) {
-    // store pendingUpdate for batch processing
-    pendingUpdates_.applyPrefixChange(changed);
-
     // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
   }
@@ -1372,8 +1358,7 @@ PrefixManager::withdrawPrefixEntriesImpl(
   // Remove prefix from originated prefixes map
   removeOriginatedPrefixes(prefixEntries);
 
-  folly::small_vector<folly::CIDRNetwork> changed{};
-
+  bool updated{false};
   for (const auto& prefixEntry : prefixEntries) {
     const auto& type = *prefixEntry.tPrefixEntry->type_ref();
 
@@ -1382,7 +1367,9 @@ PrefixManager::withdrawPrefixEntriesImpl(
 
     // ONLY populate changed collection when successfully erased key
     if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
-      changed.emplace_back(prefixEntry.network);
+      updated = true;
+      // store pendingUpdate for batch processing
+      pendingUpdates_.addPrefixChange(prefixEntry.network);
       // clean up data structure
       if (typeIt->second.empty()) {
         prefixMap_.erase(prefixEntry.network);
@@ -1390,11 +1377,7 @@ PrefixManager::withdrawPrefixEntriesImpl(
     }
   }
 
-  bool updated = (not changed.empty()) ? true : false;
   if (updated) {
-    // store pendingUpdate for batch processing
-    pendingUpdates_.applyPrefixChange(changed);
-
     // schedule `syncKvStore` after throttled timeout
     syncKvStoreThrottled_->operator()();
   }
@@ -1554,27 +1537,41 @@ PrefixManager::storeProgrammedRoutes(
     const DecisionRouteUpdate& fibRouteUpdates) {
   // In case of full sync, reset previous stored programmed routes.
   if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC) {
-    // Adding all previously programmed routes as pending updates.
-    for (const auto& deletedLabel : programmedLabels_) {
-      pendingUpdates_.addLabelChange(deletedLabel);
-    }
-    programmedLabels_.clear();
-
     if (uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
       LOG(INFO) << "[Initialization] Received initial RIB routes.";
       triggerInitialPrefixDbSync();
     }
+
+    // Adding all previously programmed routes as pending updates.
+    for (const auto& deletedLabel : programmedLabels_) {
+      pendingUpdates_.addLabelChange(deletedLabel);
+    }
+    for (const auto& deletedPrefix : programmedPrefixes_) {
+      pendingUpdates_.addPrefixChange(deletedPrefix);
+    }
+    programmedLabels_.clear();
+    programmedPrefixes_.clear();
   }
 
-  // Record MPLS label routes from OpenR/Fib.
+  // Record MPLS routes from OpenR/Fib.
   for (auto& [label, _] : fibRouteUpdates.mplsRoutesToUpdate) {
     if (programmedLabels_.insert(label).second /*inserted*/) {
       pendingUpdates_.addLabelChange(label);
     }
   }
   for (auto& deletedLabel : fibRouteUpdates.mplsRoutesToDelete) {
-    if (programmedLabels_.erase(deletedLabel) > 0 /*deleted*/) {
+    if (programmedLabels_.erase(deletedLabel) /*erased*/) {
       pendingUpdates_.addLabelChange(deletedLabel);
+    }
+  }
+  for (const auto& [prefix, _] : fibRouteUpdates.unicastRoutesToUpdate) {
+    if (programmedPrefixes_.insert(prefix).second /*inserted*/) {
+      pendingUpdates_.addPrefixChange(prefix);
+    }
+  }
+  for (const auto& prefix : fibRouteUpdates.unicastRoutesToDelete) {
+    if (programmedPrefixes_.erase(prefix) /*erased*/) {
+      pendingUpdates_.addPrefixChange(prefix);
     }
   }
 

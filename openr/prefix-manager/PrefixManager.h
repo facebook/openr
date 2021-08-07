@@ -59,10 +59,8 @@ class PrefixManagerPendingUpdates {
   }
 
   void
-  applyPrefixChange(const folly::small_vector<folly::CIDRNetwork>& change) {
-    for (const auto& network : change) {
-      changedPrefixes_.insert(network);
-    }
+  addPrefixChange(const folly::CIDRNetwork& prefix) {
+    changedPrefixes_.insert(prefix);
   }
 
   void
@@ -521,6 +519,13 @@ class PrefixManager final : public OpenrEventBase {
    * routes is programmed before advertisement.
    */
   std::unordered_set<int32_t> programmedLabels_;
+
+  /*
+   * Prefixes with unicast route already programmed by FIB. For one prefix,
+   * PrefixManager needs to make sure the associated unicast route is programmed
+   * before advertisement.
+   */
+  std::unordered_set<folly::CIDRNetwork> programmedPrefixes_;
 
   // Boolean flag indicating if kvStoreSynced signal is received from KvStore in
   // OpenR initialization procedure.

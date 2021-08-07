@@ -2572,14 +2572,11 @@ TEST(PrefixManagerPendingUpdates, updatePrefixes) {
   // verify initial state
   EXPECT_TRUE(updates.getChangedPrefixes().empty());
 
-  // empty update will ONLY change counter
-  updates.applyPrefixChange({});
-  EXPECT_TRUE(updates.getChangedPrefixes().empty());
-
   // non-empty change
   auto network1 = toIPNetwork(addr1);
   auto network2 = toIPNetwork(addr2);
-  updates.applyPrefixChange({network1, network2});
+  updates.addPrefixChange(network1);
+  updates.addPrefixChange(network2);
   EXPECT_THAT(
       updates.getChangedPrefixes(),
       testing::UnorderedElementsAre(network1, network2));
