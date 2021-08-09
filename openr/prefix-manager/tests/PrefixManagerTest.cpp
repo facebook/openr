@@ -12,9 +12,11 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
+#include <openr/decision/RibEntry.h>
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -1037,6 +1039,14 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     event.prefixEntries.push_back(cPrefixEntry);
     prefixUpdatesQueue.push(std::move(event));
 
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.addRouteToUpdate(RibUnicastEntry(
+        toIPNetwork(addr9),
+        nexthops,
+        prefixEntry9,
+        thrift::Types_constants::kDefaultArea()));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
     // Wait for update in KvStore
     // ATTN: both prefixes should be updated via throttle
     auto pub = kvStoreWrapper->recvPublication();
@@ -1832,6 +1842,23 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
 class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
  public:
+  void
+  SetUp() override {
+    PrefixManagerMultiAreaTestFixture::SetUp();
+
+    // Install route for v4Prefix_ since install_to_fib is true.
+    DecisionRouteUpdate routeUpdate;
+    auto addressV4 = toIpPrefix(v4Prefix_);
+    const auto entryV4 =
+        createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
+    routeUpdate.addRouteToUpdate(RibUnicastEntry(
+        toIPNetwork(addressV4),
+        {},
+        entryV4,
+        thrift::Types_constants::kDefaultArea()));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+  }
+
   openr::thrift::OpenrConfig
   createConfig() override {
     thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;

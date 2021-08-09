@@ -455,11 +455,15 @@ PrefixManager::updatePrefixKeysInKvStore(
     deleteKvStoreKeyHelper(keysIt->second.keys);
   }
 
+  auto& advertisedStatus = keysInKvStore_[prefix];
   // override `keysInKvStore_` for next-round syncing
-  keysInKvStore_[prefix].keys = std::move(newKeys);
+  advertisedStatus.keys = std::move(newKeys);
   // propogate route update to `KvStore` and `Decision`(if necessary)
   if (prefixEntry.shouldInstall()) {
-    keysInKvStore_[prefix].installedToFib = true;
+    if (advertisedStatus.installedToFib) {
+      return;
+    }
+    advertisedStatus.installedToFib = true;
     // Populate RibUnicastEntry struct
     // ATTN: AREA field is empty for NHs
     // if shouldInstall() is true, nexthops is guaranteed to have value.
@@ -469,9 +473,9 @@ PrefixManager::updatePrefixKeysInKvStore(
   } else {
     // if was installed to fib, but now lose in tie break, withdraw from
     // fib.
-    if (keysInKvStore_[prefix].installedToFib) {
+    if (advertisedStatus.installedToFib) {
       routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
-      keysInKvStore_[prefix].installedToFib = false;
+      advertisedStatus.installedToFib = false;
     }
   } // else
 }
@@ -639,13 +643,20 @@ PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   }
   // If prepend label is set, the associated label route should have been
   // programmed.
-  if (prefixEntry.tPrefixEntry->prependLabel_ref().has_value()) {
-    int32_t label = prefixEntry.tPrefixEntry->prependLabel_ref().value();
-    if (programmedLabels_.find(label) == programmedLabels_.end()) {
+  auto labelRef = prefixEntry.tPrefixEntry->prependLabel_ref();
+  if (labelRef.has_value()) {
+    if (programmedLabels_.count(labelRef.value()) == 0) {
       return false;
     }
   }
-  // TODO: Check unicast route is already programmed locally.
+  // If nexthops is set in prefixEntry, it implicitly indicates that the
+  // associated unicast routes should be programmed before the prefix is
+  // advertised.
+  if (prefixEntry.nexthops.has_value()) {
+    if (programmedPrefixes_.count(prefixEntry.network) == 0) {
+      return false;
+    }
+  }
 
   return true;
 }
@@ -713,8 +724,8 @@ PrefixManager::syncKvStore() {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
       // Delete prefixes that do not exist in prefixMap_.
-      VLOG(1) << fmt::format(
-          "Deleting keys for {}", folly::IPAddress::networkToString(prefix));
+      VLOG(1) << "Deleting keys for "
+              << folly::IPAddress::networkToString(prefix);
       deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
       advertisedPrefixes_.erase(prefix);
       ++syncedPrefixCnt;
