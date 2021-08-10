@@ -4700,6 +4700,15 @@ class DecisionTestFixture : public ::testing::Test {
       auto resp = decision->getDecisionRouteDb(node).get();
       EXPECT_TRUE(resp);
       EXPECT_EQ(node, *resp->thisNodeName_ref());
+
+      // Sort next-hop lists to ease verification code
+      for (auto& route : *resp->unicastRoutes_ref()) {
+        std::sort(route.nextHops_ref()->begin(), route.nextHops_ref()->end());
+      }
+      for (auto& route : *resp->mplsRoutes_ref()) {
+        std::sort(route.nextHops_ref()->begin(), route.nextHops_ref()->end());
+      }
+
       routeMap[node] = std::move(*resp);
     }
 
@@ -5719,9 +5728,7 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
         addr3, {createNextHopFromAdj(adj13, false, 10, std::nullopt, "B")});
     // addr4 is only originated in area B
     auto routeToAddr4 = createUnicastRoute(
-        addr4,
-        {createNextHopFromAdj(adj12, false, 20, std::nullopt, "A"),
-         createNextHopFromAdj(adj13, false, 20, std::nullopt, "B")});
+        addr4, {createNextHopFromAdj(adj13, false, 20, std::nullopt, "B")});
     EXPECT_THAT(*routeDb1.unicastRoutes_ref(), testing::SizeIs(3));
     EXPECT_THAT(
         *routeDb1.unicastRoutes_ref(),
@@ -5757,9 +5764,7 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
         addr3, {createNextHopFromAdj(adj43, false, 10, std::nullopt, "B")});
     // addr1 is only originated in area A
     auto routeToAddr1 = createUnicastRoute(
-        addr1,
-        {createNextHopFromAdj(adj42, false, 20, std::nullopt, "A"),
-         createNextHopFromAdj(adj43, false, 20, std::nullopt, "B")});
+        addr1, {createNextHopFromAdj(adj42, false, 20, std::nullopt, "A")});
     EXPECT_THAT(*routeDb4.unicastRoutes_ref(), testing::SizeIs(3));
     EXPECT_THAT(
         *routeDb4.unicastRoutes_ref(),

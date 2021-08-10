@@ -177,28 +177,30 @@ class SpfSolver {
       const LinkState::SpfResult& spfResult,
       const std::set<NodeAndArea>& dstNodeAreas);
 
-  // Given prefixes and the nodes who announce it, get the ecmp routes.
-  std::optional<RibUnicastEntry> selectBestPathsSpf(
+  // Given prefixes and the nodes who announce it, get the ecmp next-hops.
+  std::pair<LinkStateMetric, std::unordered_set<thrift::NextHopThrift>>
+  selectBestPathsSpf(
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       RouteSelectionResult const& routeSelectionResult,
       PrefixEntries const& prefixEntries,
       bool const isBgp,
       thrift::PrefixForwardingType const& forwardingType,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      const std::string& area,
+      const LinkState& linkState,
       PrefixState const& prefixState);
 
   // Given prefixes and the nodes who announce it, get the kspf2 routes, aka,
   // shortest paths and second shortest paths.
-  std::optional<RibUnicastEntry> selectBestPathsKsp2(
+  std::unordered_set<thrift::NextHopThrift> selectBestPathsKsp2(
       const std::string& myNodeName,
       const folly::CIDRNetwork& prefix,
       RouteSelectionResult const& routeSelectionResult,
       PrefixEntries const& prefixEntries,
       bool isBgp,
       thrift::PrefixForwardingType const& forwardingType,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixState const& prefixState);
+      const std::string& area,
+      const LinkState& linkState);
 
   std::optional<RibUnicastEntry> addBestPaths(
       const std::string& myNodeName,
@@ -263,7 +265,7 @@ class SpfSolver {
       const std::string& srcNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
       bool perDestination,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates);
+      const LinkState& linkState);
 
   // This function converts best nexthop nodes to best nexthop adjacencies
   // which can then be passed to FIB for programming. It considers and
@@ -281,7 +283,8 @@ class SpfSolver {
           std::pair<std::string, std::string>,
           openr::LinkStateMetric> nextHopNodes,
       std::optional<int32_t> swapLabel,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      const std::string& area,
+      const LinkState& linkState,
       PrefixEntries const& prefixEntries = {}) const;
 
   // Collection to store static IP/MPLS routes
