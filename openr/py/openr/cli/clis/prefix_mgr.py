@@ -198,7 +198,7 @@ class AdvertisedRoutesCli(object):
             opts.detail,
         )
 
-    @show.command("rejected_on_area")
+    @show.command("rejected-on-area")
     @click.argument("area", type=str)
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
@@ -253,7 +253,7 @@ class AdvertisedRoutesCli(object):
         """
         DEPRECATED. use rejected_on_area
         """
-        click.secho("rejected is deprecated, use rejected_on_area", fg="red")
+        click.secho("rejected is deprecated, use rejected-on-area", fg="red")
 
     @show.command("pre-origination-policy")
     @click.argument("prefix", nargs=-1, type=str, required=False)
