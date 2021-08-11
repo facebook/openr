@@ -255,6 +255,7 @@ class Constants {
   // Openr Ctrl thrift server port
   static constexpr int32_t kOpenrCtrlPort{2018};
 
+  // [TO BE DEPRECATED]
   // The port KvStore replier listens on
   static constexpr int32_t kKvStoreRepPort{60002};
 

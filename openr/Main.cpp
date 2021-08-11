@@ -41,7 +41,6 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
-#include <openr/config/GflagConfig.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/RouteUpdate.h>
@@ -209,13 +208,8 @@ main(int argc, char** argv) {
   // start config module
   std::shared_ptr<Config> config;
   try {
-    if (not FLAGS_config.empty()) {
-      LOG(INFO) << "Reading config from " << FLAGS_config;
-      config = std::make_shared<Config>(FLAGS_config);
-    } else {
-      LOG(INFO) << "Constructing config from GFLAG value.";
-      config = GflagConfig::createConfigFromGflag();
-    }
+    LOG(INFO) << "Reading config from " << FLAGS_config;
+    config = std::make_shared<Config>(FLAGS_config);
   } catch (const thrift::ConfigError&) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
     // collect stack strace then fail the process

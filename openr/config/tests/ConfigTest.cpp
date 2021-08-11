@@ -7,18 +7,14 @@
 
 #include <folly/FileUtil.h>
 #include <folly/experimental/TestUtil.h>
-#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <thread>
-#include <utility>
 
 #define Config_TEST_FRIENDS FRIEND_TEST(ConfigTest, PopulateInternalDb);
 
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/config/Config.h>
-#include <openr/config/GflagConfig.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -888,25 +884,6 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_TRUE(config.isV4OverV6NexthopEnabled());
   }
 
-  // config with bgp peering
-  {
-    auto tConfig = getBasicOpenrConfig("fsw001");
-    tConfig.enable_bgp_peering_ref() = true;
-
-    FLAGS_node_name = "fsw001";
-    const auto& bgpConf = GflagConfig::getBgpAutoConfig();
-    tConfig.bgp_config_ref() = bgpConf;
-    tConfig.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
-
-    auto config = Config(tConfig);
-
-    // isBgpPeeringEnabled
-    EXPECT_TRUE(config.isBgpPeeringEnabled());
-    EXPECT_EQ(bgpConf, config.getBgpConfig());
-    EXPECT_EQ(
-        thrift::BgpRouteTranslationConfig(), config.getBgpTranslationConfig());
-  }
-
   // config with watchdog
   {
     auto tConfig = getBasicOpenrConfig("fsw001");
@@ -972,19 +949,6 @@ TEST(ConfigTest, PrefixAllocatorGetter) {
   // getPrefixAllocationParams
   const PrefixAllocationParams& params = {testSeedPrefix, testAllocationPfxLen};
   EXPECT_EQ(params, config.getPrefixAllocationParams());
-}
-
-TEST(ConfigTest, BgpPeeringConfig) {
-  {
-    FLAGS_node_name = "fsw001";
-    auto bgpConfig = GflagConfig::getBgpAutoConfig();
-    EXPECT_EQ(2201, *bgpConfig.local_confed_as_ref());
-  }
-  {
-    FLAGS_node_name = "rsw001";
-    auto bgpConfig = GflagConfig::getBgpAutoConfig();
-    EXPECT_EQ(2101, *bgpConfig.local_confed_as_ref());
-  }
 }
 
 TEST(ConfigTest, SegmentRoutingConfig) {
