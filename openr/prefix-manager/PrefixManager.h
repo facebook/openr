@@ -282,14 +282,17 @@ class PrefixManager final : public OpenrEventBase {
       DecisionRouteUpdate& routeUpdatesOut);
 
   // Add KvStore keys of one prefix entry.
+  // @return: set of the areas that this prefix will advertise to.
   std::unordered_set<std::string> addKvStoreKeyHelper(const PrefixEntry& entry);
 
   // Delete KvStore keys of one prefix entry.
   void deletePrefixKeysInKvStore(
       const folly::CIDRNetwork& prefix, DecisionRouteUpdate& routeUpdatesOut);
 
+  // Delete KvStore keys form the areas for one prefix entry.
   void deleteKvStoreKeyHelper(
-      const std::unordered_set<std::string>& deletedKeys);
+      const folly::CIDRNetwork& prefix,
+      const std::unordered_set<std::string>& deletedArea);
 
   /*
    * [Route Origination/Aggregation]
@@ -410,13 +413,16 @@ class PrefixManager final : public OpenrEventBase {
 
   // This collection serves for easy clean up when certain prefix is withdrawn.
   // `PrefixManager` will advertise prefixes based on best-route-selection
-  // process. With multi-area support, one prefixes will map to multiple
+  // process. With multi-area support, one prefix will map to multiple
   // key-advertisement in `KvStore`.
   struct AdervertiseStatus {
+    // If the prefix was installed to the Fib
     bool installedToFib{false};
-    std::unordered_set<std::string> keys;
+    // Saving the set of areas this prefix advertised to
+    std::unordered_set<std::string> areas;
   };
   std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> keysInKvStore_{};
+
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
 

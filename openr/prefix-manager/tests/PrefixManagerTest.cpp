@@ -234,13 +234,13 @@ class PrefixManagerPrefixKeyFormatTestFixture
 TEST_F(
     PrefixManagerPrefixKeyFormatTestFixture,
     PrefixKeyFormatBackwardCompatibility) {
-  // Make sure we have old format of keys added
+  // Make sure we have new format of keys added
   auto prefixKey1 = PrefixKey(
       nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName, true);
   auto prefixKey2 = PrefixKey(
       nodeId_, toIPNetwork(*prefixEntry2.prefix_ref()), kTestingAreaName, true);
 
-  // ATTN: remember v1 format of keys for future validation.
+  // ATTN: record v2 format of keys for future validation.
   auto keyStr1 = prefixKey1.getPrefixKeyV2();
   auto keyStr2 = prefixKey2.getPrefixKeyV2();
 
@@ -297,7 +297,7 @@ TEST_F(
           auto db2 = readThriftObjStr<thrift::PrefixDatabase>(
               maybeValue2.value().value_ref().value(), serializer);
           EXPECT_EQ(*db2.deletePrefix_ref(), false);
-          EXPECT_EQ(*db1.deletePrefix_ref(), false);
+          EXPECT_EQ(*db1.deletePrefix_ref(), true);
 
           evb.stop();
         });

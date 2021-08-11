@@ -279,13 +279,20 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
     }
     try {
       const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          *val.value_ref(), serializer_);
+          *val.get_value(), serializer_);
+      CHECK_EQ(prefixDb.get_prefixEntries().size(), 1)
+          << "Expect single entry inside prefix database";
+
       if (not *prefixDb.deletePrefix_ref()) {
         VLOG(2) << "Learning previously announced prefix: " << keyStr;
+        // get the key prefix and area from the thrift::PrefixDatabase
+        auto const& tPrefixEntry = prefixDb.get_prefixEntries().front();
+        auto const& network = toIPNetwork(tPrefixEntry.get_prefix());
+        auto const& area = thriftPub.get_area();
+
         // populate keysInKvStore_ collection to make sure we can find
-        // key when clear key from `KvStore`
-        const auto network = prefixKey->getCIDRNetwork();
-        keysInKvStore_[network].keys.emplace(keyStr);
+        // <key, area> when clear key from `KvStore`
+        keysInKvStore_[network].areas.emplace(area);
 
         // Populate pendingState to check keys
         pendingUpdates_.addPrefixChange(network);
@@ -380,15 +387,15 @@ PrefixManager::updatePrefixKeysInKvStore(
     const PrefixEntry& prefixEntry,
     DecisionRouteUpdate& routeUpdatesOut) {
   // advertise best-entry for this prefix to `KvStore`
-  auto newKeys = addKvStoreKeyHelper(prefixEntry);
+  auto updatedArea = addKvStoreKeyHelper(prefixEntry);
 
   auto keysIt = keysInKvStore_.find(prefix);
   if (keysIt != keysInKvStore_.end()) {
-    // ATTN: This collection holds "advertised" prefixes in previous round
-    // of syncing. By removing prefixes in current run, whatever left in
+    // ATTN: keysInKvStore_ collection holds "advertised" prefixes in previous
+    // round of syncing. By removing prefixes in current run, whatever left in
     // `keysInKvStore_` will be the delta to be removed.
-    for (const auto& key : newKeys) {
-      keysIt->second.keys.erase(key);
+    for (const auto& area : updatedArea) {
+      keysIt->second.areas.erase(area);
     }
 
     // remove keys which are no longer advertised
@@ -396,12 +403,12 @@ PrefixManager::updatePrefixKeysInKvStore(
     // t0: prefix_1 => {area_1, area_2}
     // t1: prefix_1 => {area_1, area_3}
     //     (prefix_1, area_2) will be removed
-    deleteKvStoreKeyHelper(keysIt->second.keys);
+    deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
   }
 
   auto& advertisedStatus = keysInKvStore_[prefix];
   // override `keysInKvStore_` for next-round syncing
-  advertisedStatus.keys = std::move(newKeys);
+  advertisedStatus.areas = std::move(updatedArea);
   // propogate route update to `KvStore` and `Decision`(if necessary)
   if (prefixEntry.shouldInstall()) {
     if (advertisedStatus.installedToFib) {
@@ -426,7 +433,7 @@ PrefixManager::updatePrefixKeysInKvStore(
 
 std::unordered_set<std::string>
 PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
-  std::unordered_set<std::string> prefixKeys;
+  std::unordered_set<std::string> areasToUpdate;
   const auto& tPrefixEntry = entry.tPrefixEntry;
   const auto& type = *tPrefixEntry->type_ref();
   const std::unordered_set<std::string> areaStack{
@@ -492,9 +499,9 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
             << "Area: " << toArea << ", "
             << "Type: " << toString(type) << ", "
             << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
-    prefixKeys.emplace(prefixKeyStr);
+    areasToUpdate.emplace(toArea);
   }
-  return prefixKeys;
+  return areasToUpdate;
 }
 
 void
@@ -508,7 +515,7 @@ PrefixManager::deletePrefixKeysInKvStore(
   //  marker        nodeId      areaId        prefixStr
   auto keysIt = keysInKvStore_.find(prefix);
   if (keysIt != keysInKvStore_.end()) {
-    deleteKvStoreKeyHelper(keysIt->second.keys);
+    deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
     if (keysIt->second.installedToFib) {
       routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
     }
@@ -518,30 +525,22 @@ PrefixManager::deletePrefixKeysInKvStore(
 
 void
 PrefixManager::deleteKvStoreKeyHelper(
-    const std::unordered_set<std::string>& deletedKeys) {
+    const folly::CIDRNetwork& prefix,
+    const std::unordered_set<std::string>& deletedArea) {
   // Prepare thrift::PrefixDatabase object for deletion
   thrift::PrefixDatabase deletedPrefixDb;
   deletedPrefixDb.thisNodeName_ref() = nodeId_;
   deletedPrefixDb.deletePrefix_ref() = true;
 
-  // TODO: see if we can avoid encoding/decoding of string
-  for (const auto& prefixStr : deletedKeys) {
-    // TODO: add multi-area support for prefixStr instead of use default area
-    auto maybePrefixKey = PrefixKey::fromStr(prefixStr);
-    if (maybePrefixKey.hasError()) {
-      // this is bad format of key.
-      LOG(ERROR) << fmt::format(
-          "Unable to parse prefix key: {} with error: {}",
-          prefixStr,
-          maybePrefixKey.error());
-      continue;
-    }
-    const auto network = maybePrefixKey->getCIDRNetwork();
-    const auto area = maybePrefixKey->getPrefixArea();
-
+  for (const auto& area : deletedArea) {
     thrift::PrefixEntry entry;
-    entry.prefix_ref() = toIpPrefix(network);
+    entry.prefix_ref() = toIpPrefix(prefix);
     deletedPrefixDb.prefixEntries_ref() = {entry};
+    deletedPrefixDb.area_ref() = area;
+
+    const auto prefixKey = PrefixKey(nodeId_, prefix, area);
+    const auto prefixStr = enableNewPrefixFormat_ ? prefixKey.getPrefixKeyV2()
+                                                  : prefixKey.getPrefixKey();
 
     // Remove prefix from KvStore and flood deletion by setting deleted value.
     if (config_->getConfig().get_enable_kvstore_request_queue()) {
