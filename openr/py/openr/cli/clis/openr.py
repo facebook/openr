@@ -4,7 +4,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 import click
+from bunch import Bunch
 from openr.cli.clis.decision import DecisionRibPolicyCli, ReceivedRoutesCli
 from openr.cli.clis.fib import FibMplsRoutesCli, FibUnicastRoutesCli
 from openr.cli.clis.kvstore import AdjCli
@@ -13,8 +16,8 @@ from openr.cli.clis.prefix_mgr import AdvertisedRoutesCli
 from openr.cli.commands import openr
 
 
-class OpenrCli(object):
-    def __init__(self):
+class OpenrCli:
+    def __init__(self) -> None:
         self.openr.add_command(AdvertisedRoutesCli().show, name="advertised-routes")
         self.openr.add_command(DecisionRibPolicyCli().show, name="rib-policy")
         self.openr.add_command(FibMplsRoutesCli().routes, name="mpls-routes")
@@ -26,16 +29,16 @@ class OpenrCli(object):
 
     @click.group()
     @click.pass_context
-    def openr(ctx):  # noqa: B902
+    def openr(ctx: click.Context) -> None:  # noqa: B902
         """CLI tool to peek into Openr information."""
         pass
 
 
-class VersionCli(object):
+class VersionCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
-    def version(cli_opts, json):  # noqa: B902
+    def version(cli_opts: Bunch, json: bool) -> None:  # noqa: B902
         """
         Get OpenR version
         """
