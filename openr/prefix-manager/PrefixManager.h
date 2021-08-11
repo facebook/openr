@@ -217,9 +217,6 @@ class PrefixManager final : public OpenrEventBase {
           typeFilter);
 
  private:
-  // Dump self originated prefix keys from KvStore.
-  void dumpSelfOriginatedPrefixes();
-
   // Process thrift publication from KvStore.
   void processPublication(thrift::Publication&& thriftPub);
 

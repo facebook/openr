@@ -110,6 +110,15 @@ class KvStoreWrapper {
       const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
       std::optional<std::vector<std::string>> nodeIds = std::nullopt);
 
+  void
+  publishKvStoreSynced() {
+    kvStoreUpdatesQueue_.push(Publication(true /*kvStoreSynced*/));
+  }
+
+  void pushToKvStoreUpdatesQueue(
+      const AreaId& area,
+      const std::unordered_map<std::string /* key */, thrift::Value>& keyVals);
+
   /**
    * API to get dump from KvStore.
    * if we pass a prefix, only return keys that match it
@@ -177,11 +186,6 @@ class KvStoreWrapper {
    */
   std::vector<thrift::KvStoreAreaSummary> getSummary(
       std::set<std::string> selectAreas);
-
-  void
-  publishKvStoreSynced() {
-    kvStoreUpdatesQueue_.push(Publication(true /*kvStoreSynced*/));
-  }
 
   /**
    * Utility function to get peer-spec for owned KvStore

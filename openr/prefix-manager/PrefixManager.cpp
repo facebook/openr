@@ -228,10 +228,6 @@ PrefixManager::PrefixManager(
       auto& pub = maybePub.value();
       // kvStoreSynced and tPublication are exclusive with each other.
       if (pub.kvStoreSynced) {
-        // "kvStoreSynced" signal is used to mark initial KvStore sync stage
-        // done during Open/R initialization process. PrefixManager could dump
-        // all prefixes advertised by itself previously.
-        dumpSelfOriginatedPrefixes();
         LOG(INFO)
             << "[Initialization] All prefix keys are retrieved from KvStore.";
         initialKvStoreSynced_ = true;
@@ -246,58 +242,6 @@ PrefixManager::PrefixManager(
       }
     }
   });
-}
-
-void
-PrefixManager::dumpSelfOriginatedPrefixes() {
-  // get initial dump of keys related to `myNodeId_`.
-  // ATTN: when Open/R restarts, newly started prefixManager will need to
-  // understand what it has previously advertised.
-  const auto keyPrefix =
-      fmt::format("{}{}:", Constants::kPrefixDbMarker.toString(), nodeId_);
-
-  for (const auto& [area, _] : areaToPolicy_) {
-    auto result = kvStoreClient_->dumpAllWithPrefix(AreaId{area}, keyPrefix);
-    if (not result.has_value()) {
-      LOG(ERROR) << "Failed dumping prefix " << keyPrefix << " from area "
-                 << area;
-      continue;
-    }
-
-    folly::small_vector<folly::CIDRNetwork> changed;
-    for (auto const& [keyStr, _] : result.value()) {
-      // TODO: avoid decoding keys
-      auto maybePrefixKey = PrefixKey::fromStr(keyStr);
-      if (maybePrefixKey.hasError()) {
-        // this is bad format of key.
-        LOG(ERROR) << fmt::format(
-            "Unable to parse prefix key: {} with error: {}",
-            keyStr,
-            maybePrefixKey.error());
-        continue;
-      }
-
-      // ATTN: to avoid prefix churn, skip processing prefixes from previous
-      // incarnation with different prefix key format.
-      if (enableNewPrefixFormat_ != maybePrefixKey.value().isPrefixKeyV2()) {
-        const std::string version =
-            maybePrefixKey.value().isPrefixKeyV2() ? "v2" : "v1";
-        LOG(INFO) << fmt::format(
-            "Skip processing {} format of prefix: {}", version, keyStr);
-        continue;
-      }
-
-      // populate keysInKvStore_ collection to make sure we can find
-      // key when clear key from `KvStore`
-      const auto network = maybePrefixKey->getCIDRNetwork();
-      keysInKvStore_[network].keys.emplace(keyStr);
-
-      // Populate pendingState to check keys
-      pendingUpdates_.addPrefixChange(network);
-    }
-    // populate pending update in one shot
-    syncKvStoreThrottled_->operator()();
-  }
 }
 
 void

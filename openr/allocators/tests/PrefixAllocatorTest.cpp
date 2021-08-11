@@ -586,11 +586,15 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   SetUp(thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE);
 
+  OpenrEventBase eventBase;
+  int scheduleAt{0};
   folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
   const uint8_t allocPrefixLen = 24;
+  const auto seedPrefix = folly::IPAddress::createNetwork("10.1.0.0/16");
+  auto prefixAllocParam = folly::sformat(
+      "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
 
-  // Set callback
   auto cb = [&](const std::string&,
                 std::optional<thrift::Value> value) mutable noexcept {
     // Parse PrefixDb
@@ -624,118 +628,143 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
     }
   };
 
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    KvStoreFilters kvStoreFilters(
-        {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
+  eventBase.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // Set callback
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+          KvStoreFilters kvStoreFilters(
+              {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
 
-    kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
-  });
+          kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
+        });
 
-  //
-  // 1) Set seed prefix in kvStore and verify that we get an elected prefix
-  //
-  // announce new seed prefix
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
-  const auto seedPrefix = folly::IPAddress::createNetwork("10.1.0.0/16");
-  auto prefixAllocParam = folly::sformat(
-      "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    auto res = kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kSeedPrefixAllocParamKey.toString(),
-        prefixAllocParam);
-    EXPECT_TRUE(res.has_value());
-  });
-  // busy loop until we have prefix
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.has_value());
-    if (allocPrefix.has_value()) {
-      EXPECT_EQ(allocPrefixLen, allocPrefix->second);
-      EXPECT_TRUE(allocPrefix->first.inSubnet("10.1.0.0/16"));
-    }
-  }
-  LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
+        //
+        // 1) Set seed prefix in kvStore and verify that we get an elected
+        // prefix
+        //
+        // announce new seed prefix
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+          auto res = kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kSeedPrefixAllocParamKey.toString(),
+              prefixAllocParam);
+          EXPECT_TRUE(res.has_value());
+        });
+        // busy loop until we have prefix
+        while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        SYNCHRONIZED(allocPrefix) {
+          EXPECT_TRUE(allocPrefix.has_value());
+          if (allocPrefix.has_value()) {
+            EXPECT_EQ(allocPrefixLen, allocPrefix->second);
+            EXPECT_TRUE(allocPrefix->first.inSubnet("10.1.0.0/16"));
+          }
+        }
+        LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
 
-  //
-  // 2) Clear prefix-allocator, clear prefix in config store and config store
-  // and restart prefix allcoator. Expect prefix to be withdrawn
-  //
-  // ATTN: Clean up kvStoreUpdatesQueue before shutting down prefixAllocator.
-  //       resetQueue() will clean up ALL readers including kvStoreClient. Must
-  //       recreate it to receive KvStore publication.
-  prefixUpdatesQueue_.close();
-  fibRouteUpdatesQueue_.close();
-  kvStoreWrapper_->closeQueue();
-  kvStoreClient_.reset();
-  prefixAllocator_->stop();
-  prefixAllocator_->waitUntilStopped();
-  prefixAllocator_.reset();
-  prefixManager_->stop();
-  prefixManager_->waitUntilStopped();
-  prefixManager_.reset();
+        //
+        // 2) Clear prefix-allocator, clear prefix in config store and config
+        // store and restart prefix allcoator. Expect prefix to be withdrawn
+        //
+        // ATTN: Clean up kvStoreUpdatesQueue before shutting down
+        // prefixAllocator.
+        // resetQueue() will clean up ALL readers including kvStoreClient.
+        // Must recreate it to receive KvStore publication.
+        prefixUpdatesQueue_.close();
+        fibRouteUpdatesQueue_.close();
+        kvStoreWrapper_->closeQueue();
+        kvStoreClient_.reset();
+        prefixAllocator_->stop();
+        prefixAllocator_->waitUntilStopped();
+        prefixAllocator_.reset();
+        prefixManager_->stop();
+        prefixManager_->waitUntilStopped();
+        prefixManager_.reset();
 
-  // reopen queue and restart prefixAllocator/prefixManager
-  prefixUpdatesQueue_.open();
-  fibRouteUpdatesQueue_.open();
-  kvStoreWrapper_->openQueue();
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
-    kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-        &evb_, myNodeName_, kvStoreWrapper_->getKvStore());
-    // Set callback
-    KvStoreFilters kvStoreFilters(
-        {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
-    kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
-    kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kSeedPrefixAllocParamKey.toString(),
-        "",
-        0,
-        std::chrono::milliseconds(10)); // erase-key
-    kvStoreClient_->unsetKey(
-        kTestingAreaName, Constants::kSeedPrefixAllocParamKey.toString());
-  });
-  configStore_->erase("prefix-allocator-config").get();
-  // wait long enough for key to expire
-  // @lint-ignore CLANGTIDY
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // reopen queue and restart prefixAllocator/prefixManager
+        prefixUpdatesQueue_.open();
+        fibRouteUpdatesQueue_.open();
+        kvStoreWrapper_->openQueue();
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
+          kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
+              &evb_, myNodeName_, kvStoreWrapper_->getKvStore());
+          // Set callback
+          KvStoreFilters kvStoreFilters(
+              {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
+          kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
+          kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kSeedPrefixAllocParamKey.toString(),
+              "",
+              0,
+              std::chrono::milliseconds(10)); // erase-key
+          kvStoreClient_->unsetKey(
+              kTestingAreaName, Constants::kSeedPrefixAllocParamKey.toString());
+        });
+        configStore_->erase("prefix-allocator-config").get();
+      });
 
-  hasAllocPrefix.store(true, std::memory_order_relaxed);
-  createPrefixManager();
-  createPrefixAllocator();
-  // KvStore receives empty peers after reboot. This will have PrefixManager
-  // load prefix keys in kvStoreClient_.
-  myPeerUpdatesQueue_.push(PeerEvent());
-  while (hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  // PrefixManager clears  prefixes previously advertised but not
-  // allocated/originated after reboot.
-  EXPECT_FALSE(allocPrefix->has_value());
-  LOG(INFO) << "Step-2: Lost allocated prefix";
+  eventBase.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // wait long enough for key to expire
 
-  //
-  // 3) Set prefix and expect new prefix to be elected
-  //
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
-    auto res2 = kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kSeedPrefixAllocParamKey.toString(),
-        prefixAllocParam);
-    EXPECT_TRUE(res2.has_value());
-  });
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  EXPECT_TRUE(allocPrefix->has_value());
-  LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
+        hasAllocPrefix.store(true, std::memory_order_relaxed);
+        createPrefixManager();
+        createPrefixAllocator();
 
-  // cleanup
-  evb_.getEvb()->runInEventBaseThreadAndWait(
-      [&]() { kvStoreClient_->unsubscribeKeyFilter(); });
+        // Dump KeyVals from KvStore and push to kvStoreUpdatesQueue. This
+        // mimics the behaviors of PrefixManager receives all KvStore KeyVals in
+        // OpenR initialization process.
+        auto dumpedKeyVals = kvStoreWrapper_->dumpAll(kTestingAreaName);
+        kvStoreWrapper_->pushToKvStoreUpdatesQueue(
+            kTestingAreaName, dumpedKeyVals);
+        // Push kvStoreSynced signal to trigger initial
+        // PrefixManager::syncKvStore().
+        kvStoreWrapper_->publishKvStoreSynced();
+      });
+
+  eventBase.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 10 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        while (hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        // PrefixManager clears  prefixes previously advertised but not
+        // allocated/originated after reboot.
+        EXPECT_FALSE(allocPrefix->has_value());
+        LOG(INFO) << "Step-2: Lost allocated prefix";
+
+        //
+        // 3) Set prefix and expect new prefix to be elected
+        //
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
+          auto res2 = kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kSeedPrefixAllocParamKey.toString(),
+              prefixAllocParam);
+          EXPECT_TRUE(res2.has_value());
+        });
+        while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        EXPECT_TRUE(allocPrefix->has_value());
+        LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
+
+        // cleanup
+        evb_.getEvb()->runInEventBaseThreadAndWait(
+            [&]() { kvStoreClient_->unsubscribeKeyFilter(); });
+
+        eventBase.stop();
+      });
+
+  // let magic happen
+  eventBase.run();
 }
 
 /**
@@ -931,12 +960,13 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
  */
 TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   SetUp(thrift::PrefixAllocationMode::STATIC);
+  OpenrEventBase eventBase;
+  int scheduleAt{0};
 
   thrift::StaticAllocation staticAlloc;
   folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
 
-  // Set callback
   auto cb = [&](const std::string&,
                 std::optional<thrift::Value> value) mutable noexcept {
     // Parse PrefixDb
@@ -968,161 +998,195 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     }
   };
 
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    KvStoreFilters kvStoreFilters(
-        {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
+  eventBase.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // Set callback
 
-    kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
-  });
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+          KvStoreFilters kvStoreFilters(
+              {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
 
-  //
-  // 1) Set static allocation in KvStore
-  //
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
-  staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("1.2.3.0/24");
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    auto res = kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kStaticPrefixAllocParamKey.toString(),
-        writeThriftObjStr(staticAlloc, serializer));
-    EXPECT_TRUE(res.has_value());
-  });
-  // busy loop until we have prefix
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.has_value());
-    if (allocPrefix.has_value()) {
-      EXPECT_EQ(allocPrefix, folly::IPAddress::createNetwork("1.2.3.0/24"));
-    }
-  }
-  LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
+          kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
+        });
 
-  //
-  // 2) Stop prefix-allocator, clear prefix in config store and config store
-  //    and restart prefix allcoator. Expect prefix to be withdrawn
-  //
-  // ATTN: Clean up kvStoreUpdatesQueue before shutting down prefixAllocator.
-  //       resetQueue() will clean up ALL readers including kvStoreClient. Must
-  //       recreate it to receive KvStore publication.
-  prefixUpdatesQueue_.close();
-  fibRouteUpdatesQueue_.close();
-  kvStoreWrapper_->closeQueue();
-  kvStoreClient_.reset();
-  prefixAllocator_->stop();
-  prefixAllocator_->waitUntilStopped();
-  prefixAllocator_.reset();
-  prefixManager_->stop();
-  prefixManager_->waitUntilStopped();
-  prefixManager_.reset();
+        //
+        // 1) Set static allocation in KvStore
+        //
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+        staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("1.2.3.0/24");
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+          auto res = kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kStaticPrefixAllocParamKey.toString(),
+              writeThriftObjStr(staticAlloc, serializer));
+          EXPECT_TRUE(res.has_value());
+        });
+        // busy loop until we have prefix
+        while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        SYNCHRONIZED(allocPrefix) {
+          EXPECT_TRUE(allocPrefix.has_value());
+          if (allocPrefix.has_value()) {
+            EXPECT_EQ(
+                allocPrefix, folly::IPAddress::createNetwork("1.2.3.0/24"));
+          }
+        }
+        LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
 
-  // reopen queue and restart prefixAllocator/prefixManager
-  prefixUpdatesQueue_.open();
-  fibRouteUpdatesQueue_.open();
-  kvStoreWrapper_->openQueue();
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
-    kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-        &evb_, myNodeName_, kvStoreWrapper_->getKvStore());
-    // Set callback
-    KvStoreFilters kvStoreFilters(
-        {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
-    kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
-    kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kStaticPrefixAllocParamKey.toString(),
-        "",
-        0,
-        std::chrono::milliseconds(10)); // erase-key
-    kvStoreClient_->unsetKey(
-        kTestingAreaName, Constants::kStaticPrefixAllocParamKey.toString());
-  });
-  configStore_->erase("prefix-allocator-config").get();
-  // wait long enough for key to expire
-  // @lint-ignore CLANGTIDY
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        //
+        // 2) Stop prefix-allocator, clear prefix in config store and config
+        // store and restart prefix allcoator. Expect prefix to be withdrawn
+        //
+        // ATTN: Clean up kvStoreUpdatesQueue before shutting down
+        // prefixAllocator.
+        // resetQueue() will clean up ALL readers including kvStoreClient.
+        // Must recreate it to receive KvStore publication.
+        prefixUpdatesQueue_.close();
+        fibRouteUpdatesQueue_.close();
+        kvStoreWrapper_->closeQueue();
+        kvStoreClient_.reset();
+        prefixAllocator_->stop();
+        prefixAllocator_->waitUntilStopped();
+        prefixAllocator_.reset();
+        prefixManager_->stop();
+        prefixManager_->waitUntilStopped();
+        prefixManager_.reset();
 
-  hasAllocPrefix.store(true, std::memory_order_relaxed);
-  createPrefixManager();
-  createPrefixAllocator();
-  // KvStore receives empty peers after reboot. This will have PrefixManager
-  // load prefix keys in kvStoreClient_.
-  myPeerUpdatesQueue_.push(PeerEvent());
-  while (hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  // PrefixManager clears  prefixes previously advertised but not
-  // allocated/originated after reboot.
-  EXPECT_FALSE(allocPrefix->has_value());
-  LOG(INFO) << "Step-2: Lost allocated prefix";
+        // reopen queue and restart prefixAllocator/prefixManager
+        prefixUpdatesQueue_.open();
+        fibRouteUpdatesQueue_.open();
+        kvStoreWrapper_->openQueue();
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
+          kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
+              &evb_, myNodeName_, kvStoreWrapper_->getKvStore());
+          // Set callback
+          KvStoreFilters kvStoreFilters(
+              {Constants::kPrefixDbMarker.toString()}, {myNodeName_});
+          kvStoreClient_->subscribeKeyFilter(std::move(kvStoreFilters), cb);
+          kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kStaticPrefixAllocParamKey.toString(),
+              "",
+              0,
+              std::chrono::milliseconds(10)); // erase-key
+          kvStoreClient_->unsetKey(
+              kTestingAreaName,
+              Constants::kStaticPrefixAllocParamKey.toString());
+        });
+        configStore_->erase("prefix-allocator-config").get();
+      });
 
-  //
-  // 3) Set prefix and expect new prefix to be advertised
-  //
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
-  staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("3.2.1.0/24");
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    auto res2 = kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kStaticPrefixAllocParamKey.toString(),
-        writeThriftObjStr(staticAlloc, serializer));
-    EXPECT_TRUE(res2.has_value());
-  });
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.has_value());
-    if (allocPrefix.has_value()) {
-      EXPECT_EQ(allocPrefix, folly::IPAddress::createNetwork("3.2.1.0/24"));
-    }
-  }
-  LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
+  eventBase.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // wait long enough for key to expire
 
-  //
-  // 4) Change prefix in static config and expect the announcement
-  //
-  hasAllocPrefix.store(false, std::memory_order_relaxed);
-  staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("5.6.7.0/24");
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    auto res3 = kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kStaticPrefixAllocParamKey.toString(),
-        writeThriftObjStr(staticAlloc, serializer));
-    EXPECT_TRUE(res3.has_value());
-  });
-  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.has_value());
-    if (allocPrefix.has_value()) {
-      EXPECT_EQ(allocPrefix, folly::IPAddress::createNetwork("5.6.7.0/24"));
-    }
-  }
-  LOG(INFO) << "Step-4: Received updated allocated prefix from KvStore.";
+        hasAllocPrefix.store(true, std::memory_order_relaxed);
+        createPrefixManager();
+        createPrefixAllocator();
 
-  //
-  // 5) Remove prefix in static config and expect the withdrawal
-  //
-  hasAllocPrefix.store(true, std::memory_order_relaxed);
-  staticAlloc.nodePrefixes_ref()->erase(myNodeName_);
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    auto res4 = kvStoreClient_->setKey(
-        kTestingAreaName,
-        Constants::kStaticPrefixAllocParamKey.toString(),
-        writeThriftObjStr(staticAlloc, serializer));
-    EXPECT_TRUE(res4.has_value());
-  });
-  while (hasAllocPrefix.load(std::memory_order_relaxed)) {
-    std::this_thread::yield();
-  }
-  EXPECT_FALSE(allocPrefix->has_value());
-  LOG(INFO) << "Step-5: Received withdraw for allocated prefix from KvStore.";
+        // Dump KeyVals from KvStore and push to kvStoreUpdatesQueue. This
+        // mimics the behaviors of PrefixManager receives all KvStore KeyVals in
+        // OpenR initialization process.
+        auto dumpedKeyVals = kvStoreWrapper_->dumpAll(kTestingAreaName);
+        kvStoreWrapper_->pushToKvStoreUpdatesQueue(
+            kTestingAreaName, dumpedKeyVals);
+        // Push kvStoreSynced signal to trigger initial
+        // PrefixManager::syncKvStore().
+        kvStoreWrapper_->publishKvStoreSynced();
+      });
 
-  // cleanup
-  evb_.getEvb()->runInEventBaseThreadAndWait(
-      [&]() { kvStoreClient_->unsubscribeKeyFilter(); });
+  eventBase.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 10 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // wait long enough for key to expire
+        while (hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        // PrefixManager clears  prefixes previously advertised but not
+        // allocated/originated after reboot.
+        EXPECT_FALSE(allocPrefix->has_value());
+        LOG(INFO) << "Step-2: Lost allocated prefix";
+
+        //
+        // 3) Set prefix and expect new prefix to be advertised
+        //
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+        staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("3.2.1.0/24");
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+          auto res2 = kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kStaticPrefixAllocParamKey.toString(),
+              writeThriftObjStr(staticAlloc, serializer));
+          EXPECT_TRUE(res2.has_value());
+        });
+        while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        SYNCHRONIZED(allocPrefix) {
+          EXPECT_TRUE(allocPrefix.has_value());
+          if (allocPrefix.has_value()) {
+            EXPECT_EQ(
+                allocPrefix, folly::IPAddress::createNetwork("3.2.1.0/24"));
+          }
+        }
+        LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
+
+        //
+        // 4) Change prefix in static config and expect the announcement
+        //
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+        staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("5.6.7.0/24");
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+          auto res3 = kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kStaticPrefixAllocParamKey.toString(),
+              writeThriftObjStr(staticAlloc, serializer));
+          EXPECT_TRUE(res3.has_value());
+        });
+        while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        SYNCHRONIZED(allocPrefix) {
+          EXPECT_TRUE(allocPrefix.has_value());
+          if (allocPrefix.has_value()) {
+            EXPECT_EQ(
+                allocPrefix, folly::IPAddress::createNetwork("5.6.7.0/24"));
+          }
+        }
+        LOG(INFO) << "Step-4: Received updated allocated prefix from KvStore.";
+
+        //
+        // 5) Remove prefix in static config and expect the withdrawal
+        //
+        hasAllocPrefix.store(true, std::memory_order_relaxed);
+        staticAlloc.nodePrefixes_ref()->erase(myNodeName_);
+        evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+          auto res4 = kvStoreClient_->setKey(
+              kTestingAreaName,
+              Constants::kStaticPrefixAllocParamKey.toString(),
+              writeThriftObjStr(staticAlloc, serializer));
+          EXPECT_TRUE(res4.has_value());
+        });
+        while (hasAllocPrefix.load(std::memory_order_relaxed)) {
+          std::this_thread::yield();
+        }
+        EXPECT_FALSE(allocPrefix->has_value());
+        LOG(INFO)
+            << "Step-5: Received withdraw for allocated prefix from KvStore.";
+
+        // cleanup
+        evb_.getEvb()->runInEventBaseThreadAndWait(
+            [&]() { kvStoreClient_->unsubscribeKeyFilter(); });
+
+        eventBase.stop();
+      });
+
+  // let magic happen
+  eventBase.run();
 }
 
 TEST_F(PrefixAllocatorFixture, SyncIfaceAddresses) {

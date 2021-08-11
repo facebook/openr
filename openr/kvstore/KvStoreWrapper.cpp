@@ -130,6 +130,16 @@ KvStoreWrapper::setKeys(
   return true;
 }
 
+void
+KvStoreWrapper::pushToKvStoreUpdatesQueue(
+    const AreaId& area,
+    const std::unordered_map<std::string /* key */, thrift::Value>& keyVals) {
+  thrift::Publication pub;
+  pub.area_ref() = area;
+  pub.keyVals_ref() = keyVals;
+  kvStoreUpdatesQueue_.push(Publication(pub));
+}
+
 std::optional<thrift::Value>
 KvStoreWrapper::getKey(AreaId const& area, std::string key) {
   // Prepare KeyGetParams
