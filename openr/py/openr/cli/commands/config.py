@@ -27,15 +27,16 @@ class ConfigShowCmd(OpenrCtrlCmd):
 
 
 class ConfigDryRunCmd(OpenrCtrlCmd):
-    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs):
+    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs) -> int:
         try:
             file_conf = client.dryrunConfig(file)
         except OpenrError as ex:
             click.echo(click.style("FAILED: {}".format(ex), fg="red"))
-            return
+            return 1
 
         config = json.loads(file_conf)
         utils.print_json(config)
+        return 0
 
 
 class ConfigCompareCmd(OpenrCtrlCmd):

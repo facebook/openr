@@ -6,11 +6,11 @@
 
 
 import click
+from bunch import Bunch
 from openr.cli.commands import config
-from openr.cli.utils.options import breeze_option
 
 
-class ConfigCli(object):
+class ConfigCli:
     def __init__(self):
         self.config.add_command(ConfigShowCli().show, name="show")
         self.config.add_command(ConfigDryRunCli().dryrun, name="dryrun")
@@ -30,41 +30,47 @@ class ConfigCli(object):
 
     @click.group()
     @click.pass_context
-    def config(ctx):  # noqa: B902
+    def config(ctx: Bunch) -> None:  # noqa: B902
         """CLI tool to peek into Config Store module."""
         pass
 
 
-class ConfigShowCli(object):
+class ConfigShowCli:
     @click.command()
     @click.pass_obj
-    def show(cli_opts):  # noqa: B902
+    def show(cli_opts: Bunch) -> None:  # noqa: B902
         """Show openr running config"""
 
         config.ConfigShowCmd(cli_opts).run()
 
 
-class ConfigDryRunCli(object):
+class ConfigDryRunCli:
     @click.command()
     @click.argument("file")
     @click.pass_obj
-    def dryrun(cli_opts, file):  # noqa: B902
-        """Dryrun openr config, output parsed config upon success"""
+    @click.pass_context
+    def dryrun(ctx: click.Context, cli_opts: Bunch, file: str) -> None:  # noqa: B902
+        """Dryrun/validate openr config, output JSON parsed config upon success"""
 
         config.ConfigDryRunCmd(cli_opts).run(file)
+        # TODO(@cooper): Fix emulation to handle UNIX return codes
+        # neteng/emulation/emulator/testing/openr/test_breeze.py expects all to return 0
+        # This is incorrect and needs to be fixed
+        # ret_val = config.ConfigDryRunCmd(cli_opts).run(file)
+        # ctx.exit(ret_val if ret_val else 0)
 
 
-class ConfigCompareCli(object):
+class ConfigCompareCli:
     @click.command()
     @click.argument("file")
     @click.pass_obj
-    def compare(cli_opts, file):  # noqa: B902
+    def compare(cli_opts: Bunch, file: str) -> None:  # noqa: B902
         """Migration cli: Compare config with current running config"""
 
         config.ConfigCompareCmd(cli_opts).run(file)
 
 
-class ConfigPrefixAllocatorCli(object):
+class ConfigPrefixAllocatorCli:
     @click.command()
     @click.pass_obj
     def config_prefix_allocator(cli_opts):  # noqa: B902
@@ -73,7 +79,7 @@ class ConfigPrefixAllocatorCli(object):
         config.ConfigPrefixAllocatorCmd(cli_opts).run()
 
 
-class ConfigLinkMonitorCli(object):
+class ConfigLinkMonitorCli:
     @click.command()
     @click.pass_obj
     def config_link_monitor(cli_opts):  # noqa: B902
@@ -82,7 +88,7 @@ class ConfigLinkMonitorCli(object):
         config.ConfigLinkMonitorCmd(cli_opts).run()
 
 
-class ConfigPrefixManagerCli(object):
+class ConfigPrefixManagerCli:
     @click.command()
     @click.pass_obj
     def config_prefix_manager(cli_opts):  # noqa: B902
@@ -91,7 +97,7 @@ class ConfigPrefixManagerCli(object):
         config.ConfigPrefixManagerCmd(cli_opts).run()
 
 
-class ConfigEraseCli(object):
+class ConfigEraseCli:
     @click.command()
     @click.argument("key")
     @click.pass_obj
@@ -101,7 +107,7 @@ class ConfigEraseCli(object):
         config.ConfigEraseCmd(cli_opts).run(key)
 
 
-class ConfigStoreCli(object):
+class ConfigStoreCli:
     @click.command()
     @click.argument("key")
     @click.argument("value")

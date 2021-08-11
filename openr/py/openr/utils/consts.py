@@ -6,12 +6,16 @@
 
 
 import re
-from builtins import object
 
 from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 
-class Consts(object):
+class Consts:
+    # Defaults for OpenrCtrlCmd
+    DEFAULT_HOST = "::1"
+    DEFAULT_TIMEOUT = 2  # seconds
+    DEFAULT_FIB_AGENT_PORT = 5909
+
     TIMEOUT_MS = 10000  # 10 seconds
     CONST_TTL_INF = -(2 ** 31)
     IP_TOS = 192

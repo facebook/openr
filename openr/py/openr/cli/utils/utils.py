@@ -15,6 +15,7 @@ import sys
 from builtins import chr, input, map
 from collections import defaultdict
 from functools import lru_cache, partial
+from io import TextIOBase
 from itertools import product
 from typing import (
     Any,
@@ -595,10 +596,13 @@ def adj_dbs_to_area_dict(
     return adj_dbs_dict_all_areas
 
 
-def print_json(map, file=sys.stdout):
+def print_json(map: Dict, file: Optional[TextIOBase] = None) -> None:
     """
     Print object in json format. Use this function for consistent json style
     formatting for output. Further it prints to `stdout` stream.
+    - file: Defaults to none which is sys.stdout - None causes a runtime
+            evauluation to find the current sys.stdout rather than a import
+            time evaluation. Handy for unittests where stdout is mocked.
 
     @map: object that needs to be printed in json
     """

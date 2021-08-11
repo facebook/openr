@@ -15,27 +15,35 @@ from openr.utils import printing
 from openr.utils.consts import Consts
 
 
-class OpenrCtrlCmd(object):
+class OpenrCtrlCmd:
     """
     Command wrapping OpenrCtrl.Client
     """
 
-    def __init__(self, cli_opts: bunch.Bunch) -> None:
+    def __init__(self, cli_opts: Optional[bunch.Bunch] = None) -> None:
         """initialize the Config Store client"""
+        if not cli_opts:
+            cli_opts = bunch.Bunch()
 
-        self.cli_opts = cli_opts  # type: bunch.Bunch
-        self.host = cli_opts.host
-        self.timeout = cli_opts.timeout
-        self.fib_agent_port = cli_opts.fib_agent_port
+        self.cli_opts: bunch.Bunch = cli_opts
+        self.host = cli_opts.get("host") or Consts.DEFAULT_HOST
+        self.timeout = cli_opts.get("timeout") or Consts.DEFAULT_TIMEOUT
+        self.fib_agent_port = (
+            cli_opts.get("fib_agent_port") or Consts.DEFAULT_FIB_AGENT_PORT
+        )
         self._config = None
 
-    def run(self, *args, **kwargs) -> None:
+    def run(self, *args, **kwargs) -> Optional[int]:
         """
         run method that invokes _run with client and arguments
         """
 
+        ret_val: Optional[int] = 0
         with get_openr_ctrl_client(self.host, self.cli_opts) as client:
-            self._run(client, *args, **kwargs)
+            ret_val = self._run(client, *args, **kwargs)
+            if ret_val is None:
+                ret_val = 0
+        return ret_val
 
     def _run(self, client: Any, *args, **kwargs) -> Any:
         """
