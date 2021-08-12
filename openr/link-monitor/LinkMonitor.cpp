@@ -657,10 +657,17 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   LOG(INFO) << "Updating adjacency database in KvStore with "
             << adjDb.adjacencies_ref()->size() << " entries in area: " << area;
 
-  // Persist `adj:node_Id` key into KvStore via KvStoreClientInternal
+  // Persist `adj:node_Id` key into KvStore
   const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
   std::string adjDbStr = writeThriftObjStr(adjDb, serializer_);
-  kvStoreClient_->persistKey(AreaId{area}, keyName, adjDbStr, ttlKeyInKvStore_);
+  if (enableKvStoreRequestQueue_) {
+    auto persistAdjacencyKeyVal =
+        PersistKeyValueRequest(AreaId{area}, keyName, adjDbStr);
+    kvRequestQueue_.push(std::move(persistAdjacencyKeyVal));
+  } else {
+    kvStoreClient_->persistKey(
+        AreaId{area}, keyName, adjDbStr, ttlKeyInKvStore_);
+  }
 
   // Config is most likely to have changed. Update it in `ConfigStore`
   configStore_->storeThriftObj(kConfigKey, state_); // not awaiting on result

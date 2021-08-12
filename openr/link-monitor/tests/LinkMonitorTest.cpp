@@ -178,15 +178,15 @@ const std::vector<uint64_t> kTestVethIfIndex = {1240, 1241, 1242};
 const std::string kConfigStorePath = "/tmp/lm_ut_config_store.bin";
 } // namespace
 
-class LinkMonitorTestFixture : public ::testing::Test {
- protected:
+class LinkMonitorTestFixture : public testing::Test {
+ public:
   void
   SetUp() override {}
 
   virtual void
   SetUp(
       std::unordered_set<std::string> areas = {},
-      std::chrono::milliseconds flapInitalBackoff =
+      std::chrono::milliseconds flapInitialBackoff =
           std::chrono::milliseconds(1),
       std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8),
       std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
@@ -205,7 +205,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // create config
     config = std::make_shared<Config>(
-        getTestOpenrConfig(areas, flapInitalBackoff, flapMaxBackoff, areaMap));
+        getTestOpenrConfig(areas, flapInitialBackoff, flapMaxBackoff, areaMap));
 
     // spin up a config store
     configStore = std::make_unique<PersistentStore>(config, true /* dryrun */);
@@ -308,10 +308,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
     return srNodeLabel;
   }
 
-  thrift::OpenrConfig
+  virtual thrift::OpenrConfig
   getTestOpenrConfig(
       std::unordered_set<std::string> areas = {},
-      std::chrono::milliseconds flapInitalBackoff =
+      std::chrono::milliseconds flapInitialBackoff =
           std::chrono ::milliseconds(1),
       std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8),
       std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
@@ -361,7 +361,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // link monitor config
     auto& lmConf = *tConfig.link_monitor_config_ref();
     lmConf.enable_perf_measurement_ref() = false;
-    lmConf.linkflap_initial_backoff_ms_ref() = flapInitalBackoff.count();
+    lmConf.linkflap_initial_backoff_ms_ref() = flapInitialBackoff.count();
     lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
     lmConf.use_rtt_metric_ref() = false;
     lmConf.include_interface_regexes_ref() = {
@@ -371,7 +371,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     tConfig.enable_new_gr_behavior_ref() = true;
     tConfig.assume_drained_ref() = false;
     tConfig.persistent_config_store_path_ref() = kConfigStorePath;
-
+    tConfig.enable_kvstore_request_queue_ref() = true;
     return tConfig;
   }
 
@@ -2601,6 +2601,26 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1", "plane");
   }
+}
+
+// Test communication between LinkMonitor and KvStore via KeyValueRequeust
+// queue.
+TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
+  const auto nodeKey = "adj:myNode";
+  const auto adjacencies = "adjacencies-for-myNode";
+
+  SetUp({});
+  OpenrEventBase evb;
+  // Persist key.
+  auto persistPrefixKeyVal =
+      PersistKeyValueRequest(kTestingAreaName, nodeKey, adjacencies);
+  kvRequestQueue.push(std::move(persistPrefixKeyVal));
+  // Check that key was correctly persisted.
+  // Wait for throttling in KvStore. TODO: Implement KvStore throttling.
+  auto maybeValue = getPublicationValueForKey(nodeKey);
+  EXPECT_TRUE(maybeValue.has_value());
+  EXPECT_EQ(maybeValue.value().get_version(), 1);
+  EXPECT_EQ(*maybeValue.value().value_ref(), adjacencies);
 }
 
 int
