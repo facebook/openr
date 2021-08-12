@@ -17,6 +17,7 @@
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/AsyncThrottle.h>
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrClient.h>
@@ -117,8 +118,7 @@ struct KvStoreParams {
   bool enableFloodOptimization{false};
   bool isFloodRoot{false};
   bool enableThriftDualMsg{false};
-  // consume requests from local modules (e.g. PrefixManager, LinkMonitor)
-  // via queue
+  // Knob to consume requests to update key-vals via queue
   bool enableKvStoreRequestQueue{false};
 
   KvStoreParams(
@@ -570,8 +570,17 @@ class KvStoreDb : public DualNode {
    */
   void advertiseTtlUpdates();
   void scheduleTtlUpdates(std::string const& key, bool advertiseImmediately);
-  void advertiseSelfOriginatedKeys(
-      const std::unordered_set<std::string>& pendingKeysToAdvertise);
+
+  /*
+   * [Self Originated Key Management with Throttling]
+   *
+   * KvStoreDb uses throttling to advertise key-value changes to KvStore in
+   * batches. It provides the following util methods to:
+   *     1) advertise persisted self-originated key-vals in batches
+   *     2) unset self-originated key-vals in batches
+   */
+  void advertiseSelfOriginatedKeys();
+  void unsetPendingSelfOriginatedKeys();
 
   /*
    * Private variables
@@ -695,10 +704,32 @@ class KvStoreDb : public DualNode {
   // timer to advertise ttl updates for self-originated key-vals
   std::unique_ptr<folly::AsyncTimeout> selfOriginatedKeyTtlTimer_;
 
+  // timer to advertise key-vals for self-originated keys
+  std::unique_ptr<folly::AsyncTimeout> advertiseKeyValsTimer_;
+
   // all self originated key-vals and their backoffs
   // persistKey and setKey will add, clearKey will remove
   std::unordered_map<std::string /* key */, SelfOriginatedValue>
       selfOriginatedKeyVals_;
+
+  // Map of keys to unset to new values to set. Used for batch processing of
+  // unset ClearKeyValueRequests.
+  std::unordered_map<std::string /* key */, thrift::Value> keysToUnset_;
+
+  // Set of local keys to be re-advertised.
+  std::unordered_set<std::string /* key */> keysToAdvertise_;
+
+  // Throttle advertisement of self-originated persisted keys.
+  // Calls `advertiseSelfOriginatedKeys()`.
+  std::unique_ptr<AsyncThrottle> advertiseSelfOriginatedKeysThrottled_;
+
+  // Throttle advertisement of TTL updates for self-originated keys.
+  // Calls `advertiseTtlUpdates()`.
+  std::unique_ptr<AsyncThrottle> selfOriginatedTtlUpdatesThrottled_;
+
+  // Throttle unsetting of self-originated keys.
+  // Calls `unsetPendingSelfOriginatedKeys()`.
+  std::unique_ptr<AsyncThrottle> unsetSelfOriginatedKeysThrottled_;
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>

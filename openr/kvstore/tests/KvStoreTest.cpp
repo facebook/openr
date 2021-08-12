@@ -776,8 +776,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
 TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
   // Create and start kv store with kvRequestQueue enabled with 2 second ttl.
   const std::string nodeId = "node-testunsetkey";
-  const uint32_t ttl = 2000; // 2 seconds
-  initKvStore(nodeId, ttl);
+  initKvStore(nodeId, kShortTtl);
 
   const std::string unsetKey = "unset-key";
   const std::string valueBeforeUnset = "value-before-unset";
@@ -848,11 +847,101 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
   });
 
   // After ttl time, unset key should expire.
-  evb.scheduleTimeout(std::chrono::milliseconds(ttl * 2), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(kShortTtl * 2), [&]() noexcept {
     auto recVal = kvStore_->getKey(kTestingAreaName, unsetKey);
     EXPECT_FALSE(recVal.has_value());
     evb.stop();
   });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
+
+/**
+ * Validate throttling that batches together requests to persist and unset keys
+ * to avoid unnecessary changes to the KvStore's key-vals. Verify that
+ * chronology of incoming requests is maintained with throttling.
+ */
+TEST_F(
+    KvStoreSelfOriginatedKeyValueRequestFixture, PersistKeyUnsetKeyThrottle) {
+  const std::string nodeId{"throttle-node"};
+  const std::string key{"k1"};
+  const std::string val{"v1"};
+  const std::string deleteVal{"delete-v1"};
+  int scheduleAt{0};
+  OpenrEventBase evb;
+
+  initKvStore(nodeId, kShortTtl);
+
+  //
+  // Test1: - persist key X;
+  //        - unset key X;
+  //        - expect key X is NOT received by `KvStore` at all
+  //
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // persistKey will throttle the request and hold for 100ms
+        auto persistKvRequest =
+            PersistKeyValueRequest(kTestingAreaName, key, val);
+        kvRequestQueue_.push(std::move(persistKvRequest));
+
+        // immediately unset this key with empty value to mimick race condition
+        auto unsetKvRequest =
+            ClearKeyValueRequest(kTestingAreaName, key, deleteVal, true);
+        kvRequestQueue_.push(std::move(unsetKvRequest));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // No key-val injected after throttled time
+        auto maybeThriftVal = kvStore_->getKey(kTestingAreaName, key);
+        ASSERT_FALSE(maybeThriftVal.has_value());
+      });
+
+  //
+  // Test2: - persist key X and wait for throttle to kick in;
+  //        - unset key X;
+  //        - persist key X again before `unsetKey()` throttle kicks in;
+  //        - expect key X is presented in `KvStore` as persistKey() operation
+  //          happens chronologically later;
+  //
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 100), [&]() noexcept {
+        auto persistKvRequest =
+            PersistKeyValueRequest(kTestingAreaName, key, val);
+        kvRequestQueue_.push(std::move(persistKvRequest));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // Wait for throttling. Verify k1 has been populated to KvStore.
+        auto maybeThriftVal = kvStore_->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(maybeThriftVal.has_value());
+        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
+
+        // unsetKey() call with throttled fashion
+        auto unsetKvRequest =
+            ClearKeyValueRequest(kTestingAreaName, key, deleteVal, true);
+        kvRequestQueue_.push(std::move(unsetKvRequest));
+
+        // immediately persist this key again to mimick race condition
+        auto persistKvRequest =
+            PersistKeyValueRequest(kTestingAreaName, key, val);
+        kvRequestQueue_.push(std::move(persistKvRequest));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // Wait for throttling. Verify k1 is still populated to KvStore
+        // without corruption by unsetKey() call
+        auto maybeThriftVal = kvStore_->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(maybeThriftVal.has_value());
+        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
+
+        // End test.
+        evb.stop();
+      });
 
   // Start the event loop and wait until it is finished execution.
   evb.run();

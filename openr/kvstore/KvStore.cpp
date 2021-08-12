@@ -1122,7 +1122,41 @@ KvStoreDb::KvStoreDb(
 
   // Create ttl timer for refreshing ttls of self-originated key-vals
   selfOriginatedKeyTtlTimer_ = folly::AsyncTimeout::make(
-      *evb->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
+      *evb_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
+
+  // Create timer to advertise pending key-vals
+  advertiseKeyValsTimer_ =
+      folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
+        // Advertise all pending keys
+        advertiseSelfOriginatedKeys();
+
+        // Clear all backoff if they are passed away
+        for (auto& [key, selfOriginatedVal] : selfOriginatedKeyVals_) {
+          auto& backoff = selfOriginatedVal.keyBackoff;
+          if (backoff.has_value() and backoff.value().canTryNow()) {
+            VLOG(2) << "Clearing off the exponential backoff for key " << key;
+            backoff.value().reportSuccess();
+          }
+        }
+      });
+
+  // create throttled fashion of ttl update
+  selfOriginatedTtlUpdatesThrottled_ = std::make_unique<AsyncThrottle>(
+      evb_->getEvb(),
+      Constants::kKvStoreSyncThrottleTimeout,
+      [this]() noexcept { advertiseTtlUpdates(); });
+
+  // create throttled fashion of advertising pending keys
+  advertiseSelfOriginatedKeysThrottled_ = std::make_unique<AsyncThrottle>(
+      evb_->getEvb(),
+      Constants::kKvStoreSyncThrottleTimeout,
+      [this]() noexcept { advertiseSelfOriginatedKeys(); });
+
+  // create throttled fashion of unsetting pending keys
+  unsetSelfOriginatedKeysThrottled_ = std::make_unique<AsyncThrottle>(
+      evb_->getEvb(),
+      Constants::kKvStoreClearThrottleTimeout,
+      [this]() noexcept { unsetPendingSelfOriginatedKeys(); });
 
   // initialize KvStore per-area counters
   fb303::fbData->addStatExportType("kvstore.sent_key_vals." + area, fb303::SUM);
@@ -1148,7 +1182,10 @@ KvStoreDb::stop() {
     // fulfill promises with exceptions if any.
     thriftPeers_.clear();
     selfOriginatedKeyTtlTimer_.reset();
-
+    advertiseKeyValsTimer_.reset();
+    selfOriginatedTtlUpdatesThrottled_.reset();
+    unsetSelfOriginatedKeysThrottled_.reset();
+    advertiseSelfOriginatedKeysThrottled_.reset();
     LOG(INFO) << AreaTag() << "Successfully destroyed thriftPeers and timers";
   });
 
@@ -1239,9 +1276,6 @@ KvStoreDb::persistSelfOriginatedKey(
   VLOG(3) << AreaTag()
           << fmt::format("{} called for key: {}", __FUNCTION__, key);
 
-  // Local variable to hold pending keys to advertise
-  std::unordered_set<std::string> pendingKeysToAdvertise{};
-
   // Look key up in local cached storage
   auto selfOriginatedKeyIt = selfOriginatedKeyVals_.find(key);
 
@@ -1322,30 +1356,33 @@ KvStoreDb::persistSelfOriginatedKey(
 
   // Add keys to list of pending keys
   if (shouldAdvertise) {
-    pendingKeysToAdvertise.insert(key);
+    keysToAdvertise_.insert(key);
   }
 
-  // Advertise this key.
-  advertiseSelfOriginatedKeys(pendingKeysToAdvertise);
+  // Throttled advertisement of pending keys
+  advertiseSelfOriginatedKeysThrottled_->operator()();
 
   // Add ttl backoff and trigger selfOriginatedKeyTtlTimer_
   scheduleTtlUpdates(key, false /* advertiseImmediately */);
 }
 
 void
-KvStoreDb::advertiseSelfOriginatedKeys(
-    const std::unordered_set<std::string>& pendingKeysToAdvertise) {
-  std::chrono::milliseconds timeout = Constants::kMaxBackoff;
+KvStoreDb::advertiseSelfOriginatedKeys() {
+  VLOG(3) << "Advertising Self Originated Keys. Num keys to advertise: "
+          << keysToAdvertise_.size();
 
   // advertise pending key for each area
-  if (pendingKeysToAdvertise.empty()) {
+  if (keysToAdvertise_.empty()) {
     return;
   }
 
   // Build set of keys to advertise
   std::unordered_map<std::string, thrift::Value> keyVals{};
+  // Build keys to be cleaned from local storage
+  std::vector<std::string> keysToClear;
 
-  for (auto const& key : pendingKeysToAdvertise) {
+  std::chrono::milliseconds timeout = Constants::kMaxBackoff;
+  for (auto const& key : keysToAdvertise_) {
     // Each key was introduced through a persistSelfOriginatedKey() call.
     // Therefore, each key is in selfOriginatedKeyVals_ and has a keyBackoff.
     auto& selfOriginatedValue = selfOriginatedKeyVals_.at(key);
@@ -1357,7 +1394,6 @@ KvStoreDb::advertiseSelfOriginatedKeys(
     // Proceed only if key backoff is active
     if (not backoff.canTryNow()) {
       VLOG(2) << AreaTag() << fmt::format("Skipping key: {}", key);
-
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
       continue;
     }
@@ -1368,15 +1404,25 @@ KvStoreDb::advertiseSelfOriginatedKeys(
 
     printKeyValInArea(
         1 /*logLevel*/, "Advertising key update", AreaTag(), key, thriftValue);
-
     // Set in keyVals which is going to be advertise to the kvStore.
     DCHECK(thriftValue.value_ref());
     keyVals.emplace(key, thriftValue);
+    keysToClear.emplace_back(key);
   }
 
+  // Advertise key-vals to KvStore
   thrift::KeySetParams params;
   params.keyVals_ref() = std::move(keyVals);
   setKeyVals(std::move(params));
+
+  // clear out variable used for batching advertisements
+  for (auto const& key : keysToClear) {
+    keysToAdvertise_.erase(key);
+  }
+
+  // Schedule next-timeout for processing/clearing backoffs
+  VLOG(2) << "Scheduling timer after " << timeout.count() << "ms.";
+  advertiseKeyValsTimer_->scheduleTimeout(timeout);
 }
 
 void
@@ -1402,19 +1448,63 @@ KvStoreDb::unsetSelfOriginatedKey(
   thriftValue.ttlVersion_ref() = 0;
   thriftValue.value_ref() = value;
 
-  // Send updates to KvStore
-  std::unordered_map<std::string, thrift::Value> keyVals = {{key, thriftValue}};
-  thrift::KeySetParams params;
-  params.keyVals_ref() = std::move(keyVals);
-  setKeyVals(std::move(params));
+  keysToUnset_.emplace(key, std::move(thriftValue));
+  // Send updates to KvStore via batch processing.
+  unsetSelfOriginatedKeysThrottled_->operator()();
 }
 
 void
 KvStoreDb::eraseSelfOriginatedKey(std::string const& key) {
   VLOG(3) << AreaTag()
           << fmt::format("{} called for key: {}", __FUNCTION__, key);
-
   selfOriginatedKeyVals_.erase(key);
+  keysToAdvertise_.erase(key);
+}
+
+void
+KvStoreDb::unsetPendingSelfOriginatedKeys() {
+  if (keysToUnset_.empty()) {
+    return;
+  }
+
+  // Build set of keys to update KvStore
+  std::unordered_map<std::string, thrift::Value> keyVals;
+  // Build keys to be cleaned from local storage. Do not remove from
+  // keysToUnset_ directly while iterating.
+  std::vector<std::string> localKeysToUnset;
+
+  for (auto const& [key, thriftVal] : keysToUnset_) {
+    // ATTN: consider corner case of key X being:
+    //  Case 1) first persisted then unset before throttling triggers
+    //    X will NOT be persisted at all.
+    //
+    //  Case 2) first unset then persisted before throttling kicks in
+    //    X will NOT be unset since it is inside `persistedKeyVals_`
+    //
+    //  Source of truth will be `persistedKeyVals_` as
+    //  `unsetSelfOriginatedKey()` will do `eraseSelfOriginatedKey()`, which
+    //  wipes out its existence.
+    auto it = selfOriginatedKeyVals_.find(key);
+    if (it == selfOriginatedKeyVals_.end()) {
+      // Case 1:  X is not persisted. Set new value.
+      printKeyValInArea(1 /*logLevel*/, "Unsetting", area_, key, thriftVal);
+      keyVals.emplace(key, thriftVal);
+      localKeysToUnset.emplace_back(key);
+    } else {
+      // Case 2: X is persisted. Do not set new value.
+      localKeysToUnset.emplace_back(key);
+    }
+  }
+
+  // Send updates to KvStore
+  thrift::KeySetParams params;
+  params.keyVals_ref() = std::move(keyVals);
+  setKeyVals(std::move(params));
+
+  // Empty out keysToUnset_
+  for (auto const& key : localKeysToUnset) {
+    keysToUnset_.erase(key);
+  }
 }
 
 void
@@ -1436,9 +1526,8 @@ KvStoreDb::scheduleTtlUpdates(
     selfOriginatedKeyVals_[key].ttlBackoff.reportError();
   }
 
-  // trigger self-originated key-val ttl refreshing timer
-  selfOriginatedKeyTtlTimer_->scheduleTimeout(
-      selfOriginatedKeyVals_[key].ttlBackoff.getTimeRemainingUntilRetry());
+  // Trigger timer to advertise ttl updates for self-originated key-vals.
+  selfOriginatedTtlUpdatesThrottled_->operator()();
 }
 
 void

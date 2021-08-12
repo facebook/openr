@@ -28,6 +28,7 @@ class PrefixManagerBenchmarkTestFixture {
   explicit PrefixManagerBenchmarkTestFixture(const std::string& nodeId) {
     // construct basic `OpenrConfig`
     auto tConfig = getBasicOpenrConfig(nodeId);
+    tConfig.enable_kvstore_request_queue_ref() = true;
     tConfig.kvstore_config_ref()->sync_interval_s_ref() =
         ::detail::kDbSyncIntervalOverride.count();
     config_ = std::make_shared<Config>(tConfig);
@@ -260,6 +261,8 @@ BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerAdvertisePrefixes, 10000_1000, 10000, 1000);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerAdvertisePrefixes, 10000_10000, 10000, 10000);
+BENCHMARK_NAMED_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, 100000_100000, 100000, 100000);
 
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 100_1, 100, 1);
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 1000_1, 1000, 1);
@@ -270,6 +273,8 @@ BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerWithdrawPrefixes, 10000_1000, 10000, 1000);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerWithdrawPrefixes, 10000_10000, 10000, 10000);
+BENCHMARK_NAMED_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, 100000_100000, 100000, 100000);
 
 /*
  * TODO: add decision route processing benchmark
