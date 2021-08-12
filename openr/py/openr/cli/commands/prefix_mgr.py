@@ -21,9 +21,17 @@ from openr.utils import ipnetwork, printing
 
 
 def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
-    if not isinstance(key, network_types.PrefixType):
-        return ("N/A",)
-    return (network_types.PrefixType._VALUES_TO_NAMES.get(key, "N/A"),)
+    try:
+        return (
+            network_types.PrefixType._VALUES_TO_NAMES.get(
+                # pyre-ignore [6]: We are to loosely typed to clean this up sanely
+                key,
+                "N/A - Not in PrefixType enum",
+            ),
+        )
+    except ValueError:
+        pass  # Here we should have debug logging ...
+    return ("N/A - ERROR",)
 
 
 def get_advertised_route_filter(

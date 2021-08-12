@@ -50,6 +50,7 @@ PrintAdvertisedTypes = Union[
     ctrl_types.AdvertisedRoute,
     ctrl_types.ReceivedRoute,
     ctrl_types.NodeAndArea,
+    int,
     network_types.PrefixType,
 ]
 

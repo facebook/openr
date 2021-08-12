@@ -132,14 +132,12 @@ class AdvertisedRoutesCli(object):
         """
 
         # Set options & arguments in cli_opts
-        print(cli_opts.keys())
         cli_opts["advertised_routes_options"] = bunch.Bunch(
             prefix_type=prefix_type,
             detail=detail,
             json=json,
             tag2name=tag2name,
         )
-        print(cli_opts.advertised_routes_options.keys())
 
     @show.command("all")
     @click.argument("prefix", nargs=-1, type=str, required=False)
