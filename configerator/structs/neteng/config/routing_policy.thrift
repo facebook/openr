@@ -339,6 +339,12 @@ struct FilterTransform {
    * valid operators: rewrite
    */
   26: optional i64 openrMinNexthop;
+  /*
+   * flag that indicates if prependLabel attribute is accepted. If not, the
+   * attribute is reset.
+   * Note: openrAcceptPrependLabel does not need operators.
+   */
+  27: optional bool openrAcceptPrependLabel;
 
   // not all operation is applicable to all fields:
   // e.g. subset/add are only applicable to bgpLocalPref
