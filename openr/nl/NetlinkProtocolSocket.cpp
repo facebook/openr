@@ -25,7 +25,10 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
       evb_(evb),
       netlinkEventsQueue_(netlinkEventsQ),
       enableIPv6RouteReplaceSemantics_(enableIPv6RouteReplaceSemantics) {
+  // We expect ctrl-evb not be running. Attaching and scheduling
+  // of timers is not thread safe.
   CHECK_NOTNULL(evb_);
+  CHECK(not evb_->isRunning());
 
   nlMessageTimer_ = folly::AsyncTimeout::make(*evb_, [this]() noexcept {
     DCHECK(false) << "This shouldn't occur usually. Adding DCHECK to get "

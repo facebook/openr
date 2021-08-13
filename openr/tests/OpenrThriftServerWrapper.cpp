@@ -35,26 +35,23 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
 
 void
 OpenrThriftServerWrapper::run() {
+  // create openrCtrlHandler
+  openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
+      nodeName_,
+      std::unordered_set<std::string>{},
+      &evb_,
+      decision_,
+      fib_,
+      kvStore_,
+      linkMonitor_,
+      monitor_,
+      configStore_,
+      prefixManager_,
+      spark_,
+      config_);
   // Create main-event-loop
   evbThread_ = std::thread([&]() { evb_.run(); });
   evb_.waitUntilRunning();
-
-  // create openrCtrlHandler
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
-        nodeName_,
-        std::unordered_set<std::string>{},
-        &evb_,
-        decision_,
-        fib_,
-        kvStore_,
-        linkMonitor_,
-        monitor_,
-        configStore_,
-        prefixManager_,
-        spark_,
-        config_);
-  });
 
   // setup openrCtrlThrift server for client to connect to
   std::shared_ptr<apache::thrift::ThriftServer> server =

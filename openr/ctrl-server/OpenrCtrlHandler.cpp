@@ -60,6 +60,10 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       prefixManager_(prefixManager),
       spark_(spark),
       config_(config) {
+  // We expect ctrl-evb not be running otherwise adding fiber task is not
+  // thread safe.
+  CHECK_NOTNULL(ctrlEvb);
+  CHECK(not ctrlEvb->isRunning());
   // Add fiber task to receive publication from KvStore
   if (kvStore_) {
     auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(

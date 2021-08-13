@@ -285,20 +285,16 @@ main(int argc, char** argv) {
   }
 
   std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
-  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
   std::unique_ptr<std::thread> netlinkFibServerThread{nullptr};
 
   // Create Netlink Protocol object in a new thread
-  auto nlEvb = startEventBase(
-      allThreads,
-      orderedEvbs,
-      watchdog,
-      "netlink",
-      std::make_unique<OpenrEventBase>());
-
-  nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
-      nlEvb->getEvb(), netlinkEventsQueue);
+  // NOTE: Start EventBase only after NetlinkProtocolSocket has been constructed
+  auto nlOpenrEvb = std::make_unique<OpenrEventBase>();
+  auto nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
+      nlOpenrEvb->getEvb(), netlinkEventsQueue);
+  startEventBase(
+      allThreads, orderedEvbs, watchdog, "netlink", std::move(nlOpenrEvb));
 
   // Start NetlinkFibHandler if specified
   if (config->isNetlinkFibHandlerEnabled()) {
@@ -523,17 +519,12 @@ main(int argc, char** argv) {
           logSampleQueue));
 
   // Create Open/R control handler
-  auto ctrlEvb = startEventBase(
-      allThreads,
-      orderedEvbs,
-      watchdog,
-      "ctrl_evb",
-      std::make_unique<OpenrEventBase>());
-
+  // NOTE: Start EventBase only after OpenrCtrlHandler has been constructed
+  auto ctrlOpenrEvb = std::make_unique<OpenrEventBase>();
   auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
       config->getNodeName(),
       acceptableNamesSet,
-      ctrlEvb,
+      ctrlOpenrEvb.get(),
       decision,
       fib,
       kvStore,
@@ -543,6 +534,8 @@ main(int argc, char** argv) {
       prefixManager,
       spark,
       config);
+  startEventBase(
+      allThreads, orderedEvbs, watchdog, "ctrl_evb", std::move(ctrlOpenrEvb));
 
   CHECK(ctrlHandler);
   thriftCtrlServer->setInterface(ctrlHandler);
