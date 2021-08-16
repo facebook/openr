@@ -528,7 +528,7 @@ struct SegmentRoutingConfig {
    *  (b) type is sr_adj_label.SegmentRoutingAdjLabelType
    *      is DISABLE
    */
-  2: optional SegmentRoutingAdjLabel sr_adj_label;
+  2: optional SegmentRoutingAdjLabel sr_adj_label (deprecated);
 
   /**
    * Specifies the ranges for prepend labels
@@ -641,7 +641,7 @@ struct AreaConfig {
    * Relevant for routing scheme with alternative
    * topology(non-CLOS)
    */
-  10: optional MplsLabelRanges prepend_label_ranges;
+  10: optional MplsLabelRanges prepend_label_ranges (deprecated);
 } (cpp.minimize_padding)
 
 /**
