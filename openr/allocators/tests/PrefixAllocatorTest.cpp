@@ -850,10 +850,9 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto expPrefixKey = folly::sformat(
-        "{}{}:{}:[{}]",
+        "{}{}:[{}]",
         Constants::kPrefixDbMarker.toString(),
         myNodeName_,
-        kTestingAreaName.t,
         folly::IPAddress::networkToString(prevAllocPrefix));
     std::vector<thrift::PrefixEntry> prefixes{};
 
@@ -931,10 +930,9 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
   //       can come in any order.
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto expPrefixKey = folly::sformat(
-        "{}{}:{}:[{}/{}]",
+        "{}{}:[{}/{}]",
         Constants::kPrefixDbMarker.toString(),
         myNodeName_,
-        kTestingAreaName.t,
         expectedPrefix,
         allocPrefixLen);
     auto maybeVal = kvStoreClient_->getKey(kTestingAreaName, expPrefixKey);
