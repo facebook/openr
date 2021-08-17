@@ -178,6 +178,9 @@ struct RouteComputationRules {
 
   /* Rules to allocate and compute the route's prepend label */
   3: optional PrependLabelRules prependLabelRules;
+
+  /* Allow next-hops to be selected in areas with inferior IGP metrics */
+  4: bool allowUcmpPathsBetweenAreas = false;
 } (cpp.minimize_padding)
 
 /* SR Policy Configuration defines a route's path computation and LSP setup rules. */

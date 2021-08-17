@@ -395,18 +395,22 @@ SpfSolver::createRouteForPrefix(
           area,
           linkState->second,
           prefixState);
-      // Only use next-hops in areas with the shortest IGP metric
-      //
-      // T96776309: bypass this code to allow UCMP paths between areas if
-      // new RouteComputationRules flag allowUcmpPathsBetweenAreas is true
-      if (shortestMetric >= metricsAreaNextHops.first) {
-        if (shortestMetric > metricsAreaNextHops.first) {
-          shortestMetric = metricsAreaNextHops.first;
-          totalNextHops.clear();
-        }
+      if (*routeComputationRules.allowUcmpPathsBetweenAreas_ref()) {
+        // Allow UCMP paths between areas
         totalNextHops.insert(
             metricsAreaNextHops.second.begin(),
             metricsAreaNextHops.second.end());
+      } else {
+        // Only use next-hops in areas with the shortest IGP metric
+        if (shortestMetric >= metricsAreaNextHops.first) {
+          if (shortestMetric > metricsAreaNextHops.first) {
+            shortestMetric = metricsAreaNextHops.first;
+            totalNextHops.clear();
+          }
+          totalNextHops.insert(
+              metricsAreaNextHops.second.begin(),
+              metricsAreaNextHops.second.end());
+        }
       }
     } break;
     case thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP: {
