@@ -23,6 +23,8 @@ namespace fb303 = facebook::fb303;
 
 namespace openr {
 
+thrift::IpPrefix kDefaultRoutePrefix = toIpPrefix("::/0");
+
 Fib::Fib(
     std::shared_ptr<const Config> config,
     int32_t thriftPort,
@@ -140,6 +142,10 @@ Fib::Fib(
   fb303::fbData->addStatExportType(
       "fib.thrift.failure.keepalive", fb303::COUNT);
   fb303::fbData->addStatExportType("fib.thrift.failure.sync_fib", fb303::COUNT);
+
+   // Initialize fib stats
+   stats.countDefaultRouteChanged_ = 0;
+   stats.countDefaultRouteDeleted_ = 0;
 }
 
 void
@@ -271,6 +277,14 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
   return retRouteVec;
 }
 
+void
+Fib::compareDefaultRoutes(const thrift::UnicastRoute& oldRoute, const thrift::UnicastRoute& newRoute) {
+  if (oldRoute.dest == kDefaultRoutePrefix && oldRoute.nextHops != newRoute.nextHops) {
+    stats.countDefaultRouteChanged_++;
+    VLOG(2) << "Default route changed. Number of new next hops: " << newRoute.nextHops.size();
+  }
+}
+
 std::vector<thrift::MplsRoute>
 Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
   // return and send the vector<thrift::MplsRoute>
@@ -325,6 +339,9 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   for (const auto& route : routeDelta.unicastRoutesToUpdate) {
     routeState_.unicastRoutes[route.dest] = route;
     routeState_.dirtyPrefixes.erase(route.dest);
+    if (routeState_.unicastRoutes.count(route.dest) > 0) {
+      compareDefaultRoutes(routeState_.unicastRoutes[route.dest],route);
+    }
   }
 
   // Add mpls routes to update
@@ -337,6 +354,10 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   for (const auto& dest : routeDelta.unicastRoutesToDelete) {
     routeState_.unicastRoutes.erase(dest);
     routeState_.dirtyPrefixes.erase(dest);
+    if (dest == kDefaultRoutePrefix) {
+      stats.countDefaultRouteDeleted_++;
+      VLOG(2) << "Default route deleted.";
+    }
   }
 
   // Delete mpls routes
@@ -743,6 +764,10 @@ Fib::updateGlobalCounters() {
       "fib.num_dirty_prefixes", routeState_.dirtyPrefixes.size());
   fb303::fbData->setCounter(
       "fib.num_dirty_labels", routeState_.dirtyLabels.size());
+  fb303::fbData->setCounter(
+      "fib.default_route_changed", stats.countDefaultRouteChanged_);
+  fb303::fbData->setCounter(
+      "fib.default_route_deleted", stats.countDefaultRouteDeleted_);
 
   // Count the number of bgp routes
   int64_t bgpCounter = 0;
