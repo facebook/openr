@@ -516,7 +516,12 @@ KvStoreClientInternal::clearPendingKeys() {
         continue;
       }
 
-      printKeyValInArea(1 /*logLevel*/, "Clearing", area, key, thriftVal);
+      printKeyValInArea(
+          1 /*logLevel*/,
+          "Clearing",
+          fmt::format("[Area: {}] ", area.t),
+          key,
+          thriftVal);
       DCHECK(thriftVal.value_ref());
       keyVals.emplace(key, thriftVal);
       keysToClear.emplace_back(key);
@@ -817,7 +822,12 @@ KvStoreClientInternal::advertisePendingKeys(
       backoff.reportError();
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
-      printKeyValInArea(1 /*logLevel*/, "Advertising", area, key, thriftValue);
+      printKeyValInArea(
+          1 /*logLevel*/,
+          "Advertising",
+          fmt::format("[Area: {}] ", area.t),
+          key,
+          thriftValue);
       // Set in keyVals which is going to be advertise to the kvStore.
       DCHECK(thriftValue.value_ref());
       keyVals.emplace(key, thriftValue);
@@ -874,7 +884,11 @@ KvStoreClientInternal::advertiseTtlUpdates() {
       // Set in keyVals which is going to be advertised to the kvStore.
       DCHECK(not thriftValue.value_ref());
       printKeyValInArea(
-          1 /*logLevel*/, "Advertising ttl update", area, key, thriftValue);
+          1 /*logLevel*/,
+          "Advertising ttl update",
+          fmt::format("[Area: {}] ", area.t),
+          key,
+          thriftValue);
       keyVals.emplace(key, thriftValue);
     }
 
@@ -900,7 +914,12 @@ KvStoreClientInternal::setKeysHelper(
 
   // Debugging purpose print-out
   for (auto const& [key, thriftValue] : keyVals) {
-    printKeyValInArea(3 /*logLevel*/, "Send update", area, key, thriftValue);
+    printKeyValInArea(
+        3 /*logLevel*/,
+        "Send update",
+        fmt::format("[Area: {}] ", area.t),
+        key,
+        thriftValue);
   }
 
   thrift::KeySetParams params;

@@ -254,7 +254,10 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
         (not val.value_ref())) {
       continue;
     }
-    auto prefixKey = PrefixKey::fromStr(keyStr);
+
+    // TODO: remove fromStr() key parsing logic once every key is on V2 format
+    auto const& area = thriftPub.get_area();
+    auto prefixKey = PrefixKey::fromStr(keyStr, area);
     // Skip bad format of key.
     if (prefixKey.hasError()) {
       LOG(ERROR) << fmt::format(
@@ -284,12 +287,14 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
           << "Expect single entry inside prefix database";
 
       if (not *prefixDb.deletePrefix_ref()) {
-        VLOG(2) << "Learning previously announced prefix: " << keyStr;
         // get the key prefix and area from the thrift::PrefixDatabase
         auto const& tPrefixEntry = prefixDb.get_prefixEntries().front();
         auto const& network = toIPNetwork(tPrefixEntry.get_prefix());
-        auto const& area = thriftPub.get_area();
 
+        VLOG(1) << fmt::format(
+            "[Prefix Update]: Area: {}, {} updated inside KvStore",
+            area,
+            keyStr);
         // populate keysInKvStore_ collection to make sure we can find
         // <key, area> when clear key from `KvStore`
         keysInKvStore_[network].areas.emplace(area);
