@@ -1487,6 +1487,13 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
     storeProgrammedRoutes(fibRouteUpdate);
   }
 
+  if (fibRouteUpdate.type == DecisionRouteUpdate::FULL_SYNC) {
+    if (uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
+      LOG(INFO) << "[Initialization] Received initial RIB routes.";
+      triggerInitialPrefixDbSync();
+    }
+  }
+
   // Re-advertise prefixes received from one area to other areas.
   redistributePrefixesAcrossAreas(fibRouteUpdate);
 }
@@ -1496,11 +1503,6 @@ PrefixManager::storeProgrammedRoutes(
     const DecisionRouteUpdate& fibRouteUpdates) {
   // In case of full sync, reset previous stored programmed routes.
   if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC) {
-    if (uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
-      LOG(INFO) << "[Initialization] Received initial RIB routes.";
-      triggerInitialPrefixDbSync();
-    }
-
     // Adding all previously programmed routes as pending updates.
     for (const auto& deletedLabel : programmedLabels_) {
       pendingUpdates_.addLabelChange(deletedLabel);
