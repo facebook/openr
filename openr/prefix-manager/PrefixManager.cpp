@@ -626,7 +626,9 @@ PrefixManager::applyOriginationPolicy(
           policyName);
       auto dstAreasCp = prefix.dstAreas;
       postOriginationPrefixes.emplace_back(
-          std::move(postPolicyTPrefixEntry), std::move(dstAreasCp));
+          std::move(postPolicyTPrefixEntry),
+          std::move(dstAreasCp),
+          std::move(prefix.nexthops));
     } else {
       VLOG(1) << fmt::format(
           "Not processing prefixes {} : denied by origination policy {}",
