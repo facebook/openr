@@ -8,11 +8,11 @@
 #pragma once
 
 #include <folly/io/async/AsyncTimeout.h>
-
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/config/Config.h>
 #include <openr/monitor/SystemMetrics.h>
+#include "openr/messaging/ReplicateQueue.h"
 
 namespace openr {
 
@@ -28,6 +28,11 @@ class Watchdog final : public OpenrEventBase {
 
   bool memoryLimitExceeded();
 
+  /**
+   * Register a queue with watchdog to be monitored and logged
+   */
+  void addQueue(messaging::ReplicateQueueBase& q, const std::string& qName);
+
  private:
   // monitor thread status in case they get stuck
   void monitorThreadStatus();
@@ -37,6 +42,9 @@ class Watchdog final : public OpenrEventBase {
 
   // update per-eventbase related counters
   void updateThreadCounters();
+
+  // update counters for each ReplicatedQueue and its internal RWQueues
+  void updateQueueCounters();
 
   // force to abort, aka, crash process
   void fireCrash(const std::string& msg);
@@ -69,6 +77,12 @@ class Watchdog final : public OpenrEventBase {
 
   // Get the system metrics for resource usage counters
   SystemMetrics systemMetrics_{};
+
+  // Vector of queues to monitor for drainage
+  std::unordered_map<
+      std::string,
+      std::reference_wrapper<messaging::ReplicateQueueBase>>
+      monitoredQs_;
 };
 
 } // namespace openr

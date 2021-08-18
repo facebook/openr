@@ -5,11 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include "openr/watchdog/Watchdog.h"
 #include <fb303/ServiceData.h>
-
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/watchdog/Watchdog.h>
+#include "folly/Range.h"
+#include "openr/messaging/ReplicateQueue.h"
 
 namespace fb303 = facebook::fb303;
 
@@ -32,6 +34,9 @@ Watchdog::Watchdog(std::shared_ptr<const Config> config)
     // collect evb specific counters
     updateThreadCounters();
 
+    // collect queue counters
+    updateQueueCounters();
+
     // Schedule next timer
     watchdogTimer_->scheduleTimeout(interval_);
   });
@@ -45,6 +50,15 @@ Watchdog::addEvb(OpenrEventBase* evb) {
     CHECK_EQ(monitorEvbs_.count(evb), 0);
     monitorEvbs_.emplace(evb);
   });
+}
+
+void
+Watchdog::addQueue(messaging::ReplicateQueueBase& q, const std::string& qName) {
+  if (monitoredQs_.find(qName) == monitoredQs_.end()) {
+    monitoredQs_.emplace(qName, std::ref(q));
+  } else {
+    LOG(INFO) << "Queue " << qName << " is already registered.";
+  }
 }
 
 bool
@@ -151,6 +165,41 @@ Watchdog::fireCrash(const std::string& msg) {
   SYSLOG(ERROR) << msg;
   // hell ya!
   abort();
+}
+
+void
+Watchdog::updateQueueCounters() {
+  // TODO: T98478475 - Currently we only log the counters but don't take any
+  // action if the queue keeps growing. In future, via T98478475, we should
+  // invoke fireCrash() if the queue keeps growing.
+  LOG(INFO) << "[QueueMonitor] Updating queue counters";
+  for (auto const& [qName, q] : monitoredQs_) {
+    fb303::fbData->setCounter(
+        fmt::format("messaging.replicate_queue.{}.readers", qName),
+        q.get().getNumReaders());
+    fb303::fbData->setCounter(
+        fmt::format("messaging.replicate_queue.{}.messages_sent", qName),
+        q.get().getNumWrites());
+
+    // Get the stats for each replicated queue
+    // TODO: 1. Handle the delete scenario where a reader disconnects
+    // TODO: 2. Assign keys to each reader so we can record the stats without
+    //          risk of mixup
+    std::vector<messaging::RWQueueStats> stats = q.get().getReplicationStats();
+    for (auto& stat : stats) {
+      fb303::fbData->setCounter(
+          fmt::format("messaging.rw_queue.{}-{}.size", qName, stat.queueId),
+          stat.size);
+
+      fb303::fbData->setCounter(
+          fmt::format("messaging.rw_queue.{}-{}.read", qName, stat.queueId),
+          stat.reads);
+
+      fb303::fbData->setCounter(
+          fmt::format("messaging.rw_queue.{}-{}.sent", qName, stat.queueId),
+          stat.writes);
+    }
+  }
 }
 
 } // namespace openr

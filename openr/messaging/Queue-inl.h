@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <string>
+#include "openr/messaging/Queue.h"
 namespace openr {
 namespace messaging {
 
@@ -38,7 +40,16 @@ RQueue<ValueType>::size() {
 }
 
 template <typename ValueType>
+std::string
+RQueue<ValueType>::getReaderId() {
+  return queue_->queueId();
+}
+
+template <typename ValueType>
 RWQueue<ValueType>::RWQueue() {}
+
+template <typename ValueType>
+RWQueue<ValueType>::RWQueue(const std::string& queueId) : queueId_(queueId) {}
 
 template <typename ValueType>
 RWQueue<ValueType>::~RWQueue() {
@@ -66,6 +77,7 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     // Add data into the queue
     queue_.emplace_back(std::forward<ValueTypeT>(val));
   }
+  ++writes_;
 
   return true;
 }
@@ -92,6 +104,7 @@ RWQueue<ValueType>::get() {
   // Wait for baton and read the data
   pendingRead.baton.wait();
   if (pendingRead.data) {
+    ++reads_;
     return std::move(pendingRead.data).value();
   }
   return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
@@ -118,6 +131,7 @@ RWQueue<ValueType>::getCoro() {
   // Wait for baton and read the data
   co_await pendingRead.baton;
   if (pendingRead.data) {
+    ++reads_;
     co_return std::move(pendingRead.data).value();
   }
   co_return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
@@ -173,6 +187,12 @@ RWQueue<ValueType>::isClosed() {
 }
 
 template <typename ValueType>
+std::string
+RWQueue<ValueType>::getQueueId() {
+  return queueId_;
+}
+
+template <typename ValueType>
 size_t
 RWQueue<ValueType>::size() {
   std::lock_guard<std::mutex> l(lock_);
@@ -184,6 +204,27 @@ size_t
 RWQueue<ValueType>::numPendingReads() {
   std::lock_guard<std::mutex> l(lock_);
   return pendingReads_.size();
+}
+
+template <typename ValueType>
+size_t
+RWQueue<ValueType>::numWrites() {
+  std::lock_guard<std::mutex> l(lock_);
+  return writes_;
+}
+
+template <typename ValueType>
+size_t
+RWQueue<ValueType>::numReads() {
+  std::lock_guard<std::mutex> l(lock_);
+  return reads_;
+}
+
+template <typename ValueType>
+RWQueueStats
+RWQueue<ValueType>::getStats() {
+  std::lock_guard<std::mutex> l(lock_);
+  return RWQueueStats{"", reads_, writes_, queue_.size()};
 }
 
 } // namespace messaging

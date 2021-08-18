@@ -8,9 +8,21 @@
 #pragma once
 
 #include <openr/messaging/Queue.h>
+#include <list>
 
 namespace openr {
 namespace messaging {
+
+class ReplicateQueueBase {
+ public:
+  virtual ~ReplicateQueueBase() = default;
+
+  virtual size_t getNumReaders() = 0;
+
+  virtual size_t getNumWrites() = 0;
+
+  virtual std::vector<RWQueueStats> getReplicationStats() = 0;
+};
 
 /**
  * Multiple writers and readers. Each reader gets every written element push by
@@ -20,7 +32,7 @@ namespace messaging {
  * Pushed object must be copy constructible.
  */
 template <typename ValueType>
-class ReplicateQueue {
+class ReplicateQueue : public ReplicateQueueBase {
  public:
   ReplicateQueue();
 
@@ -49,7 +61,8 @@ class ReplicateQueue {
    * Get new reader stream of this queue. Stream will get closed automatically
    * when reader is destructed.
    */
-  RQueue<ValueType> getReader();
+  RQueue<ValueType> getReader(
+      const std::optional<std::string>& readerId = std::nullopt);
 
   /**
    * Number of replicated streams/readers
@@ -69,9 +82,20 @@ class ReplicateQueue {
    */
   void close();
 
+  /**
+   * Number of messages sent on queue before replication
+   */
+  size_t getNumWrites() override;
+
+  /**
+   * Queue stats for each replicated queue
+   */
+  std::vector<RWQueueStats> getReplicationStats() override;
+
  private:
   folly::Synchronized<std::list<std::shared_ptr<RWQueue<ValueType>>>> readers_;
   bool closed_{false}; // Protected by above Synchronized lock
+  size_t writes_{0};
 };
 
 } // namespace messaging

@@ -7,6 +7,10 @@
 
 #pragma once
 
+#include <cstddef>
+#include <vector>
+#include "openr/messaging/Queue.h"
+#include "openr/messaging/ReplicateQueue.h"
 namespace openr {
 namespace messaging {
 
@@ -49,6 +53,7 @@ ReplicateQueue<ValueType>::push(ValueTypeT&& value) {
     // Perfect forwarding for last reader
     readers.back()->push(std::forward<ValueTypeT>(value));
   }
+  ++writes_;
 
   return true;
 }
@@ -59,12 +64,18 @@ ReplicateQueue<ValueType>::push(ValueTypeT&& value) {
  */
 template <typename ValueType>
 RQueue<ValueType>
-ReplicateQueue<ValueType>::getReader() {
+ReplicateQueue<ValueType>::getReader(
+    const std::optional<std::string>& readerId) {
   auto lockedReaders = readers_.wlock();
   if (closed_) {
     throw std::runtime_error("queue is closed");
   }
-  lockedReaders->emplace_back(std::make_shared<RWQueue<ValueType>>());
+  if (readerId) {
+    lockedReaders->emplace_back(
+        std::make_shared<RWQueue<ValueType>>(*readerId));
+  } else {
+    lockedReaders->emplace_back(std::make_shared<RWQueue<ValueType>>());
+  }
   return RQueue<ValueType>(lockedReaders->back());
 }
 
@@ -92,6 +103,37 @@ ReplicateQueue<ValueType>::close() {
     queue->close();
   }
   lockedReaders->clear();
+}
+
+template <typename ValueType>
+size_t
+ReplicateQueue<ValueType>::getNumWrites() {
+  auto lockedReaders = readers_.wlock();
+  return writes_;
+}
+
+template <typename ValueType>
+std::vector<RWQueueStats>
+ReplicateQueue<ValueType>::getReplicationStats() {
+  std::vector<RWQueueStats> stats;
+  uint32_t queueCount = 0;
+  auto lockedReaders = readers_.wlock();
+  for (auto it = lockedReaders->begin(); it != lockedReaders->end();) {
+    if (it->use_count() == 1) {
+      (*it)->close(); // Close before erasing
+      it = lockedReaders->erase(it);
+    } else {
+      RWQueueStats stat = (*it)->getStats();
+      // TODO T98477650 : We need to maintain proper queueIds instead of
+      // using a counter/index to maintain consistency and robustness
+      if (stat.queueId.empty()) {
+        stat.queueId = std::to_string(queueCount++);
+      }
+      stats.push_back(stat);
+      ++it;
+    }
+  }
+  return stats;
 }
 
 } // namespace messaging

@@ -28,12 +28,16 @@ TEST(RWQueueTest, SizeAndReaders) {
 
   EXPECT_EQ(2, q.size());
   EXPECT_EQ(0, q.numPendingReads());
+  EXPECT_EQ(2, q.numWrites());
+  EXPECT_EQ(0, q.numReads());
 
   EXPECT_EQ(1, q.get().value());
   EXPECT_EQ(2, q.get().value());
 
   EXPECT_EQ(0, q.size());
   EXPECT_EQ(0, q.numPendingReads());
+  EXPECT_EQ(2, q.numWrites());
+  EXPECT_EQ(2, q.numReads());
 
   folly::EventBase evb;
   auto& manager = folly::fibers::getFiberManager(evb);
@@ -43,12 +47,16 @@ TEST(RWQueueTest, SizeAndReaders) {
   evb.loopOnce();
   EXPECT_EQ(0, q.size());
   EXPECT_EQ(2, q.numPendingReads());
+  EXPECT_EQ(2, q.numWrites());
+  EXPECT_EQ(2, q.numReads());
 
   q.push(1);
   q.push(2);
   evb.loopOnce();
   EXPECT_EQ(0, q.size());
   EXPECT_EQ(0, q.numPendingReads());
+  EXPECT_EQ(4, q.numWrites());
+  EXPECT_EQ(4, q.numReads());
 }
 
 TEST(RWQueueTest, OrderedPushGet) {
@@ -151,12 +159,14 @@ TEST(RWQueueTest, MultipleReadersWriters) {
   }
 
   // Add writer task
+  std::atomic<size_t> totalWrites{0};
   for (size_t i = 0; i < kNumWriters; ++i) {
-    manager.addTask([&q, i]() {
+    manager.addTask([&q, &totalWrites, i]() {
       for (size_t j = 0; j < kCountPerWriter; ++j) {
         const size_t num = i * kCountPerWriter + j;
         VLOG(1) << "Writer" << i << " sending " << num;
         q.push(num);
+        ++totalWrites;
       }
       LOG(INFO) << "Writer" << i << " finished pushing " << kCountPerWriter
                 << " messages.";
@@ -164,6 +174,8 @@ TEST(RWQueueTest, MultipleReadersWriters) {
   }
 
   evb.loop();
+  EXPECT_EQ(totalWrites, q.numWrites());
+  EXPECT_EQ(totalReads, q.numReads());
 }
 
 TEST(RWQueueTest, MultiThreadTest) {
@@ -264,11 +276,14 @@ TEST(RWQueueTest, CoroTest) {
     co_return;
   };
 
-  auto writerCoro = [](size_t writerId,
-                       RWQueue<int>& q,
-                       size_t count) -> folly::coro::Task<void> {
+  std::atomic<size_t> totalWrites{0};
+  auto writerCoro = [&totalWrites](
+                        size_t writerId,
+                        RWQueue<int>& q,
+                        size_t count) -> folly::coro::Task<void> {
     for (size_t i = 0; i < count; ++i) {
       q.push(i);
+      ++totalWrites;
       // VLOG(1) << "Writer " << writerId << " sending " << i;
     }
     LOG(INFO) << "Writer" << writerId << " done. Sent " << count << " items";
@@ -288,6 +303,8 @@ TEST(RWQueueTest, CoroTest) {
   EXPECT_EQ(kNumWriters * kCountPerWriter, totalReads);
   EXPECT_EQ(0, q.size());
   EXPECT_EQ(0, q.numPendingReads());
+  EXPECT_EQ(totalWrites, q.numWrites());
+  EXPECT_EQ(totalReads, q.numReads());
 }
 #endif
 

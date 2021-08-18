@@ -245,15 +245,21 @@ main(int argc, char** argv) {
   // Create the readers in the first place to make sure they can receive every
   // messages from the writer(s)
   auto decisionStaticRouteUpdatesQueueReader =
-      staticRouteUpdatesQueue.getReader();
-  auto fibStaticRouteUpdatesQueueReader = staticRouteUpdatesQueue.getReader();
-  auto fibDecisionRouteUpdatesQueueReader = routeUpdatesQueue.getReader();
-  auto linkMonitorNeighborUpdatesQueueReader = neighborUpdatesQueue.getReader();
+      staticRouteUpdatesQueue.getReader("decision");
+  auto fibStaticRouteUpdatesQueueReader =
+      staticRouteUpdatesQueue.getReader("fib");
+  auto fibDecisionRouteUpdatesQueueReader =
+      routeUpdatesQueue.getReader("fibDecision");
+  auto linkMonitorNeighborUpdatesQueueReader =
+      neighborUpdatesQueue.getReader("linkMonitor");
   auto linkMonitorKvStoreSyncEventsQueueReader =
-      kvStoreSyncEventsQueue.getReader();
-  auto linkMonitorNetlinkEventsQueueReader = netlinkEventsQueue.getReader();
-  auto decisionKvStoreUpdatesQueueReader = kvStoreUpdatesQueue.getReader();
-  auto PrefixManagerKvStoreUpdatesReader = kvStoreUpdatesQueue.getReader();
+      kvStoreSyncEventsQueue.getReader("linkMonitor");
+  auto linkMonitorNetlinkEventsQueueReader =
+      netlinkEventsQueue.getReader("linkMonitor");
+  auto decisionKvStoreUpdatesQueueReader =
+      kvStoreUpdatesQueue.getReader("decision");
+  auto PrefixManagerKvStoreUpdatesReader =
+      kvStoreUpdatesQueue.getReader("prefixManager");
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -322,6 +328,7 @@ main(int argc, char** argv) {
           netlinkFibServer->serve();
           LOG(INFO) << "NetlinkFib server got stopped.";
         });
+    watchdog->addQueue(netlinkEventsQueue, "netlinkEventsQueue");
   }
 
   // Start config-store URL
@@ -341,7 +348,7 @@ main(int argc, char** argv) {
       std::make_unique<openr::Monitor>(
           config,
           Constants::kEventLogCategory.toString(),
-          logSampleQueue.getReader()));
+          logSampleQueue.getReader("monitor")));
 
   // Start KVStore
   auto kvStore = startEventBase(
@@ -353,22 +360,25 @@ main(int argc, char** argv) {
           context,
           kvStoreUpdatesQueue,
           kvStoreSyncEventsQueue,
-          peerUpdatesQueue.getReader(),
-          kvRequestQueue.getReader(),
+          peerUpdatesQueue.getReader("kvStore"),
+          kvRequestQueue.getReader("kvStore"),
           logSampleQueue,
           KvStoreGlobalCmdUrl{fmt::format(
               "tcp://{}:{}",
               *config->getConfig().listen_addr_ref(),
               Constants::kKvStoreRepPort)},
           config));
+  watchdog->addQueue(kvStoreSyncEventsQueue, "kvStoreSyncEventsQueue");
+  watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
+  watchdog->addQueue(logSampleQueue, "logSampleQueue");
 
   // If FIB-ACK feature is enabled, Fib publishes routes to PrefixManager
   // after programming has completed; Otherwise, Decision publishes routes to
   // PrefixManager.
   auto routeUpdatesQueueReader =
       (config->getConfig().get_enable_fib_ack()
-           ? fibRouteUpdatesQueue.getReader()
-           : routeUpdatesQueue.getReader());
+           ? fibRouteUpdatesQueue.getReader("routeUpdates")
+           : routeUpdatesQueue.getReader("routeUpdates"));
   auto prefixManager = startEventBase(
       allThreads,
       orderedEvbs,
@@ -378,10 +388,12 @@ main(int argc, char** argv) {
           staticRouteUpdatesQueue,
           kvRequestQueue,
           PrefixManagerKvStoreUpdatesReader,
-          prefixUpdatesQueue.getReader(),
+          prefixUpdatesQueue.getReader("prefixManager"),
           std::move(routeUpdatesQueueReader),
           config,
           kvStore));
+  watchdog->addQueue(kvRequestQueue, "kvRequestQueue");
+  watchdog->addQueue(staticRouteUpdatesQueue, "staticRouteUpdatesQueue");
 
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (config->isPrefixAllocationEnabled()) {
@@ -401,6 +413,8 @@ main(int argc, char** argv) {
             kvRequestQueue,
             Constants::kPrefixAllocatorSyncInterval));
   }
+  watchdog->addQueue(prefixUpdatesQueue, "prefixUpdatesQueue");
+  watchdog->addQueue(netlinkEventsQueue, "netlinkEventsQueue");
 
   // Create Spark instance for neighbor discovery
   auto spark = startEventBase(
@@ -409,10 +423,11 @@ main(int argc, char** argv) {
       watchdog,
       "spark",
       std::make_unique<Spark>(
-          interfaceUpdatesQueue.getReader(),
+          interfaceUpdatesQueue.getReader("spark"),
           neighborUpdatesQueue,
           std::make_shared<IoProvider>(),
           config));
+  watchdog->addQueue(neighborUpdatesQueue, "neighborUpdatesQueue");
 
   // Create link monitor instance.
   auto linkMonitor = startEventBase(
@@ -434,6 +449,8 @@ main(int argc, char** argv) {
           std::move(linkMonitorKvStoreSyncEventsQueueReader),
           std::move(linkMonitorNetlinkEventsQueueReader),
           FLAGS_override_drain_state));
+  watchdog->addQueue(interfaceUpdatesQueue, "interfaceUpdatesQueue");
+  watchdog->addQueue(peerUpdatesQueue, "peerUpdatesQueue");
 
   // Setup the SSL policy
   std::shared_ptr<wangle::SSLContextConfig> sslContext;
@@ -475,8 +492,8 @@ main(int argc, char** argv) {
       prefixUpdatesQueue,
       staticRouteUpdatesQueue,
       (config->getConfig().get_enable_fib_ack()
-           ? fibRouteUpdatesQueue.getReader()
-           : routeUpdatesQueue.getReader()),
+           ? fibRouteUpdatesQueue.getReader("pluginRouteUpdates")
+           : routeUpdatesQueue.getReader("pluginRouteUpdates")),
       config,
       sslContext};
   if (config->isBgpPeeringEnabled()) {
@@ -504,6 +521,7 @@ main(int argc, char** argv) {
           std::move(decisionKvStoreUpdatesQueueReader),
           std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));
+  watchdog->addQueue(routeUpdatesQueue, "routeUpdatesQueue");
 
   // Define and start Fib Module
   auto fib = startEventBase(
@@ -517,6 +535,7 @@ main(int argc, char** argv) {
           std::move(fibStaticRouteUpdatesQueueReader),
           fibRouteUpdatesQueue,
           logSampleQueue));
+  watchdog->addQueue(fibRouteUpdatesQueue, "fibRouteUpdatesQueue");
 
   // Create Open/R control handler
   // NOTE: Start EventBase only after OpenrCtrlHandler has been constructed
