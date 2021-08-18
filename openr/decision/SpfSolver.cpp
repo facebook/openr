@@ -16,7 +16,6 @@ namespace fb303 = facebook::fb303;
 
 using apache::thrift::can_throw;
 using Metric = openr::LinkStateMetric;
-using SpfResult = openr::LinkState::SpfResult;
 
 namespace openr {
 
