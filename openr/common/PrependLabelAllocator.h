@@ -8,6 +8,7 @@
 #pragma once
 
 #include <openr/common/MplsUtil.h>
+#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 
 namespace openr {
@@ -26,6 +27,28 @@ class PrependLabelAllocator {
   ~PrependLabelAllocator() = default;
 
   /**
+   * Decrement reference count associated with a nexthop set. After reference
+   * count drops to 0, we return the label to be deleted. A deleted label will
+   * be re-used and re-allocated to next nexthop set. This would retain the
+   * label if a next-hop group shrinks or expands for all the routes.
+   */
+  std::optional<int32_t> decrementRefCount(
+      const std::set<folly::IPAddress>& nextHopSet);
+
+  /**
+   * Increment reference count associated with a nexthop set. Assign labels to
+   * new next-hop sets. The allocation will re-use free labels.
+   * At the end, we will create the new MPLS routes to be added for newly added
+   * next-hop set.
+   *
+   * Returned result is a tuple of label value and a boolean flag indicating if
+   * the label is newly allocated.
+   */
+  std::pair<std::optional<int32_t>, bool> incrementRefCount(
+      const std::set<folly::IPAddress>& nextHopSet);
+
+ private:
+  /**
    * Return an available mpls label from previously freed labels from previous
    * iteration or allocation. Otherwise, generate next label next from the range
    * and allocate.
@@ -39,28 +62,13 @@ class PrependLabelAllocator {
   void freeMplsLabel(bool isV4, int32_t label, const std::string& nh_str);
 
   /**
-   * Return the NH to label mapping
+   * Get the configured prepend label range for a given address family.
    */
-  std::map<std::set<folly::IPAddress>, std::pair<int32_t, int32_t>>&
-  getNextHopSetToLabel() {
-    return nextHopSetToLabel_;
-  }
-
-  /**
-   * Decrement reference count of the label associated with the nexthop set
-   */
-  int32_t decrementRefCount(const std::set<folly::IPAddress>& nextHopSet);
-
-  /**
-   * Increment reference count of the label associated with the nexthop set
-   */
-  void incrementRefCount(const std::set<folly::IPAddress>& nextHopSet);
-
- private:
-  // Get the configured prepend labels
   const std::pair<int32_t, int32_t> getPrependLabelRange(bool isV4);
 
-  // NextHopSet -> [RefCount, Label] mapping.
+  /**
+   * NextHopSet -> [RefCount, Label] mapping.
+   */
   std::map<std::set<folly::IPAddress>, std::pair<int32_t, int32_t>>
       nextHopSetToLabel_;
 

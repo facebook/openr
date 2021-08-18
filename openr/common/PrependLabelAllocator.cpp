@@ -6,6 +6,7 @@
  */
 
 #include <openr/common/PrependLabelAllocator.h>
+#include <optional>
 
 namespace openr {
 
@@ -76,24 +77,55 @@ PrependLabelAllocator::getPrependLabelRange(bool isV4) {
   }
 }
 
-int32_t
+std::optional<int32_t>
 PrependLabelAllocator::decrementRefCount(
     const std::set<folly::IPAddress>& nextHopSet) {
-  int32_t oldLabel = 0;
+  std::optional<int32_t> oldLabel = std::nullopt;
   if (nextHopSet.size()) {
-    auto& [refCount, label] = getNextHopSetToLabel().at(nextHopSet);
+    auto& [refCount, label] = nextHopSetToLabel_.at(nextHopSet);
     refCount--;
-    return label;
+    CHECK_GE(refCount, 0) << "Reference count can never be negative";
+    if (refCount == 0) {
+      oldLabel = label;
+      CHECK_GT(nextHopSet.size(), 0) << "Nexthop set must have a valid entry";
+      const auto& nh = *nextHopSet.begin();
+      nextHopSetToLabel_.erase(nextHopSet);
+      if (oldLabel) {
+        VLOG(1) << "De-allocating label " << oldLabel.value()
+                << " used for nextHopSet consisting of";
+        for (auto const& nhEntry : nextHopSet) {
+          VLOG(1) << " " << nhEntry.str();
+        }
+        freeMplsLabel(nh.isV4(), oldLabel.value(), nh.str());
+      }
+    }
   }
   return oldLabel;
 }
 
-void
+std::pair<std::optional<int32_t>, bool>
 PrependLabelAllocator::incrementRefCount(
     const std::set<folly::IPAddress>& nextHopSet) {
+  std::optional<int32_t> newOrCurrentLabel = std::nullopt;
+  auto isNewLabel = false;
   if (nextHopSet.size()) {
-    auto& [refCount, label] = getNextHopSetToLabel().at(nextHopSet);
+    auto& [refCount, label] = nextHopSetToLabel_[nextHopSet];
     refCount++; // Increase ref-count
+    if (label == 0) {
+      CHECK_GT(nextHopSet.size(), 0) << "Nexthop set must have a valid entry";
+      const auto& nh = *nextHopSet.begin();
+      // Create a new label
+      label = getNewMplsLabel(nh.isV4());
+      VLOG(1) << "Allocating label " << label
+              << " for nexthop set consisting of";
+      for (auto const& nhEntry : nextHopSet) {
+        VLOG(1) << " " << nhEntry.str();
+      }
+      isNewLabel = true;
+    }
+    newOrCurrentLabel = label;
   }
+  return std::make_pair(newOrCurrentLabel, isNewLabel);
 }
+
 } // namespace openr

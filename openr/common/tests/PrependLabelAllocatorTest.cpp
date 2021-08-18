@@ -11,91 +11,128 @@
 #include <openr/common/PrependLabelAllocator.h>
 #include <openr/config/Config.h>
 #include <openr/config/tests/Utils.h>
+#include <optional>
 
-using namespace openr;
+namespace openr {
 
-namespace {
+class PrependLabelAllocatorTestFixture : public ::testing::Test {
+ public:
+  PrependLabelAllocatorTestFixture() = default;
+  ~PrependLabelAllocatorTestFixture() override = default;
 
-std::shared_ptr<Config>
-getTestConfig() {
-  // generate a config for testing
-  auto tConfig = getBasicOpenrConfig(
-      "1",
-      "domain",
-      {},
-      false, /* enableV4 */
-      true, /* enableSegmentRouting */
-      false, /* dryrun */
-      false, /* enableV4OverV6Nexthop */
-      false, /* enableAdjLabels */
-      true /* enablePrependLabels */
-  );
+  void
+  SetUp() override {
+    config_ = std::make_shared<Config>(createConfig());
+    prependLabelAllocator_ = std::make_unique<PrependLabelAllocator>(config_);
+  }
 
-  return std::make_shared<Config>(tConfig);
+  virtual thrift::OpenrConfig
+  createConfig() {
+    // generate a config for testing
+    auto tConfig = getBasicOpenrConfig(
+        "1",
+        "domain",
+        {},
+        false, /* enableV4 */
+        true, /* enableSegmentRouting */
+        false, /* dryrun */
+        false, /* enableV4OverV6Nexthop */
+        false, /* enableAdjLabels */
+        true /* enablePrependLabels */
+    );
+
+    return tConfig;
+  }
+
+  std::shared_ptr<Config> config_;
+  std::unique_ptr<PrependLabelAllocator> prependLabelAllocator_;
+};
+
+/**
+ * Empty nexthop set should return no label while incrementing
+ * or decrementing reference count.
+ */
+TEST_F(PrependLabelAllocatorTestFixture, EmptyNextHopSet) {
+  std::set<folly::IPAddress> labelNextHopSet;
+  auto [label, isNew] =
+      prependLabelAllocator_->incrementRefCount(labelNextHopSet);
+  EXPECT_EQ(isNew, false);
+  EXPECT_EQ(label.has_value(), false);
+
+  auto oldLabel = prependLabelAllocator_->decrementRefCount(labelNextHopSet);
+  EXPECT_EQ(oldLabel.has_value(), false);
 }
 
 /**
- * Verify label allocation.
+ * Increment reference count for a new nexthop set and assign a label.
+ * Then decrement reference count and verify value of the released label.
  */
-TEST(PrependLabelAllocator, GetLabel) {
-  auto config = getTestConfig();
-  auto prependLabelAllocator = std::make_unique<PrependLabelAllocator>(config);
-  EXPECT_EQ(
-      prependLabelAllocator->getNewMplsLabel(true),
-      MplsConstants::kSrV4StaticMplsRouteRange.first);
-  EXPECT_EQ(
-      prependLabelAllocator->getNewMplsLabel(false),
-      MplsConstants::kSrV6StaticMplsRouteRange.first);
-}
-
-/**
- * Verify label de-allocation.
- */
-TEST(PrependLabelAllocator, FreeLabel) {
-  auto config = getTestConfig();
-  auto prependLabelAllocator = std::make_unique<PrependLabelAllocator>(config);
-
-  // Allocate labels
-  auto prependLabelV4 = prependLabelAllocator->getNewMplsLabel(true);
-  auto prependLabelV6 = prependLabelAllocator->getNewMplsLabel(false);
-
-  // Free the labels
-  prependLabelAllocator->freeMplsLabel(true, prependLabelV4, "nh4");
-  prependLabelAllocator->freeMplsLabel(false, prependLabelV6, "nh6");
-
-  // Re-allocation of label should use labels from the free label list
-  EXPECT_EQ(
-      prependLabelAllocator->getNewMplsLabel(true),
-      MplsConstants::kSrV4StaticMplsRouteRange.first);
-  EXPECT_EQ(
-      prependLabelAllocator->getNewMplsLabel(false),
-      MplsConstants::kSrV6StaticMplsRouteRange.first);
-}
-
-/**
- * Increment refCount for a new NH set. Assign label.
- * Then decrement refCount and verify the value of the label.
- */
-TEST(PrependLabelAllocator, RefCount) {
-  auto config = getTestConfig();
-  auto prependLabelAllocator = std::make_unique<PrependLabelAllocator>(config);
-
+TEST_F(PrependLabelAllocatorTestFixture, AllocateAndDeAllocateLabels) {
   std::set<folly::IPAddress> labelNextHopSet;
   labelNextHopSet.emplace(folly::IPAddress("192.168.0.1"));
   labelNextHopSet.emplace(folly::IPAddress("192.168.0.2"));
 
-  auto& [refCount, label] =
-      prependLabelAllocator->getNextHopSetToLabel()[labelNextHopSet];
-  prependLabelAllocator->incrementRefCount(labelNextHopSet);
-  EXPECT_EQ(refCount, 1);
-  EXPECT_EQ(label, 0);
+  auto [label, isNew] =
+      prependLabelAllocator_->incrementRefCount(labelNextHopSet);
+  EXPECT_EQ(isNew, true);
+  EXPECT_EQ(label.value(), 60000);
 
-  label = 101; /* New Label */
-  auto oldLabel = prependLabelAllocator->decrementRefCount(labelNextHopSet);
-  EXPECT_EQ(refCount, 0);
-  EXPECT_EQ(oldLabel, label);
+  auto oldLabel = prependLabelAllocator_->decrementRefCount(labelNextHopSet);
+  EXPECT_EQ(oldLabel, 60000);
 }
-} // namespace
+
+/**
+ * Make sure when reference count is increased for an existing nexthop set, no
+ * new label is created.
+ */
+TEST_F(PrependLabelAllocatorTestFixture, NoNewAllocation) {
+  std::set<folly::IPAddress> labelNextHopSet;
+  labelNextHopSet.emplace(folly::IPAddress("192.168.0.1"));
+  labelNextHopSet.emplace(folly::IPAddress("192.168.0.2"));
+
+  auto [label, isNew] =
+      prependLabelAllocator_->incrementRefCount(labelNextHopSet);
+  EXPECT_EQ(isNew, true);
+  EXPECT_EQ(label.value(), 60000);
+
+  // Make sure current label is non-zero and no new label is created.
+  auto pair = prependLabelAllocator_->incrementRefCount(labelNextHopSet);
+  EXPECT_EQ(pair.second, false);
+  EXPECT_EQ(pair.first.value(), 60000);
+}
+
+/**
+ * Allocate a label to a nexthop group.
+ * Released the label and the nexthop group.
+ * Allocate label to a new nexthop group.
+ * Make sure old label gets re-used.
+ */
+TEST_F(PrependLabelAllocatorTestFixture, AllocateFreedLabelToNewNextHopSet) {
+  // create a new nexthop set and increase refcount
+  std::set<folly::IPAddress> labelNextHopSet;
+  labelNextHopSet.emplace(folly::IPAddress("192.168.0.1"));
+  labelNextHopSet.emplace(folly::IPAddress("192.168.0.2"));
+
+  auto [label, isNew] =
+      prependLabelAllocator_->incrementRefCount(labelNextHopSet);
+  EXPECT_EQ(isNew, true);
+  EXPECT_EQ(label.value(), 60000);
+
+  // Decrement reference count and delete the label
+  auto oldLabel = prependLabelAllocator_->decrementRefCount(labelNextHopSet);
+  EXPECT_EQ(oldLabel, 60000);
+
+  // create a new nexthop set and verify that the free'd label is re-allocated.
+  std::set<folly::IPAddress> labelNextHopSet2;
+  labelNextHopSet2.emplace(folly::IPAddress("192.168.0.1"));
+  labelNextHopSet2.emplace(folly::IPAddress("192.168.0.2"));
+  labelNextHopSet2.emplace(folly::IPAddress("192.168.0.3"));
+  auto pair = prependLabelAllocator_->incrementRefCount(labelNextHopSet2);
+  EXPECT_EQ(pair.second, true);
+  EXPECT_EQ(pair.first.value(), 60000);
+}
+
+} // namespace openr
 
 int
 main(int argc, char* argv[]) {
