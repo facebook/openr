@@ -964,4 +964,10 @@ struct OpenrConfig {
    * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html.
    */
   200: bool enable_initialization_process = false;
+
+  /**
+   * Flag to indicate if adjacencyDb publication after prefixDb sync is enabled.
+   * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html.
+   */
+  201: bool enable_ordered_adj_publication = false;
 } (cpp.minimize_padding)
