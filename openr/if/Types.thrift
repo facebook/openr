@@ -1311,14 +1311,65 @@ struct OpenrVersions {
  *    - SparkHelloMsg will be sent per interface;
  */
 struct SparkHelloMsg {
+  /**
+   * [TO BE DEPRECATED]
+   * Name of the domain this Open/R belongs to.
+   * ATTN: adapt to area concept and usage to replace this.
+   */
   1: string domainName;
+
+  /**
+   * Name of the node originating this hello message.
+   */
   2: string nodeName;
+
+  /**
+   * Local interface name from where this SparkHelloMsg is sent.
+   */
   3: string ifName;
+
+  /**
+   * Sequence number growing monotonically.
+   * ATTN: this is used to differentiate restarting of neighbors
+   * with unexpected sequence number.
+   */
   4: i64 seqNum;
+
+  /**
+   * Mapping from:
+   *  nodeName -> neighbor info
+   *
+   * ATTN: Neighbor Discovery Process is bi-directional and will
+   * promote to ESTABLISHED state ONLY when I see the fact that
+   * neighbor is aware of myself.
+   */
   5: map<string, ReflectedNeighborInfo> neighborInfos;
+
+  /**
+   * Version contains current version and lowest version of messages
+   * supported.
+   *
+   * See Versioning for more details.
+   *
+   * https://openr.readthedocs.io/Operator_Guide/Versions.html
+   */
   6: OpenrVersion version;
+
+  /**
+   * Flag to ask for immediate response for Fast-Neighbor-Discovery
+   *
+   * https://openr.readthedocs.io/Protocol_Guide/Spark.html#fast-neighbor-discovery
+   */
   7: bool solicitResponse = 0;
+
+  /**
+   * Flag to indicating the node is going Graceful Restart(GR)
+   */
   8: bool restarting = 0;
+
+  /**
+   * Timestamp to indicate when this helloMsg is sent for RTT calculation
+   */
   9: i64 sentTsInUs;
 } (cpp.minimize_padding)
 
@@ -1329,8 +1380,24 @@ struct SparkHelloMsg {
  *    - SparkHeartbeatMsg will be sent per interface;
  */
 struct SparkHeartbeatMsg {
+  /**
+   * Name of the node originating this heartbeat message
+   */
   1: string nodeName;
+
+  /**
+   * Sequence number growing monotonically
+   */
   2: i64 seqNum;
+
+  /**
+   * Flag to notify neighbor to unblock adjacency hold
+   *
+   * For details of Open/R Initialization Process, please refer to:
+   *
+   * https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html
+   */
+  3: bool holdAdjacency = false;
 }
 
 /**
