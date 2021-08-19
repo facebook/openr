@@ -156,7 +156,7 @@ struct AreaPathComputationRules {
  */
 union PrependLabelRules {
   /* Advertise node segment label of the best route */
-  1: bool bestRouteNodeSegmentLabel;
+  1: bool bestRouteNodeSegmentLabel = false;
 
   /*
    * Allocate prepend label and use next-hops from given areas.
@@ -166,7 +166,7 @@ union PrependLabelRules {
    * (next-hop IP + label stack)
    *
    */
-  2: list<string> nextHopAreas = [];
+  2: list<string> nextHopAreas;
 } (cpp.minimize_padding)
 
 struct RouteComputationRules {
