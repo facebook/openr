@@ -277,9 +277,7 @@ class PrefixManager final : public OpenrEventBase {
 
   // Update KvStore keys of one prefix entry.
   void updatePrefixKeysInKvStore(
-      const folly::CIDRNetwork& prefix,
-      const PrefixEntry& prefixEntry,
-      DecisionRouteUpdate& routeUpdatesOut);
+      const folly::CIDRNetwork& prefix, const PrefixEntry& prefixEntry);
 
   // Add KvStore keys of one prefix entry.
   // @return: set of the areas that this prefix will advertise to.
@@ -294,6 +292,14 @@ class PrefixManager final : public OpenrEventBase {
       const folly::CIDRNetwork& prefix,
       const std::unordered_set<std::string>& deletedArea);
 
+  /*
+   * Get route updates of prefixEntry.
+   * PrefixEntry with nexthops attr set/reset introduces route add/delete.
+   */
+  void populateRouteUpdates(
+      const folly::CIDRNetwork& prefix,
+      const PrefixEntry& prefixEntry,
+      DecisionRouteUpdate& routeUpdatesOut);
   /*
    * [Route Origination/Aggregation]
    *
@@ -416,7 +422,7 @@ class PrefixManager final : public OpenrEventBase {
   // process. With multi-area support, one prefix will map to multiple
   // key-advertisement in `KvStore`.
   struct AdervertiseStatus {
-    // If the prefix was installed to the Fib
+    // If the prefix was sent for programming.
     bool installedToFib{false};
     // Saving the set of areas this prefix advertised to
     std::unordered_set<std::string> areas;

@@ -388,9 +388,7 @@ PrefixManager::buildOriginatedPrefixDb(
 
 void
 PrefixManager::updatePrefixKeysInKvStore(
-    const folly::CIDRNetwork& prefix,
-    const PrefixEntry& prefixEntry,
-    DecisionRouteUpdate& routeUpdatesOut) {
+    const folly::CIDRNetwork& prefix, const PrefixEntry& prefixEntry) {
   // advertise best-entry for this prefix to `KvStore`
   auto updatedArea = addKvStoreKeyHelper(prefixEntry);
 
@@ -411,14 +409,18 @@ PrefixManager::updatePrefixKeysInKvStore(
     deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
   }
 
-  auto& advertisedStatus = keysInKvStore_[prefix];
   // override `keysInKvStore_` for next-round syncing
-  advertisedStatus.areas = std::move(updatedArea);
-  // propogate route update to `KvStore` and `Decision`(if necessary)
+  keysInKvStore_[prefix].areas = std::move(updatedArea);
+}
+
+void
+PrefixManager::populateRouteUpdates(
+    const folly::CIDRNetwork& prefix,
+    const PrefixEntry& prefixEntry,
+    DecisionRouteUpdate& routeUpdatesOut) {
+  // Propogate route update to Decision (if necessary)
+  auto& advertisedStatus = keysInKvStore_[prefix];
   if (prefixEntry.shouldInstall()) {
-    if (advertisedStatus.installedToFib) {
-      return;
-    }
     advertisedStatus.installedToFib = true;
     // Populate RibUnicastEntry struct
     // ATTN: AREA field is empty for NHs
@@ -427,7 +429,7 @@ PrefixManager::updatePrefixKeysInKvStore(
     unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
     routeUpdatesOut.addRouteToUpdate(std::move(unicastEntry));
   } else {
-    // if was installed to fib, but now lose in tie break, withdraw from
+    // If was installed to fib, but now lose in tie break, withdraw from
     // fib.
     if (advertisedStatus.installedToFib) {
       routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
@@ -695,11 +697,15 @@ PrefixManager::syncKvStore() {
     bool readyToBeAdvertised = prefixEntryReadyToBeAdvertised(bestEntry);
     bool needToAdvertise =
         ((hasPrefixUpdate or haslabelUpdate) and readyToBeAdvertised);
+    // Get route updates from updated prefix entry.
+    if (hasPrefixUpdate) {
+      populateRouteUpdates(prefix, bestEntry, routeUpdatesOut);
+    }
     if (needToAdvertise) {
       VLOG(1) << fmt::format(
           "Adding/updating keys for {}",
           folly::IPAddress::networkToString(prefix));
-      updatePrefixKeysInKvStore(prefix, bestEntry, routeUpdatesOut);
+      updatePrefixKeysInKvStore(prefix, bestEntry);
       advertisedPrefixes_[prefix] = bestEntry;
       ++syncedPrefixCnt;
       continue;

@@ -1035,29 +1035,56 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
 
   // ADD_PREFIXES
   {
-    // Send update request in queue
-    PrefixEvent event(
-        PrefixEventType::ADD_PREFIXES, thrift::PrefixType::VIP, {}, {});
-    event.prefixEntries.push_back(cPrefixEntry);
-    prefixUpdatesQueue.push(std::move(event));
+    int scheduleAt{0};
+    auto prefixKey9 = PrefixKey(
+                          nodeId_,
+                          toIPNetwork(*prefixEntry9.prefix_ref()),
+                          thrift::Types_constants::kDefaultArea(),
+                          true)
+                          .getPrefixKeyV2();
 
-    DecisionRouteUpdate routeUpdate;
-    routeUpdate.addRouteToUpdate(RibUnicastEntry(
-        toIPNetwork(addr9),
-        nexthops,
-        prefixEntry9,
-        thrift::Types_constants::kDefaultArea()));
-    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+    evb.scheduleTimeout(
+        std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+          // Send prefix update request in queue
+          PrefixEvent event(
+              PrefixEventType::ADD_PREFIXES, thrift::PrefixType::VIP, {}, {});
+          event.prefixEntries.push_back(cPrefixEntry);
+          prefixUpdatesQueue.push(std::move(event));
+        });
 
-    // Wait for update in KvStore
-    // ATTN: both prefixes should be updated via throttle
-    auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_EQ(1, pub.keyVals_ref()->size());
+    evb.scheduleTimeout(
+        std::chrono::milliseconds(
+            scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+        [&]() {
+          // prefixEntry9 is not injected into KvStore.
+          EXPECT_FALSE(
+              kvStoreWrapper->getKey(kTestingAreaName, prefixKey9).has_value());
 
-    // Verify
-    auto prefixes = prefixManager->getPrefixes().get();
-    EXPECT_EQ(1, prefixes->size());
-    EXPECT_THAT(*prefixes, testing::Contains(prefixEntry9));
+          // Unicast route of prefixEntry9 is programmed.
+          DecisionRouteUpdate routeUpdate;
+          routeUpdate.addRouteToUpdate(RibUnicastEntry(
+              toIPNetwork(addr9),
+              nexthops,
+              prefixEntry9,
+              thrift::Types_constants::kDefaultArea()));
+          fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+          // Wait for prefix update in KvStore
+          auto pub = kvStoreWrapper->recvPublication();
+          EXPECT_EQ(1, pub.keyVals_ref()->size());
+          EXPECT_TRUE(
+              kvStoreWrapper->getKey(kTestingAreaName, prefixKey9).has_value());
+
+          // Verify
+          auto prefixes = prefixManager->getPrefixes().get();
+          EXPECT_EQ(1, prefixes->size());
+          EXPECT_THAT(*prefixes, testing::Contains(prefixEntry9));
+
+          evb.stop();
+        });
+
+    // let magic happen
+    evb.run();
   }
 
   // WITHDRAW_PREFIXES
