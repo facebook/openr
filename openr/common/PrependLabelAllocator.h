@@ -21,6 +21,7 @@ namespace openr {
 // different areas or openr domains. While a prepend label is advertised
 // to remote nodes/areas, a corresponding MPLS label route can be programmed
 // in local nodes.
+template <class T>
 class PrependLabelAllocator {
  public:
   explicit PrependLabelAllocator(std::shared_ptr<const Config> config);
@@ -32,8 +33,7 @@ class PrependLabelAllocator {
    * be re-used and re-allocated to next nexthop set. This would retain the
    * label if a next-hop group shrinks or expands for all the routes.
    */
-  std::optional<int32_t> decrementRefCount(
-      const std::set<folly::IPAddress>& nextHopSet);
+  std::optional<int32_t> decrementRefCount(const std::set<T>& nextHopSet);
 
   /**
    * Increment reference count associated with a nexthop set. Assign labels to
@@ -45,7 +45,7 @@ class PrependLabelAllocator {
    * the label is newly allocated.
    */
   std::pair<std::optional<int32_t>, bool> incrementRefCount(
-      const std::set<folly::IPAddress>& nextHopSet);
+      const std::set<T>& nextHopSet);
 
  private:
   /**
@@ -69,8 +69,7 @@ class PrependLabelAllocator {
   /**
    * NextHopSet -> [RefCount, Label] mapping.
    */
-  std::map<std::set<folly::IPAddress>, std::pair<int32_t, int32_t>>
-      nextHopSetToLabel_;
+  std::map<std::set<T>, std::pair<int32_t, int32_t>> nextHopSetToLabel_;
 
   /*
    * Next MPLS label available for use per address family (ipv4/ipv6).

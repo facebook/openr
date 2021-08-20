@@ -12,11 +12,15 @@
 #include <folly/IPAddress.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/Thrift.h>
+#include "openr/common/NetworkUtil.h"
+#include "openr/if/gen-cpp2/Network_types.h"
 
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <type_traits>
+#include <unordered_set>
 
 namespace std {
 
@@ -52,6 +56,12 @@ struct hash<openr::thrift::NextHopThrift> {
   size_t operator()(openr::thrift::NextHopThrift const&) const;
 };
 
+template <>
+struct hash<std::unordered_set<openr::thrift::NextHopThrift>> {
+  size_t operator()(
+      std::unordered_set<openr::thrift::NextHopThrift> const&) const;
+};
+
 /**
  * Make UnicastRoute hashable
  */
@@ -83,6 +93,11 @@ toBinaryAddress(const folly::IPAddress& addr) {
 inline thrift::BinaryAddress
 toBinaryAddress(const std::string& addr) {
   return toBinaryAddress(folly::IPAddress(addr));
+}
+
+inline thrift::BinaryAddress
+toBinaryAddress(const thrift::NextHopThrift& nh) {
+  return *nh.address_ref();
 }
 
 template <typename T>
@@ -161,7 +176,7 @@ toString(const thrift::MplsAction& mplsAction) {
 inline std::string
 toString(const thrift::NextHopThrift& nextHop) {
   return fmt::format(
-      "via {} dev {} weight {} metric {} area {} {}",
+      "via {} dev {} weight {} metric {} area {} {} neighbor {}",
       toIPAddress(*nextHop.address_ref()).str(),
       nextHop.address_ref()->ifName_ref().value_or("N/A"),
       *nextHop.weight_ref(),
@@ -169,7 +184,15 @@ toString(const thrift::NextHopThrift& nextHop) {
       nextHop.area_ref().value_or("N/A"),
       nextHop.mplsAction_ref().has_value()
           ? toString(nextHop.mplsAction_ref().value())
+          : "",
+      nextHop.neighborNodeName_ref().has_value()
+          ? *nextHop.neighborNodeName_ref()
           : "");
+}
+
+inline std::string
+toString(const folly::IPAddress& addr) {
+  return addr.str();
 }
 
 inline std::string
@@ -215,5 +238,15 @@ toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
  * localIfName
  */
 std::string getRemoteIfName(const thrift::Adjacency& adj);
+
+inline bool
+isAddressFamilyV4(const folly::IPAddress& addr) {
+  return addr.isV4();
+}
+
+inline bool
+isAddressFamilyV4(const thrift::NextHopThrift& nh) {
+  return toIPAddress(*nh.address_ref()).isV4();
+}
 
 } // namespace openr

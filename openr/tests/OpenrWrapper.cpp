@@ -40,8 +40,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       {}, /* area config */
       v4Enabled,
       true /*enableSegmentRouting*/,
-      false /*orderedFibProgramming*/,
-      true /*dryrun*/);
+      true /*dryrun*/,
+      false /* enableV4OverV6Nexthop */,
+      false /* enableAdjLabels */,
+      true /* enablePrependLabels */);
 
   tConfig.kvstore_config_ref()->sync_interval_s_ref() =
       kvStoreDbSyncInterval.count();

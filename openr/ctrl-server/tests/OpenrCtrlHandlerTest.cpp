@@ -54,7 +54,11 @@ class OpenrCtrlFixture : public ::testing::Test {
         "domain",
         areaConfig,
         true /* enableV4 */,
-        true /* enableSegmentRouting */);
+        true /* enableSegmentRouting */,
+        true /* dryrun */,
+        false /* enableV4OverV6Nexthop */,
+        true /* enableAdjLabels */,
+        true /* enablePrependLabels */);
 
     // decision config
     tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;

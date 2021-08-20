@@ -122,6 +122,7 @@ Decision::Decision(
                                          ->debounce_max_ms_ref()),
           [this]() noexcept { rebuildRoutes("DECISION_DEBOUNCE"); }) {
   spfSolver_ = std::make_unique<SpfSolver>(
+      config,
       config->getNodeName(),
       config->isV4Enabled(),
       config->isSegmentRoutingEnabled(),

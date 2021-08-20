@@ -23,7 +23,8 @@ class PrependLabelAllocatorTestFixture : public ::testing::Test {
   void
   SetUp() override {
     config_ = std::make_shared<Config>(createConfig());
-    prependLabelAllocator_ = std::make_unique<PrependLabelAllocator>(config_);
+    prependLabelAllocator_ =
+        std::make_unique<PrependLabelAllocator<folly::IPAddress>>(config_);
   }
 
   virtual thrift::OpenrConfig
@@ -45,7 +46,8 @@ class PrependLabelAllocatorTestFixture : public ::testing::Test {
   }
 
   std::shared_ptr<Config> config_;
-  std::unique_ptr<PrependLabelAllocator> prependLabelAllocator_;
+  std::unique_ptr<PrependLabelAllocator<folly::IPAddress>>
+      prependLabelAllocator_;
 };
 
 /**

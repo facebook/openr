@@ -25,6 +25,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/PrependLabelAllocator.h>
 #include <openr/common/Util.h>
 #include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
@@ -438,6 +439,31 @@ updatePrefixDatabase(
   return changed;
 }
 
+openr::thrift::OpenrConfig
+createConfig() {
+  auto tConfig = getBasicOpenrConfig(
+      "1",
+      "default",
+      {},
+      true /* enable v4 */,
+      true /* enableSegmentRouting */,
+      true /* dryrun */,
+      false /* enableV4OverV6Nexthop */,
+      true /* enableAdjLabels */,
+      true /* enablePrependLabels */);
+
+  // timeout to wait until decision debounce
+  // (i.e. spf recalculation, route rebuild) finished
+  tConfig.decision_config_ref()->debounce_min_ms_ref() =
+      debounceTimeoutMin.count();
+  tConfig.decision_config_ref()->debounce_max_ms_ref() =
+      debounceTimeoutMax.count();
+
+  // set coldstart to be longer than debounce time
+  tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
+  return tConfig;
+}
+
 } // anonymous namespace
 
 //
@@ -449,8 +475,10 @@ TEST(ShortestPathTest, UnreachableNodes) {
   auto adjacencyDb1 = createAdjDb("1", {}, 0);
   auto adjacencyDb2 = createAdjDb("2", {}, 0);
 
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -491,8 +519,10 @@ TEST(ShortestPathTest, UnreachableNodes) {
 TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
 
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -528,8 +558,10 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
   auto adjacencyDb2 = createAdjDb("2", {}, 0);
 
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -565,8 +597,10 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 // Query route for unknown neighbor. It should return none
 //
 TEST(ShortestPathTest, UnknownNode) {
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -591,8 +625,10 @@ TEST(SpfSolver, AdjacencyUpdate) {
   auto adjacencyDb1 = createAdjDb("1", {adj12}, 1);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 2);
 
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -731,8 +767,10 @@ TEST(SpfSolver, AdjacencyUpdate) {
 // Node-2 and Node-3 are bi-directionally connected
 //
 TEST(MplsRoutes, BasicTest) {
+  auto config = std::make_shared<Config>(createConfig());
   const std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -780,8 +818,10 @@ TEST(MplsRoutes, BasicTest) {
 }
 
 TEST(BGPRedistribution, BasicOperation) {
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -969,8 +1009,10 @@ TEST(BGPRedistribution, BasicOperation) {
 TEST(BGPRedistribution, IgpMetric) {
   const std::string data1{"data1"};
   const auto expectedAddr = addr1;
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* enableV4 */,
       true /* enable segment label */,
@@ -1130,9 +1172,11 @@ TEST(BGPRedistribution, IgpMetric) {
 }
 
 TEST(Decision, BestRouteSelection) {
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   const auto expectedAddr = addr1;
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* enableV4 */,
       true /* enable segment label */,
@@ -1287,8 +1331,10 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
     adjacencyDb3 = createAdjDb("3", {adj32}, 3);
   }
 
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -1346,8 +1392,10 @@ INSTANTIATE_TEST_CASE_P(
 //   10     10
 //
 TEST(ConnectivityTest, OverloadNodeTest) {
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -1448,8 +1496,10 @@ TEST(ConnectivityTest, OverloadNodeTest) {
 //     |                  |
 //     |------------------|
 TEST(ConnectivityTest, CompatibilityNodeTest) {
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   SpfSolver spfSolver(
+      config,
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
@@ -1591,9 +1641,15 @@ class SimpleRingMeshTopologyFixture
       bool useAdjLabel,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
+    auto config = std::make_shared<Config>(createConfig());
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(
-        nodeName, v4Enabled, useNodeSegmentLabel, useAdjLabel, calculateLfas);
+        config,
+        nodeName,
+        v4Enabled,
+        useNodeSegmentLabel,
+        useAdjLabel,
+        calculateLfas);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13, adj14}, 1);
     adjacencyDb2 = createAdjDb("2", {adj21, adj23, adj24}, 2);
     adjacencyDb3 = createAdjDb("3", {adj31, adj32, adj34}, 3);
@@ -1791,9 +1847,15 @@ class SimpleRingTopologyFixture
       bool useAdjLabels,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
+    auto config = std::make_shared<Config>(createConfig());
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(
-        nodeName, v4Enabled, useNodeSegmentLabel, useAdjLabels, calculateLfas);
+        config,
+        nodeName,
+        v4Enabled,
+        useNodeSegmentLabel,
+        useAdjLabels,
+        calculateLfas);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
     adjacencyDb2 = createAdjDb("2", {adj21, adj24}, 2);
     adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
@@ -3327,9 +3389,15 @@ class ParallelAdjRingTopologyFixture
       bool useNodeSegmentLabel,
       bool useAdjLabels,
       std::optional<thrift::PrefixType> prefixType = std::nullopt) {
+    auto config = std::make_shared<Config>(createConfig());
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(
-        nodeName, false, useNodeSegmentLabel, useAdjLabels, calculateLfas);
+        config,
+        nodeName,
+        false,
+        useNodeSegmentLabel,
+        useAdjLabels,
+        calculateLfas);
     // R1 -> R2
     adj12_1 =
         createAdjacency("2", "2/1", "1/1", "fe80::2:1", "192.168.2.1", 11, 201);
@@ -4115,9 +4183,10 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
  * - No adjacency routes were accounted
  */
 TEST(DecisionTest, Ip2MplsRoutes) {
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
   auto spfSolver =
-      std::make_unique<SpfSolver>(nodeName, false, true, true, true);
+      std::make_unique<SpfSolver>(config, nodeName, false, true, true, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -4487,6 +4556,7 @@ class GridTopologyFixture : public ::testing::TestWithParam<int> {
  public:
   GridTopologyFixture()
       : spfSolver(
+            std::make_shared<Config>(createConfig()),
             nodeName,
             false,
             true /* enable node segment label */,
@@ -4584,8 +4654,9 @@ TEST(GridTopology, StressTest) {
   if (!FLAGS_stress_test) {
     return;
   }
+  auto config = std::make_shared<Config>(createConfig());
   std::string nodeName("1");
-  SpfSolver spfSolver(nodeName, false, true, true, true);
+  SpfSolver spfSolver(config, nodeName, false, true, true, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -4644,11 +4715,12 @@ class DecisionTestFixture : public ::testing::Test {
         "1",
         "default",
         {},
-        true /* enable v4 */,
-        true /* enableSegmentRouting */,
-        true /* dryrun */,
-        false /* enableV4OverV6Nexthop */,
-        true /* enableAdjLabels */);
+        true, /* enable v4 */
+        true, /* enableSegmentRouting */
+        true, /* dryrun */
+        false, /* enableV4OverV6Nexthop */
+        true, /* enableAdjLabels */
+        true /* enablePrependLabels */);
 
     // timeout to wait until decision debounce
     // (i.e. spf recalculation, route rebuild) finished
@@ -6106,7 +6178,17 @@ TEST_F(DecisionTestFixture, RibPolicyClear) {
  * enabled.
  */
 TEST(Decision, RibPolicyFeatureKnob) {
-  auto tConfig = getBasicOpenrConfig("1");
+  auto tConfig = getBasicOpenrConfig(
+      "1",
+      "domain",
+      {},
+      true, /* enableV4 */
+      false, /* enableSegmentRouting */
+      true, /* dryrun */
+      false, /* enableV4OverV6Nexthop */
+      false, /* enableAdjLabels */
+      true /* enablePrependLabels */
+  );
   tConfig.enable_rib_policy_ref() = false; // Disable rib_policy feature
   auto config = std::make_shared<Config>(tConfig);
   tConfig.decision_config_ref()->debounce_min_ms_ref() =
@@ -7057,7 +7139,9 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
         true, // enableV4
         true, // enableSegmentRouting (so that adj segment label is enabled)
         false, // enableBgpRouteProgramming
-        true // enableV4OverV6Nexthop
+        true, // enableV4OverV6Nexthop
+        false, // enableAdjLabels
+        true // enablePrependLabels
     );
     tConfig.decision_config_ref()->debounce_min_ms_ref() =
         debounceTimeoutMin.count();
@@ -7183,7 +7267,9 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
         false, // enableV4
         true, // enableSegmentRouting
         false, // enableBgpRouteProgramming
-        true // enableV4OverV6Nexthop
+        true, // enableV4OverV6Nexthop
+        false, // enableAdjLabels
+        true // enablePrependLabels
     );
     tConfig.decision_config_ref()->debounce_min_ms_ref() =
         debounceTimeoutMin.count();
