@@ -99,6 +99,46 @@ RangeAllocator<T>::createKey(const T val) const noexcept {
 }
 
 template <typename T>
+std::optional<thrift::KeyVals>
+RangeAllocator<T>::dumpKeysWithPrefix() const noexcept {
+  try {
+    thrift::KeyDumpParams params;
+    params.prefix_ref() = keyPrefix_;
+    params.keys_ref() = {keyPrefix_};
+    auto maybeGetKey =
+        kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area_})
+            .getTry(Constants::kReadTimeout);
+    if (maybeGetKey.hasValue()) {
+      auto pub = *maybeGetKey.value()->begin();
+      auto keyMap = *pub.keyVals_ref();
+      return keyMap;
+    } else {
+      LOG(ERROR) << fmt::format(
+          "Failed to retrieve keys with prefix: {} "
+          "from KvStore in area: {}. Exception: {}",
+          keyPrefix_,
+          area_.t,
+          folly::exceptionStr(maybeGetKey.exception()));
+      return std::nullopt;
+    }
+  } catch (const folly::FutureTimeout&) {
+    LOG(ERROR) << fmt::format(
+        "Timed out retrieving keys with prefix: {} from KvStore in area: {}",
+        keyPrefix_,
+        area_.t);
+    return std::nullopt;
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << fmt::format(
+        "Failed to dump keys with prefix: {} from KvStore in area: {}. "
+        "Exception: {}",
+        keyPrefix_,
+        area_.t,
+        ex.what());
+    return std::nullopt;
+  }
+}
+
+template <typename T>
 void
 RangeAllocator<T>::startAllocator(
     const std::pair<T, T> allocRange, const std::optional<T> maybeInitValue) {
@@ -138,14 +178,13 @@ RangeAllocator<T>::startAllocator(
 template <typename T>
 bool
 RangeAllocator<T>::isRangeConsumed() const {
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(area_, keyPrefix_);
-  CHECK(maybeKeyMap.has_value())
-      << "Failed to dump keys with prefix: " << keyPrefix_
-      << " from kvstore in area: " << area_.t;
+  auto maybeKeyVals = dumpKeysWithPrefix();
+  CHECK(maybeKeyVals.has_value()); // Crash if key dump failed
+
   T count = 0;
-  for (const auto& kv : *maybeKeyMap) {
+  for (const auto& [_, thriftVal] : maybeKeyVals.value()) {
     const auto val =
-        details::binaryToPrimitive<T>(kv.second.value_ref().value());
+        details::binaryToPrimitive<T>(thriftVal.value_ref().value());
     if (val >= allocRange_.first && val <= allocRange_.second) {
       ++count;
     }
@@ -157,15 +196,14 @@ RangeAllocator<T>::isRangeConsumed() const {
 template <typename T>
 std::optional<T>
 RangeAllocator<T>::getValueFromKvStore() const {
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(area_, keyPrefix_);
-  CHECK(maybeKeyMap.has_value())
-      << "Failed to dump keys with prefix: " << keyPrefix_
-      << " from kvstore in area: " << area_.t;
-  for (const auto& kv : *maybeKeyMap) {
-    if (*kv.second.originatorId_ref() == nodeName_) {
+  auto maybeKeyVals = dumpKeysWithPrefix();
+  CHECK(maybeKeyVals.has_value()); // Crash if key dump failed
+
+  for (const auto& [key, thriftVal] : maybeKeyVals.value()) {
+    if (*thriftVal.originatorId_ref() == nodeName_) {
       const auto val =
-          details::binaryToPrimitive<T>(kv.second.value_ref().value());
-      CHECK_EQ(kv.first, createKey(val));
+          details::binaryToPrimitive<T>(thriftVal.value_ref().value());
+      CHECK_EQ(key, createKey(val));
       return val;
     }
   }
@@ -292,12 +330,11 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
   std::uniform_int_distribution<T> dist(allocRange_.first, allocRange_.second);
   auto newVal = dist(gen);
 
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(area_, keyPrefix_);
-  CHECK(maybeKeyMap.has_value())
-      << "Failed to dump keys with prefix: " << keyPrefix_
-      << " from kvstore in area: " << area_.t;
+  auto maybeKeyVals = dumpKeysWithPrefix();
+  CHECK(maybeKeyVals.has_value()); // Crash if key dump failed
+
   const auto valOwners =
-      folly::gen::from(*maybeKeyMap) |
+      folly::gen::from(maybeKeyVals.value()) |
       folly::gen::map([](std::pair<std::string, thrift::Value> const& kv) {
         return std::make_pair(
             details::binaryToPrimitive<T>(kv.second.value_ref().value()),

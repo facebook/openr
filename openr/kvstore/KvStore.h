@@ -812,7 +812,7 @@ class KvStore final : public OpenrEventBase {
       std::string area, thrift::KeySetParams keySetParams);
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
-  dumpKvStoreKeys(
+  semifuture_dumpKvStoreKeys(
       thrift::KeyDumpParams keyDumpParams,
       std::set<std::string> selectAreas = {});
 

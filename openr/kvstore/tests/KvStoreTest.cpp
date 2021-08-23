@@ -542,7 +542,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
  * Validate retrieval of a single key-value from a node's KvStore.
  */
 TEST_F(KvStoreTestFixture, BasicGetKey) {
-  // create and start kv store with kvRequestQueue enabled
+  // Create and start KvStore.
   const std::string nodeId = "node-for-retrieval";
   auto kvStore_ = createKvStore(nodeId);
   kvStore_->run();
@@ -587,6 +587,83 @@ TEST_F(KvStoreTestFixture, BasicGetKey) {
   EXPECT_EQ(valueFromStore.get_version(), 1);
   EXPECT_EQ(valueFromStore.get_ttlVersion(), 0);
 
+  kvStore_->stop();
+}
+
+/**
+ * Validate retrieval of all key-values matching a given prefix.
+ */
+TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
+  // Create and start KvStore.
+  const std::string nodeId = "node-for-dump";
+  auto kvStore_ = createKvStore(nodeId);
+  kvStore_->run();
+
+  const std::string prefixRegex = "10\\.0\\.0\\.";
+  const std::string prefix1 = "10.0.0.96";
+  const std::string prefix2 = "10.0.0.128";
+  const std::string prefix3 = "192.10.0.0";
+  const std::string prefix4 = "192.168.0.0";
+
+  // 1. Dump keys with no matches.
+  // 2. Set keys manully. 2 include prefix, 2 do not.
+  // 3. Dump keys. Verify 2 that include prefix are in dump, others are not.
+  std::optional<std::unordered_map<std::string, thrift::Value>> maybeKeyMap;
+  try {
+    thrift::KeyDumpParams params;
+    params.prefix_ref() = prefixRegex;
+    params.keys_ref() = {prefixRegex};
+    auto pub = *kvStore_->getKvStore()
+                    ->semifuture_dumpKvStoreKeys(
+                        std::move(params), {kTestingAreaName.t})
+                    .get()
+                    ->begin();
+    maybeKeyMap = *pub.keyVals_ref();
+  } catch (const std::exception& ex) {
+    maybeKeyMap = std::nullopt;
+  }
+  EXPECT_TRUE(maybeKeyMap.has_value());
+  EXPECT_EQ(maybeKeyMap.value().size(), 0);
+
+  const std::string genValue = "generic-value";
+  const thrift::Value thriftVal = createThriftValue(
+      1 /* version */,
+      nodeId /* originatorId */,
+      genValue /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(
+          1, nodeId, thrift::Value().value_ref() = std::string(genValue)));
+  kvStore_->setKey(kTestingAreaName, prefix1, thriftVal);
+  kvStore_->setKey(kTestingAreaName, prefix2, thriftVal);
+  kvStore_->setKey(kTestingAreaName, prefix3, thriftVal);
+  kvStore_->setKey(kTestingAreaName, prefix4, thriftVal);
+
+  // Check that keys retrieved are those with prefix "10.0.0".
+  std::optional<std::unordered_map<std::string, thrift::Value>>
+      maybeKeysAfterInsert;
+  try {
+    thrift::KeyDumpParams params;
+    params.prefix_ref() = prefixRegex;
+    params.keys_ref() = {prefixRegex};
+    auto pub = *kvStore_->getKvStore()
+                    ->semifuture_dumpKvStoreKeys(
+                        std::move(params), {kTestingAreaName.t})
+                    .get()
+                    ->begin();
+    maybeKeysAfterInsert = *pub.keyVals_ref();
+  } catch (const std::exception& ex) {
+    maybeKeysAfterInsert = std::nullopt;
+  }
+  EXPECT_TRUE(maybeKeysAfterInsert.has_value());
+  auto keysFromStore = maybeKeysAfterInsert.value();
+  EXPECT_EQ(keysFromStore.size(), 2);
+  EXPECT_EQ(keysFromStore.count(prefix1), 1);
+  EXPECT_EQ(keysFromStore.count(prefix2), 1);
+  EXPECT_EQ(keysFromStore.count(prefix3), 0);
+  EXPECT_EQ(keysFromStore.count(prefix4), 0);
+
+  // Cleanup.
   kvStore_->stop();
 }
 

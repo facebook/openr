@@ -124,6 +124,9 @@ class RangeAllocator {
    */
   std::string createKey(const T val) const noexcept;
 
+  std::optional<std::unordered_map<std::string, thrift::Value>>
+  dumpKeysWithPrefix() const noexcept;
+
   //
   // Immutable state
   //

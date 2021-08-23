@@ -578,7 +578,9 @@ KvStoreClientInternal::dumpAllWithPrefix(
     if (not prefix.empty()) {
       params.keys_ref() = {prefix};
     }
-    pub = *kvStore_->dumpKvStoreKeys(std::move(params), {area}).get()->begin();
+    pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
+               .get()
+               ->begin();
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to add peers to kvstore. Exception: " << ex.what();
     return std::nullopt;

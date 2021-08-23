@@ -419,8 +419,44 @@ OpenrWrapper<Serializer>::getIpPrefix() {
 
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
   eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    keys = kvStoreClient_->dumpAllWithPrefix(
-        kTestingAreaName, folly::sformat("prefix:{}", nodeId_));
+    const std::string keyPrefix = folly::sformat("prefix:{}", nodeId_);
+    try {
+      thrift::KeyDumpParams params;
+      params.prefix_ref() = keyPrefix;
+      if (not keyPrefix.empty()) {
+        params.keys_ref() = {keyPrefix};
+      }
+      auto maybeGetKey = kvStore_
+                             ->semifuture_dumpKvStoreKeys(
+                                 std::move(params), {kTestingAreaName})
+                             .getTry(Constants::kReadTimeout);
+      if (maybeGetKey.hasValue()) {
+        auto pub = *maybeGetKey.value()->begin();
+        keys = *pub.keyVals_ref();
+      } else {
+        LOG(ERROR) << fmt::format(
+            "Failed to retrieve keys with prefix: {} from KvStore in area: {}. "
+            "Exception: {}",
+            keyPrefix,
+            kTestingAreaName.t,
+            folly::exceptionStr(maybeGetKey.exception()));
+        keys = std::nullopt;
+      }
+    } catch (const folly::FutureTimeout&) {
+      LOG(ERROR) << fmt::format(
+          "Timed out retrieving keys with prefix: {} from KvStore in area: {}",
+          keyPrefix,
+          kTestingAreaName.t);
+      keys = std::nullopt;
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << fmt::format(
+          "Failed to dump keys with prefix: {} from KvStore in area: {}. "
+          "Exception: {}",
+          keyPrefix,
+          kTestingAreaName.t,
+          ex.what());
+      keys = std::nullopt;
+    }
   });
 
   SYNCHRONIZED(ipPrefix_) {

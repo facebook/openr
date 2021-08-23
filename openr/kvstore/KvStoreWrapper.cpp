@@ -187,8 +187,9 @@ KvStoreWrapper::dumpAll(
     }
   }
 
-  auto pub =
-      *kvStore_->dumpKvStoreKeys(std::move(params), {area}).get()->begin();
+  auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
+                  .get()
+                  ->begin();
   return *pub.keyVals_ref();
 }
 
@@ -216,8 +217,9 @@ KvStoreWrapper::syncKeyVals(
   thrift::KeyDumpParams params;
   params.keyValHashes_ref() = keyValHashes;
 
-  auto pub =
-      *kvStore_->dumpKvStoreKeys(std::move(params), {area}).get()->begin();
+  auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
+                  .get()
+                  ->begin();
   return *pub.keyVals_ref();
 }
 

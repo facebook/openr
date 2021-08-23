@@ -96,7 +96,7 @@ dumpKvStoreHashes(std::string area, thrift::KeyDumpParams keyDumpParams);
  * @return: thrift::Publication
  */
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
-dumpKvStoreKeys(thrift::KeyDumpParams keyDumpParams,
+semifuture_dumpKvStoreKeys(thrift::KeyDumpParams keyDumpParams,
        std::set<std::string> selectAreas = {});
 
 ```

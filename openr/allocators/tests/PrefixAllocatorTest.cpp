@@ -800,19 +800,35 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     // dump key with regex: "prefix:<node_name>" from KvStore
     auto expPrefixKey = folly::sformat(
         "{}{}", Constants::kPrefixDbMarker.toString(), myNodeName_);
-    std::optional<std::unordered_map<std::string, thrift::Value>> maybeVals;
+    std::optional<thrift::KeyVals> maybeKeyVals;
 
     while (true) {
-      maybeVals =
-          kvStoreClient_->dumpAllWithPrefix(kTestingAreaName, expPrefixKey);
-      if (maybeVals.has_value() and maybeVals.value().size()) {
+      try {
+        thrift::KeyDumpParams params;
+        params.prefix_ref() = expPrefixKey;
+        params.keys_ref() = {expPrefixKey};
+        auto pub = *kvStoreWrapper_->getKvStore()
+                        ->semifuture_dumpKvStoreKeys(
+                            std::move(params), {kTestingAreaName})
+                        .get()
+                        ->begin();
+        maybeKeyVals = *pub.keyVals_ref();
+      } catch (const std::exception& ex) {
+        LOG(ERROR) << fmt::format(
+            "Failed to dump keys with prefix: {}. Exception: {}",
+            expPrefixKey,
+            ex.what());
+        maybeKeyVals = std::nullopt;
+      }
+
+      if (maybeKeyVals.has_value() and maybeKeyVals.value().size()) {
         break;
       }
       std::this_thread::yield();
     }
 
     // verify allocated prefix
-    for (const auto& [key, rawVal] : maybeVals.value()) {
+    for (const auto& [key, rawVal] : maybeKeyVals.value()) {
       ASSERT_TRUE(rawVal.value_ref().has_value());
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           rawVal.value_ref().value(), serializer);

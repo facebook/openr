@@ -427,7 +427,7 @@ KvStore::dumpKvStoreSelfOriginatedKeys(std::string area) {
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
-KvStore::dumpKvStoreKeys(
+KvStore::semifuture_dumpKvStoreKeys(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
   folly::Promise<std::unique_ptr<std::vector<thrift::Publication>>> p;
   auto sf = p.getSemiFuture();

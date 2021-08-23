@@ -669,7 +669,7 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->dumpKvStoreKeys(std::move(*filter), {*area})
+  return kvStore_->semifuture_dumpKvStoreKeys(std::move(*filter), {*area})
       .deferValue(
           [](std::unique_ptr<std::vector<thrift::Publication>>&& pubs) mutable {
             thrift::Publication pub = pubs->empty() ? thrift::Publication{}
@@ -886,7 +886,8 @@ OpenrCtrlHandler::semifuture_subscribeAndGetAreaKvStores(
   auto dumpParamsCopy = std::make_unique<thrift::KeyDumpParams>(*dumpParams);
   auto selectAreasCopy = std::make_unique<std::set<std::string>>(*selectAreas);
   return kvStore_
-      ->dumpKvStoreKeys(std::move(*dumpParams), std::move(*selectAreas))
+      ->semifuture_dumpKvStoreKeys(
+          std::move(*dumpParams), std::move(*selectAreas))
       .defer([stream = subscribeKvStoreFilter(
                   std::move(dumpParamsCopy), std::move(selectAreasCopy))](
                  folly::Try<std::unique_ptr<std::vector<thrift::Publication>>>&&
