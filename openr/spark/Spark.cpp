@@ -1054,6 +1054,8 @@ Spark::neighborUpWrapper(
   // add neighborName to collection
   ifNameToActiveNeighbors_[ifName].emplace(neighborName);
 
+  // TODO: notify NEIGHBOR_UP or NEIGHBOR_ADJ_DB_HOLD
+
   // notify LinkMonitor about neighbor UP state
   notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
 }

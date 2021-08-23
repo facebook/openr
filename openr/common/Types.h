@@ -74,6 +74,11 @@ enum class NeighborEventType {
    * Neighbor goes into graceful restart(GR) mode
    */
   NEIGHBOR_RESTARTING = 5,
+
+  /**
+   * Neighbor is UP but will hold advertising of the adjacencyDb
+   */
+  NEIGHBOR_ADJ_DB_HOLD = 6,
 };
 
 /**

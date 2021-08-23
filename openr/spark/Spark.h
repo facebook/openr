@@ -30,16 +30,27 @@
 
 namespace openr {
 
+/*
+ * [Sanity Check]
+ *
+ * This is the ENUM set used for Spark pkt sanity check.
+ */
 enum class PacketValidationResult {
   SUCCESS = 1,
   FAILURE = 2,
   SKIP = 3,
 };
 
-//
-// Define SparkNeighState for Spark usage. This is used to define
-// transition state for neighbors as part of the Finite State Machine.
-//
+/*
+ * [Spark Neighbor FSM]
+ *
+ * Define:
+ *  1) SparkNeighState
+ *  2) SparkNeighEvent
+ *
+ * This is used to define transition state for neighbors as part of the
+ * Finite State Machine(FSM).
+ */
 enum class SparkNeighState {
   IDLE = 0,
   WARM = 1,
@@ -60,15 +71,13 @@ enum class SparkNeighEvent {
   NEGOTIATION_FAILURE = 8,
 };
 
-//
-// Spark is responsible of telling our peer of our existence
-// and also tracking the neighbor liveness. It publishes the
-// neighbor state changes to a single downstream consumer
-// via a PAIR socket.
-//
-// It receives commands in form of "add interface" / "remove inteface"
-// and starts hello process on those interfaces.
-//
+/*
+ * Spark is responsible of telling our peer of our existence and also tracking
+ * the neighbor liveness.  It receives commands in form of "interface", on which
+ * neighbor discovery will be performed. The discovered neighbors, aka, "Local
+ * Topology" of the node, is fed into other modules for synchronization purpose
+ * and SPF calculation.
+ */
 
 class Spark final : public OpenrEventBase {
   friend class SparkWrapper;
@@ -90,20 +99,25 @@ class Spark final : public OpenrEventBase {
 
   ~Spark() override = default;
 
-  // Public APIs
+  void stop() override;
+
+  /*
+   * [Public API]
+   *
+   * Spark exposed multiple public API for external caller to be able to:
+   *  1) retrieve neighbor information;
+   *  2) retrieve neighbor state;
+   *  3) etc.
+   */
+
   folly::SemiFuture<folly::Unit> floodRestartingMsg();
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
   getNeighbors();
-
-  // get the current state of neighborNode, used for unit-testing
   folly::SemiFuture<std::optional<SparkNeighState>> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
   // Util function to convert ENUM SparlNeighborState to string
   static std::string toStr(SparkNeighState state);
-
-  // override eventloop stop()
-  void stop() override;
 
   // Turn on the throwing of parsing errors.
   void setThrowParserErrors(bool);
@@ -559,9 +573,13 @@ class Spark final : public OpenrEventBase {
   // to neighborUpdatesQueue_ in OpenR initialization procedure.
   std::unique_ptr<folly::AsyncTimeout> initializationHoldTimer_{nullptr};
 
-  // Boolean flag indicating whether initial interfaces are received in OpenR
-  // initialization procedure.
+  // Boolean flag indicating whether initial interfaces are received during
+  // Open/R initialization procedure.
   bool initialInterfacesReceived_{false};
+
+  // Boolean flag indicating whether adjacency database is synced during
+  // Open/R initialization procedure.
+  bool adjacencyDbSynced_{false};
 
   // Optional rate-limit on processing inbound Spark messages
   std::optional<uint32_t> maybeMaxAllowedPps_;
