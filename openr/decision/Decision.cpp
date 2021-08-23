@@ -172,11 +172,19 @@ Decision::Decision(
           // In OpenR initialization procedure, receiving kvStoreSynced signal
           // indicates Decision has received all KvStore publications, and is
           // ready to start initial RIB computation.
-          LOG(INFO) << "[Initialization] KVSOTORE_SYNCED signal is received";
           initialKvStoreSynced_ = true;
+
+          rebuildRoutesDebounced_.cancelTimeout();
           pendingUpdates_.setNeedsFullRebuild();
+          rebuildRoutes("INITIALIZATION");
+          logInitializationEvent(
+              "Decision", thrift::InitializationEvent::RIB_COMPUTED);
         } else {
           processPublication(std::move(pub.tPublication));
+          // Compute routes with exponential backoff timer if needed
+          if (pendingUpdates_.needsRouteUpdate()) {
+            rebuildRoutesDebounced_();
+          }
         }
       } catch (const std::exception& e) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
@@ -188,10 +196,6 @@ Decision::Decision(
         // FATAL to produce core dump
         LOG(FATAL) << "Exception occured in Decision::processPublication - "
                    << folly::exceptionStr(e);
-      }
-      // compute routes with exponential backoff timer if needed
-      if (pendingUpdates_.needsRouteUpdate()) {
-        rebuildRoutesDebounced_();
       }
     }
   });

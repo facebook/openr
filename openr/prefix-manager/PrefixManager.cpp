@@ -580,8 +580,9 @@ PrefixManager::triggerInitialPrefixDbSync() {
   if (uninitializedPrefixTypes_.empty() and initialKvStoreSynced_) {
     // Trigger initial syncKvStore(), after receiving prefixes of all expected
     // types and all inital prefix keys from KvStore.
-    LOG(INFO) << "[Initialization] Triggering initial syncKvStore().";
     syncKvStore();
+    logInitializationEvent(
+        "PrefixManager", thrift::InitializationEvent::PREFIX_DB_SYNCED);
   }
 }
 

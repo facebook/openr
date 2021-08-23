@@ -1201,6 +1201,8 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
     peerUpdatesQueue_.push(std::move(event));
 
     initialNeighborsReceived_ = true;
+    logInitializationEvent(
+        "LinkMonitor", thrift::InitializationEvent::LINK_DISCOVERED);
   }
 }
 

@@ -902,7 +902,10 @@ Fib::syncRoutes() {
 
   // Transition state on successful sync. Also record our first sync
   transitionRouteState(RouteState::FIB_SYNCED);
-  routeState_.isInitialSynced = true;
+  if (not routeState_.isInitialSynced) {
+    routeState_.isInitialSynced = true;
+    logInitializationEvent("Fib", thrift::InitializationEvent::FIB_SYNCED);
+  }
   return true;
 }
 

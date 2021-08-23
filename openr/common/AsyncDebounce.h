@@ -24,7 +24,7 @@ namespace openr {
  * of wait time until execution from minBackoff to maxBackoff
  */
 template <typename Duration>
-class AsyncDebounce final : private folly::AsyncTimeout {
+class AsyncDebounce final : public folly::AsyncTimeout {
  public:
   using TimeoutCallback = folly::Function<void(void)>;
 

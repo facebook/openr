@@ -301,14 +301,16 @@ Spark::Spark(
           } // for
         } // for
 
-        LOG(INFO) << fmt::format(
-            "[Initialization] NEIGHBOR_DISCOVERY is complete. Announcing {} UP "
-            "neighbors out of {}",
-            upNeighbors.size(),
-            totalNeighborCnt);
         // NOTE: In scenarios of standalone node or first node coming up in the
         // network, there are none announced neighbors.
         neighborUpdatesQueue_.push(std::move(upNeighbors));
+        logInitializationEvent(
+            "Spark",
+            thrift::InitializationEvent::NEIGHBOR_DISCOVERED,
+            fmt::format(
+                "Published {} UP neighbors out of {}",
+                upNeighbors.size(),
+                totalNeighborCnt));
       });
 
   // Fiber to process interface updates from LinkMonitor

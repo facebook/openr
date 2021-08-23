@@ -35,6 +35,7 @@ enum InitializationEvent {
   FIB_SYNCED = 5,
   PREFIX_DB_SYNCED = 6,
   ADJACENCY_DB_SYNCED = 7,
+  INITIALIZING = 8,
 }
 
 /**

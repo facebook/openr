@@ -191,6 +191,7 @@ main(int argc, char** argv) {
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   SYSLOG(INFO) << "Starting OpenR daemon: ppid = " << getpid();
+  logInitializationEvent("Main", thrift::InitializationEvent::INITIALIZING);
 
   // Export and log build information
   BuildInfo::exportBuildInfo();
@@ -289,6 +290,7 @@ main(int argc, char** argv) {
       (not config->isNetlinkFibHandlerEnabled())) {
     waitForFibService(mainEvb, *config->getConfig().fib_port_ref());
   }
+  logInitializationEvent("Main", thrift::InitializationEvent::AGENT_CONFIGURED);
 
   std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};

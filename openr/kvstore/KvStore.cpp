@@ -747,14 +747,16 @@ KvStore::initialKvStoreDbSynced() {
       return;
     }
   }
-  LOG(INFO) << fmt::format(
-      "[Initialization] KvStoreDb sync is completed in all {} areas.",
-      kvStoreDb_.size());
 
   if (not initialSyncSignalSent_) {
     // Publish KvStore synced signal.
     kvParams_.kvStoreUpdatesQueue.push(Publication(true /*kvStoreSynced*/));
     initialSyncSignalSent_ = true;
+    logInitializationEvent(
+        "KvStore",
+        thrift::InitializationEvent::KVSTORE_SYNCED,
+        fmt::format(
+            "KvStoreDb sync is completed in all {} areas.", kvStoreDb_.size()));
   }
 }
 
