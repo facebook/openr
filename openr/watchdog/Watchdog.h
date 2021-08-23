@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrEventBase.h>
@@ -58,7 +60,7 @@ class Watchdog final : public OpenrEventBase {
   std::unique_ptr<folly::AsyncTimeout> watchdogTimer_{nullptr};
 
   // Eventbase raw pointers
-  std::unordered_set<OpenrEventBase*> monitorEvbs_;
+  folly::F14NodeSet<OpenrEventBase*> monitorEvbs_;
 
   // thread healthcheck interval
   std::chrono::seconds interval_;
@@ -79,7 +81,7 @@ class Watchdog final : public OpenrEventBase {
   SystemMetrics systemMetrics_{};
 
   // Vector of queues to monitor for drainage
-  std::unordered_map<
+  folly::F14NodeMap<
       std::string,
       std::reference_wrapper<messaging::ReplicateQueueBase>>
       monitoredQs_;
