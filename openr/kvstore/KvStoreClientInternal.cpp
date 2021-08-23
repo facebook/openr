@@ -183,7 +183,7 @@ KvStoreClientInternal::checkPersistKeyInStore() {
 
     // Get KvStore response
     try {
-      pub = *(kvStore_->getKvStoreKeyVals(area, params).get());
+      pub = *(kvStore_->semifuture_getKvStoreKeyVals(area, params).get());
     } catch (const std::exception& ex) {
       LOG(ERROR) << "Failed to get keyvals from kvstore. Exception: "
                  << ex.what();
@@ -550,7 +550,7 @@ KvStoreClientInternal::getKey(AreaId const& area, std::string const& key) {
   try {
     thrift::KeyGetParams params;
     params.keys_ref()->emplace_back(key);
-    pub = *(kvStore_->getKvStoreKeyVals(area, params).get());
+    pub = *(kvStore_->semifuture_getKvStoreKeyVals(area, params).get());
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to get keyvals from kvstore. Exception: "
                << ex.what();

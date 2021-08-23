@@ -804,7 +804,8 @@ class KvStore final : public OpenrEventBase {
    *  2) dump hashes;
    *  3) dump self-originated keys;
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>> getKvStoreKeyVals(
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreKeyVals(
       std::string area, thrift::KeyGetParams keyGetParams);
 
   folly::SemiFuture<folly::Unit> setKvStoreKeyVals(

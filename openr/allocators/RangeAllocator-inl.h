@@ -40,6 +40,7 @@ RangeAllocator<T>::RangeAllocator(
     AreaId const& area,
     const std::string& nodeName,
     const std::string& keyPrefix,
+    KvStore* kvStore,
     KvStoreClientInternal* const kvStoreClient,
     std::function<void(std::optional<T>)> callback,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
@@ -51,6 +52,7 @@ RangeAllocator<T>::RangeAllocator(
     const std::chrono::milliseconds rangeAllocTtl)
     : nodeName_(nodeName),
       keyPrefix_(keyPrefix),
+      kvStore_(kvStore),
       kvStoreClient_(kvStoreClient),
       eventBase_(kvStoreClient->getOpenrEventBase()),
       callback_(std::move(callback)),
@@ -181,10 +183,29 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
           << newVal;
 
   // Check for any existing value in KvStore
+  std::optional<thrift::Value> maybeThriftVal = std::nullopt;
   const auto newKey = createKey(newVal);
-  const auto maybeThriftVal = kvStoreClient_->getKey(area_, newKey);
-  if (maybeThriftVal) {
-    DCHECK_EQ(1, *maybeThriftVal->version_ref());
+  try {
+    thrift::KeyGetParams getNewKeyParams;
+    getNewKeyParams.keys_ref()->emplace_back(newKey);
+    const auto maybeGetKey =
+        kvStore_->semifuture_getKvStoreKeyVals(area_, getNewKeyParams)
+            .getTry(Constants::kReadTimeout);
+    if (maybeGetKey.hasValue()) {
+      auto pub = *maybeGetKey.value();
+      auto it = pub.keyVals_ref()->find(newKey);
+      if (it == pub.keyVals_ref()->end()) {
+        LOG(ERROR) << "[RangeAllocator] Key: " << newKey
+                   << " not found in KvStore, area: " << area_.t;
+      } else {
+        maybeThriftVal = it->second;
+        DCHECK_EQ(1, *maybeThriftVal->version_ref());
+      }
+    } else {
+      LOG(ERROR) << "[RangeAllocator] Failed to retrieve key: " << newKey;
+    }
+  } catch (const folly::FutureTimeout&) {
+    LOG(ERROR) << "Timed out retrieving new key: " << newKey;
   }
 
   // Check if we can own the value or not

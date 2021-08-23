@@ -653,7 +653,8 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
   *params.keys_ref() = std::move(*filterKeys);
 
   CHECK(kvStore_);
-  return kvStore_->getKvStoreKeyVals(std::move(*area), std::move(params));
+  return kvStore_->semifuture_getKvStoreKeyVals(
+      std::move(*area), std::move(params));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>

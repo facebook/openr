@@ -101,7 +101,8 @@ LinkMonitor::LinkMonitor(
       kvRequestQueue_(kvRequestQueue),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
       configStore_(configStore),
-      nlSock_(nlSock) {
+      nlSock_(nlSock),
+      kvStore_(kvStore) {
   // Check non-empty module ptr
   CHECK(kvStore);
   CHECK(configStore_);
@@ -192,6 +193,7 @@ LinkMonitor::LinkMonitor(
                 AreaId{areaId},
                 nodeId_,
                 Constants::kNodeLabelRangePrefix.toString(),
+                kvStore_,
                 kvStoreClient_.get(),
                 [&](std::optional<int32_t> newVal) noexcept {
                   state_.nodeLabelMap_ref()->insert_or_assign(

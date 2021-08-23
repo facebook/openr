@@ -382,7 +382,7 @@ KvStore::processPeerUpdates(PeerEvent&& event) {
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStore::getKvStoreKeyVals(
+KvStore::semifuture_getKvStoreKeyVals(
     std::string area, thrift::KeyGetParams keyGetParams) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
   auto sf = p.getSemiFuture();

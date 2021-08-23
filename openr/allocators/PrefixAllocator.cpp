@@ -47,6 +47,7 @@ PrefixAllocator::PrefixAllocator(
           *config->getConfig().prefix_forwarding_algorithm_ref()),
       area_(area),
       nlSock_(nlSock),
+      kvStore_(kvStore),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       logSampleQueue_(logSampleQueue),
@@ -114,15 +115,35 @@ PrefixAllocator::staticAllocation() {
     }
 
     // 1) Get initial value from KvStore!
-    auto maybeValue = kvStoreClient_->getKey(
-        area_, Constants::kStaticPrefixAllocParamKey.toString());
-    if (!maybeValue.has_value()) {
-      LOG(ERROR) << "Failed to retrieve prefix alloc key: "
-                 << Constants::kStaticPrefixAllocParamKey.toString()
-                 << " from KvStore, area: " << area_.t;
-    } else {
-      processStaticPrefixAllocUpdate(maybeValue.value());
-      return;
+    try {
+      thrift::KeyGetParams getStaticAllocParams;
+      getStaticAllocParams.keys_ref()->emplace_back(
+          Constants::kStaticPrefixAllocParamKey.toString());
+      auto maybeGetKey =
+          kvStore_->semifuture_getKvStoreKeyVals(area_, getStaticAllocParams)
+              .getTry(Constants::kReadTimeout);
+      if (not maybeGetKey.hasValue()) {
+        LOG(ERROR) << fmt::format(
+            "Failed to retrieve prefix allocation key: {}. Exception: {}",
+            Constants::kStaticPrefixAllocParamKey.toString(),
+            folly::exceptionStr(maybeGetKey.exception()));
+      } else {
+        auto pub = *maybeGetKey.value();
+        auto it = pub.keyVals_ref()->find(
+            Constants::kStaticPrefixAllocParamKey.toString());
+        if (it == pub.keyVals_ref()->end()) {
+          LOG(ERROR) << "Prefix allocation key: "
+                     << Constants::kStaticPrefixAllocParamKey.toString()
+                     << " not found in KvStore, area: " << area_.t;
+        } else {
+          // Successful key-value retrieval. Process static allocation update.
+          processStaticPrefixAllocUpdate(it->second);
+          return;
+        }
+      }
+    } catch (const folly::FutureTimeout&) {
+      LOG(ERROR) << "Timed out retrieving prefix allocation key: "
+                 << Constants::kStaticPrefixAllocParamKey.toString();
     }
 
     // 2) Start prefix allocator from previously configured params. Resume
@@ -187,15 +208,35 @@ PrefixAllocator::dynamicAllocationLeafNode() {
     }
 
     // 1) Get initial value from KvStore!
-    auto maybeValue = kvStoreClient_->getKey(
-        area_, Constants::kSeedPrefixAllocParamKey.toString());
-    if (!maybeValue.has_value()) {
-      LOG(ERROR) << "Failed to retrieve prefix alloc key: "
-                 << Constants::kStaticPrefixAllocParamKey.toString()
-                 << " from KvStore, area: " << area_.t;
-    } else {
-      processAllocParamUpdate(maybeValue.value());
-      return;
+    try {
+      thrift::KeyGetParams params;
+      params.keys_ref()->emplace_back(
+          Constants::kSeedPrefixAllocParamKey.toString());
+      auto maybeGetKey = kvStore_->semifuture_getKvStoreKeyVals(area_, params)
+                             .getTry(Constants::kReadTimeout);
+      if (not maybeGetKey.hasValue()) {
+        LOG(ERROR) << fmt::format(
+            "Failed to retrieve seed prefix allocation key: {}. Exception: {}",
+            Constants::kSeedPrefixAllocParamKey.toString(),
+            folly::exceptionStr(maybeGetKey.exception()));
+      } else {
+        auto pub = *maybeGetKey.value();
+        auto it = pub.keyVals_ref()->find(
+            Constants::kSeedPrefixAllocParamKey.toString());
+        if (it == pub.keyVals_ref()->end()) {
+          LOG(ERROR) << "Seed prefix alloc key: "
+                     << Constants::kSeedPrefixAllocParamKey.toString()
+                     << " not found in KvStore, area: " << area_.t;
+        } else {
+          // Successful key-value retrieval. Process allocation param update.
+          processAllocParamUpdate(it->second);
+          return;
+        }
+      }
+    } catch (const folly::FutureTimeout&) {
+      LOG(ERROR) << "Timed out retrieving seed prefix allocation key: "
+                 << Constants::kSeedPrefixAllocParamKey.toString();
+      ;
     }
 
     // 2) Start prefix allocator from previously configured params. Resume
@@ -525,6 +566,7 @@ PrefixAllocator::startAllocation(
       area_,
       myNodeName_,
       Constants::kPrefixAllocMarker.toString(),
+      kvStore_,
       kvStoreClient_.get(),
       [this](std::optional<uint32_t> newPrefixIndex) noexcept {
         applyMyPrefixIndex(newPrefixIndex);

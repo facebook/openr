@@ -539,6 +539,58 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
 }
 
 /**
+ * Validate retrieval of a single key-value from a node's KvStore.
+ */
+TEST_F(KvStoreTestFixture, BasicGetKey) {
+  // create and start kv store with kvRequestQueue enabled
+  const std::string nodeId = "node-for-retrieval";
+  auto kvStore_ = createKvStore(nodeId);
+  kvStore_->run();
+
+  const std::string key = "get-key-key";
+  const std::string value = "get-key-value";
+
+  // 1. Get key. Make sure it doesn't exist in KvStore yet.
+  // 2. Set key manually using KvStoreWrapper.
+  // 3. Get key. Make sure it exists and value matches.
+
+  thrift::KeyGetParams paramsBefore;
+  paramsBefore.keys_ref()->emplace_back(key);
+  auto pub = *kvStore_->getKvStore()
+                  ->semifuture_getKvStoreKeyVals(kTestingAreaName, paramsBefore)
+                  .get();
+  auto it = pub.keyVals_ref()->find(key);
+  EXPECT_EQ(it, pub.keyVals_ref()->end());
+
+  // Set a key in KvStore.
+  const thrift::Value thriftVal = createThriftValue(
+      1 /* version */,
+      nodeId /* originatorId */,
+      value /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(
+          1, nodeId, thrift::Value().value_ref() = std::string(value)));
+  kvStore_->setKey(kTestingAreaName, key, thriftVal);
+
+  // Check that value retrieved is same as value that was set.
+  thrift::KeyGetParams paramsAfter;
+  paramsAfter.keys_ref()->emplace_back(key);
+  auto pubAfter =
+      *kvStore_->getKvStore()
+           ->semifuture_getKvStoreKeyVals(kTestingAreaName, paramsAfter)
+           .get();
+  auto itAfter = pubAfter.keyVals_ref()->find(key);
+  EXPECT_NE(itAfter, pubAfter.keyVals_ref()->end());
+  auto& valueFromStore = itAfter->second;
+  EXPECT_EQ(valueFromStore.value_ref(), value);
+  EXPECT_EQ(valueFromStore.get_version(), 1);
+  EXPECT_EQ(valueFromStore.get_ttlVersion(), 0);
+
+  kvStore_->stop();
+}
+
+/**
  * Validate PersistKeyValueRequest advertisement, version overriding, and
  * ttl-refreshing. Send PersistKeyValueRequest via queue to KvStore.
  */

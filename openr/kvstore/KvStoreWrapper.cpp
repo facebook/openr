@@ -148,7 +148,17 @@ KvStoreWrapper::getKey(AreaId const& area, std::string key) {
 
   thrift::Publication pub;
   try {
-    pub = *(kvStore_->getKvStoreKeyVals(area, std::move(params)).get());
+    auto maybeGetKey =
+        kvStore_->semifuture_getKvStoreKeyVals(area, std::move(params))
+            .getTry(Constants::kReadTimeout);
+    if (maybeGetKey.hasValue()) {
+      pub = *(maybeGetKey.value());
+    } else {
+      LOG(ERROR) << "Failed to retrieve key from KvStore. Key: " << key;
+      return std::nullopt;
+    }
+  } catch (const folly::FutureTimeout&) {
+    LOG(ERROR) << "Timed out retrieving key: " << key;
   } catch (std::exception const& e) {
     LOG(WARNING) << "Exception to get key from kvstore: "
                  << folly::exceptionStr(e);

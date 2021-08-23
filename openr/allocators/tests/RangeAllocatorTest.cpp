@@ -127,6 +127,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
           kTestingAreaName,
           createClientName(i),
           "value:",
+          stores[i % kNumStores]->getKvStore(),
           clients[i].get(),
           [callback, i](std::optional<T> newVal) noexcept {
             callback(i, newVal);

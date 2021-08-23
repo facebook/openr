@@ -50,6 +50,7 @@ class RangeAllocator {
       AreaId const& area,
       const std::string& nodeName,
       const std::string& keyPrefix,
+      KvStore* const kvStore,
       KvStoreClientInternal* const kvStoreClient,
       std::function<void(std::optional<T>)> callback,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
@@ -129,6 +130,9 @@ class RangeAllocator {
 
   const std::string nodeName_;
   const std::string keyPrefix_;
+
+  // raw ptr to KvStore for retreiving key-vals and subscribing keys
+  KvStore* const kvStore_{nullptr};
 
   // KvStoreClientInternal instance used for communicating with KvStore
   KvStoreClientInternal* const kvStoreClient_{nullptr};

@@ -419,6 +419,9 @@ class LinkMonitor final : public OpenrEventBase {
   // Raw ptr to interact with NetlinkProtocolSocket
   fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 
+  // Raw ptr to KvStore for RangeAllocator to retrieve key-values
+  KvStore* const kvStore_{nullptr};
+
   // Timer for starting range allocator
   // this is equal to adjHoldTimer_
   // because we'll delay range allocation until we have formed all of our

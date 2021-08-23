@@ -189,6 +189,9 @@ class PrefixAllocator : public OpenrEventBase {
   // raw ptr for netlinkProtocolSocket for addr add/del
   fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 
+  // raw ptr to KvStore for retrieving key-vals and subscribe keys
+  KvStore* const kvStore_{nullptr};
+
   // module ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
 
