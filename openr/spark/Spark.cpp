@@ -510,32 +510,30 @@ Spark::prepareSocket() noexcept {
 }
 
 PacketValidationResult
-Spark::sanityCheckHelloPkt(
-    std::string const& neighborName,
-    std::string const& remoteIfName,
-    uint32_t const& remoteVersion) {
+Spark::sanityCheckMsg(
+    std::string const& neighborName, std::string const& ifName) {
   // check if own packet has looped
   if (neighborName == myNodeName_) {
-    VLOG(2) << "Ignore packet from self (" << myNodeName_ << ")";
+    VLOG(2) << fmt::format(
+        "[Sanity Check] Ignore packet from self node: {}", myNodeName_);
     fb303::fbData->addStatValue(
         "spark.invalid_keepalive.looped_packet", 1, fb303::SUM);
-    return PacketValidationResult::SKIP_LOOPED_SELF;
+    return PacketValidationResult::SKIP;
   }
-  // version check
-  if (remoteVersion <
-      static_cast<uint32_t>(*kVersion_.lowestSupportedVersion_ref())) {
-    LOG(ERROR) << "Unsupported version: " << neighborName << " "
-               << remoteVersion
-               << ", must be >= " << *kVersion_.lowestSupportedVersion_ref();
-    fb303::fbData->addStatValue(
-        "spark.invalid_keepalive.invalid_version", 1, fb303::SUM);
-    return PacketValidationResult::FAILURE;
+
+  // interface name check
+  if (sparkNeighbors_.find(ifName) == sparkNeighbors_.end()) {
+    LOG(ERROR) << fmt::format(
+        "[Sanity Check] Ignoring packet received from {} on unknown interface: {}",
+        neighborName,
+        ifName);
+    return PacketValidationResult::SKIP;
   }
   return PacketValidationResult::SUCCESS;
 }
 
 bool
-Spark::shouldProcessHelloPacket(
+Spark::shouldProcessPacket(
     std::string const& ifName, folly::IPAddress const& addr) {
   if (not maybeMaxAllowedPps_.has_value()) {
     return true; // no rate limit
@@ -599,7 +597,7 @@ Spark::parsePacket(
   fb303::fbData->addStatValue(
       "spark.hello.packet_recv_size", bytesRead, fb303::SUM);
 
-  if (!shouldProcessHelloPacket(ifName, clientAddr.getIPAddress())) {
+  if (not shouldProcessPacket(ifName, clientAddr.getIPAddress())) {
     LOG(ERROR) << "Spark: dropping hello packet due to rate limiting on iface: "
                << ifName << " from addr: " << clientAddr.getAddressStr();
     fb303::fbData->addStatValue("spark.hello.packet_dropped", 1, fb303::SUM);
@@ -1214,21 +1212,20 @@ Spark::processHelloMsg(
   auto const& nbrSentTimeInUs =
       std::chrono::microseconds(*helloMsg.sentTsInUs_ref());
 
-  // interface name check
-  if (sparkNeighbors_.find(ifName) == sparkNeighbors_.end()) {
-    LOG(ERROR) << "Ignoring packet received from: " << neighborName
-               << " on unknown interface: " << ifName;
+  // sanity check for SparkHelloMsg
+  auto sanityCheckResult = sanityCheckMsg(neighborName, ifName);
+  if (PacketValidationResult::SUCCESS != sanityCheckResult) {
     return;
   }
 
-  auto sanityCheckResult =
-      sanityCheckHelloPkt(neighborName, remoteIfName, remoteVersion);
-  if (PacketValidationResult::SKIP_LOOPED_SELF == sanityCheckResult) {
-    VLOG(4) << "Received self-looped hello pkt";
-    return;
-  }
-
-  if (PacketValidationResult::FAILURE == sanityCheckResult) {
+  // version check
+  if (remoteVersion <
+      static_cast<uint32_t>(*kVersion_.lowestSupportedVersion_ref())) {
+    LOG(ERROR) << "Unsupported version: " << neighborName << " "
+               << remoteVersion
+               << ", must be >= " << *kVersion_.lowestSupportedVersion_ref();
+    fb303::fbData->addStatValue(
+        "spark.invalid_keepalive.invalid_version", 1, fb303::SUM);
     return;
   }
 
@@ -1446,24 +1443,31 @@ Spark::processHelloMsg(
 void
 Spark::processHandshakeMsg(
     thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName) {
+  // sanity check for SparkHandshakeMsg
+  auto const& neighborName = *handshakeMsg.nodeName_ref();
+  auto sanityCheckResult = sanityCheckMsg(neighborName, ifName);
+  if (PacketValidationResult::SUCCESS != sanityCheckResult) {
+    return;
+  }
+
   // Ignore handshakeMsg if I am NOT the receiver as AREA negotiation
   // is point-to-point
   if (auto neighborNodeName = handshakeMsg.neighborNodeName_ref()) {
     if (*neighborNodeName != myNodeName_) {
-      VLOG(4) << "Ignoring handshakeMsg targeted for node: "
-              << *neighborNodeName << ", my node name: " << myNodeName_;
+      VLOG(4) << fmt::format(
+          "[Sanity Check] Ignoring handshakeMsg targeted for node: {}, my node name: {}",
+          *neighborNodeName,
+          myNodeName_);
       return;
     }
   }
-
-  auto const& neighborName = *handshakeMsg.nodeName_ref();
-  auto& ifNeighbors = sparkNeighbors_.at(ifName);
-  auto neighborIt = ifNeighbors.find(neighborName);
 
   // under quick flapping of Openr, msg can come out-of-order.
   // handshakeMsg will ONLY be processed when:
   //  1). neighbor is tracked on ifName;
   //  2). neighbor is under NEGOTIATE stage;
+  auto& ifNeighbors = sparkNeighbors_.at(ifName);
+  auto neighborIt = ifNeighbors.find(neighborName);
   if (neighborIt == ifNeighbors.end()) {
     VLOG(3) << "Neighbor: (" << neighborName
             << "). is NOT found. Ignore handshakeMsg.";
@@ -1612,13 +1616,18 @@ Spark::processHandshakeMsg(
 void
 Spark::processHeartbeatMsg(
     thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName) {
+  // sanity check for SparkHandshakeMsg
   auto const& neighborName = *heartbeatMsg.nodeName_ref();
-  auto& ifNeighbors = sparkNeighbors_.at(ifName);
-  auto neighborIt = ifNeighbors.find(neighborName);
+  auto sanityCheckResult = sanityCheckMsg(neighborName, ifName);
+  if (PacketValidationResult::SUCCESS != sanityCheckResult) {
+    return;
+  }
 
   // under GR case, when node restarts, it will needs several helloMsg to
   // establish neighborship. During this time, heartbeatMsg from peer
   // will NOT be processed.
+  auto& ifNeighbors = sparkNeighbors_.at(ifName);
+  auto neighborIt = ifNeighbors.find(neighborName);
   if (neighborIt == ifNeighbors.end()) {
     VLOG(3) << "I am NOT aware of neighbor: (" << neighborName
             << "). Ignore it.";

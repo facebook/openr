@@ -33,9 +33,7 @@ namespace openr {
 enum class PacketValidationResult {
   SUCCESS = 1,
   FAILURE = 2,
-  NEIGHBOR_RESTART = 3,
-  SKIP_LOOPED_SELF = 4,
-  INVALID_AREA_CONFIGURATION = 5,
+  SKIP = 3,
 };
 
 //
@@ -145,14 +143,12 @@ class Spark final : public OpenrEventBase {
   // check neighbor's hello packet; return true if packet is valid and
   // passed the following checks:
   // (1) neighbor is not self (packet not looped back)
-  // (2) performs various other validation e.g. version
-  PacketValidationResult sanityCheckHelloPkt(
-      std::string const& neighborName,
-      std::string const& remoteIfName,
-      uint32_t const& remoteVersion);
+  // (2) interface is tracked interface
+  PacketValidationResult sanityCheckMsg(
+      std::string const& neighborName, std::string const& ifName);
 
   // Determine if we should process the next packte from this ifName, addr pair
-  bool shouldProcessHelloPacket(
+  bool shouldProcessPacket(
       std::string const& ifName, folly::IPAddress const& addr);
 
   // process hello packet from a neighbor. we want to see if
