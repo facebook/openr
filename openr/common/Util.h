@@ -15,7 +15,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <wangle/ssl/SSLContextConfig.h>
-#include "openr/common/Types.h"
+#include <optional>
 
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
@@ -77,10 +77,18 @@ std::string toString(thrift::PrefixMetrics const& metrics);
  */
 std::string toString(thrift::PrefixEntry const& entry, bool detailed = false);
 
-/*
+/**
  * Convert NeighborEventType enum to string
  */
 std::string toString(NeighborEventType const& type);
+
+/**
+ * Log OpenR initialization event and export to fb303::fbData.
+ */
+void logInitializationEvent(
+    const std::string& publisher,
+    const thrift::InitializationEvent event,
+    const std::optional<std::string>& message = std::nullopt);
 
 /**
  * Setup thrift server for TLS

@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include <fb303/ServiceData.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <glog/logging.h>
@@ -1316,6 +1317,21 @@ TEST(UtilTest, ThriftValueConstruction) {
   EXPECT_EQ(thriftVal.ttl_ref().value(), ttl);
   EXPECT_EQ(thriftVal.ttlVersion_ref().value(), ttlVersion);
   EXPECT_EQ(thriftVal.hash_ref().value(), hash);
+}
+
+TEST(UtilTest, logInitializationEvent) {
+  logInitializationEvent("Main", thrift::InitializationEvent::AGENT_CONFIGURED);
+  EXPECT_TRUE(facebook::fb303::fbData->hasCounter(
+      "initialization.AGENT_CONFIGURED.duration_ms"));
+  EXPECT_FALSE(facebook::fb303::fbData->hasCounter(
+      "initialization.KVSTORE_SYNCED.duration_ms"));
+
+  logInitializationEvent(
+      "moduleA",
+      thrift::InitializationEvent::KVSTORE_SYNCED,
+      "this is a message.");
+  EXPECT_TRUE(facebook::fb303::fbData->hasCounter(
+      "initialization.KVSTORE_SYNCED.duration_ms"));
 }
 
 int

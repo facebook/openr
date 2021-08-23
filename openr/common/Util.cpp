@@ -7,6 +7,7 @@
 
 #include <openr/common/Util.h>
 
+#include <fb303/ServiceData.h>
 #include <fmt/core.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -90,6 +91,40 @@ toString(NeighborEventType const& type) {
   default:
     return "UNKNOWN";
   }
+}
+
+void
+logInitializationEvent(
+    const std::string& publisher,
+    const thrift::InitializationEvent event,
+    const std::optional<std::string>& message) {
+  // OpenR start time. Initialized first time function is called.
+  const static auto kOpenrStartTime = std::chrono::steady_clock::now();
+  // Duration in milliseconds since OpenR start.
+  auto durationSinceStart =
+      std::chrono::ceil<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - kOpenrStartTime)
+          .count();
+  auto durationStr = durationSinceStart >= 1000
+      ? fmt::format("{}s", durationSinceStart * 1.0 / 1000)
+      : fmt::format("{}ms", durationSinceStart);
+
+  auto logMsg = fmt::format(
+      "[Initialization] event: {}, publisher: {}, durationSinceStart: {}",
+      apache::thrift::util::enumNameSafe(event),
+      publisher,
+      durationStr);
+  if (message.has_value()) {
+    logMsg = logMsg + fmt::format(", message: {}", message.value());
+  }
+  LOG(INFO) << logMsg;
+
+  // Log OpenR initialization event to fb303::fbData.
+  facebook::fb303::fbData->setCounter(
+      fmt::format(
+          "initialization.{}.duration_ms",
+          apache::thrift::util::enumNameSafe(event)),
+      durationSinceStart);
 }
 
 void
