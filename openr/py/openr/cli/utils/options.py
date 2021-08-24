@@ -47,9 +47,7 @@ def getDefaultOptions(host: str, timeout_ms: int = Consts.TIMEOUT_MS) -> bunch.B
     """
 
     options = copy.deepcopy(OPTIONS)
-    # pyre-fixme[16]: `Bunch` has no attribute `host`.
     options.host = host
-    # pyre-fixme[16]: `Bunch` has no attribute `timeout`.
     options.timeout = timeout_ms
     for k in options:
         options[k] = getDefaultOption(options, k)

@@ -697,11 +697,7 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
         for stmt in policy.statements:
             prefixes: List[str] = []
             if stmt.matcher.prefixes:
-                prefixes = [
-                    ipnetwork.sprint_prefix(p)
-                    # pyre-fixme[16]: `Optional` has no attribute `__iter__`.
-                    for p in stmt.matcher.prefixes
-                ]
+                prefixes = [ipnetwork.sprint_prefix(p) for p in stmt.matcher.prefixes]
             tags = stmt.matcher.tags or []
             action = stmt.action.set_weight or ctrl_types.RibRouteActionWeight()
             print(f"  Statement: {stmt.name}")
