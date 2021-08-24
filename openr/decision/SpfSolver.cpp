@@ -448,11 +448,13 @@ SpfSolver::createRouteForPrefix(
 
   return addBestPaths(
       myNodeName,
+      areaLinkStates,
       prefix,
       routeSelectionResult,
       prefixEntries,
       hasBGP,
-      std::move(totalNextHops));
+      std::move(totalNextHops),
+      routeComputationRules);
 
   // SrPolicy TODO: (T94500292) before returning need to apply prepend label
   // rules. Prepend label rules, may create a new MPLS route (RibMplsEntry)
@@ -962,13 +964,13 @@ SpfSolver::selectBestPathsKsp2(
 std::optional<RibUnicastEntry>
 SpfSolver::addBestPaths(
     const std::string& myNodeName,
-    const folly::CIDRNetwork& prefixThrift,
+    const std::unordered_map<std::string, LinkState>& areaLinkStates,
+    const folly::CIDRNetwork& prefix,
     const RouteSelectionResult& routeSelectionResult,
     const PrefixEntries& prefixEntries,
     const bool isBgp,
-    std::unordered_set<thrift::NextHopThrift>&& nextHops) {
-  const auto prefix = prefixThrift;
-
+    std::unordered_set<thrift::NextHopThrift>&& nextHops,
+    const thrift::RouteComputationRules& routeComputationRules) {
   // Check if next-hop list is empty
   if (nextHops.empty()) {
     return std::nullopt;
@@ -979,7 +981,7 @@ SpfSolver::addBestPaths(
   auto minNextHop = getMinNextHopThreshold(routeSelectionResult, prefixEntries);
   if (minNextHop.has_value() and minNextHop.value() > nextHops.size()) {
     LOG(WARNING) << "Ignore programming of route to "
-                 << folly::IPAddress::networkToString(prefixThrift)
+                 << folly::IPAddress::networkToString(prefix)
                  << " because of min-nexthop requirement. "
                  << "Minimum required " << minNextHop.value() << ", got "
                  << nextHops.size();
@@ -1016,13 +1018,52 @@ SpfSolver::addBestPaths(
     }
   }
 
+  auto prependLabel = routeComputationRules.prependLabelRules_ref().has_value()
+      ? generatePrependLabel(
+            myNodeName,
+            areaLinkStates,
+            prefix,
+            routeSelectionResult.bestNodeArea,
+            routeComputationRules.prependLabelRules_ref().value())
+      : std::nullopt;
+
   // Create RibUnicastEntry and add it the list
   return RibUnicastEntry(
       prefix,
       std::move(nextHops),
       *(prefixEntries.at(routeSelectionResult.bestNodeArea)),
       routeSelectionResult.bestNodeArea.second,
-      isBgp & (not enableBgpRouteProgramming_)); // doNotInstall
+      isBgp & (not enableBgpRouteProgramming_), // doNotInstall
+      prependLabel);
+}
+
+std::optional<int32_t>
+SpfSolver::generatePrependLabel(
+    const std::string& myNodeName,
+    const std::unordered_map<std::string, LinkState>& areaLinkStates,
+    const folly::CIDRNetwork& prefix,
+    const NodeAndArea& bestNodeArea,
+    const thrift::PrependLabelRules& prependLabelRules) {
+  if (prependLabelRules.bestRouteNodeSegmentLabel_ref().has_value() and
+      prependLabelRules.bestRouteNodeSegmentLabel_ref().value()) {
+    const auto& [node, area] = bestNodeArea;
+    if (areaLinkStates.count(area)) {
+      // Use node segment label of the best route as prepend label
+      const auto& linkState = areaLinkStates.at(area);
+      if (linkState.getAdjacencyDatabases().count(node) and
+          linkState.getAdjacencyDatabases().at(node).nodeLabel_ref().value()) {
+        auto nodeLabel =
+            linkState.getAdjacencyDatabases().at(node).nodeLabel_ref().value();
+        VLOG(2) << fmt::format(
+            "Node: {}, prefix: {}, prependLabel: {} (node segment label).",
+            myNodeName,
+            folly::IPAddress::networkToString(prefix),
+            nodeLabel);
+        return nodeLabel;
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 std::pair<

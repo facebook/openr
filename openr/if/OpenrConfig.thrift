@@ -166,7 +166,7 @@ union PrependLabelRules {
    * (next-hop IP + label stack)
    *
    */
-  2: list<string> nextHopAreas;
+  2: set<string> nextHopAreas;
 } (cpp.minimize_padding)
 
 struct RouteComputationRules {
