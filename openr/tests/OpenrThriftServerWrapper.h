@@ -18,8 +18,8 @@ class OpenrThriftServerWrapper {
  private:
   OpenrEventBase evb_;
   std::thread evbThread_;
-  std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler_{nullptr};
-  apache::thrift::util::ScopedServerThread openrCtrlThriftServerThread_;
+  std::shared_ptr<OpenrCtrlHandler> ctrlHandler_{nullptr};
+  apache::thrift::util::ScopedServerThread thriftServerThread_;
   std::string const nodeName_;
 
  public:
@@ -43,12 +43,12 @@ class OpenrThriftServerWrapper {
 
   inline uint16_t
   getOpenrCtrlThriftPort() {
-    return openrCtrlThriftServerThread_.getAddress()->getPort();
+    return thriftServerThread_.getAddress()->getPort();
   }
 
   inline std::shared_ptr<OpenrCtrlHandler>&
   getOpenrCtrlHandler() {
-    return openrCtrlHandler_;
+    return ctrlHandler_;
   }
 
   // Pointers to Open/R modules

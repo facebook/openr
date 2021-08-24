@@ -36,7 +36,7 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
 void
 OpenrThriftServerWrapper::run() {
   // create openrCtrlHandler
-  openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
+  ctrlHandler_ = std::make_shared<OpenrCtrlHandler>(
       nodeName_,
       std::unordered_set<std::string>{},
       &evb_,
@@ -59,8 +59,8 @@ OpenrThriftServerWrapper::run() {
   server->setNumIOWorkerThreads(1);
   server->setNumAcceptThreads(1);
   server->setPort(0);
-  server->setInterface(openrCtrlHandler_);
-  openrCtrlThriftServerThread_.start(std::move(server));
+  server->setInterface(ctrlHandler_);
+  thriftServerThread_.start(std::move(server));
 
   LOG(INFO) << "Successfully started openr-ctrl thrift server";
 }
@@ -69,13 +69,17 @@ void
 OpenrThriftServerWrapper::stop() {
   // ATTN: it is user's responsibility to close the queue passed
   //       to OpenrThrifyServerWrapper before calling stop()
+  thriftServerThread_.stop();
+  thriftServerThread_.join();
+
   LOG(INFO) << "Stopping openr-ctrl handler";
-  openrCtrlHandler_.reset();
+  CHECK(ctrlHandler_.unique()) << "Unexpected ownership of ctrlHandler";
+  ctrlHandler_.reset();
+
+  LOG(INFO) << "Stopping ctrl eventbase";
   evb_.stop();
   evb_.waitUntilStopped();
   evbThread_.join();
-  openrCtrlThriftServerThread_.stop();
-  openrCtrlThriftServerThread_.join();
 
   LOG(INFO) << "Successfully stopped openr-ctrl thrift server";
 }
