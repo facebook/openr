@@ -584,6 +584,17 @@ TEST(NetlinkRouteMessage, EncodeLabel) {
 }
 
 /**
+ * This test construct and destroy netlink socket without event base being
+ * looped ever.
+ */
+TEST(NetlinkProtocolSocket, NoEvbLooping) {
+  folly::EventBase evb;
+  messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQ;
+  auto nlSock = std::make_unique<NetlinkProtocolSocket>(&evb, netlinkEventsQ);
+  nlSock.reset();
+}
+
+/**
  * This test intends to test the delayed looping of event-base. Request is
  * made before event loop is started. This will help ensuring that socket
  * initialization and message sent happens inside event loop in sequence even

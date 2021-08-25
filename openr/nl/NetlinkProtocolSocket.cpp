@@ -100,8 +100,13 @@ NetlinkProtocolSocket::~NetlinkProtocolSocket() {
     msg->setReturnStatus(-ESHUTDOWN);
   }
 
-  LOG(INFO) << "Closing netlink socket. fd=" << nlSock_ << ", port=" << portId_;
-  close(nlSock_);
+  if (nlSock_ > 0) {
+    LOG(INFO) << "Closing netlink socket. fd=" << nlSock_
+              << ", port=" << portId_;
+    close(nlSock_);
+  } else {
+    LOG(INFO) << "Netlink socket was never initialized";
+  }
 }
 
 void
