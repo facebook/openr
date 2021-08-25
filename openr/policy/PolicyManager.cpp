@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/policy/PolicyManager.h"
+#include <openr/policy/PolicyManager.h>
 
 namespace openr {
 
@@ -18,7 +18,8 @@ PolicyManager::~PolicyManager() = default;
 std::pair<std::shared_ptr<thrift::PrefixEntry>, std::string /*policy name*/>
 PolicyManager::applyPolicy(
     const std::string& policyStatementName,
-    const std::shared_ptr<thrift::PrefixEntry>& prefixEntry) noexcept {
+    const std::shared_ptr<thrift::PrefixEntry>& prefixEntry,
+    const std::optional<OpenrPolicyActionData>& policyActionData) noexcept {
   return {prefixEntry, "Always Allow"};
 }
 
