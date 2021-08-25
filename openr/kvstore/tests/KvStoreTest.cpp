@@ -96,6 +96,7 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
     for (auto& store : stores_) {
       store->stop();
     }
+    stores_.clear();
   }
 
   /**
@@ -382,10 +383,12 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public KvStoreTestFixture {
   TearDown() override {
     // close queue before stopping kvstore so fiber task can end
     kvRequestQueue_.close();
-    // nothing to do
+
+    // stop spawned kvStores
     for (auto& store : stores_) {
       store->stop();
     }
+    stores_.clear();
   }
 
   /**
@@ -3038,25 +3041,25 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
     auto nodeId = getNodeId(kOriginBase, j);
     auto store = createKvStore(nodeId);
     store->run();
-    peerStores.push_back(store);
+    peerStores.emplace_back(store);
   }
 
   // Submit initial value set into all peerStores
-  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
-  int i = 0;
+
+  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+  int index = 0;
   for (auto& store : peerStores) {
-    auto key = folly::sformat("{}-test-key-{}", i % 2, store->getNodeId());
+    auto key = folly::sformat("{}-test-key-{}", index % 2, store->getNodeId());
     auto thriftVal = createThriftValue(
         1 /* version */,
         "gotham_city" /* originatorId */,
         folly::sformat("test-value-{}", store->getNodeId()),
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
+        Constants::kTtlInfinity /* ttl */);
 
     // Submit the key-value to store
     store->setKey(kTestingAreaName, key, thriftVal);
+
     // Update hash
     thriftVal.hash_ref() = generateHash(
         *thriftVal.version_ref(),
@@ -3064,21 +3067,21 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
         thriftVal.value_ref());
 
     // Store this in expectedKeyVals
-    if (i % 2 == 0) {
+    if (index % 2 == 0) {
       expectedKeyVals[key] = thriftVal;
     }
-    ++i;
+    ++index;
   }
 
   LOG(INFO) << "Starting store under test";
 
-  // set up the store that we'll be testing
+  // set up the extra KvStore that we'll be testing
   auto myNodeId = getNodeId(kOriginBase, kNumStores);
   auto myStore = createKvStore(myNodeId);
   myStore->run();
 
   // NOTE: It is important to add peers after starting our store to avoid
-  // race condition where certain updates are lost over PUB/SUB channel
+  // race condition.
   for (auto& store : peerStores) {
     myStore->addPeer(
         kTestingAreaName, store->getNodeId(), store->getPeerSpec());
@@ -3089,8 +3092,9 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   // key-value updates from each store over PUB socket.
   LOG(INFO) << "Waiting for full sync to complete.";
   {
-    std::unordered_set<std::string> keys;
     VLOG(3) << "Store " << myStore->getNodeId() << " received keys.";
+
+    std::unordered_set<std::string> keys;
     while (keys.size() < kNumStores) {
       auto publication = myStore->recvPublication();
       for (auto const& [key, val] : *publication.keyVals_ref()) {
@@ -3099,11 +3103,15 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
       }
     }
   }
+
   // Verify myStore database. we only want keys with "0" prefix
   std::optional<KvStoreFilters> kvFilters{KvStoreFilters({"0"}, {})};
   EXPECT_EQ(
       expectedKeyVals,
       myStore->dumpAll(kTestingAreaName, std::move(kvFilters)));
+
+  // cleanup
+  myStore->stop();
 }
 
 /**
