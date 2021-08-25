@@ -1167,8 +1167,10 @@ Fib::transitionRouteState(const RouteState::Event event) {
   const auto prevState = routeState_.state;
   const auto nextState = stateMap.at(prevState).at(event);
   CHECK(nextState.has_value()) << "Next state is 'UNDEFINED'";
-  LOG(INFO) << "Route state transitions from " << routeState_.toStr(prevState)
-            << " to " << routeState_.toStr(nextState.value());
+  if (prevState != nextState) {
+    LOG(INFO) << "Route state transitions from " << routeState_.toStr(prevState)
+              << " to " << routeState_.toStr(nextState.value());
+  }
 
   // Update current state
   routeState_.state = nextState.value();
