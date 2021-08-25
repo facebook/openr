@@ -207,7 +207,7 @@ add_library(openrlib
   openr/decision/SrPolicy.cpp
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
-  openr/dual/Dual.cpp
+  openr/kvstore/Dual.cpp
   openr/fib/Fib.cpp
   openr/kvstore/KvStoreClientInternal.cpp
   openr/kvstore/KvStore.cpp
@@ -547,8 +547,8 @@ if(BUILD_TESTS)
 
   add_openr_test(DualTest dual_test
     SOURCES
-      openr/dual/tests/DualTest.cpp
-    DESTINATION sbin/tests/openr/dual
+      openr/kvstore/tests/DualTest.cpp
+    DESTINATION sbin/tests/openr/kvstore
   )
 
   add_openr_test(LinkStateTest link_state_test

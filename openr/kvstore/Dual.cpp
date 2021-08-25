@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/dual/Dual.h>
+#include <openr/kvstore/Dual.h>
 
 namespace openr {
 
@@ -167,7 +167,7 @@ void
 Dual::floodUpdates(
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
   thrift::DualMessage msg;
-  *msg.dstId_ref() = rootId;
+  msg.dstId_ref() = rootId;
   msg.distance_ref() = info_.reportDistance;
   msg.type_ref() = thrift::DualMessageType::UPDATE;
 
@@ -219,7 +219,7 @@ Dual::diffusingComputation(
   bool success = false;
 
   thrift::DualMessage msg;
-  *msg.dstId_ref() = rootId;
+  msg.dstId_ref() = rootId;
   msg.distance_ref() = info_.reportDistance;
   msg.type_ref() = thrift::DualMessageType::QUERY;
 
@@ -422,7 +422,7 @@ Dual::peerUp(
       // this is equivlent to receiving a reply
 
       thrift::DualMessage msg;
-      *msg.dstId_ref() = rootId;
+      msg.dstId_ref() = rootId;
       msg.distance_ref() = info_.neighborInfos[neighbor].reportDistance;
       msg.type_ref() = thrift::DualMessageType::REPLY;
       processReply(neighbor, msg, msgsToSend);
@@ -434,7 +434,7 @@ Dual::peerUp(
   // (2nd update will just be ignored by our neighbor)
 
   thrift::DualMessage msg;
-  *msg.dstId_ref() = rootId;
+  msg.dstId_ref() = rootId;
   msg.distance_ref() = info_.reportDistance;
   msg.type_ref() = thrift::DualMessageType::UPDATE;
   msgsToSend[neighbor].messages_ref()->emplace_back(std::move(msg));
@@ -445,7 +445,7 @@ Dual::peerUp(
     info_.neighborInfos.at(neighbor).needToReply = false;
 
     thrift::DualMessage reply;
-    *reply.dstId_ref() = rootId;
+    reply.dstId_ref() = rootId;
     reply.distance_ref() = info_.reportDistance;
     reply.type_ref() = thrift::DualMessageType::REPLY;
     msgsToSend[neighbor].messages_ref()->emplace_back(std::move(reply));
@@ -483,7 +483,7 @@ Dual::peerDown(
       // equivlent to receing a reply from this guy with max-distance.
 
       thrift::DualMessage msg;
-      *msg.dstId_ref() = rootId;
+      msg.dstId_ref() = rootId;
       msg.distance_ref() = std::numeric_limits<int64_t>::max();
       msg.type_ref() = thrift::DualMessageType::REPLY;
       processReply(neighbor, msg, msgsToSend);
@@ -549,7 +549,7 @@ Dual::sendReply(
   }
 
   thrift::DualMessage msg;
-  *msg.dstId_ref() = rootId;
+  msg.dstId_ref() = rootId;
   msg.distance_ref() = info_.reportDistance;
   msg.type_ref() = thrift::DualMessageType::REPLY;
 
@@ -862,7 +862,7 @@ DualNode::neighborUp(const std::string& neighbor) const noexcept {
 thrift::DualCounters
 DualNode::getCounters() const noexcept {
   thrift::DualCounters counters;
-  *counters.neighborCounters_ref() = counters_;
+  counters.neighborCounters_ref() = counters_;
   for (const auto& kv : duals_) {
     counters.rootCounters_ref()->emplace(kv.first, kv.second.getCounters());
   }
@@ -891,7 +891,7 @@ DualNode::sendAllDualMessages(
     }
 
     // set srcId = myNodeId
-    *msgs.srcId_ref() = nodeId;
+    msgs.srcId_ref() = nodeId;
     if (not sendDualMessages(neighbor, msgs)) {
       LOG(ERROR) << "failed to send dual messages to " << kv.first;
       continue;

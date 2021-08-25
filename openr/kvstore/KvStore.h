@@ -25,10 +25,10 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/dual/Dual.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/kvstore/Dual.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>

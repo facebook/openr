@@ -13,7 +13,7 @@
 #include <folly/Random.h>
 #include <folly/gen/Base.h>
 #include <folly/io/async/EventBase.h>
-#include <openr/dual/Dual.h>
+#include <openr/kvstore/Dual.h>
 
 #include <vector>
 
