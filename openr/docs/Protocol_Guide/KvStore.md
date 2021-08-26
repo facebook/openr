@@ -14,7 +14,7 @@ may post information to its local store about its adjacent neighbors under a key
 `adj:<node-name>` and this information will propagate to all other stores in the
 network, under the same key name.
 
-To limit the boundary of flooding domain, `KvStore` has multilpe `KvStoreDb`
+To limit the boundary of flooding domain, `KvStore` has multiple `KvStoreDb`
 instances spawned based on the number of `AREA` configured when initialized.
 Each `KvStoreDb` will do sync/update individually with its counterpart of peer
 node. For `AREA` concept, see `Area.md` for more details.
@@ -23,7 +23,7 @@ node. For `AREA` concept, see `Area.md` for more details.
 
 ---
 
-![KvStore flow diagram](https://user-images.githubusercontent.com/51382140/102562658-68a25400-408c-11eb-92f2-002a63b3831d.png)
+![KvStore flow diagram](https://user-images.githubusercontent.com/10733132/130928965-f0f94f67-5d08-4e20-9b02-e491debfe89d.png)
 
 - `[Producer] ReplicateQueue<Publication>`: propagate `thrift::Publication` and
   kvStoreSynced signal to local subscribers( i.e. `Decision`) for any delta
@@ -36,6 +36,9 @@ node. For `AREA` concept, see `Area.md` for more details.
 - `[Consumer] RQueue<thrift::PeerUpdateRequest>`: receive **PEER SPEC**
   information from `LinkMonitor` to know how to establish TCP connection with
   peers over Thrift channel.
+- `[Consumer] RQueue<KeyValueRequest>`: receive requests from `LinkMonitor` and
+  `PrefixManager` to set and clear key-values in`KvStore`. Used for key-values
+  originated by local node.
 
 ## Operations
 
@@ -72,7 +75,7 @@ and server. Some examples are:
  * @return: thrift::Publication
  */
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-getKvStoreKeyVals(std::string area, thrift::KeyGetParams keyGetParams)
+semifuture_getKvStoreKeyVals(std::string area, thrift::KeyGetParams keyGetParams)
 
 /*
  * @params: area => single areaId to set K-V pairs
@@ -223,9 +226,17 @@ key-value since it's origination.
 #### ttl updates
 
 In order to keep key-values with limited lifetime persisted for long duration,
-originators are expected to emit `ttl updates` with new ttl values. On receipt
-of a ttl update (with higher version), the ttl of a key in local store is
-updated and the ttl update is flooded to neighbors.
+originators emit `ttl updates` with new ttl values. On receipt of a ttl update
+(with higher version), the ttl of a key in local store is updated and the ttl
+update is flooded to its neighbors.
+
+`KvStore` provides two different ways for `ttl updates`:
+
+1. Self-originated keys with link-state information. These `ttl updates` are
+   completely managed by KvStore.
+2. Non-self-originated keys (e.g. key-vals injected from user for global view
+   and eventual consistency). User is responsible for refreshing `ttl updates`
+   periodically and updating ttlVersion on their own.
 
 #### Key Expiry Notifications
 
@@ -235,19 +246,30 @@ handle an expired key (for e.g. Decision removes adj/prefix DB of nodes). These
 notifications are ignored by other KvStores as they will be generating the very
 same notifications by themselves.
 
+#### Self-originated key-values
+
+All link-state protocol related key-values originated by the local node are sent
+to `KvStore` via key-value requests. There are 3 key-value request types:
+
+- `Set` stores the key-value and adds it to a cache used to generate
+  `ttl updates` to maintain the key-value in `KvStore` for longer durations.
+- `Persist` does the same as `Set` while also ensuring that the key-value
+  submitted doesn't get overriden by another node.
+- `Clear` removes from the cache, which ends `ttl updates` and allows the key to
+  expire.
+
+`KvStore` stores key-values with newer versions to ensure new or updated
+self-originated key-values make it to the network and are NOT **overriden** by
+other nodes.
+
 #### KvStoreClientInternal
 
 `KvStore` is core and a heavily used module in Open/R. Interacting with
 `KvStore` involves sending and receiving proper thrift objects on sockets. This
 was leading to a lot of complexity in the code. `KvStoreClientInternal` is added
-to address this concern. It provides APIs to interact with KvStore in an
-easy-going way. While submitting `Key-Vals`, special care needs to be taken for
-the versions from originator's perspective. To be sure changes make it to the
-network and NOT **overriden** by others, originator need to submit with a newer
-version, and then wait for K-V publication to come back.
-
-> NOTE: There is a special `persist-key` operation which can ensure that
-> key-value submitted doesn't get overridden by anyone else.
+to address this concern. It provides APIs to subscribe/unsubscribe to key-value
+changes within `KvStore`. A client uses these APIs to call a callback function
+when the value associated with a key changes.
 
 ### More Reading
 

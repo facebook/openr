@@ -24,6 +24,9 @@ There are three channels of information for managing route advertisements
   programmed by local nodes. This queue is currently ONLY used for route
   origination purpose. Each static route is with a special type `CONFIG`.
 
+- `[Producer] ReplicateQueue<KeyValueRequest>`: send requests to set/clear
+  key-values in `KvStore` representing advertised/withdrawn routes.
+
 - `[Consumer] RQueue<PrefixEvent>`: receive route advertising & withdrawing
   commands. Multiple sources within Open/R (`LinkMonitor`, `PrefixAllocator`,
   `BgpRib`) uses this channel to manage their advertisements. Each source is
@@ -45,18 +48,13 @@ knob. Each originated route maintains a count of its supporting routes.
 ---
 
 To fulfill operations defined in previous section, `PrefixManager` updates its
-local prefix database and interacts with `KvStore` via:
+local prefix database and interacts with `KvStore`:
 
-- [Advertise]: `persistKey()` API inside `KvStoreClientInternal`;
-- [Withdraw]: `clearKey()` API inside `KvStoreClientInternal`;
+- [Advertise]: Send `Persist` key-value request to `kvRequestQueue`;
+- [Withdraw]: Send `Clear` key-value request to `kvRequestQueue`;
 
-For more information about message formats, checkout:
-
-- [if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
-
-For more information about `KvStoreClientInternal`'s APIs, checkout:
-
-- [KvStoreClientInternal](https://github.com/facebook/openr/blob/master/openr/docs/Protocol_Guide/KvStore.md#kvstoreclientinternal)
+See [KvStore.md](KvStore.md#self-originated-key-values) for how `KvStore`
+handles these key-value requests.
 
 `PrefixManager` supports the following operations:
 

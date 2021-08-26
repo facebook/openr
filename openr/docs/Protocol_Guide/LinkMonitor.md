@@ -11,14 +11,14 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
 - Monitor system interface status & address;
 - Initiate neighbor discovery for newly added links;
 - Maintain KvStore peering with discovered neighbors;
-- Maintain `AdjacencyDatabase` of current node in KvStore by injecting
+- Maintain `AdjacencyDatabase` of current node in `KvStore` by injecting
   `adj:<node-name>`;
 
 ## Inter Module Communication
 
 ---
 
-![LinkMonitor Intermodule Communication](https://user-images.githubusercontent.com/51382140/102449373-f75d9500-3fe8-11eb-8465-66e2fd1d0055.png)
+![LinkMonitor Intermodule Communication](https://user-images.githubusercontent.com/10733132/130930966-4c2557ce-bc88-4781-a37a-dff29da52363.png)
 
 - `[Producer] ReplicateQueue<thrift::InterfaceDatabase>`: react to `Netlink`
   event update and asynchronously update interface database to inform `Spark` to
@@ -32,6 +32,9 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
 - `[Producer] ReplicateQueue<thrift::PeerUpdateRequest>`: populates **PEER
   SPEC** information to `KvStore` for peer session establishment over TCP
   connection.
+
+- `[Producer] ReplicateQueue<KeyValueRequest>`: send requests to set key-value
+  storing node's adjacency database in `KvStore`.
 
 - `[Consumer] RQueue<NeighborEvents>`: receive neighbor update sent from `Spark`
   for adjacency updates. Events include neighbor UP/DOWN/RESTART/RTT-CHANGE.
