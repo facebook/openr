@@ -143,21 +143,19 @@ OpenrWrapper<Serializer>::OpenrWrapper(
         // Parse PrefixDb
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             value.value().value_ref().value(), serializer_);
-
-        SYNCHRONIZED(ipPrefix_) {
+        ipPrefix_.withWLock([&](auto& ipPrefix) {
           bool received = false;
-
           for (auto& prefix : *prefixDb.prefixEntries_ref()) {
             if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
               received = true;
-              ipPrefix_ = *prefix.prefix_ref();
+              ipPrefix = *prefix.prefix_ref();
               break;
             }
           }
           if (!received) {
-            ipPrefix_ = std::nullopt;
+            ipPrefix = std::nullopt;
           }
-        }
+        });
       },
       false);
 
@@ -411,10 +409,9 @@ OpenrWrapper<Serializer>::stop() {
 template <class Serializer>
 std::optional<thrift::IpPrefix>
 OpenrWrapper<Serializer>::getIpPrefix() {
-  SYNCHRONIZED(ipPrefix_) {
-    if (ipPrefix_.has_value()) {
-      return ipPrefix_;
-    }
+  auto prefix = ipPrefix_.withRLock([&](auto& ipPrefix) { return ipPrefix; });
+  if (prefix.has_value()) {
+    return prefix;
   }
 
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
@@ -459,7 +456,7 @@ OpenrWrapper<Serializer>::getIpPrefix() {
     }
   });
 
-  SYNCHRONIZED(ipPrefix_) {
+  ipPrefix_.withWLock([&](auto& ipPrefix) {
     for (const auto& key : keys.value()) {
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           key.second.value_ref().value(), serializer_);
@@ -470,12 +467,12 @@ OpenrWrapper<Serializer>::getIpPrefix() {
 
       for (auto& prefix : *prefixDb.prefixEntries_ref()) {
         if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
-          ipPrefix_ = *prefix.prefix_ref();
+          ipPrefix = *prefix.prefix_ref();
           break;
         }
       }
     }
-  }
+  });
   return ipPrefix_.copy();
 }
 

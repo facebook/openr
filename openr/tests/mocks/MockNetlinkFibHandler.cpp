@@ -251,19 +251,17 @@ MockNetlinkFibHandler::syncMplsFib(
 int64_t
 MockNetlinkFibHandler::aliveSince() {
   int64_t res = 0;
-  SYNCHRONIZED(startTime_) {
-    res = startTime_;
-  }
+  startTime_.withRLock([&](auto& startTime) { res = startTime; });
   return res;
 }
 
 void
 MockNetlinkFibHandler::getRouteTableByClient(
     std::vector<openr::thrift::UnicastRoute>& routes, int16_t) {
-  SYNCHRONIZED(unicastRouteDb_) {
+  unicastRouteDb_.withRLock([&](auto& unicastRouteDb) {
     routes.clear();
     VLOG(2) << "MockNetlinkFibHandler: get route table by client";
-    for (auto const& [prefix, nhs] : unicastRouteDb_) {
+    for (auto const& [prefix, nhs] : unicastRouteDb) {
       auto thriftNextHops =
           from(nhs) |
           mapped([](const std::pair<std::string, folly::IPAddress>& nextHop) {
@@ -281,21 +279,21 @@ MockNetlinkFibHandler::getRouteTableByClient(
       route.nextHops_ref() = std::move(thriftNextHops);
       routes.emplace_back(std::move(route));
     }
-  }
+  });
 }
 
 void
 MockNetlinkFibHandler::getMplsRouteTableByClient(
     std::vector<openr::thrift::MplsRoute>& routes, int16_t) {
-  SYNCHRONIZED(mplsRouteDb_) {
+  mplsRouteDb_.withRLock([&](auto& mplsRouteDb) {
     routes.clear();
-    for (auto const& [topLabel, nhs] : mplsRouteDb_) {
+    for (auto const& [topLabel, nhs] : mplsRouteDb) {
       thrift::MplsRoute route;
       route.topLabel_ref() = topLabel;
       route.nextHops_ref() = nhs;
       routes.emplace_back(std::move(route));
     }
-  }
+  });
 }
 
 void
@@ -371,10 +369,9 @@ MockNetlinkFibHandler::restart() {
   LOG(INFO) << "Restarting fib agent";
   unicastRouteDb_->clear();
   mplsRouteDb_->clear();
-
-  SYNCHRONIZED(startTime_) {
-    startTime_ += 1; // Always increment on retart for unique number
-  }
+  startTime_.withWLock([&](auto& startTime) {
+    startTime += 1; // Always increment on restart for unique number
+  });
   fibSyncCount_ = 0;
   addRoutesCount_ = 0;
   delRoutesCount_ = 0;

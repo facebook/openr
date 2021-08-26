@@ -610,9 +610,8 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
     //       be empty.
     EXPECT_GE(1, prefixes.size());
     if (isPrefixDbDeleted or prefixes.empty()) {
-      SYNCHRONIZED(allocPrefix) {
-        allocPrefix = std::nullopt;
-      }
+      allocPrefix.withWLock(
+          [&](auto& allocatedPrefix) { allocatedPrefix = std::nullopt; });
       LOG(INFO) << "Lost allocated prefix!";
       hasAllocPrefix.store(false, std::memory_order_relaxed);
     } else {
@@ -620,9 +619,8 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
           thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes.back().type_ref());
       auto prefix = toIPNetwork(*prefixes.back().prefix_ref());
       EXPECT_EQ(allocPrefixLen, prefix.second);
-      SYNCHRONIZED(allocPrefix) {
-        allocPrefix = prefix;
-      }
+      allocPrefix.withWLock(
+          [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
       LOG(INFO) << "Got new prefix allocation: " << prefix.first;
       hasAllocPrefix.store(true, std::memory_order_relaxed);
     }
@@ -655,13 +653,13 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
         while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
           std::this_thread::yield();
         }
-        SYNCHRONIZED(allocPrefix) {
-          EXPECT_TRUE(allocPrefix.has_value());
-          if (allocPrefix.has_value()) {
-            EXPECT_EQ(allocPrefixLen, allocPrefix->second);
-            EXPECT_TRUE(allocPrefix->first.inSubnet("10.1.0.0/16"));
+        allocPrefix.withRLock([&](auto& allocatedPrefix) {
+          EXPECT_TRUE(allocatedPrefix.has_value());
+          if (allocatedPrefix.has_value()) {
+            EXPECT_EQ(allocPrefixLen, allocatedPrefix->second);
+            EXPECT_TRUE(allocatedPrefix->first.inSubnet("10.1.0.0/16"));
           }
-        }
+        });
         LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
 
         //
@@ -996,17 +994,15 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     //       be empty.
     EXPECT_GE(1, prefixes.size());
     if (isPrefixDbDeleted or prefixes.empty()) {
-      SYNCHRONIZED(allocPrefix) {
-        allocPrefix = std::nullopt;
-      }
+      allocPrefix.withWLock(
+          [&](auto& allocatedPrefix) { allocatedPrefix = std::nullopt; });
       LOG(INFO) << "Lost allocated prefix!";
       hasAllocPrefix.store(false, std::memory_order_relaxed);
     } else {
       EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes[0].type_ref());
       auto prefix = toIPNetwork(*prefixes[0].prefix_ref());
-      SYNCHRONIZED(allocPrefix) {
-        allocPrefix = prefix;
-      }
+      allocPrefix.withWLock(
+          [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
       LOG(INFO) << "Got new prefix allocation!";
       hasAllocPrefix.store(true, std::memory_order_relaxed);
     }
@@ -1039,13 +1035,13 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
           std::this_thread::yield();
         }
-        SYNCHRONIZED(allocPrefix) {
-          EXPECT_TRUE(allocPrefix.has_value());
-          if (allocPrefix.has_value()) {
+        allocPrefix.withRLock([&](auto& allocatedPrefix) {
+          EXPECT_TRUE(allocatedPrefix.has_value());
+          if (allocatedPrefix.has_value()) {
             EXPECT_EQ(
-                allocPrefix, folly::IPAddress::createNetwork("1.2.3.0/24"));
+                allocatedPrefix, folly::IPAddress::createNetwork("1.2.3.0/24"));
           }
-        }
+        });
         LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
 
         //
@@ -1140,13 +1136,13 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
           std::this_thread::yield();
         }
-        SYNCHRONIZED(allocPrefix) {
-          EXPECT_TRUE(allocPrefix.has_value());
-          if (allocPrefix.has_value()) {
+        allocPrefix.withRLock([&](auto& allocatedPrefix) {
+          EXPECT_TRUE(allocatedPrefix.has_value());
+          if (allocatedPrefix.has_value()) {
             EXPECT_EQ(
-                allocPrefix, folly::IPAddress::createNetwork("3.2.1.0/24"));
+                allocatedPrefix, folly::IPAddress::createNetwork("3.2.1.0/24"));
           }
-        }
+        });
         LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
 
         //
@@ -1164,13 +1160,13 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
           std::this_thread::yield();
         }
-        SYNCHRONIZED(allocPrefix) {
-          EXPECT_TRUE(allocPrefix.has_value());
-          if (allocPrefix.has_value()) {
+        allocPrefix.withRLock([&](auto& allocatedPrefix) {
+          EXPECT_TRUE(allocatedPrefix.has_value());
+          if (allocatedPrefix.has_value()) {
             EXPECT_EQ(
-                allocPrefix, folly::IPAddress::createNetwork("5.6.7.0/24"));
+                allocatedPrefix, folly::IPAddress::createNetwork("5.6.7.0/24"));
           }
-        }
+        });
         LOG(INFO) << "Step-4: Received updated allocated prefix from KvStore.";
 
         //
