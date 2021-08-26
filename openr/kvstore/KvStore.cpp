@@ -1285,11 +1285,13 @@ KvStoreDb::persistSelfOriginatedKey(
   // exist in KvStore already.
   bool shouldAdvertise = false;
 
-  // Override thrift::Value if SAME key is already in KvStore with another
-  // originator or if value has changed.
-  bool shouldOverride = false;
-
-  // Default thrift value to use with invalid version(0)
+  // Create the default thrift value with:
+  //  1. version - [NOT FILLED] - 0 is INVALID
+  //  2. originatorId - [DONE] - nodeId
+  //  3. value - [DONE] - value
+  //  4. ttl - [DONE] - kvParams_.keyTtl.count()
+  //  5. ttlVersion - [NOT FILLED] - empty
+  //  6. hash - [OPTIONAL] - empty
   thrift::Value thriftValue =
       createThriftValue(0, nodeId, value, kvParams_.keyTtl.count());
   CHECK(thriftValue.value_ref());
@@ -1307,16 +1309,13 @@ KvStoreDb::persistSelfOriginatedKey(
     // Key is first-time persisted. Check if key is in KvStore.
     auto keyIt = kvStore_.find(key);
     if (keyIt == kvStore_.end()) {
-      // Key is not in KvStore. Advertise key-value.
+      // Key is not in KvStore. Set initial version and ready to advertise.
       thriftValue.version_ref() = 1;
       shouldAdvertise = true;
     } else {
-      // Key is in KvStore, but it is NOT self-originated, i.e., someone else is
-      // advertising the SAME key.
+      // Key is NOT persisted but can be found inside KvStore.
+      // This can be keys advertised by our previous incarnation.
       thriftValue = keyIt->second;
-      if (thriftValue.get_originatorId() != nodeId) {
-        shouldOverride = true;
-      }
       // TTL update pub is never saved in kvstore. Value is not std::nullopt.
       DCHECK(thriftValue.value_ref());
     }
@@ -1329,19 +1328,24 @@ KvStoreDb::persistSelfOriginatedKey(
     }
   }
 
-  // Override `thrift::Value` if we detect Value field has changed
-  if (*thriftValue.value_ref() != value) {
-    shouldOverride = true;
-  }
-
-  // Perform value and version override
-  if (shouldOverride) {
+  // Override thrift::Value if
+  //  1) the SAME key is originated by different node;
+  //  2) the peristed value has changed;
+  if (*thriftValue.originatorId_ref() != nodeId or
+      *thriftValue.value_ref() != value) {
     (*thriftValue.version_ref())++;
     thriftValue.ttlVersion_ref() = 0;
     thriftValue.value_ref() = value;
     thriftValue.originatorId_ref() = nodeId;
     shouldAdvertise = true;
   }
+
+  // Override ttl value to new one.
+  // ATTN: When ttl changes but value doesn't, we should advertise ttl
+  // immediately so that new ttl is in effect.
+  const bool hasTtlChanged =
+      (kvParams_.keyTtl.count() != thriftValue.get_ttl()) ? true : false;
+  thriftValue.ttl_ref() = kvParams_.keyTtl.count();
 
   // Cache it in selfOriginatedKeyVals. Override the existing one.
   if (selfOriginatedKeyIt == selfOriginatedKeyVals_.end()) {
@@ -1365,7 +1369,7 @@ KvStoreDb::persistSelfOriginatedKey(
   advertiseSelfOriginatedKeysThrottled_->operator()();
 
   // Add ttl backoff and trigger selfOriginatedKeyTtlTimer_
-  scheduleTtlUpdates(key, false /* advertiseImmediately */);
+  scheduleTtlUpdates(key, hasTtlChanged /* advertiseImmediately */);
 }
 
 void

@@ -51,6 +51,8 @@ const std::chrono::milliseconds kTimeoutOfKvStorePropagation(500);
 
 // TTL in ms
 const int64_t kTtlMs = 1000;
+const uint64_t kShortTtl{2000}; // 2 seconds
+const uint64_t kLongTtl{300000}; // 5 minutes
 
 /**
  * produce a random string of given length - for value generation
@@ -421,8 +423,6 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public KvStoreTestFixture {
   }
   KvStoreWrapper* kvStore_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
-  const static uint32_t kShortTtl{2000}; // 2 seconds
-  const static uint32_t kLongTtl{300000}; // 5 minutes
 };
 } // namespace
 
@@ -810,6 +810,72 @@ TEST_F(
   EXPECT_EQ(0, *(persistPub.keyVals_ref()->at(key).ttlVersion_ref()));
   EXPECT_EQ(2, *(persistPub.keyVals_ref()->at(key).version_ref()));
   EXPECT_EQ(myNodeId, *(persistPub.keyVals_ref()->at(key).originatorId_ref()));
+}
+
+/**
+ * Test ttl change with persist key while keeping value and version same
+ * - Set key with kShortTtl: 2s
+ *   - Verify key is set and remains
+ *   - Verify "0s < ttl <= 2s"
+ * - Update key with kLongTtl: 300s
+ *   - Verify key remains after key persistence
+ *   - Verify "2s < ttl <= 300s"
+ */
+TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, PersistKeyChangeTtlTest) {
+  const std::string nodeId = "test-nodeId";
+  const std::string key{"test-key"};
+  const std::string val{"test-value"};
+  int scheduleAt{0};
+
+  // Create and initialize KvStore
+  initKvStore(nodeId, kLongTtl);
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // Set a key in KvStore
+        const thrift::Value thriftVal = createThriftValue(
+            1 /* version */,
+            nodeId /* originatorId */,
+            val /* value */,
+            kShortTtl /* ttl = 5s */);
+        kvStore_->setKey(kTestingAreaName, key, thriftVal);
+      });
+
+  // Verify key exists after 200ms given 100ms throttling time
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // Ensure key exists
+        auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(maybeVal.has_value());
+        EXPECT_EQ(1, *maybeVal->version_ref());
+        EXPECT_EQ(val, maybeVal->value_ref());
+        EXPECT_LT(0, *maybeVal->ttl_ref());
+        EXPECT_GE(kShortTtl, *maybeVal->ttl_ref());
+
+        // Set key with smaller kShortTtl=5s(default with KvStore)
+        auto persistKvRequest =
+            PersistKeyValueRequest(kTestingAreaName, key, val);
+        kvRequestQueue_.push(std::move(persistKvRequest));
+      });
+
+  // Verify key exists after 200ms given 100ms throttling time
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // Ensure key exists
+        auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(maybeVal.has_value());
+        EXPECT_EQ(1, *maybeVal->version_ref());
+        EXPECT_EQ(val, maybeVal->value_ref());
+        EXPECT_LT(kShortTtl, *maybeVal->ttl_ref());
+        EXPECT_GE(kLongTtl, *maybeVal->ttl_ref());
+
+        evb.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
 }
 
 /**
