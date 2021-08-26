@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -25,6 +26,7 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/policy/PolicyStructs.h>
 
 namespace openr {
 
@@ -158,14 +160,21 @@ struct PrefixEntry {
    * - An empty list could indicate a NULL route programming
    */
   std::optional<std::unordered_set<thrift::NextHopThrift>> nexthops;
+  /**
+   * Optional data applied in area policy actions when advertising the prefix to
+   * KvStore.
+   */
+  std::optional<OpenrPolicyActionData> policyActionData{std::nullopt};
 
   PrefixEntry() = default;
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
-      std::unordered_set<std::string>&& dstAreas)
+      std::unordered_set<std::string>&& dstAreas,
+      std::optional<OpenrPolicyActionData> policyActionData = std::nullopt)
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
-        network(toIPNetwork(*tPrefixEntry->prefix_ref())) {}
+        network(toIPNetwork(*tPrefixEntry->prefix_ref())),
+        policyActionData(policyActionData) {}
 
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,

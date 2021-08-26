@@ -462,7 +462,8 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
     const auto& policy = areaToPolicy_.at(toArea);
     if (policy) {
       std::tie(postPolicyTPrefixEntry, hitPolicyName) =
-          policyManager_->applyPolicy(*policy, tPrefixEntry);
+          policyManager_->applyPolicy(
+              *policy, tPrefixEntry, entry.policyActionData);
 
       // policy reject prefix, nothing to do.
       if (not postPolicyTPrefixEntry) {
@@ -1602,6 +1603,14 @@ PrefixManager::redistributePrefixesAcrossAreas(
     // 3. normalize to RIB routes
     prefixEntry.type_ref() = thrift::PrefixType::RIB;
 
+    // Keep prependLable in OpenrPolicyActionData. Area policy will later decide
+    // whether it should be advertised into one area.
+    std::optional<OpenrPolicyActionData> policyActionData{std::nullopt};
+    if (prefixEntry.prependLabel_ref().has_value()) {
+      policyActionData =
+          OpenrPolicyActionData(prefixEntry.prependLabel_ref().value());
+    }
+
     // Reset non-transitive attributes before redistribution across areas.
     resetNonTransitiveAttrs(prefixEntry);
 
@@ -1614,7 +1623,8 @@ PrefixManager::redistributePrefixesAcrossAreas(
     }
     advertisedPrefixes.emplace_back(
         std::make_shared<thrift::PrefixEntry>(std::move(prefixEntry)),
-        std::move(dstAreas));
+        std::move(dstAreas),
+        policyActionData);
 
     // Adjust supporting route count due to prefix advertisement
     aggregatesToAdvertise(prefix);
