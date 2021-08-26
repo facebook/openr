@@ -161,6 +161,65 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         return area
 
 
+class KvPrefixesCmd(KvStoreCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        prefix: str,
+        client_type: str,
+        *args,
+        **kwargs,
+    ) -> None:
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        self.print_prefix({"": resp}, nodes, json, prefix, client_type)
+
+    def print_prefix(
+        self,
+        resp: Dict[str, openr_types.Publication],
+        nodes: set,
+        json: bool,
+        prefix: str,
+        client_type: str,
+    ):
+        all_kv = openr_types.Publication()
+        all_kv.keyVals = {}
+        for _, val in resp.items():
+            all_kv.keyVals.update(val.keyVals)
+        if json:
+            utils.print_prefixes_json(
+                all_kv, nodes, prefix, client_type, self.iter_publication
+            )
+        else:
+            utils.print_prefixes_table(
+                all_kv, nodes, prefix, client_type, self.iter_publication
+            )
+
+
+class PrefixesCmd(KvPrefixesCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        prefix: str = "",
+        client_type: str = "",
+        *args,
+        **kwargs,
+    ) -> None:
+        if not self.area_feature:
+            super()._run(client, nodes, json, prefix, client_type)
+            return
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        area_kv = {}
+        for area in self.areas:
+            resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+            area_kv[area] = resp
+        self.print_prefix(area_kv, nodes, json, prefix, client_type)
+
+
 class KvKeysCmd(KvStoreCmdBase):
     def _run(
         self,
