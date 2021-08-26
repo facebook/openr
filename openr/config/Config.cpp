@@ -488,7 +488,7 @@ Config::checkSegmentRoutingConfig() {
 
         // Validate each filter criteria type is supported. Currently we only
         // support openrTags and openrAreaStack SR Policy filters.
-        for (const auto& criteria : *srPolicy.criterias_ref()) {
+        for (const auto& criteria : *srPolicy.matcher_ref()->criterias_ref()) {
           if (not criteria.openrTags_ref() &&
               not criteria.openrAreaStack_ref()) {
             throw std::invalid_argument(folly::sformat(
