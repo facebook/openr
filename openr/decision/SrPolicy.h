@@ -9,6 +9,7 @@
 
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <optional>
 
 namespace openr {
 
@@ -28,7 +29,8 @@ class SrPolicy {
   // Walks all SR Policy matchers. If they all match then the SR Policy rules
   // are returned.
   std::optional<thrift::RouteComputationRules> matchAndGetRules(
-      const std::shared_ptr<thrift::PrefixEntry>& prefixEntry) const;
+      const std::shared_ptr<thrift::PrefixEntry>& prefixEntry,
+      const std::string& receivedAreaId) const;
 
   // SrPolicyMactcher uses forward declaration
   // Use shared_ptr because it works with incomplete type, where unique_ptr

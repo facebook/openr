@@ -1240,7 +1240,8 @@ SpfSolver::getRouteComputationRules(
   // matches the route attributes
   for (const auto& srPolicy : srPolicies_) {
     auto rules = srPolicy.matchAndGetRules(
-        prefixEntries.at(routeSelectionResult.bestNodeArea));
+        prefixEntries.at(routeSelectionResult.bestNodeArea),
+        routeSelectionResult.bestNodeArea.second);
     if (rules) {
       return *rules;
     }
