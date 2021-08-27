@@ -27,15 +27,15 @@ const string kDefaultArea = "0";
  * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html
  */
 enum InitializationEvent {
-  AGENT_CONFIGURED = 0,
-  LINK_DISCOVERED = 1,
-  NEIGHBOR_DISCOVERED = 2,
-  KVSTORE_SYNCED = 3,
-  RIB_COMPUTED = 4,
-  FIB_SYNCED = 5,
-  PREFIX_DB_SYNCED = 6,
-  ADJACENCY_DB_SYNCED = 7,
-  INITIALIZING = 8,
+  INITIALIZING = 0,
+  AGENT_CONFIGURED = 1,
+  LINK_DISCOVERED = 2,
+  NEIGHBOR_DISCOVERED = 3,
+  KVSTORE_SYNCED = 4,
+  RIB_COMPUTED = 5,
+  FIB_SYNCED = 6,
+  PREFIX_DB_SYNCED = 7,
+  ADJACENCY_DB_SYNCED = 8,
 }
 
 /**
