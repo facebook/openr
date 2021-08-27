@@ -80,10 +80,10 @@ semifuture_getKvStoreKeyVals(std::string area, thrift::KeyGetParams keyGetParams
 /*
  * @params: area => single areaId to set K-V pairs
  *          thrift::KeySetParams => parameters to set specific K-V pairs
- * @return: None
+ * @return: folly::Unit
  */
-void
-setKvStoreKeyVals(std::string area, thrift::KeySetParams keySetParams)
+folly::SemiFuture<folly::Unit>
+semifuture_setKvStoreKeyVals(std::string area, thrift::KeySetParams keySetParams)
 
 /*
  * @params: area => single areaId to set K-V pairs
@@ -91,7 +91,7 @@ setKvStoreKeyVals(std::string area, thrift::KeySetParams keySetParams)
  * @return: thrift::Publication WITHOUT `value`(serialized binary data)
  */
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
-dumpKvStoreHashes(std::string area, thrift::KeyDumpParams keyDumpParams);
+semifuture_dumpKvStoreHashes(std::string area, thrift::KeyDumpParams keyDumpParams);
 
 /*
  * @params: selectAreas => set of areas to dump keys from
@@ -102,6 +102,86 @@ folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
 semifuture_dumpKvStoreKeys(thrift::KeyDumpParams keyDumpParams,
        std::set<std::string> selectAreas = {});
 
+/*
+ * @params: area => area to dump self-originated K-V pairs from
+ * @return: SelfOriginatedKeyVals => map of K-V pairs
+ */
+folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
+  semifuture_dumpKvStoreSelfOriginatedKeys(std::string area);
+
+/*
+ * @params: area => area to dump KvStore peers from
+ * @return: thrift::PeersMap => map of peers KvStore is subscribed to
+ */
+folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
+  semifuture_getKvStorePeers(std::string area);
+
+/*
+ * @params: area => area to add/update KvStore peers to
+ * @return: folly::Unit
+ */
+folly::SemiFuture<folly::Unit> semifuture_addUpdateKvStorePeers(
+  std::string area, thrift::PeersMap peersToAdd);
+
+/*
+ * @params: area => area to delete KvStore peers from
+ * @return: folly::Unit
+ */
+folly::SemiFuture<folly::Unit> semifuture_deleteKvStorePeers(
+  std::string area, std::vector<std::string> peersToDel);
+
+/*
+ * @params: area => area to dump flood topology
+ * @return: thrift::SptInfos => Spanning Tree Infos for given area
+ */
+folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
+  semifuture_getSpanningTreeInfos(std::string area);
+
+/*
+ * @params: area => area to update flood topology process
+ *          thrift::FloodTopoSetParams => params to set/unset a child for a
+ *                                        given root
+ * @return: folly::Unit
+ */
+folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
+  std::string area, thrift::FloodTopoSetParams floodTopoSetParams);
+
+/*
+ * @params: area => area to send dual messages to
+ *          thrift::DualMessages => Dual messages for DualNode (KvStoreDb) to
+ *                                  process
+ * @return: folly::Unit
+ */
+folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
+  std::string area, thrift::DualMessages dualMessages);
+
+/*
+ * @params: selectAreas => set of areas to retrieve area summary
+ * @return: thrift::KvStoreAreaSummary => counters, key-vals, peers, etc.
+ */
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+  semifuture_getKvStoreAreaSummaryInternal(
+      std::set<std::string> selectAreas = {});
+
+/*
+ * @return: std::map<std::string, int64_t> => num_keys, num_peers, etc.
+ */
+folly::SemiFuture<std::map<std::string, int64_t>> semifuture_getCounters();
+
+/*
+ * @return: messaging::RQueue<Publication> => read-only interface for KvStore
+ *                                            updates queue
+ */
+messaging::RQueue<Publication> getKvStoreUpdatesReader();
+
+/*
+ * @params: area => area to retrieve current KvStore peer state from
+ *          peerName => name of peer for which to fetch current peer state
+ * @return: thrift::KvStorePeerState
+ */
+folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
+  semifuture_getKvStorePeerState(
+      std::string const& area, std::string const& peerName);
 ```
 
 For more information about `KvStore` parameters, check out

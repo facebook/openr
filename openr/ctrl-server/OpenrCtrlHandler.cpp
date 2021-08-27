@@ -690,7 +690,8 @@ OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->dumpKvStoreHashes(std::move(*area), std::move(*filter));
+  return kvStore_->semifuture_dumpKvStoreHashes(
+      std::move(*area), std::move(*filter));
 }
 
 folly::SemiFuture<folly::Unit>
@@ -698,7 +699,8 @@ OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->setKvStoreKeyVals(std::move(*area), std::move(*setParams));
+  return kvStore_->semifuture_setKvStoreKeyVals(
+      std::move(*area), std::move(*setParams));
 }
 
 folly::SemiFuture<bool>
@@ -773,7 +775,7 @@ OpenrCtrlHandler::semifuture_processKvStoreDualMessage(
     std::unique_ptr<thrift::DualMessages> messages,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->processKvStoreDualMessage(
+  return kvStore_->semifuture_processKvStoreDualMessage(
       std::move(*area), std::move(*messages));
 }
 
@@ -782,7 +784,7 @@ OpenrCtrlHandler::semifuture_updateFloodTopologyChild(
     std::unique_ptr<thrift::FloodTopoSetParams> params,
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->updateFloodTopologyChild(
+  return kvStore_->semifuture_updateFloodTopologyChild(
       std::move(*area), std::move(*params));
 }
 
@@ -790,7 +792,7 @@ folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
 OpenrCtrlHandler::semifuture_getSpanningTreeInfos(
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->getSpanningTreeInfos(std::move(*area));
+  return kvStore_->semifuture_getSpanningTreeInfos(std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
@@ -803,14 +805,15 @@ folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeersArea(
     std::unique_ptr<std::string> area) {
   CHECK(kvStore_);
-  return kvStore_->getKvStorePeers(std::move(*area));
+  return kvStore_->semifuture_getKvStorePeers(std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
 OpenrCtrlHandler::semifuture_getKvStoreAreaSummary(
     std::unique_ptr<std::set<std::string>> selectAreas) {
   CHECK(kvStore_);
-  return kvStore_->getKvStoreAreaSummaryInternal(std::move(*selectAreas));
+  return kvStore_->semifuture_getKvStoreAreaSummaryInternal(
+      std::move(*selectAreas));
 }
 
 apache::thrift::ServerStream<thrift::Publication>

@@ -2139,32 +2139,28 @@ TEST_F(KvStoreTestFixture, FloodOptimizationWithBackwardCompatibility) {
   waitForAllPeersInitialized();
 
   // verify flooding peers to make sure flooding topology is good
-  auto fsw001SptInfos =
-      fsw001->getKvStore()->getSpanningTreeInfos(kTestingAreaName).get();
-  auto fsw002SptInfos =
-      fsw002->getKvStore()->getSpanningTreeInfos(kTestingAreaName).get();
-  auto rsw001SptInfos =
-      rsw001->getKvStore()->getSpanningTreeInfos(kTestingAreaName).get();
-  auto rsw002SptInfos =
-      rsw002->getKvStore()->getSpanningTreeInfos(kTestingAreaName).get();
+  const auto& fsw001SptInfos = fsw001->getFloodTopo(kTestingAreaName);
+  const auto& fsw002SptInfos = fsw002->getFloodTopo(kTestingAreaName);
+  const auto& rsw001SptInfos = rsw001->getFloodTopo(kTestingAreaName);
+  const auto& rsw002SptInfos = rsw002->getFloodTopo(kTestingAreaName);
 
   // Verify fsw001 -> [rsw001, rsw002]
-  auto& fsw001Peers = fsw001SptInfos->get_floodPeers();
+  auto& fsw001Peers = fsw001SptInfos.get_floodPeers();
   EXPECT_TRUE(fsw001Peers.count("rsw001"));
   EXPECT_TRUE(fsw001Peers.count("rsw002"));
 
   // Verify fsw002 -> [rsw001, rsw002]
-  auto& fsw002Peers = fsw002SptInfos->get_floodPeers();
+  auto& fsw002Peers = fsw002SptInfos.get_floodPeers();
   EXPECT_TRUE(fsw002Peers.count("rsw001"));
   EXPECT_TRUE(fsw002Peers.count("rsw002"));
 
   // Verify rsw001 -> [fsw001, fsw002]
-  auto& rsw001Peers = rsw001SptInfos->get_floodPeers();
+  auto& rsw001Peers = rsw001SptInfos.get_floodPeers();
   EXPECT_TRUE(rsw001Peers.count("fsw001"));
   EXPECT_TRUE(rsw001Peers.count("fsw002"));
 
   // Verify rsw002 -> [fsw001, fsw002]
-  auto& rsw002Peers = rsw002SptInfos->get_floodPeers();
+  auto& rsw002Peers = rsw002SptInfos.get_floodPeers();
   EXPECT_TRUE(rsw002Peers.count("fsw001"));
   EXPECT_TRUE(rsw002Peers.count("fsw002"));
 }

@@ -353,10 +353,10 @@ KvStore::processPeerUpdates(PeerEvent&& event) {
   for (const auto& [area, areaPeerEvent] : event) {
     // Event can contain peerAdd/peerDel simultaneously
     if (not areaPeerEvent.peersToAdd.empty()) {
-      addUpdateKvStorePeers(area, areaPeerEvent.peersToAdd).get();
+      semifuture_addUpdateKvStorePeers(area, areaPeerEvent.peersToAdd).get();
     }
     if (not areaPeerEvent.peersToDel.empty()) {
-      deleteKvStorePeers(area, areaPeerEvent.peersToDel).get();
+      semifuture_deleteKvStorePeers(area, areaPeerEvent.peersToDel).get();
     }
   }
 
@@ -406,13 +406,14 @@ KvStore::semifuture_getKvStoreKeyVals(
 }
 
 folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
-KvStore::dumpKvStoreSelfOriginatedKeys(std::string area) {
+KvStore::semifuture_dumpKvStoreSelfOriginatedKeys(std::string area) {
   folly::Promise<std::unique_ptr<SelfOriginatedKeyVals>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
     VLOG(3) << "Dump self originated key-vals for AREA: " << area;
     try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreSelfOriginatedKeys");
+      auto& kvStoreDb =
+          getAreaDbOrThrow(area, "semifuture_dumpKvStoreSelfOriginatedKeys");
       // track self origin key-val dump calls
       fb303::fbData->addStatValue(
           "kvstore.cmd_self_originated_key_dump", 1, fb303::COUNT);
@@ -498,7 +499,7 @@ KvStore::semifuture_dumpKvStoreKeys(
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStore::dumpKvStoreHashes(
+KvStore::semifuture_dumpKvStoreHashes(
     std::string area, thrift::KeyDumpParams keyDumpParams) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
   auto sf = p.getSemiFuture();
@@ -508,7 +509,7 @@ KvStore::dumpKvStoreHashes(
                         area]() mutable {
     VLOG(3) << "Dump all hashes requested for AREA: " << area;
     try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreHashes");
+      auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_dumpKvStoreHashes");
       fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
 
       std::set<std::string> originator{};
@@ -530,7 +531,7 @@ KvStore::dumpKvStoreHashes(
 }
 
 folly::SemiFuture<folly::Unit>
-KvStore::setKvStoreKeyVals(
+KvStore::semifuture_setKvStoreKeyVals(
     std::string area, thrift::KeySetParams keySetParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -552,14 +553,14 @@ KvStore::setKvStoreKeyVals(
 }
 
 folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
-KvStore::getKvStorePeerState(
+KvStore::semifuture_getKvStorePeerState(
     std::string const& area, std::string const& peerName) {
   folly::Promise<std::optional<thrift::KvStorePeerState>> promise;
   auto sf = promise.getSemiFuture();
   runInEventBaseThread(
       [this, p = std::move(promise), peerName, area]() mutable {
         try {
-          p.setValue(getAreaDbOrThrow(area, "getKvStorePeerState")
+          p.setValue(getAreaDbOrThrow(area, "semifuture_getKvStorePeerState")
                          .getCurrentState(peerName));
         } catch (thrift::OpenrError const& e) {
           p.setException(e);
@@ -569,14 +570,14 @@ KvStore::getKvStorePeerState(
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-KvStore::getKvStorePeers(std::string area) {
+KvStore::semifuture_getKvStorePeers(std::string area) {
   folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
     VLOG(2) << "Peer dump requested for AREA: " << area;
     try {
       p.setValue(std::make_unique<thrift::PeersMap>(
-          getAreaDbOrThrow(area, "getKvStorePeers").dumpPeers()));
+          getAreaDbOrThrow(area, "semifuture_getKvStorePeers").dumpPeers()));
       fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
     } catch (thrift::OpenrError const& e) {
       p.setException(e);
@@ -586,7 +587,8 @@ KvStore::getKvStorePeers(std::string area) {
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
-KvStore::getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas) {
+KvStore::semifuture_getKvStoreAreaSummaryInternal(
+    std::set<std::string> selectAreas) {
   folly::Promise<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -616,7 +618,8 @@ KvStore::getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas) {
 }
 
 folly::SemiFuture<folly::Unit>
-KvStore::addUpdateKvStorePeers(std::string area, thrift::PeersMap peersToAdd) {
+KvStore::semifuture_addUpdateKvStorePeers(
+    std::string area, thrift::PeersMap peersToAdd) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this,
@@ -629,7 +632,8 @@ KvStore::addUpdateKvStorePeers(std::string area, thrift::PeersMap peersToAdd) {
 
       LOG(INFO) << "Peer addition for: [" << folly::join(",", str)
                 << "] in area: " << area;
-      auto& kvStoreDb = getAreaDbOrThrow(area, "addUpdateKvStorePeers");
+      auto& kvStoreDb =
+          getAreaDbOrThrow(area, "semifuture_addUpdateKvStorePeers");
       if (peersToAdd.empty()) {
         p.setException(thrift::OpenrError(
             "Empty peerNames from peer-add request, ignoring"));
@@ -646,7 +650,7 @@ KvStore::addUpdateKvStorePeers(std::string area, thrift::PeersMap peersToAdd) {
 }
 
 folly::SemiFuture<folly::Unit>
-KvStore::deleteKvStorePeers(
+KvStore::semifuture_deleteKvStorePeers(
     std::string area, std::vector<std::string> peersToDel) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -657,7 +661,7 @@ KvStore::deleteKvStorePeers(
     LOG(INFO) << "Peer deletion for: [" << folly::join(",", peersToDel)
               << "] in area: " << area;
     try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "deleteKvStorePeers");
+      auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_deleteKvStorePeers");
       if (peersToDel.empty()) {
         p.setException(thrift::OpenrError(
             "Empty peerNames from peer-del request, ignoring"));
@@ -674,14 +678,14 @@ KvStore::deleteKvStorePeers(
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
-KvStore::getSpanningTreeInfos(std::string area) {
+KvStore::semifuture_getSpanningTreeInfos(std::string area) {
   folly::Promise<std::unique_ptr<thrift::SptInfos>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
     VLOG(3) << "FLOOD_TOPO_GET command requested for AREA: " << area;
     try {
       p.setValue(std::make_unique<thrift::SptInfos>(
-          getAreaDbOrThrow(area, "getSpanningTreeInfos")
+          getAreaDbOrThrow(area, "semifuture_getSpanningTreeInfos")
               .processFloodTopoGet()));
     } catch (thrift::OpenrError const& e) {
       p.setException(e);
@@ -691,7 +695,7 @@ KvStore::getSpanningTreeInfos(std::string area) {
 }
 
 folly::SemiFuture<folly::Unit>
-KvStore::updateFloodTopologyChild(
+KvStore::semifuture_updateFloodTopologyChild(
     std::string area, thrift::FloodTopoSetParams floodTopoSetParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -701,7 +705,7 @@ KvStore::updateFloodTopologyChild(
                         area]() mutable {
     VLOG(2) << "FLOOD_TOPO_SET command requested for AREA: " << area;
     try {
-      getAreaDbOrThrow(area, "updateFloodTopologyChild")
+      getAreaDbOrThrow(area, "semifuture_updateFloodTopologyChild")
           .processFloodTopoSet(std::move(floodTopoSetParams));
       p.setValue();
     } catch (thrift::OpenrError const& e) {
@@ -712,7 +716,7 @@ KvStore::updateFloodTopologyChild(
 }
 
 folly::SemiFuture<folly::Unit>
-KvStore::processKvStoreDualMessage(
+KvStore::semifuture_processKvStoreDualMessage(
     std::string area, thrift::DualMessages dualMessages) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -722,7 +726,8 @@ KvStore::processKvStoreDualMessage(
                         area]() mutable {
     VLOG(2) << "DUAL messages received for AREA: " << area;
     try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "processKvStoreDualMessage");
+      auto& kvStoreDb =
+          getAreaDbOrThrow(area, "semifuture_processKvStoreDualMessage");
       if (dualMessages.messages_ref()->empty()) {
         LOG(ERROR) << "Empty DUAL msg receved";
         p.setValue();
@@ -761,7 +766,7 @@ KvStore::initialKvStoreDbSynced() {
 }
 
 folly::SemiFuture<std::map<std::string, int64_t>>
-KvStore::getCounters() {
+KvStore::semifuture_getCounters() {
   auto pf = folly::makePromiseContract<std::map<std::string, int64_t>>();
   runInEventBaseThread([this, p = std::move(pf.first)]() mutable {
     p.setValue(getGlobalCounters());

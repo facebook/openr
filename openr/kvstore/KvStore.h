@@ -808,7 +808,7 @@ class KvStore final : public OpenrEventBase {
   semifuture_getKvStoreKeyVals(
       std::string area, thrift::KeyGetParams keyGetParams);
 
-  folly::SemiFuture<folly::Unit> setKvStoreKeyVals(
+  folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
@@ -817,9 +817,10 @@ class KvStore final : public OpenrEventBase {
       std::set<std::string> selectAreas = {});
 
   folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
-  dumpKvStoreSelfOriginatedKeys(std::string area);
+  semifuture_dumpKvStoreSelfOriginatedKeys(std::string area);
 
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>> dumpKvStoreHashes(
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_dumpKvStoreHashes(
       std::string area, thrift::KeyDumpParams keyDumpParams);
 
   /*
@@ -827,13 +828,13 @@ class KvStore final : public OpenrEventBase {
    *
    * Set of APIs to interact with KvStore peers
    */
-  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>> getKvStorePeers(
-      std::string area);
+  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
+  semifuture_getKvStorePeers(std::string area);
 
-  folly::SemiFuture<folly::Unit> addUpdateKvStorePeers(
+  folly::SemiFuture<folly::Unit> semifuture_addUpdateKvStorePeers(
       std::string area, thrift::PeersMap peersToAdd);
 
-  folly::SemiFuture<folly::Unit> deleteKvStorePeers(
+  folly::SemiFuture<folly::Unit> semifuture_deleteKvStorePeers(
       std::string area, std::vector<std::string> peersToDel);
 
   /*
@@ -841,13 +842,13 @@ class KvStore final : public OpenrEventBase {
    *
    * Set of APIs to interact with DUAL(flooding-optimization) related structure.
    */
-  folly::SemiFuture<std::unique_ptr<thrift::SptInfos>> getSpanningTreeInfos(
-      std::string area);
+  folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
+  semifuture_getSpanningTreeInfos(std::string area);
 
-  folly::SemiFuture<folly::Unit> updateFloodTopologyChild(
+  folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
       std::string area, thrift::FloodTopoSetParams floodTopoSetParams);
 
-  folly::SemiFuture<folly::Unit> processKvStoreDualMessage(
+  folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
       std::string area, thrift::DualMessages dualMessages);
 
   /*
@@ -856,16 +857,18 @@ class KvStore final : public OpenrEventBase {
    * Set of APIs to retrieve internal state including: state/counter/reader/etc.
    */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
-  getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
+  semifuture_getKvStoreAreaSummaryInternal(
+      std::set<std::string> selectAreas = {});
 
-  folly::SemiFuture<std::map<std::string, int64_t>> getCounters();
+  folly::SemiFuture<std::map<std::string, int64_t>> semifuture_getCounters();
 
   // API to get reader for kvStoreUpdatesQueue
   messaging::RQueue<Publication> getKvStoreUpdatesReader();
 
   // API to fetch state of peerNode, used for unit-testing
   folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
-  getKvStorePeerState(std::string const& area, std::string const& peerName);
+  semifuture_getKvStorePeerState(
+      std::string const& area, std::string const& peerName);
 
  private:
   // disable copying

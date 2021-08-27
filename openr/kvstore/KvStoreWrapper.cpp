@@ -101,7 +101,7 @@ KvStoreWrapper::setKey(
   params.nodeIds_ref().from_optional(std::move(nodeIds));
 
   try {
-    kvStore_->setKvStoreKeyVals(area, std::move(params)).get();
+    kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
   } catch (std::exception const& e) {
     LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
@@ -122,7 +122,7 @@ KvStoreWrapper::setKeys(
   }
 
   try {
-    kvStore_->setKvStoreKeyVals(area, std::move(params)).get();
+    kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
   } catch (std::exception const& e) {
     LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
@@ -200,13 +200,15 @@ KvStoreWrapper::dumpHashes(AreaId const& area, std::string const& prefix) {
   params.prefix_ref() = prefix;
   params.keys_ref() = {prefix};
 
-  auto pub = *(kvStore_->dumpKvStoreHashes(area, std::move(params)).get());
+  auto pub =
+      *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
   return *pub.keyVals_ref();
 }
 
 SelfOriginatedKeyVals
 KvStoreWrapper::dumpAllSelfOriginated(AreaId const& area) {
-  auto keyVals = *(kvStore_->dumpKvStoreSelfOriginatedKeys(area).get());
+  auto keyVals =
+      *(kvStore_->semifuture_dumpKvStoreSelfOriginatedKeys(area).get());
   return keyVals;
 }
 
@@ -254,7 +256,7 @@ KvStoreWrapper::recvSyncEvent() {
 
 thrift::SptInfos
 KvStoreWrapper::getFloodTopo(AreaId const& area) {
-  auto sptInfos = *(kvStore_->getSpanningTreeInfos(area).get());
+  auto sptInfos = *(kvStore_->semifuture_getSpanningTreeInfos(area).get());
   return sptInfos;
 }
 
@@ -268,7 +270,7 @@ KvStoreWrapper::addPeer(
 bool
 KvStoreWrapper::addPeers(AreaId const& area, thrift::PeersMap& peers) {
   try {
-    kvStore_->addUpdateKvStorePeers(area, peers).get();
+    kvStore_->semifuture_addUpdateKvStorePeers(area, peers).get();
   } catch (std::exception const& e) {
     LOG(ERROR) << "Failed to add peers: " << folly::exceptionStr(e);
     return false;
@@ -279,7 +281,7 @@ KvStoreWrapper::addPeers(AreaId const& area, thrift::PeersMap& peers) {
 bool
 KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
   try {
-    kvStore_->deleteKvStorePeers(area, {peerName}).get();
+    kvStore_->semifuture_deleteKvStorePeers(area, {peerName}).get();
   } catch (std::exception const& e) {
     LOG(ERROR) << "Failed to delete peers: " << folly::exceptionStr(e);
     return false;
@@ -289,18 +291,19 @@ KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
 
 std::optional<thrift::KvStorePeerState>
 KvStoreWrapper::getPeerState(AreaId const& area, std::string const& peerName) {
-  return kvStore_->getKvStorePeerState(area, peerName).get();
+  return kvStore_->semifuture_getKvStorePeerState(area, peerName).get();
 }
 
 std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper::getPeers(AreaId const& area) {
-  auto peers = *(kvStore_->getKvStorePeers(area).get());
+  auto peers = *(kvStore_->semifuture_getKvStorePeers(area).get());
   return peers;
 }
 
 std::vector<thrift::KvStoreAreaSummary>
 KvStoreWrapper::getSummary(std::set<std::string> selectAreas) {
-  return *(kvStore_->getKvStoreAreaSummaryInternal(selectAreas).get());
+  return *(
+      kvStore_->semifuture_getKvStoreAreaSummaryInternal(selectAreas).get());
 }
 
 } // namespace openr

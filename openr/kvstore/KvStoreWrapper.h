@@ -206,7 +206,7 @@ class KvStoreWrapper {
    */
   std::map<std::string, int64_t>
   getCounters() {
-    return kvStore_->getCounters().get();
+    return kvStore_->semifuture_getCounters().get();
   }
 
   KvStore*

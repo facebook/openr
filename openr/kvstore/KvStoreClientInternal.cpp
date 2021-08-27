@@ -928,7 +928,7 @@ KvStoreClientInternal::setKeysHelper(
   *params.keyVals_ref() = std::move(keyVals);
 
   try {
-    kvStore_->setKvStoreKeyVals(area, params).get();
+    kvStore_->semifuture_setKvStoreKeyVals(area, params).get();
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to set key-val from KvStore. Exception: "
                << ex.what();
