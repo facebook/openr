@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
@@ -138,10 +139,10 @@ SpfSolver::updateStaticUnicastRoutes(
   for (const auto& [prefix, ribUnicastEntry] : unicastRoutesToUpdate) {
     staticUnicastRoutes_.insert_or_assign(prefix, ribUnicastEntry);
 
-    VLOG(1) << "> " << folly::IPAddress::networkToString(prefix)
-            << ", NextHopsCount = " << ribUnicastEntry.nexthops.size();
+    XLOG(DBG1) << "> " << folly::IPAddress::networkToString(prefix)
+               << ", NextHopsCount = " << ribUnicastEntry.nexthops.size();
     for (auto const& nh : ribUnicastEntry.nexthops) {
-      VLOG(2) << " via " << toString(nh);
+      XLOG(DBG2) << " via " << toString(nh);
     }
   }
 
@@ -152,7 +153,7 @@ SpfSolver::updateStaticUnicastRoutes(
     // mark unicast entry to be deleted
     staticUnicastRoutes_.erase(prefix);
 
-    VLOG(1) << "> " << folly::IPAddress::networkToString(prefix);
+    XLOG(DBG1) << "> " << folly::IPAddress::networkToString(prefix);
   }
 }
 
@@ -167,10 +168,10 @@ SpfSolver::updateStaticMplsRoutes(
   for (const auto& [label, mplsRoute] : mplsRoutesToUpdate) {
     staticMplsRoutes_.insert_or_assign(label, mplsRoute);
 
-    VLOG(1) << "> " << label
-            << ", NextHopsCount = " << mplsRoute.nexthops.size();
+    XLOG(DBG1) << "> " << label
+               << ", NextHopsCount = " << mplsRoute.nexthops.size();
     for (auto const& nh : mplsRoute.nexthops) {
-      VLOG(2) << " via " << toString(nh);
+      XLOG(DBG2) << " via " << toString(nh);
     }
   }
 
@@ -179,7 +180,7 @@ SpfSolver::updateStaticMplsRoutes(
   for (const auto& topLabel : mplsRoutesToDelete) {
     staticMplsRoutes_.erase(topLabel);
 
-    VLOG(1) << "> " << std::to_string(topLabel);
+    XLOG(DBG1) << "> " << std::to_string(topLabel);
   }
 }
 
@@ -511,8 +512,8 @@ SpfSolver::buildRouteDb(
         const auto& nodeName = *adjDb.thisNodeName_ref();
         // Top label is not set => Non-SR mode
         if (topLabel == 0) {
-          LOG(INFO) << "Ignoring node label " << topLabel << " of node "
-                    << nodeName << " in area " << area;
+          XLOG(INFO) << "Ignoring node label " << topLabel << " of node "
+                     << nodeName << " in area " << area;
           fb303::fbData->addStatValue(
               "decision.skipped_mpls_route", 1, fb303::COUNT);
           continue;
@@ -532,9 +533,9 @@ SpfSolver::buildRouteDb(
         // the node label of bigger node-ID
         auto iter = labelToNode.find(topLabel);
         if (iter != labelToNode.end()) {
-          LOG(INFO) << "Found duplicate label " << topLabel << "from "
-                    << iter->second.first << " " << nodeName << " in area "
-                    << area;
+          XLOG(INFO) << "Found duplicate label " << topLabel << "from "
+                     << iter->second.first << " " << nodeName << " in area "
+                     << area;
           fb303::fbData->addStatValue(
               "decision.duplicate_node_label", 1, fb303::COUNT);
           if (iter->second.first < nodeName) {
@@ -643,7 +644,7 @@ SpfSolver::buildRouteDb(
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";
+  XLOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";
   fb303::fbData->addStatValue(
       "decision.route_build_ms", deltaTime.count(), fb303::AVG);
   return routeDb;
@@ -1057,7 +1058,7 @@ SpfSolver::generatePrependLabel(
           linkState.getAdjacencyDatabases().at(node).nodeLabel_ref().value()) {
         auto nodeLabel =
             linkState.getAdjacencyDatabases().at(node).nodeLabel_ref().value();
-        VLOG(2) << fmt::format(
+        XLOG(DBG2) << fmt::format(
             "Node: {}, prefix: {}, prependLabel: {} (node segment label).",
             myNodeName,
             folly::IPAddress::networkToString(prefix),

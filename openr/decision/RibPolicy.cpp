@@ -9,6 +9,7 @@
 
 #include <fb303/ServiceData.h>
 #include <folly/MapUtil.h>
+#include <folly/logging/xlog.h>
 
 namespace openr {
 
@@ -243,8 +244,8 @@ RibPolicy::applyPolicy(std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
     if (applyAction(iter->second)) {
       DCHECK(iter->second.nexthops.size()) << "Unexpected empty next-hops";
       change.updatedRoutes.push_back(iter->second.prefix);
-      VLOG(2) << "RibPolicy transformed the route "
-              << folly::IPAddress::networkToString(iter->second.prefix);
+      XLOG(DBG2) << "RibPolicy transformed the route "
+                 << folly::IPAddress::networkToString(iter->second.prefix);
     }
     ++iter;
   }

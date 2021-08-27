@@ -7,6 +7,7 @@
 
 #include "openr/decision/PrefixState.h"
 
+#include <folly/logging/xlog.h>
 #include <openr/common/Util.h>
 
 namespace openr {
@@ -36,9 +37,10 @@ PrefixState::updatePrefix(
   }
   changed.insert(key.getCIDRNetwork());
 
-  VLOG(1) << "[ROUTE ADVERTISEMENT] "
-          << "Area: " << key.getPrefixArea() << ", Node: " << key.getNodeName()
-          << ", " << toString(entry, VLOG_IS_ON(1));
+  XLOG(DBG1) << "[ROUTE ADVERTISEMENT] "
+             << "Area: " << key.getPrefixArea()
+             << ", Node: " << key.getNodeName() << ", "
+             << toString(entry, VLOG_IS_ON(1));
   return changed;
 }
 
@@ -49,17 +51,17 @@ PrefixState::deletePrefix(PrefixKey const& key) {
   if (key.isPrefixKeyV2()) {
     prefixKeyV2_.erase(key);
     if (prefixKey_.count(key)) {
-      LOG(INFO) << "Skip withdrawing v2 format prefix: "
-                << folly::IPAddress::networkToString(key.getCIDRNetwork())
-                << " since same key with v1 format received.";
+      XLOG(INFO) << "Skip withdrawing v2 format prefix: "
+                 << folly::IPAddress::networkToString(key.getCIDRNetwork())
+                 << " since same key with v1 format received.";
       return changed;
     }
   } else {
     prefixKey_.erase(key);
     if (prefixKeyV2_.count(key)) {
-      LOG(INFO) << "Skip withdrawing v1 format prefix: "
-                << folly::IPAddress::networkToString(key.getCIDRNetwork())
-                << " since same key with v2 format received.";
+      XLOG(INFO) << "Skip withdrawing v1 format prefix: "
+                 << folly::IPAddress::networkToString(key.getCIDRNetwork())
+                 << " since same key with v2 format received.";
       return changed;
     }
   }
@@ -68,10 +70,10 @@ PrefixState::deletePrefix(PrefixKey const& key) {
   if (search != prefixes_.end() and
       search->second.erase(key.getNodeAndArea())) {
     changed.insert(key.getCIDRNetwork());
-    VLOG(1) << "[ROUTE WITHDRAW] "
-            << "Area: " << key.getPrefixArea()
-            << ", Node: " << key.getNodeName() << ", "
-            << folly::IPAddress::networkToString(key.getCIDRNetwork());
+    XLOG(DBG1) << "[ROUTE WITHDRAW] "
+               << "Area: " << key.getPrefixArea()
+               << ", Node: " << key.getNodeName() << ", "
+               << folly::IPAddress::networkToString(key.getCIDRNetwork());
     // clean up data structures
     if (search->second.empty()) {
       prefixes_.erase(search);

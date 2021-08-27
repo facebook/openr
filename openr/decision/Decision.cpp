@@ -17,6 +17,7 @@
 #include <folly/Optional.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
+#include <folly/logging/xlog.h>
 #ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif
@@ -157,12 +158,12 @@ Decision::Decision(
 
   // Add reader to process publication from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
-    LOG(INFO) << "Starting KvStore updates processing fiber";
+    XLOG(INFO) << "Starting KvStore updates processing fiber";
     while (true) {
       auto maybePub = q.get(); // perform read
-      VLOG(2) << "Received KvStore update";
+      XLOG(DBG2) << "Received KvStore update";
       if (maybePub.hasError()) {
-        LOG(INFO) << "Terminating KvStore updates processing fiber";
+        XLOG(INFO) << "Terminating KvStore updates processing fiber";
         break;
       }
       try {
@@ -203,12 +204,12 @@ Decision::Decision(
   // Add reader to process static routes publication from prefix-manager
   addFiberTask(
       [q = std::move(staticRouteUpdatesQueue), this]() mutable noexcept {
-        LOG(INFO) << "Starting static routes update processing fiber";
+        XLOG(INFO) << "Starting static routes update processing fiber";
         while (true) {
           auto maybeThriftPub = q.get(); // perform read
-          VLOG(2) << "Received static routes update";
+          XLOG(DBG2) << "Received static routes update";
           if (maybeThriftPub.hasError()) {
-            LOG(INFO) << "Terminating static routes update processing fiber";
+            XLOG(INFO) << "Terminating static routes update processing fiber";
             break;
           }
           processStaticRoutesUpdate(std::move(maybeThriftPub).value());
@@ -365,8 +366,8 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
         }
 
         // Update local policy instance
-        LOG(INFO) << "Updating RibPolicy with new instance. Validity "
-                  << durationLeft.count() << "ms";
+        XLOG(INFO) << "Updating RibPolicy with new instance. Validity "
+                   << durationLeft.count() << "ms";
         ribPolicy_ = std::move(ribPolicy);
 
         // Schedule timer for processing routes on expiry
@@ -459,8 +460,9 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
         // re-origintaed by me to areas that do not have the best prefix entry
         if (prefixDb.get_thisNodeName() == myNodeName_ &&
             areaStack.size() > 0 && areaLinkStates_.count(areaStack.back())) {
-          VLOG(2) << "Ignore self redistributed route reflection for prefix: "
-                  << key << " area_stack: " << folly::join(",", areaStack);
+          XLOG(DBG2)
+              << "Ignore self redistributed route reflection for prefix: "
+              << key << " area_stack: " << folly::join(",", areaStack);
           continue;
         }
 
@@ -562,15 +564,15 @@ Decision::rebuildRoutes(std::string const& event) {
   }
 
   pendingUpdates_.addEvent(event);
-  VLOG(1) << "Decision: processing " << pendingUpdates_.getCount()
-          << " accumulated updates. " << event;
+  XLOG(DBG1) << "Decision: processing " << pendingUpdates_.getCount()
+             << " accumulated updates. " << event;
   if (pendingUpdates_.perfEvents()) {
     if (auto expectedDuration = getDurationBetweenPerfEvents(
             *pendingUpdates_.perfEvents(),
             "DECISION_RECEIVED",
             "DECISION_DEBOUNCE")) {
-      VLOG(2) << "Debounced " << pendingUpdates_.getCount() << " events over "
-              << expectedDuration->count() << "ms.";
+      XLOG(DBG2) << "Debounced " << pendingUpdates_.getCount()
+                 << " events over " << expectedDuration->count() << "ms.";
     }
   }
 

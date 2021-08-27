@@ -11,6 +11,7 @@
 
 #include <fb303/ServiceData.h>
 #include <folly/Format.h>
+#include <folly/logging/xlog.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/decision/LinkState.h>
 
@@ -567,8 +568,8 @@ LinkState::updateAdjacencyDatabase(
     LinkStateMetric holdDownTtl) {
   LinkStateChange change;
   auto const& nodeName = *newAdjacencyDb.thisNodeName_ref();
-  VLOG(1) << "Updating adjacency database for node " << nodeName << ", area "
-          << *newAdjacencyDb.area_ref();
+  XLOG(DBG1) << "Updating adjacency database for node " << nodeName << ", area "
+             << *newAdjacencyDb.area_ref();
 
   // Area field must be specified and match with area_
   DCHECK_EQ(area_, *newAdjacencyDb.area_ref());
@@ -617,7 +618,7 @@ LinkState::updateAdjacencyDatabase(
       // and check for holds when running spf. this ensures we don't add the
       // same hold twice
       addLink(*newIter);
-      VLOG(1) << "[LINK UP]" << (*newIter)->toString();
+      XLOG(DBG1) << "[LINK UP]" << (*newIter)->toString();
       ++newIter;
       continue;
     }
@@ -629,7 +630,7 @@ LinkState::updateAdjacencyDatabase(
       // change the topology.
       change.topologyChanged |= (*oldIter)->isUp();
       removeLink(*oldIter);
-      VLOG(1) << "[LINK DOWN] " << (*oldIter)->toString();
+      XLOG(DBG1) << "[LINK DOWN] " << (*oldIter)->toString();
       ++oldIter;
       continue;
     }
@@ -642,7 +643,7 @@ LinkState::updateAdjacencyDatabase(
     // change the metric on the link object we already have
     if (newLink.getMetricFromNode(nodeName) !=
         oldLink.getMetricFromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
+      XLOG(DBG1) << folly::sformat(
           "[LINK UPDATE] Metric change on link {}, {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getMetricFromNode(nodeName),
@@ -656,7 +657,7 @@ LinkState::updateAdjacencyDatabase(
 
     if (newLink.getOverloadFromNode(nodeName) !=
         oldLink.getOverloadFromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
+      XLOG(DBG1) << folly::sformat(
           "[LINK UPDATE] Overload change on link {}: {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getOverloadFromNode(nodeName),
@@ -671,7 +672,7 @@ LinkState::updateAdjacencyDatabase(
     // Check if adjacency label has changed
     if (newLink.getAdjLabelFromNode(nodeName) !=
         oldLink.getAdjLabelFromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
+      XLOG(DBG1) << folly::sformat(
           "[LINK UPDATE] AdjLabel change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getAdjLabelFromNode(nodeName),
@@ -687,7 +688,7 @@ LinkState::updateAdjacencyDatabase(
     // check if local nextHops Changed
     if (newLink.getNhV4FromNode(nodeName) !=
         oldLink.getNhV4FromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
+      XLOG(DBG1) << folly::sformat(
           "[LINK UPDATE] V4-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV4FromNode(nodeName)),
@@ -698,7 +699,7 @@ LinkState::updateAdjacencyDatabase(
     }
     if (newLink.getNhV6FromNode(nodeName) !=
         oldLink.getNhV6FromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
+      XLOG(DBG1) << folly::sformat(
           "[LINK UPDATE] V6-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV6FromNode(nodeName)),
@@ -720,7 +721,7 @@ LinkState::updateAdjacencyDatabase(
 LinkState::LinkStateChange
 LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
   LinkStateChange change;
-  VLOG(1) << "Deleting adjacency database for node " << nodeName;
+  XLOG(DBG1) << "Deleting adjacency database for node " << nodeName;
   auto search = adjacencyDatabases_.find(nodeName);
 
   if (search != adjacencyDatabases_.end()) {
