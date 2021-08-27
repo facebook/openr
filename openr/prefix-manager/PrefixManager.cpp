@@ -693,8 +693,6 @@ PrefixManager::syncKvStore() {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
       // Delete prefixes that do not exist in prefixMap_.
-      XLOG(DBG1) << "Deleting keys for "
-                 << folly::IPAddress::networkToString(prefix);
       deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
       advertisedPrefixes_.erase(prefix);
       ++syncedPrefixCnt;
