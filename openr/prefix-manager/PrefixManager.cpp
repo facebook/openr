@@ -152,6 +152,11 @@ PrefixManager::PrefixManager(
 
       switch (update.eventType) {
       case PrefixEventType::ADD_PREFIXES: {
+        XLOGF(
+            DBG1,
+            "[Prefix Event] Announcing {} prefixes to areas: {}",
+            update.prefixes.size() + update.prefixEntries.size(),
+            folly::join(",", dstAreas));
         advertisePrefixesImpl(std::move(update.prefixes), dstAreas);
         advertisePrefixesImpl(
             std::move(std::move(update.prefixEntries)),
@@ -171,10 +176,19 @@ PrefixManager::PrefixManager(
         break;
       }
       case PrefixEventType::WITHDRAW_PREFIXES:
+        XLOGF(
+            DBG1,
+            "[Prefix Event] Withdrawing {} prefixes from areas: {}",
+            update.prefixes.size() + update.prefixEntries.size(),
+            folly::join(",", dstAreas));
         withdrawPrefixesImpl(update.prefixes);
         withdrawPrefixEntriesImpl(update.prefixEntries);
         break;
       case PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE:
+        XLOGF(
+            DBG1,
+            "[Prefix Event] Withdrawing all prefix with type {} from all areas",
+            apache::thrift::util::enumNameSafe(update.type));
         withdrawPrefixesByTypeImpl(update.type);
         break;
       case PrefixEventType::SYNC_PREFIXES_BY_TYPE:
@@ -1568,6 +1582,11 @@ resetNonTransitiveAttrs(thrift::PrefixEntry& prefixEntry) {
 void
 PrefixManager::redistributePrefixesAcrossAreas(
     DecisionRouteUpdate& fibRouteUpdate) {
+  XLOGF(
+      DBG1,
+      "Processing FibRouteUpdate: {} announcements, {} withdrawals",
+      fibRouteUpdate.unicastRoutesToUpdate.size(),
+      fibRouteUpdate.unicastRoutesToDelete.size());
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
 
