@@ -371,6 +371,8 @@ struct ThriftServerConfig {
   9: optional string ticket_seed_path;
   /** Verify type for client when enabling secure server. */
   10: optional VerifyClientType verify_client_type;
+  /** Knob to enable/disable non-default VRF thrift server. */
+  11: optional bool enable_non_default_vrf_thrift_server;
 }
 
 struct ThriftClientConfig {
