@@ -496,14 +496,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
   EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
   EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
 
-  unordered_map<
-      pair<string /* node name */, string /* ip prefix */>,
-      thrift::UnicastRoute>
-      routeMap;
-
-  vector<string> allNodes = {"1", "2"};
-
-  for (string const& node : allNodes) {
+  for (string const& node : {"1", "2"}) {
     auto routeDb = spfSolver.buildRouteDb(node, areaLinkStates, prefixState);
     ASSERT_TRUE(routeDb.has_value());
     EXPECT_EQ(0, routeDb->unicastRoutes.size());

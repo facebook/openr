@@ -1018,7 +1018,10 @@ SpfSolver::addBestPaths(
     }
   }
 
-  auto prependLabel = routeComputationRules.prependLabelRules_ref().has_value()
+  auto prependLabel =
+      (routeComputationRules.prependLabelRules_ref().has_value() and
+       // check if segment routing is enabled
+       enableNodeSegmentLabel_)
       ? generatePrependLabel(
             myNodeName,
             areaLinkStates,
