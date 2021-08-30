@@ -295,22 +295,22 @@ class SetKeyValueRequest {
       const uint32_t version = 0)
       : area(area), key(key), value(value), version(version) {}
 
-  inline AreaId
+  inline AreaId const&
   getArea() const {
     return area;
   }
 
-  inline std::string
+  inline std::string const&
   getKey() const {
     return key;
   }
 
-  inline std::string
+  inline std::string const&
   getValue() const {
     return value;
   }
 
-  inline uint32_t
+  inline uint32_t const&
   getVersion() const {
     return version;
   }
@@ -350,17 +350,17 @@ class PersistKeyValueRequest {
       const AreaId& area, const std::string& key, const std::string& value)
       : area(area), key(key), value(value) {}
 
-  inline AreaId
+  inline AreaId const&
   getArea() const {
     return area;
   }
 
-  inline std::string
+  inline std::string const&
   getKey() const {
     return key;
   }
 
-  inline std::string
+  inline std::string const&
   getValue() const {
     return value;
   }
@@ -399,22 +399,22 @@ class ClearKeyValueRequest {
         << "Must specify value in ClearKeyValueRequest when setValue flag is set to true.";
   }
 
-  inline AreaId
+  inline AreaId const&
   getArea() const {
     return area;
   }
 
-  inline std::string
+  inline std::string const&
   getKey() const {
     return key;
   }
 
-  inline std::string
+  inline std::string const&
   getValue() const {
     return value;
   }
 
-  inline bool
+  inline bool const&
   getSetValue() const {
     return setValue;
   }
