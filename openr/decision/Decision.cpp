@@ -436,8 +436,10 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
             rawVal.value_ref().value(), serializer_);
         auto& nodeName = adjacencyDb.get_thisNodeName();
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
+        // TODO: can we directly use area in AdjacencyDatabase?
         adjacencyDb.area_ref() = area;
 
+        // TODO: Is this useful?
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyLinkStateChange(
             nodeName,
@@ -448,13 +450,20 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
         // prefixDb: update keys starting with "prefix:"
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
+
+        // We expect per prefix key, ignore if publication is still in old
+        // format.
         if (1 != prefixDb.get_prefixEntries().size()) {
-          LOG(ERROR) << "Expecting exactly one entry per prefix key";
+          LOG(ERROR)
+              << "Expecting exactly one entry per prefix key, publication received from "
+              << *prefixDb.thisNodeName_ref();
           fb303::fbData->addStatValue("decision.error", 1, fb303::COUNT);
           continue;
         }
+
         auto const& entry = prefixDb.get_prefixEntries().front();
         auto const& areaStack = entry.get_area_stack();
+
         // Ignore self redistributed route reflection
         // These routes are programmed by Decision,
         // re-origintaed by me to areas that do not have the best prefix entry
@@ -473,6 +482,7 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
             area,
             PrefixKey::isPrefixKeyV2Str(key));
 
+        // TODO: Is this useful?
         fb303::fbData->addStatValue(
             "decision.prefix_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyPrefixStateChange(
