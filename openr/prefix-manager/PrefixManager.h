@@ -86,6 +86,8 @@ class PrefixManager final : public OpenrEventBase {
       // producer queue
       messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>&
+          prefixMgrRouteUpdatesQueue,
       // consumer queue
       messaging::RQueue<Publication> kvStoreUpdatesQueue,
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
@@ -285,7 +287,9 @@ class PrefixManager final : public OpenrEventBase {
 
   // Delete KvStore keys of one prefix entry.
   void deletePrefixKeysInKvStore(
-      const folly::CIDRNetwork& prefix, DecisionRouteUpdate& routeUpdatesOut);
+      const folly::CIDRNetwork& prefix,
+      DecisionRouteUpdate& routeUpdatesForDecision,
+      DecisionRouteUpdate& routeUpdatesForBgp);
 
   // Delete KvStore keys form the areas for one prefix entry.
   void deleteKvStoreKeyHelper(
@@ -299,12 +303,15 @@ class PrefixManager final : public OpenrEventBase {
   void populateRouteUpdates(
       const folly::CIDRNetwork& prefix,
       const PrefixEntry& prefixEntry,
-      DecisionRouteUpdate& routeUpdatesOut);
+      DecisionRouteUpdate& routeUpdatesForDecision,
+      DecisionRouteUpdate& routeUpdatesForBgp);
   /*
    * [Route Origination/Aggregation]
    *
    * Methods implement utility function for route origination/aggregation.
    */
+
+  thrift::NextHopThrift getLocalNextHop(const folly::CIDRNetwork& network);
 
   /*
    * Read routes from OpenrConfig and stored in `OriginatedPrefixDb_`
@@ -378,6 +385,9 @@ class PrefixManager final : public OpenrEventBase {
 
   // queue to send key-value update requests to KvStore
   messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
+
+  // Queue to publish prefix updates to bgprib
+  messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue_;
 
   // V4 prefix over V6 nexthop enabled
   const bool v4OverV6Nexthop_{false};

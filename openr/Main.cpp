@@ -239,6 +239,7 @@ main(int argc, char** argv) {
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
   ReplicateQueue<KeyValueRequest> kvRequestQueue;
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
@@ -389,6 +390,7 @@ main(int argc, char** argv) {
       std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           kvRequestQueue,
+          prefixMgrRouteUpdatesQueue,
           PrefixManagerKvStoreUpdatesReader,
           prefixUpdatesQueue.getReader("prefixManager"),
           std::move(routeUpdatesQueueReader),
@@ -493,9 +495,7 @@ main(int argc, char** argv) {
   auto pluginArgs = PluginArgs{
       prefixUpdatesQueue,
       staticRouteUpdatesQueue,
-      (config->getConfig().get_enable_fib_ack()
-           ? fibRouteUpdatesQueue.getReader("pluginRouteUpdates")
-           : routeUpdatesQueue.getReader("pluginRouteUpdates")),
+      prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates"),
       config,
       sslContext};
   if (config->isBgpPeeringEnabled()) {

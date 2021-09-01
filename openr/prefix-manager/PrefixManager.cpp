@@ -33,6 +33,7 @@ namespace fb303 = facebook::fb303;
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+    messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue,
     messaging::RQueue<Publication> kvStoreUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
@@ -44,6 +45,7 @@ PrefixManager::PrefixManager(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvRequestQueue_(kvRequestQueue),
+      prefixMgrRouteUpdatesQueue_(prefixMgrRouteUpdatesQueue),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       kvStore_(kvStore),
       preferOpenrOriginatedRoutes_(
@@ -380,15 +382,11 @@ PrefixManager::buildOriginatedPrefixDb(
     const std::vector<thrift::OriginatedPrefix>& prefixes) {
   for (const auto& prefix : prefixes) {
     auto network = folly::IPAddress::createNetwork(*prefix.prefix_ref());
-    auto nh = network.first.isV4() and not v4OverV6Nexthop_
-        ? Constants::kLocalRouteNexthopV4.toString()
-        : Constants::kLocalRouteNexthopV6.toString();
-
     auto entry = toPrefixEntryThrift(prefix, thrift::PrefixType::CONFIG);
 
     // Populate RibUnicastEntry struct
     // ATTN: AREA field is empty for NHs
-    RibUnicastEntry unicastEntry(network, {createNextHop(toBinaryAddress(nh))});
+    RibUnicastEntry unicastEntry(network, {getLocalNextHop(network)});
     unicastEntry.bestPrefixEntry = std::move(entry);
 
     // ATTN: upon initialization, no supporting routes
@@ -399,6 +397,15 @@ PrefixManager::buildOriginatedPrefixDb(
             std::move(unicastEntry),
             std::unordered_set<folly::CIDRNetwork>{}));
   }
+}
+
+thrift::NextHopThrift
+PrefixManager::getLocalNextHop(const folly::CIDRNetwork& network) {
+  auto nh = network.first.isV4() and not v4OverV6Nexthop_
+      ? Constants::kLocalRouteNexthopV4.toString()
+      : Constants::kLocalRouteNexthopV6.toString();
+
+  return createNextHop(toBinaryAddress(nh));
 }
 
 void
@@ -432,7 +439,8 @@ void
 PrefixManager::populateRouteUpdates(
     const folly::CIDRNetwork& prefix,
     const PrefixEntry& prefixEntry,
-    DecisionRouteUpdate& routeUpdatesOut) {
+    DecisionRouteUpdate& routeUpdatesForDecision,
+    DecisionRouteUpdate& routeUpdatesForBgp) {
   // Propogate route update to Decision (if necessary)
   auto& advertisedStatus = keysInKvStore_[prefix];
   if (prefixEntry.shouldInstall()) {
@@ -442,12 +450,22 @@ PrefixManager::populateRouteUpdates(
     // if shouldInstall() is true, nexthops is guaranteed to have value.
     RibUnicastEntry unicastEntry(prefix, prefixEntry.nexthops.value());
     unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
-    routeUpdatesOut.addRouteToUpdate(std::move(unicastEntry));
+    routeUpdatesForDecision.addRouteToUpdate(std::move(unicastEntry));
   } else {
+    // shouldInstall() is false, need to send to bgprib here
+    // When shouldInstall() is true, prefix will be sent to bgprib after
+    // fib installs
+
+    // Do not reflect back the prefixes just learned from BGP Rib
+    if (thrift::PrefixType::BGP != prefixEntry.tPrefixEntry->get_type()) {
+      RibUnicastEntry unicastEntry(prefix, {getLocalNextHop(prefix)});
+      unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
+      routeUpdatesForBgp.addRouteToUpdate(std::move(unicastEntry));
+    }
     // If was installed to fib, but now lose in tie break, withdraw from
     // fib.
     if (advertisedStatus.installedToFib) {
-      routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
+      routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
       advertisedStatus.installedToFib = false;
     }
   } // else
@@ -529,7 +547,9 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
 
 void
 PrefixManager::deletePrefixKeysInKvStore(
-    const folly::CIDRNetwork& prefix, DecisionRouteUpdate& routeUpdatesOut) {
+    const folly::CIDRNetwork& prefix,
+    DecisionRouteUpdate& routeUpdatesForDecision,
+    DecisionRouteUpdate& routeUpdatesForBgp) {
   // delete actual keys being advertised in the cache
   //
   // Sample format:
@@ -540,7 +560,9 @@ PrefixManager::deletePrefixKeysInKvStore(
   if (keysIt != keysInKvStore_.end()) {
     deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
     if (keysIt->second.installedToFib) {
-      routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
+      routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
+    } else {
+      routeUpdatesForBgp.unicastRoutesToDelete.emplace_back(prefix);
     }
     keysInKvStore_.erase(keysIt);
   }
@@ -683,7 +705,8 @@ void
 PrefixManager::syncKvStore() {
   XLOG(DBG1) << "[KvStore Sync] Syncing " << pendingUpdates_.size()
              << " pending updates.";
-  DecisionRouteUpdate routeUpdatesOut;
+  DecisionRouteUpdate routeUpdatesForDecision;
+  DecisionRouteUpdate routeUpdatesForBgp;
   size_t receivedPrefixCnt = 0;
   size_t syncedPrefixCnt = 0;
   size_t awaitingPrefixCnt = 0;
@@ -693,7 +716,8 @@ PrefixManager::syncKvStore() {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
       // Delete prefixes that do not exist in prefixMap_.
-      deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
+      deletePrefixKeysInKvStore(
+          prefix, routeUpdatesForDecision, routeUpdatesForBgp);
       advertisedPrefixes_.erase(prefix);
       ++syncedPrefixCnt;
     }
@@ -714,7 +738,8 @@ PrefixManager::syncKvStore() {
         ((hasPrefixUpdate or haslabelUpdate) and readyToBeAdvertised);
     // Get route updates from updated prefix entry.
     if (hasPrefixUpdate) {
-      populateRouteUpdates(prefix, bestEntry, routeUpdatesOut);
+      populateRouteUpdates(
+          prefix, bestEntry, routeUpdatesForDecision, routeUpdatesForBgp);
     }
     if (needToAdvertise) {
       XLOG(DBG1) << fmt::format(
@@ -740,7 +765,8 @@ PrefixManager::syncKvStore() {
       XLOG(DBG1) << fmt::format(
           "Deleting advertised keys for {}",
           folly::IPAddress::networkToString(prefix));
-      deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
+      deletePrefixKeysInKvStore(
+          prefix, routeUpdatesForDecision, routeUpdatesForBgp);
       advertisedPrefixes_.erase(prefix);
       ++syncedPrefixCnt;
     }
@@ -750,10 +776,19 @@ PrefixManager::syncKvStore() {
   pendingUpdates_.clear();
 
   // Push originatedRoutes update to staticRouteUpdatesQueue_.
-  if (not routeUpdatesOut.empty()) {
-    CHECK(routeUpdatesOut.mplsRoutesToUpdate.empty());
-    CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
-    staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
+  if (not routeUpdatesForDecision.empty()) {
+    CHECK(routeUpdatesForDecision.mplsRoutesToUpdate.empty());
+    CHECK(routeUpdatesForDecision.mplsRoutesToDelete.empty());
+    staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
+  }
+
+  // Push originatedRoutes that does not go through fib to
+  // prefixMgrRouteUpdatesQueue_. Note: the routes that do go through fib will
+  // be pushed to this queue once fib finishes installing
+  if (not routeUpdatesForBgp.empty()) {
+    CHECK(routeUpdatesForBgp.mplsRoutesToUpdate.empty());
+    CHECK(routeUpdatesForBgp.mplsRoutesToDelete.empty());
+    prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
   }
 
   XLOG(DBG1) << fmt::format(
@@ -1585,6 +1620,9 @@ PrefixManager::redistributePrefixesAcrossAreas(
       "Processing FibRouteUpdate: {} announcements, {} withdrawals",
       fibRouteUpdate.unicastRoutesToUpdate.size(),
       fibRouteUpdate.unicastRoutesToDelete.size());
+  // Forward to bgprib
+  prefixMgrRouteUpdatesQueue_.push(fibRouteUpdate);
+
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
 
