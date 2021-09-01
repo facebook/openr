@@ -38,6 +38,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Flags.h>
+#include <openr/common/OpenrThriftCtrlServer.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
@@ -461,12 +462,6 @@ main(int argc, char** argv) {
   // Acceptable SSL peer names
   std::unordered_set<std::string> acceptableNamesSet; // empty set by default
 
-  // OpenrCtrl thrift server
-  auto thriftCtrlServer = std::make_unique<apache::thrift::ThriftServer>();
-  // Set the port and interface for OpenrCtrl thrift server
-  thriftCtrlServer->setPort(
-      config->getThriftServerConfig().get_openr_ctrl_port());
-
   if (config->isSecureThriftServerEnabled()) {
     sslContext = std::make_shared<wangle::SSLContextConfig>();
     sslContext->setCertificate(
@@ -482,13 +477,6 @@ main(int argc, char** argv) {
     std::vector<std::string> acceptableNames;
     folly::split(",", config->getSSLAcceptablePeers(), acceptableNames, true);
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
-
-    // Start OpenrCtrl thrift server
-    setupThriftServerTls(
-        *thriftCtrlServer,
-        config->getSSLThriftPolicy(),
-        config->getSSLSeedPath(),
-        sslContext);
   }
 
   // Create bgp speaker module
@@ -558,30 +546,9 @@ main(int argc, char** argv) {
   startEventBase(
       allThreads, orderedEvbs, watchdog, "ctrl_evb", std::move(ctrlOpenrEvb));
 
-  CHECK(ctrlHandler);
-  thriftCtrlServer->setInterface(ctrlHandler);
-  thriftCtrlServer->setNumIOWorkerThreads(1);
-  // Intentionally kept this as (1). If you're changing to higher number please
-  // address thread safety for private member variables in OpenrCtrlHandler
-  thriftCtrlServer->setNumCPUWorkerThreads(1);
-  // Enable TOS reflection on the server socket
-  thriftCtrlServer->setTosReflect(true);
-
-  // serve
-  std::thread thriftCtrlServerThread([&thriftCtrlServer]() noexcept {
-    LOG(INFO) << "Starting ThriftCtrlServer thread ...";
-    folly::setThreadName("openr-ThriftCtrlServer");
-    thriftCtrlServer->serve();
-    LOG(INFO) << "ThriftCtrlServer thread got stopped.";
-  });
-  // Wait until thrift server starts
-  while (true) {
-    auto evb = thriftCtrlServer->getServeEventBase();
-    if (evb != nullptr and evb->isRunning()) {
-      break;
-    }
-    std::this_thread::yield();
-  }
+  // Start the thrift server
+  auto thriftCtrlServer = std::make_unique<OpenrThriftCtrlServer>();
+  thriftCtrlServer->start(config, ctrlHandler, sslContext);
 
   // Wait for main eventbase to stop
   mainEvbThread.join();
@@ -602,9 +569,7 @@ main(int argc, char** argv) {
 
   // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
   thriftCtrlServer->stop();
-  thriftCtrlServerThread.join();
   thriftCtrlServer.reset();
-
   // Destroy ctrlHandler
   CHECK(ctrlHandler.unique()) << "Unexpected ownership of ctrlHandler pointer";
   ctrlHandler.reset();

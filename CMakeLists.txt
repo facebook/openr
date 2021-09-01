@@ -192,6 +192,7 @@ add_library(openrlib
   openr/common/ExponentialBackoff.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
+  openr/common/OpenrThriftCtrlServer.cpp
   openr/common/PrependLabelAllocator.cpp
   openr/common/Types.cpp
   openr/common/Util.cpp
