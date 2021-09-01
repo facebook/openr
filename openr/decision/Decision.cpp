@@ -410,10 +410,11 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   CHECK(not thriftPub.area_ref()->empty());
   auto const& area = *thriftPub.area_ref();
 
-  if (!areaLinkStates_.count(area)) {
-    areaLinkStates_.emplace(area, area);
+  auto it = areaLinkStates_.find(area);
+  if (it == areaLinkStates_.end()) {
+    it = areaLinkStates_.emplace(area, area).first;
   }
-  auto& areaLinkState = areaLinkStates_.at(area);
+  auto& areaLinkState = it->second;
 
   // Nothing to process if no adj/prefix db changes
   if (thriftPub.keyVals_ref()->empty() and
