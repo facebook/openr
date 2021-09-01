@@ -443,7 +443,7 @@ PrefixManager::populateRouteUpdates(
     DecisionRouteUpdate& routeUpdatesForBgp) {
   // Propogate route update to Decision (if necessary)
   auto& advertisedStatus = keysInKvStore_[prefix];
-  if (prefixEntry.shouldInstall()) {
+  if (prefixEntry.shouldInstall) {
     advertisedStatus.installedToFib = true;
     // Populate RibUnicastEntry struct
     // ATTN: AREA field is empty for NHs
@@ -458,7 +458,12 @@ PrefixManager::populateRouteUpdates(
 
     // Do not reflect back the prefixes just learned from BGP Rib
     if (thrift::PrefixType::BGP != prefixEntry.tPrefixEntry->get_type()) {
-      RibUnicastEntry unicastEntry(prefix, {getLocalNextHop(prefix)});
+      RibUnicastEntry unicastEntry;
+      if (prefixEntry.nexthops.has_value()) {
+        unicastEntry = RibUnicastEntry(prefix, prefixEntry.nexthops.value());
+      } else {
+        unicastEntry = RibUnicastEntry(prefix, {getLocalNextHop(prefix)});
+      }
       unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
       routeUpdatesForBgp.addRouteToUpdate(std::move(unicastEntry));
     }
@@ -641,7 +646,7 @@ PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   // If nexthops is set in prefixEntry, it implicitly indicates that the
   // associated unicast routes should be programmed before the prefix is
   // advertised.
-  if (prefixEntry.nexthops.has_value()) {
+  if (prefixEntry.shouldInstall) {
     if (programmedPrefixes_.count(prefixEntry.network) == 0) {
       return false;
     }
@@ -669,7 +674,8 @@ PrefixManager::applyOriginationPolicy(
       postOriginationPrefixes.emplace_back(
           std::move(postPolicyTPrefixEntry),
           std::move(dstAreasCp),
-          std::move(prefix.nexthops));
+          std::move(prefix.nexthops),
+          prefix.shouldInstall);
     } else {
       XLOG(DBG1) << fmt::format(
           "Not processing prefixes {} : denied by origination policy {}",
@@ -1512,16 +1518,18 @@ PrefixManager::processOriginatedPrefixes() {
   for (auto& [network, route] : originatedPrefixDb_) {
     if (route.shouldAdvertise()) {
       route.isAdvertised = true; // mark as advertised
+      bool shouldInstall =
+          route.originatedPrefix.install_to_fib_ref().has_value() and
+          *route.originatedPrefix.install_to_fib_ref();
       advertisedPrefixes.emplace_back(
           std::make_shared<thrift::PrefixEntry>(
               route.unicastEntry.bestPrefixEntry),
-          allAreaIds());
-      if (route.originatedPrefix.install_to_fib_ref().has_value() &&
-          *route.originatedPrefix.install_to_fib_ref()) {
-        advertisedPrefixes.back().nexthops = route.unicastEntry.nexthops;
-      }
+          allAreaIds(),
+          route.unicastEntry.nexthops,
+          shouldInstall);
       XLOG(INFO) << "[Route Origination] Advertising originated route "
-                 << folly::IPAddress::networkToString(network);
+                 << folly::IPAddress::networkToString(network)
+                 << " install to fib: " << shouldInstall;
     }
 
     if (route.shouldWithdraw()) {

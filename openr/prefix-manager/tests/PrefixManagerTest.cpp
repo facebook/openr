@@ -1037,6 +1037,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   nexthops.insert(createNextHop(toBinaryAddress("::1")));
   nexthops.insert(createNextHop(toBinaryAddress("::2")));
   cPrefixEntry.nexthops = nexthops;
+  cPrefixEntry.shouldInstall = true;
 
   // ADD_PREFIXES
   {
