@@ -30,7 +30,7 @@ struct VipServiceConfig {
   * ttl is set by each injector
   * min_ttl_s indicates the lowerbound of a valid ttl
   */
-  4: i32 min_ttl_s = 60;
+  4: i32 min_ttl_s = 1;
   /**
   * upperbound of a valid ttl in vip_service
   */
