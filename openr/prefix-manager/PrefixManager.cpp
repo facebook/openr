@@ -61,7 +61,9 @@ PrefixManager::PrefixManager(
   if (config->getConfig().get_enable_bgp_peering()) {
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::BGP);
   }
-  // TODO: Handle VIP after VipInjector supports GR.
+  if (config->isVipServiceEnabled()) {
+    uninitializedPrefixTypes_.emplace(thrift::PrefixType::VIP);
+  }
 
   if (auto policyConf = config->getAreaPolicies()) {
     policyManager_ = std::make_unique<PolicyManager>(*policyConf);

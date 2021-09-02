@@ -3544,10 +3544,20 @@ class PrefixManagerInitialKvStoreSyncTestFixture
     auto tConfig = getBasicOpenrConfig(nodeId_);
     tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.enable_fib_ack_ref() = true;
+    tConfig.enable_initialization_process_ref() = true;
+    return tConfig;
+  }
+};
+
+class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
+    : public PrefixManagerInitialKvStoreSyncTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = PrefixManagerInitialKvStoreSyncTestFixture::createConfig();
     // Enable BGP peering.
     tConfig.enable_bgp_peering_ref() = true;
     tConfig.bgp_config_ref() = thrift::BgpConfig();
-    tConfig.enable_initialization_process_ref() = true;
     return tConfig;
   }
 };
@@ -3556,7 +3566,9 @@ class PrefixManagerInitialKvStoreSyncTestFixture
  * Verifies that in OpenR initialization procedure, initial syncKvStore() is
  * triggered after all dependent signals are received.
  */
-TEST_F(PrefixManagerInitialKvStoreSyncTestFixture, TriggerInitialKvStoreTest) {
+TEST_F(
+    PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
+    TriggerInitialKvStoreTest) {
   int scheduleAt{0};
   auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
 
@@ -3608,6 +3620,83 @@ TEST_F(PrefixManagerInitialKvStoreSyncTestFixture, TriggerInitialKvStoreTest) {
         // prefix updates are received.
         auto pub = kvStoreWrapper->recvPublication();
         EXPECT_EQ(2, pub.keyVals_ref()->size());
+        evb.stop();
+      });
+  // let magic happen
+  evb.run();
+}
+
+class PrefixManagerInitialKvStoreSyncVipEnabledTestFixture
+    : public PrefixManagerInitialKvStoreSyncTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = PrefixManagerInitialKvStoreSyncTestFixture::createConfig();
+    // Enable Vip service.
+    tConfig.enable_vip_service_ref() = true;
+    tConfig.vip_service_config_ref() = vipconfig::config::VipServiceConfig();
+    return tConfig;
+  }
+};
+
+/**
+ * Verifies that in OpenR initialization procedure, initial syncKvStore() is
+ * triggered after all dependent signals are received.
+ */
+TEST_F(
+    PrefixManagerInitialKvStoreSyncVipEnabledTestFixture,
+    TriggerInitialKvStoreTest) {
+  int scheduleAt{0};
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
+
+  auto prefixKey = PrefixKey(
+      nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix_ref()), kTestingAreaName);
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // Initial prefix updates from VipRouteManager
+        PrefixEvent vipPrefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::VIP,
+            {prefixEntry9});
+        prefixUpdatesQueue.push(std::move(vipPrefixEvent));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // No pprefixes advertised into KvStore.
+        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+
+        // Initial full Fib sync.
+        DecisionRouteUpdate fullSyncUpdates;
+        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+        fullSyncUpdates.mplsRoutesToUpdate = {
+            {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // No pprefixes advertised into KvStore.
+        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+
+        // Publish initial kvStoreSynced signal.
+        kvStoreWrapper->publishKvStoreSynced();
+        kvStoreWrapper->recvKvStoreSyncedSignal();
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // Initial KvStore sync happens after initial full Fib updates and all
+        // prefix updates are received.
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
         evb.stop();
       });
   // let magic happen
