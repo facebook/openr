@@ -263,6 +263,8 @@ main(int argc, char** argv) {
       kvStoreUpdatesQueue.getReader("decision");
   auto PrefixManagerKvStoreUpdatesReader =
       kvStoreUpdatesQueue.getReader("prefixManager");
+  auto pluginRouteReader =
+      prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates");
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -483,7 +485,7 @@ main(int argc, char** argv) {
   auto pluginArgs = PluginArgs{
       prefixUpdatesQueue,
       staticRouteUpdatesQueue,
-      prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates"),
+      pluginRouteReader,
       config,
       sslContext};
   if (config->isBgpPeeringEnabled()) {
