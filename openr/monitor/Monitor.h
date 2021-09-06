@@ -28,6 +28,9 @@ class Monitor : public MonitorBase {
 
   // Get the heap profile
   void dumpHeapProfile() override;
+
+  // Status of Heap Profiling tool
+  bool isHeapProfilingActive_ = false;
 };
 
 } // namespace openr
