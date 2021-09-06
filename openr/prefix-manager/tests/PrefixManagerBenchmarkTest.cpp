@@ -41,7 +41,6 @@ class PrefixManagerBenchmarkTestFixture {
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
         kvRequestQueue_,
-        prefixMgrRouteUpdatesQueue_,
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
@@ -56,8 +55,6 @@ class PrefixManagerBenchmarkTestFixture {
   ~PrefixManagerBenchmarkTestFixture() {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
-    prefixMgrRouteUpdatesQueue_.close();
-
     fibRouteUpdatesQueue_.close();
     kvRequestQueue_.close();
     kvStoreWrapper_->closeQueue();
@@ -141,7 +138,6 @@ class PrefixManagerBenchmarkTestFixture {
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
-  messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 
