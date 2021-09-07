@@ -1,7 +1,0 @@
-{
-  "options": {
-    "parser": "markdown",
-    "proseWrap": "always",
-    "requirePragma": false
-  }
-}
