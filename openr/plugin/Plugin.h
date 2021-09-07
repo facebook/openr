@@ -29,6 +29,7 @@ struct PluginArgs {
 };
 
 struct VipPluginArgs {
+  folly::EventBase* vipRouteEvb;
   messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue;
   std::shared_ptr<const Config> config;
   std::shared_ptr<wangle::SSLContextConfig> sslContext;

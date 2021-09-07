@@ -491,9 +491,17 @@ main(int argc, char** argv) {
   }
 
   // Create vip service module
-  auto vipPluginArgs = VipPluginArgs{prefixUpdatesQueue, config, sslContext};
+  auto vipRouteEvb = std::make_unique<OpenrEventBase>();
+  auto vipPluginArgs = VipPluginArgs{
+      vipRouteEvb->getEvb(), prefixUpdatesQueue, config, sslContext};
   if (config->isVipServiceEnabled()) {
     vipPluginStart(vipPluginArgs);
+    startEventBase(
+        allThreads,
+        orderedEvbs,
+        watchdog,
+        "vipRouteManager",
+        std::move(vipRouteEvb));
   }
 
   // Wait for the above three modules to start and run before running
