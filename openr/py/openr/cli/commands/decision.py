@@ -527,13 +527,11 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         params = openr_types.KeyDumpParams(Consts.ALL_DB_MARKER)
         params.keys = [Consts.ALL_DB_MARKER]
         if area_id is None:
-            kvstore_keyvals = client.getKvStoreKeyValsFiltered(params).keyVals
+            kvstore_publication = client.getKvStoreKeyValsFiltered(params)
         else:
-            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(
-                params, area_id
-            ).keyVals
+            kvstore_publication = client.getKvStoreKeyValsFilteredArea(params, area_id)
 
-        return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
+        return (decision_adj_dbs, decision_prefix_dbs, kvstore_publication.keyVals)
 
     def print_db_delta_adj(
         self,
