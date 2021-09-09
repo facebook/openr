@@ -5,8 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import sys
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence
 
 import bunch
 import click
@@ -148,12 +147,19 @@ class DecisionAdjCli:
 class DecisionValidateCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.option("--area", default=None, help="area identifier")
+    @click.argument("areas", nargs=-1)
     @click.pass_obj
-    def validate(cli_opts, json, area):  # noqa: B902
+    @click.pass_context
+    def validate(
+        ctx: click.Context,  # noqa: B902
+        cli_opts: bunch.Bunch,
+        json: bool,
+        areas: Sequence[str],
+    ) -> None:
         """
         Check all prefix & adj dbs in Decision against that in KvStore
 
+        TODO: Fix json to be combined for all areas ...
         If --json is provided, returns database diffs in the following format.
         "neighbor_down" is a list of nodes not in the inspected node's dump that were expected,
         "neighbor_up" is a list of unexpected nodes in inspected node's dump,
@@ -180,8 +186,7 @@ class DecisionValidateCli:
             }
         """
 
-        return_code = decision.DecisionValidateCmd(cli_opts).run(json, area)
-        sys.exit(return_code)
+        ctx.exit(decision.DecisionValidateCmd(cli_opts).run(json, areas))
 
 
 class DecisionRibPolicyCli:

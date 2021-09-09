@@ -8,7 +8,7 @@
 import ipaddress
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Sequence, Tuple
 
 import click
 from openr.cli.utils import utils
@@ -453,74 +453,96 @@ class PathCmd(OpenrCtrlCmd):
 
 class DecisionValidateCmd(OpenrCtrlCmd):
     def _run(
-        self, client: OpenrCtrl.Client, json=False, area: str = "", *args, **kwargs
+        self,
+        client: OpenrCtrl.Client,
+        json: bool = False,
+        areas: Sequence[str] = (),
+        *args: Any,
+        **kwargs: Any,
     ) -> int:
-        """Returns a status code. 0 = success, 1 = failure"""
-        (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
-            client, area
-        )
+        """Returns a status code. 0 = success, >= 1 failure"""
+        if not areas:
+            areas_summary = client.getKvStoreAreaSummary(set())
+            areas = tuple(a.area for a in areas_summary)
 
-        kvstore_adj_node_names = set()
-        kvstore_prefix_node_names = set()
+        errors = 0
+        for area in sorted(areas):
+            click.secho(f"> Area: {area}", bold=True)
+            (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
+                client, area
+            )
 
-        for key, value in sorted(kvstore_keyvals.items()):
-            if key.startswith(Consts.ADJ_DB_MARKER):
-                return_code = self.print_db_delta_adj(
-                    key, value, kvstore_adj_node_names, decision_adj_dbs, json
-                )
-                if return_code != 0:
-                    return return_code
+            kvstore_adj_node_names = set()
+            kvstore_prefix_node_names = set()
 
-        return_code = self.print_db_delta_prefix(
-            kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
-        )
-        if return_code != 0:
-            return return_code
+            for key, value in sorted(kvstore_keyvals.items()):
+                if key.startswith(Consts.ADJ_DB_MARKER):
+                    return_code = self.print_db_delta_adj(
+                        key, value, kvstore_adj_node_names, decision_adj_dbs, json
+                    )
+                    if return_code:
+                        errors += return_code
+                        continue
 
-        decision_adj_node_names = {
-            node
-            for node in decision_adj_dbs.keys()
-            if decision_adj_dbs[node].adjacencies
-        }
-        decision_prefix_node_names = set(decision_prefix_dbs.keys())
+            return_code, decision_prefix_node_names = self.print_db_delta_prefix(
+                kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
+            )
+            if return_code:
+                errors += return_code
+                continue
 
-        adjValidateRet = self.print_db_diff(
-            decision_adj_node_names,
-            kvstore_adj_node_names,
-            ["Decision", "KvStore"],
-            "adj",
-            json,
-        )
+            decision_adj_node_names = {db.thisNodeName for db in decision_adj_dbs}
 
-        prefixValidateRet = self.print_db_diff(
-            decision_prefix_node_names,
-            kvstore_prefix_node_names,
-            ["Decision", "KvStore"],
-            "prefix",
-            json,
-        )
+            errors += self.print_db_diff(
+                decision_adj_node_names,
+                kvstore_adj_node_names,
+                ["Decision", "KvStore"],
+                "adj",
+                json,
+            )
 
-        return adjValidateRet or prefixValidateRet
+            errors += self.print_db_diff(
+                decision_prefix_node_names,
+                kvstore_prefix_node_names,
+                ["Decision", "KvStore"],
+                "prefix",
+                json,
+            )
 
-    def get_dbs(self, client: OpenrCtrl.Client, area: str) -> Tuple[Dict, Dict, Dict]:
+        return errors
+
+    def get_dbs(
+        self, client: OpenrCtrl.Client, area: str
+    ) -> Tuple[
+        List[openr_types.AdjacencyDatabase], List[ctrl_types.ReceivedRouteDetail], Dict
+    ]:
         # get LSDB from Decision
-        decision_adj_dbs = client.getDecisionAdjacencyDbs()
-        decision_prefix_dbs = client.getDecisionPrefixDbs()
+        adj_filter = ctrl_types.AdjacenciesFilter({area})
+        decision_adj_dbs = client.getDecisionAdjacenciesFiltered(adj_filter)
+        route_filter = ctrl_types.ReceivedRouteFilter(areaName=area)
+        decision_prefix_dbs = client.getReceivedRoutesFiltered(route_filter)
 
-        area = utils.get_area_id(client, area)
+        area_id = utils.get_area_id(client, area)
         # get LSDB from KvStore
         params = openr_types.KeyDumpParams(Consts.ALL_DB_MARKER)
         params.keys = [Consts.ALL_DB_MARKER]
-        if area is None:
+        if area_id is None:
             kvstore_keyvals = client.getKvStoreKeyValsFiltered(params).keyVals
         else:
-            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(params, area).keyVals
+            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(
+                params, area_id
+            ).keyVals
 
         return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
 
     def print_db_delta_adj(
-        self, key, value, kvstore_adj_node_names, decision_adj_dbs, json
-    ):
+        self,
+        key: str,
+        value: Any,
+        kvstore_adj_node_names: Set,
+        decision_adj_dbs: Sequence[openr_types.AdjacencyDatabase],
+        json: bool,
+    ) -> int:
         """Returns status code. 0 = success, 1 = failure"""
 
         kvstore_adj_db = deserialize_thrift_object(
@@ -528,14 +550,18 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         )
         node_name = kvstore_adj_db.thisNodeName
         kvstore_adj_node_names.add(node_name)
-        if node_name not in decision_adj_dbs:
+        if node_name not in {db.thisNodeName for db in decision_adj_dbs}:
             print(
                 printing.render_vertical_table(
-                    [["node {}'s adj db is missing in Decision".format(node_name)]]
+                    [[f"node {node_name}'s adj db is missing in Decision"]]
                 )
             )
             return 1
-        decision_adj_db = decision_adj_dbs[node_name]
+
+        decision_adj_db = openr_types.AdjacencyDatabase()
+        for db in decision_adj_dbs:
+            if db.thisNodeName == node_name:
+                decision_adj_db = db
 
         return_code = 0
         if json:
@@ -555,8 +581,8 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                     printing.render_vertical_table(
                         [
                             [
-                                "node {}'s adj db in Decision out of sync with "
-                                "KvStore's".format(node_name)
+                                f"node {node_name}'s adj db in Decision out of "
+                                "sync with KvStore's"
                             ]
                         ]
                     )
@@ -567,31 +593,32 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         return return_code
 
     def print_db_delta_prefix(
-        self, kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
-    ):
+        self,
+        kvstore_keyvals: Dict,
+        kvstore_prefix_node_names: Set,
+        decision_prefix_dbs: Sequence[ctrl_types.ReceivedRouteDetail],
+        json: bool,
+    ) -> Tuple[int, Set[str]]:
         """Returns status code. 0 = success, 1 = failure"""
 
         prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
+        decision_prefix_nodes = set()
+        for received_route_detail in decision_prefix_dbs:
+            for node_and_area in received_route_detail.bestKeys:
+                decision_prefix_nodes.add(node_and_area.node)
 
         for node_name, prefix_db in prefix_maps.items():
             kvstore_prefix_node_names.add(node_name)
-            if node_name not in decision_prefix_dbs:
+            if node_name not in decision_prefix_nodes:
                 print(
                     printing.render_vertical_table(
-                        [
-                            [
-                                "node {}'s prefix db is missing in Decision".format(
-                                    node_name
-                                )
-                            ]
-                        ]
+                        [[f"node {node_name}'s prefix db is missing in Decision"]]
                     )
                 )
-                return 1
-            decision_prefix_db = decision_prefix_dbs[node_name]
-            decision_prefix_set = {}
+                return 1, decision_prefix_nodes
 
-            utils.update_global_prefix_db(decision_prefix_set, decision_prefix_db)
+            decision_prefix_set = {}
+            utils.update_global_prefix_db(decision_prefix_set, prefix_db)
             lines = utils.sprint_prefixes_db_delta(decision_prefix_set, prefix_db)
             if lines:
                 print(
@@ -605,13 +632,13 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                     )
                 )
                 print("\n".join(lines))
-                return 1
-        return 0
+                return 1, decision_prefix_nodes
+        return 0, decision_prefix_nodes
 
     def print_db_diff(
         self,
-        nodes_set_a: set,
-        nodes_set_b: set,
+        nodes_set_a: Set,
+        nodes_set_b: Set,
         db_sources: List[str],
         db_type: str,
         json: bool,

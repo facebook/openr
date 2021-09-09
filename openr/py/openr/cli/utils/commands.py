@@ -33,7 +33,7 @@ class OpenrCtrlCmd:
         )
         self._config = None
 
-    def run(self, *args, **kwargs) -> Optional[int]:
+    def run(self, *args, **kwargs) -> int:
         """
         run method that invokes _run with client and arguments
         """

@@ -427,21 +427,20 @@ class FibSnoopCmd(OpenrCtrlCmd):
             )
 
     # @override
-    def run(self, *args, **kwargs) -> None:
+    def run(self, *args, **kwargs) -> int:
         """
         Override run method to create py3 client for streaming.
         """
 
-        async def _wrapper():
+        async def _wrapper() -> int:
             client_type = ClientType.THRIFT_ROCKET_CLIENT_TYPE
             async with get_openr_ctrl_cpp_client(
                 self.host, self.cli_opts, client_type=client_type
             ) as client:
                 await self._run(client, *args, **kwargs)
+            return 0
 
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(_wrapper())
-        loop.close()
+        return asyncio.run(_wrapper())
 
     async def _run(
         self,

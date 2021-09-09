@@ -935,7 +935,11 @@ def print_route_db(
         )
 
 
-def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
+def find_adj_list_deltas(
+    old_adj_list: Optional[Sequence[openr_types.Adjacency]],
+    new_adj_list: Optional[Sequence[openr_types.Adjacency]],
+    tags: Optional[Sequence[str]] = None,
+) -> List:
     """given the old adj list and the new one for some node, return
     change list.
 
@@ -951,6 +955,11 @@ def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
     """
     if not tags:
         tags = ("NEIGHBOR_DOWN", "NEIGHBOR_UP", "NEIGHBOR_UPDATE")
+
+    if old_adj_list is None:
+        old_adj_list = set()
+    if new_adj_list is None:
+        new_adj_list = set()
 
     old_neighbors = {(a.otherNodeName, a.ifName) for a in old_adj_list}
     new_neighbors = {(a.otherNodeName, a.ifName) for a in new_adj_list}
@@ -1113,7 +1122,9 @@ def sprint_pub_update(global_publication_db, key, value):
 
 
 def update_global_prefix_db(
-    global_prefix_db: Dict, prefix_db: Dict, key: Optional[str] = None
+    global_prefix_db: Dict,
+    prefix_db: openr_types.PrefixDatabase,
+    key: Optional[str] = None,
 ):
     """update the global prefix map with a single publication
 
@@ -1199,7 +1210,7 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
 
 def sprint_prefixes_db_delta(
     global_prefixes_db: Dict,
-    prefix_db: Dict,
+    prefix_db: openr_types.PrefixDatabase,
     key: Optional[str] = None,
 ):
     """given serialzied prefixes for a single node, output the delta
@@ -1215,7 +1226,6 @@ def sprint_prefixes_db_delta(
     :return [str]: the array of prefix strings
     """
 
-    # pyre-fixme[16]: `Dict` has no attribute `thisNodeName`.
     this_node_name = prefix_db.thisNodeName
     prev_prefixes = global_prefixes_db.get(this_node_name, set())
 
@@ -1223,13 +1233,11 @@ def sprint_prefixes_db_delta(
     removed_prefixes = set()
     cur_prefixes = set()
 
-    # pyre-fixme[16]: `Dict` has no attribute `prefixEntries`.
     for prefix_entry in prefix_db.prefixEntries:
         cur_prefixes.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
     # per prefix key format contains only one key, it can be an 'add' or 'delete'
     if key and re.match(Consts.PER_PREFIX_KEY_REGEX, key):
-        # pyre-fixme[16]: `Dict` has no attribute `deletePrefix`.
         if prefix_db.deletePrefix:
             removed_prefixes = cur_prefixes
         else:
