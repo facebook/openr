@@ -13,9 +13,6 @@
 #include <openr/tests/mocks/PrefixGenerator.h>
 
 namespace detail {
-
-// interval for periodic sync
-const std::chrono::seconds kDbSyncIntervalOverride(10000);
 // Prefix length of a subnet
 static const uint8_t kBitMaskLen = 128;
 
@@ -29,8 +26,6 @@ class PrefixManagerBenchmarkTestFixture {
     // construct basic `OpenrConfig`
     auto tConfig = getBasicOpenrConfig(nodeId);
     tConfig.enable_kvstore_request_queue_ref() = true;
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() =
-        ::detail::kDbSyncIntervalOverride.count();
     config_ = std::make_shared<Config>(tConfig);
 
     // spawn `KvStore` and `PrefixManager` for benchmarking
@@ -164,7 +159,10 @@ generatePrefixEntries(uint32_t num, PrefixGenerator& prefixGenerator) {
 }
 
 /*
- * Benchmark test for advertisePrefixes:
+ * Benchmark test for Prefix Advertisement: The time measured includes prefix
+ * manager processing time and kvstore processing time.
+ *   - from prefixes arrived in prefix manager
+ *   - to the prefix gets announced into the network by kvstore through
  * Test setup:
  *  - Generate `numOfExistingPrefixes` and inject them into KvStore
  * Benchmark:
@@ -206,7 +204,8 @@ BM_PrefixManagerAdvertisePrefixes(
 }
 
 /*
- * Benchmark test for witndrawPrefixes:
+ * Benchmark test for Prefix Withdrawals: The time measured includes prefix
+ * manager processing time and kvstore processing time.
  * Test setup:
  *  - Generate `numOfExistingPrefixes` and inject them into `KvStore`
  * Benchmark:
@@ -249,8 +248,208 @@ BM_PrefixManagerWithdrawPrefixes(
 }
 
 /*
+ * Benchmark test for prefixes flap: The time measured includes prefix
+ * manager processing time and kvstore processing time.
+ * Test setup:
+ *  - Generate `numOfExistingPrefixes` and inject them into KvStore
+ * Benchmark:
+ *  - iteration 1.1: Prefix Manager process `numOfFlappedPrefixes` announcement
+ * (includes KvStore process persistKey request and announce it)
+ *  - iteration 1.2: Prefix Manager process `numOfFlappedPrefixes` withdrawals
+ * from previous injected prefixes (includes KvStore time)
+ *  - iteration 2,3 are the same as iteration 1
+ */
+static void
+BM_PrefixManagerPrefixFlap(
+    uint32_t iters,
+    uint32_t numOfExistingPrefixes,
+    uint32_t numOfFlappedPrefixes) {
+  // Spawn suspender object to NOT calculating setup time into benchmark
+  auto suspender = folly::BenchmarkSuspender();
+
+  const std::string nodeId{"node-1"};
+  auto testFixture =
+      std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId);
+  auto prefixMgr = testFixture->getPrefixManager();
+
+  // Generate `numOfExistingPrefixes` and make sure `KvStore` is updated
+  auto prefixes = generatePrefixEntries(
+      numOfExistingPrefixes, testFixture->getPrefixGenerator());
+  prefixMgr->advertisePrefixes(std::move(prefixes)).get();
+
+  // Verify pre-existing prefixes inside `KvStore`
+  testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
+
+  // Generate `numOfUpdatedPrefixes`
+  auto prefixesToAdvertise = generatePrefixEntries(
+      numOfFlappedPrefixes, testFixture->getPrefixGenerator());
+  auto prefixesToWithdraw = prefixesToAdvertise;
+
+  for (uint32_t i = 0; i < iters; ++i) {
+    //
+    // itertion 1.1: advertise `numOfFlappedPrefixes`
+    //
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+    auto start = std::chrono::steady_clock::now();
+
+    // advertise prefixes into `KvStore` and make sure update received
+    prefixMgr->advertisePrefixes(prefixesToAdvertise).get();
+    testFixture->checkThriftPublication(numOfFlappedPrefixes, false);
+
+    auto finish = std::chrono::steady_clock::now();
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    float advertiseBaseline =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
+    LOG(INFO) << "First iteration: advertised " << numOfFlappedPrefixes
+              << " prefixes in " << advertiseBaseline << "ms";
+
+    //
+    // itertion 1.2: withdraw `numOfFlappedPrefixes`
+    //
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+    start = std::chrono::steady_clock::now();
+
+    // withdraw prefixes from `KvStore` and make sure update received
+    prefixMgr->withdrawPrefixes(prefixesToWithdraw).get();
+    testFixture->checkThriftPublication(numOfFlappedPrefixes, true);
+
+    finish = std::chrono::steady_clock::now();
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    float withdrawBaseline =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
+    LOG(INFO) << "First iteration: withdrawn " << numOfFlappedPrefixes
+              << " prefixes in " << withdrawBaseline << "ms";
+    //
+    // itertion 2.1: advertise `numOfFlappedPrefixes`
+    //
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+    start = std::chrono::steady_clock::now();
+
+    // advertise prefixes into `KvStore` and make sure update received
+    prefixMgr->advertisePrefixes(prefixesToAdvertise).get();
+    testFixture->checkThriftPublication(numOfFlappedPrefixes, false);
+
+    finish = std::chrono::steady_clock::now();
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    auto advertiseDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
+    LOG(INFO) << "Second iteration: advertised " << numOfFlappedPrefixes
+              << " prefixes in " << advertiseDuration << "ms";
+    float diffPercentage =
+        (advertiseDuration - advertiseBaseline) / advertiseBaseline * 100;
+    if (diffPercentage > 0 && diffPercentage > 50) {
+      LOG(ERROR)
+          << "Found regression in second iteration, advertisement increased by "
+          << diffPercentage << "%";
+    }
+
+    //
+    // itertion 2.2: withdraw `numOfFlappedPrefixes`
+    //
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+    start = std::chrono::steady_clock::now();
+
+    // withdraw prefixes from `KvStore` and make sure update received
+    prefixMgr->withdrawPrefixes(prefixesToWithdraw).get();
+    testFixture->checkThriftPublication(numOfFlappedPrefixes, true);
+
+    finish = std::chrono::steady_clock::now();
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    auto withdrawDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
+    LOG(INFO) << "Second iteration: withdrawn " << numOfFlappedPrefixes
+              << " prefixes in " << withdrawDuration << "ms";
+    diffPercentage =
+        (withdrawDuration - withdrawBaseline) / withdrawBaseline * 100;
+    if (diffPercentage > 0 && diffPercentage > 50) {
+      LOG(ERROR)
+          << "Found regression in second iteration, withdrawn increased by "
+          << diffPercentage << "%";
+    }
+
+    //
+    // itertion 3.1: advertise `numOfFlappedPrefixes`
+    //
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+    start = std::chrono::steady_clock::now();
+
+    // advertise prefixes into `KvStore` and make sure update received
+    prefixMgr->advertisePrefixes(prefixesToAdvertise).get();
+    testFixture->checkThriftPublication(numOfFlappedPrefixes, false);
+
+    finish = std::chrono::steady_clock::now();
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    advertiseDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
+    LOG(INFO) << "Third iteration: advertised " << numOfFlappedPrefixes
+              << " prefixes in " << advertiseDuration << "ms";
+    diffPercentage =
+        (advertiseDuration - advertiseBaseline) / advertiseBaseline * 100;
+    if (diffPercentage > 0 && diffPercentage > 50) {
+      LOG(ERROR)
+          << "Found regression in third iteration, advertisement increased by "
+          << diffPercentage << "%";
+    }
+
+    //
+    // itertion 3.2: withdraw `numOfFlappedPrefixes`
+    //
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+    start = std::chrono::steady_clock::now();
+
+    // withdraw prefixes from `KvStore` and make sure update received
+    prefixMgr->withdrawPrefixes(prefixesToWithdraw).get();
+    testFixture->checkThriftPublication(numOfFlappedPrefixes, true);
+
+    finish = std::chrono::steady_clock::now();
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    withdrawDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
+    LOG(INFO) << "Third iteration: withdrawn " << numOfFlappedPrefixes
+              << " prefixes in " << withdrawDuration << "ms";
+    diffPercentage =
+        (withdrawDuration - withdrawBaseline) / withdrawBaseline * 100;
+    if (diffPercentage > 0 && diffPercentage > 50) {
+      LOG(ERROR)
+          << "Found regression in third iteration, withdrawn increased by "
+          << diffPercentage << "%";
+    }
+  }
+}
+
+/*
  * @first integer: number of prefixes existing inside PrefixManager
- * @second integer: number of prefixes to advertise/withdraw
+ * @second integer: number of prefixes to advertise
  */
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 100_1, 100, 1);
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 1000_1, 1000, 1);
@@ -263,7 +462,10 @@ BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerAdvertisePrefixes, 10000_10000, 10000, 10000);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerAdvertisePrefixes, 100000_100000, 100000, 100000);
-
+/*
+ * @first integer: number of prefixes existing inside PrefixManager
+ * @second integer: number of prefixes to withdraw
+ */
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 100_1, 100, 1);
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 1000_1, 1000, 1);
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 10000_1, 10000, 1);
@@ -275,6 +477,12 @@ BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerWithdrawPrefixes, 10000_10000, 10000, 10000);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerWithdrawPrefixes, 100000_100000, 100000, 100000);
+/*
+ * @first integer: number of prefixes existing inside PrefixManager
+ * @second integer: number of prefixes to flap
+ */
+BENCHMARK_NAMED_PARAM(BM_PrefixManagerPrefixFlap, 100_25000, 100, 25000);
+BENCHMARK_NAMED_PARAM(BM_PrefixManagerPrefixFlap, 10000_25000, 10000, 25000);
 
 /*
  * TODO: add decision route processing benchmark
