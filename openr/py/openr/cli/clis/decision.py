@@ -14,7 +14,7 @@ from openr.cli.commands import decision
 from openr.cli.utils.utils import parse_nodes
 
 
-class DecisionCli(object):
+class DecisionCli:
     def __init__(self):
         self.decision.add_command(PathCli().path)
         self.decision.add_command(DecisionAdjCli().adj)
@@ -36,7 +36,7 @@ class DecisionCli(object):
         pass
 
 
-class PathCli(object):
+class PathCli:
     @click.command()
     @click.option(
         "--src", default="", help="source node, " "default will be the current host"
@@ -55,7 +55,7 @@ class PathCli(object):
         decision.PathCmd(cli_opts).run(src, dst, max_hop, area)
 
 
-class DecisionRoutesComputedCli(object):
+class DecisionRoutesComputedCli:
     @click.command()
     @click.option(
         "--nodes",
@@ -86,7 +86,7 @@ class DecisionRoutesComputedCli(object):
         decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, labels, json)
 
 
-class DecisionPrefixesCli(object):
+class DecisionPrefixesCli:
     @click.command()
     @click.option(
         "--nodes",
@@ -103,8 +103,10 @@ class DecisionPrefixesCli(object):
         help="Client type filter. Provide name e.g. loopback, bgp",
     )
     @click.pass_obj
+    @click.pass_context
     def prefixes(
-        cli_opts: Any,  # noqa: B902
+        ctx: click.Context,  # noqa: B902
+        cli_opts: Any,
         nodes: List[str],
         json: bool,
         prefix: str,
@@ -116,7 +118,7 @@ class DecisionPrefixesCli(object):
         decision.DecisionPrefixesCmd(cli_opts).run(nodes, json, prefix, client_type)
 
 
-class DecisionAdjCli(object):
+class DecisionAdjCli:
     @click.command()
     @click.option(
         "--nodes",
@@ -143,7 +145,7 @@ class DecisionAdjCli(object):
         decision.DecisionAdjCmd(cli_opts).run(nodes, set(areas), bidir, json)
 
 
-class DecisionValidateCli(object):
+class DecisionValidateCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.option("--area", default=None, help="area identifier")
@@ -182,7 +184,7 @@ class DecisionValidateCli(object):
         sys.exit(return_code)
 
 
-class DecisionRibPolicyCli(object):
+class DecisionRibPolicyCli:
     @click.command()
     @click.pass_obj
     def show(cli_opts):  # noqa: B902
@@ -193,7 +195,7 @@ class DecisionRibPolicyCli(object):
         decision.DecisionRibPolicyCmd(cli_opts).run()
 
 
-class ReceivedRoutesCli(object):
+class ReceivedRoutesCli:
     @click.command("received-routes")
     @click.argument("prefix", nargs=-1, type=str)
     @click.option("--node", help="Filter on node name", type=str)

@@ -22,7 +22,7 @@ from .fixtures import OPENR_CONFIG_STR
 BASE_MODULE = "openr.cli.clis.config"
 
 
-class CliOpenrTests(TestCase):
+class CliConfigTests(TestCase):
     def setUp(self) -> None:
         self.runner = CliRunner()
 
