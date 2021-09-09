@@ -738,8 +738,9 @@ PrefixManager::syncKvStore() {
 
     // Check if previously advertised prefix is no longer ready to be
     // advertised.
-    if (advertisedPrefixes_.count(prefix) and
-        (not prefixEntryReadyToBeAdvertised(advertisedPrefixes_.at(prefix)))) {
+    const auto& it = advertisedPrefixes_.find(prefix);
+    if (advertisedPrefixes_.cend() != it and
+        (not prefixEntryReadyToBeAdvertised(it->second))) {
       XLOG(DBG1) << fmt::format(
           "Deleting advertised keys for {}",
           folly::IPAddress::networkToString(prefix));
