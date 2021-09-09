@@ -382,15 +382,11 @@ PrefixManager::buildOriginatedPrefixDb(
     const std::vector<thrift::OriginatedPrefix>& prefixes) {
   for (const auto& prefix : prefixes) {
     auto network = folly::IPAddress::createNetwork(*prefix.prefix_ref());
-    auto nh = network.first.isV4() and not v4OverV6Nexthop_
-        ? Constants::kLocalRouteNexthopV4.toString()
-        : Constants::kLocalRouteNexthopV6.toString();
-
     auto entry = toPrefixEntryThrift(prefix, thrift::PrefixType::CONFIG);
 
     // Populate RibUnicastEntry struct
-    // ATTN: AREA field is empty for NHs
-    RibUnicastEntry unicastEntry(network, {createNextHop(toBinaryAddress(nh))});
+    // ATTN: empty nexthop list indicates a drop route
+    RibUnicastEntry unicastEntry(network, {});
     unicastEntry.bestPrefixEntry = std::move(entry);
 
     // ATTN: upon initialization, no supporting routes

@@ -2131,13 +2131,9 @@ TEST_F(RouteOriginationOverrideFixture, StaticRoutesAnnounce) {
   const auto& route = updatedRoutes.back();
   EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
 
-  // Verify the next hop address is also v4 address
+  // Verify the next hop list is empty
   const auto& nhs = *route.nextHops_ref();
-  EXPECT_THAT(nhs, testing::SizeIs(1));
-  EXPECT_THAT(
-      nhs,
-      testing::UnorderedElementsAre(createNextHop(
-          toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()))));
+  EXPECT_THAT(nhs, testing::SizeIs(0));
 }
 
 //
@@ -2279,11 +2275,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
       EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
 
       const auto& nhs = *route.nextHops_ref();
-      EXPECT_THAT(nhs, testing::SizeIs(1));
-      EXPECT_THAT(
-          nhs,
-          testing::UnorderedElementsAre(createNextHop(
-              toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()))));
+      EXPECT_THAT(nhs, testing::SizeIs(0));
 
       // no v6 route update received
       EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
@@ -2609,12 +2601,7 @@ TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, StateRouteAnnounce) {
   EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
 
   const auto& nhs = *route.nextHops_ref();
-  EXPECT_THAT(nhs, testing::SizeIs(1));
-  // we expect the nexthop is V6
-  EXPECT_THAT(
-      nhs,
-      testing::UnorderedElementsAre(createNextHop(
-          toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()))));
+  EXPECT_THAT(nhs, testing::SizeIs(0));
 }
 
 class RouteOriginationV4OverV6NonZeroSupportFixture
@@ -2695,12 +2682,7 @@ TEST_F(
   EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
 
   const auto& nhs = *route.nextHops_ref();
-  EXPECT_THAT(nhs, testing::SizeIs(1));
-  // we expect the nexthop is V6
-  EXPECT_THAT(
-      nhs,
-      testing::UnorderedElementsAre(createNextHop(
-          toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()))));
+  EXPECT_THAT(nhs, testing::SizeIs(0));
 }
 
 TEST(PrefixManagerPendingUpdates, updatePrefixes) {
@@ -3072,11 +3054,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
 
     const auto& nhs = *route.nextHops_ref();
-    EXPECT_THAT(nhs, testing::SizeIs(1));
-    EXPECT_THAT(
-        nhs,
-        testing::UnorderedElementsAre(createNextHop(
-            toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()))));
+    EXPECT_THAT(nhs, testing::SizeIs(0));
 
     // 1b. no v6 route update received
     EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
