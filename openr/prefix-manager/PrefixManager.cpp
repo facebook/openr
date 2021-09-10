@@ -1509,15 +1509,15 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
     storeProgrammedRoutes(fibRouteUpdate);
   }
 
+  // Re-advertise prefixes received from one area to other areas.
+  redistributePrefixesAcrossAreas(fibRouteUpdate);
+
   if (fibRouteUpdate.type == DecisionRouteUpdate::FULL_SYNC) {
     if (uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
       XLOG(INFO) << "[Initialization] Received initial RIB routes.";
       triggerInitialPrefixDbSync();
     }
   }
-
-  // Re-advertise prefixes received from one area to other areas.
-  redistributePrefixesAcrossAreas(fibRouteUpdate);
 }
 
 void
