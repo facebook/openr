@@ -557,7 +557,7 @@ class KvStoreDb : public DualNode {
   void logKvEvent(const std::string& event, const std::string& key);
 
   /*
-   * [Self Originated Key Management]
+   * [Self Originated Key Management with ttl refreshing]
    *
    * KvStoreDb will manage ttl-refreshing for self-originated key-vals sent via
    * queue.
@@ -572,7 +572,7 @@ class KvStoreDb : public DualNode {
   void scheduleTtlUpdates(std::string const& key, bool advertiseImmediately);
 
   /*
-   * [Self Originated Key Management with Throttling]
+   * [Self Originated Key Management with throttling]
    *
    * KvStoreDb uses throttling to advertise key-value changes to KvStore in
    * batches. It provides the following util methods to:
@@ -581,6 +581,20 @@ class KvStoreDb : public DualNode {
    */
   void advertiseSelfOriginatedKeys();
   void unsetPendingSelfOriginatedKeys();
+
+  /*
+   * [Self Originated Key Management with publication]
+   *
+   * Self-originiated keys needs sync with latest KvStore contents.
+   * To handle potential discrepancy like:
+   *
+   *  - t0: advertise self-orinigated key with version 1 since local KvStoreDb
+   *    is empty;
+   *  - t1: KvStoreDb FULL_SYNC finished and see keys advertised by its previous
+   *    incarnaton with higher version(>1);
+   */
+  void processPublicationForSelfOriginatedKey(
+      thrift::Publication const& publication);
 
   /*
    * Private variables

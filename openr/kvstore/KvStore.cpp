@@ -3413,6 +3413,11 @@ KvStoreDb::floodPublication(
   kvParams_.kvStoreUpdatesQueue.push(Publication(publication));
   fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
 
+  // Process potential update to self-originated key-vals
+  if (kvParams_.enableKvStoreRequestQueue) {
+    processPublicationForSelfOriginatedKey(publication);
+  }
+
   // Flood keyValue ONLY updates to external neighbors
   if (publication.keyVals_ref()->empty()) {
     return;
@@ -3520,6 +3525,90 @@ KvStoreDb::floodPublication(
               "kvstore.thrift.num_flood_pub_failure", 1, fb303::COUNT);
         });
   }
+}
+
+void
+KvStoreDb::processPublicationForSelfOriginatedKey(
+    thrift::Publication const& publication) {
+  // direct return to avoid performance issue
+  if (selfOriginatedKeyVals_.empty()) {
+    return;
+  }
+
+  // go through received publications to refresh self-originated key-vals if
+  // necessary
+  for (auto const& [key, rcvdValue] : publication.get_keyVals()) {
+    if (not rcvdValue.value_ref().has_value()) {
+      // ignore TTL update
+      continue;
+    }
+
+    // update local self-originated key-vals
+    auto it = selfOriginatedKeyVals_.find(key);
+    if (it == selfOriginatedKeyVals_.end()) {
+      // skip processing since it is none of our interest
+      continue;
+    }
+
+    // 3 cases to process for version comparison
+    //
+    // case-1: currValue > rcvdValue
+    // case-2: currValue < rcvdValue
+    // case-3: currValue == rcvdValue
+    auto& currValue = it->second.value;
+    const auto& currVersion = currValue.get_version();
+    const auto& rcvdVersion = rcvdValue.get_version();
+    bool shouldOverride{false};
+
+    if (currVersion > rcvdVersion) {
+      // case-1: ignore rcvdValue since it is "older" than local keys.
+      continue;
+    } else if (currVersion < rcvdVersion) {
+      // case-2: rcvdValue has higher version, MUST override.
+      shouldOverride = true;
+    } else {
+      // case-3: currValue has the SAME version as rcvdValue,
+      // conditionally override.
+      // NOTE: similar operation in persistSelfOriginatedKey()
+      // for key overriding.
+      if (*rcvdValue.originatorId_ref() != kvParams_.nodeId or
+          *currValue.value_ref() != *rcvdValue.value_ref()) {
+        shouldOverride = true;
+      }
+    }
+
+    // NOTE: local KvStoreDb needs to override and re-advertise, including:
+    //  - bump up version;
+    //  - reset ttlVersion;
+    //  - override originatorId(do nothing since it is up-to-date);
+    //  - override value(do nothing since it is up-to-date);
+    //  - honor the ttl from local value;
+    if (shouldOverride) {
+      currValue.ttlVersion_ref() = 0;
+      currValue.version_ref() = rcvdValue.get_version() + 1;
+      keysToAdvertise_.insert(key);
+
+      LOG(INFO)
+          << AreaTag()
+          << fmt::format(
+                 "Override version for [key: {}, v: {}, originatorId: {}]",
+                 key,
+                 rcvdValue.get_version(),
+                 currValue.get_originatorId());
+    } else {
+      // update local ttlVersion if received higher ttlVersion.
+      // NOTE: ttlVersion will be bumped up before ttl update.
+      // It works fine to just update to latest ttlVersion, instead of +1.
+      if (currValue.get_ttlVersion() < rcvdValue.get_ttlVersion()) {
+        currValue.ttlVersion_ref() = rcvdValue.get_ttlVersion();
+      }
+    }
+  }
+
+  // NOTE: use throttling to NOT block publication flooding.
+  advertiseSelfOriginatedKeysThrottled_->operator()();
+
+  // TODO: when native key subscription is supported. Handle callback here.
 }
 
 size_t

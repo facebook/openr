@@ -764,6 +764,155 @@ TEST_F(
   evb.waitUntilStopped();
 }
 
+/*
+ * Verify KvStoreDb will override self-originated key version when received
+ * KvStore publication. Make sure key-override happens and re-advertise higher
+ * version of key-vals.
+ */
+TEST_F(
+    KvStoreSelfOriginatedKeyValueRequestFixture,
+    PersistKeyWithVersionOverriding) {
+  // ATTN: nodId/diffNodeId and val/diffVal has the lexicographical order.
+  const std::string nodeId{"A"};
+  const std::string diffNodeId{"Z"};
+  const std::string key{"key"};
+  const std::string val{"a"};
+  const std::string diffVal{"z"};
+
+  initKvStore(nodeId, kShortTtl);
+
+  //
+  // Test 1: test currVersion < rcvdVersion. Key overriding will happen.
+  //
+  {
+    //
+    // Step1: - persist key X;
+    //        - expect key version to be 1 as it KvStore is empty before
+    //
+    auto persistKvRequest = PersistKeyValueRequest(kTestingAreaName, key, val);
+    kvRequestQueue_.push(std::move(persistKvRequest));
+
+    auto pub1 = kvStore_->recvPublication();
+    EXPECT_EQ(1, pub1.keyVals_ref()->size());
+
+    // validate version = 1
+    const auto tVal1 = pub1.keyVals_ref()->at(key);
+    EXPECT_EQ(1, tVal1.get_version());
+    EXPECT_EQ(nodeId, tVal1.get_originatorId());
+
+    //
+    // Step2: - manually set key X with existing version + 1 to mimick receiving
+    //          publication(e.g. via FULL_SYNC);
+    //        - expect KvStore re-advertise version + 2 to override;
+    //
+    kvStore_->setKey(
+        kTestingAreaName,
+        key,
+        createThriftValue(
+            tVal1.get_version() + 1 /* version */,
+            nodeId /* originatorId */,
+            val /* value */,
+            Constants::kTtlInfinity /* ttl */));
+
+    // validate setKey() takes effect
+    auto pub2 = kvStore_->recvPublication();
+    const auto tVal2 = pub2.keyVals_ref()->at(key);
+    EXPECT_EQ(tVal1.get_version() + 1, tVal2.get_version());
+    EXPECT_EQ(nodeId, tVal2.get_originatorId());
+
+    // validate version is overridden
+    auto pub3 = kvStore_->recvPublication();
+    const auto tVal3 = pub3.keyVals_ref()->at(key);
+    EXPECT_EQ(tVal1.get_version() + 2, tVal3.get_version());
+    EXPECT_EQ(nodeId, tVal3.get_originatorId());
+  }
+
+  //
+  // Test 2: test currVersion > rcvdVersion. Ignore.
+  //
+  {
+    kvStore_->setKey(
+        kTestingAreaName,
+        key,
+        createThriftValue(
+            1 /* version */,
+            nodeId /* originatorId */,
+            diffVal /* value */,
+            Constants::kTtlInfinity /* ttl */));
+    // Ensure key exists
+    auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
+    ASSERT_TRUE(maybeVal.has_value());
+    EXPECT_NE(1, *maybeVal->version_ref());
+    EXPECT_EQ(val, maybeVal->value_ref());
+  }
+
+  //
+  // Test 3: test currVersion == rcvdVersion.
+  //
+  {
+    //
+    // Step1: - manually set key X with SAME version to mimick receiving
+    //          publication(e.g. via FULL_SYNC);
+    //        - explicitly set different VALUE with same ORIGINATOR_ID.
+    //          Expect KvStore re-advertises version + 1 to override;
+    //
+    auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
+    ASSERT_TRUE(maybeVal.has_value());
+    const auto version = maybeVal->get_version();
+    kvStore_->setKey(
+        kTestingAreaName,
+        key,
+        createThriftValue(
+            version /* version */,
+            nodeId /* originatorId */,
+            diffVal /* value */,
+            Constants::kTtlInfinity /* ttl */));
+
+    // validate setKey() takes effect
+    auto pub1 = kvStore_->recvPublication();
+    const auto tVal1 = pub1.keyVals_ref()->at(key);
+    EXPECT_EQ(version, tVal1.get_version());
+    EXPECT_EQ(diffVal, *tVal1.value_ref());
+    EXPECT_EQ(nodeId, tVal1.get_originatorId());
+
+    // validate version is overridden
+    auto pub2 = kvStore_->recvPublication();
+    const auto tVal2 = pub2.keyVals_ref()->at(key);
+    EXPECT_EQ(version + 1, tVal2.get_version());
+    EXPECT_EQ(val, *tVal2.value_ref());
+    EXPECT_EQ(nodeId, tVal2.get_originatorId());
+
+    //
+    // Step2: - manually set key X with SAME version to mimick receiving
+    //          publication(e.g. via FULL_SYNC);
+    //        - explicitly set different ORIGINATOR_ID. Expect KvStore
+    //          re-advertises version + 1 to override;
+    //
+    kvStore_->setKey(
+        kTestingAreaName,
+        key,
+        createThriftValue(
+            version + 1 /* version */,
+            diffNodeId /* originatorId */,
+            val /* value */,
+            Constants::kTtlInfinity /* ttl */));
+
+    // validate setKey() takes effect
+    auto pub3 = kvStore_->recvPublication();
+    const auto tVal3 = pub3.keyVals_ref()->at(key);
+    EXPECT_EQ(version + 1, tVal3.get_version());
+    EXPECT_EQ(val, *tVal3.value_ref());
+    EXPECT_EQ(diffNodeId, tVal3.get_originatorId());
+
+    // validate version is overridden
+    auto pub4 = kvStore_->recvPublication();
+    const auto tVal4 = pub4.keyVals_ref()->at(key);
+    EXPECT_EQ(version + 2, tVal4.get_version());
+    EXPECT_EQ(val, *tVal4.value_ref());
+    EXPECT_EQ(nodeId, tVal4.get_originatorId());
+  }
+}
+
 /**
  * Validate PersistKeyValueRequest version overriding of self-originated key-val
  * if another originator has advertised same key.
