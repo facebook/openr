@@ -110,6 +110,11 @@ const auto bgpAddr2V4 = toIpPrefix("10.22.2.2/16");
 const auto bgpAddr3V4 = toIpPrefix("10.33.3.3/16");
 const auto bgpAddr4V4 = toIpPrefix("10.43.4.4/16");
 
+const auto addr1V4ConfigPrefixEntry =
+    createPrefixEntry(addr1, thrift::PrefixType::CONFIG);
+const auto addr2VipPrefixEntry =
+    createPrefixEntry(addr1, thrift::PrefixType::VIP);
+
 const auto prefixDb1 = createPrefixDb("1", {createPrefixEntry(addr1)});
 const auto prefixDb2 = createPrefixDb("2", {createPrefixEntry(addr2)});
 const auto prefixDb3 = createPrefixDb("3", {createPrefixEntry(addr3)});
@@ -7116,6 +7121,142 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
   EXPECT_EQ(
       skippedUnicastRouteCnt,
       counters.at("decision.skipped_unicast_route.count.60"));
+}
+
+/**
+ * Test fixture for testing initial RIB computation in OpenR initialization
+ * process.
+ */
+class InitialRibBuildTestFixture
+    : public DecisionTestFixture,
+      public ::testing::WithParamInterface<thrift::PrefixType> {
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = DecisionTestFixture::createConfig();
+
+    // Set config originated prefixes.
+    thrift::OriginatedPrefix originatedPrefixV4;
+    originatedPrefixV4.prefix_ref() = toString(addr1V4);
+    originatedPrefixV4.minimum_supporting_routes_ref() = 0;
+    originatedPrefixV4.install_to_fib_ref() = true;
+    tConfig.originated_prefixes_ref() = {originatedPrefixV4};
+
+    // Set either AddPath BGP config or VIP service config.
+    thrift::PrefixType prefixType = GetParam();
+    if (prefixType == thrift::PrefixType::BGP) {
+      // Enable segment routing.
+      tConfig.enable_segment_routing_ref() = true;
+      // Enable BGP peering.
+      tConfig.enable_bgp_peering_ref() = true;
+      tConfig.bgp_config_ref() = thrift::BgpConfig();
+      // Enable AddPath feature.
+      auto bgpPeer = thrift::BgpPeer();
+      bgpPeer.peer_addr_ref() = Constants::kPlatformHost.toString();
+      bgpPeer.add_path_ref() = thrift::AddPath::RECEIVE;
+      tConfig.bgp_config_ref()->peers_ref()->push_back(bgpPeer);
+    } else if (prefixType == thrift::PrefixType::VIP) {
+      // Enable Vip service.
+      tConfig.enable_vip_service_ref() = true;
+      tConfig.vip_service_config_ref() = vipconfig::config::VipServiceConfig();
+    }
+    return tConfig;
+  }
+};
+
+INSTANTIATE_TEST_CASE_P(
+    InitialRibBuildTestInstance,
+    InitialRibBuildTestFixture,
+    ::testing::Values(thrift::PrefixType::BGP, thrift::PrefixType::VIP));
+
+TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
+  // Send adj publication
+  sendKvPublication(
+      createThriftPublication(
+          {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+           {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
+          {},
+          {},
+          {},
+          std::string("")),
+      false /*prefixPubExists*/);
+
+  thrift::PrefixType prefixType = GetParam();
+
+  int scheduleAt{0};
+  OpenrEventBase evb;
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // Received KvStoreSynced signal.
+        auto publication = createThriftPublication(
+            /* prefix key format v2 */
+            {createPrefixKeyValue(
+                "2", 1, addr1, kTestingAreaName, false, true)},
+            /* expired-keys */
+            {});
+        sendKvPublication(publication);
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // Initial RIB computation not triggered yet.
+        EXPECT_EQ(0, routeUpdatesQueueReader.size());
+
+        // Received static unicast routes for config originated prefixes.
+        DecisionRouteUpdate configStaticRoutes;
+        configStaticRoutes.prefixType = thrift::PrefixType::CONFIG;
+
+        configStaticRoutes.addRouteToUpdate(RibUnicastEntry(
+            toIPNetwork(addr1V4),
+            {},
+            addr1V4ConfigPrefixEntry,
+            thrift::Types_constants::kDefaultArea()));
+        staticRouteUpdatesQueue.push(std::move(configStaticRoutes));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // Initial RIB computation not triggered yet.
+        EXPECT_EQ(0, routeUpdatesQueueReader.size());
+
+        if (prefixType == thrift::PrefixType::BGP) {
+          // Received static MPLS label routes for BGP prefixes.
+          DecisionRouteUpdate bgpStaticRoutes;
+          bgpStaticRoutes.prefixType = thrift::PrefixType::BGP;
+          bgpStaticRoutes.addMplsRouteToUpdate(RibMplsEntry(65000));
+          staticRouteUpdatesQueue.push(std::move(bgpStaticRoutes));
+        } else if (prefixType == thrift::PrefixType::VIP) {
+          // Received static unicast routes for VIP prefixes.
+          DecisionRouteUpdate vipStaticRoutes;
+          vipStaticRoutes.prefixType = thrift::PrefixType::VIP;
+          vipStaticRoutes.addRouteToUpdate(RibUnicastEntry(
+              toIPNetwork(addr2V4),
+              {},
+              addr2VipPrefixEntry,
+              thrift::Types_constants::kDefaultArea()));
+          staticRouteUpdatesQueue.push(std::move(vipStaticRoutes));
+        }
+
+        auto routeDbDelta = recvRouteUpdates();
+        if (prefixType == thrift::PrefixType::BGP) {
+          // Static config originated route and route for addr1.
+          EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
+          // Static MPLS routes; Two node label routes.
+          EXPECT_EQ(3, routeDbDelta.mplsRoutesToUpdate.size());
+        } else if (prefixType == thrift::PrefixType::VIP) {
+          // Static config originated route, static VIP route, and route for
+          // addr1.
+          EXPECT_EQ(3, routeDbDelta.unicastRoutesToUpdate.size());
+          // Two node label routes.
+          EXPECT_EQ(2, routeDbDelta.mplsRoutesToUpdate.size());
+        }
+        evb.stop();
+      });
+  // let magic happen
+  evb.run();
 }
 
 /**

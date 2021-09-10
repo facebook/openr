@@ -355,6 +355,19 @@ class Config {
     return config_.enable_bgp_peering_ref().value_or(false);
   }
 
+  // If add-path is enabled in BGP config.
+  bool
+  isBgpAddPathEnabled() const {
+    // Identify if BGP Add Path is enabled for local peering or not
+    for (const auto& peer : *config_.bgp_config_ref()->peers_ref()) {
+      if (folly::IPAddress(peer.peer_addr_ref().value()).isLoopback()) {
+        return peer.add_path_ref() and
+            *peer.add_path_ref() == thrift::AddPath::RECEIVE;
+      }
+    }
+    return false;
+  }
+
   const thrift::BgpConfig&
   getBgpConfig() const {
     CHECK(isBgpPeeringEnabled());

@@ -547,7 +547,7 @@ class PrefixManager final : public OpenrEventBase {
    *   up in the network, there will be empty RIB route updates from OpenR/Fib
    *   in initialization procedure.
    * - `BGP` is added if BGP peering is enabled in config.
-   * - `VIP` is added is VIP plugin is enabled in config.
+   * - `VIP` is added if VIP plugin is enabled in config.
    *
    * As we receive the first prefix update request from these types we remove
    * them from this set. Empty set indicates all expected prefix types are

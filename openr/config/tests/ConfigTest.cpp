@@ -1030,6 +1030,12 @@ TEST(ConfigTest, AddPathConfig) {
 
   tConfig.enable_segment_routing_ref() = true;
   EXPECT_NO_THROW((Config(tConfig)));
+  EXPECT_TRUE(Config(tConfig).isBgpAddPathEnabled());
+
+  bgpPeer.add_path_ref() = thrift::AddPath::NONE;
+  bgpConfig.peers_ref() = {bgpPeer};
+  tConfig.bgp_config_ref() = bgpConfig;
+  EXPECT_FALSE(Config(tConfig).isBgpAddPathEnabled());
 }
 
 TEST(ConfigTest, EorTime) {

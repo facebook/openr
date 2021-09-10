@@ -218,6 +218,9 @@ class Decision : public OpenrEventBase {
    */
   void rebuildRoutes(std::string const& event);
 
+  // Trigger initial route build in OpenR initialization process.
+  void triggerInitialBuildRoutes();
+
   void sendRouteUpdate(
       DecisionRouteDb&& routeDb,
       std::optional<thrift::PerfEvents>&& perfEvents);
@@ -274,6 +277,20 @@ class Decision : public OpenrEventBase {
   // Boolean flag indicating whether KvStore synced signal is received in OpenR
   // initialization procedure.
   bool initialKvStoreSynced_{false};
+
+  /*
+   * Set of prefix types whose static routes Decision awaits before initial RIB
+   * computation in OpenR initialization procedure. This would be populated
+   * based on config,
+   * - `VIP` is added if VIP plugin is enabled in config.
+   * - `BGP` is added if BgpRib genereates static MPLS label routes, aka, BGP
+   *   peering enable, AddPath feature enabled, and segment routing enabled.
+   * - `CONFIG` is added if config originated prefixes are enabled in config.
+   *
+   * As we receive the first static routes from these types we remove them from
+   * this set. Empty set indicates routes of all expected types are received.
+   */
+  std::unordered_set<thrift::PrefixType> unreceivedRouteTypes_{};
 };
 
 } // namespace openr

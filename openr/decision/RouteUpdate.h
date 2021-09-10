@@ -49,8 +49,12 @@ struct DecisionRouteUpdate {
   std::unordered_map<int32_t, RibMplsEntry> mplsRoutesToUpdate;
   std::vector<int32_t> mplsRoutesToDelete;
 
+  // Optional prefix type whose unicast/label routes are included in the struct.
+  // Used in OpenR initialization process.
+  std::optional<thrift::PrefixType> prefixType{std::nullopt};
+
   // Optional perf events associated with this route update
-  std::optional<thrift::PerfEvents> perfEvents = std::nullopt;
+  std::optional<thrift::PerfEvents> perfEvents{std::nullopt};
 
   bool
   empty() const {
