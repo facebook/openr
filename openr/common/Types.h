@@ -166,9 +166,6 @@ struct PrefixEntry {
    */
   std::optional<OpenrPolicyActionData> policyActionData{std::nullopt};
 
-  // Whether should install to fib. If true, nexthops must have value
-  bool shouldInstall{true};
-
   PrefixEntry() = default;
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
@@ -177,27 +174,30 @@ struct PrefixEntry {
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
         network(toIPNetwork(*tPrefixEntry->prefix_ref())),
-        policyActionData(policyActionData),
-        shouldInstall{false} {}
+        policyActionData(policyActionData) {}
 
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
       std::unordered_set<std::string>&& dstAreas,
-      std::optional<std::unordered_set<thrift::NextHopThrift>> nexthops,
-      bool shouldInstall)
+      std::optional<std::unordered_set<thrift::NextHopThrift>> nexthops)
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
         network(toIPNetwork(*tPrefixEntry->prefix_ref())),
-        nexthops(std::move(nexthops)),
-        shouldInstall(shouldInstall) {
-    if (not nexthops.has_value()) {
-      CHECK(not shouldInstall);
-    }
-  }
+        nexthops(std::move(nexthops)) {}
 
   apache::thrift::field_ref<const thrift::PrefixMetrics&>
   metrics_ref() const& {
     return tPrefixEntry->metrics_ref();
+  }
+
+  /*
+   * Util function for route-agg check
+   * Note that route will only be installed to fib when both installToFib is set
+   * to true and has valid nexthops.
+   */
+  bool
+  shouldInstall() const {
+    return nexthops.has_value();
   }
 
   bool
