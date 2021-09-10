@@ -24,10 +24,6 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 
 namespace {
-
-// interval for periodic syncs
-const std::chrono::seconds kDbSyncInterval(10000);
-
 // The byte size of a key
 const int kSizeOfKey = 32;
 // The byte size of a value
@@ -76,12 +72,8 @@ class KvStoreTestFixture {
    */
   KvStoreWrapper*
   createKvStore(const std::string& nodeId) {
-    auto tConfig = getBasicOpenrConfig(nodeId);
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() =
-        kDbSyncInterval.count();
-    config_ = std::make_shared<Config>(tConfig);
-    auto ptr = std::make_unique<KvStoreWrapper>(context_, config_);
-    stores_.emplace_back(std::move(ptr));
+    config_ = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
+    stores_.emplace_back(std::make_unique<KvStoreWrapper>(context_, config_));
     return stores_.back().get();
   }
 

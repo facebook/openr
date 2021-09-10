@@ -53,8 +53,9 @@ struct KvstoreConfig {
    * networks where burst of updates are low, having low value makes more sense.
    */
   1: i32 key_ttl_ms = 300000;
-  2: i32 sync_interval_s = 60;
+
   3: i32 ttl_decrement_ms = 1;
+
   4: optional KvstoreFloodRate flood_rate;
 
   /**

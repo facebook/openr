@@ -66,7 +66,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
 
     // kvstore config
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.kvstore_config_ref()->enable_flood_optimization_ref() = true;
     tConfig.kvstore_config_ref()->is_flood_root_ref() = true;
 

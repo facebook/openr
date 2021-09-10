@@ -356,8 +356,6 @@ class LinkMonitorTestFixture : public testing::Test {
     }
     auto tConfig =
         getBasicOpenrConfig("node-1", "domain", areaConfig, true, true);
-    // kvstore config
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     // link monitor config
     auto& lmConf = *tConfig.link_monitor_config_ref();
     lmConf.enable_perf_measurement_ref() = false;

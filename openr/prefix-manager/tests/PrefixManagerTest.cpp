@@ -163,7 +163,6 @@ class PrefixManagerTestFixture : public testing::Test {
   virtual thrift::OpenrConfig
   createConfig() {
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.enable_fib_ack_ref() = true;
     return tConfig;
   }
@@ -218,7 +217,6 @@ class PrefixManagerPrefixKeyFormatTestFixture
   thrift::OpenrConfig
   createConfig() override {
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     return tConfig;
   }
 };
@@ -1534,7 +1532,6 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
     auto C = createAreaConfig("C", {"SSW.*"}, {".*"});
 
     auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A, B, C});
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     return tConfig;
   }
 
@@ -2709,8 +2706,7 @@ class RouteOriginationKnobTestFixture : public PrefixManagerTestFixture {
   thrift::OpenrConfig
   createConfig() override {
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
-    tConfig.prefer_openr_originated_routes_ref() = 1;
+    tConfig.prefer_openr_originated_routes_ref() = true;
     return tConfig;
   }
 };
@@ -2932,7 +2928,6 @@ class RouteOriginationSingleAreaFixture : public RouteOriginationFixture {
     // create a single area config
     auto A = createAreaConfig("A", {"RSW.*"}, {".*"});
     auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A});
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.originated_prefixes_ref() = {
         originatedPrefixV4, originatedPrefixV6};
     return tConfig;
@@ -3214,7 +3209,6 @@ class PrefixManagerKeyValRequestQueueTestFixture
   virtual thrift::OpenrConfig
   createConfig() override {
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.enable_fib_ack_ref() = true;
     tConfig.enable_kvstore_request_queue_ref() = true;
     return tConfig;
@@ -3397,7 +3391,6 @@ class PrefixManagerInitialKvStoreSyncTestFixture
   thrift::OpenrConfig
   createConfig() override {
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
     tConfig.enable_fib_ack_ref() = true;
     tConfig.enable_initialization_process_ref() = true;
     return tConfig;

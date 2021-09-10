@@ -44,7 +44,6 @@ namespace {
 
 const std::chrono::seconds kMaxOpenrSyncTime(3);
 
-const std::chrono::seconds kKvStoreDbSyncInterval(1);
 const std::chrono::milliseconds kSpark2HelloTime(100);
 const std::chrono::milliseconds kSpark2FastInitHelloTime(20);
 const std::chrono::milliseconds kSpark2HandshakeTime(20);
@@ -201,7 +200,6 @@ class OpenrFixture : public ::testing::Test {
         context,
         nodeId,
         v4Enabled,
-        kKvStoreDbSyncInterval,
         kSpark2HelloTime,
         kSpark2FastInitHelloTime,
         kSpark2HandshakeTime,

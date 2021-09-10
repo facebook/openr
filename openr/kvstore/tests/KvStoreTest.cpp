@@ -37,9 +37,6 @@ namespace {
 // the size of the value string
 const uint32_t kValueStrSize = 64;
 
-// interval for periodic syncs
-const std::chrono::seconds kDbSyncInterval(1);
-
 // wait time before checking counter
 const std::chrono::milliseconds counterUpdateWaitTime(5500);
 
@@ -77,7 +74,6 @@ genRandomStr(const int len) {
 thrift::KvstoreConfig
 getTestKvConf() {
   thrift::KvstoreConfig kvConf;
-  kvConf.sync_interval_s_ref() = kDbSyncInterval.count();
   kvConf.enable_thrift_dual_msg_ref() = false;
   return kvConf;
 }

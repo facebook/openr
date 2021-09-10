@@ -48,8 +48,6 @@ KvStore::KvStore(
               folly::none,
               fbzmq::NonblockingFlag{true}),
           config->getKvStoreConfig().get_zmq_hwm(),
-          std::chrono::seconds(
-              *config->getKvStoreConfig().sync_interval_s_ref()),
           getKvStoreFilters(config),
           config->getKvStoreConfig().flood_rate_ref().to_optional(),
           std::chrono::milliseconds(

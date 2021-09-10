@@ -69,7 +69,6 @@ OPENR_CONFIG_STR = r"""
     "enable_thrift_dual_msg": false,
     "is_flood_root": true,
     "key_ttl_ms": 3600000,
-    "sync_interval_s": 300,
     "ttl_decrement_ms": 1,
     "zmq_hwm": 65536
   },

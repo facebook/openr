@@ -43,7 +43,6 @@ class OpenrWrapper {
       fbzmq::Context& context,
       std::string nodeId,
       bool v4Enabled,
-      std::chrono::seconds kvStoreDbSyncInterval,
       std::chrono::milliseconds spark2HelloTime,
       std::chrono::milliseconds spark2FastInitHelloTime,
       std::chrono::milliseconds spark2HandshakeTime,

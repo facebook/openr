@@ -16,7 +16,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     fbzmq::Context& context,
     std::string nodeId,
     bool v4Enabled,
-    std::chrono::seconds kvStoreDbSyncInterval,
     std::chrono::milliseconds spark2HelloTime,
     std::chrono::milliseconds spark2FastInitHelloTime,
     std::chrono::milliseconds spark2HandshakeTime,
@@ -44,9 +43,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /* enableV4OverV6Nexthop */,
       false /* enableAdjLabels */,
       true /* enablePrependLabels */);
-
-  tConfig.kvstore_config_ref()->sync_interval_s_ref() =
-      kvStoreDbSyncInterval.count();
 
   // link monitor config
   auto& lmConf = *tConfig.link_monitor_config_ref();

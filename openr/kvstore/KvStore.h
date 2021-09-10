@@ -104,8 +104,6 @@ struct KvStoreParams {
   int zmqHwm;
   // IP ToS
   std::optional<int> maybeIpTos;
-  // how often to request full db sync from peers
-  std::chrono::seconds dbSyncInterval;
   // KvStore key filters
   std::optional<KvStoreFilters> filters;
   // Kvstore flooding rate
@@ -127,10 +125,7 @@ struct KvStoreParams {
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreSyncEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
-      // ZMQ high water mark
       int zmqhwm,
-      // how often to request full db sync from peers
-      std::chrono::seconds dbsyncInterval,
       std::optional<KvStoreFilters> filter,
       // Kvstore flooding rate
       std::optional<thrift::KvstoreFloodRate> floodrate,
@@ -149,7 +144,6 @@ struct KvStoreParams {
         logSampleQueue(logSampleQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
-        dbSyncInterval(dbsyncInterval),
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
