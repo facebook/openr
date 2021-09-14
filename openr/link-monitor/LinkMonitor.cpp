@@ -742,10 +742,6 @@ LinkMonitor::advertiseInterfaces() {
 
 void
 LinkMonitor::advertiseRedistAddrs() {
-  if (adjHoldTimer_->isScheduled()) {
-    return;
-  }
-
   std::map<folly::CIDRNetwork, std::vector<std::string>> prefixesToAdvertise;
   std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixMap;
 
