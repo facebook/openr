@@ -949,12 +949,13 @@ TEST_F(
   // Second publication is from flooding the persist key originator change.
   // Check that key-val has been overridden and originator has changed to my
   // node.
-  // potential race: ttl refresh happens before persist publication.
   auto persistPub = kvStore_->recvPublication();
   EXPECT_EQ(1, persistPub.keyVals_ref()->size());
-  EXPECT_EQ(0, *(persistPub.keyVals_ref()->at(key).ttlVersion_ref()));
   EXPECT_EQ(2, *(persistPub.keyVals_ref()->at(key).version_ref()));
   EXPECT_EQ(myNodeId, *(persistPub.keyVals_ref()->at(key).originatorId_ref()));
+  // TTL refresh could happen before persist publication.
+  auto ttlVersion = *(persistPub.keyVals_ref()->at(key).ttlVersion_ref());
+  EXPECT_TRUE(0 == ttlVersion || 1 == ttlVersion);
 }
 
 /**
