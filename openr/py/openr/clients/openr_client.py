@@ -132,7 +132,6 @@ def get_openr_ctrl_cpp_client(
 
     options = options if options else getDefaultOptions(host)
     ssl_context = None
-
     # Create ssl context if specified
     if options.ssl:
         # Translate ssl verification option
