@@ -28,6 +28,9 @@ from openr.Types.ttypes import (
 )
 
 
+## Fixtures for testing decision validate
+
+
 AREA_SUMMARIES = (
     KvStoreAreaSummary(
         area="area2",
@@ -379,4 +382,218 @@ PASS
 adj table for Decision and KvStore match
 PASS
 prefix table for Decision and KvStore match
+"""
+
+
+## Fixtures for testing received-routes JSON
+
+
+MOCKED_RECEIVED_ROUTES = [
+    ReceivedRouteDetail(
+        prefix=IpPrefix(
+            prefixAddress=BinaryAddress(
+                addr=b"\xfd\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            ),
+            prefixLength=64,
+        ),
+        bestKey=NodeAndArea(node="openr-center", area="area2"),
+        bestKeys=[NodeAndArea(node="openr-center", area="area2")],
+        routes=[
+            ReceivedRoute(
+                key=NodeAndArea(node="openr-center", area="area2"),
+                route=PrefixEntry(
+                    prefix=IpPrefix(
+                        prefixAddress=BinaryAddress(
+                            addr=b"\xfd\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                        ),
+                        prefixLength=64,
+                    ),
+                    type=1,
+                    forwardingType=0,
+                    forwardingAlgorithm=0,
+                    metrics=PrefixMetrics(
+                        version=1,
+                        path_preference=1000,
+                        source_preference=200,
+                        distance=0,
+                    ),
+                    tags={"INTERFACE_SUBNET", "openr-center:lo"},
+                    area_stack=[],
+                ),
+            )
+        ],
+    ),
+    ReceivedRouteDetail(
+        prefix=IpPrefix(
+            prefixAddress=BinaryAddress(
+                addr=b"\xfd\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            ),
+            prefixLength=64,
+        ),
+        bestKey=NodeAndArea(node="openr-center", area="area2"),
+        bestKeys=[NodeAndArea(node="openr-center", area="area2")],
+        routes=[
+            ReceivedRoute(
+                key=NodeAndArea(node="openr-center", area="area2"),
+                route=PrefixEntry(
+                    prefix=IpPrefix(
+                        prefixAddress=BinaryAddress(
+                            addr=b"\xfd\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                        ),
+                        prefixLength=64,
+                    ),
+                    type=1,
+                    forwardingType=0,
+                    forwardingAlgorithm=0,
+                    metrics=PrefixMetrics(
+                        version=1,
+                        path_preference=1000,
+                        source_preference=200,
+                        distance=0,
+                    ),
+                    tags={"INTERFACE_SUBNET", "openr-center:lo"},
+                    area_stack=[],
+                ),
+            )
+        ],
+    ),
+    ReceivedRouteDetail(
+        prefix=IpPrefix(
+            prefixAddress=BinaryAddress(
+                addr=b"\xfd\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            ),
+            prefixLength=64,
+        ),
+        bestKey=NodeAndArea(node="openr-right", area="area2"),
+        bestKeys=[NodeAndArea(node="openr-right", area="area2")],
+        routes=[
+            ReceivedRoute(
+                key=NodeAndArea(node="openr-right", area="area2"),
+                route=PrefixEntry(
+                    prefix=IpPrefix(
+                        prefixAddress=BinaryAddress(
+                            addr=b"\xfd\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                        ),
+                        prefixLength=64,
+                    ),
+                    type=1,
+                    forwardingType=0,
+                    forwardingAlgorithm=0,
+                    metrics=PrefixMetrics(
+                        version=1,
+                        path_preference=1000,
+                        source_preference=200,
+                        distance=0,
+                    ),
+                    tags={"INTERFACE_SUBNET", "openr-right:lo"},
+                    area_stack=[],
+                ),
+            )
+        ],
+    ),
+]
+
+EXPECTED_ROUTES_RECEIVED_JSON = """\
+{
+  "::1": {
+    "areas": [
+      "area2"
+    ],
+    "prefixEntries": [
+      {
+        "area": "area2",
+        "bestKey": {
+          "area": "area2",
+          "node": "openr-center"
+        },
+        "prefix": "fd00:5::/64",
+        "tags": [
+          "INTERFACE_SUBNET",
+          "openr-center:lo"
+        ]
+      },
+      {
+        "area": "area2",
+        "bestKey": {
+          "area": "area2",
+          "node": "openr-center"
+        },
+        "prefix": "fd00:4::/64",
+        "tags": [
+          "INTERFACE_SUBNET",
+          "openr-center:lo"
+        ]
+      },
+      {
+        "area": "area2",
+        "bestKey": {
+          "area": "area2",
+          "node": "openr-right"
+        },
+        "prefix": "fd00:6::/64",
+        "tags": [
+          "INTERFACE_SUBNET",
+          "openr-right:lo"
+        ]
+      }
+    ],
+    "thisNodeName": "::1"
+  }
+}
+"""
+
+# Keeping for reference
+OLD_PREFIXES_JSON = """\
+{
+  "openr-right": {
+    "area": null,
+    "deletePrefix": null,
+    "perfEvents": null,
+    "prefixEntries": [
+      {
+        "area_stack": [],
+        "data": null,
+        "forwardingAlgorithm": 0,
+        "forwardingType": 0,
+        "metrics": {
+          "distance": 0,
+          "path_preference": 1000,
+          "source_preference": 200,
+          "version": 1
+        },
+        "minNexthop": null,
+        "mv": null,
+        "prefix": "fd00:6::/64",
+        "prependLabel": null,
+        "tags": [
+          "INTERFACE_SUBNET",
+          "openr-right:lo"
+        ],
+        "type": 1
+      },
+      {
+        "area_stack": [],
+        "data": null,
+        "forwardingAlgorithm": 0,
+        "forwardingType": 0,
+        "metrics": {
+          "distance": 0,
+          "path_preference": 1000,
+          "source_preference": 200,
+          "version": 1
+        },
+        "minNexthop": null,
+        "mv": null,
+        "prefix": "fd00:7::/64",
+        "prependLabel": null,
+        "tags": [
+          "INTERFACE_SUBNET",
+          "openr-right:lo"
+        ],
+        "type": 1
+      }
+    ],
+    "thisNodeName": "openr-right"
+  }
+}
 """

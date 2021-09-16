@@ -7,23 +7,26 @@
 
 import ipaddress
 import socket
-from typing import List, Optional
+from typing import Union, List, Optional
 
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types
+from openr.thrift.Network import types as network_types_py3
 from openr.Types import ttypes as openr_types
 
 
-def sprint_addr(addr) -> str:
+def sprint_addr(addr: bytes) -> str:
     """binary ip addr -> string"""
 
-    if not len(addr):
+    if not len(addr) or not addr:
         return ""
 
     return str(ipaddress.ip_address(addr))
 
 
-def sprint_prefix(prefix) -> str:
+def sprint_prefix(
+    prefix: Union[network_types_py3.IpPrefix, network_types.IpPrefix]
+) -> str:
     """
     :param prefix: network_types.IpPrefix representing an CIDR network
 
@@ -31,7 +34,7 @@ def sprint_prefix(prefix) -> str:
     :rtype: str or unicode
     """
 
-    return "{}/{}".format(sprint_addr(prefix.prefixAddress.addr), prefix.prefixLength)
+    return f"{sprint_addr(prefix.prefixAddress.addr)}/{prefix.prefixLength}"
 
 
 def ip_str_to_addr(

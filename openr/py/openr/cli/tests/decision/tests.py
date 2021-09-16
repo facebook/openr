@@ -19,10 +19,12 @@ from .fixtures import (
     AREA_SUMMARIES,
     BAD_VALIDATE_TIMESTAMP,
     DECISION_ADJ_DBS_OK,
+    EXPECTED_ROUTES_RECEIVED_JSON,
     EXPECTED_VALIDATE_OUTPUT_BAD,
     EXPECTED_VALIDATE_OUTPUT_OK,
     RECEIVED_ROUTES_DB_OK,
     KVSTORE_KEYVALS_OK,
+    MOCKED_RECEIVED_ROUTES,
 )
 
 
@@ -87,3 +89,58 @@ class CliDecisionTests(TestCase):
             )
         self.assertEqual(2, invoked_return.exit_code)
         self.assertEqual(EXPECTED_VALIDATE_OUTPUT_BAD, invoked_return.stdout)
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    def test_decision_received_routes_json(
+        self, mocked_openr_client: MagicMock
+    ) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        # Retturn a List of ReceivedRouteDetail
+        mocked_returned_connection.getReceivedRoutesFiltered.return_value = (
+            MOCKED_RECEIVED_ROUTES
+        )
+        invoked_return = self.runner.invoke(
+            decision.ReceivedRoutesCli.show,
+            ["--json"],
+            catch_exceptions=False,
+        )
+        self.assertEqual(0, invoked_return.exit_code)
+        self.assertEqual("[]", invoked_return.stdout)
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    def test_decision_received_routes_json_legacy(
+        self, mocked_openr_client: MagicMock
+    ) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        # Retturn a List of ReceivedRouteDetail
+        mocked_returned_connection.getReceivedRoutesFiltered.return_value = (
+            MOCKED_RECEIVED_ROUTES
+        )
+        invoked_return = self.runner.invoke(
+            decision.ReceivedRoutesCli.show,
+            ["--json", "--legacy"],
+            catch_exceptions=False,
+        )
+        self.assertEqual(0, invoked_return.exit_code)
+        self.assertEqual(EXPECTED_ROUTES_RECEIVED_JSON, invoked_return.stdout)
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    def test_decision_received_routes_json_no_data(
+        self, mocked_openr_client: MagicMock
+    ) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        # Retturn a List of ReceivedRouteDetail
+        mocked_returned_connection.getReceivedRoutesFiltered.return_value = []
+        invoked_return = self.runner.invoke(
+            decision.ReceivedRoutesCli.show,
+            ["--json"],
+            catch_exceptions=False,
+        )
+        self.assertEqual(0, invoked_return.exit_code)  # TODO - Should we return 1?
+        self.assertEqual("{}\n", invoked_return.stdout)

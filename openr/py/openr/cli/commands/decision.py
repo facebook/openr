@@ -6,6 +6,7 @@
 
 
 import ipaddress
+import json
 import sys
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Sequence, Tuple
@@ -18,7 +19,7 @@ from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object
+from openr.utils.serializer import deserialize_thrift_object, serialize_json
 
 
 class DecisionPrefixesCmd(OpenrCtrlCmd):
@@ -751,17 +752,14 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         json: bool,
         detailed: bool,
         tag2name: bool,
+        legacy: bool,
         *args,
         **kwargs,
     ) -> None:
-
-        # Get data
         routes = self.fetch(client, prefixes, node, area)
 
-        # Print json if
         if json:
-            # TODO: Print routes in json
-            raise NotImplementedError()
+            print(self.render_json(routes, legacy))
         else:
             self.render(routes, detailed, tag2name)
 
@@ -808,3 +806,53 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         )
 
         utils.print_route_details(routes, key_fn, detailed, tag_to_name)
+
+    def _render_legacy_json(self, data: List[ctrl_types.ReceivedRouteDetail]) -> str:
+        areas = set()
+        json_dict = {}
+        json_dict[self.host] = {
+            "thisNodeName": self.host,
+            "prefixEntries": [],
+        }
+
+        for route_detail in data:
+            route_json = {}
+
+            # Area
+            area = route_detail.bestKey.area
+            areas.add(area)
+            route_json["area"] = area
+
+            # Calc + add prefix
+            route_json["prefix"] = ipnetwork.sprint_prefix(route_detail.prefix)
+
+            # BestKey
+            route_json["bestKey"] = {
+                "node": route_detail.bestKey.node,
+                "area": route_detail.bestKey.area,
+            }
+
+            for route in route_detail.routes:
+                # TODO: Add forwarding* etc. for each ReceivedRoute
+                # TODO: Make set of all tags for prefix
+                route_json["tags"] = sorted(route.route.tags)
+
+            json_dict[self.host]["prefixEntries"].append(route_json)
+
+        json_dict[self.host]["areas"] = sorted(areas)
+        return json.dumps(json_dict, indent=2, sort_keys=True)
+
+    def render_json(
+        self, data: List[ctrl_types.ReceivedRouteDetail], legacy: bool = False
+    ) -> str:
+        """Render Routes into JSON matching deprecated decision prefixes output"""
+        if not data:
+            return r"{}"
+
+        if legacy:
+            return self._render_legacy_json(data)
+
+        json_structs = []
+        for rrd_struct in data:
+            json_structs.append(json.loads(serialize_json(rrd_struct)))
+        return json.dumps(json_structs, indent=2, sort_keys=True)

@@ -4,9 +4,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Any
 
 from openr.utils.consts import Consts
+from thrift.protocol.TSimpleJSONProtocol import TSimpleJSONProtocolFactory
 from thrift.util import Serializer
+
+
+def serialize_json(struct: Any) -> bytes:
+    """Serialize any thrift Struct into JSON"""
+    return Serializer.serialize(TSimpleJSONProtocolFactory(), struct)
 
 
 def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):

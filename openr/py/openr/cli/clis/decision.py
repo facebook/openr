@@ -216,6 +216,9 @@ class ReceivedRoutesCli:
         help="Translate tag string to human readable name",
     )
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    @click.option(
+        "--legacy", is_flag=True, help="Output legacy prefixEntry like JSON format"
+    )
     @click.pass_obj
     def show(
         cli_opts: bunch.Bunch,  # noqa: B902
@@ -225,10 +228,11 @@ class ReceivedRoutesCli:
         detail: bool,
         tag2name: bool,
         json: bool,
+        legacy: bool,
     ) -> None:
         """
         Show routes this node is advertising. Will show all by default
         """
         decision.ReceivedRoutesCmd(cli_opts).run(
-            prefix, node, area, json, detail, tag2name
+            prefix, node, area, json, detail, tag2name, legacy
         )
