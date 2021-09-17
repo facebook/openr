@@ -36,6 +36,46 @@ corresponding interfaces will be modified inside database:
 - Interface DOWN: remove tracked neighbor over this interface and generate
   neighbor down notification;
 
+## Areas
+
+Spark only forms adjacencies with nodes in the same area. This is configured in
+the `area` stanza of the Open/R config. For example, the following node is in
+two areas:
+
+```json
+"areas": [
+  {
+    "area_id": "area1",
+    "include_interface_regexes": [
+      "eth[0-9]"
+    ],
+  },
+  {
+    "area_id": "area2",
+    "include_interface_regexes": [
+      "eth[0-9]"
+    ],
+  }
+],
+```
+
+### Wildcard Area
+
+Open/R has a special area that is treated as the wildcard area. This is area
+**"0"**. Interfaces configured into this area will form adjacencies with any
+other node not validating what area they claim to be in. Example Config:
+
+```json
+"areas": [
+  {
+    "area_id": "0",
+    "include_interface_regexes": [
+      "eth0"
+    ]
+  }
+]
+```
+
 ## Deep Dive
 
 ---
