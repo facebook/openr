@@ -616,34 +616,44 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   auto prefixAllocParam = folly::sformat(
       "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
 
-  auto cb = [&](const std::string&,
-                std::optional<thrift::Value> value) mutable noexcept {
+  auto cb = [&](const std::string& prefixStr,
+                std::optional<thrift::Value> val) mutable noexcept {
     // Parse PrefixDb
-    ASSERT_TRUE(value.has_value());
-    ASSERT_TRUE(value.value().value_ref().has_value());
-    auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-        value.value().value_ref().value(), serializer);
-    auto prefixes = *prefixDb.prefixEntries_ref();
-    bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
+    // Ignore update if:
+    //  1) val is std::nullopt;
+    //  2) val has no value field inside `thrift::Value`(e.g. ttl update)
+    if ((not val.has_value()) or (not val.value().value_ref())) {
+      return;
+    }
 
-    // prefixDb marked by `deletedPrefix` to indicate prefix is stale.
-    // ATTN: With per-prefix-key advertisement, `prefixEntries` will never
-    //       be empty.
-    EXPECT_GE(1, prefixes.size());
-    if (isPrefixDbDeleted or prefixes.empty()) {
-      allocPrefix.withWLock(
-          [&](auto& allocatedPrefix) { allocatedPrefix = std::nullopt; });
-      LOG(INFO) << "Lost allocated prefix!";
-      hasAllocPrefix.store(false, std::memory_order_relaxed);
-    } else {
-      EXPECT_EQ(
-          thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes.back().type_ref());
-      auto prefix = toIPNetwork(*prefixes.back().prefix_ref());
-      EXPECT_EQ(allocPrefixLen, prefix.second);
-      allocPrefix.withWLock(
-          [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
-      LOG(INFO) << "Got new prefix allocation: " << prefix.first;
-      hasAllocPrefix.store(true, std::memory_order_relaxed);
+    try {
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+          *val.value().value_ref(), serializer);
+      auto prefixes = *prefixDb.prefixEntries_ref();
+      bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
+
+      // prefixDb marked by `deletedPrefix` to indicate prefix is stale.
+      // ATTN: With per-prefix-key advertisement, `prefixEntries` will never
+      //       be empty.
+      EXPECT_GE(1, prefixes.size());
+      if (isPrefixDbDeleted or prefixes.empty()) {
+        allocPrefix.withWLock(
+            [&](auto& allocatedPrefix) { allocatedPrefix = std::nullopt; });
+        LOG(INFO) << "Lost allocated prefix!";
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+      } else {
+        EXPECT_EQ(
+            thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes.back().type_ref());
+        auto prefix = toIPNetwork(*prefixes.back().prefix_ref());
+        EXPECT_EQ(allocPrefixLen, prefix.second);
+        allocPrefix.withWLock(
+            [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
+        LOG(INFO) << "Got new prefix allocation: " << prefix.first;
+        hasAllocPrefix.store(true, std::memory_order_relaxed);
+      }
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << "Failed to deserialize corresponding value for key "
+                 << prefixStr << ". Exception: " << folly::exceptionStr(ex);
     }
   };
 
@@ -1002,32 +1012,42 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
   folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
 
-  auto cb = [&](const std::string&,
-                std::optional<thrift::Value> value) mutable noexcept {
+  auto cb = [&](const std::string& prefixStr,
+                std::optional<thrift::Value> val) mutable noexcept {
     // Parse PrefixDb
-    ASSERT_TRUE(value.has_value());
-    ASSERT_TRUE(value.value().value_ref().has_value());
-    auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-        value.value().value_ref().value(), serializer);
-    auto& prefixes = *prefixDb.prefixEntries_ref();
-    bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
+    // Ignore update if:
+    //  1) val is std::nullopt;
+    //  2) val has no value field inside `thrift::Value`(e.g. ttl update)
+    if ((not val.has_value()) or (not val.value().value_ref())) {
+      return;
+    }
+    try {
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+          *val.value().value_ref(), serializer);
+      auto prefixes = *prefixDb.prefixEntries_ref();
+      bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
 
-    // prefixDb marked by `deletedPrefix` to indicate prefix is stale.
-    // ATTN: With per-prefix-key advertisement, `prefixEntries` will never
-    //       be empty.
-    EXPECT_GE(1, prefixes.size());
-    if (isPrefixDbDeleted or prefixes.empty()) {
-      allocPrefix.withWLock(
-          [&](auto& allocatedPrefix) { allocatedPrefix = std::nullopt; });
-      LOG(INFO) << "Lost allocated prefix!";
-      hasAllocPrefix.store(false, std::memory_order_relaxed);
-    } else {
-      EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes[0].type_ref());
-      auto prefix = toIPNetwork(*prefixes[0].prefix_ref());
-      allocPrefix.withWLock(
-          [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
-      LOG(INFO) << "Got new prefix allocation!";
-      hasAllocPrefix.store(true, std::memory_order_relaxed);
+      // prefixDb marked by `deletedPrefix` to indicate prefix is stale.
+      // ATTN: With per-prefix-key advertisement, `prefixEntries` will never
+      //       be empty.
+      EXPECT_GE(1, prefixes.size());
+      if (isPrefixDbDeleted or prefixes.empty()) {
+        allocPrefix.withWLock(
+            [&](auto& allocatedPrefix) { allocatedPrefix = std::nullopt; });
+        LOG(INFO) << "Lost allocated prefix!";
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+      } else {
+        EXPECT_EQ(
+            thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes[0].type_ref());
+        auto prefix = toIPNetwork(*prefixes[0].prefix_ref());
+        allocPrefix.withWLock(
+            [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
+        LOG(INFO) << "Got new prefix allocation!";
+        hasAllocPrefix.store(true, std::memory_order_relaxed);
+      }
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << "Failed to deserialize corresponding value for key "
+                 << prefixStr << ". Exception: " << folly::exceptionStr(ex);
     }
   };
 
