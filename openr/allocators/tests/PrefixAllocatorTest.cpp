@@ -74,7 +74,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
     // Start persistent config store
     configStore_ =
         std::make_unique<PersistentStore>(config_, true /* dryrun */);
-    threads_.emplace_back([&]() noexcept { configStore_->run(); });
+    configStoreThread_ = std::make_unique<std::thread>(
+        [this]() noexcept { configStore_->run(); });
     configStore_->waitUntilRunning();
 
     // Erase previous configs (if any)
@@ -104,7 +105,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         logSampleQueue_,
         kvRequestQueue_,
         kSyncInterval);
-    threads_.emplace_back([&]() noexcept {
+    prefixAllocatorThread_ = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "PrefixAllocator started. TID: "
                 << std::this_thread::get_id();
       prefixAllocator_->run();
@@ -122,7 +123,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         fibRouteUpdatesQueue_.getReader(),
         config_,
         kvStoreWrapper_->getKvStore());
-    threads_.emplace_back([&]() noexcept {
+    prefixManagerThread_ = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "PrefixManager started. TID: " << std::this_thread::get_id();
       prefixManager_->run();
     });
@@ -145,10 +146,12 @@ class PrefixAllocatorFixture : public ::testing::Test {
     // Stop various modules
     prefixAllocator_->stop();
     prefixAllocator_->waitUntilStopped();
+    prefixAllocatorThread_->join();
     prefixAllocator_.reset();
 
     prefixManager_->stop();
     prefixManager_->waitUntilStopped();
+    prefixManagerThread_->join();
     prefixManager_.reset();
 
     kvStoreWrapper_->stop();
@@ -156,16 +159,12 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
     configStore_->stop();
     configStore_->waitUntilStopped();
+    configStoreThread_->join();
     configStore_.reset();
 
     evb_.stop();
     evb_.waitUntilStopped();
     evbThread_.join();
-
-    // Join for all threads to finish
-    for (auto& thread : threads_) {
-      thread.join();
-    }
 
     // destroy MockNetlinkProtocolSocket
     nlSock_.reset();
@@ -190,8 +189,9 @@ class PrefixAllocatorFixture : public ::testing::Test {
   std::unique_ptr<PersistentStore> configStore_;
   std::unique_ptr<PrefixManager> prefixManager_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
-
-  std::vector<std::thread> threads_;
+  std::unique_ptr<std::thread> configStoreThread_;
+  std::unique_ptr<std::thread> prefixManagerThread_;
+  std::unique_ptr<std::thread> prefixAllocatorThread_;
 
   // Queue for publishing prefix-updates to PrefixManager
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
@@ -276,21 +276,27 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     // Put in outer scope of kvstore client to ensure it's still alive when the
     // client is destroyed
     OpenrEventBase evb;
+    std::thread evbThread;
+
     folly::Baton waitBaton;
     std::atomic<bool> usingNewSeedPrefix{false};
 
     std::vector<std::shared_ptr<Config>> configs;
+    std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
+    std::unique_ptr<KvStoreClientInternal> kvStoreClient;
     std::vector<std::unique_ptr<PersistentStore>> configStores;
     std::vector<std::unique_ptr<PrefixManager>> prefixManagers;
+    std::vector<std::unique_ptr<PrefixAllocator>> allocators;
+    std::vector<std::thread> configStoreThreads;
+    std::vector<std::thread> prefixManagerThreads;
+    std::vector<std::thread> prefixAllocatorThreads;
+    messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
     std::vector<messaging::ReplicateQueue<PrefixEvent>> prefixQueues{
         numAllocators};
     std::vector<messaging::ReplicateQueue<DecisionRouteUpdate>>
         fibRouteUpdatesQueues{numAllocators};
-    messaging::ReplicateQueue<LogSample> logSampleQueue;
-    messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
     messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
-    std::vector<std::unique_ptr<PrefixAllocator>> allocators;
-    std::vector<std::thread> threads;
+    messaging::ReplicateQueue<LogSample> logSampleQueue;
 
     // needed while allocators manipulate test state
     folly::Synchronized<std::unordered_map<std::string, folly::CIDRNetwork>>
@@ -359,41 +365,42 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       });
     };
 
+    // start event loop
+    evbThread = std::thread([&evb]() noexcept { evb.run(); });
+    evb.waitUntilRunning();
+
     //
     // 1) spin up a kvstore and create KvStoreClientInternal
     //
     const auto nodeId = folly::sformat("test_store{}", round);
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
-    auto store = std::make_shared<KvStoreWrapper>(zmqContext, config);
-    store->run();
+    kvStoreWrapper = std::make_unique<KvStoreWrapper>(zmqContext, config);
+    kvStoreWrapper->run();
 
     // Attach a kvstore client in main event loop
-    auto kvStoreClient = std::make_unique<KvStoreClientInternal>(
-        &evb, nodeId, store->getKvStore());
+    evb.getEvb()->runInEventBaseThreadAndWait([&]() {
+      kvStoreClient = std::make_unique<KvStoreClientInternal>(
+          &evb, nodeId, kvStoreWrapper->getKvStore());
 
-    // Set seed prefix in KvStore
-    if (emptySeedPrefix) {
-      // inject seed prefix
-      auto prefixAllocParam = folly::sformat(
-          "{},{}",
-          folly::IPAddress::networkToString(seedPrefix),
-          kAllocPrefixLen);
-      auto res = kvStoreClient->setKey(
-          kTestingAreaName,
-          Constants::kSeedPrefixAllocParamKey.toString(),
-          prefixAllocParam);
-      EXPECT_TRUE(res.has_value());
-    }
+      // Set seed prefix in KvStore
+      if (emptySeedPrefix) {
+        // inject seed prefix
+        auto prefixAllocParam = folly::sformat(
+            "{},{}",
+            folly::IPAddress::networkToString(seedPrefix),
+            kAllocPrefixLen);
+        auto res = kvStoreClient->setKey(
+            kTestingAreaName,
+            Constants::kSeedPrefixAllocParamKey.toString(),
+            prefixAllocParam);
+        EXPECT_TRUE(res.has_value());
+      }
+    });
 
     //
     // 2) start threads for allocators
     //
-
-    // start event loop
-    threads.emplace_back([&evb]() noexcept { evb.run(); });
-    evb.waitUntilRunning();
-
     for (uint32_t i = 0; i < numAllocators; ++i) {
       const auto myNodeName = folly::sformat("node-{}", i);
 
@@ -415,7 +422,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // spin up config store server for this allocator
       auto configStore = std::make_unique<PersistentStore>(config1);
-      threads.emplace_back([&configStore]() noexcept { configStore->run(); });
+      configStoreThreads.emplace_back(
+          [&configStore]() noexcept { configStore->run(); });
       configStore->waitUntilRunning();
 
       // Temporary config store for PrefixManager so that they are not being
@@ -428,7 +436,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // spin up config store server for this allocator
       auto tempConfigStore = std::make_unique<PersistentStore>(config2);
-      threads.emplace_back(
+      configStoreThreads.emplace_back(
           [&tempConfigStore]() noexcept { tempConfigStore->run(); });
       tempConfigStore->waitUntilRunning();
 
@@ -452,12 +460,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       auto prefixManager = std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           kvRequestQueue,
-          store->getReader(),
+          kvStoreWrapper->getReader(),
           prefixQueues.at(i).getReader(),
           fibRouteUpdatesQueues.at(i).getReader(),
           currConfig,
-          store->getKvStore());
-      threads.emplace_back(
+          kvStoreWrapper->getKvStore());
+      prefixManagerThreads.emplace_back(
           [&prefixManager]() noexcept { prefixManager->run(); });
       prefixManager->waitUntilRunning();
       prefixManagers.emplace_back(std::move(prefixManager));
@@ -466,13 +474,14 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           kTestingAreaName,
           currConfig,
           nlSock_.get(),
-          store->getKvStore(),
+          kvStoreWrapper->getKvStore(),
           configStore.get(),
           prefixQueues.at(i),
           logSampleQueue,
           kvRequestQueue,
           kSyncInterval);
-      threads.emplace_back([&allocator]() noexcept { allocator->run(); });
+      prefixAllocatorThreads.emplace_back(
+          [&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();
 
       configStores.emplace_back(std::move(configStore));
@@ -531,28 +540,40 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     staticRouteUpdatesQueue.close();
     kvRequestQueue.close();
     logSampleQueue.close();
-    store->closeQueue();
+    kvStoreWrapper->closeQueue();
 
-    // stop eventbase
-    evb.stop();
-    evb.waitUntilStopped();
+    kvStoreClient->stop();
+    kvStoreClient.reset();
 
+    int allocatorId = 0;
     for (auto& allocator : allocators) {
       allocator->stop();
       allocator->waitUntilStopped();
+      prefixAllocatorThreads.at(allocatorId++).join();
     }
+
+    int prefixManagerId = 0;
     for (auto& prefixManager : prefixManagers) {
       prefixManager->stop();
       prefixManager->waitUntilStopped();
+      prefixManagerThreads.at(prefixManagerId++).join();
+      prefixManager.reset();
     }
-    for (auto& server : configStores) {
-      server->stop();
-      server->waitUntilStopped();
+
+    kvStoreWrapper->stop();
+    kvStoreWrapper.reset();
+
+    int configStoreId = 0;
+    for (auto& configStore : configStores) {
+      configStore->stop();
+      configStore->waitUntilStopped();
+      configStoreThreads.at(configStoreId++).join();
+      configStore.reset();
     }
-    store->stop();
-    for (auto& t : threads) {
-      t.join();
-    }
+
+    evb.stop();
+    evb.waitUntilStopped();
+    evbThread.join();
 
     // Verify at the end when everything is stopped
     for (uint32_t i = 0; i < numAllocators; ++i) {
@@ -676,9 +697,11 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
         kvStoreClient_.reset();
         prefixAllocator_->stop();
         prefixAllocator_->waitUntilStopped();
+        prefixAllocatorThread_->join();
         prefixAllocator_.reset();
         prefixManager_->stop();
         prefixManager_->waitUntilStopped();
+        prefixManagerThread_->join();
         prefixManager_.reset();
 
         // reopen queue and restart prefixAllocator/prefixManager
@@ -1058,9 +1081,11 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         kvStoreClient_.reset();
         prefixAllocator_->stop();
         prefixAllocator_->waitUntilStopped();
+        prefixAllocatorThread_->join();
         prefixAllocator_.reset();
         prefixManager_->stop();
         prefixManager_->waitUntilStopped();
+        prefixManagerThread_->join();
         prefixManager_.reset();
 
         // reopen queue and restart prefixAllocator/prefixManager
