@@ -129,13 +129,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb_);
 
     // Create LinkMonitor
-    re2::RE2::Options regexOpts;
-    std::string regexErr;
-    auto includeRegexList =
-        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    includeRegexList->Add("po.*", &regexErr);
-    includeRegexList->Compile();
-
     linkMonitor = std::make_shared<LinkMonitor>(
         config,
         nlSock_.get(),
@@ -166,11 +159,8 @@ class OpenrCtrlFixture : public ::testing::Test {
         config);
     openrThriftServerWrapper_->run();
 
-    // initialize openrCtrlClient talking to server
-    client_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
-        evb_,
-        folly::IPAddress(Constants::kPlatformHost.toString()),
-        openrThriftServerWrapper_->getOpenrCtrlThriftPort());
+    // initialize OpenrCtrlHandler for testing usage
+    handler_ = openrThriftServerWrapper_->getOpenrCtrlHandler();
   }
 
   void
@@ -187,7 +177,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
 
-    client_.reset();
+    handler_.reset();
 
     linkMonitor->stop();
     linkMonitorThread_.join();
@@ -226,7 +216,11 @@ class OpenrCtrlFixture : public ::testing::Test {
     thrift::KeySetParams setParams;
     setParams.keyVals_ref() = keyVals;
 
-    client_->sync_setKvStoreKeyVals(setParams, area);
+    handler_
+        ->semifuture_setKvStoreKeyVals(
+            std::make_unique<thrift::KeySetParams>(setParams),
+            std::make_unique<std::string>(area))
+        .get();
   }
 
  private:
@@ -238,7 +232,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
-  // Queue for event logs
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
   fbzmq::Context context_{};
@@ -263,12 +256,12 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_{nullptr};
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
-  std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client_{nullptr};
+  std::shared_ptr<OpenrCtrlHandler> handler_{nullptr};
 };
 
 TEST_F(OpenrCtrlFixture, getMyNodeName) {
-  std::string res = "";
-  client_->sync_getMyNodeName(res);
+  std::string res{""};
+  handler_->getMyNodeName(res);
   EXPECT_EQ(nodeName_, res);
 }
 
@@ -280,125 +273,138 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
         createPrefixEntry("20.0.0.0/8", thrift::PrefixType::BGP),
         createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
     };
-    client_->sync_advertisePrefixes(
-        std::vector<thrift::PrefixEntry>{std::move(prefixes)});
+    handler_
+        ->semifuture_advertisePrefixes(
+            std::make_unique<std::vector<thrift::PrefixEntry>>(
+                std::move(prefixes)))
+        .get();
   }
 
   {
     std::vector<thrift::PrefixEntry> prefixes{
         createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
     };
-    client_->sync_withdrawPrefixes(
-        std::vector<thrift::PrefixEntry>{std::move(prefixes)});
-    client_->sync_withdrawPrefixesByType(thrift::PrefixType::LOOPBACK);
+    handler_
+        ->semifuture_withdrawPrefixes(
+            std::make_unique<std::vector<thrift::PrefixEntry>>(
+                std::move(prefixes)))
+        .get();
+    handler_->semifuture_withdrawPrefixesByType(thrift::PrefixType::LOOPBACK);
   }
 
   {
     std::vector<thrift::PrefixEntry> prefixes{
         createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
     };
-    client_->sync_syncPrefixesByType(
+    handler_->semifuture_syncPrefixesByType(
         thrift::PrefixType::BGP,
-        std::vector<thrift::PrefixEntry>{std::move(prefixes)});
+        std::make_unique<std::vector<thrift::PrefixEntry>>(
+            std::move(prefixes)));
   }
 
   {
-    const std::vector<thrift::PrefixEntry> prefixes{
+    const std::vector<thrift::PrefixEntry> exp{
         createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
     };
-    std::vector<thrift::PrefixEntry> res;
-    client_->sync_getPrefixes(res);
-    EXPECT_EQ(prefixes, res);
+    auto res = handler_->semifuture_getPrefixes().get();
+    EXPECT_EQ(exp, *res);
   }
 
   {
-    std::vector<thrift::PrefixEntry> res;
-    client_->sync_getPrefixesByType(res, thrift::PrefixType::LOOPBACK);
-    EXPECT_EQ(0, res.size());
+    auto res =
+        handler_->semifuture_getPrefixesByType(thrift::PrefixType::LOOPBACK)
+            .get();
+    EXPECT_EQ(0, res->size());
   }
 
   {
-    std::vector<thrift::AdvertisedRouteDetail> routes;
-    client_->sync_getAdvertisedRoutes(routes);
-    EXPECT_EQ(1, routes.size());
+    auto routes = handler_->semifuture_getAdvertisedRoutes().get();
+    EXPECT_EQ(1, routes->size());
   }
 }
 
 TEST_F(OpenrCtrlFixture, RouteApis) {
   {
-    thrift::RouteDatabase db;
-    client_->sync_getRouteDb(db);
-    EXPECT_EQ(nodeName_, db.thisNodeName_ref());
-    EXPECT_EQ(0, db.unicastRoutes_ref()->size());
-    EXPECT_EQ(0, db.mplsRoutes_ref()->size());
+    auto db = handler_->semifuture_getRouteDb().get();
+    EXPECT_EQ(nodeName_, db->get_thisNodeName());
+    EXPECT_EQ(0, db->get_unicastRoutes().size());
+    EXPECT_EQ(0, db->get_mplsRoutes().size());
   }
 
   {
-    thrift::RouteDatabase db;
-    client_->sync_getRouteDbComputed(db, nodeName_);
-    EXPECT_EQ(nodeName_, db.thisNodeName_ref());
-    EXPECT_EQ(0, db.unicastRoutes_ref()->size());
-    EXPECT_EQ(0, db.mplsRoutes_ref()->size());
+    auto db = handler_
+                  ->semifuture_getRouteDbComputed(
+                      std::make_unique<std::string>(nodeName_))
+                  .get();
+    EXPECT_EQ(nodeName_, db->get_thisNodeName());
+    EXPECT_EQ(0, db->get_unicastRoutes().size());
+    EXPECT_EQ(0, db->get_mplsRoutes().size());
   }
 
   {
     const std::string testNode("avengers@universe");
-    thrift::RouteDatabase db;
-    client_->sync_getRouteDbComputed(db, testNode);
-    EXPECT_EQ(testNode, *db.thisNodeName_ref());
-    EXPECT_EQ(0, db.unicastRoutes_ref()->size());
-    EXPECT_EQ(0, db.mplsRoutes_ref()->size());
+    auto db = handler_
+                  ->semifuture_getRouteDbComputed(
+                      std::make_unique<std::string>(testNode))
+                  .get();
+    EXPECT_EQ(testNode, db->get_thisNodeName());
+    EXPECT_EQ(0, db->get_unicastRoutes().size());
+    EXPECT_EQ(0, db->get_mplsRoutes().size());
   }
 
   {
-    std::vector<thrift::UnicastRoute> filterRet;
-    std::vector<std::string> prefixes{"10.46.2.0", "10.46.2.0/24"};
-    client_->sync_getUnicastRoutesFiltered(filterRet, prefixes);
-    EXPECT_EQ(0, filterRet.size());
+    const std::vector<std::string> prefixes{"10.46.2.0", "10.46.2.0/24"};
+    auto res = handler_
+                   ->semifuture_getUnicastRoutesFiltered(
+                       std::make_unique<std::vector<std::string>>(prefixes))
+                   .get();
+    EXPECT_EQ(0, res->size());
   }
 
   {
-    std::vector<thrift::UnicastRoute> allRouteRet;
-    client_->sync_getUnicastRoutes(allRouteRet);
-    EXPECT_EQ(0, allRouteRet.size());
+    auto res = handler_->semifuture_getUnicastRoutes().get();
+    EXPECT_EQ(0, res->size());
   }
   {
-    std::vector<thrift::MplsRoute> filterRet;
-    std::vector<std::int32_t> labels{1, 2};
-    client_->sync_getMplsRoutesFiltered(filterRet, labels);
-    EXPECT_EQ(0, filterRet.size());
+    const std::vector<std::int32_t> labels{1, 2};
+    auto res = handler_
+                   ->semifuture_getMplsRoutesFiltered(
+                       std::make_unique<std::vector<std::int32_t>>(labels))
+                   .get();
+    EXPECT_EQ(0, res->size());
   }
   {
-    std::vector<thrift::MplsRoute> allRouteRet;
-    client_->sync_getMplsRoutes(allRouteRet);
-    EXPECT_EQ(0, allRouteRet.size());
+    auto res = handler_->semifuture_getMplsRoutes().get();
+    EXPECT_EQ(0, res->size());
   }
 }
 
 TEST_F(OpenrCtrlFixture, PerfApis) {
-  thrift::PerfDatabase db;
-  client_->sync_getPerfDb(db);
-  EXPECT_EQ(nodeName_, db.thisNodeName_ref());
+  auto db = handler_->semifuture_getPerfDb().get();
+  EXPECT_EQ(nodeName_, db->get_thisNodeName());
 }
 
 TEST_F(OpenrCtrlFixture, DecisionApis) {
   {
-    std::vector<thrift::AdjacencyDatabase> dbs;
-    client_->sync_getDecisionAdjacenciesFiltered(dbs, {});
-    EXPECT_EQ(0, dbs.size());
+    auto dbs = handler_
+                   ->semifuture_getDecisionAdjacenciesFiltered(
+                       std::make_unique<thrift::AdjacenciesFilter>())
+                   .get();
+    EXPECT_EQ(0, dbs->size());
   }
 
   {
-    std::vector<thrift::ReceivedRouteDetail> routes;
-    client_->sync_getReceivedRoutes(routes);
-    EXPECT_EQ(0, routes.size());
+    auto routes = handler_->semifuture_getReceivedRoutes().get();
+    EXPECT_EQ(0, routes->size());
   }
 
   {
     // Positive Test
-    std::vector<thrift::ReceivedRouteDetail> routes;
-    client_->sync_getReceivedRoutesFiltered(routes, {});
-    EXPECT_EQ(0, routes.size());
+    auto routes = handler_
+                      ->semifuture_getReceivedRoutesFiltered(
+                          std::make_unique<thrift::ReceivedRouteFilter>())
+                      .get();
+    EXPECT_EQ(0, routes->size());
 
     // Nevative Test
     thrift::ReceivedRouteFilter filter;
@@ -412,27 +418,33 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
 
     filter.prefixes_ref() = {v4Prefix};
     EXPECT_THROW(
-        client_->sync_getReceivedRoutesFiltered(routes, filter),
+        handler_
+            ->semifuture_getReceivedRoutesFiltered(
+                std::make_unique<thrift::ReceivedRouteFilter>(filter))
+            .get(),
         thrift::OpenrError);
 
     filter.prefixes_ref() = {v6Prefix};
     EXPECT_THROW(
-        client_->sync_getReceivedRoutesFiltered(routes, filter),
+        handler_
+            ->semifuture_getReceivedRoutesFiltered(
+                std::make_unique<thrift::ReceivedRouteFilter>(filter))
+            .get(),
         thrift::OpenrError);
   }
 }
 
 TEST_F(OpenrCtrlFixture, KvStoreApis) {
-  thrift::KeyVals keyVals;
-  keyVals["key1"] = createThriftValue(1, "node1", std::string("value1"));
-  keyVals["key11"] = createThriftValue(1, "node1", std::string("value11"));
-  keyVals["key111"] = createThriftValue(1, "node1", std::string("value111"));
-  keyVals["key2"] = createThriftValue(1, "node1", std::string("value2"));
-  keyVals["key22"] = createThriftValue(1, "node1", std::string("value22"));
-  keyVals["key222"] = createThriftValue(1, "node1", std::string("value222"));
-  keyVals["key3"] = createThriftValue(1, "node3", std::string("value3"));
-  keyVals["key33"] = createThriftValue(1, "node33", std::string("value33"));
-  keyVals["key333"] = createThriftValue(1, "node33", std::string("value333"));
+  thrift::KeyVals kvs(
+      {{"key1", createThriftValue(1, "node1", std::string("value1"))},
+       {"key11", createThriftValue(1, "node1", std::string("value11"))},
+       {"key111", createThriftValue(1, "node1", std::string("value111"))},
+       {"key2", createThriftValue(1, "node1", std::string("value2"))},
+       {"key22", createThriftValue(1, "node1", std::string("value22"))},
+       {"key222", createThriftValue(1, "node1", std::string("value222"))},
+       {"key3", createThriftValue(1, "node3", std::string("value3"))},
+       {"key33", createThriftValue(1, "node33", std::string("value33"))},
+       {"key333", createThriftValue(1, "node33", std::string("value333"))}});
 
   thrift::KeyVals keyValsPod;
   keyValsPod["keyPod1"] =
@@ -450,10 +462,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // area list get
   //
   {
-    thrift::OpenrConfig config;
-    client_->sync_getRunningConfigThrift(config);
+    auto config = handler_->semifuture_getRunningConfigThrift().get();
     std::unordered_set<std::string> areas;
-    for (auto const& area : config.get_areas()) {
+    for (auto const& area : config->get_areas()) {
       areas.insert(area.get_area_id());
     }
     EXPECT_THAT(areas, testing::SizeIs(3));
@@ -464,75 +475,100 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   // Key set/get
   {
-    setKvStoreKeyVals(keyVals, kSpineAreaId);
+    setKvStoreKeyVals(kvs, kSpineAreaId);
     setKvStoreKeyVals(keyValsPod, kPodAreaId);
     setKvStoreKeyVals(keyValsPlane, kPlaneAreaId);
   }
 
   {
     std::vector<std::string> filterKeys{"key11", "key2"};
-    thrift::Publication pub;
-    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kSpineAreaId);
-    EXPECT_EQ(2, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyVals.at("key2"), pub.keyVals_ref()["key2"]);
-    EXPECT_EQ(keyVals.at("key11"), pub.keyVals_ref()["key11"]);
+    auto pub = handler_
+                   ->semifuture_getKvStoreKeyValsArea(
+                       std::make_unique<std::vector<std::string>>(
+                           std::move(filterKeys)),
+                       std::make_unique<std::string>(kSpineAreaId))
+                   .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
+    EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
   }
 
   // pod keys
   {
     std::vector<std::string> filterKeys{"keyPod1"};
-    thrift::Publication pub;
-    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kPodAreaId);
-    EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyValsPod.at("keyPod1"), pub.keyVals_ref()["keyPod1"]);
+    auto pub = handler_
+                   ->semifuture_getKvStoreKeyValsArea(
+                       std::make_unique<std::vector<std::string>>(
+                           std::move(filterKeys)),
+                       std::make_unique<std::string>(kPodAreaId))
+                   .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(1, keyVals.size());
+    EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
   }
 
   {
-    thrift::Publication pub;
     thrift::KeyDumpParams params;
-    *params.prefix_ref() = "key3";
+    params.prefix_ref() = "key3";
     params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
-    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kSpineAreaId);
-    EXPECT_EQ(3, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyVals.at("key3"), pub.keyVals_ref()["key3"]);
-    EXPECT_EQ(keyVals.at("key33"), pub.keyVals_ref()["key33"]);
-    EXPECT_EQ(keyVals.at("key333"), pub.keyVals_ref()["key333"]);
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
   }
 
   // with areas
   {
-    thrift::Publication pub;
     thrift::KeyDumpParams params;
-    *params.prefix_ref() = "keyP";
+    params.prefix_ref() = "keyP";
     params.originatorIds_ref()->insert("node1");
     params.keys_ref() = {"keyP"};
 
-    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kPlaneAreaId);
-    EXPECT_EQ(2, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyValsPlane.at("keyPlane1"), pub.keyVals_ref()["keyPlane1"]);
-    EXPECT_EQ(keyValsPlane.at("keyPlane2"), pub.keyVals_ref()["keyPlane2"]);
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kPlaneAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
+    EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
   }
 
   {
-    thrift::Publication pub;
     thrift::KeyDumpParams params;
-    *params.prefix_ref() = "key3";
+    params.prefix_ref() = "key3";
     params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
-    client_->sync_getKvStoreHashFilteredArea(pub, params, kSpineAreaId);
-    EXPECT_EQ(3, (*pub.keyVals_ref()).size());
-    auto value3 = keyVals.at("key3");
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreHashFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    auto value3 = kvs.at("key3");
     value3.value_ref().reset();
-    auto value33 = keyVals.at("key33");
+    auto value33 = kvs.at("key33");
     value33.value_ref().reset();
-    auto value333 = keyVals.at("key333");
+    auto value333 = kvs.at("key333");
     value333.value_ref().reset();
-    EXPECT_EQ(value3, pub.keyVals_ref()["key3"]);
-    EXPECT_EQ(value33, pub.keyVals_ref()["key33"]);
-    EXPECT_EQ(value333, pub.keyVals_ref()["key333"]);
+    EXPECT_EQ(value3, keyVals["key3"]);
+    EXPECT_EQ(value33, keyVals["key33"]);
+    EXPECT_EQ(value333, keyVals["key333"]);
   }
 
   //
@@ -542,48 +578,67 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     std::set<std::string> areaSetAll{
         kPodAreaId, kPlaneAreaId, kSpineAreaId, kTestingAreaName};
     std::map<std::string, int> areaKVCountMap{};
-    std::vector<thrift::KvStoreAreaSummary> summary;
 
     // get summary from KvStore for all configured areas (one extra
     // non-existent area is provided)
-    client_->sync_getKvStoreAreaSummary(summary, areaSetAll);
-    EXPECT_THAT(summary, testing::SizeIs(3));
+    auto summary =
+        handler_
+            ->semifuture_getKvStoreAreaSummary(
+                std::make_unique<std::set<std::string>>(std::move(areaSetAll)))
+            .get();
+    EXPECT_THAT(*summary, testing::SizeIs(3));
+
     // map each area to the # of keyVals in each area
-    areaKVCountMap[summary.at(0).get_area()] = summary.at(0).get_keyValsCount();
-    areaKVCountMap[summary.at(1).get_area()] = summary.at(1).get_keyValsCount();
-    areaKVCountMap[summary.at(2).get_area()] = summary.at(2).get_keyValsCount();
+    areaKVCountMap[summary->at(0).get_area()] =
+        summary->at(0).get_keyValsCount();
+    areaKVCountMap[summary->at(1).get_area()] =
+        summary->at(1).get_keyValsCount();
+    areaKVCountMap[summary->at(2).get_area()] =
+        summary->at(2).get_keyValsCount();
     // test # of keyVals for each area, as per config above.
     // area names are being implicitly tested as well
     EXPECT_EQ(9, areaKVCountMap[kSpineAreaId]);
     EXPECT_EQ(2, areaKVCountMap[kPodAreaId]);
     EXPECT_EQ(2, areaKVCountMap[kPlaneAreaId]);
   }
+
   //
   // Dual and Flooding APIs
   //
   {
-    thrift::DualMessages messages;
-    client_->sync_processKvStoreDualMessage(messages, kSpineAreaId);
+    handler_
+        ->semifuture_processKvStoreDualMessage(
+            std::make_unique<thrift::DualMessages>(),
+            std::make_unique<std::string>(kSpineAreaId))
+        .get();
   }
 
   {
     thrift::FloodTopoSetParams params;
     params.rootId_ref() = nodeName_;
-    client_->sync_updateFloodTopologyChild(params, kSpineAreaId);
+    handler_
+        ->semifuture_updateFloodTopologyChild(
+            std::make_unique<thrift::FloodTopoSetParams>(std::move(params)),
+            std::make_unique<std::string>(kSpineAreaId))
+        .get();
   }
 
   {
-    thrift::SptInfos ret;
-    client_->sync_getSpanningTreeInfos(ret, kSpineAreaId);
-    EXPECT_EQ(1, ret.infos_ref()->size());
-    ASSERT_NE(ret.infos_ref()->end(), ret.infos_ref()->find(nodeName_));
-    EXPECT_EQ(0, ret.counters_ref()->neighborCounters_ref()->size());
-    EXPECT_EQ(1, ret.counters_ref()->rootCounters_ref()->size());
-    EXPECT_EQ(nodeName_, *ret.floodRootId_ref());
-    EXPECT_EQ(0, ret.floodPeers_ref()->size());
+    auto ret = handler_
+                   ->semifuture_getSpanningTreeInfos(
+                       std::make_unique<std::string>(kSpineAreaId))
+                   .get();
+    auto sptInfos = ret->get_infos();
+    auto counters = ret->get_counters();
+    EXPECT_EQ(1, sptInfos.size());
+    ASSERT_NE(sptInfos.end(), sptInfos.find(nodeName_));
+    EXPECT_EQ(0, counters.neighborCounters_ref()->size());
+    EXPECT_EQ(1, counters.rootCounters_ref()->size());
+    EXPECT_EQ(nodeName_, *(ret->floodRootId_ref()));
+    EXPECT_EQ(0, ret->floodPeers_ref()->size());
 
-    thrift::SptInfo sptInfo = ret.infos_ref()->at(nodeName_);
-    EXPECT_EQ(0, *sptInfo.cost_ref());
+    thrift::SptInfo sptInfo = sptInfos.at(nodeName_);
+    EXPECT_EQ(0, sptInfo.get_cost());
     ASSERT_TRUE(sptInfo.parent_ref().has_value());
     EXPECT_EQ(nodeName_, sptInfo.parent_ref().value());
     EXPECT_EQ(0, sptInfo.children_ref()->size());
@@ -621,139 +676,174 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
       kvStoreWrapper_->addPeer(kPodAreaId, peerPod.first, peerPod.second);
     }
 
-    thrift::PeersMap ret;
-    client_->sync_getKvStorePeersArea(ret, kSpineAreaId);
+    auto ret = handler_
+                   ->semifuture_getKvStorePeersArea(
+                       std::make_unique<std::string>(kSpineAreaId))
+                   .get();
 
-    EXPECT_EQ(3, ret.size());
-    EXPECT_TRUE(ret.count("peer1"));
-    EXPECT_TRUE(ret.count("peer2"));
-    EXPECT_TRUE(ret.count("peer3"));
+    EXPECT_EQ(3, ret->size());
+    EXPECT_TRUE(ret->count("peer1"));
+    EXPECT_TRUE(ret->count("peer2"));
+    EXPECT_TRUE(ret->count("peer3"));
   }
 
   {
     kvStoreWrapper_->delPeer(kSpineAreaId, "peer2");
 
-    thrift::PeersMap ret;
-    client_->sync_getKvStorePeersArea(ret, kSpineAreaId);
-    EXPECT_EQ(2, ret.size());
-    EXPECT_TRUE(ret.count("peer1"));
-    EXPECT_TRUE(ret.count("peer3"));
+    auto ret = handler_
+                   ->semifuture_getKvStorePeersArea(
+                       std::make_unique<std::string>(kSpineAreaId))
+                   .get();
+    EXPECT_EQ(2, ret->size());
+    EXPECT_TRUE(ret->count("peer1"));
+    EXPECT_TRUE(ret->count("peer3"));
   }
 
   {
-    thrift::PeersMap ret;
-    client_->sync_getKvStorePeersArea(ret, kPodAreaId);
+    auto ret = handler_
+                   ->semifuture_getKvStorePeersArea(
+                       std::make_unique<std::string>(kPodAreaId))
+                   .get();
 
-    EXPECT_EQ(2, ret.size());
-    EXPECT_TRUE(ret.count("peer11"));
-    EXPECT_TRUE(ret.count("peer21"));
+    EXPECT_EQ(2, ret->size());
+    EXPECT_TRUE(ret->count("peer11"));
+    EXPECT_TRUE(ret->count("peer21"));
   }
 
   {
     kvStoreWrapper_->delPeer(kPodAreaId, "peer21");
 
-    thrift::PeersMap ret;
-    client_->sync_getKvStorePeersArea(ret, kPodAreaId);
-    EXPECT_EQ(1, ret.size());
-    EXPECT_TRUE(ret.count("peer11"));
+    auto ret = handler_
+                   ->semifuture_getKvStorePeersArea(
+                       std::make_unique<std::string>(kPodAreaId))
+                   .get();
+    EXPECT_EQ(1, ret->size());
+    EXPECT_TRUE(ret->count("peer11"));
   }
 
   // Not using params.prefix. Instead using keys. params.prefix will be
   // deprecated soon. There are three sub-tests with different prefix
   // key values.
   {
-    thrift::Publication pub;
-    thrift::Publication pub33;
-    thrift::Publication pub333;
     thrift::KeyDumpParams params;
-    thrift::KeyDumpParams params33;
-    thrift::KeyDumpParams params333;
     params.originatorIds_ref()->insert("node3");
     params.keys_ref() = {"key3"};
 
-    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kSpineAreaId);
-    EXPECT_EQ(3, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyVals.at("key3"), (*pub.keyVals_ref())["key3"]);
-    EXPECT_EQ(keyVals.at("key33"), (*pub.keyVals_ref())["key33"]);
-    EXPECT_EQ(keyVals.at("key333"), (*pub.keyVals_ref())["key333"]);
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
+  }
 
-    params33.originatorIds_ref() = {"node33"};
-    params33.keys_ref() = {"key33"};
-    client_->sync_getKvStoreKeyValsFilteredArea(pub33, params33, kSpineAreaId);
-    EXPECT_EQ(2, (*pub33.keyVals_ref()).size());
-    EXPECT_EQ(keyVals.at("key33"), (*pub33.keyVals_ref())["key33"]);
-    EXPECT_EQ(keyVals.at("key333"), (*pub33.keyVals_ref())["key333"]);
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds_ref() = {"node33"};
+    params.keys_ref() = {"key33"};
 
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
+  }
+
+  {
     // Two updates because the operator is OR and originator ids for keys
     // key33 and key333 are same.
-    params333.originatorIds_ref() = {"node33"};
-    params333.keys_ref() = {"key333"};
-    client_->sync_getKvStoreKeyValsFilteredArea(
-        pub333, params333, kSpineAreaId);
-    EXPECT_EQ(2, (*pub333.keyVals_ref()).size());
-    EXPECT_EQ(keyVals.at("key33"), (*pub33.keyVals_ref())["key33"]);
-    EXPECT_EQ(keyVals.at("key333"), (*pub333.keyVals_ref())["key333"]);
+    thrift::KeyDumpParams params;
+    params.originatorIds_ref() = {"node33"};
+    params.keys_ref() = {"key333"};
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
   }
 
   // with areas but do not use prefix (to be deprecated). use prefixes/keys
   // instead.
   {
-    thrift::Publication pub;
     thrift::KeyDumpParams params;
     params.originatorIds_ref()->insert("node1");
     params.keys_ref() = {"keyP", "keyPl"};
 
-    client_->sync_getKvStoreKeyValsFilteredArea(pub, params, kPlaneAreaId);
-    EXPECT_EQ(2, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(keyValsPlane.at("keyPlane1"), (*pub.keyVals_ref())["keyPlane1"]);
-    EXPECT_EQ(keyValsPlane.at("keyPlane2"), (*pub.keyVals_ref())["keyPlane2"]);
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kPlaneAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
+    EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
   }
 
   // Operator is OR and params.prefix is empty.
   // Use HashFiltered
   {
-    thrift::Publication pub;
     thrift::KeyDumpParams params;
     params.originatorIds_ref() = {"node3"};
     params.keys_ref() = {"key3"};
 
-    client_->sync_getKvStoreHashFilteredArea(pub, params, kSpineAreaId);
-    EXPECT_EQ(3, (*pub.keyVals_ref()).size());
-    auto value3 = keyVals.at("key3");
+    auto pub =
+        handler_
+            ->semifuture_getKvStoreHashFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId))
+            .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    auto value3 = kvs.at("key3");
     value3.value_ref().reset();
-    auto value33 = keyVals.at("key33");
+    auto value33 = kvs.at("key33");
     value33.value_ref().reset();
-    auto value333 = keyVals.at("key333");
+    auto value333 = kvs.at("key333");
     value333.value_ref().reset();
-    EXPECT_EQ(value3, (*pub.keyVals_ref())["key3"]);
-    EXPECT_EQ(value33, (*pub.keyVals_ref())["key33"]);
-    EXPECT_EQ(value333, (*pub.keyVals_ref())["key333"]);
+    EXPECT_EQ(value3, keyVals["key3"]);
+    EXPECT_EQ(value33, keyVals["key33"]);
+    EXPECT_EQ(value333, keyVals["key333"]);
   }
 }
 
 TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
-  thrift::KeyVals keyVals;
-  keyVals["key1"] =
-      createThriftValue(1, "node1", std::string("value1"), 30000, 1);
-  keyVals["key11"] =
-      createThriftValue(1, "node1", std::string("value11"), 30000, 1);
-  keyVals["key111"] =
-      createThriftValue(1, "node1", std::string("value111"), 30000, 1);
-  keyVals["key2"] =
-      createThriftValue(1, "node1", std::string("value2"), 30000, 1);
-  keyVals["key22"] =
-      createThriftValue(1, "node1", std::string("value22"), 30000, 1);
-  keyVals["key222"] =
-      createThriftValue(1, "node1", std::string("value222"), 30000, 1);
-  keyVals["key3"] =
-      createThriftValue(1, "node3", std::string("value3"), 30000, 1);
-  keyVals["key33"] =
-      createThriftValue(1, "node33", std::string("value33"), 30000, 1);
-  keyVals["key333"] =
-      createThriftValue(1, "node33", std::string("value333"), 30000, 1);
+  thrift::KeyVals kvs({
+      {"key1", createThriftValue(1, "node1", std::string("value1"), 30000, 1)},
+      {"key11",
+       createThriftValue(1, "node1", std::string("value11"), 30000, 1)},
+      {"key111",
+       createThriftValue(1, "node1", std::string("value11"), 30000, 1)},
+      {"key2", createThriftValue(1, "node1", std::string("value2"), 30000, 1)},
+      {"key22",
+       createThriftValue(1, "node1", std::string("value22"), 30000, 1)},
+      {"key222",
+       createThriftValue(1, "node1", std::string("value222"), 30000, 1)},
+      {"key3", createThriftValue(1, "node3", std::string("value3"), 30000, 1)},
+      {"key33",
+       createThriftValue(1, "node33", std::string("value33"), 30000, 1)},
+      {"key333",
+       createThriftValue(1, "node33", std::string("value333"), 30000, 1)},
+  });
 
   // Key set
-  setKvStoreKeyVals(keyVals, kSpineAreaId);
+  setKvStoreKeyVals(std::move(kvs), kSpineAreaId);
 
   //
   // Subscribe and Get API
@@ -779,19 +869,23 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         createThriftValue(3, "node1", std::string("value1")));
 
     std::vector<std::string> filterKeys{key};
-    thrift::Publication pub;
-    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kSpineAreaId);
-    EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(3, *((*pub.keyVals_ref()).at(key).version_ref()));
-    EXPECT_EQ("value1", (*pub.keyVals_ref()).at(key).value_ref().value());
+    auto pub = handler_
+                   ->semifuture_getKvStoreKeyValsArea(
+                       std::make_unique<std::vector<std::string>>(
+                           std::move(filterKeys)),
+                       std::make_unique<std::string>(kSpineAreaId))
+                   .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(1, keyVals.size());
+    EXPECT_EQ(3, *(keyVals.at(key).version_ref()));
+    EXPECT_EQ("value1", keyVals.at(key).value_ref().value());
   }
 
   {
     const std::string key{"snoop-key"};
     std::atomic<int> received{0};
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -825,7 +919,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   received + 4, *(*pub.keyVals_ref()).at(key).version_ref());
               received++;
             });
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
         key,
@@ -863,7 +957,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1486,39 +1580,36 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
 TEST_F(
     OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysTtlUpdateOption) {
-  thrift::KeyVals keyVals;
-  keyVals["key1"] =
-      createThriftValue(1, "node1", std::string("value1"), 30000, 1);
-  keyVals["key11"] =
-      createThriftValue(1, "node1", std::string("value11"), 30000, 1);
-  keyVals["key111"] =
-      createThriftValue(1, "node1", std::string("value111"), 30000, 1);
-  keyVals["key2"] =
-      createThriftValue(1, "node1", std::string("value2"), 30000, 1);
-  keyVals["key22"] =
-      createThriftValue(1, "node1", std::string("value22"), 30000, 1);
-  keyVals["key222"] =
-      createThriftValue(1, "node1", std::string("value222"), 30000, 1);
-  keyVals["key3"] =
-      createThriftValue(1, "node3", std::string("value3"), 30000, 1);
-  keyVals["key33"] =
-      createThriftValue(1, "node33", std::string("value33"), 30000, 1);
-  keyVals["key333"] =
-      createThriftValue(1, "node33", std::string("value333"), 30000, 1);
+  thrift::KeyVals kvs({
+      {"key1", createThriftValue(1, "node1", std::string("value1"), 30000, 1)},
+      {"key11",
+       createThriftValue(1, "node1", std::string("value11"), 30000, 1)},
+      {"key111",
+       createThriftValue(1, "node1", std::string("value111"), 30000, 1)},
+      {"key2", createThriftValue(1, "node1", std::string("value2"), 30000, 1)},
+      {"key22",
+       createThriftValue(1, "node1", std::string("value22"), 30000, 1)},
+      {"key222",
+       createThriftValue(1, "node1", std::string("value222"), 30000, 1)},
+      {"key3", createThriftValue(1, "node3", std::string("value3"), 30000, 1)},
+      {"key33",
+       createThriftValue(1, "node33", std::string("value33"), 30000, 1)},
+      {"key333",
+       createThriftValue(1, "node33", std::string("value333"), 30000, 1)},
+  });
 
   // Key set
-  setKvStoreKeyVals(keyVals, kSpineAreaId);
+  setKvStoreKeyVals(kvs, kSpineAreaId);
 
   // ignoreTTL = false is specified in filter.
   // Client should receive publication associated with TTL update
   {
     const std::string key{"key1"};
+    const std::unordered_map<std::string, std::string> keyvals{{key, "value1"}};
     thrift::KeyDumpParams filter;
     filter.keys_ref() = {key};
     filter.ignoreTtl_ref() = false;
     filter.originatorIds_ref()->insert("node1");
-    std::unordered_map<std::string, std::string> keyvals;
-    keyvals[key] = "value1";
     filter.oper_ref() = thrift::FilterOperator::AND;
 
     const auto value = createThriftValue(
@@ -1699,14 +1790,17 @@ TEST_F(
 
     /* Check that the TTL version is updated */
     std::vector<std::string> filterKeys{key};
-    thrift::Publication pub;
-    client_->sync_getKvStoreKeyValsArea(pub, filterKeys, kSpineAreaId);
-    EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-    EXPECT_EQ(1, *((*pub.keyVals_ref()).at(key).version_ref()));
-    EXPECT_EQ(true, (*pub.keyVals_ref()).at(key).value_ref().has_value());
-    EXPECT_EQ(
-        thriftValue2.ttlVersion_ref(),
-        (*pub.keyVals_ref()).at(key).ttlVersion_ref());
+    auto pub = handler_
+                   ->semifuture_getKvStoreKeyValsArea(
+                       std::make_unique<std::vector<std::string>>(
+                           std::move(filterKeys)),
+                       std::make_unique<std::string>(kSpineAreaId))
+                   .get();
+    auto keyVals = pub->get_keyVals();
+    EXPECT_EQ(1, keyVals.size());
+    EXPECT_EQ(1, *(keyVals.at(key).version_ref()));
+    EXPECT_EQ(true, keyVals.at(key).value_ref().has_value());
+    EXPECT_EQ(thriftValue2.ttlVersion_ref(), keyVals.at(key).ttlVersion_ref());
 
     // Check we should receive 0 update.
     std::this_thread::yield();
@@ -1822,83 +1916,107 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   const std::string adjName = "night@king";
 
   {
-    client_->sync_setNodeOverload();
-    client_->sync_unsetNodeOverload();
+    handler_->semifuture_setNodeOverload().get();
+    handler_->semifuture_unsetNodeOverload().get();
   }
 
   {
-    client_->sync_setInterfaceOverload(ifName);
-    client_->sync_unsetInterfaceOverload(ifName);
+    handler_
+        ->semifuture_setInterfaceOverload(std::make_unique<std::string>(ifName))
+        .get();
+    handler_
+        ->semifuture_unsetInterfaceOverload(
+            std::make_unique<std::string>(ifName))
+        .get();
   }
 
   {
-    client_->sync_setInterfaceMetric(ifName, 110);
-    client_->sync_unsetInterfaceMetric(ifName);
+    handler_
+        ->semifuture_setInterfaceMetric(
+            std::make_unique<std::string>(ifName), 110)
+        .get();
+    handler_
+        ->semifuture_unsetInterfaceMetric(std::make_unique<std::string>(ifName))
+        .get();
   }
 
   {
-    client_->sync_setAdjacencyMetric(ifName, adjName, 110);
-    client_->sync_unsetAdjacencyMetric(ifName, adjName);
+    handler_
+        ->semifuture_setAdjacencyMetric(
+            std::make_unique<std::string>(ifName),
+            std::make_unique<std::string>(adjName),
+            110)
+        .get();
+    handler_
+        ->semifuture_unsetAdjacencyMetric(
+            std::make_unique<std::string>(ifName),
+            std::make_unique<std::string>(adjName))
+        .get();
   }
 
   {
-    thrift::DumpLinksReply reply;
-    client_->sync_getInterfaces(reply);
-    EXPECT_EQ(nodeName_, reply.thisNodeName_ref());
-    EXPECT_FALSE(*reply.isOverloaded_ref());
-    EXPECT_EQ(1, reply.interfaceDetails_ref()->size());
+    auto reply = handler_->semifuture_getInterfaces().get();
+    EXPECT_EQ(nodeName_, reply->get_thisNodeName());
+    EXPECT_FALSE(*reply->isOverloaded_ref());
+    EXPECT_EQ(1, reply->interfaceDetails_ref()->size());
   }
 
   {
-    thrift::OpenrVersions ret;
-    client_->sync_getOpenrVersion(ret);
-    EXPECT_LE(*ret.lowestSupportedVersion_ref(), *ret.version_ref());
+    auto ret = handler_->semifuture_getOpenrVersion().get();
+    EXPECT_LE(*(ret->lowestSupportedVersion_ref()), *(ret->version_ref()));
   }
 
   {
-    thrift::BuildInfo info;
-    client_->sync_getBuildInfo(info);
-    EXPECT_NE("", *info.buildMode_ref());
+    auto info = handler_->semifuture_getBuildInfo().get();
+    EXPECT_NE("", *(info->buildMode_ref()));
   }
 
   {
-    std::vector<thrift::AdjacencyDatabase> adjDbs;
     thrift::AdjacenciesFilter filter;
     filter.selectAreas_ref() = {kSpineAreaId};
-    client_->sync_getLinkMonitorAdjacenciesFiltered(adjDbs, filter);
-    EXPECT_EQ(0, adjDbs.begin()->get_adjacencies().size());
+    auto adjDbs =
+        handler_
+            ->semifuture_getLinkMonitorAdjacenciesFiltered(
+                std::make_unique<thrift::AdjacenciesFilter>(std::move(filter)))
+            .get();
+    EXPECT_EQ(0, adjDbs->begin()->get_adjacencies().size());
   }
 }
 
 TEST_F(OpenrCtrlFixture, PersistentStoreApis) {
   {
-    const std::string key = "key1";
-    const std::string value = "value1";
-    client_->sync_setConfigKey(key, value);
+    handler_
+        ->semifuture_setConfigKey(
+            std::make_unique<std::string>("key1"),
+            std::make_unique<std::string>("value1"))
+        .get();
   }
 
   {
-    const std::string key = "key2";
-    const std::string value = "value2";
-    client_->sync_setConfigKey(key, value);
+    handler_
+        ->semifuture_setConfigKey(
+            std::make_unique<std::string>("key2"),
+            std::make_unique<std::string>("value2"))
+        .get();
   }
 
   {
-    const std::string key = "key1";
-    client_->sync_eraseConfigKey(key);
+    handler_->semifuture_eraseConfigKey(std::make_unique<std::string>("key1"))
+        .get();
   }
 
   {
-    const std::string key = "key2";
-    std::string ret = "";
-    client_->sync_getConfigKey(ret, key);
-    EXPECT_EQ("value2", ret);
+    auto ret =
+        handler_->semifuture_getConfigKey(std::make_unique<std::string>("key2"))
+            .get();
+    EXPECT_EQ("value2", *ret);
   }
 
   {
-    const std::string key = "key1";
-    std::string ret = "";
-    EXPECT_THROW(client_->sync_getConfigKey(ret, key), thrift::OpenrError);
+    EXPECT_THROW(
+        handler_->semifuture_getConfigKey(std::make_unique<std::string>("key1"))
+            .get(),
+        thrift::OpenrError);
   }
 }
 
@@ -1917,28 +2035,28 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
     policy.statements_ref()->emplace_back(policyStatement);
     policy.ttl_secs_ref() = 1;
 
-    EXPECT_NO_THROW(client_->sync_setRibPolicy(policy));
+    EXPECT_NO_THROW(handler_
+                        ->semifuture_setRibPolicy(
+                            std::make_unique<thrift::RibPolicy>(policy))
+                        .get());
   }
 
   // Get API
-  {
-    thrift::RibPolicy policy;
-    EXPECT_NO_THROW(client_->sync_getRibPolicy(policy));
-  }
+  { EXPECT_NO_THROW(handler_->semifuture_getRibPolicy().get()); }
 
   // Clear API
   {
     // Clear Rib Policy and expect no error as rib policy exists
-    EXPECT_NO_THROW(client_->sync_clearRibPolicy());
+    EXPECT_NO_THROW(handler_->semifuture_clearRibPolicy().get());
 
     // An attempt to clear non-existing rib policy will show a message.
-    EXPECT_THROW(client_->sync_clearRibPolicy(), thrift::OpenrError);
+    EXPECT_THROW(
+        handler_->semifuture_clearRibPolicy().get(), thrift::OpenrError);
   }
 
   // Using Get API after clearing rib policy will show a message.
   {
-    thrift::RibPolicy policy;
-    EXPECT_THROW(client_->sync_getRibPolicy(policy), thrift::OpenrError);
+    EXPECT_THROW(handler_->semifuture_getRibPolicy().get(), thrift::OpenrError);
   }
 }
 
