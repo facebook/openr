@@ -996,11 +996,11 @@ TEST(KvStoreClientInternal, ApiTest) {
     EXPECT_TRUE(store->addPeer(
         kTestingAreaName,
         "peer1",
-        createPeerSpec("inproc://fake_cmd_url_1", "fake_thrift_url_1")));
+        createPeerSpec("inproc://fake_cmd_url_1", "2000::1")));
     EXPECT_TRUE(store->addPeer(
         kTestingAreaName,
         "peer2",
-        createPeerSpec("inproc://fake_cmd_url_2", "fake_thrift_url_1")));
+        createPeerSpec("inproc://fake_cmd_url_2", "2000::2")));
     EXPECT_TRUE(store->delPeer(kTestingAreaName, "peer1"));
   });
 
@@ -1600,23 +1600,6 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
         // pod key must be present
         EXPECT_TRUE(client2->getKey(podArea, "test_ttl_key_pod").has_value());
         EXPECT_TRUE(client3->getKey(podArea, "test_ttl_key_pod").has_value());
-      });
-
-  // verify dumpAllWithThriftClientFromMultiple
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        auto [db1, addr1] =
-            dumpAllWithThriftClientFromMultiple(planeArea, sockAddrs_, "test_");
-        // there will be plane area key "test_ttl_key_plane"
-        ASSERT_TRUE(db1.has_value());
-        EXPECT_EQ(db1.value().size(), 1);
-
-        // only one key in pod Area too, "test_ttl_pod_area"
-        auto [db2, addr2] =
-            dumpAllWithThriftClientFromMultiple(podArea, sockAddrs_, "test_");
-        // there will be plane area key "test_ttl_key_plane"
-        ASSERT_TRUE(db2.has_value());
-        EXPECT_EQ(db2.value().size(), 1);
       });
 
   // unset key, this stops key ttl refresh
