@@ -97,7 +97,7 @@ class SparkFixture : public testing::Test {
       std::shared_ptr<const Config> config = nullptr,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion)) {
-    return std::make_unique<SparkWrapper>(
+    return std::make_shared<SparkWrapper>(
         myNodeName, version, mockIoProvider_, config);
   }
 
@@ -105,11 +105,28 @@ class SparkFixture : public testing::Test {
   std::unique_ptr<std::thread> mockIoProviderThread_{nullptr};
 };
 
+/*
+ * This is a test fixture to create two Spark instances for further testing.
+ *
+ * createAndConnect() will:
+ *  1) specify interface connections;
+ *  2) create configuration for 2 Spark instances(overridable);
+ *  3) feed InterfaceDb into Spark instance for neighbor discovery;
+ */
 class SimpleSparkFixture : public SparkFixture {
  protected:
   void
+  createConfig() {
+    auto tConfig1 = getBasicOpenrConfig(nodeName1_, kDomainName);
+    auto tConfig2 = getBasicOpenrConfig(nodeName2_, kDomainName);
+
+    config1_ = std::make_shared<Config>(tConfig1);
+    config2_ = std::make_shared<Config>(tConfig2);
+  }
+
+  void
   createAndConnect() {
-    // Define interface names for the test
+    // define interface names for the test
     mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
     // connect interfaces directly
@@ -119,27 +136,24 @@ class SimpleSparkFixture : public SparkFixture {
     };
     mockIoProvider_->setConnectedPairs(connectedPairs);
 
-    auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
-    auto config1 = std::make_shared<Config>(tConfig1);
-
-    auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
-    auto config2 = std::make_shared<Config>(tConfig2);
+    // create config for Spark instance creation
+    createConfig();
 
     // start one spark2 instance
-    node1 = createSpark("node-1", config1);
+    node1_ = createSpark(nodeName1_, config1_);
 
     // start another spark2 instance
-    node2 = createSpark("node-2", config2);
+    node2_ = createSpark(nodeName2_, config2_);
 
     // start tracking iface1
-    node1->updateInterfaceDb({InterfaceInfo(
+    node1_->updateInterfaceDb({InterfaceInfo(
         iface1 /* ifName */,
         true /* isUp */,
         ifIndex1 /* ifIndex */,
         {ip1V4, ip1V6} /* networks */)});
 
     // start tracking iface2
-    node2->updateInterfaceDb({InterfaceInfo(
+    node2_->updateInterfaceDb({InterfaceInfo(
         iface2 /* ifName */,
         true /* isUp */,
         ifIndex2 /* ifIndex */,
@@ -149,50 +163,44 @@ class SimpleSparkFixture : public SparkFixture {
 
     // Now wait for sparks to detect each other
     {
-      auto events = node1->waitForEvents(NB_UP);
+      auto events = node1_->waitForEvents(NB_UP);
       ASSERT_TRUE(events.has_value() and events.value().size() == 1);
       auto& event = events.value().back();
       EXPECT_EQ(iface1, event.info.localIfName_ref());
-      EXPECT_EQ("node-2", event.info.nodeName_ref());
+      EXPECT_EQ(nodeName2_, event.info.nodeName_ref());
       EXPECT_EQ(
           std::make_pair(ip2V4.first, ip2V6.first),
           SparkWrapper::getTransportAddrs(event));
-      LOG(INFO) << "node-1 reported adjacency to node-2";
+      LOG(INFO) << fmt::format(
+          "{} reported adjacency UP towards {}", nodeName1_, nodeName2_);
     }
 
     {
-      auto events = node2->waitForEvents(NB_UP);
+      auto events = node2_->waitForEvents(NB_UP);
       ASSERT_TRUE(events.has_value() and events.value().size() == 1);
       auto& event = events.value().back();
       EXPECT_EQ(iface2, event.info.localIfName_ref());
-      EXPECT_EQ("node-1", event.info.nodeName_ref());
+      EXPECT_EQ(nodeName1_, event.info.nodeName_ref());
       EXPECT_EQ(
           std::make_pair(ip1V4.first, ip1V6.first),
           SparkWrapper::getTransportAddrs(event));
-      LOG(INFO) << "node-2 reported adjacency to node-1";
+      LOG(INFO) << fmt::format(
+          "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
     }
-
-    initialNbrHandlingTime =
-        (3 *
-             std::chrono::milliseconds(
-                 *config1->getSparkConfig().fastinit_hello_time_ms_ref()) +
-         std::chrono::milliseconds(
-             *config1->getSparkConfig().fastinit_hello_time_ms_ref()));
   }
 
   void
   checkCounters() {
     auto counters = fb303::fbData->getCounters();
     // Verify the counter keys exist
-    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg"));
-    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg.3600"));
-    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg.60"));
-    ASSERT_EQ(1, counters.count("slo.neighbor_discovery.time_ms.avg.600"));
-
-    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg"));
-    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg.3600"));
-    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg.60"));
-    ASSERT_EQ(1, counters.count("slo.neighbor_restart.time_ms.avg.600"));
+    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg"));
+    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg.3600"));
+    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg.60"));
+    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg.600"));
+    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg"));
+    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg.3600"));
+    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg.60"));
+    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg.600"));
 
     // Neighbor discovery should be less than 3 secs
     ASSERT_GE(3000, counters["slo.neighbor_discovery.time_ms.avg"]);
@@ -201,9 +209,17 @@ class SimpleSparkFixture : public SparkFixture {
     ASSERT_GE(3000, counters["slo.neighbor_discovery.time_ms.avg.600"]);
   }
 
-  std::shared_ptr<SparkWrapper> node1;
-  std::shared_ptr<SparkWrapper> node2;
-  std::chrono::milliseconds initialNbrHandlingTime;
+  /*
+   * Protected variables which can be accessed by UT fixtures
+   */
+  const std::string nodeName1_{"node-1"};
+  const std::string nodeName2_{"node-2"};
+
+  std::shared_ptr<Config> config1_;
+  std::shared_ptr<Config> config2_;
+
+  std::shared_ptr<SparkWrapper> node1_;
+  std::shared_ptr<SparkWrapper> node2_;
 };
 
 //
@@ -215,8 +231,8 @@ TEST_F(SimpleSparkFixture, GetNeighborsTest) {
   createAndConnect();
 
   // get SparkNeigborDb via public API
-  auto db1 = *(node1->get()->getNeighbors().get());
-  auto db2 = *(node2->get()->getNeighbors().get());
+  auto db1 = *(node1_->get()->getNeighbors().get());
+  auto db2 = *(node2_->get()->getNeighbors().get());
 
   EXPECT_EQ(1, db1.size());
   EXPECT_EQ(1, db2.size());
@@ -243,35 +259,34 @@ TEST_F(SimpleSparkFixture, ForceGRMsgTest) {
   createAndConnect();
 
   // force to send out helloMsg with restarting flag
-  node1->get()->floodRestartingMsg();
-  node2->get()->floodRestartingMsg();
+  node1_->get()->floodRestartingMsg();
+  node2_->get()->floodRestartingMsg();
 
   // should report each other as 'RESTARTING'
-  const std::string nodeName1 = "node-1";
-  const std::string nodeName2 = "node-2";
-
   {
-    auto events1 = node1->waitForEvents(NB_RESTARTING);
-    auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
+    auto events1 = node1_->waitForEvents(NB_RESTARTING);
+    auto neighState1 = node1_->getSparkNeighState(iface1, nodeName2_);
     ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(iface1, event1.info.localIfName_ref());
-    EXPECT_TRUE(nodeName2 == event1.info.nodeName_ref());
+    EXPECT_TRUE(nodeName2_ == event1.info.nodeName_ref());
     EXPECT_TRUE(neighState1 == RESTART);
 
-    LOG(INFO) << "node-1 reported node-2 as RESTARTING";
+    LOG(INFO)
+        << fmt::format("{} reported {} as RESTARTING", nodeName1_, nodeName2_);
   }
 
   {
-    auto events2 = node2->waitForEvents(NB_RESTARTING);
-    auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
+    auto events2 = node2_->waitForEvents(NB_RESTARTING);
+    auto neighState2 = node2_->getSparkNeighState(iface2, nodeName1_);
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_EQ(iface2, event2.info.localIfName_ref());
-    EXPECT_TRUE(nodeName1 == event2.info.nodeName_ref());
+    EXPECT_TRUE(nodeName1_ == event2.info.nodeName_ref());
     EXPECT_TRUE(neighState2 == RESTART);
 
-    LOG(INFO) << "node-2 reported node-1 as RESTARTING";
+    LOG(INFO)
+        << fmt::format("{} reported {} as RESTARTING", nodeName2_, nodeName1_);
   }
 }
 
@@ -293,27 +308,33 @@ TEST_F(SimpleSparkFixture, RttTest) {
 
   // wait for spark nodes to detecct Rtt change
   {
-    auto events = node1->waitForEvents(NB_RTT_CHANGE);
+    auto events = node1_->waitForEvents(NB_RTT_CHANGE);
     ASSERT_TRUE(events.has_value() and events.value().size() == 1);
     auto& event = events.value().back();
     // 25% tolerance
     auto rtt = *event.info.rttUs_ref();
     EXPECT_GE(rtt, (40 - 10) * 1000);
     EXPECT_LE(rtt, (40 + 10) * 1000);
-    LOG(INFO) << "node-1 reported new RTT to node-2 to be " << rtt / 1000.0
-              << "ms";
+    LOG(INFO) << fmt::format(
+        "{} reported new RTT to {} to be {}ms",
+        nodeName1_,
+        nodeName2_,
+        rtt / 1000.0);
   }
 
   {
-    auto events = node2->waitForEvents(NB_RTT_CHANGE);
+    auto events = node2_->waitForEvents(NB_RTT_CHANGE);
     ASSERT_TRUE(events.has_value() and events.value().size() == 1);
     auto& event = events.value().back();
     // 25% tolerance
     auto rtt = *event.info.rttUs_ref();
     EXPECT_GE(rtt, (40 - 10) * 1000);
     EXPECT_LE(rtt, (40 + 10) * 1000);
-    LOG(INFO) << "node-2 reported new RTT to node-1 to be " << rtt / 1000.0
-              << "ms";
+    LOG(INFO) << fmt::format(
+        "{} reported new RTT to {} to be {}ms",
+        nodeName2_,
+        nodeName1_,
+        rtt / 1000.0);
   }
 
   checkCounters();
@@ -340,13 +361,15 @@ TEST_F(SimpleSparkFixture, UnidirectionTest) {
 
   // wait for sparks to lose each other
   {
-    EXPECT_TRUE(node1->waitForEvents(NB_DOWN).has_value());
-    LOG(INFO) << "node-1 reported down adjacency to node-2";
+    EXPECT_TRUE(node1_->waitForEvents(NB_DOWN).has_value());
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency DOWN towards {}", nodeName1_, nodeName2_);
   }
 
   {
-    EXPECT_TRUE(node2->waitForEvents(NB_DOWN).has_value());
-    LOG(INFO) << "node-2 reported down adjacency to node-1";
+    EXPECT_TRUE(node2_->waitForEvents(NB_DOWN).has_value());
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency DOWN towards {}", nodeName2_, nodeName1_);
   }
 }
 
@@ -359,25 +382,22 @@ TEST_F(SimpleSparkFixture, GRTest) {
   // create Spark instances and establish connections
   createAndConnect();
 
-  // Kill node2
-  LOG(INFO) << "Kill and restart node-2";
+  // kill node2
+  LOG(INFO) << fmt::format("Kill and restart {}", nodeName2_);
 
-  node2.reset();
+  node2_.reset();
 
   // node-1 should report node-2 as 'RESTARTING'
   {
-    EXPECT_TRUE(node1->waitForEvents(NB_RESTARTING).has_value());
-    LOG(INFO) << "node-1 reported node-2 as RESTARTING";
+    EXPECT_TRUE(node1_->waitForEvents(NB_RESTARTING).has_value());
+    LOG(INFO)
+        << fmt::format("{} reported {} as RESTARTING", nodeName1_, nodeName2_);
   }
 
-  auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
-  auto config2 = std::make_shared<Config>(tConfig2);
+  // Recreate Spark instance
+  node2_ = createSpark(nodeName2_, config2_);
 
-  node2 = createSpark("node-2", config2);
-
-  LOG(INFO) << "Adding iface2 to node-2 to let it start helloMsg adverstising";
-
-  node2->updateInterfaceDb({InterfaceInfo(
+  node2_->updateInterfaceDb({InterfaceInfo(
       iface2 /* ifName */,
       true /* isUp */,
       ifIndex2 /* ifIndex */,
@@ -386,29 +406,31 @@ TEST_F(SimpleSparkFixture, GRTest) {
   // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
   // with wrapped seqNum
   {
-    EXPECT_TRUE(node1->waitForEvents(NB_RESTARTED).has_value());
-    LOG(INFO) << "node-1 reported node-2 as 'RESTARTED'";
+    EXPECT_TRUE(node1_->waitForEvents(NB_RESTARTED).has_value());
+    LOG(INFO)
+        << fmt::format("{} reported {} as 'RESTARTED'", nodeName1_, nodeName2_);
   }
 
   // node-2 should ultimately report node-1 as 'UP'
   {
-    EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
-    LOG(INFO) << "node-2 reported adjacency to node-1";
+    EXPECT_TRUE(node2_->waitForEvents(NB_UP).has_value());
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
   }
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        folly::copy(*node1->getSparkConfig().graceful_restart_time_s_ref()));
+        folly::copy(*node1_->getSparkConfig().graceful_restart_time_s_ref()));
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
-        folly::copy(*node2->getSparkConfig().graceful_restart_time_s_ref()));
+        folly::copy(*node2_->getSparkConfig().graceful_restart_time_s_ref()));
     EXPECT_FALSE(
-        node1
+        node1_
             ->waitForEvents(
                 NB_DOWN, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(
-        node2
+        node2_
             ->waitForEvents(
                 NB_DOWN, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
@@ -426,27 +448,28 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
   // create Spark instances and establish connections
   createAndConnect();
 
-  // Kill node2
-  LOG(INFO) << "Kill and restart node-2";
+  // kill node2
+  LOG(INFO) << fmt::format("Kill and restart {}", nodeName2_);
 
   auto startTime = std::chrono::steady_clock::now();
-  node2.reset();
+  auto holdTime = config1_->getSparkConfig().get_hold_time_s();
+  auto grTime = config1_->getSparkConfig().get_graceful_restart_time_s();
+  node2_.reset();
 
   // Since node2 doesn't come back, will lose adj and declare DOWN
   {
-    EXPECT_TRUE(node1->waitForEvents(NB_DOWN).has_value());
-    LOG(INFO) << "node-1 reporte down adjacency to node-2";
+    EXPECT_TRUE(node1_->waitForEvents(NB_DOWN).has_value());
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency DOWN towards {}", nodeName1_, nodeName2_);
 
     // Make sure 'down' event is triggered by GRTimer expire
     // and NOT related with heartbeat holdTimer( no hearbeatTimer started )
     auto endTime = std::chrono::steady_clock::now();
-    const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        folly::copy(*node1->getSparkConfig().graceful_restart_time_s_ref()));
-    ASSERT_TRUE(endTime - startTime >= graceful_restart_time_s1);
+    ASSERT_TRUE(endTime - startTime >= std::chrono::seconds(grTime));
 
     ASSERT_TRUE(
-        endTime - startTime <= graceful_restart_time_s1 +
-            std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()));
+        endTime - startTime <=
+        std::chrono::seconds(grTime) + std::chrono::seconds(holdTime));
   }
 }
 
@@ -462,6 +485,11 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
   // record time for future comparison
   auto startTime = std::chrono::steady_clock::now();
 
+  auto fastInitTime = config1_->getSparkConfig().get_fastinit_hello_time_ms();
+  auto initialNbrHandlingTime =
+      (3 * std::chrono::milliseconds(fastInitTime) +
+       std::chrono::milliseconds(fastInitTime));
+
   // remove underneath connections between to nodes
   ConnectedIfPairs connectedPairs = {};
   mockIoProvider_->setConnectedPairs(connectedPairs);
@@ -470,19 +498,19 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
   {
     LOG(INFO) << "Waiting for both nodes to time out with each other";
 
-    EXPECT_TRUE(node1->waitForEvents(NB_DOWN).has_value());
-    EXPECT_TRUE(node2->waitForEvents(NB_DOWN).has_value());
+    EXPECT_TRUE(node1_->waitForEvents(NB_DOWN).has_value());
+    EXPECT_TRUE(node2_->waitForEvents(NB_DOWN).has_value());
 
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
     // initialNbrHandlingTime needs to be accounted.
     ASSERT_TRUE(
         initialNbrHandlingTime + endTime - startTime >=
-        std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()));
+        std::chrono::seconds(*node1_->getSparkConfig().hold_time_s_ref()));
     ASSERT_TRUE(
         endTime - startTime <=
         std::chrono::seconds(
-            *node1->getSparkConfig().graceful_restart_time_s_ref()));
+            *node1_->getSparkConfig().graceful_restart_time_s_ref()));
   }
 }
 
@@ -495,7 +523,7 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
   // create Spark instances and establish connections
   createAndConnect();
 
-  node1->updateInterfaceDb({InterfaceInfo(
+  node1_->updateInterfaceDb({InterfaceInfo(
       iface1 /* ifName */,
       true /* isUp */,
       ifIndex1 /* ifIndex */,
@@ -504,11 +532,12 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
   // since the removal of intf happens instantly. down event should
   // be reported ASAP.
   auto waitTime = std::chrono::seconds(
-      *node1->getSparkConfig().graceful_restart_time_s_ref());
+      config1_->getSparkConfig().get_graceful_restart_time_s());
 
   EXPECT_FALSE(
-      node1->waitForEvents(NB_DOWN, waitTime, waitTime * 2).has_value());
-  EXPECT_FALSE(node1->waitForEvents(NB_UP, waitTime, waitTime * 2).has_value());
+      node1_->waitForEvents(NB_DOWN, waitTime, waitTime * 2).has_value());
+  EXPECT_FALSE(
+      node1_->waitForEvents(NB_UP, waitTime, waitTime * 2).has_value());
 }
 
 //
@@ -521,47 +550,54 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
 
   auto startTime = std::chrono::steady_clock::now();
   auto waitTime = std::chrono::seconds(
-      *node1->getSparkConfig().graceful_restart_time_s_ref());
+      config1_->getSparkConfig().get_graceful_restart_time_s());
+  auto holdTime =
+      std::chrono::seconds(config1_->getSparkConfig().get_hold_time_s());
+  auto keepAliveTime =
+      std::chrono::seconds(config1_->getSparkConfig().get_keepalive_time_s());
 
   // tell node1 to remove interface to mimick request from linkMonitor
-  node1->updateInterfaceDb({});
+  node1_->updateInterfaceDb({});
 
-  LOG(INFO) << "Waiting for node-1 to report loss of adj to node-2";
+  LOG(INFO) << fmt::format(
+      "Waiting for {} to report loss of adj towards {}",
+      nodeName1_,
+      nodeName2_);
 
   // since the removal of intf happens instantly. down event should
   // be reported ASAP.
   {
-    EXPECT_TRUE(node1->waitForEvents(NB_DOWN).has_value());
+    EXPECT_TRUE(node1_->waitForEvents(NB_DOWN).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(
-        endTime - startTime <=
-        std::min(
-            waitTime,
-            std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref())));
-    LOG(INFO)
-        << "node-1 reported down adjacency to node-2 due to interface removal";
+    ASSERT_TRUE(endTime - startTime <= std::min(waitTime, holdTime));
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency DOWN towards {} due to interface removal",
+        nodeName1_,
+        nodeName2_);
   }
 
   {
-    EXPECT_TRUE(node2->waitForEvents(NB_DOWN).has_value());
+    EXPECT_TRUE(node2_->waitForEvents(NB_DOWN).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= waitTime);
-    LOG(INFO)
-        << "node-2 reported down adjacency to node-2 due to heartbeat expired";
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency DOWN towards {} due to heartbeat expired",
+        nodeName2_,
+        nodeName1_);
   }
 
   {
     // should NOT receive any event after down adj
-    EXPECT_FALSE(node1->recvNeighborEvent(waitTime).has_value());
-    EXPECT_FALSE(node2->recvNeighborEvent(waitTime).has_value());
+    EXPECT_FALSE(node1_->recvNeighborEvent(waitTime).has_value());
+    EXPECT_FALSE(node2_->recvNeighborEvent(waitTime).has_value());
   }
 
   // Resume interface connection
   LOG(INFO) << "Bringing iface-1 back online";
 
-  node1->updateInterfaceDb({InterfaceInfo(
+  node1_->updateInterfaceDb({InterfaceInfo(
       iface1 /* ifName */,
       true /* isUp */,
       ifIndex1 /* ifIndex */,
@@ -569,27 +605,21 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
   startTime = std::chrono::steady_clock::now();
 
   {
-    EXPECT_TRUE(node1->waitForEvents(NB_UP).has_value());
+    EXPECT_TRUE(node1_->waitForEvents(NB_UP).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(
-        endTime - startTime <=
-        std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()) +
-            std::chrono::seconds(
-                *node1->getSparkConfig().keepalive_time_s_ref()));
-    LOG(INFO) << "node-1 reported up adjacency to node-2";
+    ASSERT_TRUE(endTime - startTime <= holdTime + keepAliveTime);
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {}", nodeName1_, nodeName2_);
   }
 
   {
-    EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
+    EXPECT_TRUE(node2_->waitForEvents(NB_UP).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(
-        endTime - startTime <=
-        std::chrono::seconds(*node1->getSparkConfig().hold_time_s_ref()) +
-            std::chrono::seconds(
-                *node1->getSparkConfig().keepalive_time_s_ref()));
-    LOG(INFO) << "node-2 reported up adjacency to node-1";
+    ASSERT_TRUE(endTime - startTime <= holdTime + keepAliveTime);
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
   }
 }
 
