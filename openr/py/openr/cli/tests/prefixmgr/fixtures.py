@@ -165,9 +165,9 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           "prependLabel": 65001,
           "tags": [
             "65520:822",
-            "65527:896"
+            "65527:896",
             "65529:15990",
-            "COMMODITY:EGRESS",
+            "COMMODITY:EGRESS"
           ],
           "type": 3
         }
@@ -206,9 +206,9 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           "prependLabel": 60000,
           "tags": [
             "65520:822",
-            "65527:896"
+            "65527:896",
             "65529:15990",
-            "COMMODITY:EGRESS",
+            "COMMODITY:EGRESS"
           ],
           "type": 3
         }

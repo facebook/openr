@@ -41,7 +41,7 @@ from openr.thrift.Network import types as network_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object
+from openr.utils.serializer import deserialize_thrift_object, object_to_dict
 from thrift.protocol import TBinaryProtocol
 from thrift.transport import TSocket, TTransport
 
@@ -972,8 +972,8 @@ def adj_list_deltas_json(adj_deltas_list, tags=None):
     nodes_update = []
 
     for data in adj_deltas_list:
-        old_adj = adjacency_to_dict(data[1]) if data[1] else None
-        new_adj = adjacency_to_dict(data[2]) if data[2] else None
+        old_adj = object_to_dict(data[1]) if data[1] else None
+        new_adj = object_to_dict(data[2]) if data[2] else None
 
         if data[0] == tags[0]:
             assert new_adj is None
@@ -1004,26 +1004,6 @@ def adj_list_deltas_json(adj_deltas_list, tags=None):
     return deltas_json, return_code
 
 
-def adjacency_to_dict(adjacency):
-    """convert adjacency from thrift instance into a dict in strings
-
-    :param adjacency as a thrift instance: adjacency
-
-    :return dict: dict with adjacency attributes as key, value in strings
-    """
-
-    # Only addrs need string conversion so we udpate them
-    adj_dict = copy.copy(adjacency).__dict__
-    adj_dict.update(
-        {
-            "nextHopV6": ipnetwork.sprint_addr(adjacency.nextHopV6.addr),
-            "nextHopV4": ipnetwork.sprint_addr(adjacency.nextHopV4.addr),
-        }
-    )
-
-    return adj_dict
-
-
 def sprint_adj_delta(old_adj, new_adj):
     """given old and new adjacency, create a list of strings that summarize
     changes. If oldAdj is None, this function prints all attridutes of
@@ -1036,9 +1016,9 @@ def sprint_adj_delta(old_adj, new_adj):
     """
     assert new_adj is not None
     rows = []
-    new_adj_dict = adjacency_to_dict(new_adj)
+    new_adj_dict = object_to_dict(new_adj)
     if old_adj is not None:
-        old_adj_dict = adjacency_to_dict(old_adj)
+        old_adj_dict = object_to_dict(old_adj)
         for k in sorted(new_adj_dict.keys()):
             if old_adj_dict.get(k) != new_adj_dict.get(k):
                 rows.append([k, old_adj_dict.get(k), "-->", new_adj_dict.get(k)])

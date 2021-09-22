@@ -12,6 +12,7 @@ from openr.cli.utils.utils import find_adj_list_deltas, parse_prefix_database
 from openr.Network import ttypes as network_types
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork
+from openr.utils.serializer import object_to_dict
 
 
 class UtilsTests(unittest.TestCase):
@@ -37,6 +38,10 @@ class UtilsTests(unittest.TestCase):
             timestamp=(timestamp if timestamp else int(time.time())),
             weight=weight,
             otherIfName=otherIfName,
+            nextHopV6=network_types.BinaryAddress(
+                addr=b"\xfe\x80\x00\x00\x00\x00\x00\x00 \xa2\x01\xff\xfe\xf4Y\xbe"
+            ),
+            nextHopV4=network_types.BinaryAddress(addr=b"\x00\x00\x00\x00"),
         )
         return adj
 
@@ -62,6 +67,23 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(("NEIGHBOR_DOWN", adjs_old[3], None), d2)
         self.assertEqual(("NEIGHBOR_UP", None, adjs_new[2]), d3)
         self.assertEqual(("NEIGHBOR_UPDATE", adjs_old[2], adjs_new[1]), d4)
+
+    def test_adjacency_to_json(self):
+        adj = self.create_adjacency("nodeA", "ifaceX", metric=10)
+        adj_dict = {
+            "adjLabel": 0,
+            "ifName": "ifaceX",
+            "isOverloaded": False,
+            "metric": 10,
+            "nextHopV4": {"addr": "0.0.0.0", "ifName": None},
+            "nextHopV6": {"addr": "fe80::20a2:1ff:fef4:59be", "ifName": None},
+            "otherIfName": "",
+            "otherNodeName": "nodeA",
+            "rtt": 1,
+            "timestamp": adj.timestamp,
+            "weight": 1,
+        }
+        self.assertEqual(adj_dict, object_to_dict(adj))
 
     def test_parse_prefix_database(self):
         bgp1 = openr_types.PrefixEntry(

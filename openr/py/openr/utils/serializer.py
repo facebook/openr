@@ -9,11 +9,22 @@ from typing import Any, Dict, Optional
 
 from openr.Network import ttypes as network_types
 from openr.utils.consts import Consts
-from openr.utils.ipnetwork import sprint_prefix
+from openr.utils.ipnetwork import sprint_addr, sprint_prefix
 from thrift.util import Serializer
 
 
-def object_to_dict(data: Any, overrides: Optional[Dict] = None) -> Any:
+TO_DICT_OVERRIDES = {
+    # Convert IpPrefix to human readable format
+    network_types.IpPrefix: sprint_prefix,
+    # Convert BinaryAddress to human readable format
+    network_types.BinaryAddress: lambda x: {
+        "addr": sprint_addr(x.addr),
+        "ifName": x.ifName,
+    },
+}
+
+
+def object_to_dict(data: Any, overrides: Optional[Dict] = TO_DICT_OVERRIDES) -> Any:
     """
     Recursively convert any python object to dict such that it is json
     serializable. Provides to_dict overrides for any specific class type
@@ -43,7 +54,7 @@ def object_to_dict(data: Any, overrides: Optional[Dict] = None) -> Any:
         return data.decode("utf-8")
 
     # Primitive types (string & numbers)
-    if type(data) in [float, int, str]:
+    if type(data) in [float, int, str, bool]:
         return data
 
     # Specific overrides
@@ -59,11 +70,7 @@ def object_to_dict(data: Any, overrides: Optional[Dict] = None) -> Any:
 def serialize_json(struct: Any) -> str:
     """Serialize any thrift Struct into JSON"""
 
-    overrides = {
-        # Convert IpPrefix to human readable format
-        network_types.IpPrefix: sprint_prefix,
-    }
-    return json.dumps(object_to_dict(struct, overrides), indent=2, sort_keys=True)
+    return json.dumps(object_to_dict(struct), indent=2, sort_keys=True)
 
 
 def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
