@@ -769,52 +769,6 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
     )
 
 
-def interface_db_to_dict(value):
-    """
-    Convert a thrift::Value representation of InterfaceDatabase to bunch
-    object
-    """
-
-    def _parse_intf_info(info):
-        addrs = [ipnetwork.sprint_addr(v.prefixAddress.addr) for v in info.networks]
-
-        return bunch.Bunch(
-            **{"isUp": info.isUp, "ifIndex": info.ifIndex, "Addrs": addrs}
-        )
-
-    assert isinstance(value, openr_types.Value)
-    intf_db = deserialize_thrift_object(value.value, openr_types.InterfaceDatabase)
-    return bunch.Bunch(
-        **{
-            "thisNodeName": intf_db.thisNodeName,
-            "interfaces": {
-                k: _parse_intf_info(v) for k, v in intf_db.interfaces.items()
-            },
-        }
-    )
-
-
-def interface_dbs_to_dict(publication, nodes, iter_func):
-    """get parsed interface dbs
-
-    :param publication openr_types.Publication
-    :param nodes set: the set of the nodes to filter interfaces for
-
-    :return map(node, InterfaceDatabase.bunch): the parsed
-        adjacency DB in a map with keys and values in strings
-    """
-
-    assert isinstance(publication, openr_types.Publication)
-
-    def _parse_intf_db(intf_map, value):
-        intf_db = interface_db_to_dict(value)
-        intf_map[intf_db.thisNodeName] = intf_db
-
-    intf_dbs_map = {}
-    iter_func(intf_dbs_map, publication, nodes, _parse_intf_db)
-    return intf_dbs_map
-
-
 def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
     """convert nextHop from thrift instance into a dict in strings"""
     if nextHop is None:
