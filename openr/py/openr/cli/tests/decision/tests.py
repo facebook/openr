@@ -107,25 +107,6 @@ class CliDecisionTests(TestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, invoked_return.exit_code)
-        self.assertEqual("[]", invoked_return.stdout)
-
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
-    def test_decision_received_routes_json_legacy(
-        self, mocked_openr_client: MagicMock
-    ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
-            mocked_openr_client
-        )
-        # Retturn a List of ReceivedRouteDetail
-        mocked_returned_connection.getReceivedRoutesFiltered.return_value = (
-            MOCKED_RECEIVED_ROUTES
-        )
-        invoked_return = self.runner.invoke(
-            decision.ReceivedRoutesCli.show,
-            ["--json", "--legacy"],
-            catch_exceptions=False,
-        )
-        self.assertEqual(0, invoked_return.exit_code)
         self.assertEqual(EXPECTED_ROUTES_RECEIVED_JSON, invoked_return.stdout)
 
     @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
@@ -143,4 +124,4 @@ class CliDecisionTests(TestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, invoked_return.exit_code)  # TODO - Should we return 1?
-        self.assertEqual("{}\n", invoked_return.stdout)
+        self.assertEqual("[]\n", invoked_return.stdout)

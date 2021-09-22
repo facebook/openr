@@ -4,16 +4,62 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any
+import json
+from typing import Any, Dict, Optional
 
+from openr.Network import ttypes as network_types
 from openr.utils.consts import Consts
-from thrift.protocol.TSimpleJSONProtocol import TSimpleJSONProtocolFactory
+from openr.utils.ipnetwork import sprint_prefix
 from thrift.util import Serializer
 
 
-def serialize_json(struct: Any) -> bytes:
+def object_to_dict(data: Any, overrides: Optional[Dict] = None) -> Any:
+    """
+    Recursively convert any python object to dict such that it is json
+    serializable. Provides to_dict overrides for any specific class type
+    """
+
+    # Handling none objects
+    if data is None:
+        return None
+
+    # Sequence & Set type
+    if type(data) in [list, tuple, range, set, frozenset]:
+        return [object_to_dict(x, overrides) for x in data]
+
+    # Map type
+    if isinstance(data, dict):
+        return {
+            object_to_dict(x, overrides): object_to_dict(y, overrides)
+            for x, y in data.items()
+        }
+
+    # Bytes type
+    if isinstance(data, bytes):
+        return data.decode("utf-8")
+
+    # Primitive types (string & numbers)
+    if type(data) in [float, int, str]:
+        return data
+
+    # Specific overrides
+    if overrides:
+        for class_type, override_fn in overrides.items():
+            if isinstance(data, class_type):
+                return override_fn(data)
+
+    # data represents some class
+    return {x: object_to_dict(y, overrides) for x, y in data.__dict__.items()}
+
+
+def serialize_json(struct: Any) -> str:
     """Serialize any thrift Struct into JSON"""
-    return Serializer.serialize(TSimpleJSONProtocolFactory(), struct)
+
+    overrides = {
+        # Convert IpPrefix to human readable format
+        network_types.IpPrefix: sprint_prefix,
+    }
+    return json.dumps(object_to_dict(struct, overrides), indent=2, sort_keys=True)
 
 
 def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):

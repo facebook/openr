@@ -494,52 +494,134 @@ MOCKED_RECEIVED_ROUTES = [
 ]
 
 EXPECTED_ROUTES_RECEIVED_JSON = """\
-{
-  "::1": {
-    "areas": [
-      "area2"
+[
+  {
+    "bestKey": {
+      "area": "area2",
+      "node": "openr-center"
+    },
+    "bestKeys": [
+      {
+        "area": "area2",
+        "node": "openr-center"
+      }
     ],
-    "prefixEntries": [
+    "prefix": "fd00:5::/64",
+    "routes": [
       {
-        "area": "area2",
-        "bestKey": {
+        "key": {
           "area": "area2",
           "node": "openr-center"
         },
-        "prefix": "fd00:5::/64",
-        "tags": [
-          "INTERFACE_SUBNET",
-          "openr-center:lo"
-        ]
-      },
+        "route": {
+          "area_stack": [],
+          "data": null,
+          "forwardingAlgorithm": 0,
+          "forwardingType": 0,
+          "metrics": {
+            "distance": 0,
+            "path_preference": 1000,
+            "source_preference": 200,
+            "version": 1
+          },
+          "minNexthop": null,
+          "mv": null,
+          "prefix": "fd00:5::/64",
+          "prependLabel": null,
+          "tags": [
+            "INTERFACE_SUBNET",
+            "openr-center:lo"
+          ],
+          "type": 1
+        }
+      }
+    ]
+  },
+  {
+    "bestKey": {
+      "area": "area2",
+      "node": "openr-center"
+    },
+    "bestKeys": [
       {
         "area": "area2",
-        "bestKey": {
+        "node": "openr-center"
+      }
+    ],
+    "prefix": "fd00:4::/64",
+    "routes": [
+      {
+        "key": {
           "area": "area2",
           "node": "openr-center"
         },
-        "prefix": "fd00:4::/64",
-        "tags": [
-          "INTERFACE_SUBNET",
-          "openr-center:lo"
-        ]
-      },
+        "route": {
+          "area_stack": [],
+          "data": null,
+          "forwardingAlgorithm": 0,
+          "forwardingType": 0,
+          "metrics": {
+            "distance": 0,
+            "path_preference": 1000,
+            "source_preference": 200,
+            "version": 1
+          },
+          "minNexthop": null,
+          "mv": null,
+          "prefix": "fd00:4::/64",
+          "prependLabel": null,
+          "tags": [
+            "INTERFACE_SUBNET",
+            "openr-center:lo"
+          ],
+          "type": 1
+        }
+      }
+    ]
+  },
+  {
+    "bestKey": {
+      "area": "area2",
+      "node": "openr-right"
+    },
+    "bestKeys": [
       {
         "area": "area2",
-        "bestKey": {
+        "node": "openr-right"
+      }
+    ],
+    "prefix": "fd00:6::/64",
+    "routes": [
+      {
+        "key": {
           "area": "area2",
           "node": "openr-right"
         },
-        "prefix": "fd00:6::/64",
-        "tags": [
-          "INTERFACE_SUBNET",
-          "openr-right:lo"
-        ]
+        "route": {
+          "area_stack": [],
+          "data": null,
+          "forwardingAlgorithm": 0,
+          "forwardingType": 0,
+          "metrics": {
+            "distance": 0,
+            "path_preference": 1000,
+            "source_preference": 200,
+            "version": 1
+          },
+          "minNexthop": null,
+          "mv": null,
+          "prefix": "fd00:7::/64",
+          "prependLabel": null,
+          "tags": [
+            "INTERFACE_SUBNET",
+            "openr-right:lo"
+          ],
+          "type": 1
+        }
       }
-    ],
-    "thisNodeName": "::1"
+    ]
   }
-}
+]
 """
 
 # Keeping for reference
