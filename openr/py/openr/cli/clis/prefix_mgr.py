@@ -17,7 +17,6 @@ class PrefixMgrCli:
     def __init__(self):
         self.prefixmgr.add_command(WithdrawCli().withdraw)
         self.prefixmgr.add_command(AdvertiseCli().advertise)
-        self.prefixmgr.add_command(ViewCli().view)
         self.prefixmgr.add_command(SyncCli().sync)
         self.prefixmgr.add_command(AdvertisedRoutesCli().show)
         self.prefixmgr.add_command(OriginatedRoutesCli().show)
@@ -87,18 +86,6 @@ class SyncCli(object):
         """Sync the prefixes from this node with specific type"""
 
         prefix_mgr.SyncCmd(cli_opts).run(prefixes, prefix_type, forwarding_type)
-
-
-class ViewCli(object):
-    @click.command()
-    @click.pass_obj
-    def view(cli_opts):  # noqa: B902
-        """
-        View the prefix of this node
-        TODO: Deprecated. Use advertised-routes instead
-        """
-
-        prefix_mgr.ViewCmd(cli_opts).run()
 
 
 class AdvertisedRoutesCli(object):

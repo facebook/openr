@@ -138,31 +138,6 @@ class SyncCmd(PrefixMgrCmd):
         print(f"Synced {len(prefixes)} prefixes with type {prefix_type}")
 
 
-class ViewCmd(PrefixMgrCmd):
-    def _run(
-        self,
-        client: OpenrCtrl.Client,
-        *args,
-        **kwargs,
-    ) -> None:
-        prefixes = client.getPrefixes()
-        rows = []
-        for prefix_entry in prefixes:
-            prefix_str = ipnetwork.sprint_prefix(prefix_entry.prefix)
-            prefix_type = ipnetwork.sprint_prefix_type(prefix_entry.type)
-            forwarding_type = ipnetwork.sprint_prefix_forwarding_type(
-                prefix_entry.forwardingType
-            )
-            rows.append((prefix_type, prefix_str, forwarding_type))
-        print(
-            "\n",
-            printing.render_horizontal_table(
-                rows, ["Type", "Prefix", "Forwarding Type"]
-            ),
-        )
-        print()
-
-
 class AdvertisedRoutesCmd(PrefixMgrCmd):
 
     # @override

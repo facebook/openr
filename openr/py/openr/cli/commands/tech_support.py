@@ -41,7 +41,6 @@ class TechSupportCmd(object):
             ("openr runtime params", self.print_runtime_params),
             ("openr version", self.print_openr_version),
             ("openr config", self.print_config),
-            ("breeze prefixmgr view", self.print_prefixmgr_view),
             ("breeze lm links", self.print_lm_links),
             ("breeze kvstore peers", self.print_kvstore_peers),
             ("breeze kvstore nodes", self.print_kvstore_nodes),
@@ -96,9 +95,6 @@ class TechSupportCmd(object):
         config.ConfigPrefixAllocatorCmd(self.cli_opts).run()
         config.ConfigLinkMonitorCmd(self.cli_opts).run()
         config.ConfigPrefixManagerCmd(self.cli_opts).run()
-
-    def print_prefixmgr_view(self):
-        prefix_mgr.ViewCmd(self.cli_opts).run()
 
     def print_lm_links(self):
         lm.LMLinksCmd(self.cli_opts).run(False, False)

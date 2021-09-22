@@ -721,20 +721,6 @@ Successfully unset overload bit..
 PrefixManager exposes APIs to list, advertise and withdraw prefixes into the
 network for the current node.
 
-#### view
-
-List this node's currently advertised prefixes
-
-```console
-$ breeze prefixmgr view
-
-Type              Prefix
-----------------  ---------------------------
-LOOPBACK          fc00:cafe:babe::1/128
-LOOPBACK          192.168.0.1/32
-PREFIX_ALLOCATOR  da00:cafe:babe:f6:f70b::/80
-```
-
 #### advertise/withdraw
 
 - Advertise a prefix from this node.
@@ -751,17 +737,24 @@ $ breeze prefixmgr sync face:b00c::/80
 Synced 1 prefixes with type BREEZE
 ```
 
-- List current node's prefix database
+#### List Advertised Routes
+
+- List advertised prefixes by current node
 
 ```console
-$ breeze prefixmgr view
+$ breeze prefixmgr advertised-routes all
 
-Type              Prefix
-----------------  ---------------------------
-LOOPBACK          fc00:cafe:babe::1/128
-LOOPBACK          192.168.0.1/32
-BREEZE            face:b00c::/80
-PREFIX_ALLOCATOR  da00:cafe:babe:f6:f70b::/80
+Markers: * - One of the best entries, @ - The best entry
+Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
+          MN - Min-Nexthops, PL - Prepend Label
+
+   Source                               FwdAlgo      FwdType  SP     PP     D      MN    PL
+
+> 2803:6081:2874::/46, 1/1
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   2      24    65001
+
+> 2401:db00:106c:1d00::/56, 1/1
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   2      24    65001
 ```
 
 - Withdraw advertised routes
