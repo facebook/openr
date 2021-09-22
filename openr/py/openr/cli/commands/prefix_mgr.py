@@ -17,7 +17,7 @@ from openr.Network import ttypes as network_types
 from openr.OpenrConfig.ttypes import PrefixForwardingType, PrefixForwardingAlgorithm
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
-from openr.utils import ipnetwork, printing
+from openr.utils import ipnetwork, printing, serializer
 
 
 def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
@@ -182,8 +182,7 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
 
         # Print json if
         if json:
-            # TODO: Print routes in json
-            raise NotImplementedError()
+            print(serializer.serialize_json(routes))
         else:
             self.render(routes, detailed)
 
@@ -374,8 +373,7 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
 
         # Print json if
         if json:
-            # TODO: Print routes in json
-            raise NotImplementedError()
+            print(serializer.serialize_json(routes))
         else:
             self.render(routes, detailed)
 
@@ -429,8 +427,7 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
 
         # Print json if
         if json:
-            # TODO: Print routes in json
-            raise NotImplementedError()
+            print(serializer.serialize_json(routes))
         else:
             self.render(routes, detailed)
 

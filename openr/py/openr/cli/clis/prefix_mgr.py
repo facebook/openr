@@ -119,9 +119,9 @@ class AdvertisedRoutesCli(object):
         help="Translate tag string to human readable name",
     )
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
-    @click.pass_obj
+    @click.pass_context
     def show(
-        cli_opts: bunch.Bunch,  # noqa: B902
+        ctx: bunch.Bunch,  # noqa: B902
         prefix_type: Optional[str],
         detail: bool,
         tag2name: bool,
@@ -132,7 +132,9 @@ class AdvertisedRoutesCli(object):
         """
 
         # Set options & arguments in cli_opts
-        cli_opts["advertised_routes_options"] = bunch.Bunch(
+        if ctx.obj is None:
+            ctx.obj = bunch.Bunch()
+        ctx.obj["advertised_routes_options"] = bunch.Bunch(
             prefix_type=prefix_type,
             detail=detail,
             json=json,

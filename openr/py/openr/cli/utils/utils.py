@@ -2138,7 +2138,7 @@ def print_route_helper(
             rows.append(f"     Misc - prepend-label: {route.route.prependLabel}")
         tag_map = tag_map if tag_map is not None else {}
         rows.append(
-            f"     Tags - {', '.join([tag_map.get(t,t) for t in route.route.tags])}"
+            f"     Tags - {', '.join(sorted([tag_map.get(t,t) for t in route.route.tags]))}"
         )
         rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
         if (

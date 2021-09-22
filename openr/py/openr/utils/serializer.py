@@ -23,9 +23,13 @@ def object_to_dict(data: Any, overrides: Optional[Dict] = None) -> Any:
     if data is None:
         return None
 
-    # Sequence & Set type
-    if type(data) in [list, tuple, range, set, frozenset]:
+    # Sequence type
+    if type(data) in [list, tuple, range]:
         return [object_to_dict(x, overrides) for x in data]
+
+    # Set type
+    if type(data) in [set, frozenset]:
+        return sorted([object_to_dict(x, overrides) for x in data])
 
     # Map type
     if isinstance(data, dict):
