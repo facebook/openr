@@ -208,6 +208,11 @@ class Config {
     return config_.v4_over_v6_nexthop_ref().value_or(false);
   }
 
+  bool
+  isInitializationProcessEnabled() const {
+    return *config_.enable_initialization_process_ref();
+  }
+
   //
   // area
   //

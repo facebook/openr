@@ -33,6 +33,7 @@ namespace fb303 = facebook::fb303;
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+    messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue,
     messaging::RQueue<Publication> kvStoreUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
@@ -44,6 +45,7 @@ PrefixManager::PrefixManager(
           *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvRequestQueue_(kvRequestQueue),
+      prefixMgrRouteUpdatesQueue_(prefixMgrRouteUpdatesQueue),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       kvStore_(kvStore),
       preferOpenrOriginatedRoutes_(
@@ -92,7 +94,7 @@ PrefixManager::PrefixManager(
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
   // TODO: deprecate this after prefix_hold_time_s after OpenR initialization
   // procedure is stable.
-  if (not config_->getConfig().get_enable_initialization_process()) {
+  if (not config_->isInitializationProcessEnabled()) {
     initialSyncKvStoreTimer_ =
         folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
           XLOG(INFO) << "syncKvStore() from initialSyncKvStoreTimer_.";
@@ -105,7 +107,7 @@ PrefixManager::PrefixManager(
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kKvStoreSyncThrottleTimeout, [this]() noexcept {
         // No write to KvStore before initial KvStore sync
-        if (config_->getConfig().get_enable_initialization_process()) {
+        if (config_->isInitializationProcessEnabled()) {
           // Signal based initialization process.
           if ((not uninitializedPrefixTypes_.empty()) or
               (not initialKvStoreSynced_)) {
@@ -430,7 +432,8 @@ void
 PrefixManager::populateRouteUpdates(
     const folly::CIDRNetwork& prefix,
     const PrefixEntry& prefixEntry,
-    DecisionRouteUpdate& routeUpdatesOut) {
+    DecisionRouteUpdate& routeUpdatesForDecision,
+    DecisionRouteUpdate& routeUpdatesForBgp) {
   // Propogate route update to Decision (if necessary)
   auto& advertisedStatus = keysInKvStore_[prefix];
   if (prefixEntry.shouldInstall()) {
@@ -440,12 +443,24 @@ PrefixManager::populateRouteUpdates(
     // if shouldInstall() is true, nexthops is guaranteed to have value.
     RibUnicastEntry unicastEntry(prefix, prefixEntry.nexthops.value());
     unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
-    routeUpdatesOut.addRouteToUpdate(std::move(unicastEntry));
+    routeUpdatesForDecision.addRouteToUpdate(std::move(unicastEntry));
   } else {
+    // shouldInstall() is false, need to send to bgprib here
+    // When shouldInstall() is true, prefix will be sent to bgprib after
+    // fib installs
+
+    // ATTN: This does not support GR with install_to_fib = false and min
+    // supporting routes > 0
+    // Do not reflect back the prefixes just learned from BGP Rib
+    if (thrift::PrefixType::BGP != prefixEntry.tPrefixEntry->get_type()) {
+      RibUnicastEntry unicastEntry = RibUnicastEntry(prefix, {});
+      unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
+      routeUpdatesForBgp.addRouteToUpdate(std::move(unicastEntry));
+    }
     // If was installed to fib, but now lose in tie break, withdraw from
     // fib.
     if (advertisedStatus.installedToFib) {
-      routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
+      routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
       advertisedStatus.installedToFib = false;
     }
   } // else
@@ -527,7 +542,8 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
 
 void
 PrefixManager::deletePrefixKeysInKvStore(
-    const folly::CIDRNetwork& prefix, DecisionRouteUpdate& routeUpdatesOut) {
+    const folly::CIDRNetwork& prefix,
+    DecisionRouteUpdate& routeUpdatesForDecision) {
   // delete actual keys being advertised in the cache
   //
   // Sample format:
@@ -538,7 +554,7 @@ PrefixManager::deletePrefixKeysInKvStore(
   if (keysIt != keysInKvStore_.end()) {
     deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
     if (keysIt->second.installedToFib) {
-      routeUpdatesOut.unicastRoutesToDelete.emplace_back(prefix);
+      routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
     }
     keysInKvStore_.erase(keysIt);
   }
@@ -588,7 +604,7 @@ PrefixManager::deleteKvStoreKeyHelper(
 
 void
 PrefixManager::triggerInitialPrefixDbSync() {
-  if (not config_->getConfig().get_enable_initialization_process()) {
+  if (not config_->isInitializationProcessEnabled()) {
     return;
   }
   if (uninitializedPrefixTypes_.empty() and initialKvStoreSynced_) {
@@ -597,6 +613,11 @@ PrefixManager::triggerInitialPrefixDbSync() {
     syncKvStore();
     logInitializationEvent(
         "PrefixManager", thrift::InitializationEvent::PREFIX_DB_SYNCED);
+
+    // Send FULL_SYNC to bgp speaker, signal bgp speaker to send EoR
+    DecisionRouteUpdate routeUpdatesForBgp;
+    routeUpdatesForBgp.type = DecisionRouteUpdate::FULL_SYNC;
+    prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
   }
 }
 
@@ -681,7 +702,8 @@ void
 PrefixManager::syncKvStore() {
   XLOG(DBG1) << "[KvStore Sync] Syncing " << pendingUpdates_.size()
              << " pending updates.";
-  DecisionRouteUpdate routeUpdatesOut;
+  DecisionRouteUpdate routeUpdatesForDecision;
+  DecisionRouteUpdate routeUpdatesForBgp;
   size_t receivedPrefixCnt = 0;
   size_t syncedPrefixCnt = 0;
   size_t awaitingPrefixCnt = 0;
@@ -691,7 +713,7 @@ PrefixManager::syncKvStore() {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
       // Delete prefixes that do not exist in prefixMap_.
-      deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
+      deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
       advertisedPrefixes_.erase(prefix);
       ++syncedPrefixCnt;
     }
@@ -712,7 +734,8 @@ PrefixManager::syncKvStore() {
         ((hasPrefixUpdate or haslabelUpdate) and readyToBeAdvertised);
     // Get route updates from updated prefix entry.
     if (hasPrefixUpdate) {
-      populateRouteUpdates(prefix, bestEntry, routeUpdatesOut);
+      populateRouteUpdates(
+          prefix, bestEntry, routeUpdatesForDecision, routeUpdatesForBgp);
     }
     if (needToAdvertise) {
       XLOG(DBG1) << fmt::format(
@@ -739,7 +762,7 @@ PrefixManager::syncKvStore() {
       XLOG(DBG1) << fmt::format(
           "Deleting advertised keys for {}",
           folly::IPAddress::networkToString(prefix));
-      deletePrefixKeysInKvStore(prefix, routeUpdatesOut);
+      deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
       advertisedPrefixes_.erase(prefix);
       ++syncedPrefixCnt;
     }
@@ -749,10 +772,19 @@ PrefixManager::syncKvStore() {
   pendingUpdates_.clear();
 
   // Push originatedRoutes update to staticRouteUpdatesQueue_.
-  if (not routeUpdatesOut.empty()) {
-    CHECK(routeUpdatesOut.mplsRoutesToUpdate.empty());
-    CHECK(routeUpdatesOut.mplsRoutesToDelete.empty());
-    staticRouteUpdatesQueue_.push(std::move(routeUpdatesOut));
+  if (not routeUpdatesForDecision.empty()) {
+    CHECK(routeUpdatesForDecision.mplsRoutesToUpdate.empty());
+    CHECK(routeUpdatesForDecision.mplsRoutesToDelete.empty());
+    staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
+  }
+
+  // Push originatedRoutes that does not go through fib to
+  // prefixMgrRouteUpdatesQueue_. Note: the routes that do go through fib will
+  // be pushed to this queue once fib finishes installing
+  if (not routeUpdatesForBgp.empty()) {
+    CHECK(routeUpdatesForBgp.mplsRoutesToUpdate.empty());
+    CHECK(routeUpdatesForBgp.mplsRoutesToDelete.empty());
+    prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
   }
 
   XLOG(DBG1) << fmt::format(
@@ -1504,19 +1536,36 @@ PrefixManager::processOriginatedPrefixes() {
 
 void
 PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
+  // Forward fib update to bgprib for route announcement.
+  // NOTE: fib update does not include routes that do not need fib programming,
+  // which are send to bgprib in syncKvStore().
+  //
+  // If initialization process is enabled, full sync signal will be sent
+  // explicitly in triggerInitialPrefixDbSync(). We send fib update as
+  // INCREMENTAL, this has to be done before triggerInitialPrefixDbSync().
+  //
+  // If initialization process is disabled, to match existing
+  // behavior, send full sync as it is to unblock bgp eor.
+  //
+  // TODO: treat bgprib as another area, move this logic into syncKvStore()
+  auto fibRouteUpdateCp = fibRouteUpdate;
+  if (config_->isInitializationProcessEnabled()) {
+    fibRouteUpdateCp.type = DecisionRouteUpdate::INCREMENTAL;
+  }
+  prefixMgrRouteUpdatesQueue_.push(std::move(fibRouteUpdateCp));
+
   if (config_->getConfig().get_enable_fib_ack()) {
     // Store programmed label/unicast routes info if FIB-ACK feature is enabled.
     storeProgrammedRoutes(fibRouteUpdate);
   }
 
   // Re-advertise prefixes received from one area to other areas.
-  redistributePrefixesAcrossAreas(fibRouteUpdate);
+  redistributePrefixesAcrossAreas(std::move(fibRouteUpdate));
 
-  if (fibRouteUpdate.type == DecisionRouteUpdate::FULL_SYNC) {
-    if (uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
-      XLOG(INFO) << "[Initialization] Received initial RIB routes.";
-      triggerInitialPrefixDbSync();
-    }
+  if (fibRouteUpdate.type == DecisionRouteUpdate::FULL_SYNC and
+      uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
+    XLOG(INFO) << "[Initialization] Received initial RIB routes.";
+    triggerInitialPrefixDbSync();
   }
 }
 
@@ -1578,12 +1627,13 @@ resetNonTransitiveAttrs(thrift::PrefixEntry& prefixEntry) {
 
 void
 PrefixManager::redistributePrefixesAcrossAreas(
-    DecisionRouteUpdate& fibRouteUpdate) {
+    DecisionRouteUpdate&& fibRouteUpdate) {
   XLOGF(
       DBG1,
       "Processing FibRouteUpdate: {} announcements, {} withdrawals",
       fibRouteUpdate.unicastRoutesToUpdate.size(),
       fibRouteUpdate.unicastRoutesToDelete.size());
+
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
 

@@ -118,6 +118,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     prefixManager = std::make_shared<PrefixManager>(
         staticRoutesUpdatesQueue_,
         kvRequestQueue_,
+        prefixMgrRoutesUpdatesQueue_,
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
@@ -167,6 +168,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   TearDown() override {
     routeUpdatesQueue_.close();
     staticRoutesUpdatesQueue_.close();
+    prefixMgrRoutesUpdatesQueue_.close();
     interfaceUpdatesQueue_.close();
     peerUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
@@ -230,6 +232,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRoutesUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   messaging::ReplicateQueue<LogSample> logSampleQueue_;

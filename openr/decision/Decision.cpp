@@ -634,6 +634,7 @@ Decision::rebuildRoutes(std::string const& event) {
     }
     // update `DecisionRouteDb` cache and return delta as `update`
     update = routeDb_.calculateUpdate(std::move(db));
+    update.type = DecisionRouteUpdate::FULL_SYNC;
   } else {
     // process prefixes update from `prefixState_`
     for (auto const& prefix : pendingUpdates_.updatedPrefixes()) {

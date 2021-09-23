@@ -240,6 +240,7 @@ main(int argc, char** argv) {
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
   ReplicateQueue<KeyValueRequest> kvRequestQueue;
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
@@ -262,6 +263,8 @@ main(int argc, char** argv) {
       kvStoreUpdatesQueue.getReader("decision");
   auto PrefixManagerKvStoreUpdatesReader =
       kvStoreUpdatesQueue.getReader("prefixManager");
+  auto pluginRouteReader =
+      prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates");
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -390,6 +393,7 @@ main(int argc, char** argv) {
       std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           kvRequestQueue,
+          prefixMgrRouteUpdatesQueue,
           PrefixManagerKvStoreUpdatesReader,
           prefixUpdatesQueue.getReader("prefixManager"),
           std::move(routeUpdatesQueueReader),
@@ -481,9 +485,7 @@ main(int argc, char** argv) {
   auto pluginArgs = PluginArgs{
       prefixUpdatesQueue,
       staticRouteUpdatesQueue,
-      (config->getConfig().get_enable_fib_ack()
-           ? fibRouteUpdatesQueue.getReader("pluginRouteUpdates")
-           : routeUpdatesQueue.getReader("pluginRouteUpdates")),
+      pluginRouteReader,
       config,
       sslContext};
   if (config->isBgpPeeringEnabled()) {
@@ -573,6 +575,7 @@ main(int argc, char** argv) {
   staticRouteUpdatesQueue.close();
   fibRouteUpdatesQueue.close();
   netlinkEventsQueue.close();
+  prefixMgrRouteUpdatesQueue.close();
   logSampleQueue.close();
 
   // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler

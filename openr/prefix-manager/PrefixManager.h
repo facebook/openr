@@ -86,6 +86,8 @@ class PrefixManager final : public OpenrEventBase {
       // producer queue
       messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>&
+          prefixMgrRouteUpdatesQueue,
       // consumer queue
       messaging::RQueue<Publication> kvStoreUpdatesQueue,
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
@@ -285,7 +287,8 @@ class PrefixManager final : public OpenrEventBase {
 
   // Delete KvStore keys of one prefix entry.
   void deletePrefixKeysInKvStore(
-      const folly::CIDRNetwork& prefix, DecisionRouteUpdate& routeUpdatesOut);
+      const folly::CIDRNetwork& prefix,
+      DecisionRouteUpdate& routeUpdatesForDecision);
 
   // Delete KvStore keys form the areas for one prefix entry.
   void deleteKvStoreKeyHelper(
@@ -299,7 +302,8 @@ class PrefixManager final : public OpenrEventBase {
   void populateRouteUpdates(
       const folly::CIDRNetwork& prefix,
       const PrefixEntry& prefixEntry,
-      DecisionRouteUpdate& routeUpdatesOut);
+      DecisionRouteUpdate& routeUpdatesForDecision,
+      DecisionRouteUpdate& routeUpdatesForBgp);
   /*
    * [Route Origination/Aggregation]
    *
@@ -342,7 +346,7 @@ class PrefixManager final : public OpenrEventBase {
   // For one node locating in multiple areas, it should redistribute prefixes
   // received from one area into other areas, performing similar role as border
   // routers in BGP.
-  void redistributePrefixesAcrossAreas(DecisionRouteUpdate& fibRouteUpdate);
+  void redistributePrefixesAcrossAreas(DecisionRouteUpdate&& fibRouteUpdate);
 
   // get all areaIds
   std::unordered_set<std::string> allAreaIds();
@@ -378,6 +382,9 @@ class PrefixManager final : public OpenrEventBase {
 
   // queue to send key-value update requests to KvStore
   messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
+
+  // Queue to publish prefix updates to bgprib
+  messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue_;
 
   // V4 prefix over V6 nexthop enabled
   const bool v4OverV6Nexthop_{false};

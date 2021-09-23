@@ -196,6 +196,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   prefixManager_ = std::make_unique<PrefixManager>(
       staticRoutesQueue_,
       kvRequestQueue_,
+      prefixMgrRoutesQueue_,
       kvStoreUpdatesQueue_.getReader(),
       prefixUpdatesQueue_.getReader(),
       fibRouteUpdatesQueue_.getReader(),
@@ -363,6 +364,7 @@ OpenrWrapper<Serializer>::stop() {
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
   staticRoutesQueue_.close();
+  prefixMgrRoutesQueue_.close();
   fibRouteUpdatesQueue_.close();
   logSampleQueue_.close();
 

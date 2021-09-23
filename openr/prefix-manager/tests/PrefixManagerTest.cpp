@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/IPAddress.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -126,6 +127,7 @@ class PrefixManagerTestFixture : public testing::Test {
   closeQueue() {
     kvRequestQueue.close();
     prefixUpdatesQueue.close();
+    prefixMgrRouteUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     fibRouteUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
@@ -135,6 +137,7 @@ class PrefixManagerTestFixture : public testing::Test {
   openQueue() {
     kvRequestQueue.open();
     prefixUpdatesQueue.open();
+    prefixMgrRouteUpdatesQueue.open();
     staticRouteUpdatesQueue.open();
     fibRouteUpdatesQueue.open();
     kvStoreWrapper->openQueue();
@@ -146,6 +149,7 @@ class PrefixManagerTestFixture : public testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue,
         kvRequestQueue,
+        prefixMgrRouteUpdatesQueue,
         kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
@@ -199,6 +203,7 @@ class PrefixManagerTestFixture : public testing::Test {
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 
@@ -805,6 +810,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   auto prefixManager2 = std::make_unique<PrefixManager>(
       staticRouteUpdatesQueue,
       kvRequestQueue,
+      prefixMgrRouteUpdatesQueue,
       kvStoreWrapper->getReader(),
       prefixUpdatesQueue.getReader(),
       fibRouteUpdatesQueue.getReader(),
@@ -2938,6 +2944,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   // RQueue interface to read route updates sent by PrefixManager to
   // Decision. This queue is expressly used for originated routes
   auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+  auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
   auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
 
   // dummy nexthop
@@ -3026,16 +3033,60 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //    b. Both prefixes will be withdrawn from KvStore
   //    c. Supporting routes count for both prefixes will decrement by 1
 
+  {
+    // 0. bgp receives the v4 published by fibQueue (during setup)
+    auto update =
+        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+
+    EXPECT_FALSE(
+        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout)
+            .has_value());
+  }
+
   // Step 1 - inject 1 v4 and 1 v6 supporting prefix into fibRouteUpdatesQueue
   DecisionRouteUpdate routeUpdate;
   routeUpdate.addRouteToUpdate(unicastEntryV4_1);
   routeUpdate.addRouteToUpdate(unicastEntryV6_1);
   fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-  // Verify 1a and 1b: PrefixManager -> Decision staticRouteupdate
+  // Verify 1a and 1b: PrefixManager -> forward fib routes to Bgp/Plugin
+  // routeUpdate;
+  {
+    auto update =
+        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(2));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    const auto& route = updatedRoutes.at(0);
+    const auto& route2 = updatedRoutes.at(1);
+
+    const auto prefixes = {route.get_dest(), route2.get_dest()};
+    EXPECT_THAT(
+        prefixes,
+        testing::UnorderedElementsAre(
+            toIpPrefix(v4Prefix_1), toIpPrefix(v6Prefix_1)));
+
+    // Does not originate v4 because install_to_fib = true
+    EXPECT_FALSE(
+        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout)
+            .has_value());
+  }
+
+  // Verify 1c and 1d: PrefixManager -> Decision staticRouteupdate
   {
     auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
-    // 1a. v4 route update received
+    // 1c. v4 route update received
     EXPECT_TRUE(update.has_value());
 
     auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
@@ -3050,12 +3101,12 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     const auto& nhs = *route.nextHops_ref();
     EXPECT_THAT(nhs, testing::SizeIs(0));
 
-    // 1b. no v6 route update received
+    // 1d. no v6 route update received
     EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
                      .has_value());
   }
 
-  // Verify 1c and 1d: PrefixManager -> KvStore update
+  // Verify 1e and 1f: PrefixManager -> KvStore update
   {
     // v4Prefix_ is advertised to ALL areas configured, while v6Prefix_ is NOT
     std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
@@ -3068,7 +3119,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
   }
 
-  // Verify 1e: Via PrefixManager's public API, verify the values for # of
+  // Verify 1g: Via PrefixManager's public API, verify the values for # of
   //  supporting routes for both the v4Prefix_ (1) and v6Orefix_(1)
   {
     auto mp = getOriginatedPrefixDb();
@@ -3147,6 +3198,42 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
             folly::IPAddress::networkToString(v6Network_2)));
   }
 
+  // Verify 2d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
+  {
+    auto update =
+        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    const auto& route = updatedRoutes.back();
+
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v6Prefix_2));
+  }
+
+  // Verify 2f: PrefixMgr publish v6 route to prefixMgrRouteUpdateQueue despite
+  // of install_to_fib=false
+  {
+    // Publish v6 because install_to_fib = false and min_supporting_routes
+    // reached
+    auto update =
+        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    const auto& route = updatedRoutes.back();
+
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v6Prefix_));
+
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+  }
+
   // Step 3 - withdraw 1 v4 and 1 v6 supporting prefix
   routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
   routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
@@ -3200,6 +3287,23 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
         *prefixEntryV6.supporting_prefixes_ref(),
         testing::UnorderedElementsAre(
             folly::IPAddress::networkToString(v6Network_2)));
+  }
+
+  // Verify 3d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
+  {
+    // both route withdrawn updates are sent to Bgp/plugin
+    auto update =
+        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    EXPECT_TRUE(update.has_value());
+
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(0));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(2));
+    EXPECT_THAT(
+        deletedRoutes,
+        testing::UnorderedElementsAre(
+            toIpPrefix(v4Prefix_1), toIpPrefix(v6Prefix_1)));
   }
 }
 
@@ -3406,6 +3510,13 @@ class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
     // Enable BGP peering.
     tConfig.enable_bgp_peering_ref() = true;
     tConfig.bgp_config_ref() = thrift::BgpConfig();
+
+    thrift::OriginatedPrefix originatedPrefixV6;
+    originatedPrefixV6.prefix_ref() = "face:b00c:cafe::/64";
+    originatedPrefixV6.minimum_supporting_routes_ref() = 0;
+    originatedPrefixV6.install_to_fib_ref() = false;
+
+    tConfig.originated_prefixes_ref() = {originatedPrefixV6};
     return tConfig;
   }
 };
@@ -3417,61 +3528,86 @@ class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
 TEST_F(
     PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
     TriggerInitialKvStoreTest) {
-  int scheduleAt{0};
-  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
+  auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
 
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
   auto prefixKey = PrefixKey(
       nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix_ref()), kTestingAreaName);
 
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
-        // Initial prefix updates from BgpSpeaker
-        PrefixEvent bgpPrefixEvent(
-            PrefixEventType::ADD_PREFIXES,
-            thrift::PrefixType::BGP,
-            {prefixEntry1Bgp, prefixEntry7});
-        prefixUpdatesQueue.push(std::move(bgpPrefixEvent));
-      });
+  // Initial prefix updates from BGP
+  PrefixEvent bgpPrefixEvent(
+      PrefixEventType::ADD_PREFIXES,
+      thrift::PrefixType::BGP,
+      {prefixEntry1Bgp, prefixEntry7});
+  prefixUpdatesQueue.push(std::move(bgpPrefixEvent));
 
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
-      [&]() {
-        // No pprefixes advertised into KvStore.
-        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+  // wait for kvstore sync throttle time and check no prefixes are advertised
+  // into KvStore, waiting for FIB + KvStore Synced signal
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(
+      2 * Constants::kKvStoreSyncThrottleTimeout.count()));
+  EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+  EXPECT_EQ(0, prefixMgrRouteUpdatesReader.size());
 
-        // Initial full Fib sync.
-        DecisionRouteUpdate fullSyncUpdates;
-        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
-        fullSyncUpdates.mplsRoutesToUpdate = {
-            {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
-        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
-      });
+  // Publish initial kvStoreSynced signal.
+  kvStoreWrapper->publishKvStoreSynced();
+  kvStoreWrapper->recvKvStoreSyncedSignal();
 
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
-      [&]() {
-        // No pprefixes advertised into KvStore.
-        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+  // wait for kvstore sync throttle time and check no prefixes are advertised
+  // into KvStore, waiting for full fib sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(
+      2 * Constants::kKvStoreSyncThrottleTimeout.count()));
+  EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+  EXPECT_EQ(0, prefixMgrRouteUpdatesReader.size());
 
-        // Publish initial kvStoreSynced signal.
-        kvStoreWrapper->publishKvStoreSynced();
-        kvStoreWrapper->recvKvStoreSyncedSignal();
-      });
+  // Initial full Fib sync.
+  DecisionRouteUpdate fullSyncUpdates;
+  fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+  fullSyncUpdates.mplsRoutesToUpdate = {
+      {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+  fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
 
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
-      [&]() {
-        // Initial KvStore sync happens after initial full Fib updates and all
-        // prefix updates are received.
-        auto pub = kvStoreWrapper->recvPublication();
-        EXPECT_EQ(2, pub.keyVals_ref()->size());
-        evb.stop();
-      });
-  // let magic happen
-  evb.run();
+  // kvstore should receive publication with 3 routes 1 config + 2 bgp
+  auto pub = kvStoreWrapper->recvPublication();
+  EXPECT_EQ(3, pub.keyVals_ref()->size());
+
+  // first update to bgp rib should include all routes programmed by fib
+  // in this case no unicast is programmed by fib thus we should receive 0
+  // unicast route
+  {
+    auto msg = prefixMgrRouteUpdatesReader.get();
+    auto update = msg.value();
+    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
+
+    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(0));
+    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
+  }
+
+  // second update to bgp rib should include all config routes with
+  // install_to_fib = false
+  {
+    auto msg = prefixMgrRouteUpdatesReader.get();
+    auto update = msg.value();
+    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
+
+    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
+    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
+
+    EXPECT_EQ(
+        folly::IPAddress::createNetwork("face:b00c:cafe::/64"),
+        update.unicastRoutesToUpdate.begin()->first);
+  }
+
+  // third update with full_sync signal and empty route
+  {
+    auto msg = prefixMgrRouteUpdatesReader.get();
+    auto update = msg.value();
+    EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, update.type);
+
+    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(0));
+    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
+  }
 }
 
 class PrefixManagerInitialKvStoreSyncVipEnabledTestFixture
