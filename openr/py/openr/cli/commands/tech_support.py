@@ -44,9 +44,9 @@ class TechSupportCmd(object):
             ("breeze lm links", self.print_lm_links),
             ("breeze kvstore peers", self.print_kvstore_peers),
             ("breeze kvstore nodes", self.print_kvstore_nodes),
-            ("breeze kvstore adj", self.print_kvstore_adjs),
             ("breeze kvstore prefixes", self.print_kvstore_prefixes),
             ("breeze kvstore keys --ttl", self.print_kvstore_keys),
+            ("breeze decision adj", self.print_decision_adjs),
             ("breeze decision validate", self.print_decision_validate),
             ("breeze decision routes", self.print_decision_routes),
             ("breeze fib validate", self.print_fib_validate),
@@ -105,14 +105,14 @@ class TechSupportCmd(object):
     def print_kvstore_nodes(self):
         kvstore.NodesCmd(self.cli_opts).run()
 
-    def print_kvstore_adjs(self):
-        kvstore.AdjCmd(self.cli_opts).run(["all"], False, False)
-
     def print_kvstore_prefixes(self):
         kvstore.PrefixesCmd(self.cli_opts).run(["all"], False)
 
     def print_kvstore_keys(self):
         kvstore.KeysCmd(self.cli_opts).run(False, "", originator=None, ttl=True)
+
+    def print_decision_adjs(self):
+        decision.DecisionAdjCmd(self.cli_opts).run({"all"}, {"all"}, True, False)
 
     def print_decision_validate(self):
         decision.DecisionValidateCmd(self.cli_opts).run()

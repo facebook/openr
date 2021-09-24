@@ -107,6 +107,7 @@ class NodesCli(object):
         kvstore.NodesCmd(cli_opts).run()
 
 
+# TODO: Remove in a month
 class AdjCli(object):
     @click.command()
     @click.option(
@@ -119,11 +120,22 @@ class AdjCli(object):
     @click.option("--bidir/--no-bidir", default=True, help="Only bidir adjacencies")
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
-    def adj(cli_opts, nodes, bidir, json):  # noqa: B902
-        """dump the link-state adjacencies"""
+    @click.pass_context
+    def adj(
+        ctx: click.Context,  # noqa: B902
+        cli_opts: Bunch,
+        nodes: str,
+        bidir: bool,
+        json: bool,
+    ) -> None:
+        """dump the link-state adjacencies - Deprecated"""
 
-        nodes = parse_nodes(cli_opts, nodes)
-        kvstore.AdjCmd(cli_opts).run(nodes, bidir, json)
+        click.secho(
+            "Command deprecated - Please prefer `breeze decision adj`",
+            bold=True,
+            err=True,
+        )
+        ctx.exit(1)
 
 
 class AreasCli(object):
