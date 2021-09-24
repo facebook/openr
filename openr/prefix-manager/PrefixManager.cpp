@@ -5,10 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "PrefixManager.h"
-#include "folly/IPAddress.h"
-
 #include <fb303/ServiceData.h>
+#include <folly/IPAddress.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -25,6 +23,7 @@
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/prefix-manager/PrefixManager.h>
 
 namespace openr {
 
