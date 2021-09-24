@@ -2136,6 +2136,10 @@ TEST_F(RouteOriginationOverrideFixture, StaticRoutesAnnounce) {
   // Verify the next hop list is empty
   const auto& nhs = *route.nextHops_ref();
   EXPECT_THAT(nhs, testing::SizeIs(0));
+
+  // Static route for the same config originated prefix is published once.
+  update = waitForRouteUpdate(*staticRoutesReaderPtr, kRouteUpdateTimeout);
+  EXPECT_FALSE(update.has_value());
 }
 
 //

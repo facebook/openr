@@ -286,7 +286,7 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
     }
     // Skip none-self advertised prefixes or already persisted keys.
     if (prefixKey->getNodeName() != nodeId_ or
-        keysInKvStore_.count(prefixKey->getCIDRNetwork()) > 0) {
+        advertiseStatus_.count(prefixKey->getCIDRNetwork()) > 0) {
       continue;
     }
     // ATTN: to avoid prefix churn, skip processing prefixes from previous
@@ -313,9 +313,9 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
             "[Prefix Update]: Area: {}, {} updated inside KvStore",
             area,
             keyStr);
-        // populate keysInKvStore_ collection to make sure we can find
+        // populate advertiseStatus_ collection to make sure we can find
         // <key, area> when clear key from `KvStore`
-        keysInKvStore_[network].areas.emplace(area);
+        advertiseStatus_[network].areas.emplace(area);
 
         // Populate pendingState to check keys
         pendingUpdates_.addPrefixChange(network);
@@ -406,11 +406,11 @@ PrefixManager::updatePrefixKeysInKvStore(
   // advertise best-entry for this prefix to `KvStore`
   auto updatedArea = addKvStoreKeyHelper(prefixEntry);
 
-  auto keysIt = keysInKvStore_.find(prefix);
-  if (keysIt != keysInKvStore_.end()) {
-    // ATTN: keysInKvStore_ collection holds "advertised" prefixes in previous
+  auto keysIt = advertiseStatus_.find(prefix);
+  if (keysIt != advertiseStatus_.end()) {
+    // ATTN: advertiseStatus_ collection holds "advertised" prefixes in previous
     // round of syncing. By removing prefixes in current run, whatever left in
-    // `keysInKvStore_` will be the delta to be removed.
+    // `advertiseStatus_` will be the delta to be removed.
     for (const auto& area : updatedArea) {
       keysIt->second.areas.erase(area);
     }
@@ -423,8 +423,8 @@ PrefixManager::updatePrefixKeysInKvStore(
     deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
   }
 
-  // override `keysInKvStore_` for next-round syncing
-  keysInKvStore_[prefix].areas = std::move(updatedArea);
+  // override `advertiseStatus_` for next-round syncing
+  advertiseStatus_[prefix].areas = std::move(updatedArea);
 }
 
 void
@@ -434,14 +434,20 @@ PrefixManager::populateRouteUpdates(
     DecisionRouteUpdate& routeUpdatesForDecision,
     DecisionRouteUpdate& routeUpdatesForBgp) {
   // Propogate route update to Decision (if necessary)
-  auto& advertisedStatus = keysInKvStore_[prefix];
+  auto& advertiseStatus = advertiseStatus_[prefix];
   if (prefixEntry.shouldInstall()) {
-    advertisedStatus.installedToFib = true;
     // Populate RibUnicastEntry struct
     // ATTN: AREA field is empty for NHs
     // if shouldInstall() is true, nexthops is guaranteed to have value.
     RibUnicastEntry unicastEntry(prefix, prefixEntry.nexthops.value());
     unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
+    if (advertiseStatus.publishedRoute.has_value() and
+        advertiseStatus.publishedRoute.value() == unicastEntry) {
+      // Avoid publishing duplicate routes for the prefix.
+      return;
+    }
+    advertiseStatus.publishedRoute = unicastEntry;
+
     routeUpdatesForDecision.addRouteToUpdate(std::move(unicastEntry));
   } else {
     // shouldInstall() is false, need to send to bgprib here
@@ -458,9 +464,9 @@ PrefixManager::populateRouteUpdates(
     }
     // If was installed to fib, but now lose in tie break, withdraw from
     // fib.
-    if (advertisedStatus.installedToFib) {
+    if (advertiseStatus.publishedRoute.has_value()) {
       routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
-      advertisedStatus.installedToFib = false;
+      advertiseStatus.publishedRoute.reset();
     }
   } // else
 }
@@ -549,13 +555,13 @@ PrefixManager::deletePrefixKeysInKvStore(
   //  prefix    :    node1    :    0    :    0.0.0.0/32
   //    |              |           |             |
   //  marker        nodeId      areaId        prefixStr
-  auto keysIt = keysInKvStore_.find(prefix);
-  if (keysIt != keysInKvStore_.end()) {
-    deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
-    if (keysIt->second.installedToFib) {
+  auto prefixIter = advertiseStatus_.find(prefix);
+  if (prefixIter != advertiseStatus_.end()) {
+    deleteKvStoreKeyHelper(prefix, prefixIter->second.areas);
+    if (prefixIter->second.publishedRoute.has_value()) {
       routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
     }
-    keysInKvStore_.erase(keysIt);
+    advertiseStatus_.erase(prefixIter);
   }
 }
 
@@ -713,7 +719,7 @@ PrefixManager::syncKvStore() {
     if (it == prefixMap_.end()) {
       // Delete prefixes that do not exist in prefixMap_.
       deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
-      advertisedPrefixes_.erase(prefix);
+      advertisedPrefixEntries_.erase(prefix);
       ++syncedPrefixCnt;
     }
   }
@@ -741,12 +747,12 @@ PrefixManager::syncKvStore() {
           "Adding/updating keys for {}",
           folly::IPAddress::networkToString(prefix));
       updatePrefixKeysInKvStore(prefix, bestEntry);
-      advertisedPrefixes_[prefix] = bestEntry;
+      advertisedPrefixEntries_[prefix] = bestEntry;
       ++syncedPrefixCnt;
       continue;
     } else if (readyToBeAdvertised) {
       // Skip still-ready-to-be and previously advertised prefix.
-      CHECK(advertisedPrefixes_.count(prefix));
+      CHECK(advertisedPrefixEntries_.count(prefix));
       continue;
     }
 
@@ -755,14 +761,14 @@ PrefixManager::syncKvStore() {
 
     // Check if previously advertised prefix is no longer ready to be
     // advertised.
-    const auto& it = advertisedPrefixes_.find(prefix);
-    if (advertisedPrefixes_.cend() != it and
+    const auto& it = advertisedPrefixEntries_.find(prefix);
+    if (advertisedPrefixEntries_.cend() != it and
         (not prefixEntryReadyToBeAdvertised(it->second))) {
       XLOG(DBG1) << fmt::format(
           "Deleting advertised keys for {}",
           folly::IPAddress::networkToString(prefix));
       deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
-      advertisedPrefixes_.erase(prefix);
+      advertisedPrefixEntries_.erase(prefix);
       ++syncedPrefixCnt;
     }
   } // for
@@ -797,7 +803,7 @@ PrefixManager::syncKvStore() {
   // TODO: report per-area advertised prefixes if openr is running in
   // multi-areas.
   fb303::fbData->setCounter(
-      "prefix_manager.advertised_prefixes", advertisedPrefixes_.size());
+      "prefix_manager.advertised_prefixes", advertisedPrefixEntries_.size());
   fb303::fbData->setCounter(
       "prefix_manager.awaiting_prefixes", awaitingPrefixCnt);
 }

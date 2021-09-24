@@ -400,6 +400,7 @@ class PrefixManager final : public OpenrEventBase {
   // kvStoreClient for persisting our prefix db
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
 
+  // TODO: Merge this with advertiseStatus_.
   // The current prefix db this node is advertising. In-case if multiple entries
   // exists for a given prefix, best-route-selection process would select the
   // ones with the best metric. Lowest prefix-type is used as a tie-breaker for
@@ -409,7 +410,7 @@ class PrefixManager final : public OpenrEventBase {
       std::unordered_map<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
   // Advertised prefixes in KvStore and associated best PrefixEntry.
-  std::unordered_map<folly::CIDRNetwork, PrefixEntry> advertisedPrefixes_;
+  std::unordered_map<folly::CIDRNetwork, PrefixEntry> advertisedPrefixEntries_;
 
   // For prefixes came from PrefixEvent with an origination policy,
   // store the pre-policy version in originatedPrefixMap_.
@@ -424,17 +425,21 @@ class PrefixManager final : public OpenrEventBase {
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
-  // This collection serves for easy clean up when certain prefix is withdrawn.
-  // `PrefixManager` will advertise prefixes based on best-route-selection
-  // process. With multi-area support, one prefix will map to multiple
-  // key-advertisement in `KvStore`.
+  // AdervertiseStatus records following information of one prefix,
+  // * Areas where one prefix is advertised into. `PrefixManager` advertises
+  //   one prefix based on best-route-selection process, and could advertise
+  //   into multiple areas. Prefix withdrawal process will remove the prefix
+  //   from all advertised areas.
+  // * Published unicast route. `PrefixManager` sends to Decision the associated
+  //   unicast routes for the prefixes with nexthops set. Prefix withdrawal
+  //   process will remove associated unicast routes from Decision.
   struct AdervertiseStatus {
-    // If the prefix was sent for programming.
-    bool installedToFib{false};
-    // Saving the set of areas this prefix advertised to
+    // Set of areas the prefix was already advertised.
     std::unordered_set<std::string> areas;
+    // Unicast route published to Decision for programming.
+    std::optional<RibUnicastEntry> publishedRoute;
   };
-  std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> keysInKvStore_{};
+  std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> advertiseStatus_{};
 
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
