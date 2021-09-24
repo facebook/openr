@@ -64,7 +64,6 @@ Options:
 Commands:
   adj                   dump the link-state adjacencies from Decision module
   path                  path from src to dst
-  prefixes              show the prefixes from Decision module
   received-routes       Show routes this node is advertising.
   rib-policy            Show currently configured RibPolicy
   routes                Request the routing table from Decision module
@@ -539,12 +538,25 @@ Neighbor    Local Interface    Remote Interface      Metric    Weight    Adj Lab
 node2       if_1_2_0           if_2_1_0                   1         1        50006  172.16.0.1    fe80::e0fd:b7ff:fe23:e73f  1h37m
 node3       if_1_3_0           if_3_1_0                   1         1        50007  172.16.0.3    fe80::ecf4:d3ff:fef1:4cb6  1h37m
 
-$ breeze decision prefixes
+$ breeze decision received-routes all
 
-> node1 prefixes
-fc00:cafe:babe::1/128
-da00:cafe:babe:f6:f70b::/80
-192.168.0.1/32
+Markers: * - One of the best entries, @ - The best entry
+Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
+          MN - Min-Nexthops, PL - Prepend Label
+
+   Source                               FwdAlgo      FwdType  SP     PP     D      MN    PL
+
+> fd00:5::/64, 1/1
+*@ openr-center area2                   SP_ECMP      IP       200    1000   0      -     -
+
+> fd00:4::/64, 1/1
+*@ openr-center area2                   SP_ECMP      IP       200    1000   0      -     -
+
+> fd00:6::/64, 1/1
+*@ openr-right area2                    SP_ECMP      IP       200    1000   0      -     -
+
+> fd00:7::/64, 1/1
+*@ openr-right area2                    SP_ECMP      IP       200    1000   0      -     -
 ```
 
 #### Path

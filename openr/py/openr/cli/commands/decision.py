@@ -22,28 +22,6 @@ from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object, serialize_json
 
 
-class DecisionPrefixesCmd(OpenrCtrlCmd):
-    def _run(
-        self,
-        client: OpenrCtrl.Client,
-        nodes: set,
-        json: bool,
-        prefix: str,
-        client_type: str,
-        *args,
-        **kwargs,
-    ) -> None:
-        prefix_dbs = client.getDecisionPrefixDbs()
-        if json:
-            utils.print_prefixes_json(
-                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
-            )
-        else:
-            utils.print_prefixes_table(
-                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
-            )
-
-
 class DecisionRoutesComputedCmd(OpenrCtrlCmd):
     def _run(
         self,

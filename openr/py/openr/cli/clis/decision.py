@@ -85,6 +85,7 @@ class DecisionRoutesComputedCli:
         decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, labels, json)
 
 
+# TODO: Remove in a few months completely ...
 class DecisionPrefixesCli:
     @click.command()
     @click.option(
@@ -111,10 +112,14 @@ class DecisionPrefixesCli:
         prefix: str,
         client_type: str,
     ) -> None:
-        """show the prefixes from Decision module"""
+        """show the prefixes from Decision module - Deprecated"""
 
-        nodes = parse_nodes(cli_opts, nodes)
-        decision.DecisionPrefixesCmd(cli_opts).run(nodes, json, prefix, client_type)
+        click.secho(
+            "Command deprecated - Please use `breeze decision received-routes`",
+            bold=True,
+            err=True,
+        )
+        ctx.exit(1)
 
 
 class DecisionAdjCli:
