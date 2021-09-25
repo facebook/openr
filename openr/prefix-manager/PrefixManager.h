@@ -296,6 +296,12 @@ class PrefixManager final : public OpenrEventBase {
       const std::unordered_set<std::string>& deletedArea);
 
   /*
+   * Send static unicast routes for prefix entries of certain type in OpenR
+   * initialization process.
+   */
+  void sendStaticUnicastRoutes(thrift::PrefixType prefixType);
+
+  /*
    * Get route updates of prefixEntry.
    * PrefixEntry with nexthops attr set/reset introduces route add/delete.
    */

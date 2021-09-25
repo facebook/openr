@@ -3684,34 +3684,47 @@ class PrefixManagerInitialKvStoreSyncVipEnabledTestFixture
 TEST_F(
     PrefixManagerInitialKvStoreSyncVipEnabledTestFixture,
     TriggerInitialKvStoreTest) {
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+
   int scheduleAt{0};
   auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
 
-  auto prefixKey = PrefixKey(
-      nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix_ref()), kTestingAreaName);
+  PrefixEntry vipPrefixEntry(
+      std::make_shared<thrift::PrefixEntry>(prefixEntry9), {});
+  std::unordered_set<thrift::NextHopThrift> nexthops;
+  nexthops.insert(createNextHop(toBinaryAddress("::1")));
+  nexthops.insert(createNextHop(toBinaryAddress("::2")));
+  vipPrefixEntry.nexthops = nexthops;
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
         // Initial prefix updates from VipRouteManager
         PrefixEvent vipPrefixEvent(
-            PrefixEventType::ADD_PREFIXES,
-            thrift::PrefixType::VIP,
-            {prefixEntry9});
+            PrefixEventType::ADD_PREFIXES, thrift::PrefixType::VIP);
+        vipPrefixEvent.prefixEntries.emplace_back(vipPrefixEntry);
         prefixUpdatesQueue.push(std::move(vipPrefixEvent));
+
+        // Expect initial static routes to be published for VIPs.
+        auto update =
+            waitForRouteUpdate(staticRoutesReader, thrift::PrefixType::VIP);
+        EXPECT_EQ(update.value().unicastRoutesToUpdate_ref()->size(), 1);
       });
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
-        // No pprefixes advertised into KvStore.
+        // No prefixes advertised into KvStore.
         EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
 
         // Initial full Fib sync.
         DecisionRouteUpdate fullSyncUpdates;
         fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
-        fullSyncUpdates.mplsRoutesToUpdate = {
-            {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+        fullSyncUpdates.addRouteToUpdate(RibUnicastEntry(
+            toIPNetwork(addr9),
+            nexthops,
+            prefixEntry9,
+            thrift::Types_constants::kDefaultArea()));
         fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
       });
 
@@ -3733,8 +3746,17 @@ TEST_F(
       [&]() {
         // Initial KvStore sync happens after initial full Fib updates and all
         // prefix updates are received.
+        auto prefixKey9 = PrefixKey(
+            nodeId_,
+            toIPNetwork(*prefixEntry9.prefix_ref()),
+            kTestingAreaName,
+            true);
+
         auto pub = kvStoreWrapper->recvPublication();
+        // VIP and config originated prefix are both advertised.
         EXPECT_EQ(1, pub.keyVals_ref()->size());
+        EXPECT_EQ(1, pub.keyVals_ref()->count(prefixKey9.getPrefixKeyV2()));
+
         evb.stop();
       });
   // let magic happen

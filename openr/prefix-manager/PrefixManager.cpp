@@ -179,6 +179,10 @@ PrefixManager::PrefixManager(
               update.prefixes.size() + update.prefixEntries.size(),
               apache::thrift::util::enumNameSafe<thrift::PrefixType>(
                   update.type));
+          // Publish initial unicast routes for the prefix type, so they will be
+          // programmed in warmboot.
+          sendStaticUnicastRoutes(update.type);
+
           triggerInitialPrefixDbSync();
         }
         break;
@@ -446,6 +450,24 @@ PrefixManager::updatePrefixKeysInKvStore(
 
   // override `advertiseStatus_` for next-round syncing
   advertiseStatus_[prefix].areas = std::move(updatedArea);
+}
+
+void
+PrefixManager::sendStaticUnicastRoutes(thrift::PrefixType prefixType) {
+  DecisionRouteUpdate routeUpdatesForDecision;
+  DecisionRouteUpdate routeUpdatesForBgp;
+  routeUpdatesForDecision.prefixType = prefixType;
+
+  for (const auto& [prefix, prefixEntries] : prefixMap_) {
+    for (const auto& [type, prefixEntry] : prefixEntries) {
+      if (type != prefixType) {
+        continue;
+      }
+      populateRouteUpdates(
+          prefix, prefixEntry, routeUpdatesForDecision, routeUpdatesForBgp);
+    }
+  }
+  staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
 }
 
 void
