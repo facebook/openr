@@ -84,6 +84,11 @@ class PrefixManagerTestFixture : public testing::Test {
  public:
   void
   SetUp() override {
+    // Register the read in the beginning of the test
+    earlyStaticRoutesReaderPtr =
+        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
+            staticRouteUpdatesQueue.getReader());
+
     // create config
     config = std::make_shared<Config>(createConfig());
 
@@ -193,6 +198,33 @@ class PrefixManagerTestFixture : public testing::Test {
     return count;
   }
 
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+  getEarlyStaticRoutesReaderPtr() {
+    return earlyStaticRoutesReaderPtr;
+  }
+
+  std::optional<thrift::RouteDatabaseDelta>
+  waitForRouteUpdate(
+      messaging::RQueue<DecisionRouteUpdate>& reader,
+      std::optional<thrift::PrefixType> expectedPrefixType = std::nullopt,
+      std::chrono::milliseconds timeout = kRouteUpdateTimeout) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (not reader.size()) {
+      // break of timeout occurs
+      auto now = std::chrono::steady_clock::now();
+      if (now - startTime > timeout) {
+        return std::nullopt;
+      }
+      // Yield the thread
+      std::this_thread::yield();
+    }
+    auto readValue = reader.get().value();
+    if (expectedPrefixType.has_value()) {
+      EXPECT_EQ(readValue.prefixType, expectedPrefixType.value());
+    }
+    return readValue.toThrift();
+  }
+
   // NodeId to initialize
   const std::string nodeId_{"node-1"};
 
@@ -214,6 +246,10 @@ class PrefixManagerTestFixture : public testing::Test {
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient{nullptr};
+
+ private:
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+      earlyStaticRoutesReaderPtr;
 };
 
 class PrefixManagerPrefixKeyFormatTestFixture
@@ -1962,23 +1998,6 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
     return mp;
   }
 
-  std::optional<thrift::RouteDatabaseDelta>
-  waitForRouteUpdate(
-      messaging::RQueue<DecisionRouteUpdate>& reader,
-      std::chrono::milliseconds timeout) {
-    auto startTime = std::chrono::steady_clock::now();
-    while (not reader.size()) {
-      // break of timeout occurs
-      auto now = std::chrono::steady_clock::now();
-      if (now - startTime > timeout) {
-        return std::nullopt;
-      }
-      // Yield the thread
-      std::this_thread::yield();
-    }
-    return reader.get().value().toThrift();
-  }
-
   // return false if publication is tll update.
   void
   waitForKvStorePublication(
@@ -2067,11 +2086,6 @@ class RouteOriginationOverrideFixture : public RouteOriginationFixture {
  public:
   void
   SetUp() override {
-    // We register the read in the beginning of the test
-    earlyStaticRoutesReaderPtr =
-        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
-            staticRouteUpdatesQueue.getReader());
-
     // Other set ups
     RouteOriginationFixture::SetUp();
 
@@ -2107,21 +2121,13 @@ class RouteOriginationOverrideFixture : public RouteOriginationFixture {
         originatedPrefixV4, originatedPrefixV6};
     return tConfig;
   }
-
-  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
-  getEarlyStaticRoutesReaderPtr() {
-    return earlyStaticRoutesReaderPtr;
-  }
-
- private:
-  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
-      earlyStaticRoutesReaderPtr;
 };
 
 TEST_F(RouteOriginationOverrideFixture, StaticRoutesAnnounce) {
   auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
 
-  auto update = waitForRouteUpdate(*staticRoutesReaderPtr, kRouteUpdateTimeout);
+  auto update =
+      waitForRouteUpdate(*staticRoutesReaderPtr, thrift::PrefixType::CONFIG);
   EXPECT_TRUE(update.has_value());
 
   auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
@@ -2138,7 +2144,7 @@ TEST_F(RouteOriginationOverrideFixture, StaticRoutesAnnounce) {
   EXPECT_THAT(nhs, testing::SizeIs(0));
 
   // Static route for the same config originated prefix is published once.
-  update = waitForRouteUpdate(*staticRoutesReaderPtr, kRouteUpdateTimeout);
+  update = waitForRouteUpdate(*staticRoutesReaderPtr);
   EXPECT_FALSE(update.has_value());
 }
 
@@ -2265,6 +2271,23 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - v4Prefix_ will be advertised as `min_supporting_route=1`;
   //  - v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
   //
+
+  {
+    // 0. Decision receives the v4 published in initialization process.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+    // no v6 route update received
+    EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
+  }
+
   VLOG(1) << "Starting test step 1...";
   {
     DecisionRouteUpdate routeUpdate;
@@ -2273,30 +2296,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     routeUpdate.addRouteToUpdate(unicastEntryV6_1);
     fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    // Verify 1): PrefixManager -> Decision update
-    {
-      // v4 route update received
-      auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
-      EXPECT_TRUE(update.has_value());
-
-      auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
-      auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
-      EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
-      EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
-
-      // verify thrift::NextHopThrift struct
-      const auto& route = updatedRoutes.back();
-      EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
-
-      const auto& nhs = *route.nextHops_ref();
-      EXPECT_THAT(nhs, testing::SizeIs(0));
-
-      // no v6 route update received
-      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
-                       .has_value());
-    }
-
-    // Verify 2): PrefixManager -> KvStore update
+    // Verify 1): PrefixManager -> KvStore update
     {
       // v4Prefix_ is advertised to ALL areas configured
       std::unordered_map<
@@ -2368,8 +2368,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     // Verify 1): PrefixManager -> Decision update
     {
       // no more route update received
-      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
-                       .has_value());
+      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
     }
 
     // Verify 2): PrefixManager's public API
@@ -2427,8 +2426,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     // Verify 1): PrefixManager -> Decision update
     {
       // no more route update received
-      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
-                       .has_value());
+      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
     }
 
     // Verify 2): PrefixManager -> KvStore update
@@ -2496,7 +2494,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     // Verify 1): PrefixManager -> Decision update
     {
       // ONLY v4 route withdrawn updates received
-      auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+      auto update = waitForRouteUpdate(staticRoutesReader);
       EXPECT_TRUE(update.has_value());
 
       auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
@@ -2604,7 +2602,7 @@ TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, ConfigVerification) {
 TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, StateRouteAnnounce) {
   auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
 
-  auto update = waitForRouteUpdate(*staticRoutesReaderPtr, kRouteUpdateTimeout);
+  auto update = waitForRouteUpdate(*staticRoutesReaderPtr);
   EXPECT_TRUE(update.has_value());
 
   auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
@@ -2651,54 +2649,98 @@ TEST_F(
     RouteOriginationV4OverV6NonZeroSupportFixture,
     StaticRoutesAnnounceNeedsSupport) {
   auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+  auto v4PrefixKey = PrefixKey(
+      nodeId_, folly::IPAddress::createNetwork(v4Prefix_), kTestingAreaName);
+  auto v4PrefixKeyStr = v4PrefixKey.getPrefixKeyV2();
+  {
+    // Static route for prefix with `install_to_fib=true` should be published in
+    // OpenR initialization process.
+    // v4Prefix_ has install_to_fib set as true.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    // verify thrift::NextHopThrift struct
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+  }
 
-  // Supporting prefix number 1
-  // Note the v4Prefix is 192.108.0.1/24 :-)
-  const std::string v4Prefix_1 = "192.108.0.11/30";
-  const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
-  const auto prefixEntryV4_1 =
-      createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
-  auto unicastEntryV4_1 = RibUnicastEntry(
-      v4Network_1,
-      {nh_v6}, // doesn't matter but we are enabling v6 nexthop only :-)
-      prefixEntryV4_1,
-      thrift::Types_constants::kDefaultArea());
-  DecisionRouteUpdate routeUpdate1;
-  routeUpdate1.addRouteToUpdate(unicastEntryV4_1);
-  fibRouteUpdatesQueue.push(std::move(routeUpdate1));
+  {
+    // First Fib route updates include v4 and one supporting prefix.
+    // Note the v4Prefix is 192.108.0.1/24 :-)
+    auto addressV4 = toIpPrefix(v4Prefix_);
+    const auto entryV4 =
+        createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
+    const auto unicastEntryV4 = RibUnicastEntry(
+        toIPNetwork(addressV4),
+        {},
+        entryV4,
+        thrift::Types_constants::kDefaultArea());
+    const std::string v4Prefix_1 = "192.108.0.11/30";
+    const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
+    const auto prefixEntryV4_1 =
+        createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
+    auto unicastEntryV4_1 = RibUnicastEntry(
+        v4Network_1,
+        {nh_v6}, // doesn't matter but we are enabling v6 nexthop only :-)
+        prefixEntryV4_1,
+        thrift::Types_constants::kDefaultArea());
+    DecisionRouteUpdate routeUpdate1;
+    routeUpdate1.addRouteToUpdate(unicastEntryV4);
+    routeUpdate1.addRouteToUpdate(unicastEntryV4_1);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate1));
 
-  auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
-  EXPECT_FALSE(update.has_value()); // we need two supports, but only has 1
+    // After first Fib route updates, minimum_supporting_routes=2 is not
+    // fulfilled for config originated v4Prefix_. As a result, previously
+    // published unicast route should be removed.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(1));
+    EXPECT_EQ(deletedRoutes.back(), toIpPrefix(v4Prefix_));
 
-  // Supporting prefix number 2
-  // Note the v4Prefix is 192.108.0.1/24 :-)
-  const std::string v4Prefix_2 = "192.108.0.22/30";
-  const auto v4Network_2 = folly::IPAddress::createNetwork(v4Prefix_2);
-  const auto prefixEntryV4_2 =
-      createPrefixEntry(toIpPrefix(v4Prefix_2), thrift::PrefixType::DEFAULT);
-  auto unicastEntryV4_2 = RibUnicastEntry(
-      v4Network_2,
-      {nh_v6}, // doesn't matter but we are enabling v6 nexhop only :-)
-      prefixEntryV4_2,
-      thrift::Types_constants::kDefaultArea());
-  DecisionRouteUpdate routeUpdate2;
-  routeUpdate2.addRouteToUpdate(unicastEntryV4_2);
-  fibRouteUpdatesQueue.push(std::move(routeUpdate2));
+    // v4Prefix_ is not advertised yet.
+    auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, v4PrefixKeyStr);
+    EXPECT_FALSE(maybeValue.has_value());
+  }
 
-  update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
-  EXPECT_TRUE(update.has_value()); // now we have two ;-)
+  {
+    // Supporting prefix number 2
+    // Note the v4Prefix is 192.108.0.1/24 :-)
+    const std::string v4Prefix_2 = "192.108.0.22/30";
+    const auto v4Network_2 = folly::IPAddress::createNetwork(v4Prefix_2);
+    const auto prefixEntryV4_2 =
+        createPrefixEntry(toIpPrefix(v4Prefix_2), thrift::PrefixType::DEFAULT);
+    auto unicastEntryV4_2 = RibUnicastEntry(
+        v4Network_2,
+        {nh_v6}, // doesn't matter but we are enabling v6 nexhop only :-)
+        prefixEntryV4_2,
+        thrift::Types_constants::kDefaultArea());
+    DecisionRouteUpdate routeUpdate2;
+    routeUpdate2.addRouteToUpdate(unicastEntryV4_2);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate2));
 
-  auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
-  auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
-  EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
-  EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    // Two supporting routes are received. v4Prefix_ should be advertised.
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->count(v4PrefixKeyStr));
 
-  // verify thrift::NextHopThrift struct
-  const auto& route = updatedRoutes.back();
-  EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
-
-  const auto& nhs = *route.nextHops_ref();
-  EXPECT_THAT(nhs, testing::SizeIs(0));
+    // minimum_supporting_routes=2 is fulfilled, same static route for v4Prefix_
+    // should not be published again.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    // verify thrift::NextHopThrift struct
+    const auto& route2 = updatedRoutes.back();
+    EXPECT_EQ(*route2.dest_ref(), toIpPrefix(v4Prefix_));
+    EXPECT_THAT(*route2.nextHops_ref(), testing::SizeIs(0));
+  }
 }
 
 TEST(PrefixManagerPendingUpdates, updatePrefixes) {
@@ -3055,6 +3097,20 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //    b. Both prefixes will be withdrawn from KvStore
   //    c. Supporting routes count for both prefixes will decrement by 1
 
+  {
+    // 0. Decision receives the v4 published in initialization process.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+  }
+
   // Step 1 - inject 1 v4 and 1 v6 supporting prefix into fibRouteUpdatesQueue
   DecisionRouteUpdate routeUpdate;
   routeUpdate.addRouteToUpdate(unicastEntryV4);
@@ -3065,8 +3121,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   // Verify 1a and 1b: PrefixManager -> forward fib routes to Bgp/Plugin
   // routeUpdate;
   {
-    auto update =
-        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
     EXPECT_TRUE(update.has_value());
     auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
     auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
@@ -3083,32 +3138,13 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
             addressV4, toIpPrefix(v4Prefix_1), toIpPrefix(v6Prefix_1)));
 
     // Does not originate v4 because install_to_fib = true
-    EXPECT_FALSE(
-        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout)
-            .has_value());
+    EXPECT_FALSE(waitForRouteUpdate(prefixMgrRouteUpdatesReader).has_value());
   }
 
   // Verify 1c and 1d: PrefixManager -> Decision staticRouteupdate
   {
-    auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
-    // 1c. v4 route update received
-    EXPECT_TRUE(update.has_value());
-
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
-    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
-    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
-
-    // verify thrift::NextHopThrift struct
-    const auto& route = updatedRoutes.back();
-    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
-
-    const auto& nhs = *route.nextHops_ref();
-    EXPECT_THAT(nhs, testing::SizeIs(0));
-
     // 1d. no v6 route update received
-    EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout)
-                     .has_value());
+    EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
   }
 
   // Verify 1e and 1f: PrefixManager -> KvStore update
@@ -3158,7 +3194,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   // Verify 2a: PrefixManager -> Decision staticRouteUpdate
   {
     // 2a. NO v6 route update received
-    auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+    auto update = waitForRouteUpdate(staticRoutesReader);
     EXPECT_FALSE(update.has_value());
   }
 
@@ -3205,8 +3241,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
 
   // Verify 2d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
   {
-    auto update =
-        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
     EXPECT_TRUE(update.has_value());
     auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
     auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
@@ -3223,8 +3258,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   {
     // Publish v6 because install_to_fib = false and min_supporting_routes
     // reached
-    auto update =
-        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
     EXPECT_TRUE(update.has_value());
     auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
     auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
@@ -3247,7 +3281,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   // Verify 3a PrefixManager -> Decision staticRouteupdate
   {
     // ONLY v4 route withdrawn updates are sent to Decision
-    auto update = waitForRouteUpdate(staticRoutesReader, kRouteUpdateTimeout);
+    auto update = waitForRouteUpdate(staticRoutesReader);
     EXPECT_TRUE(update.has_value());
 
     auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
@@ -3297,8 +3331,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   // Verify 3d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
   {
     // both route withdrawn updates are sent to Bgp/plugin
-    auto update =
-        waitForRouteUpdate(prefixMgrRouteUpdatesReader, kRouteUpdateTimeout);
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
     EXPECT_TRUE(update.has_value());
 
     auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
@@ -3516,12 +3549,17 @@ class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
     tConfig.enable_bgp_peering_ref() = true;
     tConfig.bgp_config_ref() = thrift::BgpConfig();
 
+    // Set originated prefixes.
+    thrift::OriginatedPrefix originatedPrefixV4;
+    originatedPrefixV4.prefix_ref() = toString(addr4);
+    originatedPrefixV4.install_to_fib_ref() = true;
     thrift::OriginatedPrefix originatedPrefixV6;
-    originatedPrefixV6.prefix_ref() = "face:b00c:cafe::/64";
+    originatedPrefixV6.prefix_ref() = toString(addr6);
     originatedPrefixV6.minimum_supporting_routes_ref() = 0;
     originatedPrefixV6.install_to_fib_ref() = false;
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
 
-    tConfig.originated_prefixes_ref() = {originatedPrefixV6};
     return tConfig;
   }
 };
@@ -3533,6 +3571,13 @@ class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
 TEST_F(
     PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
     TriggerInitialKvStoreTest) {
+  // Expect to publish static routes for config originated prefixes with
+  // install_to_fib set.
+  auto update = waitForRouteUpdate(
+      *getEarlyStaticRoutesReaderPtr(), thrift::PrefixType::CONFIG);
+  EXPECT_TRUE(update.has_value());
+  EXPECT_EQ(update.value().get_unicastRoutesToUpdate().size(), 1);
+
   auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
 
   auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
@@ -3541,9 +3586,7 @@ TEST_F(
 
   // Initial prefix updates from BGP
   PrefixEvent bgpPrefixEvent(
-      PrefixEventType::ADD_PREFIXES,
-      thrift::PrefixType::BGP,
-      {prefixEntry1Bgp, prefixEntry7});
+      PrefixEventType::ADD_PREFIXES, thrift::PrefixType::BGP, {prefixEntry7});
   prefixUpdatesQueue.push(std::move(bgpPrefixEvent));
 
   // wait for kvstore sync throttle time and check no prefixes are advertised
@@ -3571,22 +3614,28 @@ TEST_F(
   fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
   fullSyncUpdates.mplsRoutesToUpdate = {
       {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+  fullSyncUpdates.addRouteToUpdate(RibUnicastEntry(
+      toIPNetwork(addr4),
+      {},
+      prefixEntry4,
+      thrift::Types_constants::kDefaultArea()));
   fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
 
-  // kvstore should receive publication with 3 routes 1 config + 2 bgp
+  // kvstore should receive publication with 3 routes 2 config + 1 bgp
   auto pub = kvStoreWrapper->recvPublication();
   EXPECT_EQ(3, pub.keyVals_ref()->size());
 
-  // first update to bgp rib should include all routes programmed by fib
-  // in this case no unicast is programmed by fib thus we should receive 0
-  // unicast route
+  // first update to bgp rib should include all routes programmed by fib.
   {
     auto msg = prefixMgrRouteUpdatesReader.get();
     auto update = msg.value();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
 
-    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(0));
+    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
     EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
+    EXPECT_EQ(
+        folly::IPAddress::createNetwork(toString(addr4)),
+        update.unicastRoutesToUpdate.begin()->first);
   }
 
   // second update to bgp rib should include all config routes with
@@ -3600,7 +3649,7 @@ TEST_F(
     EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
 
     EXPECT_EQ(
-        folly::IPAddress::createNetwork("face:b00c:cafe::/64"),
+        folly::IPAddress::createNetwork(toString(addr6)),
         update.unicastRoutesToUpdate.begin()->first);
   }
 

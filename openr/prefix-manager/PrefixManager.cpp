@@ -63,6 +63,9 @@ PrefixManager::PrefixManager(
   if (config->isVipServiceEnabled()) {
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::VIP);
   }
+  if (config->getConfig().originated_prefixes_ref()) {
+    uninitializedPrefixTypes_.emplace(thrift::PrefixType::CONFIG);
+  }
 
   if (auto policyConf = config->getAreaPolicies()) {
     policyManager_ = std::make_unique<PolicyManager>(*policyConf);
@@ -123,15 +126,17 @@ PrefixManager::PrefixManager(
       });
 
   // Load openrConfig for local-originated routes
-  if (auto prefixes = config->getConfig().originated_prefixes_ref()) {
-    // read originated prefixes from OpenrConfig
-    buildOriginatedPrefixDb(*prefixes);
+  addFiberTask([this]() mutable noexcept {
+    if (auto prefixes = config_->getConfig().originated_prefixes_ref()) {
+      // Build originated prefixes from OpenrConfig.
+      buildOriginatedPrefixes(*prefixes);
 
-    // ATTN: consider min_supporting_route = 0, immediately advertise
-    // originated routes to `KvStore`
-    processOriginatedPrefixes();
-    XLOG(INFO) << "[Initialization] Originated prefixes processed.";
-  }
+      // Trigger initial prefix sync in KvStore.
+      XLOG(INFO) << "[Initialization] Processed config originated prefixes.";
+      uninitializedPrefixTypes_.erase(thrift::PrefixType::CONFIG);
+      triggerInitialPrefixDbSync();
+    }
+  });
 
   // Schedule fiber to read prefix updates messages
   addFiberTask([q = std::move(prefixUpdatesQueue), this]() mutable noexcept {
@@ -379,8 +384,11 @@ PrefixManager::toPrefixEntryThrift(
 }
 
 void
-PrefixManager::buildOriginatedPrefixDb(
+PrefixManager::buildOriginatedPrefixes(
     const std::vector<thrift::OriginatedPrefix>& prefixes) {
+  DecisionRouteUpdate routeUpdatesForDecision;
+  routeUpdatesForDecision.prefixType = thrift::PrefixType::CONFIG;
+
   for (const auto& prefix : prefixes) {
     auto network = folly::IPAddress::createNetwork(*prefix.prefix_ref());
     auto entry = toPrefixEntryThrift(prefix, thrift::PrefixType::CONFIG);
@@ -390,6 +398,12 @@ PrefixManager::buildOriginatedPrefixDb(
     RibUnicastEntry unicastEntry(network, {});
     unicastEntry.bestPrefixEntry = std::move(entry);
 
+    if (prefix.install_to_fib_ref().has_value() &&
+        *prefix.install_to_fib_ref()) {
+      routeUpdatesForDecision.addRouteToUpdate(unicastEntry);
+      advertiseStatus_[network].publishedRoute = unicastEntry;
+    }
+
     // ATTN: upon initialization, no supporting routes
     originatedPrefixDb_.emplace(
         network,
@@ -397,6 +411,13 @@ PrefixManager::buildOriginatedPrefixDb(
             prefix,
             std::move(unicastEntry),
             std::unordered_set<folly::CIDRNetwork>{}));
+  }
+
+  // Publish static routes for config originated prefixes. This makes sure
+  // initial RIB/FIB after warmboot still includes routes for config originated
+  // prefixes.
+  if (not routeUpdatesForDecision.empty()) {
+    staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
   }
 }
 
@@ -446,8 +467,8 @@ PrefixManager::populateRouteUpdates(
       // Avoid publishing duplicate routes for the prefix.
       return;
     }
-    advertiseStatus.publishedRoute = unicastEntry;
 
+    advertiseStatus.publishedRoute = unicastEntry;
     routeUpdatesForDecision.addRouteToUpdate(std::move(unicastEntry));
   } else {
     // shouldInstall() is false, need to send to bgprib here
@@ -1509,6 +1530,8 @@ void
 PrefixManager::processOriginatedPrefixes() {
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
+  DecisionRouteUpdate routeUpdatesForDecision;
+  routeUpdatesForDecision.prefixType = thrift::PrefixType::CONFIG;
 
   for (auto& [network, route] : originatedPrefixDb_) {
     if (route.shouldAdvertise()) {
@@ -1529,14 +1552,31 @@ PrefixManager::processOriginatedPrefixes() {
       route.isAdvertised = false; // mark as withdrawn
       withdrawnPrefixes.emplace_back(
           createPrefixEntry(toIpPrefix(network), thrift::PrefixType::CONFIG));
-
       XLOG(DBG1) << "[Route Origination] Withdrawing originated route "
                  << folly::IPAddress::networkToString(network);
+    } else {
+      // In OpenR initialization process, PrefixManager publishes unicast routes
+      // for config originated prefixes with `install_to_fib=true` (This is
+      // required in warmboot). If it turns out there are no enough supporting
+      // routes, previously published unicast routes in OpenR initialization
+      // process should be deleted.
+      // TODO: Consider moving static route generation and best entry selection
+      // logic to Decision.
+      if ((not route.supportingRoutesFulfilled()) and
+          advertiseStatus_.count(network) > 0 and
+          advertiseStatus_[network].publishedRoute.has_value()) {
+        routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(network);
+        advertiseStatus_[network].publishedRoute.reset();
+      }
     }
   }
   // advertise originated config routes to KvStore
   advertisePrefixesImpl(advertisedPrefixes);
   withdrawPrefixesImpl(withdrawnPrefixes);
+
+  if (not routeUpdatesForDecision.empty()) {
+    staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
+  }
 }
 
 void

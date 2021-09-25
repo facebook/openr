@@ -311,11 +311,18 @@ class PrefixManager final : public OpenrEventBase {
    */
 
   /*
-   * Read routes from OpenrConfig and stored in `OriginatedPrefixDb_`
-   * for potential advertisement/withdrawn based on min_supporting_route
-   * ref-count.
+   * Build prefixes for routes read from OpenrConfig.
+   * - Read routes from OpenrConfig and stored in `OriginatedPrefixDb_`
+   *   for potential advertisement/withdrawn based on min_supporting_route
+   *   ref-count.
+   * - Publish initial static routes for prefixes with `install_to_fib=true`.
+   *   This faciliates the programming of associated routes in initial Fib sync
+   *   and the advertisement of these prefixes in initial PrefixDbSync. For
+   *   originated prefixes with `minimum_supporting_routes>0`, the nonexistence
+   *   of supporting routes will result in the delete of static routes in next
+   *   route program iteration.
    */
-  void buildOriginatedPrefixDb(
+  void buildOriginatedPrefixes(
       const std::vector<thrift::OriginatedPrefix>& prefixes);
 
   /*
@@ -502,6 +509,12 @@ class PrefixManager final : public OpenrEventBase {
       const auto& minSupportingRouteCnt =
           *originatedPrefix.minimum_supporting_routes_ref();
       return isAdvertised and (supportingRoutes.size() < minSupportingRouteCnt);
+    }
+
+    bool
+    supportingRoutesFulfilled() const {
+      return supportingRoutes.size() >=
+          *originatedPrefix.minimum_supporting_routes_ref();
     }
   };
 
