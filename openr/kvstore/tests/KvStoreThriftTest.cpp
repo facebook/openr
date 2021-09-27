@@ -662,10 +662,8 @@ main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   folly::init(&argc, &argv);
-  google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   // Run the tests
-  auto rc = RUN_ALL_TESTS();
-
-  return rc;
+  return RUN_ALL_TESTS();
 }

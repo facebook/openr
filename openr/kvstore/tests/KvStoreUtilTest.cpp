@@ -22,18 +22,10 @@
 
 using namespace openr;
 
-namespace {
-// ttl used in test for (K,V) pair
-const std::chrono::milliseconds kTtl{1000};
-} // namespace
-
 class MultipleKvStoreTestFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
-    // define/start eventbase thread
-    evbThread = std::thread([&]() { evb.run(); });
-
     auto makeStoreWrapper = [this](std::string nodeId) {
       auto tConfig = getBasicOpenrConfig(nodeId);
       config_ = std::make_shared<Config>(tConfig);
@@ -56,15 +48,6 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     kvStoreWrapper1_.reset();
     kvStoreWrapper2_->stop();
     kvStoreWrapper2_.reset();
-
-    // ATTN: Destroy client before destroy evb. Otherwise, destructor will
-    //       FOREVER waiting fiber future to be fulfilled.
-    client1.reset();
-    client2.reset();
-
-    evb.stop();
-    evb.waitUntilStopped();
-    evbThread.join();
   }
 
   // var used to conmmunicate to kvStore through openrCtrl thrift server
@@ -72,14 +55,8 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   const std::string nodeId2_{"test_2"};
 
   fbzmq::Context context_{};
-  apache::thrift::CompactSerializer serializer;
-
-  OpenrEventBase evb;
-  std::thread evbThread;
-
   std::shared_ptr<Config> config_;
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_, kvStoreWrapper2_;
-  std::shared_ptr<KvStoreClientInternal> client1, client2;
 };
 
 //
@@ -317,52 +294,30 @@ TEST(KvStoreUtil, compareValuesTest) {
 TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
-  const std::string prefix = "";
+  const std::string val1{"test_value1"};
+  const std::string val2{"test_value2"};
   const uint16_t port1 = kvStoreWrapper1_->getThriftPort();
   const uint16_t port2 = kvStoreWrapper2_->getThriftPort();
 
   std::vector<folly::SocketAddress> sockAddrs;
-  sockAddrs.push_back(
+  sockAddrs.emplace_back(
       folly::SocketAddress{Constants::kPlatformHost.toString(), port1});
-  sockAddrs.push_back(
+  sockAddrs.emplace_back(
       folly::SocketAddress{Constants::kPlatformHost.toString(), port2});
 
-  // Step1: verify there is NOTHING inside kvStore instances
-  const auto [db, unreachableAddrs] =
-      dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, prefix);
-  EXPECT_TRUE(db.has_value());
-  EXPECT_TRUE(db.value().empty());
-  EXPECT_TRUE(unreachableAddrs.empty());
-
-  evb.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
-    // Step2: initilize kvStoreClient connecting to different thriftServers
-    client1 = std::make_shared<KvStoreClientInternal>(
-        &evb, nodeId1_, kvStoreWrapper1_->getKvStore());
-    client2 = std::make_shared<KvStoreClientInternal>(
-        &evb, nodeId2_, kvStoreWrapper2_->getKvStore());
-    EXPECT_TRUE(nullptr != client1);
-    EXPECT_TRUE(nullptr != client2);
-
-    // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
-    thrift::Value value;
-    value.version_ref() = 1;
-    {
-      value.value_ref() = "test_value1";
-      EXPECT_TRUE(client1->setKey(
-          kTestingAreaName, key1, writeThriftObjStr(value, serializer), 100));
-    }
-    {
-      value.value_ref() = "test_value2";
-      EXPECT_TRUE(client2->setKey(
-          kTestingAreaName, key2, writeThriftObjStr(value, serializer), 200));
-    }
-  });
-
-  // Step4: verify we can fetch 2 keys from different servers as aggregation
-  // result
+  // Step1: insert (k1, v1) and (k2, v2) to different KvStore instances
   {
-    const auto [db, _] = dumpAllWithThriftClientFromMultiple(
-        kTestingAreaName, sockAddrs, prefix);
+    thrift::Value tVal1 = createThriftValue(1, nodeId1_, val1);
+    EXPECT_TRUE(kvStoreWrapper1_->setKey(kTestingAreaName, key1, tVal1));
+
+    thrift::Value tVal2 = createThriftValue(1, nodeId2_, val2);
+    EXPECT_TRUE(kvStoreWrapper2_->setKey(kTestingAreaName, key2, tVal2));
+  }
+
+  // Step2: verify fetch + aggregate 2 keys from different kvStores with prefix
+  {
+    const auto [db, _] =
+        dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, "");
     ASSERT_TRUE(db.has_value());
     auto pub = db.value();
     EXPECT_TRUE(pub.size() == 2);
@@ -370,18 +325,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     EXPECT_TRUE(pub.count(key2));
   }
 
-  // Step5: verify dumpAllWithPrefixMultipleAndParse API
-  {
-    const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-        kTestingAreaName, sockAddrs, "test_");
-    ASSERT_TRUE(maybe.has_value());
-    auto pub = maybe.value();
-    EXPECT_EQ(2, pub.size());
-    EXPECT_EQ("test_value1", pub[key1].value_ref());
-    EXPECT_EQ("test_value2", pub[key2].value_ref());
-  }
-
-  // Step6: shutdown thriftSevers and verify
+  // Step3: shutdown thriftSevers and verify
   // dumpAllWithThriftClientFromMultiple() will get nothing.
   {
     // ATTN: kvStoreUpdatesQueue must be closed before destructing
@@ -391,8 +335,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     kvStoreWrapper1_->stopThriftServer();
     kvStoreWrapper2_->stopThriftServer();
 
-    const auto [db, _] = dumpAllWithThriftClientFromMultiple(
-        kTestingAreaName, sockAddrs, prefix);
+    const auto [db, _] =
+        dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, "");
     ASSERT_TRUE(db.has_value());
     ASSERT_TRUE(db.value().empty());
   }
@@ -471,10 +415,8 @@ main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   folly::init(&argc, &argv);
-  google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   // Run the tests
-  auto rc = RUN_ALL_TESTS();
-
-  return rc;
+  return RUN_ALL_TESTS();
 }

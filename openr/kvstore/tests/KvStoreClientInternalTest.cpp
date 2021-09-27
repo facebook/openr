@@ -1712,13 +1712,7 @@ main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   folly::init(&argc, &argv);
-  google::InstallFailureSignalHandler();
-
-  // init sodium security library
-  if (::sodium_init() == -1) {
-    LOG(ERROR) << "Failed initializing sodium";
-    return 1;
-  }
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();
