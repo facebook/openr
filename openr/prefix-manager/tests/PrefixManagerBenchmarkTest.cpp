@@ -180,30 +180,33 @@ BM_PrefixManagerAdvertisePrefixes(
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
 
-  const std::string nodeId{"node-1"};
-  auto testFixture =
-      std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId);
-  auto prefixMgr = testFixture->getPrefixManager();
-
-  // Generate `numOfExistingPrefixes` and make sure `KvStore` is updated
-  auto prefixes = generatePrefixEntries(
-      numOfExistingPrefixes, testFixture->getPrefixGenerator());
-  prefixMgr->advertisePrefixes(std::move(prefixes)).get();
-
-  // Verify pre-existing prefixes inside `KvStore`
-  testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
-
-  // Generate `numOfUpdatedPrefixes`
-  auto prefixesToAdvertise = generatePrefixEntries(
-      numOfUpdatedPrefixes, testFixture->getPrefixGenerator());
-
-  // Start measuring benchmark time
-  suspender.dismiss();
-
   for (uint32_t i = 0; i < iters; ++i) {
+    const std::string nodeId{"node-1"};
+    auto testFixture =
+        std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId);
+    auto prefixMgr = testFixture->getPrefixManager();
+
+    // Generate `numOfExistingPrefixes` and make sure `KvStore` is updated
+    auto prefixes = generatePrefixEntries(
+        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+    prefixMgr->advertisePrefixes(std::move(prefixes)).get();
+
+    // Verify pre-existing prefixes inside `KvStore`
+    testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
+
+    // Generate `numOfUpdatedPrefixes`
+    auto prefixesToAdvertise = generatePrefixEntries(
+        numOfUpdatedPrefixes, testFixture->getPrefixGenerator());
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+
     // advertise prefixes into `KvStore` and make sure update received
     prefixMgr->advertisePrefixes(prefixesToAdvertise).get();
     testFixture->checkThriftPublication(numOfUpdatedPrefixes, false);
+
+    // Stop measuring benchmark time
+    suspender.rehire();
   }
 }
 
