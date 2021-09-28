@@ -47,11 +47,8 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
    * KvStore uses request queue to receive key-value updates from clients.
    */
   void
-  initKvStore(
-      std::string nodeId,
-      uint32_t keyTtl = kLongTtl,
-      const std::vector<thrift::AreaConfig>& areas = {}) {
-    auto tConfig = getBasicOpenrConfig(nodeId, "domain", areas);
+  initKvStore(std::string nodeId, uint32_t keyTtl = kLongTtl) {
+    auto tConfig = getBasicOpenrConfig(nodeId, "domain");
 
     // enable kvstore request queue in config
     tConfig.enable_kvstore_request_queue_ref() = true;
