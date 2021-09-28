@@ -21,27 +21,12 @@
 #include <openr/tests/utils/Utils.h>
 
 namespace {
+
 // The byte size of a key
 const int kSizeOfKey = 32;
 // The byte size of a value
 const int kSizeOfValue = 1024;
 
-/**
- * Produce a random string of given length - for value generation
- */
-std::string
-genRandomStr(const int len) {
-  std::string s;
-  s.resize(len);
-
-  static const std::string alphanum =
-      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-  for (int i = 0; i < len; ++i) {
-    s[i] = alphanum[folly::Random::rand32() % alphanum.size()];
-  }
-  return s;
-}
 } // namespace
 
 namespace openr {

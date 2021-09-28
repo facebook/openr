@@ -25,26 +25,6 @@ const uint32_t kValueStrSize = 64;
 // TTL in ms
 const int64_t kTtlMs = 1000;
 
-/**
- * produce a random string of given length - for value generation
- */
-std::string
-genRandomStr(const int len) {
-  std::string s;
-  s.resize(len);
-
-  static const char alphanum[] =
-      "0123456789"
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      "abcdefghijklmnopqrstuvwxyz";
-
-  for (int i = 0; i < len; ++i) {
-    s[i] = alphanum[folly::Random::rand32() % (sizeof(alphanum) - 1)];
-  }
-
-  return s;
-}
-
 class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
  public:
   void

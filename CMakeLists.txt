@@ -239,6 +239,7 @@ add_library(openrlib
   openr/tests/mocks/MockNetlinkProtocolSocket.cpp
   openr/tests/mocks/PrefixGenerator.cpp
   openr/tests/OpenrThriftServerWrapper.cpp
+  openr/tests/utils/Utils.cpp
   openr/watchdog/Watchdog.cpp
 )
 
