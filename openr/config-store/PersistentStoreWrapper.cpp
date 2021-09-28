@@ -6,7 +6,7 @@
  */
 
 #include <openr/config-store/PersistentStoreWrapper.h>
-#include <openr/config/tests/Utils.h>
+#include <openr/tests/utils/Utils.h>
 
 namespace openr {
 

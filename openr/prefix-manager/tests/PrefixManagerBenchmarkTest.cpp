@@ -7,10 +7,10 @@
 
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
+#include <openr/tests/utils/Utils.h>
 
 namespace detail {
 // Prefix length of a subnet

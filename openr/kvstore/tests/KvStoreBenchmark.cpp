@@ -5,11 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <folly/Benchmark.h>
-#include <cstdlib>
-#include <unordered_set>
-
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/Benchmark.h>
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/init/Init.h>
@@ -17,11 +14,11 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/tests/utils/Utils.h>
 
 namespace {
 // The byte size of a key

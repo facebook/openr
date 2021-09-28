@@ -19,8 +19,8 @@
 
 #include <openr/allocators/RangeAllocator.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace folly::gen;
 

@@ -5,14 +5,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fb303/ServiceData.h>
 #include <gtest/gtest.h>
-#include "fb303/ServiceData.h"
-#include "openr/common/OpenrEventBase.h"
-#include "openr/messaging/ReplicateQueue.h"
+#include <openr/common/OpenrEventBase.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 #include <fb303/ServiceData.h>
 #include <folly/init/Init.h>
-#include <openr/config/tests/Utils.h>
+#include <openr/tests/utils/Utils.h>
 #include <openr/watchdog/Watchdog.h>
 
 namespace fb303 = facebook::fb303;

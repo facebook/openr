@@ -8,10 +8,9 @@
 #include <folly/Format.h>
 
 #include <openr/common/Util.h>
-#include <openr/config/tests/Utils.h>
-#include <openr/if/gen-cpp2/Types_types.h>
-
 #include <openr/decision/tests/DecisionTestUtils.h>
+#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/tests/utils/Utils.h>
 
 namespace openr {
 LinkState

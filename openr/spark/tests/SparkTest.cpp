@@ -5,12 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <chrono>
-#include <thread>
-
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <sodium.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <fb303/ServiceData.h>
@@ -19,9 +15,9 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/spark/SparkWrapper.h>
 #include <openr/tests/mocks/MockIoProvider.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace openr;
 
@@ -1898,8 +1894,7 @@ main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
-  CHECK(!::sodium_init());
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

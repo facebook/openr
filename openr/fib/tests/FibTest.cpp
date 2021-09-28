@@ -14,7 +14,6 @@
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RouteUpdate.h>
@@ -23,6 +22,7 @@
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace std;
 using namespace openr;

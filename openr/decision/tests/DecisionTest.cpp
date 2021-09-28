@@ -27,10 +27,10 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/PrependLabelAllocator.h>
 #include <openr/common/Util.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
+#include <openr/tests/utils/Utils.h>
 
 DEFINE_bool(stress_test, false, "pass this to run the stress test");
 

@@ -13,12 +13,12 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/fib/Fib.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
+#include <openr/tests/utils/Utils.h>
 
 /**
  * Defines a benchmark that allows users to record customized counter during

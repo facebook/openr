@@ -22,7 +22,6 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
@@ -30,6 +29,7 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace std;
 using namespace openr;

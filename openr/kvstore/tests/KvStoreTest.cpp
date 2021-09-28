@@ -23,10 +23,10 @@
 
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace openr;
 using namespace std::chrono;

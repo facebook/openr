@@ -17,10 +17,10 @@
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace openr;
 

@@ -10,10 +10,9 @@
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/decision/LinkState.h>
-
 #include <openr/decision/tests/DecisionTestUtils.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace testing;
 

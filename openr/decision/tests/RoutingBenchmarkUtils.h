@@ -17,8 +17,8 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
+#include <openr/tests/utils/Utils.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 

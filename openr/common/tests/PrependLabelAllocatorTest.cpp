@@ -10,7 +10,7 @@
 
 #include <openr/common/PrependLabelAllocator.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
+#include <openr/tests/utils/Utils.h>
 #include <optional>
 
 namespace openr {
