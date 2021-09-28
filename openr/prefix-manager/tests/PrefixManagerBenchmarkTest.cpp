@@ -230,27 +230,31 @@ BM_PrefixManagerWithdrawPrefixes(
   CHECK_LE(numOfWithdrawnPrefixes, numOfExistingPrefixes);
 
   const std::string nodeId{"node-1"};
-  auto testFixture =
-      std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId);
-  auto prefixMgr = testFixture->getPrefixManager();
-
-  // Generate `numOfExistingPrefixes` and advertise to `KvStore` first
-  auto prefixes = generatePrefixEntries(
-      numOfExistingPrefixes, testFixture->getPrefixGenerator());
-  auto prefixesToWithdraw = prefixes; // NOTE explicitly copy
-  prefixesToWithdraw.resize(numOfWithdrawnPrefixes);
-  prefixMgr->advertisePrefixes(prefixes);
-
-  // Verify pre-existing prefixes inside `KvStore
-  testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
-
-  // Start measuring benchmark time
-  suspender.dismiss();
 
   for (uint32_t i = 0; i < iters; ++i) {
+    auto testFixture =
+        std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId);
+    auto prefixMgr = testFixture->getPrefixManager();
+
+    // Generate `numOfExistingPrefixes` and advertise to `KvStore` first
+    auto prefixes = generatePrefixEntries(
+        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+    auto prefixesToWithdraw = prefixes; // NOTE explicitly copy
+    prefixesToWithdraw.resize(numOfWithdrawnPrefixes);
+    prefixMgr->advertisePrefixes(prefixes);
+
+    // Verify pre-existing prefixes inside `KvStore
+    testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+
     // withdraw prefixes from `KvStore` and make sure update received
     prefixMgr->withdrawPrefixes(prefixesToWithdraw).get();
     testFixture->checkThriftPublication(numOfWithdrawnPrefixes, true);
+
+    // Stop measuring benchmark time
+    suspender.rehire();
   }
 }
 
