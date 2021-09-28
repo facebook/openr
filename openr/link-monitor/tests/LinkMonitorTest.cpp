@@ -2506,6 +2506,9 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
       *link.networks.begin());
 }
 
+/*
+ * TODO: T101565435 to track this flaky test under OSS env and re-enable it
+ *
 TEST_F(LinkMonitorTestFixture, AreaTest) {
   SetUp({kTestingAreaName, "pod", "plane"});
 
@@ -2603,6 +2606,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     checkNextAdjPub("adj:node-1", "plane");
   }
 }
+*/
 
 // Test communication between LinkMonitor and KvStore via KeyValueRequeust
 // queue.
