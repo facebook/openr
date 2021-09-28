@@ -582,6 +582,12 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/kvstore
   )
 
+  add_openr_test(KvStoreSelfOriginatedKeyTest kvstore_self_originated_key_test
+    SOURCES
+      openr/kvstore/tests/KvStoreSelfOriginatedKeyTest.cpp
+    DESTINATION sbin/tests/openr/kvstore
+  )
+
   add_openr_test(KvStoreClientInternalTest kvstore_client_internal_test
     SOURCES
       openr/kvstore/tests/KvStoreClientInternalTest.cpp
