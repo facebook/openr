@@ -1076,6 +1076,8 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // ADD_PREFIXES
   {
     int scheduleAt{0};
+    auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
+
     auto prefixKey9 = PrefixKey(
                           nodeId_,
                           toIPNetwork(*prefixEntry9.prefix_ref()),
@@ -1090,6 +1092,21 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
               PrefixEventType::ADD_PREFIXES, thrift::PrefixType::VIP, {}, {});
           event.prefixEntries.push_back(cPrefixEntry);
           prefixUpdatesQueue.push(std::move(event));
+
+          // Unicast route of VIP prefixEntry9 is sent to Decision/Fib for
+          // programming.
+          auto update = waitForRouteUpdate(*staticRoutesReaderPtr);
+          EXPECT_TRUE(update.has_value());
+
+          const auto& updatedRoutes =
+              *update.value().unicastRoutesToUpdate_ref();
+          const auto& deletedRoutes =
+              *update.value().unicastRoutesToDelete_ref();
+          EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+          EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+          const auto& route = updatedRoutes.back();
+          EXPECT_EQ(*route.dest_ref(), addr9);
+          EXPECT_EQ(route.nextHops_ref().value().size(), 2); // Two next hops.
         });
 
     evb.scheduleTimeout(
@@ -1112,10 +1129,19 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
           // Wait for prefix update in KvStore
           auto pub = kvStoreWrapper->recvPublication();
           EXPECT_EQ(1, pub.keyVals_ref()->size());
-          EXPECT_TRUE(
-              kvStoreWrapper->getKey(kTestingAreaName, prefixKey9).has_value());
+          auto maybeValue =
+              kvStoreWrapper->getKey(kTestingAreaName, prefixKey9);
+          EXPECT_TRUE(maybeValue.has_value());
+          auto db = readThriftObjStr<thrift::PrefixDatabase>(
+              maybeValue.value().value_ref().value(), serializer);
+          EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+          EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+          // Area stack should not be set for originated VIP.
+          EXPECT_TRUE(db.prefixEntries_ref()[0].area_stack_ref()->empty());
+          EXPECT_EQ(
+              db.prefixEntries_ref()[0].type_ref(), thrift::PrefixType::VIP);
 
-          // Verify
+          // Verify prefixEntry9 exists in PrefixManager.
           auto prefixes = prefixManager->getPrefixes().get();
           EXPECT_EQ(1, prefixes->size());
           EXPECT_THAT(*prefixes, testing::Contains(prefixEntry9));
@@ -1612,7 +1638,7 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
 };
 
 /**
- * Test cross-AREA route redistribution for Decision RIB routes with:
+ * Test cross-AREA route redistribution for Decision RIB/VIP routes with:
  *  - prefix update
  */
 TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
@@ -1695,13 +1721,14 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   }
 
   //
-  // 2. Inject prefix1 from area B, {A, C} should receive announcement.
-  // B withdraw old prefix from A
+  // 2. Inject prefix1 of VIP type from area B, {A, C} should receive
+  // announcement. B withdraw old prefix from A
   //
 
   {
     // build prefixEntry for addr1 from area "B"
     auto prefixEntry1B = prefixEntry1;
+    prefixEntry1B.type_ref() = thrift::PrefixType::VIP;
     auto expectedPrefixEntry1B = prefixEntry1B;
 
     // append area_stack after area redistibution
@@ -1711,9 +1738,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     // increase metrics.distance by 1 after area redistribution
     prefixEntry1B.metrics_ref()->distance_ref() = 1;
     expectedPrefixEntry1B.metrics_ref()->distance_ref() = 2;
-
     // PrefixType being overridden with RIB type after area redistribution
-    prefixEntry1B.type_ref() = thrift::PrefixType::DEFAULT;
     expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
 
     // Set non-transitive attributes
