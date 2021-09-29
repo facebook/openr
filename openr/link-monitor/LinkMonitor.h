@@ -194,7 +194,12 @@ class LinkMonitor final : public OpenrEventBase {
    *  1) retrieve interface from netlink for initial/periodic interface sync;
    *  2) process LINK/ADDR event updates from platform
    */
-  void processNetlinkEvent(fbnl::NetlinkEvent&& event);
+
+  // visitor dispatcher class we use to parse messages for further processing
+  struct NetlinkEventProcessor;
+
+  void processLinkEvent(fbnl::Link&& link);
+  void processAddressEvent(fbnl::IfAddress&& addr);
 
   void syncInterfaceTask() noexcept;
   bool syncInterfaces();
@@ -406,6 +411,7 @@ class LinkMonitor final : public OpenrEventBase {
   // Exp backoff for resyncing InterfaceDb from netlink
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
 
+  // [TO BE DEPRECATED]
   // client to interact with KvStore
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 

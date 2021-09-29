@@ -59,6 +59,31 @@ printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
 
 namespace openr {
 
+/*
+ * NetlinkEventProcessor serves as the general processor struct to parse
+ * and understand different types of netlink event LinkMonitor interested in.
+ */
+struct LinkMonitor::NetlinkEventProcessor {
+  LinkMonitor& lm_;
+  explicit NetlinkEventProcessor(LinkMonitor& lm) : lm_(lm) {}
+
+  void
+  operator()(fbnl::Link&& link) {
+    lm_.processLinkEvent(std::move(link));
+  }
+
+  void
+  operator()(fbnl::IfAddress&& addr) {
+    lm_.processAddressEvent(std::move(addr));
+  }
+
+  void
+  operator()(fbnl::Neighbor&&) {}
+
+  void
+  operator()(fbnl::Rule&&) {}
+};
+
 //
 // LinkMonitor code
 //
@@ -164,7 +189,8 @@ LinkMonitor::LinkMonitor(
     state_.isOverloaded_ref() = assumeDrained;
   }
 
-  //  Create KvStore client
+  // [TO BE DEPRECATED]
+  // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
       this,
       nodeId_,
@@ -255,13 +281,14 @@ LinkMonitor::LinkMonitor(
 
   // Add fiber to process the LINK/ADDR events from platform
   addFiberTask([q = std::move(netlinkEventsQueue), this]() mutable noexcept {
+    NetlinkEventProcessor visitor(*this);
     while (true) {
       auto maybeEvent = q.get();
       if (maybeEvent.hasError()) {
         LOG(INFO) << "Terminating netlink events processing fiber";
         break;
       }
-      processNetlinkEvent(std::move(maybeEvent).value());
+      std::visit(visitor, std::move(*maybeEvent));
     }
   });
 
@@ -1088,48 +1115,50 @@ LinkMonitor::syncInterfaces() {
 }
 
 void
-LinkMonitor::processNetlinkEvent(fbnl::NetlinkEvent&& event) {
-  if (auto* link = std::get_if<fbnl::Link>(&event)) {
-    VLOG(3) << "Received Link Event from NetlinkProtocolSocket...";
+LinkMonitor::processLinkEvent(fbnl::Link&& link) {
+  VLOG(3) << "Received Link Event from NetlinkProtocolSocket...";
 
-    auto ifName = link->getLinkName();
-    auto ifIndex = link->getIfIndex();
-    auto isUp = link->isUp();
+  auto ifName = link.getLinkName();
+  auto ifIndex = link.getIfIndex();
+  auto isUp = link.isUp();
 
-    // Cache interface index name mapping
-    // ATTN: will create new ifIndex -> ifName mapping if it is unknown link
-    //       `[]` operator is used in purpose
-    ifIndexToName_[ifIndex] = ifName;
+  // Cache interface index name mapping
+  // ATTN: will create new ifIndex -> ifName mapping if it is unknown link
+  //       `[]` operator is used in purpose
+  ifIndexToName_[ifIndex] = ifName;
 
-    auto interfaceEntry = getOrCreateInterfaceEntry(ifName);
-    if (interfaceEntry) {
-      const bool wasUp = interfaceEntry->isUp();
-      interfaceEntry->updateAttrs(ifIndex, isUp);
-      logLinkEvent(
-          interfaceEntry->getIfName(),
-          wasUp,
-          interfaceEntry->isUp(),
-          interfaceEntry->getBackoffDuration());
-    }
-  } else if (auto* addr = std::get_if<fbnl::IfAddress>(&event)) {
-    VLOG(3) << "Received Address Event from NetlinkProtocolSocket...";
+  auto interfaceEntry = getOrCreateInterfaceEntry(ifName);
+  if (interfaceEntry) {
+    const bool wasUp = interfaceEntry->isUp();
+    interfaceEntry->updateAttrs(ifIndex, isUp);
+    logLinkEvent(
+        interfaceEntry->getIfName(),
+        wasUp,
+        interfaceEntry->isUp(),
+        interfaceEntry->getBackoffDuration());
+  }
+}
 
-    auto ifIndex = addr->getIfIndex();
-    auto prefix = addr->getPrefix(); // std::optional<folly::CIDRNetwork>
-    auto isValid = addr->isValid();
+void
+LinkMonitor::processAddressEvent(fbnl::IfAddress&& addr) {
+  VLOG(3) << "Received Address Event from NetlinkProtocolSocket...";
 
-    // Check for interface name
-    auto it = ifIndexToName_.find(ifIndex);
-    if (it == ifIndexToName_.end()) {
-      LOG(ERROR) << "Address event for unknown iface index: " << ifIndex;
-      return;
-    }
+  auto ifIndex = addr.getIfIndex();
+  auto prefix = addr.getPrefix(); // std::optional<folly::CIDRNetwork>
+  auto isValid = addr.isValid();
 
-    // Cached ifIndex -> ifName mapping
-    auto interfaceEntry = getOrCreateInterfaceEntry(it->second);
-    if (interfaceEntry) {
-      interfaceEntry->updateAddr(prefix.value(), isValid);
-    }
+  // Check for interface name
+  auto it = ifIndexToName_.find(ifIndex);
+  if (it == ifIndexToName_.end()) {
+    LOG(ERROR)
+        << fmt::format("Address event for unknown iface index: {}", ifIndex);
+    return;
+  }
+
+  // Cached ifIndex -> ifName mapping
+  auto interfaceEntry = getOrCreateInterfaceEntry(it->second);
+  if (interfaceEntry) {
+    interfaceEntry->updateAddr(prefix.value(), isValid);
   }
 }
 
