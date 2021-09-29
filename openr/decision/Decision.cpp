@@ -654,7 +654,7 @@ Decision::rebuildRoutes(std::string const& event) {
       if (auto maybeRibEntry = spfSolver_->createRouteForPrefixOrGetStaticRoute(
               myNodeName_, areaLinkStates_, prefixState_, prefix)) {
         update.addRouteToUpdate(std::move(maybeRibEntry).value());
-      } else {
+      } else if (routeDb_.unicastRoutes.count(prefix) > 0) {
         update.unicastRoutesToDelete.emplace_back(prefix);
       }
     }
