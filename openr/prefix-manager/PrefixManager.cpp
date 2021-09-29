@@ -57,13 +57,20 @@ PrefixManager::PrefixManager(
   // Always add RIB type prefixes, since Fib routes updates are always expected
   // in OpenR initialization procedure.
   uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
+  XLOG(INFO) << "[Initialization] PrefixManager should wait for RIB updates.";
   if (config->getConfig().get_enable_bgp_peering()) {
+    XLOG(INFO)
+        << "[Initialization] PrefixManager should wait for BGP prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::BGP);
   }
   if (config->isVipServiceEnabled()) {
+    XLOG(INFO)
+        << "[Initialization] PrefixManager should wait for VIP prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::VIP);
   }
   if (config->getConfig().originated_prefixes_ref()) {
+    XLOG(INFO)
+        << "[Initialization] PrefixManager should wait for CONFIG prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::CONFIG);
   }
 
@@ -420,9 +427,7 @@ PrefixManager::buildOriginatedPrefixes(
   // Publish static routes for config originated prefixes. This makes sure
   // initial RIB/FIB after warmboot still includes routes for config originated
   // prefixes.
-  if (not routeUpdatesForDecision.empty()) {
-    staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
-  }
+  staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
 }
 
 void

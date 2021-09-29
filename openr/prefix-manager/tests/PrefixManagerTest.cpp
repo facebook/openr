@@ -3540,7 +3540,8 @@ class PrefixManagerInitialKvStoreSyncTestFixture
 };
 
 class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
-    : public PrefixManagerInitialKvStoreSyncTestFixture {
+    : public PrefixManagerInitialKvStoreSyncTestFixture,
+      public ::testing::WithParamInterface<bool> {
  protected:
   thrift::OpenrConfig
   createConfig() override {
@@ -3549,10 +3550,11 @@ class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
     tConfig.enable_bgp_peering_ref() = true;
     tConfig.bgp_config_ref() = thrift::BgpConfig();
 
+    const bool v4_install_to_fib = GetParam();
     // Set originated prefixes.
     thrift::OriginatedPrefix originatedPrefixV4;
     originatedPrefixV4.prefix_ref() = toString(addr4);
-    originatedPrefixV4.install_to_fib_ref() = true;
+    originatedPrefixV4.install_to_fib_ref() = v4_install_to_fib;
     thrift::OriginatedPrefix originatedPrefixV6;
     originatedPrefixV6.prefix_ref() = toString(addr6);
     originatedPrefixV6.minimum_supporting_routes_ref() = 0;
@@ -3568,15 +3570,22 @@ class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
  * Verifies that in OpenR initialization procedure, initial syncKvStore() is
  * triggered after all dependent signals are received.
  */
-TEST_F(
+TEST_P(
     PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
     TriggerInitialKvStoreTest) {
+  const bool v4_install_to_fib = GetParam();
   // Expect to publish static routes for config originated prefixes with
   // install_to_fib set.
   auto update = waitForRouteUpdate(
       *getEarlyStaticRoutesReaderPtr(), thrift::PrefixType::CONFIG);
   EXPECT_TRUE(update.has_value());
-  EXPECT_EQ(update.value().get_unicastRoutesToUpdate().size(), 1);
+  if (v4_install_to_fib) {
+    EXPECT_EQ(update.value().get_unicastRoutesToUpdate().size(), 1);
+  } else {
+    // Always send CONFIG type empty static routes to Decision, even there are
+    // none unicast routes generated.
+    EXPECT_TRUE(update.value().get_unicastRoutesToUpdate().empty());
+  }
 
   auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
 
@@ -3644,8 +3653,13 @@ TEST_F(
     auto msg = prefixMgrRouteUpdatesReader.get();
     auto update = msg.value();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
-
-    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
+    if (v4_install_to_fib) {
+      // Only v4 prefix with install_to_fib = false
+      EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
+    } else {
+      // Both v4 and v6 prefixes with install_to_fib = false
+      EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(2));
+    }
     EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
 
     EXPECT_EQ(
@@ -3663,6 +3677,11 @@ TEST_F(
     EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
   }
 }
+
+INSTANTIATE_TEST_CASE_P(
+    PrefixManagerInitialKvStoreSyncBgpEnabledTest,
+    PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
+    ::testing::Values(false, true));
 
 class PrefixManagerInitialKvStoreSyncVipEnabledTestFixture
     : public PrefixManagerInitialKvStoreSyncTestFixture {
