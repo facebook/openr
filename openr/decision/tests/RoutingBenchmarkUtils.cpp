@@ -61,9 +61,9 @@ sendRecvUpdate(
   auto routes = decisionWrapper->recvMyRouteDb();
 
   // Extract time from perfevent and accumulate processing time
-  if (routes.perfEvents.has_value()) {
-    accumulatePerfTimes(routes.perfEvents.value(), processTimes);
-  }
+  // if (routes.perfEvents.has_value()) {
+  //   accumulatePerfTimes(routes.perfEvents.value(), processTimes);
+  // }
 }
 
 void
