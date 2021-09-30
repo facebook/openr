@@ -126,8 +126,7 @@ LinkMonitor::LinkMonitor(
       kvRequestQueue_(kvRequestQueue),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
       configStore_(configStore),
-      nlSock_(nlSock),
-      kvStore_(kvStore) {
+      nlSock_(nlSock) {
   // Check non-empty module ptr
   CHECK(kvStore);
   CHECK(configStore_);
@@ -201,66 +200,27 @@ LinkMonitor::LinkMonitor(
 
   if (enableSegmentRouting_) {
     // create range allocator to get unique node labels
-    for (auto const& kv : areas_) {
-      auto const& srNodeLabelCfg = kv.second.getNodeSegmentLabelConfig();
+    for (auto const& [areaId, areaCfg] : areas_) {
+      auto const& srNodeLabelCfg = areaCfg.getNodeSegmentLabelConfig();
       if (not srNodeLabelCfg.has_value()) {
-        LOG(INFO) << "Area " << kv.first
-                  << " does not have segment routing node label config";
+        LOG(INFO) << fmt::format(
+            "Area {} does not have segment rotuing node label config", areaId);
         continue;
       }
 
-      auto const& areaId = kv.first;
-      switch (srNodeLabelCfg->get_sr_node_label_type()) {
-      case openr::thrift::SegmentRoutingNodeLabelType::AUTO: {
-        rangeAllocator_.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(areaId),
-            std::forward_as_tuple(
-                AreaId{areaId},
-                nodeId_,
-                Constants::kNodeLabelRangePrefix.toString(),
-                kvStore_,
-                kvStoreClient_.get(),
-                [&](std::optional<int32_t> newVal) noexcept {
-                  state_.nodeLabelMap_ref()->insert_or_assign(
-                      areaId, newVal ? newVal.value() : 0);
-                  advertiseAdjacencies();
-                }, /* callback */
-                kvRequestQueue_,
-                enableKvStoreRequestQueue_,
-                std::chrono::milliseconds(100), /* minBackoffDur */
-                std::chrono::seconds(2), /* maxBackoffDur */
-                false /* override owner */,
-                nullptr, /* checkValueInUseCb */
-                Constants::kRangeAllocTtl));
-
-        // Delay range allocation until we have formed all of our adjcencies
-        auto startAllocTimer =
-            folly::AsyncTimeout::make(*getEvb(), [this, areaId, kv]() noexcept {
-              std::optional<int32_t> initValue;
-              auto it = state_.nodeLabelMap_ref()->find(areaId);
-              if (it != state_.nodeLabelMap_ref()->end() and it->second != 0) {
-                initValue = it->second;
-              }
-
-              rangeAllocator_.at(areaId).startAllocator(
-                  getNodeSegmentLabelRange(kv.second), initValue);
-            });
-        startAllocTimer->scheduleTimeout(initialAdjHoldTime);
-        startAllocationTimers_.emplace_back(std::move(startAllocTimer));
-      } break;
-      case openr::thrift::SegmentRoutingNodeLabelType::STATIC: {
-        // Use statically configured node segment label as node label
-        // state_.nodeLabel_ref() = getStaticNodeSegmentLabel(kv.second);
-        auto nodeLbl = getStaticNodeSegmentLabel(kv.second);
-        state_.nodeLabelMap_ref()->insert_or_assign(areaId, nodeLbl);
-        LOG(INFO) << "Allocating static node segment label " << nodeLbl
-                  << " in area " << kv.first << " for " << nodeId_;
-      } break;
-      default:
-        DCHECK("Unknown segment routing node label allocation type");
-        break;
-      }
+      CHECK(
+          srNodeLabelCfg->get_sr_node_label_type() ==
+          thrift::SegmentRoutingNodeLabelType::STATIC)
+          << "Unknown segment routing node label allocation type";
+      // Use statically configured node segment label as node label
+      // state_.nodeLabel_ref() = getStaticNodeSegmentLabel(kv.second);
+      auto nodeLbl = getStaticNodeSegmentLabel(areaCfg);
+      state_.nodeLabelMap_ref()->insert_or_assign(areaId, nodeLbl);
+      LOG(INFO) << fmt::format(
+          "Allocating static node segment label {} inside area {} for {}",
+          nodeLbl,
+          areaId,
+          nodeId_);
     }
   }
 

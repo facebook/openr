@@ -415,24 +415,11 @@ class LinkMonitor final : public OpenrEventBase {
   // client to interact with KvStore
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 
-  // RangAlloctor to get unique nodeLabel for this node
-  std::unordered_map<std::string /* area */, RangeAllocator<int32_t>>
-      rangeAllocator_;
-
   // Raw ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
 
   // Raw ptr to interact with NetlinkProtocolSocket
   fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
-
-  // Raw ptr to KvStore for RangeAllocator to retrieve key-values
-  KvStore* const kvStore_{nullptr};
-
-  // Timer for starting range allocator
-  // this is equal to adjHoldTimer_
-  // because we'll delay range allocation until we have formed all of our
-  // adjcencies
-  std::vector<std::unique_ptr<folly::AsyncTimeout>> startAllocationTimers_;
 
   // Timer for initial hold time expiry
   std::unique_ptr<folly::AsyncTimeout> adjHoldTimer_;

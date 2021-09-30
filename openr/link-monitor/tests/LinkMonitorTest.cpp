@@ -323,6 +323,7 @@ class LinkMonitorTestFixture : public testing::Test {
     }
     // create config
     std::vector<openr::thrift::AreaConfig> areaConfig;
+    int32_t nodeLabelBase = 101;
     for (auto id : areas) {
       thrift::AreaConfig area;
       area.area_id_ref() = id;
@@ -333,7 +334,7 @@ class LinkMonitorTestFixture : public testing::Test {
       auto it = areaMap.find(id);
       if (it == areaMap.end()) {
         area.area_sr_node_label_ref() = getTestSegmentRoutingNodelLabel(
-            thrift::SegmentRoutingNodeLabelType::AUTO);
+            thrift::SegmentRoutingNodeLabelType::STATIC, nodeLabelBase++);
       } else {
         thrift::SegmentRoutingNodeLabel srNodeLabel;
         openr::thrift::LabelRange labelRange;
@@ -364,9 +365,6 @@ class LinkMonitorTestFixture : public testing::Test {
     lmConf.linkflap_initial_backoff_ms_ref() = flapInitialBackoff.count();
     lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
     lmConf.use_rtt_metric_ref() = false;
-    lmConf.include_interface_regexes_ref() = {
-        kTestVethNamePrefix + ".*", "iface.*"};
-    lmConf.redistribute_interface_regexes_ref() = {"loopback"};
 
     tConfig.enable_new_gr_behavior_ref() = true;
     tConfig.assume_drained_ref() = false;
@@ -2166,149 +2164,6 @@ TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
   EXPECT_EQ(unknownAreaPublications, 0);
   EXPECT_EQ(unknownAreaAdjDb, 0);
 
-  // cleanup
-  nlSock->closeQueue();
-  neighborUpdatesQueue.close();
-  kvStoreSyncEventsQueue.close();
-  kvStoreWrapper->closeQueue();
-  for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
-    linkMonitors[i]->stop();
-    linkMonitorThreads[i]->join();
-  }
-}
-
-// Test getting unique nodeLabels
-TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
-  const openr::AreaId kTestingSpineAreaName{"test_spine_area_name"};
-  std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
-      areaMap1;
-
-  areaMap1.emplace(
-      kTestingAreaName,
-      getTestSegmentRoutingNodelLabel(
-          thrift::SegmentRoutingNodeLabelType::AUTO, 0, 100, 200));
-
-  areaMap1.emplace(
-      kTestingSpineAreaName,
-      getTestSegmentRoutingNodelLabel(
-          thrift::SegmentRoutingNodeLabelType::AUTO, 0, 300, 400));
-
-  SetUp(
-      {kTestingAreaName, kTestingSpineAreaName},
-      std::chrono::milliseconds(1),
-      std::chrono::milliseconds(8),
-      areaMap1);
-  size_t kNumNodesToTest = 10;
-
-  // spin up kNumNodesToTest - 1 new link monitors. 1 is spun up in setup()
-  std::vector<std::unique_ptr<LinkMonitor>> linkMonitors;
-  std::vector<std::unique_ptr<std::thread>> linkMonitorThreads;
-  std::vector<std::shared_ptr<Config>> configs;
-  std::unordered_set<std::string> areas{
-      kTestingAreaName, kTestingSpineAreaName};
-
-  for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
-    std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
-        areaMap2;
-    areaMap2.emplace(
-        kTestingAreaName,
-        getTestSegmentRoutingNodelLabel(
-            thrift::SegmentRoutingNodeLabelType::AUTO, 0, 100, 200));
-    areaMap2.emplace(
-        kTestingSpineAreaName,
-        getTestSegmentRoutingNodelLabel(
-            thrift::SegmentRoutingNodeLabelType::AUTO, 0, 300, 400));
-
-    auto tConfigCopy = getTestOpenrConfig(
-        areas,
-        std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8),
-        areaMap2);
-    tConfigCopy.node_name_ref() = fmt::format("lm{}", i + 1);
-    auto currConfig = std::make_shared<Config>(tConfigCopy);
-    auto lm = std::make_unique<LinkMonitor>(
-        currConfig,
-        nlSock.get(),
-        kvStoreWrapper->getKvStore(),
-        configStore.get(),
-        interfaceUpdatesQueue,
-        prefixUpdatesQueue,
-        peerUpdatesQueue,
-        logSampleQueue,
-        kvRequestQueue,
-        neighborUpdatesQueue.getReader(),
-        kvStoreSyncEventsQueue.getReader(),
-        nlSock->getReader(),
-        false /* overrideDrainState */);
-    linkMonitors.emplace_back(std::move(lm));
-    configs.emplace_back(std::move(currConfig));
-
-    auto lmThread = std::make_unique<std::thread>([&linkMonitors]() {
-      LOG(INFO) << "LinkMonitor thread starting";
-      linkMonitors.back()->run();
-      LOG(INFO) << "LinkMonitor thread finishing";
-    });
-    linkMonitorThreads.emplace_back(std::move(lmThread));
-    linkMonitors.back()->waitUntilRunning();
-  }
-
-  // map of nodeId to value allocated for each area
-  std::unordered_map<std::string, int32_t> nodeLabels1;
-  std::unordered_map<std::string, int32_t> nodeLabels2;
-  auto unknownAreaPublications = 0;
-  auto unknownAreaAdjDb = 0;
-
-  // recv kv store publications until we have valid labels from each node
-  while (nodeLabels1.size() < kNumNodesToTest or
-         nodeLabels2.size() < kNumNodesToTest) {
-    auto pub = kvStoreWrapper->recvPublication();
-    for (auto const& kv : *pub.keyVals_ref()) {
-      if (kv.first.find("adj:") == 0 and kv.second.value_ref()) {
-        auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
-            kv.second.value_ref().value(), serializer);
-
-        if (*pub.area_ref() == static_cast<std::string>(kTestingAreaName)) {
-          // kTestingAreaName node segment label
-          nodeLabels1[*adjDb.thisNodeName_ref()] = *adjDb.nodeLabel_ref();
-        } else if (
-            *pub.area_ref() ==
-            static_cast<std::string>(kTestingSpineAreaName)) {
-          // kTestingSpineAreaName node segment label
-          nodeLabels2[*adjDb.thisNodeName_ref()] = *adjDb.nodeLabel_ref();
-        } else {
-          unknownAreaPublications++;
-        }
-
-        if (*adjDb.nodeLabel_ref() == 0) {
-          if (*adjDb.area_ref() == static_cast<std::string>(kTestingAreaName)) {
-            nodeLabels1.erase(*adjDb.thisNodeName_ref());
-          } else if (
-              *adjDb.area_ref() ==
-              static_cast<std::string>(kTestingSpineAreaName)) {
-            nodeLabels2.erase(*adjDb.thisNodeName_ref());
-          } else {
-            unknownAreaAdjDb++;
-          }
-        }
-      }
-    }
-  }
-
-  // ensure that we have unique values
-  std::set<int32_t> labelSet1;
-  std::set<int32_t> labelSet2;
-  for (auto const& kv : nodeLabels1) {
-    labelSet1.insert(kv.second);
-  }
-
-  for (auto const& kv : nodeLabels2) {
-    labelSet2.insert(kv.second);
-  }
-
-  EXPECT_EQ(kNumNodesToTest, labelSet1.size());
-  EXPECT_EQ(kNumNodesToTest, labelSet2.size());
-  EXPECT_EQ(unknownAreaPublications, 0);
-  EXPECT_EQ(unknownAreaAdjDb, 0);
   // cleanup
   nlSock->closeQueue();
   neighborUpdatesQueue.close();
