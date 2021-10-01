@@ -53,9 +53,21 @@ class AsyncDebounce final : public folly::AsyncTimeout {
     CHECK(isScheduled());
   }
 
+  void
+  cancelScheduledTimeout() noexcept {
+    if (not isScheduled()) {
+      return;
+    }
+    // Cancel scheduled timeout.
+    cancelTimeout();
+    // Reset backoff_ so future `operator()()` could reschedule timeout again.
+    backoff_.reportSuccess();
+  }
+
  private:
   void
   timeoutExpired() noexcept override {
+    // Reset backoff_ so future `operator()()` could reschedule timeout again.
     backoff_.reportSuccess();
     callback_();
   }

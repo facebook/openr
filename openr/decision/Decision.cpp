@@ -689,7 +689,7 @@ Decision::triggerInitialBuildRoutes() {
   if (unreceivedRouteTypes_.empty() and initialKvStoreSynced_) {
     // Trigger initial RIB computation, after receiving routes of all expected
     // prefix types and inital publications from KvStore.
-    rebuildRoutesDebounced_.cancelTimeout();
+    rebuildRoutesDebounced_.cancelScheduledTimeout();
     pendingUpdates_.setNeedsFullRebuild();
     rebuildRoutes("INITIALIZATION");
     logInitializationEvent(

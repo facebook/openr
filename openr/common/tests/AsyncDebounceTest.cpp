@@ -37,6 +37,13 @@ TEST(AsyncDebounce, BasicOperation) {
     std::unique_lock<std::mutex> lk(m);
     evb.runInEventBaseThread([&m, debouncedCalls, &debouncedFn]() {
       std::unique_lock<std::mutex> l(m);
+      // Debounce several times.
+      for (int i = 0; i < debouncedCalls; ++i) {
+        debouncedFn();
+      }
+      // Cancel scheduled timeout.
+      debouncedFn.cancelScheduledTimeout();
+      // Debounce again.
       for (int i = 0; i < debouncedCalls; ++i) {
         debouncedFn();
       }
