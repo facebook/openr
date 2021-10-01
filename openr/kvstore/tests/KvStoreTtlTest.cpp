@@ -148,7 +148,6 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         const auto hashDump = store->dumpHashes(kTestingAreaName);
         for (const auto& [key, value] : dump) {
           EXPECT_TRUE(value.hash_ref().value() != 0);
-          EXPECT_TRUE(hashDump.count(key) != 0);
           if (!hashDump.count(key)) {
             continue;
           }
