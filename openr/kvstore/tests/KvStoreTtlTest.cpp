@@ -14,6 +14,7 @@
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/utils/Utils.h>
+#include <range/v3/view/enumerate.hpp>
 
 using namespace openr;
 
@@ -137,8 +138,8 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
             0 /* ttl version */,
             0 /* hash*/);
 
-        // Submit this to a random store.
-        auto& store = stores_[folly::Random::rand32() % stores_.size()];
+        auto& store = stores_[0];
+        EXPECT_GE(stores_.size(), 0);
         EXPECT_TRUE(store->setKey(kTestingAreaName, key, thriftVal));
         const auto dump = store->dumpAll(kTestingAreaName);
         EXPECT_FALSE(dump.empty());
@@ -319,6 +320,10 @@ TEST_P(KvStoreTestTtlFixture, Graph) {
     adjacencyList.push_back(neighbors);
   }
 
+  VLOG(1) << "Adjacency list: ";
+  for (const auto&& [index, set] : adjacencyList | ranges::views::enumerate) {
+    VLOG(1) << index << ": " << fmt::format("{}", fmt::join(set, ", "));
+  }
   performKvStoreSyncTest(
       adjacencyList, "kv_store_graph::store", kNumStores, kNumStores + 1);
 }

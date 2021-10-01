@@ -54,6 +54,7 @@ find_package(Threads REQUIRED)
 find_library(ZMQ zmq)
 find_library(ZSTD zstd)
 find_library(BENCHMARK follybenchmark PATHS)
+find_package(range-v3 REQUIRED)
 
 find_path(RE2_INCLUDE_DIR re2/re2.h)
 find_path(ZMQ_INCLUDE_DIR zmq.h)
@@ -268,6 +269,7 @@ target_link_libraries(openrlib
   -lpthread
   -lcrypto
   stdc++fs
+  range-v3
 )
 
 install(TARGETS
