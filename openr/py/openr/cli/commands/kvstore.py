@@ -17,7 +17,7 @@ from builtins import str
 from collections import defaultdict
 from collections.abc import Iterable
 from itertools import combinations
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, AbstractSet
 
 import bunch
 import hexdump
@@ -912,7 +912,6 @@ class SnoopCmd(KvStoreCmdBase):
             async with get_openr_ctrl_cpp_client(
                 self.host, self.cli_opts, client_type=client_type
             ) as client:
-                # NOTE: No area initialized
                 await self._run(client, *args, **kwargs)
             return 0
 
@@ -925,16 +924,13 @@ class SnoopCmd(KvStoreCmdBase):
         ttl: bool,
         regexes: Optional[List[str]],
         duration: int,
-        originator_ids: Optional[Set[str]],
-        match_all: bool = True,
+        originator_ids: Optional[AbstractSet[str]],
+        match_all: bool,
+        select_areas: Set[str],
+        print_initial: bool,
         *args,
         **kwargs,
     ) -> None:
-        # TODO: Fix area specifier for snoop. Intentionally setting to None to
-        # snoop across all area once. It will be easier when we migrate all the
-        # APIs to async
-        # area = await self.get_area_id()
-        area = None
         kvDumpParams = openr_types_py3.KeyDumpParams(
             ignoreTtl=not ttl,
             keys=regexes,
@@ -945,11 +941,19 @@ class SnoopCmd(KvStoreCmdBase):
         )
 
         print("Retrieving and subcribing KvStore ... ")
-        response = await client.subscribeAndGetKvStoreFiltered(kvDumpParams)
-        snapshot, updates = response.__iter__()
+        # pyre-fixme[23]: Unable to unpack
+        # ResponseAndClientBufferedStream__List__Types_Publication_Types_Publication
+        (snapshot, updates) = await client.subscribeAndGetAreaKvStores(
+            kvDumpParams,
+            select_areas,
+        )
         global_dbs = self.process_snapshot(snapshot)
-        self.print_delta(snapshot, ttl, delta, global_dbs)
-        print("Magic begins here ... \n")
+        if print_initial:
+            for pub in snapshot:
+                self.print_delta(pub, ttl, delta, global_dbs[pub.area])
+        print(
+            f"\nSnooping on areas {','.join(global_dbs.keys())}. Magic begins here ... \n"
+        )
 
         start_time = time.time()
         awaited_updates = None
@@ -967,10 +971,11 @@ class SnoopCmd(KvStoreCmdBase):
             else:
                 msg = await done.pop()
 
-            # filter out messages for area if specified
-            if area is None or msg.area == area:
-                self.print_expired_keys(msg, global_dbs)
-                self.print_delta(msg, ttl, delta, global_dbs)
+            if msg.area in global_dbs:
+                self.print_expired_keys(msg, global_dbs[msg.area])
+                self.print_delta(msg, ttl, delta, global_dbs[msg.area])
+            else:
+                print(f"ERROR: got publication for unexpected area: {msg.area}")
 
     def print_expired_keys(self, msg: openr_types_py3.Publication, global_dbs: Dict):
         rows = []
@@ -1105,23 +1110,27 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def process_snapshot(self, resp: openr_types_py3.Publication) -> Dict:
-        global_dbs = bunch.Bunch(
-            {
-                "prefixes": {},
-                "adjs": {},
-                "publications": {},  # map(key -> openr_types.Value)
-            }
-        )
+    def process_snapshot(self, resp: List[openr_types.Publication]) -> Dict:
+        snapshots = {}
+        print("Processing initial snapshots...")
+        for pub in resp:
+            global_dbs = bunch.Bunch(
+                {
+                    "prefixes": {},
+                    "adjs": {},
+                    "publications": {},  # map(key -> kv_store_types.Value)
+                }
+            )
 
-        # Populate global_dbs
-        global_dbs["prefixes"] = utils.build_global_prefix_db(resp)
-        global_dbs["adjs"] = utils.build_global_adj_db(resp)
-        for key, value in resp.keyVals.items():
-            global_dbs["publications"][key] = value
-
-        print("Done. Loaded {} initial key-values".format(len(resp.keyVals)))
-        return global_dbs
+            # Populate global_dbs
+            global_dbs.prefixes = utils.build_global_prefix_db(pub)
+            global_dbs.adjs = utils.build_global_adj_db(pub)
+            for key, value in pub.keyVals.items():
+                global_dbs.publications[key] = value
+            snapshots[pub.area] = global_dbs
+            print(f"Loaded {len(pub.keyVals)} initial key-values for area {pub.area}")
+        print("Done.")
+        return snapshots
 
 
 class KvAllocationsListCmd(KvStoreCmdBase):

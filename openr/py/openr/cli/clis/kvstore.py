@@ -6,6 +6,7 @@
 
 
 from typing import Any, List
+from typing import Optional, Set, AbstractSet
 
 import click
 from bunch import Bunch
@@ -266,16 +267,41 @@ class SnoopCli(object):
         multiple=True,
         help="Originator ids to be used in filter",
     )
+    @click.option(
+        "--area",
+        "-a",
+        multiple=True,
+        help="Area to snoop on, if none specified will snoop on all. Specify "
+        "multiple times to snoop on a set of areas",
+    )
+    @click.option(
+        "--print-initial", is_flag=True, help="Print initial snapshot before snooping"
+    )
     @click.pass_obj
     def snoop(
-        cli_opts, delta, ttl, regexes, duration, originator_ids, match_all  # noqa: B902
-    ):
+        cli_opts: Bunch,  # noqa: B902
+        delta: bool,
+        ttl: bool,
+        regexes: Optional[List[str]],
+        duration: int,
+        originator_ids: Optional[AbstractSet[str]],
+        match_all: bool,
+        area: Set[str],
+        print_initial: bool,
+    ) -> None:
         """Snoop on KV-store updates in the network. We are primarily
         looking at the adj/prefix announcements.
         """
 
         kvstore.SnoopCmd(cli_opts).run(
-            delta, ttl, regexes, duration, originator_ids, match_all
+            delta,
+            ttl,
+            regexes,
+            duration,
+            originator_ids,
+            match_all,
+            area,
+            print_initial,
         )
 
 
