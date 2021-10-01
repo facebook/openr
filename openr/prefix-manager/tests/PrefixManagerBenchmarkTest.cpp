@@ -279,24 +279,25 @@ BM_PrefixManagerPrefixFlap(
   auto suspender = folly::BenchmarkSuspender();
 
   const std::string nodeId{"node-1"};
-  auto testFixture =
-      std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId);
-  auto prefixMgr = testFixture->getPrefixManager();
-
-  // Generate `numOfExistingPrefixes` and make sure `KvStore` is updated
-  auto prefixes = generatePrefixEntries(
-      numOfExistingPrefixes, testFixture->getPrefixGenerator());
-  prefixMgr->advertisePrefixes(std::move(prefixes)).get();
-
-  // Verify pre-existing prefixes inside `KvStore`
-  testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
-
-  // Generate `numOfUpdatedPrefixes`
-  auto prefixesToAdvertise = generatePrefixEntries(
-      numOfFlappedPrefixes, testFixture->getPrefixGenerator());
-  auto prefixesToWithdraw = prefixesToAdvertise;
 
   for (uint32_t i = 0; i < iters; ++i) {
+    auto testFixture =
+        std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId);
+    auto prefixMgr = testFixture->getPrefixManager();
+
+    // Generate `numOfExistingPrefixes` and make sure `KvStore` is updated
+    auto prefixes = generatePrefixEntries(
+        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+    prefixMgr->advertisePrefixes(std::move(prefixes)).get();
+
+    // Verify pre-existing prefixes inside `KvStore`
+    testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
+
+    // Generate `numOfUpdatedPrefixes`
+    auto prefixesToAdvertise = generatePrefixEntries(
+        numOfFlappedPrefixes, testFixture->getPrefixGenerator());
+    auto prefixesToWithdraw = prefixesToAdvertise;
+
     //
     // itertion 1.1: advertise `numOfFlappedPrefixes`
     //
