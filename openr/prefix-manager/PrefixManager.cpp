@@ -431,33 +431,6 @@ PrefixManager::buildOriginatedPrefixes(
 }
 
 void
-PrefixManager::updatePrefixKeysInKvStore(
-    const folly::CIDRNetwork& prefix, const PrefixEntry& prefixEntry) {
-  // advertise best-entry for this prefix to `KvStore`
-  auto updatedArea = addKvStoreKeyHelper(prefixEntry);
-
-  auto keysIt = advertiseStatus_.find(prefix);
-  if (keysIt != advertiseStatus_.end()) {
-    // ATTN: advertiseStatus_ collection holds "advertised" prefixes in previous
-    // round of syncing. By removing prefixes in current run, whatever left in
-    // `advertiseStatus_` will be the delta to be removed.
-    for (const auto& area : updatedArea) {
-      keysIt->second.areas.erase(area);
-    }
-
-    // remove keys which are no longer advertised
-    // e.g.
-    // t0: prefix_1 => {area_1, area_2}
-    // t1: prefix_1 => {area_1, area_3}
-    //     (prefix_1, area_2) will be removed
-    deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
-  }
-
-  // override `advertiseStatus_` for next-round syncing
-  advertiseStatus_[prefix].areas = std::move(updatedArea);
-}
-
-void
 PrefixManager::sendStaticUnicastRoutes(thrift::PrefixType prefixType) {
   DecisionRouteUpdate routeUpdatesForDecision;
   DecisionRouteUpdate routeUpdatesForBgp;
@@ -517,6 +490,33 @@ PrefixManager::populateRouteUpdates(
       advertiseStatus.publishedRoute.reset();
     }
   } // else
+}
+
+void
+PrefixManager::updatePrefixKeysInKvStore(
+    const folly::CIDRNetwork& prefix, const PrefixEntry& prefixEntry) {
+  // advertise best-entry for this prefix to `KvStore`
+  auto updatedArea = addKvStoreKeyHelper(prefixEntry);
+
+  auto keysIt = advertiseStatus_.find(prefix);
+  if (keysIt != advertiseStatus_.end()) {
+    // ATTN: advertiseStatus_ collection holds "advertised" prefixes in previous
+    // round of syncing. By removing prefixes in current run, whatever left in
+    // `advertiseStatus_` will be the delta to be removed.
+    for (const auto& area : updatedArea) {
+      keysIt->second.areas.erase(area);
+    }
+
+    // remove keys which are no longer advertised
+    // e.g.
+    // t0: prefix_1 => {area_1, area_2}
+    // t1: prefix_1 => {area_1, area_3}
+    //     (prefix_1, area_2) will be removed
+    deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
+  }
+
+  // override `advertiseStatus_` for next-round syncing
+  advertiseStatus_[prefix].areas = std::move(updatedArea);
 }
 
 std::unordered_set<std::string>
@@ -698,36 +698,6 @@ PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   }
 
   return true;
-}
-
-std::vector<PrefixEntry>
-PrefixManager::applyOriginationPolicy(
-    const std::vector<PrefixEntry>& prefixEntries,
-    const std::string& policyName) {
-  // Store them before applying origination policy for future debugging purpose
-  storeOriginatedPrefixes(prefixEntries, policyName);
-  std::vector<PrefixEntry> postOriginationPrefixes = {};
-  for (auto prefix : prefixEntries) {
-    auto [postPolicyTPrefixEntry, _] =
-        policyManager_->applyPolicy(policyName, prefix.tPrefixEntry);
-    if (postPolicyTPrefixEntry) {
-      XLOG(DBG1) << fmt::format(
-          "Prefixes {} : accepted/modified by origination policy {}",
-          folly::IPAddress::networkToString(prefix.network),
-          policyName);
-      auto dstAreasCp = prefix.dstAreas;
-      postOriginationPrefixes.emplace_back(
-          std::move(postPolicyTPrefixEntry),
-          std::move(dstAreasCp),
-          std::move(prefix.nexthops));
-    } else {
-      XLOG(DBG1) << fmt::format(
-          "Not processing prefixes {} : denied by origination policy {}",
-          folly::IPAddress::networkToString(prefix.network),
-          policyName);
-    }
-  }
-  return postOriginationPrefixes;
 }
 
 namespace {
@@ -1296,6 +1266,36 @@ PrefixManager::filterAndAddAreaRoute(
     route.set_hitPolicy(hitPolicyName);
     routes.emplace_back(std::move(route));
   }
+}
+
+std::vector<PrefixEntry>
+PrefixManager::applyOriginationPolicy(
+    const std::vector<PrefixEntry>& prefixEntries,
+    const std::string& policyName) {
+  // Store them before applying origination policy for future debugging purpose
+  storeOriginatedPrefixes(prefixEntries, policyName);
+  std::vector<PrefixEntry> postOriginationPrefixes = {};
+  for (auto prefix : prefixEntries) {
+    auto [postPolicyTPrefixEntry, _] =
+        policyManager_->applyPolicy(policyName, prefix.tPrefixEntry);
+    if (postPolicyTPrefixEntry) {
+      XLOG(DBG1) << fmt::format(
+          "Prefixes {} : accepted/modified by origination policy {}",
+          folly::IPAddress::networkToString(prefix.network),
+          policyName);
+      auto dstAreasCp = prefix.dstAreas;
+      postOriginationPrefixes.emplace_back(
+          std::move(postPolicyTPrefixEntry),
+          std::move(dstAreasCp),
+          std::move(prefix.nexthops));
+    } else {
+      XLOG(DBG1) << fmt::format(
+          "Not processing prefixes {} : denied by origination policy {}",
+          folly::IPAddress::networkToString(prefix.network),
+          policyName);
+    }
+  }
+  return postOriginationPrefixes;
 }
 
 bool
