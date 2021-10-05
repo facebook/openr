@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 #include <folly/futures/Future.h>
@@ -15,11 +14,8 @@
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 #include <glog/logging.h>
-#include <re2/re2.h>
-#include <re2/set.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/allocators/RangeAllocator.h>
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>

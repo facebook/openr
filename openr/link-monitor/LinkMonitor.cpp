@@ -6,7 +6,6 @@
  */
 
 #include <fb303/ServiceData.h>
-#include <folly/futures/Future.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
