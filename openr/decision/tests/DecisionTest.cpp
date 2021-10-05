@@ -149,7 +149,7 @@ const thrift::NextHopThrift labelPopNextHop{createNextHop(
 // timeout to wait until decision debounce
 // (i.e. spf recalculation, route rebuild) finished
 const std::chrono::milliseconds debounceTimeoutMin{10};
-const std::chrono::milliseconds debounceTimeoutMax{500};
+const std::chrono::milliseconds debounceTimeoutMax{250};
 
 // Empty Perf Events
 const thrift::AdjacencyDatabase kEmptyAdjDb;
@@ -456,13 +456,6 @@ createConfig() {
       false /* enableV4OverV6Nexthop */,
       true /* enableAdjLabels */,
       true /* enablePrependLabels */);
-
-  // timeout to wait until decision debounce
-  // (i.e. spf recalculation, route rebuild) finished
-  tConfig.decision_config_ref()->debounce_min_ms_ref() =
-      debounceTimeoutMin.count();
-  tConfig.decision_config_ref()->debounce_max_ms_ref() =
-      debounceTimeoutMax.count();
 
   // set coldstart to be longer than debounce time
   tConfig.eor_time_s_ref() = ((debounceTimeoutMax.count() * 2) / 1000);
@@ -4719,13 +4712,6 @@ class DecisionTestFixture : public ::testing::Test {
         false, /* enableV4OverV6Nexthop */
         true, /* enableAdjLabels */
         true /* enablePrependLabels */);
-
-    // timeout to wait until decision debounce
-    // (i.e. spf recalculation, route rebuild) finished
-    tConfig.decision_config_ref()->debounce_min_ms_ref() =
-        debounceTimeoutMin.count();
-    tConfig.decision_config_ref()->debounce_max_ms_ref() =
-        debounceTimeoutMax.count();
     tConfig.enable_initialization_process_ref() = true;
     return tConfig;
   }
@@ -6215,11 +6201,8 @@ TEST(Decision, RibPolicyFeatureKnob) {
       true /* enablePrependLabels */
   );
   tConfig.enable_rib_policy_ref() = false; // Disable rib_policy feature
+
   auto config = std::make_shared<Config>(tConfig);
-  tConfig.decision_config_ref()->debounce_min_ms_ref() =
-      debounceTimeoutMin.count();
-  tConfig.decision_config_ref()->debounce_max_ms_ref() =
-      debounceTimeoutMax.count();
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
   messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue;
@@ -7291,7 +7274,7 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
    */
   openr::thrift::OpenrConfig
   createConfig() override {
-    auto tConfig = getBasicOpenrConfig(
+    tConfig_ = getBasicOpenrConfig(
         "1", // nodeName
         "domain", // domainName
         {}, // areaCfg
@@ -7302,14 +7285,7 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
         false, // enableAdjLabels
         true // enablePrependLabels
     );
-    tConfig.decision_config_ref()->debounce_min_ms_ref() =
-        debounceTimeoutMin.count();
-    tConfig.decision_config_ref()->debounce_max_ms_ref() =
-        debounceTimeoutMax.count();
-    tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
-
-    tConfig_ = tConfig;
-    return tConfig;
+    return tConfig_;
   }
 
   openr::thrift::OpenrConfig tConfig_;
@@ -7419,7 +7395,7 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
    */
   openr::thrift::OpenrConfig
   createConfig() override {
-    auto tConfig = getBasicOpenrConfig(
+    tConfig_ = getBasicOpenrConfig(
         "1", // nodeName
         "domain", // domainName
         {}, // areaCfg
@@ -7430,13 +7406,7 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
         false, // enableAdjLabels
         true // enablePrependLabels
     );
-    tConfig.decision_config_ref()->debounce_min_ms_ref() =
-        debounceTimeoutMin.count();
-    tConfig.decision_config_ref()->debounce_max_ms_ref() =
-        debounceTimeoutMax.count();
-
-    tConfig_ = tConfig;
-    return tConfig;
+    return tConfig_;
   }
 
   openr::thrift::OpenrConfig tConfig_;

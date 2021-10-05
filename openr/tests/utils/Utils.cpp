@@ -60,7 +60,10 @@ createAreaConfig(
 }
 
 /*
- * Util function to genearate basic Open/R config in UT env.
+ * Util function to genearate basic Open/R config in test environment:
+ *  1) Unit Test;
+ *  2) Benchmark Test;
+ *  3) TBD;
  */
 openr::thrift::OpenrConfig
 getBasicOpenrConfig(
@@ -73,26 +76,14 @@ getBasicOpenrConfig(
     bool enableV4OverV6Nexthop,
     bool enableAdjLabels,
     bool enablePrependLabels) {
-  openr::thrift::LinkMonitorConfig linkMonitorConfig;
-  linkMonitorConfig.include_interface_regexes_ref() =
-      std::vector<std::string>{".*"};
-  linkMonitorConfig.redistribute_interface_regexes_ref() =
-      std::vector<std::string>{"lo1"};
-
-  openr::thrift::KvstoreConfig kvstoreConfig;
-
-  openr::thrift::SparkConfig sparkConfig;
-  sparkConfig.hello_time_s_ref() = 2;
-  sparkConfig.keepalive_time_s_ref() = 1;
-  sparkConfig.fastinit_hello_time_ms_ref() = 100;
-  sparkConfig.hold_time_s_ref() = 2;
-  sparkConfig.graceful_restart_time_s_ref() = 6;
-
-  openr::thrift::DecisionConfig decisionConfig;
-  decisionConfig.enable_bgp_route_programming_ref() = true;
-
+  /*
+   * [DEFAULT] thrift::OpenrConfig
+   */
   openr::thrift::OpenrConfig config;
 
+  /*
+   * [OVERRIDE] config knob toggling
+   */
   config.node_name_ref() = nodeName;
   config.domain_ref() = domainName;
   config.enable_v4_ref() = enableV4;
@@ -101,10 +92,6 @@ getBasicOpenrConfig(
   config.dryrun_ref() = dryrun;
   config.ip_tos_ref() = 192;
 
-  config.kvstore_config_ref() = kvstoreConfig;
-  config.link_monitor_config_ref() = linkMonitorConfig;
-  config.spark_config_ref() = sparkConfig;
-  config.decision_config_ref() = decisionConfig;
   config.enable_rib_policy_ref() = true;
   config.assume_drained_ref() = false;
   config.enable_fib_ack_ref() = true;
@@ -112,6 +99,43 @@ getBasicOpenrConfig(
   config.prefix_hold_time_s_ref() = 0;
   config.enable_new_prefix_format_ref() = true;
 
+  /*
+   * [OVERRIDE] thrift::LinkMonitorConfig
+   */
+  openr::thrift::LinkMonitorConfig linkMonitorConfig;
+  linkMonitorConfig.include_interface_regexes_ref() =
+      std::vector<std::string>{".*"};
+  linkMonitorConfig.redistribute_interface_regexes_ref() =
+      std::vector<std::string>{"lo1"};
+  config.link_monitor_config_ref() = linkMonitorConfig;
+
+  /*
+   * [OVERRIDE] thrift::KvStoreConfig
+   */
+  openr::thrift::KvstoreConfig kvstoreConfig;
+  config.kvstore_config_ref() = kvstoreConfig;
+
+  /*
+   * [OVERRIDE] thrift::SparkConfig
+   */
+  openr::thrift::SparkConfig sparkConfig;
+  sparkConfig.hello_time_s_ref() = 2;
+  sparkConfig.keepalive_time_s_ref() = 1;
+  sparkConfig.fastinit_hello_time_ms_ref() = 100;
+  sparkConfig.hold_time_s_ref() = 2;
+  sparkConfig.graceful_restart_time_s_ref() = 6;
+  config.spark_config_ref() = sparkConfig;
+
+  /*
+   * [OVERRIDE] thrift::DecisionConfig
+   */
+  openr::thrift::DecisionConfig decisionConfig;
+  decisionConfig.enable_bgp_route_programming_ref() = true;
+  config.decision_config_ref() = decisionConfig;
+
+  /*
+   * [OVERRIDE] thrift::AreaConfig
+   */
   if (areaCfg.empty()) {
     config.areas_ref() = {createAreaConfig(
         kTestingAreaName, {".*"}, {".*"}, std::nullopt, enableAdjLabels)};
@@ -119,6 +143,9 @@ getBasicOpenrConfig(
     config.areas_ref() = areaCfg;
   }
 
+  /*
+   * [OVERRIDE] (SR) thrift::SegmentRoutingConfig
+   */
   openr::thrift::SegmentRoutingConfig srConfig;
   if (enablePrependLabels) {
     openr::thrift::MplsLabelRanges prepend_label_ranges;

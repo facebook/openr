@@ -252,25 +252,13 @@ class PrefixManagerTestFixture : public testing::Test {
       earlyStaticRoutesReaderPtr;
 };
 
-class PrefixManagerPrefixKeyFormatTestFixture
-    : public PrefixManagerTestFixture {
- protected:
-  thrift::OpenrConfig
-  createConfig() override {
-    auto tConfig = getBasicOpenrConfig(nodeId_);
-    return tConfig;
-  }
-};
-
 /*
  * This is to test backward compatibility between old and new prefix key format.
  * We will make sure:
  *  1) There will be no crash due to parsing old/new prefix keys;
  *  2) Prefix key format upgrade/downgrade is supported;
  */
-TEST_F(
-    PrefixManagerPrefixKeyFormatTestFixture,
-    PrefixKeyFormatBackwardCompatibility) {
+TEST_F(PrefixManagerTestFixture, PrefixKeyFormatBackwardCompatibility) {
   // Make sure we have new format of keys added
   auto prefixKey1 = PrefixKey(
       nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName, true);
@@ -3375,8 +3363,7 @@ class PrefixManagerKeyValRequestQueueTestFixture
  public:
   virtual thrift::OpenrConfig
   createConfig() override {
-    auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.enable_fib_ack_ref() = true;
+    auto tConfig = PrefixManagerTestFixture::createConfig();
     tConfig.enable_kvstore_request_queue_ref() = true;
     return tConfig;
   }

@@ -40,6 +40,7 @@ class OpenrCtrlFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
+    // create config
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : {kSpineAreaId, kPlaneAreaId, kPodAreaId}) {
       thrift::AreaConfig area;
@@ -48,7 +49,6 @@ class OpenrCtrlFixture : public ::testing::Test {
       area.neighbor_regexes_ref() = {".*"};
       areaConfig.emplace_back(std::move(area));
     }
-    // create config
     auto tConfig = getBasicOpenrConfig(
         nodeName_,
         "domain",
@@ -60,35 +60,14 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* enableAdjLabels */,
         true /* enablePrependLabels */);
 
-    // decision config
-    tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
-    tConfig.decision_config_ref()->debounce_max_ms_ref() = 500;
-    tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
-
-    // kvstore config
+    // override kvstore config
     tConfig.kvstore_config_ref()->enable_flood_optimization_ref() = true;
     tConfig.kvstore_config_ref()->is_flood_root_ref() = true;
-
-    // link monitor config
-    auto& lmConf = *tConfig.link_monitor_config_ref();
-    lmConf.linkflap_initial_backoff_ms_ref() = 1;
-    lmConf.linkflap_max_backoff_ms_ref() = 8;
-    lmConf.use_rtt_metric_ref() = false;
-    *lmConf.include_interface_regexes_ref() = {"po.*"};
-    lmConf.enable_perf_measurement_ref() = false;
-    tConfig.assume_drained_ref() = false;
-
-    // persistent config-store config
-    std::string const configStoreFile = "/tmp/openr-ctrl-handler-test.bin";
-    tConfig.persistent_config_store_path_ref() = configStoreFile;
-
-    // ip_tos config
-    tConfig.ip_tos_ref() = 192;
 
     config = std::make_shared<Config>(tConfig);
 
     // Create the PersistentStore and start fresh
-    std::remove(configStoreFile.data());
+    std::remove((*tConfig.persistent_config_store_path_ref()).data());
     persistentStore = std::make_unique<PersistentStore>(config);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
