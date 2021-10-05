@@ -287,41 +287,29 @@ TEST_P(KvStoreTestTtlFixture, Ring) {
 }
 
 /**
- * Create an arbitrary topology using random Albert-Barabasi graph
+ * Create a grid topology in a 3 by 3 grid. Each node is connected to all
+ * adjacent nodes.
+ *
+ * 0   1   2
+ * 3   4   5
+ * 6   7   8
  */
 TEST_P(KvStoreTestTtlFixture, Graph) {
   // how many stores/syncers to create
-  const unsigned int kNumStores = 16;
-  // how many links for each new node
-  const unsigned int kNumLinks = 3;
+  const unsigned int kNumStores = 9;
 
   // using set to avoid duplicate neighbors
-  std::vector<std::unordered_set<int>> adjacencyList;
-  // start w/ a core graph by connecting 2 nodes
-  adjacencyList.push_back({1});
-  adjacencyList.push_back({0});
-  // track how many links a node is incident w/ by its occurrences
-  std::vector<int> incidentNodes = {0, 1};
-
-  // preferential attachment
-  for (unsigned int i = 2; i < kNumStores; ++i) {
-    // 2 * # of links
-    int totalDegrees = incidentNodes.size();
-    std::unordered_set<int> neighbors;
-    for (unsigned int j = 0; j < kNumLinks; ++j) {
-      auto neighbor = incidentNodes[folly::Random::rand32() % totalDegrees];
-      // already connected
-      if (adjacencyList[neighbor].count(i)) {
-        continue;
-      }
-      // connect i w/ neighbor, bidirectionally
-      adjacencyList[neighbor].insert(i);
-      neighbors.insert(neighbor);
-      incidentNodes.push_back(i);
-      incidentNodes.push_back(neighbor);
-    }
-    adjacencyList.push_back(neighbors);
-  }
+  std::vector<std::unordered_set<int>> adjacencyList = {
+      {3, 1},
+      {0, 4, 2},
+      {1, 5},
+      {0, 4, 6},
+      {1, 3, 5, 7},
+      {2, 4, 8},
+      {3, 7},
+      {6, 4, 8},
+      {7, 5},
+  };
 
   VLOG(1) << "Adjacency list: ";
   for (const auto&& [index, set] : adjacencyList | ranges::views::enumerate) {
