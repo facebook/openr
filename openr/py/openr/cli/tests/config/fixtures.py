@@ -55,7 +55,7 @@ OPENR_CONFIG_STR = r"""
   "enable_bgp_peering": true,
   "enable_fib_ack": false,
   "enable_fib_service_waiting": true,
-  "enable_kvstore_request_queue": false,
+  "enable_kvstore_request_queue": true,
   "enable_new_gr_behavior": true,
   "enable_new_prefix_format": true,
   "enable_rib_policy": false,

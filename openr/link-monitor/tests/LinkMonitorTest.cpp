@@ -366,10 +366,7 @@ class LinkMonitorTestFixture : public testing::Test {
     lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
     lmConf.use_rtt_metric_ref() = false;
 
-    tConfig.enable_new_gr_behavior_ref() = true;
-    tConfig.assume_drained_ref() = false;
     tConfig.persistent_config_store_path_ref() = kConfigStorePath;
-    tConfig.enable_kvstore_request_queue_ref() = true;
     return tConfig;
   }
 

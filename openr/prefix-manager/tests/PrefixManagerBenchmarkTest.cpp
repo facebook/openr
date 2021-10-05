@@ -25,7 +25,6 @@ class PrefixManagerBenchmarkTestFixture {
   explicit PrefixManagerBenchmarkTestFixture(const std::string& nodeId) {
     // construct basic `OpenrConfig`
     auto tConfig = getBasicOpenrConfig(nodeId);
-    tConfig.enable_kvstore_request_queue_ref() = true;
     config_ = std::make_shared<Config>(tConfig);
 
     // spawn `KvStore` and `PrefixManager` for benchmarking

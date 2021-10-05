@@ -50,9 +50,6 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
   initKvStore(std::string nodeId, uint32_t keyTtl = kLongTtl) {
     auto tConfig = getBasicOpenrConfig(nodeId, "domain");
 
-    // enable kvstore request queue in config
-    tConfig.enable_kvstore_request_queue_ref() = true;
-
     // override key_ttl_ms field
     thrift::KvstoreConfig kvConf;
     kvConf.key_ttl_ms_ref() = keyTtl;

@@ -379,7 +379,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     const auto nodeId = folly::sformat("test_store{}", round);
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
-    kvStoreWrapper = std::make_unique<KvStoreWrapper>(zmqContext, config);
+    kvStoreWrapper = std::make_unique<KvStoreWrapper>(
+        zmqContext, config, std::nullopt, kvRequestQueue.getReader());
     kvStoreWrapper->run();
 
     // Attach a kvstore client in main event loop

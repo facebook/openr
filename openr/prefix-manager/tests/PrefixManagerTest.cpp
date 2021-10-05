@@ -821,39 +821,32 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   evb.run();
 }
 
-TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
+class PrefixManagerSmallTtlTestFixture : public PrefixManagerTestFixture {
+ public:
+  virtual thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = PrefixManagerTestFixture::createConfig();
+    tConfig.kvstore_config_ref()->key_ttl_ms_ref() = ttl_.count();
+    return tConfig;
+  }
+
+ protected:
+  std::chrono::milliseconds ttl_{100};
+};
+
+TEST_F(PrefixManagerSmallTtlTestFixture, PrefixWithdrawExpiry) {
   int scheduleAt{0};
-  std::chrono::milliseconds ttl{100};
-  const std::string nodeId{"node-2"};
-
-  // spin up a new PrefixManager add verify that it loads the config
-  auto tConfig = getBasicOpenrConfig(nodeId);
-  tConfig.kvstore_config_ref()->key_ttl_ms_ref() = ttl.count();
-  auto config = std::make_shared<Config>(tConfig);
-
-  auto prefixManager2 = std::make_unique<PrefixManager>(
-      staticRouteUpdatesQueue,
-      kvRequestQueue,
-      prefixMgrRouteUpdatesQueue,
-      kvStoreWrapper->getReader(),
-      prefixUpdatesQueue.getReader(),
-      fibRouteUpdatesQueue.getReader(),
-      config,
-      kvStoreWrapper->getKvStore());
-  auto prefixManagerThread2 =
-      std::make_unique<std::thread>([&]() { prefixManager2->run(); });
-  prefixManager2->waitUntilRunning();
 
   auto prefixKey1 = PrefixKey(
-      nodeId, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName);
+      nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName);
   auto prefixKey2 = PrefixKey(
-      nodeId, toIPNetwork(*prefixEntry2.prefix_ref()), kTestingAreaName);
+      nodeId_, toIPNetwork(*prefixEntry2.prefix_ref()), kTestingAreaName);
 
   // insert two prefixes
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
-        prefixManager2->advertisePrefixes({prefixEntry1}).get();
-        prefixManager2->advertisePrefixes({prefixEntry2}).get();
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
+        prefixManager->advertisePrefixes({prefixEntry2}).get();
       });
 
   // check both prefixes are in kvstore
@@ -874,7 +867,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
         EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
 
         // withdraw prefixEntry1
-        prefixManager2->withdrawPrefixes({prefixEntry1}).get();
+        prefixManager->withdrawPrefixes({prefixEntry1}).get();
       });
 
   // check `prefixEntry1` should have been expired, prefix 2 should be there
@@ -882,7 +875,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt +=
-          2 * Constants::kKvStoreSyncThrottleTimeout.count() + ttl.count()),
+          2 * Constants::kKvStoreSyncThrottleTimeout.count() + ttl_.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
         auto maybeValue =
@@ -900,13 +893,6 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
 
   // let magic happen
   evb.run();
-
-  // cleanup
-  prefixUpdatesQueue.close();
-  fibRouteUpdatesQueue.close();
-  kvStoreWrapper->closeQueue();
-  prefixManager2->stop();
-  prefixManagerThread2->join();
 }
 
 TEST_F(PrefixManagerTestFixture, GetPrefixes) {
@@ -3358,18 +3344,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   }
 }
 
-class PrefixManagerKeyValRequestQueueTestFixture
-    : public PrefixManagerTestFixture {
- public:
-  virtual thrift::OpenrConfig
-  createConfig() override {
-    auto tConfig = PrefixManagerTestFixture::createConfig();
-    tConfig.enable_kvstore_request_queue_ref() = true;
-    return tConfig;
-  }
-};
-
-TEST_F(PrefixManagerKeyValRequestQueueTestFixture, BasicKeyValueRequestQueue) {
+TEST_F(PrefixManagerTestFixture, BasicKeyValueRequestQueue) {
   const auto prefixKey = "prefixKeyStr";
   const auto prefixVal = "prefixDbStr";
   const auto prefixDeletedVal = "prefixDeletedStr";
@@ -3418,7 +3393,7 @@ TEST_F(PrefixManagerKeyValRequestQueueTestFixture, BasicKeyValueRequestQueue) {
   evb.run();
 }
 
-TEST_F(PrefixManagerKeyValRequestQueueTestFixture, AdvertisePrefixes) {
+TEST_F(PrefixManagerTestFixture, AdvertisePrefixes) {
   int scheduleAt{0};
   auto prefixKey1 = PrefixKey(
       nodeId_,
@@ -3481,7 +3456,7 @@ TEST_F(PrefixManagerKeyValRequestQueueTestFixture, AdvertisePrefixes) {
   evb.run();
 }
 
-TEST_F(PrefixManagerKeyValRequestQueueTestFixture, WithdrawPrefix) {
+TEST_F(PrefixManagerTestFixture, WithdrawPrefix) {
   int scheduleAt{0};
   auto prefixKeyStr =
       PrefixKey(

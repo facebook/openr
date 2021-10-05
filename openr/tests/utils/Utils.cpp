@@ -95,8 +95,9 @@ getBasicOpenrConfig(
   config.enable_rib_policy_ref() = true;
   config.assume_drained_ref() = false;
   config.enable_fib_ack_ref() = true;
-  config.enable_kvstore_request_queue_ref() = false;
+  config.enable_kvstore_request_queue_ref() = true;
   config.prefix_hold_time_s_ref() = 0;
+  config.enable_new_gr_behavior_ref() = true;
   config.enable_new_prefix_format_ref() = true;
 
   /*
