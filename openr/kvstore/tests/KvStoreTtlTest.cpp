@@ -112,7 +112,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
     // Expected global Key-Value database
     std::unordered_map<std::string, thrift::Value> expectedGlobalKeyVals;
 
-    // For each `key`, generate random `value` and submit it to any random
+    // For each `key`, generate a `value` and submit it to the first
     // store. After submission of all keys, make sure all KvStore are in
     // consistent state. We perform the same thing `kNumIter` times.
     int64_t version = 1;
@@ -125,11 +125,11 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
       // KvStores in this iteration.
       std::map<std::string, thrift::Value> expectedKeyVals;
 
-      // Submit a bunch of keys/values to a random store.
+      // Submit a bunch of keys/values to the first store.
       for (unsigned int j = 0; j < kNumKeys; ++j) {
         // Create new key-value pair.
         const std::string key = folly::sformat("key-{}-{}", i, j);
-        const auto value = genRandomStr(kValueStrSize);
+        const auto value = fmt::format("value-{}-{}", i, j);
         auto thriftVal = createThriftValue(
             version,
             "pluto" /* originatorId */,
