@@ -557,8 +557,9 @@ main(int argc, char** argv) {
       allThreads, orderedEvbs, watchdog, "ctrl_evb", std::move(ctrlOpenrEvb));
 
   // Start the thrift server
-  auto thriftCtrlServer = std::make_unique<OpenrThriftCtrlServer>();
-  thriftCtrlServer->start(config, ctrlHandler, sslContext);
+  auto thriftCtrlServer =
+      std::make_unique<OpenrThriftCtrlServer>(config, ctrlHandler, sslContext);
+  thriftCtrlServer->start();
 
   // Wait for main eventbase to stop
   mainEvbThread.join();

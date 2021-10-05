@@ -20,15 +20,27 @@ namespace openr {
  */
 class OpenrThriftCtrlServer {
  public:
-  void start(
+  OpenrThriftCtrlServer(
       std::shared_ptr<const Config> config,
       std::shared_ptr<openr::OpenrCtrlHandler>& handler,
       std::shared_ptr<wangle::SSLContextConfig> sslContext);
+
+  // This will start the default thrift server and thread.
+  // You could design your own server implementation.
+  void start();
+
+  // Stop all servers and threads.
   void stop();
 
  private:
-  std::unique_ptr<apache::thrift::ThriftServer> thriftCtrlServer_;
-  std::thread thriftCtrlServerThread_;
+  // Vector for all thrift severs and their threads
+  std::vector<std::unique_ptr<apache::thrift::ThriftServer>>
+      thriftCtrlServerVec_;
+  std::vector<std::thread> thriftCtrlServerThreadVec_;
+
+  std::shared_ptr<const Config> config_;
+  std::shared_ptr<openr::OpenrCtrlHandler> ctrlHandler_;
+  std::shared_ptr<wangle::SSLContextConfig> sslContext_;
 };
 
 } // namespace openr

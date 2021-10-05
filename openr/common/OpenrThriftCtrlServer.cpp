@@ -9,57 +9,70 @@
 
 namespace openr {
 
-void
-OpenrThriftCtrlServer::start(
+OpenrThriftCtrlServer::OpenrThriftCtrlServer(
     std::shared_ptr<const Config> config,
-    std::shared_ptr<openr::OpenrCtrlHandler>& ctrlHandler,
-    std::shared_ptr<wangle::SSLContextConfig> sslContext) {
+    std::shared_ptr<openr::OpenrCtrlHandler>& handler,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext)
+    : config_{config}, ctrlHandler_{handler}, sslContext_{sslContext} {}
+
+void
+OpenrThriftCtrlServer::start() {
   // Setup OpenrCtrl thrift server
-  CHECK(ctrlHandler);
-  thriftCtrlServer_ = std::make_unique<apache::thrift::ThriftServer>();
-  thriftCtrlServer_->setInterface(ctrlHandler);
-  thriftCtrlServer_->setNumIOWorkerThreads(1);
+  CHECK(ctrlHandler_);
+  auto server = std::make_unique<apache::thrift::ThriftServer>();
+  server->setInterface(ctrlHandler_);
+  server->setNumIOWorkerThreads(1);
   // Intentionally kept this as (1). If you're changing to higher number please
   // address thread safety for private member variables in OpenrCtrlHandler
-  thriftCtrlServer_->setNumCPUWorkerThreads(1);
+  server->setNumCPUWorkerThreads(1);
   // Enable TOS reflection on the server socket
-  thriftCtrlServer_->setTosReflect(true);
+  server->setTosReflect(true);
   // Set the port and interface for OpenrCtrl thrift server
-  thriftCtrlServer_->setPort(
-      config->getThriftServerConfig().get_openr_ctrl_port());
+  server->setPort(config_->getThriftServerConfig().get_openr_ctrl_port());
 
   // Setup TLS
-  if (config->isSecureThriftServerEnabled()) {
+  if (config_->isSecureThriftServerEnabled()) {
     setupThriftServerTls(
-        *thriftCtrlServer_,
-        config->getSSLThriftPolicy(),
-        config->getSSLSeedPath(),
-        sslContext);
+        *server,
+        config_->getSSLThriftPolicy(),
+        config_->getSSLSeedPath(),
+        sslContext_);
   }
 
   // Serve
-  thriftCtrlServerThread_ = std::thread([&]() noexcept {
+  thriftCtrlServerThreadVec_.emplace_back(std::thread([&]() noexcept {
     LOG(INFO) << "Starting ThriftCtrlServer thread ...";
     folly::setThreadName("openr-ThriftCtrlServer");
-    thriftCtrlServer_->serve();
+    server->serve();
     LOG(INFO) << "ThriftCtrlServer thread got stopped.";
-  });
+  }));
+
   // Wait until thrift server starts
   while (true) {
-    auto evb = thriftCtrlServer_->getServeEventBase();
+    auto evb = server->getServeEventBase();
     if (evb != nullptr and evb->isRunning()) {
       break;
     }
     std::this_thread::yield();
   }
+
+  // Add to the server vector
+  thriftCtrlServerVec_.emplace_back(std::move(server));
 }
 
 void
 OpenrThriftCtrlServer::stop() {
   // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
-  thriftCtrlServer_->stop();
-  thriftCtrlServerThread_.join();
-  thriftCtrlServer_.reset();
+  for (auto& server : thriftCtrlServerVec_) {
+    server->stop();
+  }
+  // Wait for all threads
+  for (auto& thread : thriftCtrlServerThreadVec_) {
+    thread.join();
+  }
+  for (auto& server : thriftCtrlServerVec_) {
+    server.reset();
+  }
 }
 
 } // namespace openr
