@@ -142,6 +142,10 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         EXPECT_GE(stores_.size(), 0);
         EXPECT_TRUE(store->setKey(kTestingAreaName, key, thriftVal));
         const auto dump = store->dumpAll(kTestingAreaName);
+        // TODO: This is a hack! Pause thread for a bit to allow key to be
+        // retrieved. T102358658 is task that has been created to address this
+        // issue.
+        std::this_thread::sleep_for(500ms);
         EXPECT_FALSE(dump.empty());
         // Verify 1. hash is updated in KvStore
         // 2. dumpHashes request returns key values as expected
