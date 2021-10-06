@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/kvstore/Dual.h>
 
 namespace openr {
@@ -110,8 +112,8 @@ Dual::routeAffected() {
   auto dmin = getMinDistance();
   if (info_.distance != dmin) {
     // distance changed
-    VLOG(2) << rootId << "::" << nodeId << ": distance changed "
-            << info_.distance << " -> " << dmin;
+    XLOG(DBG2) << rootId << "::" << nodeId << ": distance changed "
+               << info_.distance << " -> " << dmin;
     return true;
   }
 
@@ -135,8 +137,8 @@ Dual::routeAffected() {
   if (nexthops.count(*info_.nexthop) == 0) {
     // nextHop changed
     auto oldnh = info_.nexthop.has_value() ? *info_.nexthop : "none";
-    VLOG(2) << rootId << "::" << nodeId << ": nexthop changed " << oldnh
-            << " -> " << folly::join(",", nexthops);
+    XLOG(DBG2) << rootId << "::" << nodeId << ": nexthop changed " << oldnh
+               << " -> " << folly::join(",", nexthops);
     return true;
   }
   return false;
@@ -153,8 +155,8 @@ Dual::meetFeasibleCondition(std::string& nexthop, int64_t& distance) {
     }
     const auto& rd = info_.neighborInfos[neighbor].reportDistance;
     if (rd < info_.feasibleDistance and addDistances(ld, rd) == dmin) {
-      VLOG(2) << rootId << "::" << nodeId << ": meet FC: " << neighbor << ", "
-              << rd << ", " << dmin;
+      XLOG(DBG2) << rootId << "::" << nodeId << ": meet FC: " << neighbor
+                 << ", " << rd << ", " << dmin;
       nexthop = neighbor;
       distance = dmin;
       return true;
@@ -270,7 +272,7 @@ Dual::tryLocalOrDiffusing(
       // send reply back before starting diffusing
       sendReply(msgsToSend);
     }
-    VLOG(2) << rootId << "::" << nodeId << ": start diffusing";
+    XLOG(DBG2) << rootId << "::" << nodeId << ": start diffusing";
     bool success = diffusingComputation(msgsToSend);
     if (success) {
       info_.sm.processEvent(event, false);
@@ -394,8 +396,8 @@ Dual::peerUp(
     const std::string& neighbor,
     int64_t cost,
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
-  LOG(INFO) << rootId << "::" << nodeId << ": LINK UP event from (" << neighbor
-            << ", " << cost << ")";
+  XLOG(INFO) << rootId << "::" << nodeId << ": LINK UP event from (" << neighbor
+             << ", " << cost << ")";
 
   // reset parent, if I chose this neighbor as parent before, but I didn't
   // receive peer-down event(non-graceful shutdown), reset nexthop and distance
@@ -458,8 +460,8 @@ void
 Dual::peerDown(
     const std::string& neighbor,
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
-  LOG(INFO) << rootId << "::" << nodeId << ": LINK DOWN event from "
-            << neighbor;
+  XLOG(INFO) << rootId << "::" << nodeId << ": LINK DOWN event from "
+             << neighbor;
   // clear counters
   clearCounters(neighbor);
 
@@ -502,8 +504,8 @@ Dual::processUpdate(
       << " != my-root-id: " << rootId;
 
   const auto& rd = *update.distance_ref();
-  VLOG(2) << rootId << "::" << nodeId << ": received UPDATE from (" << neighbor
-          << ", " << rd << ")";
+  XLOG(DBG2) << rootId << "::" << nodeId << ": received UPDATE from ("
+             << neighbor << ", " << rd << ")";
   (*counters_[neighbor].updateRecv_ref())++;
   (*counters_[neighbor].totalRecv_ref())++;
 
@@ -569,8 +571,8 @@ Dual::processQuery(
       << " != my-root-id: " << rootId;
 
   const auto& rd = *query.distance_ref();
-  VLOG(2) << rootId << "::" << nodeId << ": received QUERY from (" << neighbor
-          << ", " << rd << ")";
+  XLOG(DBG2) << rootId << "::" << nodeId << ": received QUERY from ("
+             << neighbor << ", " << rd << ")";
   (*counters_[neighbor].queryRecv_ref())++;
   (*counters_[neighbor].totalRecv_ref())++;
 
@@ -608,8 +610,8 @@ Dual::processReply(
       << " != my-root-id: " << rootId;
 
   const auto& reportDistance = *reply.distance_ref();
-  VLOG(2) << rootId << "::" << nodeId << ": received REPLY from (" << neighbor
-          << ", " << reportDistance << ")";
+  XLOG(DBG2) << rootId << "::" << nodeId << ": received REPLY from ("
+             << neighbor << ", " << reportDistance << ")";
   (*counters_[neighbor].replyRecv_ref())++;
   (*counters_[neighbor].totalRecv_ref())++;
 
@@ -617,8 +619,8 @@ Dual::processReply(
     // received a reply when I don't expect to receive a reply from it
     // this is OK, this can happen when I detect link-down event before I
     // receive the reply, just ignore it.
-    VLOG(2) << rootId << "::" << nodeId << " recv REPLY from " << neighbor
-            << " while I dont expect a reply, ignore it";
+    XLOG(DBG2) << rootId << "::" << nodeId << " recv REPLY from " << neighbor
+               << " while I dont expect a reply, ignore it";
     return;
   }
 

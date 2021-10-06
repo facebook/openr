@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/logging/xlog.h>
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
@@ -36,11 +37,11 @@ KvStoreClientInternal::KvStoreClientInternal(
     taskFuture_ = eventBase_->addFiberTaskFuture(
         [q = std::move(kvStore_->getKvStoreUpdatesReader()),
          this]() mutable noexcept {
-          LOG(INFO) << "Starting KvStore updates processing fiber";
+          XLOG(INFO) << "Starting KvStore updates processing fiber";
           while (true) {
             auto maybePub = q.get(); // perform read
             if (maybePub.hasError()) {
-              LOG(INFO) << "Terminating KvStore updates processing fiber";
+              XLOG(INFO) << "Terminating KvStore updates processing fiber";
               break;
             }
             // Publication.kvStoreSynced is published dedicatedly in OpenR
@@ -104,7 +105,7 @@ KvStoreClientInternal::initTimers() {
   // Create timer to advertise pending key-vals
   advertiseKeyValsTimer_ =
       folly::AsyncTimeout::make(*eventBase_->getEvb(), [this]() noexcept {
-        VLOG(3) << "Received timeout event.";
+        XLOG(DBG3) << "Received timeout event.";
 
         // Advertise all pending keys
         advertisePendingKeys();
@@ -113,7 +114,8 @@ KvStoreClientInternal::initTimers() {
         for (auto& [_, areaBackoffs] : backoffs_) {
           for (auto& [key, backoff] : areaBackoffs) {
             if (backoff.canTryNow()) {
-              VLOG(2) << "Clearing off the exponential backoff for key " << key;
+              XLOG(DBG2) << "Clearing off the exponential backoff for key "
+                         << key;
               backoff.reportSuccess();
             }
           }
@@ -221,8 +223,8 @@ KvStoreClientInternal::persistKey(
     std::chrono::milliseconds const ttl) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
-  VLOG(3) << "KvStoreClientInternal: persistKey called for key:" << key
-          << " area:" << area.t;
+  XLOG(DBG3) << "KvStoreClientInternal: persistKey called for key:" << key
+             << " area:" << area.t;
 
   // local variable to hold pending keys to advertise
   std::unordered_map<AreaId, std::unordered_set<std::string>>
@@ -374,7 +376,7 @@ KvStoreClientInternal::setKey(
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
   CHECK(thriftValue.value_ref());
 
-  VLOG(3) << "KvStoreClientInternal: setKey called for key " << key;
+  XLOG(DBG3) << "KvStoreClientInternal: setKey called for key " << key;
 
   std::unordered_map<std::string, thrift::Value> keyVals;
   keyVals.emplace(key, thriftValue);
@@ -439,8 +441,8 @@ void
 KvStoreClientInternal::unsetKey(AreaId const& area, std::string const& key) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
-  VLOG(3) << "KvStoreClientInternal: unsetKey called for key " << key
-          << " area " << area.t;
+  XLOG(DBG3) << "KvStoreClientInternal: unsetKey called for key " << key
+             << " area " << area.t;
 
   persistedKeyVals_[area].erase(key);
   backoffs_[area].erase(key);
@@ -456,7 +458,7 @@ KvStoreClientInternal::clearKey(
     std::chrono::milliseconds ttl) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
-  VLOG(2) << "KvStoreClientInternal: clear key called for key " << key;
+  XLOG(DBG2) << "KvStoreClientInternal: clear key called for key " << key;
 
   // erase keys
   unsetKey(area, key);
@@ -543,8 +545,8 @@ std::optional<thrift::Value>
 KvStoreClientInternal::getKey(AreaId const& area, std::string const& key) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
-  VLOG(3) << "KvStoreClientInternal: getKey called for key " << key << ", area "
-          << area.t;
+  XLOG(DBG3) << "KvStoreClientInternal: getKey called for key " << key
+             << ", area " << area.t;
 
   thrift::Publication pub;
   try {
@@ -556,11 +558,11 @@ KvStoreClientInternal::getKey(AreaId const& area, std::string const& key) {
                << ex.what();
     return std::nullopt;
   }
-  VLOG(3) << "Received " << pub.keyVals_ref()->size() << " key-vals.";
+  XLOG(DBG3) << "Received " << pub.keyVals_ref()->size() << " key-vals.";
 
   auto it = pub.keyVals_ref()->find(key);
   if (it == pub.keyVals_ref()->end()) {
-    VLOG(2) << "Key: " << key << " NOT found in kvstore. Area: " << area.t;
+    XLOG(DBG2) << "Key: " << key << " NOT found in kvstore. Area: " << area.t;
     return std::nullopt;
   }
   return it->second;
@@ -597,7 +599,7 @@ KvStoreClientInternal::subscribeKey(
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
   CHECK(bool(callback)) << "Callback function for " << key << " is empty";
 
-  VLOG(3) << "KvStoreClientInternal: subscribeKey called for key " << key;
+  XLOG(DBG3) << "KvStoreClientInternal: subscribeKey called for key " << key;
   keyCallbacks_[area][key] = std::move(callback);
 
   return fetchKeyValue ? getKey(area, key) : std::nullopt;
@@ -627,7 +629,7 @@ KvStoreClientInternal::unsubscribeKey(
     AreaId const& area, std::string const& key) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
 
-  VLOG(3) << "KvStoreClientInternal: unsubscribeKey called for key " << key;
+  XLOG(DBG3) << "KvStoreClientInternal: unsubscribeKey called for key " << key;
   // Store callback into KeyCallback map
   if (keyCallbacks_[area].erase(key) == 0) {
     LOG(WARNING) << "UnsubscribeKey called for non-existing key" << key;
@@ -691,14 +693,14 @@ KvStoreClientInternal::processPublication(
         // NOTE: We don't need to advertise the value back
         if (sk != keyTtlBackoffs.end() and
             *sk->second.first.ttlVersion_ref() < *rcvdValue.ttlVersion_ref()) {
-          VLOG(2) << fmt::format(
-                         "Bumping TTL version for [key: {}, v: {}, "
-                         "originatorId: {}]",
-                         key,
-                         *rcvdValue.version_ref(),
-                         *rcvdValue.originatorId_ref())
-                  << " to " << (*rcvdValue.ttlVersion_ref() + 1) << " from "
-                  << *setValue.ttlVersion_ref();
+          XLOG(DBG2) << fmt::format(
+                            "Bumping TTL version for [key: {}, v: {}, "
+                            "originatorId: {}]",
+                            key,
+                            *rcvdValue.version_ref(),
+                            *rcvdValue.originatorId_ref())
+                     << " to " << (*rcvdValue.ttlVersion_ref() + 1) << " from "
+                     << *setValue.ttlVersion_ref();
           setValue.ttlVersion_ref() = *rcvdValue.ttlVersion_ref() + 1;
         }
       }
@@ -816,7 +818,7 @@ KvStoreClientInternal::advertisePendingKeys(
 
       if (not backoff.canTryNow()) {
         timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
-        VLOG(2) << "Skipping key: " << key << ", area: " << area.t;
+        XLOG(DBG2) << "Skipping key: " << key << ", area: " << area.t;
         continue;
       }
 
@@ -846,7 +848,7 @@ KvStoreClientInternal::advertisePendingKeys(
   }
 
   // Schedule next-timeout for processing/clearing backoffs
-  VLOG(2) << "Scheduling timer after " << timeout.count() << "ms.";
+  XLOG(DBG2) << "Scheduling timer after " << timeout.count() << "ms.";
   advertiseKeyValsTimer_->scheduleTimeout(timeout);
 }
 
@@ -864,7 +866,7 @@ KvStoreClientInternal::advertiseTtlUpdates() {
       auto& thriftValue = val.first;
       auto& backoff = val.second;
       if (not backoff.canTryNow()) {
-        VLOG(2) << "Skipping key: " << key << ", area: " << area.t;
+        XLOG(DBG2) << "Skipping key: " << key << ", area: " << area.t;
         timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
         continue;
       }
@@ -901,7 +903,7 @@ KvStoreClientInternal::advertiseTtlUpdates() {
   }
 
   // Schedule next-timeout for processing/clearing backoffs
-  VLOG(2) << "Scheduling ttl timer after " << timeout.count() << "ms.";
+  XLOG(DBG2) << "Scheduling ttl timer after " << timeout.count() << "ms.";
   ttlTimer_->scheduleTimeout(timeout);
 }
 

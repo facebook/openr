@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/common/Constants.h>
 #include <openr/kvstore/KvStoreUtil.h>
 
@@ -104,7 +106,7 @@ mergeKeyValues(
         int rc = (*value.value_ref()).compare(*kvStoreIt->second.value_ref());
         if (rc > 0) {
           // versions and orginatorIds are same but value is higher
-          VLOG(3) << "Previous incarnation reflected back for key " << key;
+          XLOG(DBG3) << "Previous incarnation reflected back for key " << key;
           updateAllNeeded = true;
         } else if (rc == 0) {
           // versions, orginatorIds, value are all same
@@ -127,12 +129,12 @@ mergeKeyValues(
     }
 
     if (!updateAllNeeded and !updateTtlNeeded) {
-      VLOG(3) << "(mergeKeyValues) no need to update anything for key: '" << key
-              << "'";
+      XLOG(DBG3) << "(mergeKeyValues) no need to update anything for key: '"
+                 << key << "'";
       continue;
     }
 
-    VLOG(3)
+    XLOG(DBG3)
         << "Updating key: " << key << "\n  Version: " << myVersion << " -> "
         << newVersion << "\n  Originator: "
         << (kvStoreIt != kvStore.end() ? *kvStoreIt->second.originatorId_ref()

@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include <folly/init/Init.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/common/OpenrClient.h>
 #include <openr/kvstore/KvStore.h>
@@ -40,13 +41,13 @@ main(int argc, char** argv) {
       std::string /* area */,
       std::unordered_map<std::string /* key */, openr::thrift::Value>>
       areaKeyVals;
-  LOG(INFO) << "Stream is connected, updates will follow";
+  XLOG(INFO) << "Stream is connected, updates will follow";
   for (auto const& pub : response.response) {
-    LOG(INFO) << "Received " << pub.get_keyVals().size()
-              << " entries in initial dump for area: " << pub.get_area();
+    XLOG(INFO) << "Received " << pub.get_keyVals().size()
+               << " entries in initial dump for area: " << pub.get_area();
     areaKeyVals[pub.get_area()] = pub.get_keyVals();
   }
-  LOG(INFO) << "";
+  XLOG(INFO) << "";
 
   auto subscription =
       std::move(response.stream)

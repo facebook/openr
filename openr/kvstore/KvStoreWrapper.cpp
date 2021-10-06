@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include <folly/logging/xlog.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
@@ -54,9 +55,9 @@ void
 KvStoreWrapper::run() noexcept {
   // Start kvstore
   kvStoreThread_ = std::thread([this]() {
-    VLOG(1) << "KvStore " << nodeId << " running.";
+    XLOG(DBG1) << "KvStore " << nodeId << " running.";
     kvStore_->run();
-    VLOG(1) << "KvStore " << nodeId << " stopped.";
+    XLOG(DBG1) << "KvStore " << nodeId << " stopped.";
   });
   kvStore_->waitUntilRunning();
 
@@ -65,7 +66,7 @@ KvStoreWrapper::run() noexcept {
 
 void
 KvStoreWrapper::stop() {
-  VLOG(1) << "Stopping KvStoreWrapper";
+  XLOG(DBG1) << "Stopping KvStoreWrapper";
   // Return immediately if not running
   if (!kvStore_->isRunning()) {
     return;
@@ -86,7 +87,7 @@ KvStoreWrapper::stop() {
   // Stop kvstore
   kvStore_->stop();
   kvStoreThread_.join();
-  VLOG(1) << "KvStoreWrapper stopped.";
+  XLOG(DBG1) << "KvStoreWrapper stopped.";
 }
 
 bool
