@@ -1496,7 +1496,7 @@ KvStoreDb::unsetPendingSelfOriginatedKeys() {
     auto it = selfOriginatedKeyVals_.find(key);
     if (it == selfOriginatedKeyVals_.end()) {
       // Case 1:  X is not persisted. Set new value.
-      printKeyValInArea(1 /*logLevel*/, "Unsetting", area_, key, thriftVal);
+      printKeyValInArea(1 /*logLevel*/, "Unsetting", AreaTag(), key, thriftVal);
       keyVals.emplace(key, thriftVal);
       localKeysToUnset.emplace_back(key);
     } else {

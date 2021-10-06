@@ -186,7 +186,7 @@ Decision::Decision(
     XLOG(INFO) << "Starting KvStore updates processing fiber";
     while (true) {
       auto maybePub = q.get(); // perform read
-      XLOG(DBG2) << "Received KvStore update";
+      XLOG(DBG3) << "Received KvStore update";
       if (maybePub.hasError()) {
         XLOG(INFO) << "Terminating KvStore updates processing fiber";
         break;
