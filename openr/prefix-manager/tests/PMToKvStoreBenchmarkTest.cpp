@@ -451,8 +451,13 @@ BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 10000_10, 10000, 10);
 BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 10000_100, 10000, 100);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerAdvertisePrefixes, 10000_1000, 10000, 1000);
+BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 100000_10, 100000, 10);
 BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerAdvertisePrefixes, 10000_10000, 10000, 10000);
+    BM_PrefixManagerAdvertisePrefixes, 100000_100, 100000, 100);
+BENCHMARK_NAMED_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, 100000_1000, 100000, 1000);
+BENCHMARK_NAMED_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, 100000_10000, 100000, 10000);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerAdvertisePrefixes, 100000_100000, 100000, 100000);
 /*
@@ -468,6 +473,14 @@ BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerWithdrawPrefixes, 10000_1000, 10000, 1000);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerWithdrawPrefixes, 10000_10000, 10000, 10000);
+BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 100000_1, 100000, 1);
+BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 100000_10, 100000, 10);
+BENCHMARK_NAMED_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, 100000_100, 100000, 100);
+BENCHMARK_NAMED_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, 100000_1000, 100000, 1000);
+BENCHMARK_NAMED_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, 100000_10000, 100000, 10000);
 BENCHMARK_NAMED_PARAM(
     BM_PrefixManagerWithdrawPrefixes, 100000_100000, 100000, 100000);
 /*
