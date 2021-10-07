@@ -7,6 +7,12 @@
 
 #include <openr/tests/utils/Utils.h>
 
+namespace detail {
+// Prefix length of a subnet
+const uint8_t kBitMaskLen = 128;
+
+} // namespace detail
+
 namespace openr {
 
 /*
@@ -167,6 +173,21 @@ getBasicOpenrConfig(
   config.segment_routing_config_ref() = srConfig;
 
   return config;
+}
+
+
+std::vector<thrift::PrefixEntry>
+generatePrefixEntries(uint32_t num, PrefixGenerator& prefixGenerator) {
+  // generate `num` of random prefixes
+  std::vector<thrift::IpPrefix> prefixes =
+      prefixGenerator.ipv6PrefixGenerator(num, ::detail::kBitMaskLen);
+  auto tPrefixEntries =
+      folly::gen::from(prefixes) |
+      folly::gen::mapped([](const thrift::IpPrefix& prefix) {
+        return createPrefixEntry(prefix, thrift::PrefixType::DEFAULT);
+      }) |
+      folly::gen::as<std::vector<thrift::PrefixEntry>>();
+  return tPrefixEntries;
 }
 
 } // namespace openr

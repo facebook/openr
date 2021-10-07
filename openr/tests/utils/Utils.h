@@ -16,6 +16,11 @@
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
+#include <folly/Benchmark.h>
+#include <folly/gen/Base.h>
+#include <folly/init/Init.h>
+#include <openr/tests/mocks/PrefixGenerator.h>
+
 namespace openr {
 
 /*
@@ -46,5 +51,8 @@ openr::thrift::OpenrConfig getBasicOpenrConfig(
     bool enableV4OverV6Nexthop = false,
     bool enableAdjLabels = false,
     bool enablePrependLabels = false);
+
+std::vector<thrift::PrefixEntry> generatePrefixEntries(
+    uint32_t num, PrefixGenerator& prefixGenerator);
 
 } // namespace openr
