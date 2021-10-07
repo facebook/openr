@@ -175,7 +175,6 @@ getBasicOpenrConfig(
   return config;
 }
 
-
 std::vector<thrift::PrefixEntry>
 generatePrefixEntries(uint32_t num, PrefixGenerator& prefixGenerator) {
   // generate `num` of random prefixes
