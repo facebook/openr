@@ -226,6 +226,33 @@ Spark::SparkNeighbor::SparkNeighbor(
   CHECK(not this->remoteIfName.empty());
 }
 
+thrift::SparkNeighbor
+Spark::SparkNeighbor::toThrift() const {
+  thrift::SparkNeighbor info;
+
+  // populate basic info
+  info.nodeName_ref() = this->nodeName;
+  info.state_ref() = toStr(this->state); // translate to string
+  info.area_ref() = this->area;
+
+  // populate address/port info for TCP connection
+  info.transportAddressV4_ref() = this->transportAddressV4;
+  info.transportAddressV6_ref() = this->transportAddressV6;
+  info.openrCtrlThriftPort_ref() = this->openrCtrlThriftPort;
+  info.kvStoreCmdPort_ref() = this->kvStoreCmdPort;
+
+  // populate interface info
+  info.localIfName_ref() = this->localIfName;
+  info.remoteIfName_ref() = this->remoteIfName;
+
+  // populate misc info
+  info.rttUs_ref() = this->rtt.count();
+  info.label_ref() = this->label;
+  info.enableFloodOptimization_ref() = this->enableFloodOptimization;
+
+  return info;
+}
+
 Spark::Spark(
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue,
@@ -233,25 +260,25 @@ Spark::Spark(
     std::shared_ptr<const Config> config,
     std::pair<uint32_t, uint32_t> version,
     std::optional<uint32_t> maybeMaxAllowedPps)
-    : myDomainName_(*config->getConfig().domain_ref()),
+    : myDomainName_(config->getConfig().get_domain()),
       myNodeName_(config->getNodeName()),
       neighborDiscoveryPort_(static_cast<uint16_t>(
-          *config->getSparkConfig().neighbor_discovery_port_ref())),
+          config->getSparkConfig().get_neighbor_discovery_port())),
       helloTime_(
-          std::chrono::seconds(*config->getSparkConfig().hello_time_s_ref())),
+          std::chrono::seconds(config->getSparkConfig().get_hello_time_s())),
       fastInitHelloTime_(std::chrono::milliseconds(
-          *config->getSparkConfig().fastinit_hello_time_ms_ref())),
+          config->getSparkConfig().get_fastinit_hello_time_ms())),
       handshakeTime_(std::chrono::milliseconds(
-          *config->getSparkConfig().fastinit_hello_time_ms_ref())),
+          config->getSparkConfig().get_fastinit_hello_time_ms())),
       initializationHoldTime_(3 * fastInitHelloTime_ + handshakeTime_),
       keepAliveTime_(std::chrono::seconds(
-          *config->getSparkConfig().keepalive_time_s_ref())),
+          config->getSparkConfig().get_keepalive_time_s())),
       handshakeHoldTime_(std::chrono::seconds(
-          *config->getSparkConfig().keepalive_time_s_ref())),
+          config->getSparkConfig().get_keepalive_time_s())),
       holdTime_(
-          std::chrono::seconds(*config->getSparkConfig().hold_time_s_ref())),
+          std::chrono::seconds(config->getSparkConfig().get_hold_time_s())),
       gracefulRestartTime_(std::chrono::seconds(
-          *config->getSparkConfig().graceful_restart_time_s_ref())),
+          config->getSparkConfig().get_graceful_restart_time_s())),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       enableFloodOptimization_(
@@ -301,9 +328,6 @@ Spark::Spark(
           } // for
         } // for
 
-        // NOTE: In scenarios of standalone node or first node coming up in the
-        // network, there are none announced neighbors.
-        neighborUpdatesQueue_.push(std::move(upNeighbors));
         logInitializationEvent(
             "Spark",
             thrift::InitializationEvent::NEIGHBOR_DISCOVERED,
@@ -311,6 +335,10 @@ Spark::Spark(
                 "Published {} UP neighbors out of {}",
                 upNeighbors.size(),
                 totalNeighborCnt));
+
+        // NOTE: In scenarios of standalone node or first node coming up in the
+        // network, there are none announced neighbors.
+        neighborUpdatesQueue_.push(std::move(upNeighbors));
       });
 
   // Fiber to process interface updates from LinkMonitor

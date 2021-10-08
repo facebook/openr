@@ -293,32 +293,7 @@ class Spark final : public OpenrEventBase {
         const std::string& area);
 
     // util function to transfer to SparkNeighbor
-    thrift::SparkNeighbor
-    toThrift() const {
-      thrift::SparkNeighbor info;
-
-      // populate basic info
-      info.nodeName_ref() = nodeName;
-      info.state_ref() = toStr(state); // translate to string
-      info.area_ref() = area;
-
-      // populate address/port info for TCP connection
-      info.transportAddressV4_ref() = transportAddressV4;
-      info.transportAddressV6_ref() = transportAddressV6;
-      info.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
-      info.kvStoreCmdPort_ref() = kvStoreCmdPort;
-
-      // populate interface info
-      info.localIfName_ref() = localIfName;
-      info.remoteIfName_ref() = remoteIfName;
-
-      // populate misc info
-      info.rttUs_ref() = rtt.count();
-      info.label_ref() = label;
-      info.enableFloodOptimization_ref() = enableFloodOptimization;
-
-      return info;
-    }
+    thrift::SparkNeighbor toThrift() const;
 
     // doamin name
     const std::string domainName{};
