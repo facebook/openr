@@ -427,6 +427,13 @@ class Config {
     return getThriftServerConfig().get_enable_secure_thrift_server();
   }
 
+  bool
+  isNonDefaultVrfThriftServerEnabled() const {
+    return getThriftServerConfig()
+        .enable_non_default_vrf_thrift_server_ref()
+        .value_or(false);
+  }
+
   const std::string
   getSSLCertPath() const {
     auto certPath = getThriftServerConfig().x509_cert_path_ref();

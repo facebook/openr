@@ -17,6 +17,52 @@ OpenrThriftCtrlServer::OpenrThriftCtrlServer(
 
 void
 OpenrThriftCtrlServer::start() {
+  // Please add your own implementation if you want to start the non default
+  // thrift server.
+  // Here we will only start the default one.
+  startDefaultThriftServer();
+}
+
+void
+OpenrThriftCtrlServer::stop() {
+  // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
+  for (auto& server : thriftCtrlServerVec_) {
+    server->stop();
+  }
+  // Wait for all threads
+  for (auto& thread : thriftCtrlServerThreadVec_) {
+    thread.join();
+  }
+  for (auto& server : thriftCtrlServerVec_) {
+    server.reset();
+  }
+}
+
+void
+OpenrThriftCtrlServer::startDefaultThriftServer() {
+  auto server = setUpThriftServer();
+  thriftCtrlServerThreadVec_.emplace_back(std::thread([&]() noexcept {
+    LOG(INFO) << "Starting ThriftCtrlServer thread ...";
+    folly::setThreadName("openr-ThriftCtrlServer");
+    server->serve();
+    LOG(INFO) << "ThriftCtrlServer thread got stopped.";
+  }));
+
+  // Wait until thrift server starts
+  while (true) {
+    auto evb = server->getServeEventBase();
+    if (evb != nullptr and evb->isRunning()) {
+      break;
+    }
+    std::this_thread::yield();
+  }
+
+  // Add to the server vector
+  thriftCtrlServerVec_.emplace_back(std::move(server));
+};
+
+std::unique_ptr<apache::thrift::ThriftServer>
+OpenrThriftCtrlServer::setUpThriftServer() {
   // Setup OpenrCtrl thrift server
   CHECK(ctrlHandler_);
   auto server = std::make_unique<apache::thrift::ThriftServer>();
@@ -38,41 +84,20 @@ OpenrThriftCtrlServer::start() {
         config_->getSSLSeedPath(),
         sslContext_);
   }
-
-  // Serve
-  thriftCtrlServerThreadVec_.emplace_back(std::thread([&]() noexcept {
-    LOG(INFO) << "Starting ThriftCtrlServer thread ...";
-    folly::setThreadName("openr-ThriftCtrlServer");
-    server->serve();
-    LOG(INFO) << "ThriftCtrlServer thread got stopped.";
-  }));
-
-  // Wait until thrift server starts
-  while (true) {
-    auto evb = server->getServeEventBase();
-    if (evb != nullptr and evb->isRunning()) {
-      break;
-    }
-    std::this_thread::yield();
-  }
-
-  // Add to the server vector
-  thriftCtrlServerVec_.emplace_back(std::move(server));
-}
+  return server;
+};
 
 void
-OpenrThriftCtrlServer::stop() {
-  // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
-  for (auto& server : thriftCtrlServerVec_) {
-    server->stop();
-  }
-  // Wait for all threads
-  for (auto& thread : thriftCtrlServerThreadVec_) {
-    thread.join();
-  }
-  for (auto& server : thriftCtrlServerVec_) {
-    server.reset();
-  }
+OpenrThriftCtrlServer::startNonDefaultThriftServer() {
+  LOG(INFO)
+      << "Please add your own implementation to start the non default thrift server.";
+};
+
+void
+OpenrThriftCtrlServer::startVrfThread(
+    bool isDefaultVrf, std::unique_ptr<apache::thrift::ThriftServer> server) {
+  LOG(INFO)
+      << "Please add your own implementation to start the thread with Vrf.";
 }
 
 } // namespace openr
