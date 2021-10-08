@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 BASE_CTRL_MODULE = "openr.OpenrCtrl.OpenrCtrl"
 BASE_PY_CLIENT_MODULE = "openr.clients.openr_client"
 BASE_UTILS_COMMANDS_MODULE = "openr.cli.utils.commands"
+# pyre-fixme[5]: Global expression must be annotated.
 COMMANDS_GET_OPENR_CTRL_CLIENT = f"{BASE_UTILS_COMMANDS_MODULE}.get_openr_ctrl_client"
 
 
