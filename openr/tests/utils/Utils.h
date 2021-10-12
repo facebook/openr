@@ -53,6 +53,9 @@ openr::thrift::OpenrConfig getBasicOpenrConfig(
 std::vector<thrift::PrefixEntry> generatePrefixEntries(
     const PrefixGenerator& prefixGenerator, uint32_t num);
 
+DecisionRouteUpdate generateDecisionRouteUpdateFromPrefixEntries(
+    std::vector<thrift::PrefixEntry> prefixEntries, uint32_t areaId = 0);
+
 DecisionRouteUpdate generateDecisionRouteUpdate(
     const PrefixGenerator& prefixGenerator, uint32_t num, uint32_t areaId = 0);
 } // namespace openr

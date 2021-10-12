@@ -190,13 +190,11 @@ generatePrefixEntries(const PrefixGenerator& prefixGenerator, uint32_t num) {
 }
 
 DecisionRouteUpdate
-generateDecisionRouteUpdate(
-    const PrefixGenerator& prefixGenerator, uint32_t num, uint32_t areaId) {
-  std::vector<thrift::PrefixEntry> prefixEntries =
-      generatePrefixEntries(prefixGenerator, num);
+generateDecisionRouteUpdateFromPrefixEntries(
+    std::vector<thrift::PrefixEntry> prefixEntries, uint32_t areaId) {
   // Borrow the settings for prefixEntries from PrefixManagerTest
-  auto path1 = createNextHop(
-      toBinaryAddress(folly::IPAddress("fe80::2")), std::string("iface_1"), 2);
+  auto path1 =
+      createNextHop(toBinaryAddress(folly::IPAddress("fe80::2")), "iface", 1);
   path1.area_ref() = std::to_string(areaId);
   DecisionRouteUpdate routeUpdate;
 
@@ -219,5 +217,13 @@ generateDecisionRouteUpdate(
     routeUpdate.addRouteToUpdate(unicastRoute);
   }
   return routeUpdate;
+}
+
+DecisionRouteUpdate
+generateDecisionRouteUpdate(
+    const PrefixGenerator& prefixGenerator, uint32_t num, uint32_t areaId) {
+  std::vector<thrift::PrefixEntry> prefixEntries =
+      generatePrefixEntries(prefixGenerator, num);
+  return generateDecisionRouteUpdateFromPrefixEntries(prefixEntries, areaId);
 }
 } // namespace openr
