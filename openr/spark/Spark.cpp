@@ -249,8 +249,53 @@ Spark::SparkNeighbor::toThrift() const {
   info.rttUs_ref() = this->rtt.count();
   info.label_ref() = this->label;
   info.enableFloodOptimization_ref() = this->enableFloodOptimization;
+  info.isAdjacencyOnHold_ref() = this->isAdjacencyOnHold;
 
   return info;
+}
+
+/*
+ * This is the util function to determine if flag `isAdjacencyOnHold` will be
+ * reset based on received `SparkHeartbeatMsg`.
+ *
+ * A few situations to consider for backward compatibility.
+ *
+ * 1) local node + remote peer both have `enable_ordered_adj_publication=false`
+ *
+ *      `isAdjacencyOnHold` will ALWAYS be false(e.g. default)
+ *      Processing logic will keep the SAME as existing flow.
+ *
+ * 2) local node + remote peer both have `enable_ordered_adj_publication=true`
+ *
+ *      `isAdjacencyOnHold` will first be set to TRUE when `SparkHandshakeMsg`
+ *      is received. The local node will wait until remote peer sends the
+ *      `SparkHeartbeatMsg` with `holdAdjacency=false`. `isAdjacencyOnHold`
+ *      will be reset.
+ *
+ * 3) local node: `enable_ordered_adj_publication=true`
+ *    remote peer: `enable_ordered_adj_publication=false`
+ *
+ *      `isAdjacencyOnHold` will first be set to TRUE when `SparkHandshakeMsg`
+ *      is received. The remote peer will always send `SparkHeartbeatMsg` with
+ *      `holdAdjacency=false` since knob is off.
+ *
+ * 4) local node: `enable_ordered_adj_publication=false`
+ *    remote peer: `enable_ordered_adj_publication=true`
+ *
+ *      From local node's perspective, it directly report NEIGHBOR_UP when
+ *      `SparkHandshakeMsg` is received. `isAdjacencyOnHold` will be kept false
+ *      as the default value.
+ */
+bool
+Spark::SparkNeighbor::shouldResetAdjacencyHold(
+    const thrift::SparkHeartbeatMsg& heartbeatMsg) {
+  // Skip resetting if adjacency is NOT on hold.
+  if (not this->isAdjacencyOnHold) {
+    return false;
+  }
+
+  // Honor the `holdAdjacency` flag from `SparkHeartbeatMsg`
+  return not heartbeatMsg.get_holdAdjacency();
 }
 
 Spark::Spark(
@@ -288,6 +333,8 @@ Spark::Spark(
           config->getThriftServerConfig().get_openr_ctrl_port()),
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
+      enableOrderedAdjPublication(
+          config->getConfig().get_enable_ordered_adj_publication()),
       config_(std::move(config)) {
   CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
       << "Keep-alive-time must be less than hold-time.";
@@ -903,6 +950,11 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   thrift::SparkHeartbeatMsg heartbeatMsg;
   heartbeatMsg.nodeName_ref() = myNodeName_;
   heartbeatMsg.seqNum_ref() = mySeqNum_;
+  heartbeatMsg.holdAdjacency_ref() = false;
+  if (enableOrderedAdjPublication) {
+    // ATTN: notify peer to hold adjacency when adjacencyDb still in syncing
+    heartbeatMsg.holdAdjacency_ref() = (not adjacencyDbSynced_);
+  }
 
   thrift::SparkHelloPacket pkt;
   pkt.heartbeatMsg_ref() = std::move(heartbeatMsg);
@@ -1084,9 +1136,16 @@ Spark::neighborUpWrapper(
   // add neighborName to collection
   ifNameToActiveNeighbors_[ifName].emplace(neighborName);
 
-  // TODO: notify NEIGHBOR_UP or NEIGHBOR_ADJ_DB_HOLD
-
   // notify LinkMonitor about neighbor UP state
+  if (enableOrderedAdjPublication) {
+    // ATTN: expect adjacency hold to be removed later with heartbeatMsg
+    neighbor.isAdjacencyOnHold = true;
+
+    LOG(INFO) << fmt::format(
+        "[Initialization] Set isAdjacencyOnHold to true for neighbor: {}",
+        neighborName);
+  }
+  // TODO: avoid thrift transformation between modules
   notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
 }
 
@@ -1649,7 +1708,7 @@ void
 Spark::processHeartbeatMsg(
     thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName) {
   // sanity check for SparkHandshakeMsg
-  auto const& neighborName = *heartbeatMsg.nodeName_ref();
+  auto const& neighborName = heartbeatMsg.get_nodeName();
   auto sanityCheckResult = sanityCheckMsg(neighborName, ifName);
   if (PacketValidationResult::SUCCESS != sanityCheckResult) {
     return;
@@ -1679,6 +1738,18 @@ Spark::processHeartbeatMsg(
 
   // Reset the hold-timer for neighbor as we have received a keep-alive msg
   neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
+
+  // Check isAdjacencyOnHold bit to report to LinkMonitor
+  if (neighbor.shouldResetAdjacencyHold(heartbeatMsg)) {
+    neighbor.isAdjacencyOnHold = false;
+    // TODO: may potentially report a different event
+    notifySparkNeighborEvent(
+        NeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
+
+    LOG(INFO) << fmt::format(
+        "[Initialization] Reset isAdjacencyOnHold for neighbor: {}",
+        neighborName);
+  }
 }
 
 void

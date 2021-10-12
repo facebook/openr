@@ -1554,4 +1554,9 @@ struct SparkNeighbor {
    * Flag to support flood optimization or not
    */
   12: bool enableFloodOptimization = 0;
+
+  /**
+   * Flag to indicate if adjacency is on hold
+   */
+  13: bool isAdjacencyOnHold;
 } (cpp.minimize_padding)
