@@ -7,6 +7,7 @@
 
 #include <openr/tests/utils/Utils.h>
 
+#include <folly/Benchmark.h>
 #include <folly/gen/Base.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
@@ -154,7 +155,7 @@ BM_AdvertiseWithKvRequestQueue(
     auto kvRequestReaderQ = testFixture->kvRequestQueue_.getReader();
     // Generate `numOfExistingPrefixes`
     auto prefixes = generatePrefixEntries(
-        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfExistingPrefixes);
     // Generate events to be pushed into prefixUpdatesQueue_
     auto events = PrefixEvent(
         PrefixEventType::ADD_PREFIXES, thrift::PrefixType::BGP, prefixes);
@@ -165,7 +166,7 @@ BM_AdvertiseWithKvRequestQueue(
 
     // Generate `numOfUpdatedPrefixes`
     auto prefixesToAdvertise = generatePrefixEntries(
-        numOfUpdatedPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfUpdatedPrefixes);
 
     // Generate events to be pushed into prefixUpdatesQueue_
     auto addEvents = PrefixEvent(
@@ -214,7 +215,7 @@ BM_WithdrawWithKvRequestQueue(
     auto kvRequestReaderQ = testFixture->kvRequestQueue_.getReader();
     // Generate `numOfExistingPrefixes`
     auto prefixes = generatePrefixEntries(
-        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfExistingPrefixes);
     // Generate events to be pushed into prefixUpdatesQueue_
     auto events = PrefixEvent(
         PrefixEventType::ADD_PREFIXES, thrift::PrefixType::BGP, prefixes);
@@ -246,9 +247,66 @@ BM_WithdrawWithKvRequestQueue(
 }
 
 /*
+ * Benchmark test for Redistribution of Fib add unicast route:
+ * The time measured starts from routeUpdates are pushed to fibRouteUpdatesQueue
+ * and ends by checking expected number of prefixes show up in kvRequestQueue.
+ * Test setup:
+ *  - Generate 2 area configuration
+ *  - Generate `numOfExistingPrefixes` routes as existing setup
+ *  - Generate unicast routes to be distributed from the other area
+ * Benchmark:
+ *  - Push routeUpdates into fibRouteUpdatesQueue
+ *  - and observe KeyValRequests
+ */
+
+static void
+BM_RedistributeFibAddRoute(
+    uint32_t iters,
+    uint32_t numOfExistingPrefixes,
+    uint32_t numOfRedistributeRoutes) {
+  // Spawn suspender object to NOT calculating setup time into benchmark
+  auto suspender = folly::BenchmarkSuspender();
+
+  const std::string nodeId{"node-1"};
+  for (uint32_t i = 0; i < iters; ++i) {
+    auto testFixture =
+        std::make_unique<PrefixManagerBenchmarkTestFixture>(nodeId, 2);
+
+    // Create a reader to read requests showing up in kvRequestQueue
+    auto kvRequestReaderQ = testFixture->kvRequestQueue_.getReader();
+
+    // Generate numOfExistingPrefixes of unicast routes to be added
+    // All routes are contained in single DecisionRouteUpdate
+    auto routeUpdateForExisting = generateDecisionRouteUpdate(
+        testFixture->getPrefixGenerator(), numOfExistingPrefixes);
+    testFixture->fibRouteUpdatesQueue_.push(std::move(routeUpdateForExisting));
+
+    // Verify corresponding requests inside kvRequestQueue
+    testFixture->checkKeyValRequest(numOfExistingPrefixes, kvRequestReaderQ);
+
+    // Generate numOfRedistributeRoutes of unicast routes to be redistributed
+    // All routes are contained in single DecisionRouteUpdate
+    auto routeUpdate = generateDecisionRouteUpdate(
+        testFixture->getPrefixGenerator(), numOfRedistributeRoutes);
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+
+    // Push DecisionRouteUpdate to fibRouteUpdatesQueue
+    testFixture->fibRouteUpdatesQueue_.push(std::move(routeUpdate));
+    testFixture->checkKeyValRequest(
+        numOfExistingPrefixes + numOfRedistributeRoutes, kvRequestReaderQ);
+
+    // Stop measuring benchmark time
+    suspender.rehire();
+  }
+}
+
+/*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of prefixes to advertise
  */
+
 BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 100_1, 100, 1);
 BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 1000_1, 1000, 1);
 BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 10000_1, 10000, 1);
@@ -266,6 +324,7 @@ BENCHMARK_NAMED_PARAM(
     BM_AdvertiseWithKvRequestQueue, 100000_10000, 100000, 10000);
 BENCHMARK_NAMED_PARAM(
     BM_AdvertiseWithKvRequestQueue, 100000_100000, 100000, 100000);
+
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of prefixes to withdraw
@@ -287,6 +346,25 @@ BENCHMARK_NAMED_PARAM(
 BENCHMARK_NAMED_PARAM(
     BM_WithdrawWithKvRequestQueue, 100000_100000, 100000, 100000);
 
+/*
+ * @first integer: number of prefixes existing inside PrefixManager
+ * @second integer: number of prefixes to be redistributed
+ */
+
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100_1, 100, 1);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 1000_1, 1000, 1);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_1, 10000, 1);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_10, 10000, 10);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_100, 10000, 100);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_1000, 10000, 1000);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_10000, 10000, 10000);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_1, 100000, 1);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_10, 100000, 10);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_100, 100000, 100);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_1000, 100000, 1000);
+BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_10000, 100000, 10000);
+BENCHMARK_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 100000_100000, 100000, 100000);
 } // namespace openr
 
 int

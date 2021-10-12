@@ -7,18 +7,16 @@
 
 #pragma once
 
+#include <folly/gen/Base.h>
+#include <folly/init/Init.h>
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-
+#include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-
-#include <folly/Benchmark.h>
-#include <folly/gen/Base.h>
-#include <folly/init/Init.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 
 namespace openr {
@@ -53,6 +51,8 @@ openr::thrift::OpenrConfig getBasicOpenrConfig(
     bool enablePrependLabels = false);
 
 std::vector<thrift::PrefixEntry> generatePrefixEntries(
-    uint32_t num, PrefixGenerator& prefixGenerator);
+    const PrefixGenerator& prefixGenerator, uint32_t num);
 
+DecisionRouteUpdate generateDecisionRouteUpdate(
+    const PrefixGenerator& prefixGenerator, uint32_t num, uint32_t areaId = 0);
 } // namespace openr

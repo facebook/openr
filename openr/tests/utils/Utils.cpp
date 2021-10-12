@@ -176,7 +176,7 @@ getBasicOpenrConfig(
 }
 
 std::vector<thrift::PrefixEntry>
-generatePrefixEntries(uint32_t num, PrefixGenerator& prefixGenerator) {
+generatePrefixEntries(const PrefixGenerator& prefixGenerator, uint32_t num) {
   // generate `num` of random prefixes
   std::vector<thrift::IpPrefix> prefixes =
       prefixGenerator.ipv6PrefixGenerator(num, ::detail::kBitMaskLen);
@@ -189,4 +189,35 @@ generatePrefixEntries(uint32_t num, PrefixGenerator& prefixGenerator) {
   return tPrefixEntries;
 }
 
+DecisionRouteUpdate
+generateDecisionRouteUpdate(
+    const PrefixGenerator& prefixGenerator, uint32_t num, uint32_t areaId) {
+  std::vector<thrift::PrefixEntry> prefixEntries =
+      generatePrefixEntries(prefixGenerator, num);
+  // Borrow the settings for prefixEntries from PrefixManagerTest
+  auto path1 = createNextHop(
+      toBinaryAddress(folly::IPAddress("fe80::2")), std::string("iface_1"), 2);
+  path1.area_ref() = std::to_string(areaId);
+  DecisionRouteUpdate routeUpdate;
+
+  for (auto& prefixEntry : prefixEntries) {
+    prefixEntry.area_stack_ref() = {"65000"};
+    prefixEntry.metrics_ref()->distance_ref() = 1;
+    prefixEntry.type_ref() = thrift::PrefixType::DEFAULT;
+    prefixEntry.forwardingAlgorithm_ref() =
+        thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+    prefixEntry.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
+    prefixEntry.minNexthop_ref() = 10;
+    prefixEntry.prependLabel_ref() = 70000;
+
+    auto unicastRoute = RibUnicastEntry(
+        toIPNetwork(prefixEntry.get_prefix()),
+        {path1},
+        prefixEntry,
+        std::to_string(areaId),
+        false);
+    routeUpdate.addRouteToUpdate(unicastRoute);
+  }
+  return routeUpdate;
+}
 } // namespace openr

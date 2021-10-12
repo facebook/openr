@@ -172,7 +172,7 @@ BM_PrefixManagerAdvertisePrefixes(
 
     // Generate `numOfExistingPrefixes` and make sure `KvStore` is updated
     auto prefixes = generatePrefixEntries(
-        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfExistingPrefixes);
     prefixMgr->advertisePrefixes(std::move(prefixes)).get();
 
     // Verify pre-existing prefixes inside `KvStore`
@@ -180,7 +180,7 @@ BM_PrefixManagerAdvertisePrefixes(
 
     // Generate `numOfUpdatedPrefixes`
     auto prefixesToAdvertise = generatePrefixEntries(
-        numOfUpdatedPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfUpdatedPrefixes);
 
     // Start measuring benchmark time
     suspender.dismiss();
@@ -221,7 +221,7 @@ BM_PrefixManagerWithdrawPrefixes(
 
     // Generate `numOfExistingPrefixes` and advertise to `KvStore` first
     auto prefixes = generatePrefixEntries(
-        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfExistingPrefixes);
     auto prefixesToWithdraw = prefixes; // NOTE explicitly copy
     prefixesToWithdraw.resize(numOfWithdrawnPrefixes);
     prefixMgr->advertisePrefixes(prefixes);
@@ -268,7 +268,7 @@ BM_PrefixManagerPrefixFlap(
 
     // Generate `numOfExistingPrefixes` and make sure `KvStore` is updated
     auto prefixes = generatePrefixEntries(
-        numOfExistingPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfExistingPrefixes);
     prefixMgr->advertisePrefixes(std::move(prefixes)).get();
 
     // Verify pre-existing prefixes inside `KvStore`
@@ -276,7 +276,7 @@ BM_PrefixManagerPrefixFlap(
 
     // Generate `numOfUpdatedPrefixes`
     auto prefixesToAdvertise = generatePrefixEntries(
-        numOfFlappedPrefixes, testFixture->getPrefixGenerator());
+        testFixture->getPrefixGenerator(), numOfFlappedPrefixes);
     auto prefixesToWithdraw = prefixesToAdvertise;
 
     //
