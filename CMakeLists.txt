@@ -372,12 +372,6 @@ install(TARGETS
 # Install files
 #
 
-# scripts
-install(PROGRAMS
-  ${CMAKE_CURRENT_SOURCE_DIR}/openr/scripts/run_openr.sh
-  DESTINATION sbin
-)
-
 # headers
 install(
   DIRECTORY ${CMAKE_SOURCE_DIR}/openr
