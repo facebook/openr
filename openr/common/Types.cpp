@@ -6,9 +6,10 @@
  */
 
 #include <fmt/core.h>
-#include <openr/common/Types.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
 
 namespace openr {
 
@@ -24,13 +25,14 @@ RegexSet::RegexSet(std::vector<std::string> const& keyPrefixList) {
 
   for (auto const& keyPrefix : keyPrefixList) {
     if (regexSet_->Add(keyPrefix, &re2AddError) < 0) {
-      LOG(FATAL) << "Failed to add prefixes to RE2 set: '" << keyPrefix << "', "
-                 << "error: '" << re2AddError << "'";
+      XLOG(FATAL) << "Failed to add prefixes to RE2 set: '" << keyPrefix
+                  << "', "
+                  << "error: '" << re2AddError << "'";
       return;
     }
   }
   if (!regexSet_->Compile()) {
-    LOG(FATAL) << "Failed to compile re2 set";
+    XLOG(FATAL) << "Failed to compile re2 set";
   }
 }
 

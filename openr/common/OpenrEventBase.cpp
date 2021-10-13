@@ -6,6 +6,8 @@
  */
 
 #include <folly/fibers/FiberManagerMap.h>
+#include <folly/logging/xlog.h>
+
 #include <openr/common/OpenrEventBase.h>
 
 namespace openr {
@@ -39,9 +41,9 @@ EventBaseStopSignalHandler::EventBaseStopSignalHandler(folly::EventBase* evb)
 
 void
 EventBaseStopSignalHandler::signalReceived(int signal) noexcept {
-  LOG(INFO) << "Caught signal: " << signal << ". Stopping openr event-base...";
+  XLOG(INFO) << "Caught signal: " << signal << ". Stopping openr event-base...";
   getEventBase()->terminateLoopSoon();
-  LOG(INFO) << "Openr event-base stopped";
+  XLOG(INFO) << "Openr event-base stopped";
 }
 
 OpenrEventBase::ZmqEventHandler::ZmqEventHandler(

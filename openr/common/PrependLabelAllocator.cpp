@@ -6,6 +6,7 @@
  */
 
 #include <folly/IPAddress.h>
+#include <folly/logging/xlog.h>
 #include <openr/common/PrependLabelAllocator.h>
 #include <optional>
 
@@ -96,10 +97,10 @@ PrependLabelAllocator<T>::decrementRefCount(const std::set<T>& nextHopSet) {
       const auto& nh = *nextHopSet.begin();
       nextHopSetToLabel_.erase(nextHopSet);
       if (oldLabel) {
-        VLOG(1) << "De-allocating label " << oldLabel.value()
-                << " used for nextHopSet consisting of";
+        XLOG(DBG1) << "De-allocating label " << oldLabel.value()
+                   << " used for nextHopSet consisting of";
         for (auto const& nhEntry : nextHopSet) {
-          VLOG(1) << " " << toString(nhEntry);
+          XLOG(DBG1) << " " << toString(nhEntry);
         }
         freeMplsLabel(isAddressFamilyV4(nh), oldLabel.value(), toString(nh));
       }
@@ -121,10 +122,10 @@ PrependLabelAllocator<T>::incrementRefCount(const std::set<T>& nextHopSet) {
       const auto& nh = *nextHopSet.begin();
       // Create a new label
       label = getNewMplsLabel(isAddressFamilyV4(nh));
-      VLOG(1) << "Allocating label " << label
-              << " for nexthop set consisting of";
+      XLOG(DBG1) << "Allocating label " << label
+                 << " for nexthop set consisting of";
       for (auto const& nhEntry : nextHopSet) {
-        VLOG(1) << " " << toString(nhEntry);
+        XLOG(DBG1) << " " << toString(nhEntry);
       }
       isNewLabel = true;
     }

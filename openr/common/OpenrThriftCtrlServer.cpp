@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/common/OpenrThriftCtrlServer.h>
 
 namespace openr {
@@ -42,10 +44,10 @@ void
 OpenrThriftCtrlServer::startDefaultThriftServer() {
   auto server = setUpThriftServer();
   thriftCtrlServerThreadVec_.emplace_back(std::thread([&]() noexcept {
-    LOG(INFO) << "Starting ThriftCtrlServer thread ...";
+    XLOG(INFO) << "Starting ThriftCtrlServer thread ...";
     folly::setThreadName("openr-ThriftCtrlServer");
     server->serve();
-    LOG(INFO) << "ThriftCtrlServer thread got stopped.";
+    XLOG(INFO) << "ThriftCtrlServer thread got stopped.";
   }));
 
   // Wait until thrift server starts
@@ -89,14 +91,14 @@ OpenrThriftCtrlServer::setUpThriftServer() {
 
 void
 OpenrThriftCtrlServer::startNonDefaultThriftServer() {
-  LOG(INFO)
+  XLOG(INFO)
       << "Please add your own implementation to start the non default thrift server.";
 };
 
 void
 OpenrThriftCtrlServer::startVrfThread(
     bool isDefaultVrf, std::unique_ptr<apache::thrift::ThriftServer> server) {
-  LOG(INFO)
+  XLOG(INFO)
       << "Please add your own implementation to start the thread with Vrf.";
 }
 

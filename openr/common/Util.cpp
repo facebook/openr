@@ -9,6 +9,7 @@
 
 #include <fb303/ServiceData.h>
 #include <fmt/core.h>
+#include <folly/logging/xlog.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -117,7 +118,7 @@ logInitializationEvent(
   if (message.has_value()) {
     logMsg = logMsg + fmt::format(", message: {}", message.value());
   }
-  LOG(INFO) << logMsg;
+  XLOG(INFO) << logMsg;
 
   // Log OpenR initialization event to fb303::fbData.
   facebook::fb303::fbData->setCounter(
@@ -1111,8 +1112,8 @@ selectRoutes(
   case thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE:
     return selectShortestDistancePerArea(prefixEntries, nodeAreaSet);
   default:
-    LOG(INFO) << "Unsupported route selection algorithm "
-              << apache::thrift::util::enumNameSafe(algorithm);
+    XLOG(INFO) << "Unsupported route selection algorithm "
+               << apache::thrift::util::enumNameSafe(algorithm);
     break;
   }
 
@@ -1310,8 +1311,8 @@ getThreadBytesImpl(bool isAllocated) {
   try {
     folly::mallctlRead(cmd, &bytes);
   } catch (const std::exception& ex) {
-    LOG(ERROR) << "Failed to read thread allocated/de-allocated bytes: "
-               << ex.what();
+    XLOG(ERR) << "Failed to read thread allocated/de-allocated bytes: "
+              << ex.what();
   }
   return bytes;
 }

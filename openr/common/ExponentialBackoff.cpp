@@ -5,11 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "ExponentialBackoff.h"
+#include <openr/common/ExponentialBackoff.h>
 
-#include <algorithm>
-
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 
 namespace openr {
 
@@ -24,9 +22,9 @@ ExponentialBackoff<Duration>::ExponentialBackoff(
       maxBackoff_(maxBackoff),
       currentBackoff_(0),
       isAbortAtMax_(isAbortAtMax) {
-  CHECK_GT(initialBackoff.count(), Duration(0).count())
+  XCHECK_GT(initialBackoff.count(), Duration(0).count())
       << "Backoff must be positive value";
-  CHECK_LT(initialBackoff.count(), maxBackoff.count())
+  XCHECK_LT(initialBackoff.count(), maxBackoff.count())
       << "Max backoff must be greater than initial backoff.";
 }
 
@@ -49,7 +47,7 @@ void
 ExponentialBackoff<Duration>::reportError() {
   lastErrorTime_ = std::chrono::steady_clock::now();
   if (currentBackoff_ >= maxBackoff_ && isAbortAtMax_) {
-    LOG(ERROR) << "Max back-off reached, isAbortAtMax true! Abort! Abort!";
+    XLOG(ERR) << "Max back-off reached, isAbortAtMax true! Abort! Abort!";
     ::abort();
   }
   if (currentBackoff_ == Duration(0)) {
