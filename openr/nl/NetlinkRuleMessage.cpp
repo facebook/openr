@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/nl/NetlinkRuleMessage.h>
 
 namespace openr::fbnl {
@@ -32,7 +34,7 @@ NetlinkRuleMessage::setReturnStatus(int status) {
 void
 NetlinkRuleMessage::init(int type) {
   if (type != RTM_NEWRULE && type != RTM_DELRULE && type != RTM_GETRULE) {
-    LOG(ERROR) << "Incorrect Netlink message type";
+    XLOG(ERR) << "Incorrect Netlink message type";
     return;
   }
 
@@ -87,7 +89,7 @@ NetlinkRuleMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
 
-  VLOG(3) << "Netlink parsed rule message. " << rule.str();
+  XLOG(DBG3) << "Netlink parsed rule message. " << rule.str();
   return rule;
 }
 

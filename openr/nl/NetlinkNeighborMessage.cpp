@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/nl/NetlinkNeighborMessage.h>
 
 namespace openr::fbnl {
@@ -33,7 +35,7 @@ NetlinkNeighborMessage::setReturnStatus(int status) {
 void
 NetlinkNeighborMessage::init(int type, uint32_t neighFlags) {
   if (type != RTM_NEWNEIGH && type != RTM_DELNEIGH && type != RTM_GETNEIGH) {
-    LOG(ERROR) << "Incorrect Netlink message type";
+    XLOG(ERR) << "Incorrect Netlink message type";
     return;
   }
   // initialize netlink header
@@ -83,7 +85,7 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) {
         if (ipAddress.hasValue()) {
           builder = builder.setDestination(ipAddress.value());
         } else {
-          LOG(ERROR) << "Error parsing Netlink NEIGH message";
+          XLOG(ERR) << "Error parsing Netlink NEIGH message";
         }
       }
     } break;
@@ -96,7 +98,7 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
   Neighbor neighbor = builder.build();
-  VLOG(3) << "Netlink parsed neighbor message. " << neighbor.str();
+  XLOG(DBG3) << "Netlink parsed neighbor message. " << neighbor.str();
   return neighbor;
 }
 

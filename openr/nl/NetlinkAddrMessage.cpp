@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/nl/NetlinkAddrMessage.h>
 
 namespace openr::fbnl {
@@ -34,7 +36,7 @@ NetlinkAddrMessage::setReturnStatus(int status) {
 void
 NetlinkAddrMessage::init(int type) {
   if (type != RTM_NEWADDR && type != RTM_DELADDR && type != RTM_GETADDR) {
-    LOG(ERROR) << "Incorrect Netlink message type";
+    XLOG(ERR) << "Incorrect Netlink message type";
     return;
   }
   // initialize netlink header
@@ -60,14 +62,14 @@ int
 NetlinkAddrMessage::addOrDeleteIfAddress(
     const IfAddress& ifAddr, const int type) {
   if (type != RTM_NEWADDR and type != RTM_DELADDR) {
-    LOG(ERROR) << "Incorrect Netlink message type. " << ifAddr.str();
+    XLOG(ERR) << "Incorrect Netlink message type. " << ifAddr.str();
     return EINVAL;
   } else if (ifAddr.getFamily() != AF_INET and ifAddr.getFamily() != AF_INET6) {
-    LOG(ERROR) << "Invalid address family. " << ifAddr.str();
+    XLOG(ERR) << "Invalid address family. " << ifAddr.str();
     return EINVAL;
   } else if (not ifAddr.getPrefix().has_value()) {
     // No IP address given
-    LOG(ERROR) << "No interface address given. " << ifAddr.str();
+    XLOG(ERR) << "No interface address given. " << ifAddr.str();
     return EDESTADDRREQ;
   }
 
@@ -128,14 +130,14 @@ NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) {
               ipAddress.value(), (uint8_t)addrEntry->ifa_prefixlen);
           builder = builder.setPrefix(prefix);
         } else {
-          LOG(ERROR) << "Error parsing Netlink ADDR message";
+          XLOG(ERR) << "Error parsing Netlink ADDR message";
         }
       }
     }
     }
   }
   auto addr = builder.build();
-  VLOG(3) << "Netlink parsed address message. " << addr.str();
+  XLOG(DBG3) << "Netlink parsed address message. " << addr.str();
   return addr;
 }
 

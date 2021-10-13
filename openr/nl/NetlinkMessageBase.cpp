@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/nl/NetlinkMessageBase.h>
 
 namespace openr::fbnl {
@@ -45,11 +47,11 @@ NetlinkMessageBase::addSubAttributes(
   uint32_t subRtaLen = RTA_LENGTH(len);
 
   if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > kMaxNlPayloadSize) {
-    LOG(ERROR) << "No buffer for adding attr: " << type << " length: " << len;
+    XLOG(ERR) << "No buffer for adding attr: " << type << " length: " << len;
     return subrta;
   }
 
-  VLOG(3) << "Adding sub attribute. type=" << type << ", len=" << len;
+  XLOG(DBG3) << "Adding sub attribute. type=" << type << ", len=" << len;
 
   // add the subattribute
   subrta = (struct rtattr*)(((char*)rta) + RTA_ALIGN(rta->rta_len));
@@ -71,7 +73,7 @@ NetlinkMessageBase::addAttributes(
   uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr_)->nlmsg_len);
 
   if (nlmsgAlen + RTA_ALIGN(rtaLen) > kMaxNlPayloadSize) {
-    LOG(ERROR) << "Space not available to add attribute type " << type;
+    XLOG(ERR) << "Space not available to add attribute type " << type;
     return ENOBUFS;
   }
 
@@ -80,7 +82,7 @@ NetlinkMessageBase::addAttributes(
       reinterpret_cast<struct rtattr*>(((char*)(msghdr_)) + nlmsgAlen);
   rptr->rta_type = type;
   rptr->rta_len = rtaLen;
-  VLOG(3) << "Adding attribute. type=" << type << ", len=" << rtaLen;
+  XLOG(DBG3) << "Adding attribute. type=" << type << ", len=" << rtaLen;
   if (data) {
     memcpy(RTA_DATA(rptr), data, len);
   }
@@ -97,8 +99,8 @@ NetlinkMessageBase::getSemiFuture() {
 
 void
 NetlinkMessageBase::setReturnStatus(int status) {
-  VLOG(3) << "Netlink request completed. retval=" << status << ", "
-          << folly::errnoStr(std::abs(status));
+  XLOG(DBG3) << "Netlink request completed. retval=" << status << ", "
+             << folly::errnoStr(std::abs(status));
   promise_.setValue(status);
 }
 

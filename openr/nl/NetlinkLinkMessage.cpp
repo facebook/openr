@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <linux/if_tunnel.h>
 #include <openr/nl/NetlinkLinkMessage.h>
 
@@ -39,7 +41,7 @@ NetlinkLinkMessage::setReturnStatus(int status) {
 void
 NetlinkLinkMessage::init(int type, uint32_t linkFlags) {
   if (type != RTM_NEWLINK && type != RTM_DELLINK && type != RTM_GETLINK) {
-    LOG(ERROR) << "Incorrect Netlink message type";
+    XLOG(ERR) << "Incorrect Netlink message type";
     return;
   }
   // initialize netlink header
@@ -97,7 +99,7 @@ NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
   auto link = builder.build();
-  VLOG(3) << "Netlink parsed link message. " << link.str();
+  XLOG(DBG3) << "Netlink parsed link message. " << link.str();
   return link;
 }
 
