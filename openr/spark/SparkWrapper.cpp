@@ -72,6 +72,11 @@ SparkWrapper::updateInterfaceDb(const InterfaceDatabase& ifDb) {
   interfaceUpdatesQueue_.push(ifDb);
 }
 
+void
+SparkWrapper::sendAdjDbSyncedSignal() {
+  interfaceUpdatesQueue_.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+}
+
 std::optional<NeighborEvents>
 SparkWrapper::recvNeighborEvent(
     std::optional<std::chrono::milliseconds> timeout) {

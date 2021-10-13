@@ -85,7 +85,7 @@ class Spark final : public OpenrEventBase {
  public:
   Spark(
       // consumer Queue
-      messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
+      messaging::RQueue<InterfaceEvent> interfaceUpdatesQueue,
       // producer Queue
       messaging::ReplicateQueue<NeighborEvents>& nbrUpdatesQueue,
       // raw ptr of modules
@@ -199,9 +199,16 @@ class Spark final : public OpenrEventBase {
   // util call to send heartbeat msg
   void sendHeartbeatMsg(std::string const& ifName);
 
-  // Function processes interface updates from LinkMonitor and appropriately
-  // enable/disable neighbor discovery
+  /*
+   * [Interface Update/Initialization Event Management]
+   *
+   * Spark will be the reader of following event:
+   *  1) Interface database update from LinkMonitor to appropriately
+   *     enable/disable neighbor discovery;
+   *  2) Open/R Initialization Event from LinkMonitor;
+   */
   void processInterfaceUpdates(InterfaceDatabase&& interfaceUpdates);
+  void processInitializationEvent(thrift::InitializationEvent&& event);
 
   // util function to delete interface in spark
   void deleteInterface(const std::vector<std::string>& toDel);
@@ -216,9 +223,11 @@ class Spark final : public OpenrEventBase {
       const std::vector<std::string>& toUpdate,
       const std::unordered_map<std::string, Interface>& newInterfaceDb);
 
+  // TODO: standardize Spark inline documentation
   // find an interface name in the interfaceDb given an ifIndex
   std::optional<std::string> findInterfaceFromIfindex(int ifIndex);
 
+  // TODO: deprecate adj label generation from Spark
   // Utility function to generate a new label for neighbor on given interface.
   // If there is only one neighbor per interface then labels are expected to be
   // same across process-restarts

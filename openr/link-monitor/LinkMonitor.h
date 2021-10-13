@@ -102,7 +102,7 @@ class LinkMonitor final : public OpenrEventBase {
       KvStore* kvstore,
       PersistentStore* configStore,
       // producer queue
-      messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
+      messaging::ReplicateQueue<InterfaceEvent>& interfaceUpdatesQueue,
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
       messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
@@ -356,7 +356,7 @@ class LinkMonitor final : public OpenrEventBase {
   thrift::LinkMonitorState state_;
 
   // Queue to publish interface updates to fib/spark
-  messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceEvent>& interfaceUpdatesQueue_;
 
   // Queue to publish prefix updates to PrefixManager
   messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue_;

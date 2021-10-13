@@ -196,6 +196,13 @@ Spark::getNextState(
   return nextState.value();
 }
 
+/*
+ * [SparkNeighbor]
+ *
+ * SparkNeighbor is the struct to hold data-structures of neighbor information
+ * from neighbor discovery process. It manages neighbors and report the updates
+ * to LinkMonitor.
+ */
 Spark::SparkNeighbor::SparkNeighbor(
     const thrift::StepDetectorConfig& stepDetectorConfig,
     std::string const& domainName,
@@ -299,7 +306,7 @@ Spark::SparkNeighbor::shouldResetAdjacencyHold(
 }
 
 Spark::Spark(
-    messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
+    messaging::RQueue<InterfaceEvent> interfaceUpdatesQueue,
     messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
@@ -405,7 +412,15 @@ Spark::Spark(
         initialInterfacesReceived_ = true;
       }
 
-      processInterfaceUpdates(std::move(interfaceUpdates).value());
+      // process different types of event
+      folly::variant_match(
+          std::move(interfaceUpdates).value(),
+          [this](InterfaceDatabase&& ifDb) {
+            processInterfaceUpdates(std::move(ifDb));
+          },
+          [this](thrift::InitializationEvent&& event) {
+            processInitializationEvent(std::move(event));
+          });
     }
   });
 
@@ -1856,6 +1871,17 @@ Spark::sendHelloMsg(
   fb303::fbData->addStatValue("spark.hello.packet_sent", 1, fb303::SUM);
 
   VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
+}
+
+void
+Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
+  CHECK(event == thrift::InitializationEvent::ADJACENCY_DB_SYNCED)
+      << fmt::format(
+             "Unexpected initialization event: {}",
+             apache::thrift::util::enumNameSafe(event));
+  adjacencyDbSynced_ = true;
+
+  LOG(INFO) << "[Initialization] Adjacency database in-sync signal received.";
 }
 
 void

@@ -272,6 +272,35 @@ class InitializationTestFixture : public SimpleSparkFixture {
 TEST_F(InitializationTestFixture, NeighborAdjDbHold) {
   // create 2 Spark instances with proper config and connect them
   createAndConnect();
+
+  // mimick LM queue to send adjDbSync event
+  node1_->sendAdjDbSyncedSignal();
+  node2_->sendAdjDbSyncedSignal();
+
+  // Now wait for sparks to detect each other
+  {
+    auto events = node1_->waitForEvents(NB_UP);
+    auto info = events.value().back().info;
+    EXPECT_EQ(iface1, info.localIfName_ref());
+    EXPECT_EQ(nodeName2_, info.nodeName_ref());
+    EXPECT_EQ(false, info.get_isAdjacencyOnHold());
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {} without adjacency hold",
+        nodeName1_,
+        nodeName2_);
+  }
+
+  {
+    auto events = node2_->waitForEvents(NB_UP);
+    auto info = events.value().back().info;
+    EXPECT_EQ(iface2, info.localIfName_ref());
+    EXPECT_EQ(nodeName1_, info.nodeName_ref());
+    EXPECT_EQ(false, info.get_isAdjacencyOnHold());
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {} without adjacency hold",
+        nodeName2_,
+        nodeName1_);
+  }
 }
 
 /*

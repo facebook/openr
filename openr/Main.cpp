@@ -233,7 +233,7 @@ main(int argc, char** argv) {
   // Queue for inter-module communication
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
-  ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
+  ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue;
   ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<Publication> kvStoreUpdatesQueue;

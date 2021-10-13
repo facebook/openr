@@ -410,15 +410,21 @@ class LinkMonitorTestFixture : public testing::Test {
   // Receive and process interface updates from the update queue
   void
   recvAndReplyIfUpdate() {
-    auto ifDb = interfaceUpdatesReader.get();
-    ASSERT_TRUE(ifDb.hasValue());
+    auto update = interfaceUpdatesReader.get().value();
+
     // ATTN: update class variable `sparkIfDb` for later verification
-    sparkIfDb = ifDb.value();
-    LOG(INFO) << "----------- Interface Updates ----------";
-    for (const auto& info : sparkIfDb) {
-      LOG(INFO) << "  Name=" << info.ifName << ", Status=" << info.isUp
-                << ", IfIndex=" << info.ifIndex
-                << ", networks=" << info.networks.size();
+    if (auto* db = std::get_if<InterfaceDatabase>(&update)) {
+      sparkIfDb = *db;
+      LOG(INFO) << "----------- Interface Updates ----------";
+      for (const auto& info : sparkIfDb) {
+        LOG(INFO) << "  Name=" << info.ifName << ", Status=" << info.isUp
+                  << ", IfIndex=" << info.ifIndex
+                  << ", networks=" << info.networks.size();
+      }
+    } else if (
+        auto* isAdjDbSynced =
+            std::get_if<thrift::InitializationEvent>(&update)) {
+      ASSERT_TRUE(0);
     }
   }
 
@@ -605,7 +611,7 @@ class LinkMonitorTestFixture : public testing::Test {
   folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 
-  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
+  messaging::ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
   messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
@@ -614,7 +620,7 @@ class LinkMonitorTestFixture : public testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
-  messaging::RQueue<InterfaceDatabase> interfaceUpdatesReader{
+  messaging::RQueue<InterfaceEvent> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 

@@ -91,7 +91,7 @@ LinkMonitor::LinkMonitor(
     fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
     PersistentStore* configStore,
-    messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
+    messaging::ReplicateQueue<InterfaceEvent>& interfaceUpdatesQueue,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,

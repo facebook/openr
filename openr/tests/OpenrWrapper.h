@@ -164,7 +164,7 @@ class OpenrWrapper {
   // sub module communication queues
   const std::string kvStoreGlobalCmdUrl_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
-  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
