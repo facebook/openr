@@ -55,7 +55,7 @@ DualStateMachine::processEvent(DualEvent event, bool fc) {
     break;
   }
   default: {
-    LOG(ERROR) << "unknown state";
+    XLOG(ERR) << "unknown state";
     break;
   }
   }
@@ -319,8 +319,8 @@ Dual::getCounters() const noexcept {
 void
 Dual::clearCounters(const std::string& neighbor) noexcept {
   if (counters_.count(neighbor) == 0) {
-    LOG(WARNING) << "clearCounters called on non-existing neighbor "
-                 << neighbor;
+    XLOG(WARNING) << "clearCounters called on non-existing neighbor "
+                  << neighbor;
     return;
   }
   counters_[neighbor] = thrift::DualPerRootCounters();
@@ -329,7 +329,7 @@ Dual::clearCounters(const std::string& neighbor) noexcept {
 void
 Dual::addChild(const std::string& child) noexcept {
   if (children_.count(child)) {
-    LOG(WARNING) << rootId << ": adding an existing child " << child;
+    XLOG(WARNING) << rootId << ": adding an existing child " << child;
     return;
   }
   children_.emplace(child);
@@ -338,7 +338,7 @@ Dual::addChild(const std::string& child) noexcept {
 void
 Dual::removeChild(const std::string& child) noexcept {
   if (!children_.count(child)) {
-    LOG(WARNING) << rootId << ": removing an non-existing child " << child;
+    XLOG(WARNING) << rootId << ": removing an non-existing child " << child;
     return;
   }
   children_.erase(child);
@@ -794,7 +794,7 @@ DualNode::processDualMessages(const thrift::DualMessages& messages) {
       break;
     }
     default: {
-      LOG(ERROR) << "unknown dual message type";
+      XLOG(ERR) << "unknown dual message type";
       break;
     }
     }
@@ -874,8 +874,8 @@ DualNode::getCounters() const noexcept {
 void
 DualNode::clearCounters(const std::string& neighbor) noexcept {
   if (counters_.count(neighbor) == 0) {
-    LOG(WARNING) << "clearCounters called on non-existing neighbor "
-                 << neighbor;
+    XLOG(WARNING) << "clearCounters called on non-existing neighbor "
+                  << neighbor;
     return;
   }
   counters_[neighbor] = thrift::DualPerNeighborCounters();
@@ -895,7 +895,7 @@ DualNode::sendAllDualMessages(
     // set srcId = myNodeId
     msgs.srcId_ref() = nodeId;
     if (not sendDualMessages(neighbor, msgs)) {
-      LOG(ERROR) << "failed to send dual messages to " << kv.first;
+      XLOG(ERR) << "failed to send dual messages to " << kv.first;
       continue;
     }
     (*counters_[neighbor].pktSent_ref())++;

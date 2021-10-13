@@ -133,7 +133,7 @@ SpfSolver::updateStaticUnicastRoutes(
         unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
-  LOG_IF(INFO, unicastRoutesToUpdate.size())
+  XLOG_IF(INFO, unicastRoutesToUpdate.size())
       << "Adding/Updating " << unicastRoutesToUpdate.size()
       << " static unicast routes.";
   for (const auto& [prefix, ribUnicastEntry] : unicastRoutesToUpdate) {
@@ -146,7 +146,7 @@ SpfSolver::updateStaticUnicastRoutes(
     }
   }
 
-  LOG_IF(INFO, unicastRoutesToDelete.size())
+  XLOG_IF(INFO, unicastRoutesToDelete.size())
       << "Deleting " << unicastRoutesToDelete.size()
       << " static unicast routes.";
   for (const auto& prefix : unicastRoutesToDelete) {
@@ -162,7 +162,7 @@ SpfSolver::updateStaticMplsRoutes(
     const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutesToUpdate,
     const std::vector<int32_t>& mplsRoutesToDelete) {
   // Process MPLS routes to add or update
-  LOG_IF(INFO, mplsRoutesToUpdate.size())
+  XLOG_IF(INFO, mplsRoutesToUpdate.size())
       << "Adding/Updating " << mplsRoutesToUpdate.size()
       << " static mpls routes.";
   for (const auto& [label, mplsRoute] : mplsRoutesToUpdate) {
@@ -175,7 +175,7 @@ SpfSolver::updateStaticMplsRoutes(
     }
   }
 
-  LOG_IF(INFO, mplsRoutesToDelete.size())
+  XLOG_IF(INFO, mplsRoutesToDelete.size())
       << "Deleting " << mplsRoutesToDelete.size() << " static mpls routes.";
   for (const auto& topLabel : mplsRoutesToDelete) {
     staticMplsRoutes_.erase(topLabel);
@@ -216,10 +216,10 @@ SpfSolver::createRouteForPrefix(
   // Sanity check for V4 prefixes
   const bool isV4Prefix = prefix.first.isV4();
   if (isV4Prefix and (not enableV4_) and (not v4OverV6Nexthop_)) {
-    LOG(WARNING) << "Received v4 prefix "
-                 << folly::IPAddress::networkToString(prefix)
-                 << " while v4 is not enabled, and "
-                 << "we are not allowing v4 prefix over v6 nexthop.";
+    XLOG(WARNING) << "Received v4 prefix "
+                  << folly::IPAddress::networkToString(prefix)
+                  << " while v4 is not enabled, and "
+                  << "we are not allowing v4 prefix over v6 nexthop.";
     fb303::fbData->addStatValue(
         "decision.skipped_unicast_route", 1, fb303::COUNT);
     return std::nullopt;
@@ -257,8 +257,9 @@ SpfSolver::createRouteForPrefix(
 
   // Skip if no valid prefixes
   if (prefixEntries.empty()) {
-    VLOG(3) << "Skipping route to " << folly::IPAddress::networkToString(prefix)
-            << " with no reachable node.";
+    XLOG(DBG3) << "Skipping route to "
+               << folly::IPAddress::networkToString(prefix)
+               << " with no reachable node.";
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
@@ -281,7 +282,7 @@ SpfSolver::createRouteForPrefix(
     }
     if (isBGP and not prefixEntry->mv_ref().has_value()) {
       missingMv = true;
-      LOG_IF(ERROR, not enableBestRouteSelection_)
+      XLOG_IF(ERR, not enableBestRouteSelection_)
           << "Prefix entry for " << folly::IPAddress::networkToString(prefix)
           << " advertised by " << nodeAndArea.first << ", area "
           << nodeAndArea.second
@@ -294,17 +295,17 @@ SpfSolver::createRouteForPrefix(
   // skip adding route for BGP prefixes that have issues
   if (hasBGP) {
     if (hasNonBGP and not enableBestRouteSelection_) {
-      LOG(ERROR) << "Skipping route for "
-                 << folly::IPAddress::networkToString(prefix)
-                 << " which is advertised with BGP and non-BGP type.";
+      XLOG(ERR) << "Skipping route for "
+                << folly::IPAddress::networkToString(prefix)
+                << " which is advertised with BGP and non-BGP type.";
       fb303::fbData->addStatValue(
           "decision.skipped_unicast_route", 1, fb303::COUNT);
       return std::nullopt;
     }
     if (missingMv and not enableBestRouteSelection_) {
-      LOG(ERROR) << "Skipping route for "
-                 << folly::IPAddress::networkToString(prefix)
-                 << " at least one advertiser is missing its metric vector.";
+      XLOG(ERR) << "Skipping route for "
+                << folly::IPAddress::networkToString(prefix)
+                << " at least one advertiser is missing its metric vector.";
       fb303::fbData->addStatValue(
           "decision.skipped_unicast_route", 1, fb303::COUNT);
       return std::nullopt;
@@ -317,8 +318,8 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
   if (routeSelectionResult.allNodeAreas.empty()) {
-    LOG(WARNING) << "No route to prefix "
-                 << folly::IPAddress::networkToString(prefix);
+    XLOG(WARNING) << "No route to prefix "
+                  << folly::IPAddress::networkToString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
@@ -342,8 +343,8 @@ SpfSolver::createRouteForPrefix(
   // prefix-entry with the prepend label. Once we support multi-area routing,
   // we can deprecate the check of hasSelfPrependLabel
   if (routeSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
-    VLOG(3) << "Skip adding route for prefixes advertised by " << myNodeName
-            << " " << folly::IPAddress::networkToString(prefix);
+    XLOG(DBG3) << "Skip adding route for prefixes advertised by " << myNodeName
+               << " " << folly::IPAddress::networkToString(prefix);
     return std::nullopt;
   }
 
@@ -436,7 +437,7 @@ SpfSolver::createRouteForPrefix(
       ksp2NextHops.insert(areaNextHops.begin(), areaNextHops.end());
     } break;
     default:
-      LOG(ERROR)
+      XLOG(ERR)
           << "Unknown prefix algorithm type "
           << apache::thrift::util::enumNameSafe(*areaRules.forwardingAlgo_ref())
           << " for prefix " << folly::IPAddress::networkToString(prefix);
@@ -520,8 +521,8 @@ SpfSolver::buildRouteDb(
         }
         // If mpls label is not valid then ignore it
         if (not isMplsLabelValid(topLabel)) {
-          LOG(ERROR) << "Ignoring invalid node label " << topLabel
-                     << " of node " << nodeName << " in area " << area;
+          XLOG(ERR) << "Ignoring invalid node label " << topLabel << " of node "
+                    << nodeName << " in area " << area;
           fb303::fbData->addStatValue(
               "decision.skipped_mpls_route", 1, fb303::COUNT);
           continue;
@@ -564,8 +565,8 @@ SpfSolver::buildRouteDb(
             false,
             linkState);
         if (metricNhs.second.empty()) {
-          LOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
-                       << " of node " << nodeName;
+          XLOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
+                        << " of node " << nodeName;
           fb303::fbData->addStatValue(
               "decision.no_route_to_label", 1, fb303::COUNT);
           continue;
@@ -615,8 +616,8 @@ SpfSolver::buildRouteDb(
         }
         // If mpls label is not valid then ignore it
         if (not isMplsLabelValid(topLabel)) {
-          LOG(ERROR) << "Ignoring invalid adjacency label " << topLabel
-                     << " of link " << link->directionalToString(myNodeName);
+          XLOG(ERR) << "Ignoring invalid adjacency label " << topLabel
+                    << " of link " << link->directionalToString(myNodeName);
           fb303::fbData->addStatValue(
               "decision.skipped_mpls_route", 1, fb303::COUNT);
           continue;
@@ -760,12 +761,12 @@ SpfSolver::runBestPathSelectionBgp(
       ret.allNodeAreas.emplace(nodeAndArea);
       break;
     case MetricVectorUtils::CompareResult::TIE:
-      LOG(ERROR) << "Tie ordering prefix entries. Skipping route for "
-                 << folly::IPAddress::networkToString(prefix);
+      XLOG(ERR) << "Tie ordering prefix entries. Skipping route for "
+                << folly::IPAddress::networkToString(prefix);
       return ret;
     case MetricVectorUtils::CompareResult::ERROR:
-      LOG(ERROR) << "Error ordering prefix entries. Skipping route for "
-                 << folly::IPAddress::networkToString(prefix);
+      XLOG(ERR) << "Error ordering prefix entries. Skipping route for "
+                << folly::IPAddress::networkToString(prefix);
       return ret;
     default:
       break;
@@ -811,8 +812,8 @@ SpfSolver::selectBestPathsSpf(
   const auto nextHopsWithMetric = getNextHopsWithMetric(
       myNodeName, filteredBestNodeAreas, perDestination, linkState);
   if (nextHopsWithMetric.second.empty()) {
-    VLOG(3) << "No route to prefix "
-            << folly::IPAddress::networkToString(prefix);
+    XLOG(DBG3) << "No route to prefix "
+               << folly::IPAddress::networkToString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::make_pair(
         nextHopsWithMetric.first, std::unordered_set<thrift::NextHopThrift>());
@@ -849,10 +850,10 @@ SpfSolver::selectBestPathsKsp2(
 
   // Sanity check for forwarding type
   if (forwardingType != thrift::PrefixForwardingType::SR_MPLS) {
-    LOG(ERROR) << "Incompatible forwarding type "
-               << apache ::thrift::util::enumNameSafe(forwardingType)
-               << " for algorithm KSPF2_ED_ECMP of "
-               << folly::IPAddress::networkToString(prefix);
+    XLOG(ERR) << "Incompatible forwarding type "
+              << apache ::thrift::util::enumNameSafe(forwardingType)
+              << " for algorithm KSPF2_ED_ECMP of "
+              << folly::IPAddress::networkToString(prefix);
 
     fb303::fbData->addStatValue(
         "decision.incompatible_forwarding_type", 1, fb303::COUNT);
@@ -921,7 +922,7 @@ SpfSolver::selectBestPathsKsp2(
     }
     // Ignore paths including nodes with invalid node labels.
     if (invalidNodes.size() > 0) {
-      LOG(WARNING) << fmt::format(
+      XLOG(WARNING) << fmt::format(
           "Ignore path for {} through [{}] because of invalid node label.",
           folly::IPAddress::networkToString(prefix),
           folly::join(", ", invalidNodes));
@@ -981,11 +982,11 @@ SpfSolver::addBestPaths(
   // min-nexthop requirement is not met.
   auto minNextHop = getMinNextHopThreshold(routeSelectionResult, prefixEntries);
   if (minNextHop.has_value() and minNextHop.value() > nextHops.size()) {
-    LOG(WARNING) << "Ignore programming of route to "
-                 << folly::IPAddress::networkToString(prefix)
-                 << " because of min-nexthop requirement. "
-                 << "Minimum required " << minNextHop.value() << ", got "
-                 << nextHops.size();
+    XLOG(WARNING) << "Ignore programming of route to "
+                  << folly::IPAddress::networkToString(prefix)
+                  << " because of min-nexthop requirement. "
+                  << "Minimum required " << minNextHop.value() << ", got "
+                  << nextHops.size();
     return std::nullopt;
   }
 
@@ -1014,8 +1015,8 @@ SpfSolver::addBestPaths(
             nh.address_ref().value(), std::nullopt, 0, std::nullopt));
       }
     } else {
-      LOG(ERROR) << "Static nexthops do not exist for static mpls label "
-                 << prependLabel.value();
+      XLOG(ERR) << "Static nexthops do not exist for static mpls label "
+                << prependLabel.value();
     }
   }
 

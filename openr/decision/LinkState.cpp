@@ -447,7 +447,7 @@ LinkState::removeNode(const std::string& nodeName) {
       CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
       CHECK(allLinks_.erase(link));
     } catch (std::out_of_range const& e) {
-      LOG(FATAL) << "std::out_of_range for " << nodeName;
+      XLOG(FATAL) << "std::out_of_range for " << nodeName;
     }
   }
   linkMap_.erase(search);
@@ -575,12 +575,12 @@ LinkState::updateAdjacencyDatabase(
   DCHECK_EQ(area_, *newAdjacencyDb.area_ref());
 
   for (auto const& adj : *newAdjacencyDb.adjacencies_ref()) {
-    VLOG(3) << "  neighbor: " << *adj.otherNodeName_ref()
-            << ", remoteIfName: " << getRemoteIfName(adj)
-            << ", ifName: " << *adj.ifName_ref()
-            << ", metric: " << *adj.metric_ref()
-            << ", overloaded: " << *adj.isOverloaded_ref()
-            << ", rtt: " << *adj.rtt_ref();
+    XLOG(DBG3) << "  neighbor: " << *adj.otherNodeName_ref()
+               << ", remoteIfName: " << getRemoteIfName(adj)
+               << ", ifName: " << *adj.ifName_ref()
+               << ", metric: " << *adj.metric_ref()
+               << ", overloaded: " << *adj.isOverloaded_ref()
+               << ", rtt: " << *adj.rtt_ref();
   }
 
   // Default construct if it did not exist
@@ -731,8 +731,8 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
     kthPathResults_.clear();
     change.topologyChanged = true;
   } else {
-    LOG(WARNING) << "Trying to delete adjacency db for non-existing node "
-                 << nodeName;
+    XLOG(WARNING) << "Trying to delete adjacency db for non-existing node "
+                  << nodeName;
   }
   return change;
 }
@@ -864,10 +864,10 @@ LinkState::runSpf(
       }
     }
   }
-  VLOG(3) << "Dijkstra loop count: " << loop;
+  XLOG(DBG3) << "Dijkstra loop count: " << loop;
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  VLOG(3) << "SPF elapsed time: " << deltaTime.count() << "ms.";
+  XLOG(DBG3) << "SPF elapsed time: " << deltaTime.count() << "ms.";
   fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
   return result;
 }

@@ -51,8 +51,8 @@ mergeKeyValues(
 
   for (const auto& [key, value] : keyVals) {
     if (filters.has_value() && not filters->keyMatch(key, value)) {
-      VLOG(4) << "key: " << key << " not adding from "
-              << *value.originatorId_ref();
+      XLOG(DBG4) << "key: " << key << " not adding from "
+                 << *value.originatorId_ref();
       continue;
     }
 
@@ -73,7 +73,7 @@ mergeKeyValues(
     if (kvStoreIt != kvStore.end()) {
       myVersion = *kvStoreIt->second.version_ref();
     } else {
-      VLOG(4) << "(mergeKeyValues) key: '" << key << "' not found, adding";
+      XLOG(DBG4) << "(mergeKeyValues) key: '" << key << "' not found, adding";
     }
 
     // If we get an old value just skip it
@@ -192,9 +192,9 @@ mergeKeyValues(
     kvUpdates.emplace(key, value);
   }
 
-  VLOG(4) << "(mergeKeyValues) updating " << kvUpdates.size()
-          << " keyvals. ValueUpdates: " << valUpdateCnt
-          << ", TtlUpdates: " << ttlUpdateCnt;
+  XLOG(DBG4) << "(mergeKeyValues) updating " << kvUpdates.size()
+             << " keyvals. ValueUpdates: " << valUpdateCnt
+             << ", TtlUpdates: " << ttlUpdateCnt;
   return kvUpdates;
 }
 

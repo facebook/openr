@@ -104,7 +104,7 @@ KvStoreWrapper::setKey(
   try {
     kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
   }
   return true;
@@ -125,7 +125,7 @@ KvStoreWrapper::setKeys(
   try {
     kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
   }
   return true;
@@ -155,14 +155,14 @@ KvStoreWrapper::getKey(AreaId const& area, std::string key) {
     if (maybeGetKey.hasValue()) {
       pub = *(maybeGetKey.value());
     } else {
-      LOG(ERROR) << "Failed to retrieve key from KvStore. Key: " << key;
+      XLOG(ERR) << "Failed to retrieve key from KvStore. Key: " << key;
       return std::nullopt;
     }
   } catch (const folly::FutureTimeout&) {
-    LOG(ERROR) << "Timed out retrieving key: " << key;
+    XLOG(ERR) << "Timed out retrieving key: " << key;
   } catch (std::exception const& e) {
-    LOG(WARNING) << "Exception to get key from kvstore: "
-                 << folly::exceptionStr(e);
+    XLOG(WARNING) << "Exception to get key from kvstore: "
+                  << folly::exceptionStr(e);
     return std::nullopt; // No value found
   }
 
@@ -273,7 +273,7 @@ KvStoreWrapper::addPeers(AreaId const& area, thrift::PeersMap& peers) {
   try {
     kvStore_->semifuture_addUpdateKvStorePeers(area, peers).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Failed to add peers: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Failed to add peers: " << folly::exceptionStr(e);
     return false;
   }
   return true;
@@ -284,7 +284,7 @@ KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
   try {
     kvStore_->semifuture_deleteKvStorePeers(area, {peerName}).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Failed to delete peers: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Failed to delete peers: " << folly::exceptionStr(e);
     return false;
   }
   return true;

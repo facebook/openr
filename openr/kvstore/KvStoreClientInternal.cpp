@@ -187,8 +187,8 @@ KvStoreClientInternal::checkPersistKeyInStore() {
     try {
       pub = *(kvStore_->semifuture_getKvStoreKeyVals(area, params).get());
     } catch (const std::exception& ex) {
-      LOG(ERROR) << "Failed to get keyvals from kvstore. Exception: "
-                 << ex.what();
+      XLOG(ERR) << "Failed to get keyvals from kvstore. Exception: "
+                << ex.what();
       // retry in 1 sec
       timeout = 1000ms;
       checkPersistKeyTimer_->scheduleTimeout(1000ms);
@@ -554,8 +554,7 @@ KvStoreClientInternal::getKey(AreaId const& area, std::string const& key) {
     params.keys_ref()->emplace_back(key);
     pub = *(kvStore_->semifuture_getKvStoreKeyVals(area, params).get());
   } catch (const std::exception& ex) {
-    LOG(ERROR) << "Failed to get keyvals from kvstore. Exception: "
-               << ex.what();
+    XLOG(ERR) << "Failed to get keyvals from kvstore. Exception: " << ex.what();
     return std::nullopt;
   }
   XLOG(DBG3) << "Received " << pub.keyVals_ref()->size() << " key-vals.";
@@ -584,7 +583,7 @@ KvStoreClientInternal::dumpAllWithPrefix(
                .get()
                ->begin();
   } catch (const std::exception& ex) {
-    LOG(ERROR) << "Failed to add peers to kvstore. Exception: " << ex.what();
+    XLOG(ERR) << "Failed to add peers to kvstore. Exception: " << ex.what();
     return std::nullopt;
   }
   return *pub.keyVals_ref();
@@ -632,7 +631,7 @@ KvStoreClientInternal::unsubscribeKey(
   XLOG(DBG3) << "KvStoreClientInternal: unsubscribeKey called for key " << key;
   // Store callback into KeyCallback map
   if (keyCallbacks_[area].erase(key) == 0) {
-    LOG(WARNING) << "UnsubscribeKey called for non-existing key" << key;
+    XLOG(WARNING) << "UnsubscribeKey called for non-existing key" << key;
   }
 }
 
@@ -932,8 +931,7 @@ KvStoreClientInternal::setKeysHelper(
   try {
     kvStore_->semifuture_setKvStoreKeyVals(area, params).get();
   } catch (const std::exception& ex) {
-    LOG(ERROR) << "Failed to set key-val from KvStore. Exception: "
-               << ex.what();
+    XLOG(ERR) << "Failed to set key-val from KvStore. Exception: " << ex.what();
     return std::nullopt;
   }
   return folly::Unit();

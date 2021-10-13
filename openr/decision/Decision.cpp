@@ -211,12 +211,12 @@ Decision::Decision(
 #ifndef NO_FOLLY_EXCEPTION_TRACER
         // collect stack strace then fail the process
         for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
-          LOG(ERROR) << exInfo;
+          XLOG(ERR) << exInfo;
         }
 #endif
         // FATAL to produce core dump
-        LOG(FATAL) << "Exception occured in Decision::processPublication - "
-                   << folly::exceptionStr(e);
+        XLOG(FATAL) << "Exception occured in Decision::processPublication - "
+                    << folly::exceptionStr(e);
       }
     }
   });
@@ -245,7 +245,7 @@ Decision::Decision(
 
   // Create RibPolicy timer to process routes on policy expiry
   ribPolicyTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    LOG(WARNING) << "RibPolicy is expired";
+    XLOG(WARNING) << "RibPolicy is expired";
     pendingUpdates_.setNeedsFullRebuild();
     rebuildRoutes("RIB_POLICY_EXPIRED");
   });
@@ -386,9 +386,8 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
       [this, p = std::move(p), ribPolicy = std::move(ribPolicy)]() mutable {
         const auto durationLeft = ribPolicy->getTtlDuration();
         if (durationLeft.count() <= 0) {
-          LOG(ERROR)
-              << "Ignoring RibPolicy update with new instance because of "
-              << "staleness. Validity " << durationLeft.count() << "ms";
+          XLOG(ERR) << "Ignoring RibPolicy update with new instance because of "
+                    << "staleness. Validity " << durationLeft.count() << "ms";
           return;
         }
 
@@ -482,7 +481,7 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
         // We expect per prefix key, ignore if publication is still in old
         // format.
         if (1 != prefixDb.get_prefixEntries().size()) {
-          LOG(ERROR)
+          XLOG(ERR)
               << "Expecting exactly one entry per prefix key, publication received from "
               << *prefixDb.thisNodeName_ref();
           fb303::fbData->addStatValue("decision.error", 1, fb303::COUNT);
@@ -520,8 +519,8 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
             prefixDb.perfEvents_ref());
       }
     } catch (const std::exception& e) {
-      LOG(ERROR) << "Failed to deserialize info for key " << key
-                 << ". Exception: " << folly::exceptionStr(e);
+      XLOG(ERR) << "Failed to deserialize info for key " << key
+                << ". Exception: " << folly::exceptionStr(e);
     }
   }
 
@@ -542,7 +541,7 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
       auto maybePrefixKey = PrefixKey::fromStr(key, area);
       if (maybePrefixKey.hasError()) {
         // this is bad format of key.
-        LOG(ERROR) << fmt::format(
+        XLOG(ERR) << fmt::format(
             "Unable to parse prefix key: {} with error: {}",
             key,
             maybePrefixKey.error());
@@ -633,7 +632,7 @@ Decision::rebuildRoutes(std::string const& event) {
     // because there maybe routes depended on static routes.
     auto maybeRouteDb =
         spfSolver_->buildRouteDb(myNodeName_, areaLinkStates_, prefixState_);
-    LOG_IF(WARNING, !maybeRouteDb)
+    XLOG_IF(WARNING, !maybeRouteDb)
         << "SEVERE: full route rebuild resulted in no routes";
     auto db = maybeRouteDb.has_value() ? std::move(maybeRouteDb).value()
                                        : DecisionRouteDb{};
@@ -735,9 +734,9 @@ Decision::updateGlobalCounters() const {
     if (not PrefixState::hasConflictingForwardingInfo(prefixEntries)) {
       continue;
     }
-    LOG(WARNING) << "Prefix " << folly::IPAddress::networkToString(prefix)
-                 << " has conflicting "
-                 << "forwarding algorithm or type.";
+    XLOG(WARNING) << "Prefix " << folly::IPAddress::networkToString(prefix)
+                  << " has conflicting "
+                  << "forwarding algorithm or type.";
     numConflictingPrefixes += 1;
   }
 

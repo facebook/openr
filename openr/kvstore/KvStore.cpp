@@ -97,8 +97,8 @@ KvStore::KvStore(
             }
 
             if (maybeReq.hasError()) {
-              LOG(ERROR) << "failed reading messages from globalCmdSock: "
-                         << maybeReq.error();
+              XLOG(ERR) << "failed reading messages from globalCmdSock: "
+                        << maybeReq.error();
               continue;
             }
 
@@ -120,8 +120,7 @@ KvStore::KvStore(
       try {
         processPeerUpdates(std::move(maybePeerUpdate).value());
       } catch (const std::exception& ex) {
-        LOG(ERROR) << "Failed to process peer request. Exception: "
-                   << ex.what();
+        XLOG(ERR) << "Failed to process peer request. Exception: " << ex.what();
       }
     }
   });
@@ -141,8 +140,8 @@ KvStore::KvStore(
             try {
               processKeyValueRequest(std::move(maybeKvRequest).value());
             } catch (const std::exception& ex) {
-              LOG(ERROR) << "Failed to process key-value request. Exception: "
-                         << ex.what();
+              XLOG(ERR) << "Failed to process key-value request. Exception: "
+                        << ex.what();
             }
           }
         });
@@ -209,14 +208,14 @@ KvStore::prepareSocket(
   for (const auto& [opt, val] : socketOptions) {
     auto rc = socket.setSockOpt(opt, &val, sizeof(val));
     if (rc.hasError()) {
-      LOG(ERROR) << "Error setting zmq opt: " << opt << "to " << val
-                 << ". Error: " << rc.error();
+      XLOG(ERR) << "Error setting zmq opt: " << opt << "to " << val
+                << ". Error: " << rc.error();
     }
   }
 
   auto rc = socket.bind(fbzmq::SocketUrl{url});
   if (rc.hasError()) {
-    LOG(ERROR) << "Error binding to URL '" << url << "'. Error: " << rc.error();
+    XLOG(ERR) << "Error binding to URL '" << url << "'. Error: " << rc.error();
   }
 }
 
@@ -225,8 +224,8 @@ KvStore::getAreaDbOrThrow(
     std::string const& areaId, std::string const& caller) {
   auto search = kvStoreDb_.find(areaId);
   if (kvStoreDb_.end() == search) {
-    LOG(WARNING) << "Area " << areaId
-                 << " requested but not configured for this node.";
+    XLOG(WARNING) << "Area " << areaId
+                  << " requested but not configured for this node.";
     // TODO: migration workaround => if me/peer does is using default area,
     // always honor my config, ignore peer's config.
     if (kvStoreDb_.size() == 1 and
@@ -249,7 +248,7 @@ KvStore::getAreaDbOrThrow(
 void
 KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
   if (req.empty()) {
-    LOG(ERROR) << "Empty request received";
+    XLOG(ERR) << "Empty request received";
     return;
   }
   auto maybeReply = processRequestMsg(
@@ -268,7 +267,7 @@ KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
   if (not req.back().empty()) {
     auto sndRet = kvParams_.globalCmdSock.sendMultiple(req);
     if (sndRet.hasError()) {
-      LOG(ERROR) << "Error sending response. " << sndRet.error();
+      XLOG(ERR) << "Error sending response. " << sndRet.error();
     }
   }
   return;
@@ -301,11 +300,11 @@ KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
         kvStoreDb.eraseSelfOriginatedKey(pClearKvRequest->getKey());
       }
     } else {
-      LOG(ERROR)
+      XLOG(ERR)
           << "Error processing key value request. Request type not recognized.";
     }
   } catch (thrift::OpenrError const& e) {
-    LOG(ERROR) << " Failed to find area " << area.t << " in kvStoreDb_.";
+    XLOG(ERR) << " Failed to find area " << area.t << " in kvStoreDb_.";
   }
 }
 
@@ -318,8 +317,8 @@ KvStore::processRequestMsg(
       request.readThriftObj<thrift::KvStoreRequest>(serializer_);
 
   if (maybeThriftReq.hasError()) {
-    LOG(ERROR) << "processRequest: failed reading thrift::processRequestMsg"
-               << maybeThriftReq.error();
+    XLOG(ERR) << "processRequest: failed reading thrift::processRequestMsg"
+              << maybeThriftReq.error();
     return {folly::makeUnexpected(fbzmq::Error())};
   }
 
@@ -489,7 +488,7 @@ KvStore::semifuture_dumpKvStoreKeys(
         }
         result->push_back(std::move(thriftPub));
       } catch (thrift::OpenrError const& e) {
-        LOG(ERROR) << " Failed to find area " << area << " in kvStoreDb_.";
+        XLOG(ERR) << " Failed to find area " << area << " in kvStoreDb_.";
       }
     }
     p.setValue(std::move(result));
@@ -728,7 +727,7 @@ KvStore::semifuture_processKvStoreDualMessage(
       auto& kvStoreDb =
           getAreaDbOrThrow(area, "semifuture_processKvStoreDualMessage");
       if (dualMessages.messages_ref()->empty()) {
-        LOG(ERROR) << "Empty DUAL msg receved";
+        XLOG(ERR) << "Empty DUAL msg receved";
         p.setValue();
       } else {
         fb303::fbData->addStatValue(
@@ -1016,7 +1015,7 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
         Constants::kThriftClientKeepAliveInterval, 20.0);
     keepAliveTimer->scheduleTimeout(period);
   } catch (std::exception const& e) {
-    LOG(ERROR) << fmt::format(
+    XLOG(ERR) << fmt::format(
         "{} [Thrift Sync] Failed creating thrift client with addr: {}, port: {}, peerName: {}. Exception: {}",
         areaTag,
         peerSpec.get_peerAddr(),
@@ -1928,7 +1927,7 @@ KvStoreDb::requestThriftPeerSync() {
       getPeersByState(thrift::KvStorePeerState::IDLE).size();
   if (numThriftPeersInIdle > 0 or
       numThriftPeersInSync > parallelSyncLimitOverThrift_) {
-    LOG_IF(INFO, numThriftPeersInIdle)
+    XLOG_IF(INFO, numThriftPeersInIdle)
         << AreaTag()
         << fmt::format(
                "[Thrift Sync] {} idle peers require full-sync. Schedule after: {}ms",
@@ -1950,7 +1949,7 @@ KvStoreDb::processThriftSuccess(
     std::chrono::milliseconds timeDelta) {
   // check if it is valid peer(i.e. peer removed in process of syncing)
   if (not thriftPeers_.count(peerName)) {
-    LOG(WARNING)
+    XLOG(WARNING)
         << AreaTag()
         << fmt::format(
                "[Thrift Sync] Invalid peer: {}. Skip state transition.",
@@ -1965,7 +1964,7 @@ KvStoreDb::processThriftSuccess(
   //       promote the state.
   auto& peer = thriftPeers_.at(peerName);
   if (peer.peerSpec.get_state() == thrift::KvStorePeerState::IDLE) {
-    LOG(WARNING)
+    XLOG(WARNING)
         << AreaTag()
         << fmt::format(
                "[Thrift Sync] Ignore response from: {} due to IDLE state.",
@@ -2150,7 +2149,7 @@ KvStoreDb::addThriftPeers(
                           peerAddr);
       } else {
         // case2. new peer came up (previsously shut down ungracefully)
-        LOG(WARNING)
+        XLOG(WARNING)
             << AreaTag()
             << fmt::format(
                    "[Peer Update] new peer {} comes up. Previously shutdown non-gracefully",
@@ -2255,19 +2254,18 @@ KvStoreDb::addPeers(
             const auto ret = peerSyncSock_.disconnect(
                 fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
             if (ret.hasError()) {
-              LOG(ERROR)
-                  << AreaTag()
-                  << fmt::format(
-                         "[ZMQ] Error Disconnecting to URL {}. Error: {}",
-                         peerSpec.get_cmdUrl(),
-                         ret.error().errString);
+              XLOG(ERR) << AreaTag()
+                        << fmt::format(
+                               "[ZMQ] Error Disconnecting to URL {}. Error: {}",
+                               peerSpec.get_cmdUrl(),
+                               ret.error().errString);
             }
             // Remove any pending expected response for old socket-id
             latestSentPeerSync_.erase(it->second.second);
             it->second.second = newPeerCmdId;
           } else {
             // case2. new peer came up (previsously shut down ungracefully)
-            LOG(WARNING)
+            XLOG(WARNING)
                 << AreaTag()
                 << fmt::format(
                        "[ZMQ] New peer {}. Previously shutdown non-gracefully",
@@ -2296,7 +2294,7 @@ KvStoreDb::addPeers(
           auto const optStatus = peerSyncSock_.setSockOpt(
               ZMQ_CONNECT_RID, newPeerCmdId.data(), newPeerCmdId.size());
           if (optStatus.hasError()) {
-            LOG(ERROR)
+            XLOG(ERR)
                 << AreaTag()
                 << fmt::format(
                        "[ZMQ] Error setting ZMQ_CONNECT_RID with value {}",
@@ -2304,10 +2302,10 @@ KvStoreDb::addPeers(
           }
           if (peerSyncSock_.connect(fbzmq::SocketUrl{*newPeerSpec.cmdUrl_ref()})
                   .hasError()) {
-            LOG(ERROR) << AreaTag()
-                       << fmt::format(
-                              "[ZMQ] Error connecting to URL {}",
-                              newPeerSpec.get_cmdUrl());
+            XLOG(ERR) << AreaTag()
+                      << fmt::format(
+                             "[ZMQ] Error connecting to URL {}",
+                             newPeerSpec.get_cmdUrl());
           }
         }
 
@@ -2318,11 +2316,11 @@ KvStoreDb::addPeers(
           unsetChildAll(peerName);
         }
       } catch (std::exception const& e) {
-        LOG(ERROR) << AreaTag()
-                   << fmt::format(
-                          "[ZMQ] Error connecting to {}, reason: {}",
-                          peerName,
-                          folly::exceptionStr(e));
+        XLOG(ERR) << AreaTag()
+                  << fmt::format(
+                         "[ZMQ] Error connecting to {}, reason: {}",
+                         peerName,
+                         folly::exceptionStr(e));
       }
     }
     if (not fullSyncTimer_->isScheduled()) {
@@ -2364,7 +2362,7 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
   for (auto const& peerName : peers) {
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter == thriftPeers_.end()) {
-      LOG(ERROR)
+      XLOG(ERR)
           << AreaTag()
           << fmt::format(
                  "[Peer Delete] try to delete non-existing peer: {}. Skip.",
@@ -2402,7 +2400,7 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
       // not currently subscribed
       auto it = peers_.find(peerName);
       if (it == peers_.end()) {
-        LOG(ERROR)
+        XLOG(ERR)
             << AreaTag()
             << fmt::format(
                    "[ZMQ] Trying to delete non-existing peer {}", peerName);
@@ -2423,11 +2421,11 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
       auto syncRes =
           peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
       if (syncRes.hasError()) {
-        LOG(ERROR) << AreaTag()
-                   << fmt::format(
-                          "[ZMQ] Failed to detach from {}. Error: {}",
-                          peerSpec.get_cmdUrl(),
-                          syncRes.error().errString);
+        XLOG(ERR) << AreaTag()
+                  << fmt::format(
+                         "[ZMQ] Failed to detach from {}. Error: {}",
+                         peerSpec.get_cmdUrl(),
+                         syncRes.error().errString);
       }
 
       peersToSyncWith_.erase(peerName);
@@ -2498,7 +2496,7 @@ KvStoreDb::requestFullSyncFromPeers() {
 
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
-      LOG(ERROR)
+      XLOG(ERR)
           << AreaTag()
           << fmt::format(
                  "[ZMQ] Failed to send full-sync request to peer {} ", peerName)
@@ -2538,7 +2536,7 @@ KvStoreDb::requestFullSyncFromPeers() {
   // will not initiate full sync request if it's already scheduled
   if (not peersToSyncWith_.empty() ||
       latestSentPeerSync_.size() >= parallelSyncLimit_) {
-    LOG_IF(INFO, peersToSyncWith_.size())
+    XLOG_IF(INFO, peersToSyncWith_.size())
         << AreaTag()
         << fmt::format(
                "[ZMQ] {} peers still require full-sync.",
@@ -2613,7 +2611,7 @@ KvStoreDb::processRequestMsgHelper(
   case thrift::Command::KEY_DUMP: {
     XLOG(DBG3) << "Dump all keys requested";
     if (not thriftReq.keyDumpParams_ref().has_value()) {
-      LOG(ERROR) << "received none keyDumpParams";
+      XLOG(ERR) << "received none keyDumpParams";
       return folly::makeUnexpected(fbzmq::Error());
     }
 
@@ -2663,11 +2661,11 @@ KvStoreDb::processRequestMsgHelper(
   case thrift::Command::DUAL: {
     XLOG(DBG2) << "DUAL messages received";
     if (not thriftReq.dualMessages_ref().has_value()) {
-      LOG(ERROR) << "received none dualMessages";
+      XLOG(ERR) << "received none dualMessages";
       return fbzmq::Message(); // ignore it
     }
     if (thriftReq.dualMessages_ref().value().messages_ref()->empty()) {
-      LOG(WARNING) << AreaTag() << "[ZMQ Sync] received empty dualMessages";
+      XLOG(WARNING) << AreaTag() << "[ZMQ Sync] received empty dualMessages";
       return fbzmq::Message(); // ignore it
     }
     fb303::fbData->addStatValue(
@@ -2678,14 +2676,14 @@ KvStoreDb::processRequestMsgHelper(
   case thrift::Command::FLOOD_TOPO_SET: {
     XLOG(DBG2) << "FLOOD_TOPO_SET command requested";
     if (not thriftReq.floodTopoSetParams_ref().has_value()) {
-      LOG(ERROR) << AreaTag() << "[ZMQ Sync] received none floodTopoSetParams";
+      XLOG(ERR) << AreaTag() << "[ZMQ Sync] received none floodTopoSetParams";
       return fbzmq::Message(); // ignore it
     }
     processFloodTopoSet(std::move(*thriftReq.floodTopoSetParams_ref()));
     return fbzmq::Message();
   }
   default: {
-    LOG(ERROR) << AreaTag() << "Unknown command received";
+    XLOG(ERR) << AreaTag() << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
   }
   }
@@ -2739,10 +2737,10 @@ KvStoreDb::processFloodTopoSet(
   }
 
   if (not DualNode::hasDual(*setParams.rootId_ref())) {
-    LOG(ERROR) << AreaTag()
-               << fmt::format(
-                      "[Dual] processFloodTopoSet unknown root-id: {}",
-                      *setParams.rootId_ref());
+    XLOG(ERR) << AreaTag()
+              << fmt::format(
+                     "[Dual] processFloodTopoSet unknown root-id: {}",
+                     *setParams.rootId_ref());
     return;
   }
   auto& dual = DualNode::getDual(*setParams.rootId_ref());
@@ -2783,10 +2781,10 @@ KvStoreDb::sendTopoSetCmd(
   if (kvParams_.enableThriftDualMsg) {
     auto peerIt = thriftPeers_.find(peerName);
     if (peerIt == thriftPeers_.end() or (not peerIt->second.client)) {
-      LOG(ERROR) << AreaTag()
-                 << fmt::format(
-                        "[Dual] Invalid dual peer: {} to set topo cmd. Skip.",
-                        peerName);
+      XLOG(ERR) << AreaTag()
+                << fmt::format(
+                       "[Dual] Invalid dual peer: {} to set topo cmd. Skip.",
+                       peerName);
       return;
     }
     auto& client = peerIt->second.client;
@@ -2834,13 +2832,13 @@ KvStoreDb::sendTopoSetCmd(
     const auto& dstCmdSocketId = peers_.at(peerName).second;
     const auto ret = sendMessageToPeer(dstCmdSocketId, request);
     if (ret.hasError()) {
-      LOG(ERROR) << AreaTag()
-                 << fmt::format(
-                        "{}: failed to {} spt-parent {}. Error: {}",
-                        rootId,
-                        (setChild ? "set" : "unset"),
-                        peerName,
-                        ret.error().errString);
+      XLOG(ERR) << AreaTag()
+                << fmt::format(
+                       "{}: failed to {} spt-parent {}. Error: {}",
+                       rootId,
+                       (setChild ? "set" : "unset"),
+                       peerName,
+                       ret.error().errString);
       collectSendFailureStats(ret.error(), dstCmdSocketId);
     }
   }
@@ -2972,7 +2970,7 @@ KvStoreDb::processSyncResponse(
   if (syncPubMsg.size() < 3) {
     auto syncPubStr = syncPubMsg.read<std::string>().value();
     if (syncPubStr == Constants::kErrorResponse) {
-      LOG(ERROR) << "Got error for sent publication from " << requestId;
+      XLOG(ERR) << "Got error for sent publication from " << requestId;
       return;
     }
     if (syncPubStr == Constants::kSuccessResponse) {
@@ -2985,7 +2983,7 @@ KvStoreDb::processSyncResponse(
   auto maybeSyncPub =
       syncPubMsg.readThriftObj<thrift::Publication>(serializer_);
   if (maybeSyncPub.hasError()) {
-    LOG(ERROR) << "Received bad response on peerSyncSock";
+    XLOG(ERR) << "Received bad response on peerSyncSock";
     return;
   }
 
@@ -3054,14 +3052,14 @@ KvStoreDb::attachCallbacks() {
   const auto peersSyncSndHwm = peerSyncSock_.setSockOpt(
       ZMQ_SNDHWM, &kvParams_.zmqHwm, sizeof(kvParams_.zmqHwm));
   if (peersSyncSndHwm.hasError()) {
-    LOG(ERROR) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
-               << peersSyncSndHwm.error();
+    XLOG(ERR) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
+              << peersSyncSndHwm.error();
   }
   const auto peerSyncRcvHwm = peerSyncSock_.setSockOpt(
       ZMQ_RCVHWM, &kvParams_.zmqHwm, sizeof(kvParams_.zmqHwm));
   if (peerSyncRcvHwm.hasError()) {
-    LOG(ERROR) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
-               << peerSyncRcvHwm.error();
+    XLOG(ERR) << "Error setting ZMQ_SNDHWM to " << kvParams_.zmqHwm << " "
+              << peerSyncRcvHwm.error();
   }
 
   // enable handover for inter process router socket
@@ -3069,8 +3067,8 @@ KvStoreDb::attachCallbacks() {
   const auto peerSyncHandover =
       peerSyncSock_.setSockOpt(ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
   if (peerSyncHandover.hasError()) {
-    LOG(ERROR) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
-               << peerSyncHandover.error();
+    XLOG(ERR) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
+              << peerSyncHandover.error();
   }
 
   // set keep-alive to retire old flows
@@ -3080,7 +3078,7 @@ KvStoreDb::attachCallbacks() {
       Constants::kKeepAliveCnt,
       Constants::kKeepAliveIntvl.count());
   if (peerSyncKeepAlive.hasError()) {
-    LOG(ERROR) << "Error setting KeepAlive " << peerSyncKeepAlive.error();
+    XLOG(ERR) << "Error setting KeepAlive " << peerSyncKeepAlive.error();
   }
 
   if (kvParams_.maybeIpTos.has_value()) {
@@ -3088,8 +3086,8 @@ KvStoreDb::attachCallbacks() {
     const auto peerSyncTos =
         peerSyncSock_.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
     if (peerSyncTos.hasError()) {
-      LOG(ERROR) << "Error setting ZMQ_TOS to " << ipTos << " "
-                 << peerSyncTos.error();
+      XLOG(ERR) << "Error setting ZMQ_TOS to " << ipTos << " "
+                << peerSyncTos.error();
     }
   }
 
@@ -3112,15 +3110,15 @@ KvStoreDb::drainPeerSyncSock() {
 
     // Check for error in receiving messages
     if (ret.hasError()) {
-      LOG(ERROR) << "failed reading messages from peerSyncSock_: "
-                 << ret.error();
+      XLOG(ERR) << "failed reading messages from peerSyncSock_: "
+                << ret.error();
       continue;
     }
 
     // at this point we received all three parts
     if (not delimMsg.empty()) {
-      LOG(ERROR) << "unexpected delimiter from peerSyncSock_: "
-                 << delimMsg.read<std::string>().value();
+      XLOG(ERR) << "unexpected delimiter from peerSyncSock_: "
+                << delimMsg.read<std::string>().value();
       continue;
     }
 
@@ -3148,7 +3146,7 @@ KvStoreDb::cleanupTtlCountdownQueue() {
         *it->second.originatorId_ref() == top.originatorId and
         *it->second.ttlVersion_ref() == top.ttlVersion) {
       expiredKeys.emplace_back(top.key);
-      LOG(WARNING)
+      XLOG(WARNING)
           << AreaTag()
           << "Delete expired (key, version, originatorId, ttlVersion, ttl, node) "
           << fmt::format(
@@ -3275,7 +3273,7 @@ KvStoreDb::finalizeFullSync(
 
   auto peerIt = thriftPeers_.find(senderId);
   if (peerIt == thriftPeers_.end()) {
-    LOG(ERROR)
+    XLOG(ERR)
         << AreaTag()
         << fmt::format(
                "[Thrift Sync] Invalid peer: {} to do finalize sync with. Skip it.",
@@ -3307,7 +3305,7 @@ KvStoreDb::finalizeFullSync(
   std::move(sf)
       .via(evb_->getEvb())
       .thenValue([this, senderId, startTime](folly::Unit&&) {
-        VLOG(4)
+        XLOG(DBG4)
             << AreaTag()
             << fmt::format(
                    "[Thrift Sync] Finalize full-sync ack received from peer: {}",
@@ -3459,9 +3457,8 @@ KvStoreDb::floodPublication(
   for (const auto& peerName : floodPeers) {
     auto peerIt = thriftPeers_.find(peerName);
     if (peerIt == thriftPeers_.end()) {
-      LOG(ERROR)
-          << AreaTag()
-          << fmt::format("Invalid flooding peer: {}. Skip it.", peerName);
+      XLOG(ERR) << AreaTag()
+                << fmt::format("Invalid flooding peer: {}. Skip it.", peerName);
       continue;
     }
 
@@ -3497,7 +3494,7 @@ KvStoreDb::floodPublication(
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([peerName, startTime](folly::Unit&&) {
-          VLOG(4) << "Flooding ack received from peer: " << peerName;
+          XLOG(DBG4) << "Flooding ack received from peer: " << peerName;
 
           auto endTime = std::chrono::steady_clock::now();
           auto timeDelta =
@@ -3737,11 +3734,10 @@ KvStoreDb::sendDualMessages(
   if (kvParams_.enableThriftDualMsg) {
     auto peerIt = thriftPeers_.find(neighbor);
     if (peerIt == thriftPeers_.end() or (not peerIt->second.client)) {
-      LOG(ERROR)
-          << AreaTag()
-          << fmt::format(
-                 "[Dual] Invalid dual peer: {} to set topo cmd. Skip it.",
-                 neighbor);
+      XLOG(ERR) << AreaTag()
+                << fmt::format(
+                       "[Dual] Invalid dual peer: {} to set topo cmd. Skip it.",
+                       neighbor);
       return false;
     }
 
@@ -3782,11 +3778,10 @@ KvStoreDb::sendDualMessages(
         });
   } else {
     if (peers_.count(neighbor) == 0) {
-      LOG(ERROR)
-          << AreaTag()
-          << fmt::format(
-                 "[Dual] Invalid dual peer: {} to set topo cmd. Skip it.",
-                 neighbor);
+      XLOG(ERR) << AreaTag()
+                << fmt::format(
+                       "[Dual] Invalid dual peer: {} to set topo cmd. Skip it.",
+                       neighbor);
       return false;
     }
 
@@ -3803,7 +3798,7 @@ KvStoreDb::sendDualMessages(
     // neighor will inform us it's gone. and we will delete it from our dual
     // peers.
     if (ret.hasError()) {
-      LOG(ERROR)
+      XLOG(ERR)
           << AreaTag()
           << fmt::format(
                  "[Dual] Failed to send dual messages to {}  using id: {}. ",

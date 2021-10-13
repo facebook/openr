@@ -29,22 +29,22 @@ void
 logFibUpdateError(thrift::PlatformFibUpdateError const& error) {
   fb303::fbData->addStatValue(
       "fib.thrift.failure.fib_update_error", 1, fb303::COUNT);
-  LOG(ERROR) << "Partially failed to update/delete following in FIB.";
+  XLOG(ERR) << "Partially failed to update/delete following in FIB.";
   for (auto& [_, prefixes] : *error.vrf2failedAddUpdatePrefixes_ref()) {
     for (auto& prefix : prefixes) {
-      LOG(ERROR) << "  > " << toString(prefix) << " add/update";
+      XLOG(ERR) << "  > " << toString(prefix) << " add/update";
     }
   }
   for (auto& [_, prefixes] : *error.vrf2failedDeletePrefixes_ref()) {
     for (auto& prefix : prefixes) {
-      LOG(ERROR) << "  > " << toString(prefix) << " delete";
+      XLOG(ERR) << "  > " << toString(prefix) << " delete";
     }
   }
   for (auto& label : *error.failedAddUpdateMplsLabels_ref()) {
-    LOG(ERROR) << "  > " << label << " add/update";
+    XLOG(ERR) << "  > " << label << " add/update";
   }
   for (auto& label : *error.failedDeleteMplsLabels_ref()) {
-    LOG(ERROR) << "  > " << label << " delete";
+    XLOG(ERR) << "  > " << label << " delete";
   }
 }
 
@@ -266,7 +266,7 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
     const auto maybePrefix =
         folly::IPAddress::tryCreateNetwork(prefixStr, -1, true);
     if (maybePrefix.hasError()) {
-      LOG(ERROR) << "Invalid IP address as prefix: " << prefixStr;
+      XLOG(ERR) << "Invalid IP address as prefix: " << prefixStr;
       return retRouteVec;
     }
     const auto inputPrefix = maybePrefix.value();
@@ -637,8 +637,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-        LOG(ERROR) << "Failed to delete unicast routes from FIB. Error: "
-                   << folly::exceptionStr(e);
+        XLOG(ERR) << "Failed to delete unicast routes from FIB. Error: "
+                  << folly::exceptionStr(e);
         // Marked all routes to be deleted as dirty. So we try to remove them
         // again from FIB.
         for (const auto& prefix : routeUpdate.unicastRoutesToDelete) {
@@ -675,8 +675,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-        LOG(ERROR) << "Failed to add/update unicast routes in FIB. Error: "
-                   << folly::exceptionStr(e);
+        XLOG(ERR) << "Failed to add/update unicast routes in FIB. Error: "
+                  << folly::exceptionStr(e);
         // Mark routes we failed to update as dirty for retry. Also declare
         // these routes as deleted to client, because we failed to update them
         // Next retry should restore, but meanwhile clients can take appropriate
@@ -729,8 +729,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-        LOG(ERROR) << "Failed to delete mpls routes from FIB. Error: "
-                   << folly::exceptionStr(e);
+        XLOG(ERR) << "Failed to delete mpls routes from FIB. Error: "
+                  << folly::exceptionStr(e);
         // Marked all routes to be deleted as dirty. So we try to remove them
         // again from FIB.
         for (const auto& label : routeUpdate.mplsRoutesToDelete) {
@@ -767,8 +767,8 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-        LOG(ERROR) << "Failed to add/update mpls routes in FIB. Error: "
-                   << folly::exceptionStr(e);
+        XLOG(ERR) << "Failed to add/update mpls routes in FIB. Error: "
+                  << folly::exceptionStr(e);
         // Mark routes we failed to update as dirty for retry. Also declare
         // these routes as deleted to client, because we failed to update them
         // Next retry should restore, but meanwhile clients can take appropriate
@@ -849,8 +849,8 @@ Fib::syncRoutes() {
       client_.reset();
       fb303::fbData->addStatValue(
           "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
-      LOG(ERROR) << "Failed to sync unicast routes in FIB. Error: "
-                 << folly::exceptionStr(e);
+      XLOG(ERR) << "Failed to sync unicast routes in FIB. Error: "
+                << folly::exceptionStr(e);
       return false;
     }
   }
@@ -877,8 +877,8 @@ Fib::syncRoutes() {
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
-        LOG(ERROR) << "Failed to sync unicast routes in FIB. Error: "
-                   << folly::exceptionStr(e);
+        XLOG(ERR) << "Failed to sync unicast routes in FIB. Error: "
+                  << folly::exceptionStr(e);
         return false;
       }
     } // else
@@ -990,15 +990,15 @@ Fib::keepAlive() noexcept {
       fb303::fbData->addStatValue(
           "fib.thrift.failure.keepalive", 1, fb303::COUNT);
       client_.reset();
-      LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
-                 << folly::exceptionStr(e);
+      XLOG(ERR) << "Failed to make thrift call to Switch Agent. Error: "
+                << folly::exceptionStr(e);
     }
   }
   // Check if switch agent has restarted or not. Applicable only if we have
   // initialized alive-since
   if (latestAliveSince_ != 0 && aliveSince != latestAliveSince_) {
-    LOG(WARNING) << "FibAgent seems to have restarted. "
-                 << "Performing full route DB sync ...";
+    XLOG(WARNING) << "FibAgent seems to have restarted. "
+                  << "Performing full route DB sync ...";
     // FibAgent has restarted. Enforce full sync
     transitionRouteState(RouteState::FIB_CONNECTED);
     retryRoutesExpBackoff_.reportSuccess();
@@ -1073,9 +1073,9 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
   // less than creation time of our recently logged perf events.
   if (recentPerfEventCreateTs_ >=
       *perfEvents->events_ref()->at(0).unixTs_ref()) {
-    LOG(WARNING) << "Ignoring perf event with old create timestamp "
-                 << *perfEvents->events_ref()[0].unixTs_ref() << ", expected > "
-                 << recentPerfEventCreateTs_;
+    XLOG(WARNING) << "Ignoring perf event with old create timestamp "
+                  << *perfEvents->events_ref()[0].unixTs_ref()
+                  << ", expected > " << recentPerfEventCreateTs_;
     return;
   } else {
     recentPerfEventCreateTs_ = *perfEvents->events_ref()->at(0).unixTs_ref();
@@ -1089,8 +1089,8 @@ Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
   auto totalDuration = getTotalPerfEventsDuration(*perfEvents);
   if (totalDuration.count() < 0 or
       totalDuration > Constants::kConvergenceMaxDuration) {
-    LOG(WARNING) << "Ignoring perf event with bad total duration "
-                 << totalDuration.count() << "ms.";
+    XLOG(WARNING) << "Ignoring perf event with bad total duration "
+                  << totalDuration.count() << "ms.";
     return;
   }
 

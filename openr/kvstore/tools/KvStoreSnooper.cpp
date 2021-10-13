@@ -56,7 +56,7 @@ main(int argc, char** argv) {
               [areaKeyVals = std::move(areaKeyVals)](
                   folly::Try<openr::thrift::Publication>&& maybePub) mutable {
                 if (maybePub.hasException()) {
-                  LOG(ERROR) << maybePub.exception().what();
+                  XLOG(ERR) << maybePub.exception().what();
                   return;
                 }
                 auto& pub = maybePub.value();
