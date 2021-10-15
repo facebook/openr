@@ -109,12 +109,10 @@ getBasicOpenrConfig(
   /*
    * [OVERRIDE] thrift::LinkMonitorConfig
    */
-  openr::thrift::LinkMonitorConfig linkMonitorConfig;
-  linkMonitorConfig.include_interface_regexes_ref() =
-      std::vector<std::string>{".*"};
-  linkMonitorConfig.redistribute_interface_regexes_ref() =
-      std::vector<std::string>{"lo1"};
-  config.link_monitor_config_ref() = linkMonitorConfig;
+  openr::thrift::LinkMonitorConfig lmConf;
+  lmConf.enable_perf_measurement_ref() = false;
+  lmConf.use_rtt_metric_ref() = true;
+  config.link_monitor_config_ref() = lmConf;
 
   /*
    * [OVERRIDE] thrift::KvStoreConfig

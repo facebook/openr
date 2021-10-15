@@ -10,7 +10,6 @@
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
-#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -31,7 +30,6 @@
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <openr/tests/utils/Utils.h>
 
-using namespace std;
 using namespace openr;
 using namespace folly::literals::shell_literals;
 
@@ -41,7 +39,8 @@ using ::testing::InSequence;
 // interface iface_3_1
 namespace {
 
-re2::RE2::Options regexOpts;
+using Area2SRNodeLabel =
+    std::unordered_map<std::string, thrift::SegmentRoutingNodeLabel>;
 
 const auto nb2_v4_addr = "192.168.0.2";
 const auto nb3_v4_addr = "192.168.0.3";
@@ -147,15 +146,6 @@ const auto adj_3_2 = createThriftAdjacency(
     Constants::kDefaultAdjWeight /* weight */,
     "" /* otherIfName */);
 
-thrift::AdjacencyDatabase
-createAdjDatabase(
-    const std::string& thisNodeName,
-    const std::vector<thrift::Adjacency>& adjacencies,
-    int32_t nodeLabel,
-    const std::string& area = kTestingAreaName) {
-  return createAdjDb(thisNodeName, adjacencies, nodeLabel, false, area);
-}
-
 void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
   LOG(INFO) << "Node: " << *adjDb.thisNodeName_ref()
@@ -181,16 +171,7 @@ const std::string kConfigStorePath = "/tmp/lm_ut_config_store.bin";
 class LinkMonitorTestFixture : public testing::Test {
  public:
   void
-  SetUp() override {}
-
-  virtual void
-  SetUp(
-      std::unordered_set<std::string> areas = {},
-      std::chrono::milliseconds flapInitialBackoff =
-          std::chrono::milliseconds(1),
-      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8),
-      std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
-          areaMap = {}) {
+  SetUp() override {
     // cleanup any existing config file on disk
     auto cmd = "rm -rf {}"_shellify(kConfigStorePath.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -204,8 +185,7 @@ class LinkMonitorTestFixture : public testing::Test {
     nlEventsInjector = std::make_shared<NetlinkEventsInjector>(nlSock.get());
 
     // create config
-    config = std::make_shared<Config>(
-        getTestOpenrConfig(areas, flapInitialBackoff, flapMaxBackoff, areaMap));
+    config = std::make_shared<Config>(createConfig());
 
     // spin up a config store
     configStore = std::make_unique<PersistentStore>(config, true /* dryrun */);
@@ -290,6 +270,43 @@ class LinkMonitorTestFixture : public testing::Test {
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
+  /*
+   * [Overridable method for config management]
+   *
+   * Methods can be inherited and overridden by child test fixtures for
+   * customize config setup.
+   */
+  virtual thrift::OpenrConfig
+  createConfig() {
+    // create list of thrift::AreaConfig
+    auto areaCfgs = createAreaConfigs();
+
+    // create basic openr config
+    auto tConfig =
+        getBasicOpenrConfig("node-1", "domain", areaCfgs, true, true);
+    tConfig.persistent_config_store_path_ref() = kConfigStorePath;
+
+    // override LM config
+    tConfig.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() = 1;
+    tConfig.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = 8;
+    tConfig.link_monitor_config_ref()->use_rtt_metric_ref() = false;
+
+    return tConfig;
+  }
+
+  virtual std::vector<thrift::AreaConfig>
+  createAreaConfigs() {
+    return populateAreaConfigs({}, {});
+  }
+
+  /*
+   * [Util methods]
+   *
+   * Methods serves for util purpose to do:
+   *  1) thread/module creation/destruction;
+   *  2) validation method for unit-test usage;
+   *  3) etc.
+   */
   thrift::SegmentRoutingNodeLabel
   getTestSegmentRoutingNodelLabel(
       thrift::SegmentRoutingNodeLabelType nodeLabelType,
@@ -298,6 +315,7 @@ class LinkMonitorTestFixture : public testing::Test {
       int32_t endLabel = openr::MplsConstants::kSrGlobalRange.second) {
     thrift::SegmentRoutingNodeLabel srNodeLabel;
     srNodeLabel.sr_node_label_type_ref() = nodeLabelType;
+    // TODO: remove AUTO mode
     if (nodeLabelType == thrift::SegmentRoutingNodeLabelType::AUTO) {
       openr::thrift::LabelRange labelRange;
       labelRange.start_label_ref() = startLabel;
@@ -310,30 +328,28 @@ class LinkMonitorTestFixture : public testing::Test {
     return srNodeLabel;
   }
 
-  virtual thrift::OpenrConfig
-  getTestOpenrConfig(
-      std::unordered_set<std::string> areas = {},
-      std::chrono::milliseconds flapInitialBackoff =
-          std::chrono ::milliseconds(1),
-      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8),
-      std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
-          areaMap = {}) {
+  std::vector<thrift::AreaConfig>
+  populateAreaConfigs(
+      std::unordered_set<std::string> areas, Area2SRNodeLabel areaMap) {
+    // Use kTestingAreaName by default
     if (areas.empty()) {
       areas.insert(kTestingAreaName);
     }
-    // create config
+
     std::vector<openr::thrift::AreaConfig> areaConfig;
     int32_t nodeLabelBase = 101;
-    for (auto id : areas) {
-      thrift::AreaConfig area;
-      area.area_id_ref() = id;
-      area.include_interface_regexes_ref() = {
-          kTestVethNamePrefix + ".*", "iface.*"};
-      area.redistribute_interface_regexes_ref() = {"loopback"};
 
-      auto it = areaMap.find(id);
+    // iterate and construct config
+    for (auto areaId : areas) {
+      thrift::AreaConfig cfg;
+      cfg.area_id_ref() = areaId;
+      cfg.include_interface_regexes_ref() = {
+          kTestVethNamePrefix + ".*", "iface.*"};
+      cfg.redistribute_interface_regexes_ref() = {"loopback"};
+
+      auto it = areaMap.find(areaId);
       if (it == areaMap.end()) {
-        area.area_sr_node_label_ref() = getTestSegmentRoutingNodelLabel(
+        cfg.area_sr_node_label_ref() = getTestSegmentRoutingNodelLabel(
             thrift::SegmentRoutingNodeLabelType::STATIC, nodeLabelBase++);
       } else {
         thrift::SegmentRoutingNodeLabel srNodeLabel;
@@ -353,21 +369,11 @@ class LinkMonitorTestFixture : public testing::Test {
           srNodeLabel.node_segment_label_ref() =
               *it->second.get_node_segment_label();
         }
-        area.area_sr_node_label_ref() = srNodeLabel;
+        cfg.area_sr_node_label_ref() = srNodeLabel;
       }
-      areaConfig.emplace_back(std::move(area));
+      areaConfig.emplace_back(std::move(cfg));
     }
-    auto tConfig =
-        getBasicOpenrConfig("node-1", "domain", areaConfig, true, true);
-    // link monitor config
-    auto& lmConf = *tConfig.link_monitor_config_ref();
-    lmConf.enable_perf_measurement_ref() = false;
-    lmConf.linkflap_initial_backoff_ms_ref() = flapInitialBackoff.count();
-    lmConf.linkflap_max_backoff_ms_ref() = flapMaxBackoff.count();
-    lmConf.use_rtt_metric_ref() = false;
-
-    tConfig.persistent_config_store_path_ref() = kConfigStorePath;
-    return tConfig;
+    return areaConfig;
   }
 
   void
@@ -449,7 +455,7 @@ class LinkMonitorTestFixture : public testing::Test {
     int v6LinkLocalAddrsMaxCount{0};
     int v6LinkLocalAddrsMinCount{0};
   };
-  using CollatedIfUpdates = std::map<string, CollatedIfData>;
+  using CollatedIfUpdates = std::map<std::string, CollatedIfData>;
 
   CollatedIfUpdates
   collateIfUpdates(const InterfaceDatabase& interfaces) {
@@ -472,16 +478,16 @@ class LinkMonitorTestFixture : public testing::Test {
       }
 
       res[ifName].v4AddrsMaxCount =
-          max(v4AddrsCount, res[ifName].v4AddrsMaxCount);
+          std::max(v4AddrsCount, res[ifName].v4AddrsMaxCount);
 
       res[ifName].v4AddrsMinCount =
-          min(v4AddrsCount, res[ifName].v4AddrsMinCount);
+          std::min(v4AddrsCount, res[ifName].v4AddrsMinCount);
 
       res[ifName].v6LinkLocalAddrsMaxCount =
-          max(v6LinkLocalAddrsCount, res[ifName].v6LinkLocalAddrsMaxCount);
+          std::max(v6LinkLocalAddrsCount, res[ifName].v6LinkLocalAddrsMaxCount);
 
       res[ifName].v6LinkLocalAddrsMinCount =
-          min(v6LinkLocalAddrsCount, res[ifName].v6LinkLocalAddrsMinCount);
+          std::min(v6LinkLocalAddrsCount, res[ifName].v6LinkLocalAddrsMinCount);
     }
     return res;
   }
@@ -643,22 +649,40 @@ class LinkMonitorTestFixture : public testing::Test {
 
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;
   InterfaceDatabase sparkIfDb;
+
+  // vector of thrift::AreaConfig
+  std::vector<thrift::AreaConfig> areaConfigs_;
 };
+
+// Test communication between LinkMonitor and KvStore via KeyValueRequeust
+// queue.
+TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
+  const auto nodeKey = "adj:myNode";
+  const auto adjacencies = "adjacencies-for-myNode";
+
+  // Persist key from LinkMonitor
+  auto persistPrefixKeyVal =
+      PersistKeyValueRequest(kTestingAreaName, nodeKey, adjacencies);
+  kvRequestQueue.push(std::move(persistPrefixKeyVal));
+
+  // Check that key was correctly persisted.
+  auto maybeValue = getPublicationValueForKey(nodeKey);
+  EXPECT_TRUE(maybeValue.has_value());
+  EXPECT_EQ(maybeValue.value().get_version(), 1);
+  EXPECT_EQ(*maybeValue.value().value_ref(), adjacencies);
+}
 
 // Start LinkMonitor and ensure empty adjacency database and prefixes are
 // received upon initial hold-timeout expiry
 TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
-  SetUp({});
   // Verify that we receive empty adjacency database
-  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel));
+  expectedAdjDbs.push(createAdjDb("node-1", {}, kNodeLabel));
   checkNextAdjPub("adj:node-1");
 }
 
 // Start LinkMonitor and ensure drain state are set correctly according to
 // parameters
 TEST_F(LinkMonitorTestFixture, DrainState) {
-  SetUp({});
-
   // 1. default setup:
   // persistent store == null, assume_drain = false, override_drain_state =
   // isOverloaded should be read from assume_drain, = false
@@ -712,7 +736,6 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 // receive neighbor up/down events from "spark"
 // form peer connections and inform KvStore of adjacencies
 TEST_F(LinkMonitorTestFixture, BasicOperation) {
-  SetUp({});
   const int linkMetric = 123;
   const int adjMetric = 100;
 
@@ -727,13 +750,13 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
     {
       // expect neighbor up first
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect node overload bit set
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -743,7 +766,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric_ref() = linkMetric;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -754,7 +777,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       adj_2_1_modified.metric_ref() = linkMetric;
       adj_2_1_modified.isOverloaded_ref() = true;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -765,7 +788,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       adj_2_1_modified.metric_ref() = linkMetric;
       adj_2_1_modified.isOverloaded_ref() = true;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -774,19 +797,19 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric_ref() = linkMetric;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect link metric value unset
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect node overload bit set
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -796,7 +819,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric_ref() = linkMetric;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -806,7 +829,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric_ref() = adjMetric;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -816,14 +839,14 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric_ref() = linkMetric;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect neighbor down
-      auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -834,14 +857,14 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric_ref() = linkMetric;
 
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect neighbor down
-      auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -1042,7 +1065,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
 // Test linkMonitor restarts to honor `enableSegmentRouting` flag
 TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
-  SetUp({});
   {
     // Intertionally save nodeLabel to be non-zero value
     thrift::LinkMonitorState state;
@@ -1064,7 +1086,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
 
     // ATTN: intentionally set `enableSegmentRouting = false` to test the
     //       config_ load scenario.
-    auto tConfigCopy = getTestOpenrConfig();
+    auto tConfigCopy = createConfig();
     tConfigCopy.enable_segment_routing_ref() = false;
     auto configSegmentRoutingDisabled = std::make_shared<Config>(tConfigCopy);
     createLinkMonitor(configSegmentRoutingDisabled);
@@ -1079,12 +1101,11 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
 
 // Test throttling
 TEST_F(LinkMonitorTestFixture, Throttle) {
-  SetUp({});
   {
     InSequence dummy;
 
     {
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
   }
@@ -1119,13 +1140,12 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
 // parallel adjacencies between two nodes via different interfaces
 TEST_F(LinkMonitorTestFixture, ParallelAdj) {
-  SetUp({});
   {
     InSequence dummy;
 
     // neighbor 2 up on iface_2_2
     {
-      auto adjDb = createAdjDatabase("node-1", {adj_2_2}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_2}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -1133,26 +1153,26 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     // still use iface_2_2 because it's the first established adj
     {
       // note: adj_2_1 is hashed ahead of adj_2_2
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1, adj_2_2}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1, adj_2_2}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     // neighbor 2 down on iface_2_2
     {
-      auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     // neighbor 2 down on iface_2_1
     {
-      auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     // neighbor 2 up on iface_2_1
     // make sure new kvstore peer is created, peer add request is sent out
     {
-      auto adjDb = createAdjDatabase("node-1", {adj_2_2}, kNodeLabel);
+      auto adjDb = createAdjDb("node-1", {adj_2_2}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -1160,7 +1180,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     {
       // note: adj_3_1 adj_3_2
       auto adjDb =
-          createAdjDatabase("node-1", {adj_3_2, adj_2_2, adj_3_1}, kNodeLabel);
+          createAdjDb("node-1", {adj_3_2, adj_2_2, adj_3_1}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
   }
@@ -1294,8 +1314,6 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 // check no new publication
 //
 TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
-  SetUp({});
-
   // neighbor 2 up on adj_2_1
   {
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
@@ -1309,7 +1327,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
         KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
 
     // check for adj update: initial adjacency db includes adj_2_1
-    auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
@@ -1327,7 +1345,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
 
     // check adj_2_2 is published
-    auto adjDb = createAdjDatabase("node-1", {adj_2_2, adj_2_1}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_2_2, adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
@@ -1396,8 +1414,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
         KvStoreSyncEvent(*nb3.nodeName_ref(), kTestingAreaName));
 
     // adj_2_1 still in adj publication
-    auto adjDb =
-        createAdjDatabase("node-1", {adj_3_1, adj_2_1, adj_2_2}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_3_1, adj_2_1, adj_2_2}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
@@ -1455,8 +1472,6 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
 // check kvstore publication withdraw iface_2_1 and iface_2_2
 //
 TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
-  SetUp({});
-
   // neighbor 2 up on adj_2_1
   {
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
@@ -1470,7 +1485,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
         KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
 
     // check for adj update: initial adjacency db includes adj_2_1
-    auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
@@ -1488,7 +1503,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
 
     // check adj_2_2 is published
-    auto adjDb = createAdjDatabase("node-1", {adj_2_2, adj_2_1}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_2_2, adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
@@ -1535,8 +1550,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
         KvStoreSyncEvent(*nb3.nodeName_ref(), kTestingAreaName));
 
     // adj_2_1 still in adj publication
-    auto adjDb =
-        createAdjDatabase("node-1", {adj_3_1, adj_2_1, adj_2_2}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_3_1, adj_2_1, adj_2_2}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
@@ -1548,7 +1562,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
 
     // adj_2_1 removed
-    auto adjDb = createAdjDatabase("node-1", {adj_3_1, adj_2_2}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_3_1, adj_2_2}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
@@ -1561,15 +1575,28 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
 
     // adj_2_2 removed
-    auto adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_3_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
     checkNextAdjPub("adj:node-1");
   }
 }
 
-TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
-  SetUp({}, std::chrono::milliseconds(2000), std::chrono::milliseconds(4000));
+class DampenLinkTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+
+    // override LM config
+    tConfig.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() = 2000;
+    tConfig.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = 4000;
+
+    return tConfig;
+  }
+};
+
+TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1802,7 +1829,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
 // Test Interface events to Spark
 TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
-  SetUp({});
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1867,7 +1893,6 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
 }
 
 TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
-  SetUp({});
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -2033,30 +2058,35 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   }
 }
 
+class StaticNodeLabelTestFixture : public LinkMonitorTestFixture {
+ public:
+  std::vector<thrift::AreaConfig>
+  createAreaConfigs() override {
+    Area2SRNodeLabel areaMap;
+    areaMap.emplace(
+        kTestingAreaName,
+        getTestSegmentRoutingNodelLabel(
+            thrift::SegmentRoutingNodeLabelType::STATIC, 101));
+    areaMap.emplace(
+        kTestingSpineAreaName,
+        getTestSegmentRoutingNodelLabel(
+            thrift::SegmentRoutingNodeLabelType::STATIC, 201));
+
+    // create list of thrift::AreaConfig
+    return populateAreaConfigs(
+        {kTestingAreaName, kTestingSpineAreaName}, areaMap);
+  }
+
+ protected:
+  const openr::AreaId kTestingSpineAreaName{"test_spine_area_name"};
+};
+
 /**
  * Test allocation of static node segment label in mesh area and spine area
  */
-TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
-  const openr::AreaId kTestingSpineAreaName{"test_spine_area_name"};
-  std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
-      areaMap1;
-  areaMap1.emplace(
-      kTestingAreaName,
-      getTestSegmentRoutingNodelLabel(
-          thrift::SegmentRoutingNodeLabelType::STATIC, 101));
-
-  areaMap1.emplace(
-      kTestingSpineAreaName,
-      getTestSegmentRoutingNodelLabel(
-          thrift::SegmentRoutingNodeLabelType::STATIC, 201));
-
-  SetUp(
-      {kTestingAreaName, kTestingSpineAreaName},
-      std::chrono::milliseconds(1),
-      std::chrono::milliseconds(8),
-      areaMap1);
-  size_t kNumNodesToTest = 10;
+TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
   // spin up kNumNodesToTest - 1 new link monitors. 1 is spun up in setup()
+  size_t kNumNodesToTest = 10;
   std::vector<std::unique_ptr<LinkMonitor>> linkMonitors;
   std::vector<std::unique_ptr<std::thread>> linkMonitorThreads;
   std::vector<std::shared_ptr<Config>> configs;
@@ -2064,24 +2094,33 @@ TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
       kTestingAreaName, kTestingSpineAreaName};
 
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
-    std::unordered_map<std::string, openr::thrift::SegmentRoutingNodeLabel>
-        areaMap2;
-    areaMap2.emplace(
+    Area2SRNodeLabel mp;
+    mp.emplace(
         kTestingAreaName,
         getTestSegmentRoutingNodelLabel(
             thrift::SegmentRoutingNodeLabelType::STATIC, 102 + i));
-    areaMap2.emplace(
+    mp.emplace(
         kTestingSpineAreaName,
         getTestSegmentRoutingNodelLabel(
             thrift::SegmentRoutingNodeLabelType::STATIC, 202 + i));
 
-    auto tConfigCopy = getTestOpenrConfig(
-        areas,
-        std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8),
-        areaMap2);
-    tConfigCopy.node_name_ref() = fmt::format("lm{}", i + 1);
-    auto currConfig = std::make_shared<Config>(tConfigCopy);
+    // create thrift::AreaConfig
+    auto areaCfgs =
+        populateAreaConfigs({kTestingAreaName, kTestingSpineAreaName}, mp);
+
+    // create thrift::OpenrConfig
+    auto tConfig =
+        getBasicOpenrConfig("node-1", "domain", areaCfgs, true, true);
+
+    // override LM config
+    tConfig.node_name_ref() = fmt::format("lm{}", i + 1);
+    tConfig.persistent_config_store_path_ref() = kConfigStorePath;
+    tConfig.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() = 1;
+    tConfig.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = 8;
+    tConfig.link_monitor_config_ref()->use_rtt_metric_ref() = false;
+
+    // TODO: reuse LinkMonitor creation logic
+    auto currConfig = std::make_shared<Config>(tConfig);
     auto lm = std::make_unique<LinkMonitor>(
         currConfig,
         nlSock.get(),
@@ -2178,6 +2217,18 @@ TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
   }
 }
 
+class TwoAreaTestFixture : public LinkMonitorTestFixture {
+ public:
+  std::vector<thrift::AreaConfig>
+  createAreaConfigs() override {
+    return populateAreaConfigs({area1_, area2_}, {});
+  }
+
+ protected:
+  const AreaId area1_{"area1"};
+  const AreaId area2_{"area2"};
+};
+
 /**
  * Unit-test to test advertisement of loopback prefixes
  * - add addresses via addrEvent and verify from KvStore prefix-db
@@ -2186,9 +2237,7 @@ TEST_F(LinkMonitorTestFixture, StaticNodeLabelAlloc) {
  *   change anything
  * - set link to down state and verify that it removes all associated addresses
  */
-TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
-  const AreaId area1{"area1"};
-  const AreaId area2{"area2"};
+TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
   const std::string nodeName = "node-1";
   const std::string linkLocalAddr1 = "fe80::1/128";
   const std::string linkLocalAddr2 = "fe80::2/64";
@@ -2198,14 +2247,11 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
   const std::string loopbackAddrV6_2 = "2803:6080:4958:b403::1/128";
   const std::string loopbackAddrV6Subnet = "2803:6080:4958:b403::1/64";
 
-  SetUp({area1, area2});
-
   //
   // Verify that initial DB has empty prefix entries
   //
-
-  EXPECT_EQ(0, getNextPrefixDb(nodeName, area1).size());
-  EXPECT_EQ(0, getNextPrefixDb(nodeName, area2).size());
+  EXPECT_EQ(0, getNextPrefixDb(nodeName, area1_).size());
+  EXPECT_EQ(0, getNextPrefixDb(nodeName, area2_).size());
 
   //
   // Send link UP event(i.e. mixed with VALID and INVALID loopback address)
@@ -2235,8 +2281,8 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
     std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
-      prefixesArea1 = getNextPrefixDb(nodeName, area1);
-      prefixesArea2 = getNextPrefixDb(nodeName, area2);
+      prefixesArea1 = getNextPrefixDb(nodeName, area1_);
+      prefixesArea2 = getNextPrefixDb(nodeName, area2_);
     } while (prefixesArea1.size() != 5 or prefixesArea2.size() != 5);
 
     // verify prefixes with VALID prefixes has been advertised
@@ -2287,8 +2333,8 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
     std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
-      prefixesArea1 = getNextPrefixDb(nodeName, area1);
-      prefixesArea2 = getNextPrefixDb(nodeName, area2);
+      prefixesArea1 = getNextPrefixDb(nodeName, area1_);
+      prefixesArea2 = getNextPrefixDb(nodeName, area2_);
     } while (prefixesArea1.size() != 1 or prefixesArea2.size() != 1);
 
     ASSERT_EQ(
@@ -2323,8 +2369,8 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
     std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
-      prefixesArea1 = getNextPrefixDb(nodeName, area1);
-      prefixesArea2 = getNextPrefixDb(nodeName, area2);
+      prefixesArea1 = getNextPrefixDb(nodeName, area1_);
+      prefixesArea2 = getNextPrefixDb(nodeName, area2_);
     } while (prefixesArea1.size() != 0 or prefixesArea2.size() != 0);
   }
 
@@ -2332,8 +2378,6 @@ TEST_F(LinkMonitorTestFixture, LoopbackPrefixAdvertisement) {
 }
 
 TEST_F(LinkMonitorTestFixture, GetAllLinks) {
-  SetUp({});
-
   // Empty links
   auto links = linkMonitor->semifuture_getAllLinks().get();
   EXPECT_EQ(0, links.size());
@@ -2364,21 +2408,30 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
       *link.networks.begin());
 }
 
+class MultiAreaTestFixture : public LinkMonitorTestFixture {
+ public:
+  std::vector<thrift::AreaConfig>
+  createAreaConfigs() override {
+    return populateAreaConfigs({kTestingAreaName, podArea_, planeArea_}, {});
+  }
+
+ protected:
+  const std::string podArea_{"pod"};
+  const std::string planeArea_{"plane"};
+};
+
 /*
  * TODO: T101565435 to track this flaky test under OSS env and re-enable it
  *
-TEST_F(LinkMonitorTestFixture, AreaTest) {
-  SetUp({kTestingAreaName, "pod", "plane"});
-
+TEST_F(MultiAreaTestFixture, AreaTest) {
   // Verify that we receive empty adjacency database in all 3 areas
-  expectedAdjDbs.push(
-      createAdjDatabase("node-1", {}, kNodeLabel, kTestingAreaName));
-  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel, "plane"));
-  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel, "pod"));
+  expectedAdjDbs.push(createAdjDb("node-1", {}, kNodeLabel));
+  expectedAdjDbs.push(createAdjDb("node-1", {}, kNodeLabel, false, planeArea_));
+  expectedAdjDbs.push(createAdjDb("node-1", {}, kNodeLabel, false, podArea_));
 
   checkNextAdjPub("adj:node-1", kTestingAreaName);
-  checkNextAdjPub("adj:node-1", "plane");
-  checkNextAdjPub("adj:node-1", "pod");
+  checkNextAdjPub("adj:node-1", planeArea_);
+  checkNextAdjPub("adj:node-1", podArea_);
 
   // add link up event. AdjDB should get updated with link interface
   // Will be updated in all areas
@@ -2392,8 +2445,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     recvAndReplyIfUpdate();
     // expect neighbor up first
     // node-2 neighbor up in iface_2_1
-    auto adjDb =
-        createAdjDatabase("node-1", {adj_2_1}, kNodeLabel, kTestingAreaName);
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
     {
       auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
@@ -2409,23 +2461,23 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
     // area should contain only 'adj_3_1'
     nlEventsInjector->sendLinkEvent("iface_3_1", 100, true);
     recvAndReplyIfUpdate();
-    adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, "plane");
+    adjDb = createAdjDb("node-1", {adj_3_1}, kNodeLabel, false, planeArea_);
     expectedAdjDbs.push(std::move(adjDb));
     {
       auto cp = nb3;
-      cp.area_ref() = "plane";
+      cp.area_ref() = planeArea_;
       auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
       neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
       kvStoreSyncEventsQueue.push(
           KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
 
-      checkNextAdjPub("adj:node-1", "plane");
+      checkNextAdjPub("adj:node-1", planeArea_);
     }
   }
   // neighbor up on default area
   {
-    auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
@@ -2438,53 +2490,34 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
   // neighbor up on "plane" area
   {
     auto adjDb =
-        createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, AreaId{"plane"});
+        createAdjDb("node-1", {adj_3_1}, kNodeLabel, false, AreaId{planeArea_});
     expectedAdjDbs.push(std::move(adjDb));
 
     auto cp = nb3;
-    cp.area_ref() = "plane";
+    cp.area_ref() = planeArea_;
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
     kvStoreSyncEventsQueue.push(
         KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
     LOG(INFO) << "Testing neighbor UP event!";
-    checkNextAdjPub("adj:node-1", "plane");
-    checkPeerDump(*adj_3_1.otherNodeName_ref(), peerSpec_3_1, AreaId{"plane"});
+    checkNextAdjPub("adj:node-1", planeArea_);
+    checkPeerDump(
+        *adj_3_1.otherNodeName_ref(), peerSpec_3_1, AreaId{planeArea_});
   }
   // verify neighbor down in "plane" area
   {
-    auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel, "plane");
+    auto adjDb = createAdjDb("node-1", {}, kNodeLabel, false, planeArea_);
     expectedAdjDbs.push(std::move(adjDb));
 
     auto cp = nb3;
-    cp.area_ref() = "plane";
+    cp.area_ref() = planeArea_;
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, cp);
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
     LOG(INFO) << "Testing neighbor down event!";
-    checkNextAdjPub("adj:node-1", "plane");
+    checkNextAdjPub("adj:node-1", planeArea_);
   }
 }
 */
-
-// Test communication between LinkMonitor and KvStore via KeyValueRequeust
-// queue.
-TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
-  const auto nodeKey = "adj:myNode";
-  const auto adjacencies = "adjacencies-for-myNode";
-
-  SetUp({});
-  OpenrEventBase evb;
-  // Persist key.
-  auto persistPrefixKeyVal =
-      PersistKeyValueRequest(kTestingAreaName, nodeKey, adjacencies);
-  kvRequestQueue.push(std::move(persistPrefixKeyVal));
-  // Check that key was correctly persisted.
-  // Wait for throttling in KvStore. TODO: Implement KvStore throttling.
-  auto maybeValue = getPublicationValueForKey(nodeKey);
-  EXPECT_TRUE(maybeValue.has_value());
-  EXPECT_EQ(maybeValue.value().get_version(), 1);
-  EXPECT_EQ(*maybeValue.value().value_ref(), adjacencies);
-}
 
 int
 main(int argc, char* argv[]) {
