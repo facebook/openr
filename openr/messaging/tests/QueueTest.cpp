@@ -59,6 +59,37 @@ TEST(RWQueueTest, SizeAndReaders) {
   EXPECT_EQ(4, q.numReads());
 }
 
+TEST(RWQueueTest, DataTypes) {
+  // class with const field
+  class A {
+   public:
+    const std::string a;
+    explicit A(std::string&& a) : a(std::move(a)) {}
+  };
+
+  {
+    RWQueue<A> q;
+    q.push(A("a"));
+    EXPECT_EQ(1, q.size());
+    EXPECT_EQ("a", q.get().value().a);
+  }
+
+  // class with shared_ptr<const A>
+  class B {
+   public:
+    std::shared_ptr<const A> aPtr;
+    explicit B(std::shared_ptr<const A> a) : aPtr(a) {}
+  };
+
+  {
+    RWQueue<B> q;
+    auto aPtr = std::make_shared<A>("a");
+    q.push(B(aPtr));
+    EXPECT_EQ(1, q.size());
+    EXPECT_EQ("a", q.get().value().aPtr->a);
+  }
+}
+
 TEST(RWQueueTest, OrderedPushGet) {
   RWQueue<std::string> q;
 

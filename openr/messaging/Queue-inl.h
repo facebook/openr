@@ -70,7 +70,7 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
   if (pendingReads_.size()) {
     // Unblock a pending read
     auto& pendingRead = pendingReads_.front().get();
-    pendingRead.data = std::forward<ValueTypeT>(val);
+    pendingRead.data.emplace(std::forward<ValueTypeT>(val));
     pendingRead.baton.post();
     pendingReads_.pop_front();
   } else {
@@ -150,7 +150,7 @@ RWQueue<ValueType>::getAnyImpl(PendingRead& pendingRead) {
 
   // Perform immediate read if data is available
   if (queue_.size()) {
-    pendingRead.data = std::move(queue_.front());
+    pendingRead.data.emplace(std::move(queue_.front()));
     queue_.pop_front();
     return true;
   }
