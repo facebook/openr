@@ -78,6 +78,7 @@ TEST(NetlinkTypes, RouteBaseTest) {
   EXPECT_FALSE(route.getTos().has_value());
   EXPECT_FALSE(route.getMtu().has_value());
   EXPECT_FALSE(route.getAdvMss().has_value());
+  EXPECT_TRUE(route.isMultiPath());
 }
 
 TEST(NetlinkTypes, RouteEqualTest) {

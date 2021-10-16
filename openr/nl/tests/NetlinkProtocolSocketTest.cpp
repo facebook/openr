@@ -2125,13 +2125,16 @@ TEST_F(NlMessageFixture, LinkAddDelete) {
  */
 TEST_F(NlMessageFixture, RouteTableIdTest) {
   uint32_t ackCount{0};
-  folly::CIDRNetwork network = folly::IPAddress::createNetwork("10.10.0.8/32");
+  folly::CIDRNetwork network = folly::IPAddress::createNetwork("192.0.2.0/24");
   const uint32_t kRouteTableId = 1000;
-  std::vector<NextHop> paths;
+  const auto nexthop = NextHopBuilder()
+                           .setIfIndex(ifIndexY)
+                           .setLabelAction(openr::thrift::MplsActionCode::PUSH)
+                           .setPushLabels({outLabel1})
+                           .build();
   const auto filter = RouteBuilder()
                           .setProtocolId(kRouteProtoId)
                           .setRouteTable(kRouteTableId)
-                          .setType(RTN_BLACKHOLE)
                           .build();
 
   const auto before = nlSock->getRoutes(filter).get().value();
@@ -2141,7 +2144,7 @@ TEST_F(NlMessageFixture, RouteTableIdTest) {
                          .setDestination(network)
                          .setProtocolId(kRouteProtoId)
                          .setRouteTable(kRouteTableId)
-                         .setType(RTN_BLACKHOLE)
+                         .addNextHop(nexthop)
                          .build();
   ackCount = getAckCount();
   EXPECT_EQ(0, nlSock->addRoute(route).get());
@@ -2152,7 +2155,7 @@ TEST_F(NlMessageFixture, RouteTableIdTest) {
   auto after = nlSock->getRoutes(filter).get().value();
   for (const auto& r : after) {
     if (r.getDestination() == network and r.getProtocolId() == kRouteProtoId and
-        r.getType() == RTN_BLACKHOLE and r.getRouteTable() == kRouteTableId) {
+        r.getRouteTable() == kRouteTableId) {
       found = true;
     }
   }
@@ -2274,6 +2277,90 @@ TEST_F(NlMessageFixture, SingleRouteWithLabelNexthopEmptyGateway) {
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes().get().value();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
+}
+
+/*
+ * Validate unicast routes with with 1 push label next-hop, no multipath
+ * attribute, empty gateway
+ */
+TEST_F(NlMessageFixture, SingleRouteWithSingleMplsNexthop) {
+  uint32_t ackCount{0};
+  std::vector<NextHop> paths;
+  folly::CIDRNetwork ipPrefixV4 =
+      folly::IPAddress::createNetwork("192.0.2.0/24");
+  folly::CIDRNetwork ipPrefixV6 =
+      folly::IPAddress::createNetwork("2001:DB8::/64");
+
+  const auto nexthopV4 =
+      NextHopBuilder()
+          .setIfIndex(ifIndexY)
+          .setLabelAction(openr::thrift::MplsActionCode::PUSH)
+          .setPushLabels({outLabel1})
+          .build();
+  const auto routeV4 = RouteBuilder()
+                           .setDestination(ipPrefixV4)
+                           .addNextHop(nexthopV4)
+                           .setScope(RT_SCOPE_UNIVERSE)
+                           .setFlags(0)
+                           .setProtocolId(3) // boot
+                           .setValid(true)
+                           .setMultiPath(false)
+                           .build();
+
+  const auto nexthopV6 =
+      NextHopBuilder()
+          .setIfIndex(ifIndexX)
+          .setLabelAction(openr::thrift::MplsActionCode::PUSH)
+          .setPushLabels({outLabel2})
+          .build();
+  const auto routeV6 = RouteBuilder()
+                           .setDestination(ipPrefixV6)
+                           .addNextHop(nexthopV6)
+                           .setScope(RT_SCOPE_UNIVERSE)
+                           .setFlags(0)
+                           .setProtocolId(3) // boot
+                           .setValid(true)
+                           .setMultiPath(false)
+                           .setPriority(1024)
+                           .build();
+
+  // v4 test
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(routeV4).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify getAllRoutes
+  auto kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, routeV4));
+
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(routeV4).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, routeV4));
+
+  // v6 test
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(routeV6).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify getAllRoutes
+  kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, routeV6));
+
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(routeV6).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get().value();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, routeV6));
 }
 
 class NlMessageFixtureV4OrV6 : public NlMessageFixture,

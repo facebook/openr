@@ -125,6 +125,9 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   int addMultiPathNexthop(
       std::array<char, kMaxNlPayloadSize>& nhop, const Route& route) const;
 
+  // Add single mpls encap nexthop
+  int addSingleMplsNexthop(const Route& route);
+
   // Add label encap
   int addPushNexthop(
       struct rtattr* rta, struct rtnexthop* rtnh, const NextHop& path) const;

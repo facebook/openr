@@ -171,6 +171,17 @@ RouteBuilder::isValid() const {
   return isValid_;
 }
 
+RouteBuilder&
+RouteBuilder::setMultiPath(bool isMultiPath) {
+  isMultiPath_ = isMultiPath;
+  return *this;
+}
+
+bool
+RouteBuilder::isMultiPath() const {
+  return isMultiPath_;
+}
+
 void
 RouteBuilder::reset() {
   type_ = RTN_UNICAST;
@@ -184,6 +195,7 @@ RouteBuilder::reset() {
   mtu_.reset();
   advMss_.reset();
   nextHops_.clear();
+  isMultiPath_ = true;
 }
 
 Route::Route(const RouteBuilder& builder)
@@ -200,7 +212,8 @@ Route::Route(const RouteBuilder& builder)
       advMss_(builder.getAdvMss()),
       nextHops_(builder.getNextHops()),
       dst_(builder.getDestination()),
-      mplsLabel_(builder.getMplsLabel()) {}
+      mplsLabel_(builder.getMplsLabel()),
+      isMultiPath_(builder.isMultiPath()) {}
 
 Route::~Route() {}
 
@@ -227,6 +240,7 @@ Route::operator=(Route&& other) noexcept {
   dst_ = std::move(other.dst_);
   family_ = std::move(other.family_);
   mplsLabel_ = std::move(other.mplsLabel_);
+  isMultiPath_ = std::move(other.isMultiPath_);
   return *this;
 }
 
@@ -253,6 +267,7 @@ Route::operator=(const Route& other) {
   dst_ = other.dst_;
   family_ = other.family_;
   mplsLabel_ = other.mplsLabel_;
+  isMultiPath_ = other.isMultiPath_;
   return *this;
 }
 
@@ -353,6 +368,11 @@ Route::getNextHops() const {
 bool
 Route::isValid() const {
   return isValid_;
+}
+
+bool
+Route::isMultiPath() const {
+  return isMultiPath_;
 }
 
 std::string

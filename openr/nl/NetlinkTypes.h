@@ -228,6 +228,9 @@ class RouteBuilder {
   // No explicit mutator method provided.
   uint8_t getFamily() const;
 
+  RouteBuilder& setMultiPath(bool isMultiPath);
+  bool isMultiPath() const;
+
   void reset();
 
  private:
@@ -245,6 +248,7 @@ class RouteBuilder {
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
   std::optional<uint32_t> mplsLabel_;
+  bool isMultiPath_{true};
 };
 
 class Route final {
@@ -287,6 +291,8 @@ class Route final {
 
   bool isValid() const;
 
+  bool isMultiPath() const;
+
   void setPriority(uint32_t priority);
 
   std::string str() const;
@@ -308,6 +314,7 @@ class Route final {
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
   std::optional<uint32_t> mplsLabel_;
+  bool isMultiPath_{true};
 };
 
 bool operator==(const Route& lhs, const Route& rhs);

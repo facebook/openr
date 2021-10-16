@@ -390,7 +390,7 @@ int
 NetlinkRouteMessage::addNextHops(const Route& route) {
   std::array<char, kMaxNlPayloadSize> nhop = {};
   int status{0};
-  if (route.getNextHops().size()) {
+  if (route.getNextHops().size() && route.isMultiPath()) {
     if ((status = addMultiPathNexthop(nhop, route))) {
       return status;
     }
@@ -404,6 +404,13 @@ NetlinkRouteMessage::addNextHops(const Route& route) {
     }
     // print attributes when log level is enabled
     showMultiPathAttributes(reinterpret_cast<struct rtattr*>(nhop.data()));
+  } else if (!route.isMultiPath() && route.getNextHops().size() == 1) {
+    addSingleMplsNexthop(route);
+  } else {
+    // other options are not currently supported
+    LOG(ERROR) << "Invalid route, nexthops size " << route.getNextHops().size()
+               << " multipath enabled " << route.isMultiPath();
+    return EINVAL;
   }
 
   // print attributes when log level is enabled
@@ -459,6 +466,62 @@ NetlinkRouteMessage::addMultiPathNexthop(
     rtnh = RTNH_NEXT(rtnh);
   }
   return result;
+}
+
+int
+NetlinkRouteMessage::addSingleMplsNexthop(const Route& route) {
+  std::array<struct mpls_label, kMaxLabels> mplsLabel;
+  size_t i = 0;
+  // only one nexthop
+  auto labels = route.getNextHops().begin()->getPushLabels();
+  if (!labels.has_value()) {
+    LOG(ERROR) << "Labels not provided for PUSH action";
+    return EINVAL;
+  }
+  // abort immediately to bring attention
+  CHECK_LE(labels.value().size(), kMaxLabels);
+  std::reverse(labels.value().begin(), labels.value().end());
+  for (auto label : labels.value()) {
+    bool bos = i == labels.value().size() - 1 ? true : false;
+    mplsLabel[i++].entry = encodeLabel(label, bos);
+  }
+  size_t totalSize = labels.value().size() * sizeof(struct mpls_label);
+  // nested attr RTA_ENCAP + MPLS_IPTUNNEL_DST
+  std::array<char, kMaxNlPayloadSize> encapInfo = {};
+  struct rtattr* rta = reinterpret_cast<struct rtattr*>(encapInfo.data());
+  rta->rta_type = NLA_F_NESTED | RTA_ENCAP;
+  rta->rta_len = RTA_LENGTH(0);
+  if (addSubAttributes(
+          rta,
+          MPLS_IPTUNNEL_DST,
+          reinterpret_cast<const char*>(&mplsLabel),
+          totalSize) == nullptr) {
+    return ENOBUFS;
+  }
+  const char* const data = reinterpret_cast<const char*>(
+      RTA_DATA(reinterpret_cast<struct rtattr*>(encapInfo.data())));
+  int payloadLen =
+      RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(encapInfo.data()));
+  int status{0};
+  if ((status = addAttributes(RTA_ENCAP, data, payloadLen))) {
+    return status;
+  }
+  // RTA_ENCAP_TYPE
+  uint16_t encapType = LWTUNNEL_ENCAP_MPLS;
+  if ((status = addAttributes(
+           RTA_ENCAP_TYPE,
+           reinterpret_cast<const char*>(&encapType),
+           sizeof(encapType)))) {
+    return status;
+  }
+  // RTA_OIF
+  const int oif = route.getNextHops().begin()->getIfIndex().value();
+  if ((status = addAttributes(
+           RTA_OIF, reinterpret_cast<const char*>(&oif), sizeof(oif)))) {
+    return status;
+  }
+
+  return 0;
 }
 
 int
