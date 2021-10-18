@@ -10,6 +10,7 @@
 
 #include <folly/Format.h>
 #include <folly/SocketAddress.h>
+#include <folly/logging/xlog.h>
 #include <openr/spark/IoProvider.h>
 
 namespace openr {
@@ -168,9 +169,9 @@ IoProvider::recvMessage(
 
       // sanity check
       DCHECK(recvTs >= kernelRecvTs) << "Time anomaly";
-      VLOG(4) << "Got kernel-timestamp. It took "
-              << (recvTs - kernelRecvTs).count()
-              << " us for the packet to get from kernel to user space";
+      XLOG(DBG4) << "Got kernel-timestamp. It took "
+                 << (recvTs - kernelRecvTs).count()
+                 << " us for the packet to get from kernel to user space";
       recvTs = kernelRecvTs;
     }
   } // for

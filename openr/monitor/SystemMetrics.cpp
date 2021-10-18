@@ -7,6 +7,8 @@
 
 #include "openr/monitor/SystemMetrics.h"
 
+#include <folly/logging/xlog.h>
+
 namespace openr {
 
 /* Return RSS memory the process currently used from /proc/[pid]/status.
@@ -34,7 +36,7 @@ SystemMetrics::getRSSMemBytes() {
       }
     }
   } catch (const std::exception& ex) {
-    LOG(ERROR)
+    XLOG(ERR)
         << "Fail to read the \"/proc/self/status\" of current process to get the memory usage: "
         << ex.what();
   }

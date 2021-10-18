@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/spark/SparkWrapper.h>
 
@@ -52,9 +54,9 @@ SparkWrapper::~SparkWrapper() {
 void
 SparkWrapper::run() {
   thread_ = std::make_unique<std::thread>([this]() {
-    VLOG(1) << "Spark running.";
+    XLOG(DBG1) << "Spark running.";
     spark_->run();
-    VLOG(1) << "Spark stopped.";
+    XLOG(DBG1) << "Spark stopped.";
   });
   spark_->waitUntilRunning();
 }
@@ -105,8 +107,8 @@ SparkWrapper::waitForEvents(
     // check if it is beyond procTimeout
     auto endTime = std::chrono::steady_clock::now();
     if (endTime - startTime > procTimeout.value()) {
-      LOG(ERROR) << "Timeout receiving event. Time limit: "
-                 << procTimeout.value().count();
+      XLOG(ERR) << "Timeout receiving event. Time limit: "
+                << procTimeout.value().count();
       break;
     }
     if (auto maybeEvents = recvNeighborEvent(rcvdTimeout)) {

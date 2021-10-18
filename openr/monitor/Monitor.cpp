@@ -7,18 +7,20 @@
 
 #include "openr/monitor/Monitor.h"
 
+#include <folly/logging/xlog.h>
+
 namespace openr {
 
 void
 Monitor::processEventLog(LogSample const& eventLog) {
   // publish log message
-  LOG(INFO) << "Get a " << category_ << " event log: " << eventLog.toJson();
+  XLOG(INFO) << "Get a " << category_ << " event log: " << eventLog.toJson();
   // NOTE: Could add your own implementation to push logs to your database.
 }
 
 void
 Monitor::dumpHeapProfile() {
-  LOG(INFO)
+  XLOG(INFO)
       << "Please add your own implementation to dump the heap memory profile.";
 }
 

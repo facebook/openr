@@ -6,6 +6,7 @@
  */
 
 #include "openr/monitor/MonitorBase.h"
+#include <folly/logging/xlog.h>
 #include <openr/common/Constants.h>
 
 namespace openr {
@@ -46,15 +47,15 @@ MonitorBase::MonitorBase(
   // Fiber task to read the LogSample from queue and publish
   addFiberTask(
       [q = std::move(logSampleQueue), config, this]() mutable noexcept {
-        LOG(INFO) << "Starting log sample updates processing fiber "
-                  << "with isLogSubmissionEnable() flag: "
-                  << config->isLogSubmissionEnabled();
+        XLOG(INFO) << "Starting log sample updates processing fiber "
+                   << "with isLogSubmissionEnable() flag: "
+                   << config->isLogSubmissionEnabled();
         while (true) {
           // perform read log from the queue
           auto maybeLog = q.get();
-          VLOG(2) << "Received log sample update";
+          XLOG(DBG2) << "Received log sample update";
           if (maybeLog.hasError()) {
-            LOG(INFO) << "Terminating log sample updates processing fiber";
+            XLOG(INFO) << "Terminating log sample updates processing fiber";
             break;
           }
 
@@ -81,8 +82,8 @@ MonitorBase::MonitorBase(
           } catch (const std::exception& e) {
             fb303::fbData->addStatValue(
                 "monitor.log.publish.failure", 1, fb303::COUNT);
-            LOG(ERROR) << "Failed to publish the log. Error: "
-                       << folly::exceptionStr(e);
+            XLOG(ERR) << "Failed to publish the log. Error: "
+                      << folly::exceptionStr(e);
           }
         }
       });

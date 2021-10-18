@@ -7,6 +7,7 @@
 
 #include "openr/watchdog/Watchdog.h"
 #include <fb303/ServiceData.h>
+#include <folly/logging/xlog.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/watchdog/Watchdog.h>
@@ -57,7 +58,7 @@ Watchdog::addQueue(messaging::ReplicateQueueBase& q, const std::string& qName) {
   if (monitoredQs_.find(qName) == monitoredQs_.end()) {
     monitoredQs_.emplace(qName, std::ref(q));
   } else {
-    LOG(INFO) << "Queue " << qName << " is already registered.";
+    XLOG(INFO) << "Queue " << qName << " is already registered.";
   }
 }
 
@@ -76,7 +77,7 @@ Watchdog::monitorMemory() {
     return;
   }
   if (memInUse_.value() / 1e6 > maxMemoryMB_) {
-    LOG(WARNING) << fmt::format(
+    XLOG(WARNING) << fmt::format(
         "[Mem Detector] Critical memory usage: {} bytes. Memory limit: {} MB.",
         memInUse_.value(),
         maxMemoryMB_);
@@ -113,11 +114,11 @@ Watchdog::monitorThreadStatus() {
     auto const& lastTs = evb->getTimestamp();
     auto timeDiff =
         std::chrono::duration_cast<std::chrono::seconds>(now - lastTs);
-    VLOG(4) << "Thread " << name << ", " << (now - lastTs).count()
-            << " seconds ever since last thread activity";
+    XLOG(DBG4) << "Thread " << name << ", " << (now - lastTs).count()
+               << " seconds ever since last thread activity";
 
     if (timeDiff > threadTimeout_) {
-      LOG(WARNING) << fmt::format(
+      XLOG(WARNING) << fmt::format(
           "[Dead Thread Detector] {} thread detected to be dead.", name);
       stuckThreads.emplace_back(name);
     }
@@ -133,7 +134,7 @@ Watchdog::monitorThreadStatus() {
   }
 
   if ((not stuckThreads.size()) and isDeadThreadDetected_) {
-    LOG(INFO) << "[Dead Thread Detector] Threads seem to have recovered.";
+    XLOG(INFO) << "[Dead Thread Detector] Threads seem to have recovered.";
   }
 
   isDeadThreadDetected_ = (stuckThreads.size() ? true : false);
@@ -172,7 +173,7 @@ Watchdog::updateQueueCounters() {
   // TODO: T98478475 - Currently we only log the counters but don't take any
   // action if the queue keeps growing. In future, via T98478475, we should
   // invoke fireCrash() if the queue keeps growing.
-  LOG(INFO) << "[QueueMonitor] Updating queue counters";
+  XLOG(INFO) << "[QueueMonitor] Updating queue counters";
   for (auto const& [qName, q] : monitoredQs_) {
     fb303::fbData->setCounter(
         fmt::format("messaging.replicate_queue.{}.readers", qName),

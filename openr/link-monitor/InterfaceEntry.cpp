@@ -7,6 +7,7 @@
 
 #include "InterfaceEntry.h"
 #include <folly/gen/Base.h>
+#include <folly/logging/xlog.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 
@@ -82,12 +83,13 @@ InterfaceEntry::updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid) {
     isUpdated |= (((info_.networks.erase(ipNetwork) == 1)) ? 1 : 0);
   }
 
-  if (isUpdated) {
-    VLOG(1) << (isValid ? "Adding " : "Deleting ")
-            << folly::sformat("{}/{}", ipNetwork.first.str(), ipNetwork.second)
-            << " on interface " << info_.ifName
-            << ", status: " << (isUp() ? "UP" : "DOWN");
-  }
+  XLOG_IF(DBG1, isUpdated) << fmt::format(
+      "{} {}/{} on interface {}, status: {}",
+      isValid ? "Adding" : "Deleting",
+      ipNetwork.first.str(),
+      ipNetwork.second,
+      info_.ifName,
+      isUp() ? "UP" : "DOWN");
 
   if (isUpdated and isActive()) {
     updateCallback_();
