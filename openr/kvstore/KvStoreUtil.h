@@ -194,6 +194,12 @@ std::optional<openr::KvStoreFilters> getKvStoreFilters(
  */
 int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
+// dump the keys on which hashes differ from given keyVals
+thrift::Publication dumpDifference(
+    const std::string& area,
+    std::unordered_map<std::string, thrift::Value> const& myKeyVal,
+    std::unordered_map<std::string, thrift::Value> const& reqKeyVal);
+
 } // namespace openr
 
 #include <openr/kvstore/KvStoreUtil-inl.h>

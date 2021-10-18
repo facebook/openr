@@ -228,11 +228,6 @@ class KvStoreDb : public DualNode {
   thrift::Publication dumpHashWithFilters(
       KvStoreFilters const& kvFilters) const;
 
-  // dump the keys on which hashes differ from given keyVals
-  thrift::Publication dumpDifference(
-      std::unordered_map<std::string, thrift::Value> const& myKeyVal,
-      std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const;
-
   // Merge received publication with local store and publish out the delta.
   // If senderId is set, will build <key:value> map from kvStore_ and
   // rcvdPublication.tobeUpdatedKeys and send back to senderId to update it

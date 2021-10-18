@@ -463,7 +463,8 @@ KvStore::semifuture_dumpKvStoreKeys(
         auto thriftPub = kvStoreDb.dumpAllWithFilters(
             keyPrefixMatch, oper, *keyDumpParams.doNotPublishValue_ref());
         if (keyDumpParams.keyValHashes_ref().has_value()) {
-          thriftPub = kvStoreDb.dumpDifference(
+          thriftPub = dumpDifference(
+              area,
               *thriftPub.keyVals_ref(),
               keyDumpParams.keyValHashes_ref().value());
         }
@@ -1751,57 +1752,6 @@ KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   return thriftPub;
 }
 
-// dump the keys on which hashes differ from given keyVals
-// thriftPub.keyVals: better keys or keys exist only in MY-KEY-VAL
-// thriftPub.tobeUpdatedKeys: better keys or keys exist only in REQ-KEY-VAL
-// this way, full-sync initiator knows what keys need to send back to finish
-// 3-way full-sync
-thrift::Publication
-KvStoreDb::dumpDifference(
-    std::unordered_map<std::string, thrift::Value> const& myKeyVal,
-    std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const {
-  thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
-
-  thriftPub.tobeUpdatedKeys_ref() = std::vector<std::string>{};
-  std::unordered_set<std::string> allKeys;
-  for (const auto& [key, _] : myKeyVal) {
-    allKeys.insert(key);
-  }
-  for (const auto& [key, _] : reqKeyVal) {
-    allKeys.insert(key);
-  }
-
-  for (const auto& key : allKeys) {
-    const auto& myKv = myKeyVal.find(key);
-    const auto& reqKv = reqKeyVal.find(key);
-    if (myKv == myKeyVal.end()) {
-      // not exist in myKeyVal
-      thriftPub.tobeUpdatedKeys_ref()->emplace_back(key);
-      continue;
-    }
-    if (reqKv == reqKeyVal.end()) {
-      // not exist in reqKeyVal
-      thriftPub.keyVals_ref()->emplace(key, myKv->second);
-      continue;
-    }
-    // common key
-    const auto& myVal = myKv->second;
-    const auto& reqVal = reqKv->second;
-    int rc = compareValues(myVal, reqVal);
-    if (rc == 1 or rc == -2) {
-      // myVal is better or unknown
-      thriftPub.keyVals_ref()->emplace(key, myVal);
-    }
-    if (rc == -1 or rc == -2) {
-      // reqVal is better or unknown
-      thriftPub.tobeUpdatedKeys_ref()->emplace_back(key);
-    }
-  }
-
-  return thriftPub;
-}
-
 // This function serves the purpose of periodically scanning peers in
 // IDLE state and promote them to SYNCING state. The initial dump will
 // happen in async nature to unblock KvStore to process other requests.
@@ -2629,7 +2579,8 @@ KvStoreDb::processRequestMsgHelper(
         KvStoreFilters(keyPrefixList, *keyDumpParamsVal.originatorIds_ref());
     auto thriftPub = dumpAllWithFilters(keyPrefixMatch);
     if (auto keyValHashes = keyDumpParamsVal.keyValHashes_ref()) {
-      thriftPub = dumpDifference(*thriftPub.keyVals_ref(), *keyValHashes);
+      thriftPub =
+          dumpDifference(area_, *thriftPub.keyVals_ref(), *keyValHashes);
     }
     updatePublicationTtl(thriftPub);
     // I'm the initiator, set flood-root-id
