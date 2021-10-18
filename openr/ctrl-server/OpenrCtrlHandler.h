@@ -74,6 +74,17 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       ::std::string& _return, std::unique_ptr<::std::string> file) override;
 
   //
+  // OpenR initialization APIs
+  //
+
+  void getInitializationEvents(
+      std::map<thrift::InitializationEvent, int64_t>& _return) override;
+
+  bool initializationConverged() override;
+
+  int64_t getInitializationDurationMs() override;
+
+  //
   // Monitor APIs
   //
 

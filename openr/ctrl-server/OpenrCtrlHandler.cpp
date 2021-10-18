@@ -6,6 +6,7 @@
  */
 
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 #if __has_include("filesystem")
 #include <filesystem>
@@ -390,6 +391,49 @@ OpenrCtrlHandler::getRunningConfig(std::string& _return) {
 void
 OpenrCtrlHandler::getRunningConfigThrift(thrift::OpenrConfig& _config) {
   _config = config_->getConfig();
+}
+
+void
+OpenrCtrlHandler::getInitializationEvents(
+    std::map<thrift::InitializationEvent, int64_t>& _return) {
+  for (int eventInt = int(thrift::InitializationEvent::INITIALIZING);
+       eventInt <= int(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+       ++eventInt) {
+    auto event = static_cast<thrift::InitializationEvent>(eventInt);
+
+    // The fb303 counter is set in function logInitializationEvent().
+    auto counterKey = fmt::format(
+        Constants::kInitEventCounterFormat.toString(),
+        apache::thrift::util::enumNameSafe(event));
+    if (fb303::fbData->hasCounter(counterKey)) {
+      _return[event] = fb303::fbData->getCounter(counterKey);
+    }
+  }
+}
+
+bool
+OpenrCtrlHandler::initializationConverged() {
+  // TODO: Change to ADJACENCY_DB_SYNCED after OpenR initialization stage2 is
+  // completed.
+  // The fb303 counter is set in function logInitializationEvent().
+  auto convergenceKey = fmt::format(
+      Constants::kInitEventCounterFormat.toString(),
+      apache::thrift::util::enumNameSafe(
+          thrift::InitializationEvent::PREFIX_DB_SYNCED));
+  return fb303::fbData->hasCounter(convergenceKey);
+}
+
+int64_t
+OpenrCtrlHandler::getInitializationDurationMs() {
+  // TODO: Change to ADJACENCY_DB_SYNCED after OpenR initialization stage2 is
+  // completed.
+  // The fb303 counter is set in function logInitializationEvent().
+  auto convergenceKey = fmt::format(
+      Constants::kInitEventCounterFormat.toString(),
+      apache::thrift::util::enumNameSafe(
+          thrift::InitializationEvent::PREFIX_DB_SYNCED));
+  // Throw std::invalid_argument exception if convergenceKey does not exist.
+  return fb303::fbData->getCounter(convergenceKey);
 }
 
 std::unique_ptr<std::string>

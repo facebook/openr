@@ -25,6 +25,8 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
 
+#include <openr/common/Constants.h>
+
 namespace openr {
 
 std::string
@@ -123,7 +125,7 @@ logInitializationEvent(
   // Log OpenR initialization event to fb303::fbData.
   facebook::fb303::fbData->setCounter(
       fmt::format(
-          "initialization.{}.duration_ms",
+          Constants::kInitEventCounterFormat.toString(),
           apache::thrift::util::enumNameSafe(event)),
       durationSinceStart);
 }

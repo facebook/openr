@@ -248,6 +248,27 @@ service OpenrCtrl extends fb303_core.BaseService {
   string dryrunConfig(1: string file) throws (1: OpenrError error);
 
   //
+  // OpenR initialization APIs
+  //
+
+  /**
+   * Get the mapping of <initialization event, duration in millisecond since
+   * OpenR starts>.
+   */
+  map<Types.InitializationEvent, i64> getInitializationEvents();
+
+  /**
+   * OpenR initialization is converged or not.
+   */
+  bool initializationConverged();
+
+  /**
+   * Duration of initialization in milliseconds; Throws std::invalid_argument()
+   * if OpenR initialization is not completed yet.
+   */
+  i64 getInitializationDurationMs();
+
+  //
   // PrefixManager APIs
   //
 

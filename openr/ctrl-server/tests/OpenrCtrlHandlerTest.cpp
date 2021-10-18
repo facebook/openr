@@ -14,10 +14,12 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrClient.h>
+#include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
@@ -245,6 +247,25 @@ TEST_F(OpenrCtrlFixture, getMyNodeName) {
   std::string res{""};
   handler_->getMyNodeName(res);
   EXPECT_EQ(nodeName_, res);
+}
+
+TEST_F(OpenrCtrlFixture, InitializationApis) {
+  // Add KVSTORE_SYNCED event into fb303. Initialization not converged yet.
+  logInitializationEvent(
+      "KvStore", thrift::InitializationEvent::KVSTORE_SYNCED);
+  EXPECT_FALSE(handler_->initializationConverged());
+  EXPECT_THROW(handler_->getInitializationDurationMs(), std::invalid_argument);
+  std::map<thrift::InitializationEvent, int64_t> events;
+  handler_->getInitializationEvents(events);
+  EXPECT_EQ(events.count(thrift::InitializationEvent::KVSTORE_SYNCED), 1);
+
+  // Add PREFIX_DB_SYNCED event into fb303. Initialization converged.
+  logInitializationEvent(
+      "PrefixManager", thrift::InitializationEvent::PREFIX_DB_SYNCED);
+  EXPECT_TRUE(handler_->initializationConverged());
+  EXPECT_GE(handler_->getInitializationDurationMs(), 0);
+  handler_->getInitializationEvents(events);
+  EXPECT_EQ(events.count(thrift::InitializationEvent::PREFIX_DB_SYNCED), 1);
 }
 
 TEST_F(OpenrCtrlFixture, PrefixManagerApis) {

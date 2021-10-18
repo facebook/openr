@@ -25,6 +25,7 @@ constexpr folly::StringPiece Constants::kSeedPrefixAllocParamKey;
 constexpr folly::StringPiece Constants::kSparkMcastAddr;
 constexpr folly::StringPiece Constants::kStaticPrefixAllocParamKey;
 constexpr folly::StringPiece Constants::kSuccessResponse;
+constexpr folly::StringPiece Constants::kInitEventCounterFormat;
 constexpr int Constants::kHighWaterMark;
 constexpr int Constants::kIpTos;
 constexpr int Constants::kKeepAliveCnt;
