@@ -25,10 +25,9 @@ namespace fs = std::experimental::filesystem;
 #include <folly/gen/Base.h>
 #include <folly/gen/String.h>
 #include <folly/init/Init.h>
+#include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
 #include <glog/logging.h>
-#include <re2/re2.h>
-#include <re2/set.h>
 #include <sodium.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -89,14 +88,14 @@ checkIsIpv6Enabled() {
   // check if file path exists
   std::ifstream ifs(inet6Path);
   if (!ifs) {
-    LOG(ERROR) << "File path: " << inet6Path << " doesn't exist!";
+    XLOG(ERR) << "File path: " << inet6Path << " doesn't exist!";
     return;
   }
 
   // check file size for if_inet6_path.
   // zero-size file means IPv6 is NOT enabled globally.
   if (ifs.peek() == std::ifstream::traits_type::eof()) {
-    LOG(FATAL) << "IPv6 is NOT enabled. Pls check system config!";
+    XLOG(FATAL) << "IPv6 is NOT enabled. Pls check system config!";
   }
 }
 
@@ -120,14 +119,14 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
     }
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    LOG(INFO) << "Waiting for FibService to come up and be ready to accept "
-              << "route updates...";
+    XLOG(INFO) << "Waiting for FibService to come up and be ready to accept "
+               << "route updates...";
   }
 
   auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - waitForFibStart)
                     .count();
-  LOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
+  XLOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
 }
 
 /**
@@ -150,10 +149,10 @@ startEventBase(
 
   // Start a thread
   allThreads.emplace_back(std::thread([evb = evb.get(), name]() noexcept {
-    LOG(INFO) << "Starting " << name << " thread ...";
+    XLOG(INFO) << "Starting " << name << " thread ...";
     folly::setThreadName(fmt::format("openr-{}", name));
     evb->run();
-    LOG(INFO) << name << " thread got stopped.";
+    XLOG(INFO) << name << " thread got stopped.";
   }));
   evb->waitUntilRunning();
 
@@ -196,11 +195,11 @@ main(int argc, char** argv) {
 
   // Export and log build information
   BuildInfo::exportBuildInfo();
-  LOG(INFO) << ss.str();
+  XLOG(INFO) << ss.str();
 
   // init sodium security library
   if (::sodium_init() == -1) {
-    LOG(ERROR) << "Failed initializing sodium";
+    XLOG(ERR) << "Failed initializing sodium";
     return 1;
   }
 
@@ -210,16 +209,16 @@ main(int argc, char** argv) {
   // start config module
   std::shared_ptr<Config> config;
   try {
-    LOG(INFO) << "Reading config from " << FLAGS_config;
+    XLOG(INFO) << "Reading config from " << FLAGS_config;
     config = std::make_shared<Config>(FLAGS_config);
   } catch (const thrift::ConfigError&) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
     // collect stack strace then fail the process
     for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
-      LOG(ERROR) << exInfo;
+      XLOG(ERR) << exInfo;
     }
 #endif
-    LOG(FATAL) << "Failed to start OpenR. Invalid configuration.";
+    XLOG(FATAL) << "Failed to start OpenR. Invalid configuration.";
   }
 
   SYSLOG(INFO) << config->getRunningConfig();
@@ -283,10 +282,10 @@ main(int argc, char** argv) {
 
   // Starting main event-loop
   std::thread mainEvbThread([&]() noexcept {
-    LOG(INFO) << "Starting openr main event-base...";
+    XLOG(INFO) << "Starting openr main event-base...";
     folly::setThreadName("openr-main");
     mainEvb.loopForever();
-    LOG(INFO) << "Main event-base stopped...";
+    XLOG(INFO) << "Main event-base stopped...";
   });
   mainEvb.waitUntilRunning();
 
@@ -330,9 +329,9 @@ main(int argc, char** argv) {
           auto fibHandler = std::make_shared<NetlinkFibHandler>(nlSock.get());
           netlinkFibServer->setInterface(std::move(fibHandler));
 
-          LOG(INFO) << "Starting NetlinkFib server...";
+          XLOG(INFO) << "Starting NetlinkFib server...";
           netlinkFibServer->serve();
-          LOG(INFO) << "NetlinkFib server got stopped.";
+          XLOG(INFO) << "NetlinkFib server got stopped.";
         });
     watchdog->addQueue(netlinkEventsQueue, "netlinkEventsQueue");
   }
@@ -589,10 +588,10 @@ main(int argc, char** argv) {
   // Stop all threads (in reverse order of their creation)
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {
-    LOG(INFO) << "Stopping " << (*riter)->getEvbName();
+    XLOG(INFO) << "Stopping " << (*riter)->getEvbName();
     (*riter)->stop();
     (*riter)->waitUntilStopped();
-    LOG(INFO) << "Finally stopped " << (*riter)->getEvbName();
+    XLOG(INFO) << "Finally stopped " << (*riter)->getEvbName();
   }
 
   // stop bgp speaker

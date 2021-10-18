@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
+
 #include <openr/config-store/PersistentStoreWrapper.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -12,7 +14,7 @@ namespace openr {
 
 PersistentStoreWrapper::PersistentStoreWrapper(const unsigned long tid)
     : filePath(folly::sformat("/tmp/openr_persistent_store_test_{}", tid)) {
-  VLOG(1) << "PersistentStoreWrapper: Creating PersistentStore.";
+  XLOG(DBG1) << "PersistentStoreWrapper: Creating PersistentStore.";
   auto tConfig = getBasicOpenrConfig();
   tConfig.persistent_config_store_path_ref() = filePath;
   auto config = std::make_shared<Config>(tConfig);

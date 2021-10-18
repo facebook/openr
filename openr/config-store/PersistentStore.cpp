@@ -11,6 +11,7 @@
 
 #include <folly/FileUtil.h>
 #include <folly/io/IOBuf.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
@@ -53,8 +54,8 @@ PersistentStore::PersistentStore(
   // Load initial database. On failure we will just report error and continue
   // with empty database
   if (not loadDatabaseFromDisk()) {
-    LOG(ERROR) << "Failed to load config-database from file: "
-               << storageFilePath_;
+    XLOG(ERR) << "Failed to load config-database from file: "
+              << storageFilePath_;
   }
 }
 
@@ -95,7 +96,7 @@ PersistentStore::erase(std::string key) {
           maybeSaveObjectToDisk();
           p.setValue(true);
         } else {
-          LOG(WARNING) << "Key: " << key << " doesn't exist";
+          XLOG(WARNING) << "Key: " << key << " doesn't exist";
           p.setValue(false);
         }
       });
@@ -142,8 +143,8 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
     for (auto& pObject : newObjects) {
       auto buf = encodePersistentObject(pObject);
       if (buf.hasError()) {
-        LOG(ERROR) << "Failed to encode PersistentObject to ioBuf. Error: "
-                   << buf.error();
+        XLOG(ERR) << "Failed to encode PersistentObject to ioBuf. Error: "
+                  << buf.error();
         return false;
       }
       queue.append(std::move(**buf));
@@ -153,8 +154,8 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
     auto ioBuf = queue.move();
     auto success = writeIoBufToDisk(ioBuf, WriteType::APPEND);
     if (success.hasError()) {
-      LOG(ERROR) << "Failed to write PersistentObject to file '"
-                 << storageFilePath_ << "'. Error: " << success.error();
+      XLOG(ERR) << "Failed to write PersistentObject to file '"
+                << storageFilePath_ << "'. Error: " << success.error();
       return false;
     }
 
@@ -167,14 +168,14 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
       if (not saveDatabaseToDisk()) {
         return false;
       }
-      LOG(INFO) << "Updated database on disk. Took "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                       std::chrono::steady_clock::now() - startTs)
-                       .count()
-                << "ms";
+      XLOG(INFO) << "Updated database on disk. Took "
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - startTs)
+                        .count()
+                 << "ms";
     }
   } else {
-    VLOG(1) << "Skipping writing to disk in dryrun mode";
+    XLOG(DBG1) << "Skipping writing to disk in dryrun mode";
   }
   numOfWritesToDisk_++;
 
@@ -201,8 +202,8 @@ PersistentStore::saveDatabaseToDisk() noexcept {
 
       auto buf = encodePersistentObject(pObject);
       if (buf.hasError()) {
-        LOG(ERROR) << "Failed to encode PersistentObject to ioBuf. Error:  "
-                   << buf.error();
+        XLOG(ERR) << "Failed to encode PersistentObject to ioBuf. Error:  "
+                  << buf.error();
         return false;
       }
       queue.append(std::move(*buf));
@@ -213,8 +214,8 @@ PersistentStore::saveDatabaseToDisk() noexcept {
 
   auto success = writeIoBufToDisk(ioBuf, WriteType::WRITE);
   if (success.hasError()) {
-    LOG(ERROR) << "Failed to write database to file '" << storageFilePath_
-               << "'. Error: " << success.error();
+    XLOG(ERR) << "Failed to write database to file '" << storageFilePath_
+              << "'. Error: " << success.error();
     return false;
   }
   return true;
@@ -224,16 +225,16 @@ bool
 PersistentStore::loadDatabaseFromDisk() noexcept {
   // Check if file exists
   if (not fs::exists(storageFilePath_)) {
-    LOG(INFO) << "Storage file " << storageFilePath_ << " doesn't exists. "
-              << "Starting with empty database";
+    XLOG(INFO) << "Storage file " << storageFilePath_ << " doesn't exists. "
+               << "Starting with empty database";
     return true;
   }
 
   // Read data from file
   std::string fileData{""};
   if (not folly::readFile(storageFilePath_.c_str(), fileData)) {
-    LOG(ERROR) << "Failed to read file contents from '" << storageFilePath_
-               << "'. Error (" << errno << "): " << folly::errnoStr(errno);
+    XLOG(ERR) << "Failed to read file contents from '" << storageFilePath_
+              << "'. Error (" << errno << "): " << folly::errnoStr(errno);
     return false;
   }
 
@@ -241,8 +242,8 @@ PersistentStore::loadDatabaseFromDisk() noexcept {
   auto ioBuf = folly::IOBuf::wrapBuffer(fileData.c_str(), fileData.size());
   auto tlvSuccess = loadDatabaseTlvFormat(ioBuf);
   if (tlvSuccess.hasError()) {
-    LOG(ERROR) << "Failed to read Tlv-format file contents from '"
-               << storageFilePath_ << "'. Error: " << tlvSuccess.error();
+    XLOG(ERR) << "Failed to read Tlv-format file contents from '"
+              << storageFilePath_ << "'. Error: " << tlvSuccess.error();
     return false;
   }
   return true;

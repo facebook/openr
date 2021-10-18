@@ -7,6 +7,7 @@
 
 #include <fb303/ServiceData.h>
 #include <folly/FileUtil.h>
+#include <folly/logging/xlog.h>
 #include <glog/logging.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
@@ -54,7 +55,7 @@ Config::Config(const std::string& configFile) {
   std::string contents;
   if (not folly::readFile(configFile.c_str(), contents)) {
     auto errStr = fmt::format("Could not read config file: {}", configFile);
-    LOG(ERROR) << errStr;
+    XLOG(ERR) << errStr;
     throw thrift::ConfigError(errStr);
   }
 
@@ -64,7 +65,7 @@ Config::Config(const std::string& configFile) {
   } catch (const std::exception& ex) {
     auto errStr = fmt::format(
         "Could not parse OpenrConfig struct: {}", folly::exceptionStr(ex));
-    LOG(ERROR) << errStr;
+    XLOG(ERR) << errStr;
     throw thrift::ConfigError(errStr);
   }
   populateInternalDb();
@@ -77,7 +78,7 @@ Config::getRunningConfig() const {
   try {
     jsonSerializer.serialize(config_, &contents);
   } catch (const std::exception& ex) {
-    LOG(ERROR) << "Could not serialize config: " << folly::exceptionStr(ex);
+    XLOG(ERR) << "Could not serialize config: " << folly::exceptionStr(ex);
   }
 
   return contents;

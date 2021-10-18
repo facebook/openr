@@ -7,6 +7,7 @@
 
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -40,10 +41,10 @@ main(int argc, char** argv) {
   auto nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
       nlEvb.get(), netlinkEventsQueue);
   allThreads.emplace_back(std::thread([&nlEvb]() {
-    LOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
+    XLOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
     folly::setThreadName("NetlinkProtolSocketEvl");
     nlEvb->loopForever();
-    LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
+    XLOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
   }));
   nlEvb->waitUntilRunning();
 
@@ -59,15 +60,15 @@ main(int argc, char** argv) {
     linuxFibAgentServer.setInterface(fibHandler);
     linuxFibAgentServer.setDuplex(true);
 
-    LOG(INFO) << "Fib Agent starting...";
+    XLOG(INFO) << "Fib Agent starting...";
     linuxFibAgentServer.serve();
-    LOG(INFO) << "Fib Agent stopped.";
+    XLOG(INFO) << "Fib Agent stopped.";
   });
   allThreads.emplace_back(std::move(fibThriftThread));
 
-  LOG(INFO) << "Main event loop starting...";
+  XLOG(INFO) << "Main event loop starting...";
   mainEvb.loopForever();
-  LOG(INFO) << "Main event loop stopped.";
+  XLOG(INFO) << "Main event loop stopped.";
 
   // close queue
   netlinkEventsQueue.close();

@@ -19,6 +19,7 @@ namespace fs = std::experimental::filesystem;
 #include <folly/ExceptionString.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/io/async/ssl/OpenSSLUtils.h>
+#include <folly/logging/xlog.h>
 #include <re2/re2.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
@@ -70,12 +71,12 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(
         [q = std::move(kvStore_->getKvStoreUpdatesReader()),
          this]() mutable noexcept {
-          LOG(INFO) << "Starting KvStore updates processing fiber";
+          XLOG(INFO) << "Starting KvStore updates processing fiber";
           while (true) {
             auto maybePub = q.get(); // perform read
-            VLOG(2) << "Received publication from KvStore";
+            XLOG(DBG2) << "Received publication from KvStore";
             if (maybePub.hasError()) {
-              LOG(INFO) << "Terminating KvStore publications processing fiber";
+              XLOG(INFO) << "Terminating KvStore publications processing fiber";
               break;
             }
 
@@ -97,7 +98,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 
               // "adj:*" key has changed. Update local collection
               if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-                VLOG(3) << "Adj key: " << key << " change received";
+                XLOG(DBG3) << "Adj key: " << key << " change received";
                 isAdjChanged = true;
                 break;
               }
@@ -127,9 +128,9 @@ OpenrCtrlHandler::OpenrCtrlHandler(
                   auto& timeStamp = req.second;
                   if (now - timeStamp >=
                       Constants::kLongPollReqHoldTime.count()) {
-                    LOG(INFO) << "Elapsed time: " << now - timeStamp
-                              << " is over hold limit: "
-                              << Constants::kLongPollReqHoldTime.count();
+                    XLOG(INFO) << "Elapsed time: " << now - timeStamp
+                               << " is over hold limit: "
+                               << Constants::kLongPollReqHoldTime.count();
                     reqsToClean.emplace_back(clientId);
                     p.setValue(false);
                   }
@@ -143,7 +144,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               });
             }
           }
-          LOG(INFO) << "KvStore updates processing fiber stopped";
+          XLOG(INFO) << "KvStore updates processing fiber stopped";
         });
 
     workers_.push_back(std::move(taskFutureKvStore));
@@ -153,12 +154,12 @@ OpenrCtrlHandler::OpenrCtrlHandler(
   if (fib_) {
     auto taskFutureFib = ctrlEvb->addFiberTaskFuture(
         [q = std::move(fib_->getFibUpdatesReader()), this]() mutable noexcept {
-          LOG(INFO) << "Starting Fib updates processing fiber";
+          XLOG(INFO) << "Starting Fib updates processing fiber";
           while (true) {
             auto maybeUpdate = q.get(); // perform read
-            VLOG(2) << "Received DecisionRouteUpdate from Fib";
+            XLOG(DBG2) << "Received DecisionRouteUpdate from Fib";
             if (maybeUpdate.hasError()) {
-              LOG(INFO)
+              XLOG(INFO)
                   << "Terminating Fib RouteDatabaseDelta processing fiber";
               break;
             }
@@ -184,7 +185,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               }
             });
           }
-          LOG(INFO) << "Fib updates processing fiber stopped";
+          XLOG(INFO) << "Fib updates processing fiber stopped";
         });
 
     workers_.push_back(std::move(taskFutureFib));
@@ -195,13 +196,13 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   closeKvStorePublishers();
   closeFibPublishers();
 
-  LOG(INFO) << "Cleanup all pending request(s).";
+  XLOG(INFO) << "Cleanup all pending request(s).";
   longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
 
-  LOG(INFO)
+  XLOG(INFO)
       << "Waiting for termination of kvStoreUpdatesQueue, FibUpdatesQueue";
   folly::collectAll(workers_.begin(), workers_.end()).get();
-  LOG(INFO) << "Collected all workers";
+  XLOG(INFO) << "Collected all workers";
 }
 
 // NOTE: We're intentionally creating list of publishers to and then invoke
@@ -218,8 +219,8 @@ OpenrCtrlHandler::closeKvStorePublishers() {
       publishers.emplace_back(std::move(publisher));
     }
   });
-  LOG(INFO) << "Terminating " << publishers.size()
-            << " active KvStore snoop stream(s).";
+  XLOG(INFO) << "Terminating " << publishers.size()
+             << " active KvStore snoop stream(s).";
   for (auto& publisher : publishers) {
     // We have to send an exception as part of the completion, otherwise
     // thrift doesn't seem to notify the peer of the shutdown
@@ -238,8 +239,8 @@ OpenrCtrlHandler::closeFibPublishers() {
       fibPublishers_close.emplace_back(std::move(fibPublisher));
     }
   });
-  LOG(INFO) << "Terminating " << fibPublishers_close.size()
-            << " active Fib snoop stream(s).";
+  XLOG(INFO) << "Terminating " << fibPublishers_close.size()
+             << " active Fib snoop stream(s).";
   for (auto& fibPublisher : fibPublishers_close) {
     std::move(fibPublisher).complete();
   }
@@ -270,7 +271,7 @@ OpenrCtrlHandler::authorizeConnection() {
         "peer_address", connContext->getPeerAddress()->getAddressStr());
     sample.addString("peer_common_name", peerCommonName);
 
-    LOG(INFO) << "Authorizing request with issues: " << sample.toJson();
+    XLOG(INFO) << "Authorizing request with issues: " << sample.toJson();
     return;
   }
 
@@ -794,18 +795,18 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
   }
 
   if (thriftPub->keyVals_ref()->size() > 0) {
-    VLOG(3) << "AdjKey has been added/modified. Notify immediately";
+    XLOG(DBG3) << "AdjKey has been added/modified. Notify immediately";
     p.setValue(true);
   } else if (
       thriftPub->tobeUpdatedKeys_ref().has_value() &&
       thriftPub->tobeUpdatedKeys_ref().value().size() > 0) {
-    VLOG(3) << "AdjKey has been deleted/expired. Notify immediately";
+    XLOG(DBG3) << "AdjKey has been deleted/expired. Notify immediately";
     p.setValue(true);
   } else {
     // Client provided data is consistent with KvStore.
     // Store req for future processing when there is publication
     // from KvStore.
-    VLOG(3) << "No adj change detected. Store req as pending request";
+    XLOG(DBG3) << "No adj change detected. Store req as pending request";
     longPollReqs_.withWLock([&](auto& longPollReq) {
       longPollReq[*area].emplace(
           requestId, std::make_pair(std::move(p), timeStamp));
@@ -872,11 +873,11 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
           [this, clientToken]() {
             kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
               if (kvStorePublishers_.erase(clientToken)) {
-                LOG(INFO) << "KvStore snoop stream-" << clientToken
-                          << " ended.";
+                XLOG(INFO) << "KvStore snoop stream-" << clientToken
+                           << " ended.";
               } else {
-                LOG(ERROR) << "Can't remove unknown KvStore snoop stream-"
-                           << clientToken;
+                XLOG(ERR) << "Can't remove unknown KvStore snoop stream-"
+                          << clientToken;
               }
               fb303::fbData->setCounter(
                   "subscribers.kvstore", kvStorePublishers_.size());
@@ -885,8 +886,8 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
 
   kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
     assert(kvStorePublishers_.count(clientToken) == 0);
-    LOG(INFO) << "KvStore snoop stream-" << clientToken
-              << " started for areas: " << folly::join(", ", *selectAreas);
+    XLOG(INFO) << "KvStore snoop stream-" << clientToken
+               << " started for areas: " << folly::join(", ", *selectAreas);
     auto kvStorePublisher = std::make_unique<KvStorePublisher>(
         *selectAreas, std::move(*filter), std::move(streamAndPublisher.second));
     kvStorePublishers_.emplace(clientToken, std::move(kvStorePublisher));
@@ -960,10 +961,10 @@ OpenrCtrlHandler::subscribeFib() {
           [this, clientToken]() {
             fibPublishers_.withWLock([&clientToken](auto& fibPublishers) {
               if (fibPublishers.erase(clientToken)) {
-                LOG(INFO) << "Fib snoop stream-" << clientToken << " ended.";
+                XLOG(INFO) << "Fib snoop stream-" << clientToken << " ended.";
               } else {
-                LOG(ERROR) << "Can't remove unknown Fib snoop stream-"
-                           << clientToken;
+                XLOG(ERR) << "Can't remove unknown Fib snoop stream-"
+                          << clientToken;
               }
               fb303::fbData->setCounter(
                   "subscribers.fib", fibPublishers.size());
@@ -973,7 +974,7 @@ OpenrCtrlHandler::subscribeFib() {
   fibPublishers_.withWLock([&clientToken,
                             &streamAndPublisher](auto& fibPublishers) {
     assert(fibPublishers.count(clientToken) == 0);
-    LOG(INFO) << "Fib snoop stream-" << clientToken << " started.";
+    XLOG(INFO) << "Fib snoop stream-" << clientToken << " started.";
     fibPublishers.emplace(clientToken, std::move(streamAndPublisher.second));
     fb303::fbData->setCounter("subscribers.fib", fibPublishers.size());
   });
@@ -1005,10 +1006,10 @@ OpenrCtrlHandler::subscribeFibDetail() {
       thrift::RouteDatabaseDeltaDetail>::createPublisher([this, clientToken]() {
     fibDetailPublishers_.withWLock([&clientToken](auto& fibDetailPublishers) {
       if (fibDetailPublishers.erase(clientToken)) {
-        LOG(INFO) << "Fib detail snoop stream-" << clientToken << " ended.";
+        XLOG(INFO) << "Fib detail snoop stream-" << clientToken << " ended.";
       } else {
-        LOG(ERROR) << "Can't remove unknown Fib detail snoop stream-"
-                   << clientToken;
+        XLOG(ERR) << "Can't remove unknown Fib detail snoop stream-"
+                  << clientToken;
       }
       fb303::fbData->setCounter(
           "subscribers.fibDetail", fibDetailPublishers.size());
@@ -1018,7 +1019,7 @@ OpenrCtrlHandler::subscribeFibDetail() {
   fibDetailPublishers_.withWLock(
       [&clientToken, &streamAndPublisher](auto& fibDetailPublishers) {
         assert(fibDetailPublishers.count(clientToken) == 0);
-        LOG(INFO) << "Fib detail snoop stream-" << clientToken << " started.";
+        XLOG(INFO) << "Fib detail snoop stream-" << clientToken << " started.";
         fibDetailPublishers.emplace(
             clientToken, std::move(streamAndPublisher.second));
         fb303::fbData->setCounter(
