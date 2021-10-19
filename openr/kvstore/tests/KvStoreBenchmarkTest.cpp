@@ -192,6 +192,69 @@ BM_KvStoreUpdatePersistKey(
 }
 
 /*
+ * Benchmark test for ClearKeyValueRequest:
+ * The time measured includes KvStore processing time
+ * Test setup:
+ *  - Generate `numOfExistingKeys` and inject them into KvStore
+ *    as existing setup
+ * Benchmark:
+ *  - Generate `numOfClearKeys` and inject them into KvStore
+ *    and observe KvStore publications
+ */
+
+static void
+BM_KvStoreClearKey(
+    uint32_t iters, uint32_t numOfExistingKeys, uint32_t numOfClearKeys) {
+  // Spawn suspender object to NOT calculating setup time into benchmark
+  auto suspender = folly::BenchmarkSuspender();
+
+  const std::string nodeId = "node-1";
+  for (int i = 0; i < iters; ++i) {
+    auto testFixture = std::make_unique<kvStoreBenchmarkTestFixture>(nodeId);
+    auto kvStoreUpdatesQ = testFixture->kvStoreWrapper_->getReader();
+    std::vector<std::string> keyList;
+
+    // Generate `numOfExistingKeys`
+    for (int cnt = 0; cnt < numOfExistingKeys; ++cnt) {
+      auto key = genRandomStr(keyLen);
+      auto persistKey =
+          PersistKeyValueRequest(kTestingAreaName, key, genRandomStr(valLen));
+      keyList.emplace_back(std::move(key));
+      testFixture->kvRequestQueue_.push(std::move(persistKey));
+    }
+
+    testFixture->checkThriftPublication(numOfExistingKeys, kvStoreUpdatesQ);
+
+    // Get `numOfClearKeys` from `numOfExistingKeys`
+    auto clearKeys = keyList;
+    clearKeys.resize(numOfClearKeys);
+
+    // Start measuring benchmark time
+    suspender.dismiss();
+
+    for (auto& clearKey : clearKeys) {
+      // Stop measuring benchmark time, just generating key
+      suspender.rehire();
+
+      // Generate updated PersistKeyValueRequest
+      auto unsetPrefixRequest = ClearKeyValueRequest(
+          kTestingAreaName, clearKey, genRandomStr(valLen), true);
+
+      // Resume measuring time
+      suspender.dismiss();
+
+      testFixture->kvRequestQueue_.push(std::move(unsetPrefixRequest));
+    }
+
+    // Verify keys are marked as delete
+    testFixture->checkThriftPublication(numOfClearKeys, kvStoreUpdatesQ);
+
+    // Stop measuring benchmark time
+    suspender.rehire();
+  }
+}
+
+/*
  * @first integer: number of keys existing inside kvStore
  * @second integer: number of keys to persist for the first time
  */
@@ -247,6 +310,29 @@ BENCHMARK_NAMED_PARAM(
     BM_KvStoreUpdatePersistKey, 1000000_100000, 1000000, 100000);
 BENCHMARK_NAMED_PARAM(
     BM_KvStoreUpdatePersistKey, 1000000_1000000, 1000000, 1000000);
+
+/*
+ * @first integer: number of keys existing inside kvStore
+ * @second integer: number of keys to clear
+ */
+
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100_1, 100, 1);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000_1, 1000, 1);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_1, 10000, 1);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_10, 10000, 10);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_100, 10000, 100);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_1000, 10000, 1000);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_10000, 10000, 10000);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_1, 100000, 1);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_10, 100000, 10);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_100, 100000, 100);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_1000, 100000, 1000);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_10000, 100000, 10000);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_100000, 100000, 100000);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_1, 1000000, 1);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_100, 1000000, 100);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_10000, 1000000, 10000);
+BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_1000000, 1000000, 1000000);
 
 } // namespace openr
 
