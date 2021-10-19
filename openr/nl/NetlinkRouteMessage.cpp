@@ -406,11 +406,6 @@ NetlinkRouteMessage::addNextHops(const Route& route) {
     showMultiPathAttributes(reinterpret_cast<struct rtattr*>(nhop.data()));
   } else if (!route.isMultiPath() && route.getNextHops().size() == 1) {
     addSingleMplsNexthop(route);
-  } else {
-    // other options are not currently supported
-    LOG(ERROR) << "Invalid route, nexthops size " << route.getNextHops().size()
-               << " multipath enabled " << route.isMultiPath();
-    return EINVAL;
   }
 
   // print attributes when log level is enabled
