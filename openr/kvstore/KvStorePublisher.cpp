@@ -22,10 +22,14 @@ namespace openr {
 KvStorePublisher::KvStorePublisher(
     std::set<std::string> const& selectAreas,
     thrift::KeyDumpParams filter,
-    apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher)
+    apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher,
+    std::chrono::steady_clock::time_point subscription_time,
+    int64_t total_messages)
     : selectAreas_(selectAreas),
       filter_(filter),
-      publisher_(std::move(publisher)) {
+      publisher_(std::move(publisher)),
+      subscription_time_(subscription_time),
+      total_messages_(total_messages) {
   std::vector<std::string> keyPrefix;
 
   if (filter.keys_ref().has_value()) {

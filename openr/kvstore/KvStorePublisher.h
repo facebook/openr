@@ -13,6 +13,9 @@
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
+#include <chrono>
+#include <cstddef>
+#include <optional>
 
 namespace openr {
 class KvStorePublisher {
@@ -20,7 +23,10 @@ class KvStorePublisher {
   KvStorePublisher(
       std::set<std::string> const& selectAreas,
       thrift::KeyDumpParams filter,
-      apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher);
+      apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher,
+      std::chrono::steady_clock::time_point subscription_time =
+          std::chrono::steady_clock::now(),
+      int64_t total_messages = 0);
 
   ~KvStorePublisher() {}
 
@@ -39,5 +45,9 @@ class KvStorePublisher {
   thrift::KeyDumpParams filter_;
   KvStoreFilters keyPrefixFilter_{{}, {}};
   apache::thrift::ServerStreamPublisher<thrift::Publication> publisher_;
+
+ public:
+  std::chrono::steady_clock::time_point subscription_time_;
+  int64_t total_messages_;
 };
 } // namespace openr
