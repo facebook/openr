@@ -28,6 +28,11 @@ struct NodeAndArea {
   2: string area;
 }
 
+enum StreamSubscriberType {
+  KVSTORE = 0,
+  FIB = 1,
+}
+
 //
 // Prefix Manager data structures
 //
@@ -57,6 +62,20 @@ struct AdvertisedRouteDetail {
 struct AdvertisedRouteFilter {
   1: optional list<Network.IpPrefix> prefixes;
   2: optional Network.PrefixType prefixType;
+}
+
+/**
+* Subscriber Info attributes
+*/
+struct StreamSubscriberInfo {
+  // Unique id for subscriber
+  1: i64 subscriber_id;
+  // Subscription time in msecs
+  2: i64 uptime;
+  // Time that the last message was sent
+  3: i64 last_msg_sent_time;
+  // Total number of messages streamed
+  4: i64 total_streamed_msgs;
 }
 
 //
@@ -379,6 +398,11 @@ service OpenrCtrl extends fb303_core.BaseService {
   Types.RouteDatabase getRouteDbComputed(1: string nodeName) throws (
     1: OpenrError error,
   );
+
+  /**
+   * Get a list of active stream subscribers
+   */
+  list<StreamSubscriberInfo> getSubscriberInfo(i64 type);
 
   /**
    * Get unicast routes after applying a list of prefix filter.
