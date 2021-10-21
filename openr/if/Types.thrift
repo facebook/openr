@@ -150,6 +150,13 @@ struct Adjacency {
    * established.
    */
   11: string otherIfName = "";
+
+  /**
+   * If set to true, node->neighbor adj could ONLY be used by neighbor but not
+   * other nodes in the area. Otherwise, all nodes in the area could use the
+   * adj for route computation.
+   */
+  12: bool adjOnlyUsedByOtherNode = false;
 } (cpp.minimize_padding)
 
 /**

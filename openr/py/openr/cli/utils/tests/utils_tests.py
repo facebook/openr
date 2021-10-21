@@ -82,6 +82,7 @@ class UtilsTests(unittest.TestCase):
             "rtt": 1,
             "timestamp": adj.timestamp,
             "weight": 1,
+            "adjOnlyUsedByOtherNode": False,
         }
         self.assertEqual(adj_dict, object_to_dict(adj))
 
