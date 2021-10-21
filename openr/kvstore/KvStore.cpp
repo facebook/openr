@@ -460,8 +460,12 @@ KvStore::semifuture_dumpKvStoreKeys(
           oper = *keyDumpParams.oper_ref();
         }
 
-        auto thriftPub = kvStoreDb.dumpAllWithFilters(
-            keyPrefixMatch, oper, *keyDumpParams.doNotPublishValue_ref());
+        auto thriftPub = dumpAllWithFilters(
+            area,
+            kvStoreDb.getKeyValueMap(),
+            keyPrefixMatch,
+            oper,
+            keyDumpParams.get_doNotPublishValue());
         if (keyDumpParams.keyValHashes_ref().has_value()) {
           thriftPub = dumpDifference(
               area,
@@ -519,7 +523,8 @@ KvStore::semifuture_dumpKvStoreHashes(
         folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
       }
       KvStoreFilters kvFilters{keyPrefixList, originator};
-      auto thriftPub = kvStoreDb.dumpHashWithFilters(kvFilters);
+      auto thriftPub =
+          dumpHashWithFilters(area, kvStoreDb.getKeyValueMap(), kvFilters);
       kvStoreDb.updatePublicationTtl(thriftPub);
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
     } catch (thrift::OpenrError const& e) {
@@ -1694,64 +1699,6 @@ KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
   return thriftPub;
 }
 
-// dump the entries of my KV store whose keys match filter
-thrift::Publication
-KvStoreDb::dumpAllWithFilters(
-    KvStoreFilters const& kvFilters,
-    thrift::FilterOperator oper,
-    bool doNotPublishValue) const {
-  thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
-
-  switch (oper) {
-  case thrift::FilterOperator::AND:
-    for (auto const& [key, val] : kvStore_) {
-      if (not kvFilters.keyMatchAll(key, val)) {
-        continue;
-      }
-      if (not doNotPublishValue) {
-        thriftPub.keyVals_ref()[key] = val;
-      } else {
-        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
-      }
-    }
-    break;
-  default:
-    for (auto const& [key, val] : kvStore_) {
-      if (not kvFilters.keyMatch(key, val)) {
-        continue;
-      }
-      if (not doNotPublishValue) {
-        thriftPub.keyVals_ref()[key] = val;
-      } else {
-        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
-      }
-    }
-  }
-  return thriftPub;
-}
-
-// dump the hashes of my KV store whose keys match the given prefix
-// if prefix is the empty string, the full hash store is dumped
-thrift::Publication
-KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
-  thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
-  for (auto const& [key, val] : kvStore_) {
-    if (not kvFilters.keyMatch(key, val)) {
-      continue;
-    }
-    DCHECK(val.hash_ref().has_value());
-    auto& value = thriftPub.keyVals_ref()[key];
-    value.version_ref() = *val.version_ref();
-    value.originatorId_ref() = *val.originatorId_ref();
-    value.hash_ref().copy_from(val.hash_ref());
-    value.ttl_ref() = *val.ttl_ref();
-    value.ttlVersion_ref() = *val.ttlVersion_ref();
-  }
-  return thriftPub;
-}
-
 // This function serves the purpose of periodically scanning peers in
 // IDLE state and promote them to SYNCING state. The initial dump will
 // happen in async nature to unblock KvStore to process other requests.
@@ -1813,7 +1760,7 @@ KvStoreDb::requestThriftPeerSync() {
         std::vector<std::string>{}, /* keyPrefixList */
         std::set<std::string>{} /* originator */);
     params.keyValHashes_ref() =
-        std::move(*dumpHashWithFilters(kvFilters).keyVals_ref());
+        dumpHashWithFilters(area_, kvStore_, kvFilters).get_keyVals();
 
     // record telemetry for initial full-sync
     fb303::fbData->addStatValue(
@@ -2430,8 +2377,8 @@ KvStoreDb::requestFullSyncFromPeers() {
     std::set<std::string> originator{};
     std::vector<std::string> keyPrefixList{};
     KvStoreFilters kvFilters{keyPrefixList, originator};
-    params.keyValHashes_ref() =
-        std::move(*dumpHashWithFilters(kvFilters).keyVals_ref());
+    params.keyValHashes_ref() = std::move(
+        *dumpHashWithFilters(area_, kvStore_, kvFilters).keyVals_ref());
 
     dumpRequest.cmd_ref() = thrift::Command::KEY_DUMP;
     dumpRequest.keyDumpParams_ref() = params;
@@ -2577,7 +2524,7 @@ KvStoreDb::processRequestMsgHelper(
 
     const auto keyPrefixMatch =
         KvStoreFilters(keyPrefixList, *keyDumpParamsVal.originatorIds_ref());
-    auto thriftPub = dumpAllWithFilters(keyPrefixMatch);
+    auto thriftPub = dumpAllWithFilters(area_, kvStore_, keyPrefixMatch);
     if (auto keyValHashes = keyDumpParamsVal.keyValHashes_ref()) {
       thriftPub =
           dumpDifference(area_, *thriftPub.keyVals_ref(), *keyValHashes);

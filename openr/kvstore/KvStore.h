@@ -201,6 +201,11 @@ class KvStoreDb : public DualNode {
     return selfOriginatedKeyVals_;
   }
 
+  std::unordered_map<std::string, thrift::Value> const&
+  getKeyValueMap() const {
+    return kvStore_;
+  }
+
   // [TO BE DEPRECATED]
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
       const std::string& requestId, thrift::KvStoreRequest& thriftReq);
@@ -216,17 +221,6 @@ class KvStoreDb : public DualNode {
 
   // add new key-vals to kvstore_'s key-vals
   void setKeyVals(thrift::KeySetParams&& setParams);
-
-  // dump the entries of my KV store whose keys match the filter
-  thrift::Publication dumpAllWithFilters(
-      KvStoreFilters const& kvFilters,
-      thrift::FilterOperator oper = thrift::FilterOperator::OR,
-      bool doNotPublishValue = false) const;
-
-  // dump the hashes of my KV store whose keys match the given prefix
-  // if prefix is the empty sting, the full hash store is dumped
-  thrift::Publication dumpHashWithFilters(
-      KvStoreFilters const& kvFilters) const;
 
   // Merge received publication with local store and publish out the delta.
   // If senderId is set, will build <key:value> map from kvStore_ and

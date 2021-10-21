@@ -200,6 +200,21 @@ thrift::Publication dumpDifference(
     std::unordered_map<std::string, thrift::Value> const& myKeyVal,
     std::unordered_map<std::string, thrift::Value> const& reqKeyVal);
 
+// dump the entries of my KV store whose keys match the filter
+thrift::Publication dumpAllWithFilters(
+    const std::string& area,
+    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const KvStoreFilters& kvFilters,
+    thrift::FilterOperator oper = thrift::FilterOperator::OR,
+    bool doNotPublishValue = false);
+
+// dump the hashes of my KV store whose keys match the given prefix
+// if prefix is the empty sting, the full hash store is dumped
+thrift::Publication dumpHashWithFilters(
+    const std::string& area,
+    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const KvStoreFilters& kvFilters);
+
 } // namespace openr
 
 #include <openr/kvstore/KvStoreUtil-inl.h>

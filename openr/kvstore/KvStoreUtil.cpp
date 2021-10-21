@@ -372,4 +372,68 @@ dumpDifference(
   return thriftPub;
 }
 
+// dump the entries of my KV store whose keys match filter
+thrift::Publication
+dumpAllWithFilters(
+    const std::string& area,
+    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const KvStoreFilters& kvFilters,
+    thrift::FilterOperator oper,
+    bool doNotPublishValue) {
+  thrift::Publication thriftPub;
+  thriftPub.area_ref() = area;
+
+  // TODO: simplify the operations to OR case only in accordance with practice
+  switch (oper) {
+  case thrift::FilterOperator::AND:
+    for (auto const& [key, val] : kvStore) {
+      if (not kvFilters.keyMatchAll(key, val)) {
+        continue;
+      }
+      if (not doNotPublishValue) {
+        thriftPub.keyVals_ref()[key] = val;
+      } else {
+        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
+      }
+    }
+    break;
+  default:
+    for (auto const& [key, val] : kvStore) {
+      if (not kvFilters.keyMatch(key, val)) {
+        continue;
+      }
+      if (not doNotPublishValue) {
+        thriftPub.keyVals_ref()[key] = val;
+      } else {
+        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
+      }
+    }
+  }
+  return thriftPub;
+}
+
+// dump the hashes of my KV store whose keys match the given prefix
+// if prefix is the empty string, the full hash store is dumped
+thrift::Publication
+dumpHashWithFilters(
+    const std::string& area,
+    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const KvStoreFilters& kvFilters) {
+  thrift::Publication thriftPub;
+  thriftPub.area_ref() = area;
+  for (auto const& [key, val] : kvStore) {
+    if (not kvFilters.keyMatch(key, val)) {
+      continue;
+    }
+    DCHECK(val.hash_ref().has_value());
+    auto& value = thriftPub.keyVals_ref()[key];
+    value.version_ref() = *val.version_ref();
+    value.originatorId_ref() = *val.originatorId_ref();
+    value.hash_ref().copy_from(val.hash_ref());
+    value.ttl_ref() = *val.ttl_ref();
+    value.ttlVersion_ref() = *val.ttlVersion_ref();
+  }
+  return thriftPub;
+}
+
 }; // namespace openr
