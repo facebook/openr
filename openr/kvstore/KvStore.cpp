@@ -2377,8 +2377,8 @@ KvStoreDb::requestFullSyncFromPeers() {
     std::set<std::string> originator{};
     std::vector<std::string> keyPrefixList{};
     KvStoreFilters kvFilters{keyPrefixList, originator};
-    params.keyValHashes_ref() = std::move(
-        *dumpHashWithFilters(area_, kvStore_, kvFilters).keyVals_ref());
+    params.keyValHashes_ref() =
+        dumpHashWithFilters(area_, kvStore_, kvFilters).get_keyVals();
 
     dumpRequest.cmd_ref() = thrift::Command::KEY_DUMP;
     dumpRequest.keyDumpParams_ref() = params;
