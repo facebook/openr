@@ -402,7 +402,7 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Get a list of active stream subscribers
    */
-  list<StreamSubscriberInfo> getSubscriberInfo(i64 type);
+  list<StreamSubscriberInfo> getSubscriberInfo(1: i64 type);
 
   /**
    * Get unicast routes after applying a list of prefix filter.
