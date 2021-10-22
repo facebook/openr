@@ -435,5 +435,43 @@ dumpHashWithFilters(
   }
   return thriftPub;
 }
+// update TTL with remainng time to expire, TTL version remains
+// same so existing keys will not be updated with this TTL
+void
+updatePublicationTtl(
+    const TtlCountdownQueue& ttlCountdownQueue,
+    const std::chrono::milliseconds ttlDecr,
+    thrift::Publication& thriftPub) {
+  auto timeNow = std::chrono::steady_clock::now();
+  for (const auto& qE : ttlCountdownQueue) {
+    // Find key and ensure we are taking time from right entry from queue
+    auto kv = thriftPub.keyVals_ref()->find(qE.key);
+    if (kv == thriftPub.keyVals_ref()->end() or
+        *kv->second.version_ref() != qE.version or
+        *kv->second.originatorId_ref() != qE.originatorId or
+        *kv->second.ttlVersion_ref() != qE.ttlVersion) {
+      continue;
+    }
+
+    // Compute timeLeft and do sanity check on it
+    auto timeLeft = std::chrono::duration_cast<std::chrono::milliseconds>(
+        qE.expiryTime - timeNow);
+    if (timeLeft <= ttlDecr) {
+      thriftPub.keyVals_ref()->erase(kv);
+      continue;
+    }
+
+    // filter key from publication if time left is below ttl threshold
+    if (timeLeft < Constants::kTtlThreshold) {
+      thriftPub.keyVals_ref()->erase(kv);
+      continue;
+    }
+
+    // Set the time-left and decrement it by one so that ttl decrement
+    // deterministically whenever it is exchanged between KvStores. This
+    // will avoid looping of updates between stores.
+    kv->second.ttl_ref() = timeLeft.count() - ttlDecr.count();
+  }
+}
 
 }; // namespace openr

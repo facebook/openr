@@ -580,51 +580,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
   }
 
   //
-  // 2. Advertise key-value with just below kTtlThreshold.
-  // - Ensure we don't receive it over publication but do in GET request
-  //
-  {
-    auto thriftValue = value;
-    thriftValue.ttl_ref() = Constants::kTtlThreshold.count() - 1;
-    EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
-
-    auto getRes = kvStore->getKey(kTestingAreaName, key);
-    ASSERT_TRUE(getRes.has_value());
-    EXPECT_GE(*thriftValue.ttl_ref(), *getRes->ttl_ref() + 1);
-    getRes->ttl_ref() = *thriftValue.ttl_ref();
-    getRes->hash_ref() = 0;
-    EXPECT_EQ(thriftValue, getRes.value());
-
-    // dump keys
-    auto dumpRes = kvStore->dumpAll(kTestingAreaName);
-    EXPECT_EQ(1, dumpRes.size());
-    ASSERT_EQ(1, dumpRes.count(key));
-    auto& dumpResValue = dumpRes.at(key);
-    EXPECT_GE(*thriftValue.ttl_ref(), *dumpResValue.ttl_ref() + 1);
-    dumpResValue.ttl_ref() = *thriftValue.ttl_ref();
-    dumpResValue.hash_ref() = 0;
-    EXPECT_EQ(thriftValue, dumpResValue);
-
-    // dump hashes
-    auto hashRes = kvStore->dumpHashes(kTestingAreaName);
-    EXPECT_EQ(1, hashRes.size());
-    ASSERT_EQ(1, hashRes.count(key));
-    auto& hashResValue = hashRes.at(key);
-    EXPECT_GE(*thriftValue.ttl_ref(), *hashResValue.ttl_ref() + 1);
-    hashResValue.ttl_ref() = *thriftValue.ttl_ref();
-    hashResValue.hash_ref() = 0;
-    hashResValue.value_ref().copy_from(thriftValue.value_ref());
-    EXPECT_EQ(thriftValue, hashResValue);
-
-    // We will receive key-expiry publication but no key-advertisement
-    auto publication = kvStore->recvPublication();
-    EXPECT_EQ(0, publication.keyVals_ref()->size());
-    ASSERT_EQ(1, publication.expiredKeys_ref()->size());
-    EXPECT_EQ(key, publication.expiredKeys_ref()->at(0));
-  }
-
-  //
-  // 3. Advertise key with long enough ttl, so that it doesn't expire
+  // 2. Advertise key with long enough ttl, so that it doesn't expire
   // - Ensure we receive publication over pub socket
   // - Ensure we receive key-value via GET request
   //
@@ -675,7 +631,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
   }
 
   //
-  // 4. Advertise ttl-update to set it to new value
+  // 3. Advertise ttl-update to set it to new value
   //
   {
     auto thriftValue = value;
@@ -707,7 +663,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
   }
 
   //
-  // 5. Set ttl of key to INFINITE
+  // 4. Set ttl of key to INFINITE
   //
   {
     auto thriftValue = value;

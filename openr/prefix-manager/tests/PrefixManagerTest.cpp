@@ -831,7 +831,7 @@ class PrefixManagerSmallTtlTestFixture : public PrefixManagerTestFixture {
   }
 
  protected:
-  std::chrono::milliseconds ttl_{100};
+  std::chrono::milliseconds ttl_{2000};
 };
 
 TEST_F(PrefixManagerSmallTtlTestFixture, PrefixWithdrawExpiry) {

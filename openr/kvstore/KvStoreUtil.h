@@ -194,13 +194,13 @@ std::optional<openr::KvStoreFilters> getKvStoreFilters(
  */
 int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
-// dump the keys on which hashes differ from given keyVals
+// Dump the keys on which hashes differ from given keyVals
 thrift::Publication dumpDifference(
     const std::string& area,
     std::unordered_map<std::string, thrift::Value> const& myKeyVal,
     std::unordered_map<std::string, thrift::Value> const& reqKeyVal);
 
-// dump the entries of my KV store whose keys match the filter
+// Dump the entries of my KV store whose keys match the filter
 thrift::Publication dumpAllWithFilters(
     const std::string& area,
     const std::unordered_map<std::string, thrift::Value>& kvStore,
@@ -208,12 +208,19 @@ thrift::Publication dumpAllWithFilters(
     thrift::FilterOperator oper = thrift::FilterOperator::OR,
     bool doNotPublishValue = false);
 
-// dump the hashes of my KV store whose keys match the given prefix
-// if prefix is the empty sting, the full hash store is dumped
+// Dump the hashes of my KV store whose keys match the given prefix
+// If prefix is the empty sting, the full hash store is dumped
 thrift::Publication dumpHashWithFilters(
     const std::string& area,
     const std::unordered_map<std::string, thrift::Value>& kvStore,
     const KvStoreFilters& kvFilters);
+
+// Update Time to expire filed in Publication
+// If timeleft is below Constants::kTtlThreshold, erase keyVals
+void updatePublicationTtl(
+    const TtlCountdownQueue& ttlCountdownQueue,
+    const std::chrono::milliseconds ttlDecr,
+    thrift::Publication& thriftPub);
 
 } // namespace openr
 

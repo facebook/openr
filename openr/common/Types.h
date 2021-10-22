@@ -14,6 +14,7 @@
 #include <variant>
 #include <vector>
 
+#include <boost/heap/priority_queue.hpp>
 #include <boost/serialization/strong_typedef.hpp>
 #include <fmt/core.h>
 #include <folly/Expected.h>
@@ -133,6 +134,26 @@ enum class PrefixEventType {
    */
   SYNC_PREFIXES_BY_TYPE = 4,
 };
+
+struct TtlCountdownQueueEntry {
+  std::chrono::steady_clock::time_point expiryTime;
+  std::string key;
+  int64_t version{0};
+  int64_t ttlVersion{0};
+  std::string originatorId;
+
+  bool
+  operator>(TtlCountdownQueueEntry other) const {
+    return expiryTime > other.expiryTime;
+  }
+};
+
+// TODO: migrate to std::priority_queue
+using TtlCountdownQueue = boost::heap::priority_queue<
+    TtlCountdownQueueEntry,
+    // Always returns smallest first
+    boost::heap::compare<std::greater<TtlCountdownQueueEntry>>,
+    boost::heap::stable<true>>;
 
 /**
  * Prefix entry with their destination areas and nexthops

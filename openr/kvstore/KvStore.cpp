@@ -393,7 +393,8 @@ KvStore::semifuture_getKvStoreKeyVals(
       auto& kvStoreDb = getAreaDbOrThrow(area, "getKvStoreKeyVals");
 
       auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys_ref());
-      kvStoreDb.updatePublicationTtl(thriftPub);
+      updatePublicationTtl(
+          kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
 
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
     } catch (thrift::OpenrError const& e) {
@@ -472,7 +473,8 @@ KvStore::semifuture_dumpKvStoreKeys(
               *thriftPub.keyVals_ref(),
               keyDumpParams.keyValHashes_ref().value());
         }
-        kvStoreDb.updatePublicationTtl(thriftPub);
+        updatePublicationTtl(
+            kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
         // I'm the initiator, set flood-root-id
         thriftPub.floodRootId_ref().from_optional(kvStoreDb.getSptRootId());
 
@@ -525,7 +527,8 @@ KvStore::semifuture_dumpKvStoreHashes(
       KvStoreFilters kvFilters{keyPrefixList, originator};
       auto thriftPub =
           dumpHashWithFilters(area, kvStoreDb.getKeyValueMap(), kvFilters);
-      kvStoreDb.updatePublicationTtl(thriftPub);
+      updatePublicationTtl(
+          kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
     } catch (thrift::OpenrError const& e) {
       p.setException(e);
@@ -2457,42 +2460,6 @@ KvStoreDb::dumpPeers() {
   return peers;
 }
 
-// update TTL with remainng time to expire, TTL version remains
-// same so existing keys will not be updated with this TTL
-void
-KvStoreDb::updatePublicationTtl(
-    thrift::Publication& thriftPub, bool removeAboutToExpire) {
-  auto timeNow = std::chrono::steady_clock::now();
-  for (const auto& qE : ttlCountdownQueue_) {
-    // Find key and ensure we are taking time from right entry from queue
-    auto kv = thriftPub.keyVals_ref()->find(qE.key);
-    if (kv == thriftPub.keyVals_ref()->end() or
-        *kv->second.version_ref() != qE.version or
-        *kv->second.originatorId_ref() != qE.originatorId or
-        *kv->second.ttlVersion_ref() != qE.ttlVersion) {
-      continue;
-    }
-
-    // Compute timeLeft and do sanity check on it
-    auto timeLeft = duration_cast<milliseconds>(qE.expiryTime - timeNow);
-    if (timeLeft <= kvParams_.ttlDecr) {
-      thriftPub.keyVals_ref()->erase(kv);
-      continue;
-    }
-
-    // filter key from publication if time left is below ttl threshold
-    if (removeAboutToExpire and timeLeft < Constants::kTtlThreshold) {
-      thriftPub.keyVals_ref()->erase(kv);
-      continue;
-    }
-
-    // Set the time-left and decrement it by one so that ttl decrement
-    // deterministically whenever it is exchanged between KvStores. This
-    // will avoid looping of updates between stores.
-    kv->second.ttl_ref() = timeLeft.count() - kvParams_.ttlDecr.count();
-  }
-}
-
 // process a request
 folly::Expected<fbzmq::Message, fbzmq::Error>
 KvStoreDb::processRequestMsgHelper(
@@ -2529,7 +2496,7 @@ KvStoreDb::processRequestMsgHelper(
       thriftPub =
           dumpDifference(area_, *thriftPub.keyVals_ref(), *keyValHashes);
     }
-    updatePublicationTtl(thriftPub);
+    updatePublicationTtl(ttlCountdownQueue_, kvParams_.ttlDecr, thriftPub);
     // I'm the initiator, set flood-root-id
     thriftPub.floodRootId_ref().from_optional(DualNode::getSptRootId());
 
@@ -3156,7 +3123,7 @@ KvStoreDb::finalizeFullSync(
 
   // Update ttl values to remove expiring keys. Ignore the response if no
   // keys to be sent
-  updatePublicationTtl(updates);
+  updatePublicationTtl(ttlCountdownQueue_, kvParams_.ttlDecr, updates);
   if (not updates.keyVals_ref()->size()) {
     return;
   }
@@ -3288,7 +3255,7 @@ KvStoreDb::floodPublication(
   }
   // Update ttl on keys we are trying to advertise. Also remove keys which
   // are about to expire.
-  updatePublicationTtl(publication, true);
+  updatePublicationTtl(ttlCountdownQueue_, kvParams_.ttlDecr, publication);
 
   // If there are no changes then return
   if (publication.keyVals_ref()->empty() &&

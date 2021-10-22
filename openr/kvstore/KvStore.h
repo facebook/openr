@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <boost/heap/priority_queue.hpp>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
@@ -46,18 +45,6 @@ enum class KvStorePeerEvent {
   THRIFT_API_ERROR = 3,
 };
 
-struct TtlCountdownQueueEntry {
-  std::chrono::steady_clock::time_point expiryTime;
-  std::string key;
-  int64_t version{0};
-  int64_t ttlVersion{0};
-  std::string originatorId;
-  bool
-  operator>(TtlCountdownQueueEntry other) const {
-    return expiryTime > other.expiryTime;
-  }
-};
-
 // Structure for values and their backoffs for self-originated key-vals
 struct SelfOriginatedValue {
   // Value associated with the self-originated key
@@ -73,13 +60,6 @@ struct SelfOriginatedValue {
 
 using SelfOriginatedKeyVals =
     std::unordered_map<std::string, SelfOriginatedValue>;
-
-// TODO: migrate to std::priority_queue
-using TtlCountdownQueue = boost::heap::priority_queue<
-    TtlCountdownQueueEntry,
-    // Always returns smallest first
-    boost::heap::compare<std::greater<TtlCountdownQueueEntry>>,
-    boost::heap::stable<true>>;
 
 // structure for common params across all instances of KvStoreDb
 struct KvStoreParams {
@@ -205,6 +185,10 @@ class KvStoreDb : public DualNode {
   getKeyValueMap() const {
     return kvStore_;
   }
+  inline TtlCountdownQueue const&
+  getTtlCountdownQueue() const {
+    return ttlCountdownQueue_;
+  }
 
   // [TO BE DEPRECATED]
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
@@ -229,12 +213,6 @@ class KvStoreDb : public DualNode {
   size_t mergePublication(
       thrift::Publication const& rcvdPublication,
       std::optional<std::string> senderId = std::nullopt);
-
-  // update Time to expire filed in Publication
-  // removeAboutToExpire: knob to remove keys which are about to expire
-  // and hence do not want to include them. Constants::kTtlThreshold
-  void updatePublicationTtl(
-      thrift::Publication& thriftPub, bool removeAboutToExpire = false);
 
   /*
    * [Peer Management]
@@ -542,8 +520,8 @@ class KvStoreDb : public DualNode {
   /*
    * [Self Originated Key Management with ttl refreshing]
    *
-   * KvStoreDb will manage ttl-refreshing for self-originated key-vals sent via
-   * queue.
+   * KvStoreDb will manage ttl-refreshing for self-originated key-vals sent
+   * via queue.
    *
    * It provides set of util methods to manage self-originiated keys with:
    *    1) key persistence
@@ -573,8 +551,8 @@ class KvStoreDb : public DualNode {
    *
    *  - t0: advertise self-orinigated key with version 1 since local KvStoreDb
    *    is empty;
-   *  - t1: KvStoreDb FULL_SYNC finished and see keys advertised by its previous
-   *    incarnaton with higher version(>1);
+   *  - t1: KvStoreDb FULL_SYNC finished and see keys advertised by its
+   * previous incarnaton with higher version(>1);
    */
   void processPublicationForSelfOriginatedKey(
       thrift::Publication const& publication);
@@ -625,15 +603,17 @@ class KvStoreDb : public DualNode {
 
     // timer to periodically send keep-alive status
     // ATTN: this mechanism serves the purpose of avoiding channel being
-    //       closed from thrift server due to IDLE timeout(i.e. 60s by default)
+    //       closed from thrift server due to IDLE timeout(i.e. 60s by
+    //       default)
     std::unique_ptr<folly::AsyncTimeout> keepAliveTimer{nullptr};
 
     // Stores set of keys that may have changed during initialization of this
-    // peer. Will flood to them in finalizeFullSync(), the last step of initial
-    // sync.
+    // peer. Will flood to them in finalizeFullSync(), the last step of
+    // initial sync.
     std::unordered_set<std::string> pendingKeysDuringInitialization;
 
-    // Number of occured Thrift API errors in the process of syncing with peer.
+    // Number of occured Thrift API errors in the process of syncing with
+    // peer.
     int64_t numThriftApiErrors{0};
   };
 
@@ -734,8 +714,8 @@ class KvStoreDb : public DualNode {
       unordered_map<std::optional<std::string>, std::unordered_set<std::string>>
           publicationBuffer_{};
 
-  // Callback function to signal KvStore that KvStoreDb sync with all peers are
-  // completed.
+  // Callback function to signal KvStore that KvStoreDb sync with all peers
+  // are completed.
   std::function<void()> initialKvStoreSyncedCallback_;
 
   // [TO BE DEPRECATED]
@@ -837,7 +817,8 @@ class KvStore final : public OpenrEventBase {
   /*
    * [Public APIs]
    *
-   * Set of APIs to interact with DUAL(flooding-optimization) related structure.
+   * Set of APIs to interact with DUAL(flooding-optimization) related
+   * structure.
    */
   folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
   semifuture_getSpanningTreeInfos(std::string area);
@@ -851,7 +832,8 @@ class KvStore final : public OpenrEventBase {
   /*
    * [Public APIs]
    *
-   * Set of APIs to retrieve internal state including: state/counter/reader/etc.
+   * Set of APIs to retrieve internal state including:
+   * state/counter/reader/etc.
    */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
   semifuture_getKvStoreAreaSummaryInternal(
