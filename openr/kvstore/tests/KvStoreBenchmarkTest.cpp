@@ -21,9 +21,12 @@ const uint32_t kValLen(300);
 // Ttl time reference
 const uint64_t kTtl{300000};
 
-class kvStoreBenchmarkTestFixture {
+// number of total devices
+const uint32_t kDevice{48};
+
+class KvStoreBenchmarkTestFixture {
  public:
-  explicit kvStoreBenchmarkTestFixture() {
+  explicit KvStoreBenchmarkTestFixture() {
     auto tConfig = getBasicOpenrConfig(nodeId_, "domain");
     config_ = std::make_shared<Config>(tConfig);
 
@@ -136,7 +139,7 @@ BM_KvStoreFirstTimePersistKey(
   auto suspender = folly::BenchmarkSuspender();
 
   for (int i = 0; i < iters; ++i) {
-    auto testFixture = std::make_unique<kvStoreBenchmarkTestFixture>();
+    auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
     auto kvStoreUpdatesQ = testFixture->kvStoreWrapper_->getReader();
 
     // Generate `numOfExistingKeys`
@@ -192,7 +195,7 @@ BM_KvStoreUpdatePersistKey(
   auto suspender = folly::BenchmarkSuspender();
 
   for (int i = 0; i < iters; ++i) {
-    auto testFixture = std::make_unique<kvStoreBenchmarkTestFixture>();
+    auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
     auto kvStoreUpdatesQ = testFixture->kvStoreWrapper_->getReader();
     std::vector<std::string> keyList;
 
@@ -254,7 +257,7 @@ BM_KvStoreClearKey(
   auto suspender = folly::BenchmarkSuspender();
 
   for (int i = 0; i < iters; ++i) {
-    auto testFixture = std::make_unique<kvStoreBenchmarkTestFixture>();
+    auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
     auto kvStoreUpdatesQ = testFixture->kvStoreWrapper_->getReader();
     std::vector<std::string> keyList;
 
@@ -316,7 +319,7 @@ BM_KvStoreDumpDifference(
   auto suspender = folly::BenchmarkSuspender();
 
   for (int i = 0; i < iters; ++i) {
-    auto testFixture = std::make_unique<kvStoreBenchmarkTestFixture>();
+    auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
     std::unordered_map<std::string, thrift::Value> myKeyVals;
     std::unordered_map<std::string, thrift::Value> comparedKeyVals;
     for (int cnt = 0; cnt < numOfMyKeyVals; ++cnt) {
@@ -352,7 +355,7 @@ BM_KvStoreUpdatePubTtl(
   auto suspender = folly::BenchmarkSuspender();
 
   for (int i = 0; i < iters; ++i) {
-    auto testFixture = std::make_unique<kvStoreBenchmarkTestFixture>();
+    auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
 
     // Create and push `numOfMyEntries` of keyVals to ttlCountdownQueue
     // and return `numOfPubEntries` of keyVals as publication keyVals
@@ -370,6 +373,127 @@ BM_KvStoreUpdatePubTtl(
 
     updatePublicationTtl(
         ttlCountdownQueue, Constants::kTtlThreshold, thriftPub);
+
+    // Stop measuring time
+    suspender.rehire();
+  }
+}
+
+/*
+ * Benchmark test for dumpAllWithFilters:
+ * Tech setup:
+ *  - Generate `numOfExistingKeyVals` and push into kvStore
+ *  - Generate the filter condition by specifying `numOfKeysToMatch`,
+ *    `numOfOriginatorIds` and `doNotPublishValue` flag
+ * Benchmark:
+ *  - Call dumpAllWithFilters function to dump a thrift with all
+ *    matching keyVals
+ */
+static void
+BM_KvStoreDumpAllWithFilters(
+    uint32_t iters,
+    uint32_t numOfExistingKeyVals,
+    uint32_t numOfKeysToMatch,
+    uint32_t numOfOriginatorIds,
+    bool doNotPublishValue) {
+  // Spawn suspender object to NOT calculating setup time into benchmark
+  auto suspender = folly::BenchmarkSuspender();
+
+  // TODO: Move the common code to KvStoreBenchmarkTestFixture
+  for (int i = 0; i < iters; ++i) {
+    auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
+    std::unordered_map<std::string, thrift::Value> keyVals;
+    std::unordered_set<std::string> prefixSet;
+    std::vector<std::string> keyPrefixList;
+    thrift::KeyDumpParams keyDumpParams;
+
+    for (int j = 0; j < numOfExistingKeyVals; ++j) {
+      int deviceId = folly::Random::rand32() % kDevice;
+      auto keyVal =
+          genRandomKvStoreKeyVal(kKeyLen, kValLen, 1, std::to_string(deviceId));
+      keyVals[keyVal.first] = keyVal.second;
+      if (prefixSet.size() <= numOfKeysToMatch)
+        prefixSet.emplace(keyVal.first);
+    }
+
+    keyPrefixList.insert(
+        keyPrefixList.end(), prefixSet.begin(), prefixSet.end());
+
+    thrift::FilterOperator oper;
+    if (numOfKeysToMatch == 0 || numOfOriginatorIds == 0) {
+      oper = thrift::FilterOperator::OR;
+    } else {
+      oper = thrift::FilterOperator::AND;
+    }
+
+    for (int k = 0; k < numOfOriginatorIds; ++k) {
+      keyDumpParams.originatorIds_ref()->insert(std::to_string(k));
+    }
+
+    const auto keyPrefixMatch =
+        KvStoreFilters(keyPrefixList, keyDumpParams.get_originatorIds());
+    // Start measuring time
+    suspender.dismiss();
+
+    dumpAllWithFilters(
+        kTestingAreaName, keyVals, keyPrefixMatch, oper, doNotPublishValue);
+
+    // Stop measuring time
+    suspender.rehire();
+  }
+}
+
+/*
+ * Benchmark test for dumpHashWithFilters:
+ * Tech setup:
+ *  - Generate `numOfExistingKeyVals` and push into kvStore
+ *  - Generate the filter condition by specifying `numOfKeysToMatch`,
+ *    `numOfOriginatorIds` and `doNotPublishValue` flag
+ * Benchmark:
+ *  - Call dumpHashWithFilters function to dump a thrift with all
+ *    matching keyVals
+ */
+static void
+BM_KvStoreDumpHashWithFilters(
+    uint32_t iters,
+    uint32_t numOfExistingKeyVals,
+    uint32_t numOfKeysToFilter,
+    uint32_t numOfOriginatorIds) {
+  // Spawn suspender object to NOT calculating setup time into benchmark
+  auto suspender = folly::BenchmarkSuspender();
+
+  for (int i = 0; i < iters; ++i) {
+    auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
+
+    std::unordered_map<std::string, thrift::Value> keyVals;
+    std::unordered_set<std::string> prefixSet; // avoid replicate keys
+    std::vector<std::string> keyPrefixList; // key set that's fed into filter
+    thrift::KeyDumpParams keyDumpParams;
+
+    for (int j = 0; j < numOfExistingKeyVals; ++j) {
+      int deviceId = folly::Random::rand32() % kDevice;
+      auto key = genRandomStr(kKeyLen);
+      auto keyVal =
+          genRandomKvStoreKeyVal(kKeyLen, kValLen, 1, std::to_string(deviceId));
+      keyVals[keyVal.first] = keyVal.second;
+      if (prefixSet.size() <= numOfKeysToFilter)
+        prefixSet.emplace(keyVal.first);
+    }
+
+    keyPrefixList.insert(
+        keyPrefixList.end(), prefixSet.begin(), prefixSet.end());
+
+    for (int k = 0; k < numOfOriginatorIds; ++k) {
+      keyDumpParams.originatorIds_ref()->insert(std::to_string(k));
+    }
+
+    const auto keyPrefixMatch =
+        KvStoreFilters(keyPrefixList, keyDumpParams.get_originatorIds());
+
+    // Start measuring time
+    suspender.dismiss();
+
+    dumpHashWithFilters(kTestingAreaName, keyVals, keyPrefixMatch);
 
     // Stop measuring time
     suspender.rehire();
@@ -400,6 +524,8 @@ BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 1000000_1, 1000000, 1);
 BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 1000000_100, 1000000, 100);
 BENCHMARK_NAMED_PARAM(
     BM_KvStoreFirstTimePersistKey, 1000000_10000, 1000000, 10000);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreFirstTimePersistKey, 1000000_100000, 1000000, 100000);
 
 /*
  * @first integer: number of keys existing inside kvStore
@@ -424,6 +550,8 @@ BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 1000000_1, 1000000, 1);
 BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 1000000_100, 1000000, 100);
 BENCHMARK_NAMED_PARAM(
     BM_KvStoreUpdatePersistKey, 1000000_10000, 1000000, 10000);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreUpdatePersistKey, 1000000_100000, 1000000, 100000);
 
 /*
  * @first integer: number of keys existing inside kvStore
@@ -495,6 +623,109 @@ BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 1000000_100, 1000000, 100);
 BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 1000000_10000, 1000000, 10000);
 BENCHMARK_NAMED_PARAM(
     BM_KvStoreUpdatePubTtl, 1000000_1000000, 1000000, 1000000);
+
+/*
+ * @first integer: num of existing keyVals in unordered_map
+ * @second integer: num of keys to be matched in the filter setting
+ * @third integer: num of OriginatorIds to be matched in the filter setting
+ * @fourth boolean: flag if the thrift::Value.value is not set in publications
+ *
+ * Logic design: by setting different `numOfKeysToMatch` and
+ * `numOfOriginatorIds` to control filter operaton AND/OR
+ *
+ * Consider cases:
+ *  - Keys only, regardless of originator_Ids
+ *  - originator_Ids, regardless of keys
+ *  - originator_Ids and keys
+ */
+
+// Keys only, regardless of originator_Ids
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_1000_0_true, 100000, 1000, 0, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_1000_0_false, 100000, 1000, 0, false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_1000_0_true, 1000000, 1000, 0, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters,
+    1000000_1000_0_false,
+    1000000,
+    1000,
+    0,
+    false);
+// originator_Ids, regardless of keys
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_0_1_true, 100000, 0, 1, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_0_10_true, 100000, 0, 10, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_0_40_true, 100000, 0, 40, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_0_1_false, 100000, 0, 1, false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_0_10_false, 100000, 0, 10, false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_0_40_false, 100000, 0, 40, false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_0_1_true, 1000000, 0, 1, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_0_10_true, 1000000, 0, 10, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_0_40_true, 1000000, 0, 40, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_0_1_false, 1000000, 0, 1, false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_0_10_false, 100000, 0, 10, false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_0_40_false, 1000000, 0, 40, false);
+// originator_Ids and keys
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_1000_1_true, 100000, 1000, 1, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_1000_40_true, 100000, 1000, 40, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 100000_1000_1_false, 100000, 1000, 1, false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters,
+    100000_1000_40_false,
+    100000,
+    1000,
+    40,
+    false);
+
+/*
+ * @first integer: num of existing keyVals in unordered_map
+ * @second integer: num of keys to be matched in the filter setting
+ * @third integer: num of OriginatorIds to be matched in the filter setting
+ *
+ * Logic design: by setting different `numOfKeysToMatch` and
+ * `numOfOriginatorIds` to control filter operaton AND/OR
+ *
+ * Consider cases:
+ *  - Keys only, regardless of originator_Ids
+ *  - originator_Ids, regardless of keys
+ *  - originator_Ids and keys
+ */
+
+// originator_Ids, regardless of keys
+BENCHMARK_NAMED_PARAM(BM_KvStoreDumpHashWithFilters, 100000_0_1, 100000, 0, 1);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 100000_0_10, 100000, 0, 10);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 100000_0_40, 100000, 0, 40);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 1000000_0_1, 1000000, 0, 1);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 1000000_0_10, 1000000, 0, 10);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 1000000_0_40, 1000000, 0, 40);
+// originator_Ids and keys
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 100000_1000_1, 100000, 1000, 1);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 100000_1000_10, 100000, 1000, 10);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 100000_1000_40, 100000, 1000, 40);
 
 } // namespace openr
 
