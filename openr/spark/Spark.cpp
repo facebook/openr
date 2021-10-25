@@ -8,6 +8,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <chrono>
 
 #include <fb303/ServiceData.h>
 #include <folly/GLog.h>
@@ -782,17 +783,38 @@ Spark::processRttChange(
                << ". Skip RTT change notification.";
     return;
   }
-
+  // rounding rtt value to milisecond
+  auto roundedNewRtt = rttRounding(newRtt);
+  // skip if no update
+  if (roundedNewRtt == sparkNeighbor.rtt) {
+    return;
+  }
   // update rtt value
-  sparkNeighbor.rtt = std::chrono::microseconds(newRtt);
+  sparkNeighbor.rtt = roundedNewRtt;
 
-  if (*config_->getLinkMonitorConfig().use_rtt_metric_ref()) {
+  // notify the rtt changes if use the rtt metric
+  if (config_->getLinkMonitorConfig().get_use_rtt_metric()) {
     XLOG(DBG1) << "RTT for sparkNeighbor " << neighborName << " has changed "
                << "from " << sparkNeighbor.rtt.count() << "usecs to " << newRtt
                << "usecs over interface " << ifName;
     notifySparkNeighborEvent(
         NeighborEventType::NEIGHBOR_RTT_CHANGE, sparkNeighbor.toThrift());
   }
+}
+
+std::chrono::microseconds
+Spark::rttRounding(int64_t const rtt) {
+  // Mask off to millisecond accuracy!
+  //
+  // Reason => For practical Wide Area Networks(WAN) scenario.
+  // Having accuracy up to milliseconds is sufficient.
+  //
+  // Further, load on system can heavily influence rtt measurement in
+  // microseconds as we do calculation in user-space. Also when Open/R
+  // process restarts on neighbor node, measurement will more likely
+  // to be the same as previous one.
+  return std::chrono::microseconds(
+      std::max(rtt / 1000 * 1000, std::chrono::microseconds(1000).count()));
 }
 
 void
@@ -830,17 +852,9 @@ Spark::updateNeighborRtt(
   XLOG(DBG3) << "Measured new RTT for neighbor " << neighborName
              << " from remote iface " << remoteIfName << " over interface "
              << ifName << " as " << rtt.count() / 1000.0 << "ms.";
-  // Mask off to millisecond accuracy!
-  //
-  // Reason => Relying on microsecond accuracy is too inaccurate. For
-  // practical Wide Area Networks(WAN) scenario. Having accuracy up to
-  // milliseconds is sufficient.
-  //
-  // Further, load on system can heavily influence rtt measurement in
-  // microseconds as we do calculation in user-space. Also when Open/R
-  // process restarts on neighbor node, measurement will more likely
-  // to be the same as previous one.
-  rtt = std::max(rtt / 1000 * 1000, std::chrono::microseconds(1000));
+
+  // rounding rtt value to milisecond
+  rtt = rttRounding(rtt.count());
 
   // It is possible for things to go wrong in RTT calculation because of
   // clock adjustment.

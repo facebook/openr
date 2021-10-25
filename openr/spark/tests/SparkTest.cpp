@@ -451,10 +451,15 @@ TEST_F(SimpleSparkFixture, RttTest) {
     auto events = node1_->waitForEvents(NB_RTT_CHANGE);
     ASSERT_TRUE(events.has_value() and events.value().size() == 1);
     auto& event = events.value().back();
-    // 25% tolerance
+
+    // Margin of error - 25% tolerance
     auto rtt = *event.info.rttUs_ref();
     EXPECT_GE(rtt, (40 - 10) * 1000);
     EXPECT_LE(rtt, (40 + 10) * 1000);
+
+    // Check it has the accuracy up to milliseconds.
+    EXPECT_EQ(rtt % 1000, 0);
+
     LOG(INFO) << fmt::format(
         "{} reported new RTT to {} to be {}ms",
         nodeName1_,
@@ -466,10 +471,14 @@ TEST_F(SimpleSparkFixture, RttTest) {
     auto events = node2_->waitForEvents(NB_RTT_CHANGE);
     ASSERT_TRUE(events.has_value() and events.value().size() == 1);
     auto& event = events.value().back();
-    // 25% tolerance
+    // Margin of error - 25% tolerance
     auto rtt = *event.info.rttUs_ref();
     EXPECT_GE(rtt, (40 - 10) * 1000);
     EXPECT_LE(rtt, (40 + 10) * 1000);
+
+    // Check it has the accuracy up to milliseconds.
+    EXPECT_EQ(rtt % 1000, 0);
+
     LOG(INFO) << fmt::format(
         "{} reported new RTT to {} to be {}ms",
         nodeName2_,

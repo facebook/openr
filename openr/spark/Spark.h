@@ -419,6 +419,9 @@ class Spark final : public OpenrEventBase {
       std::string const& neighborName,
       int64_t const newRtt);
 
+  // rounding the RTT for metric calculation
+  std::chrono::microseconds rttRounding(int64_t const rtt);
+
   // wrapper function to process GR msg
   void processGRMsg(
       std::string const& neighborName,
