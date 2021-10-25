@@ -58,4 +58,13 @@ DecisionRouteUpdate generateDecisionRouteUpdateFromPrefixEntries(
 
 DecisionRouteUpdate generateDecisionRouteUpdate(
     const PrefixGenerator& prefixGenerator, uint32_t num, uint32_t areaId = 0);
+
+std::pair<std::string, thrift::Value> genRandomKvStoreKeyVal(
+    int64_t keyLen,
+    int64_t valLen,
+    int64_t version,
+    const std::string& originatorId = "originator",
+    int64_t ttl = Constants::kTtlInfinity,
+    int64_t ttlVersion = 0,
+    std::optional<int64_t> hash = std::nullopt);
 } // namespace openr

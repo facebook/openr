@@ -224,4 +224,29 @@ generateDecisionRouteUpdate(
       generatePrefixEntries(prefixGenerator, num);
   return generateDecisionRouteUpdateFromPrefixEntries(prefixEntries, areaId);
 }
+
+/*
+ * Util function to generate kvstore keyVal
+ */
+std::pair<std::string, thrift::Value>
+genRandomKvStoreKeyVal(
+    int64_t keyLen,
+    int64_t valLen,
+    int64_t version,
+    const std::string& originatorId,
+    int64_t ttl,
+    int64_t ttlVersion,
+    std::optional<int64_t> hash) {
+  auto key = genRandomStr(keyLen);
+  auto value = genRandomStr(valLen);
+  auto thriftVal = createThriftValue(
+      version /* version */,
+      originatorId /* originatorId */,
+      value /* value */,
+      ttl /* ttl */,
+      ttlVersion /* ttl version */,
+      hash /* hash */);
+
+  return std::make_pair(key, thriftVal);
+}
 } // namespace openr
