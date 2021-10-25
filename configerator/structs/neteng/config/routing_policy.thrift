@@ -166,6 +166,18 @@ struct OpenrSourcePreferences {
   3: map<string/* admin pref name */ , OpenrSourcePreference> objects;
 }
 
+struct OpenrIgpCostRange {
+  1: string _description;
+  2: optional i32 max_cost;
+  3: optional i32 min_cost;
+}
+
+struct OpenrIgpCostRanges {
+  1: string _description;
+  2: optional string _revision;
+  3: map<string/* admin igp cost name */ , OpenrIgpCostRange> objects;
+}
+
 struct OpenrPrefixForwardingType {
   1: string _description;
   2: OpenrPrefixForwardingTypeValues type;
@@ -232,6 +244,7 @@ struct PolicyDefinitions {
   10: optional OpenrSourcePreferences openrSourcePreference;
   11: optional OpenrPrefixForwardingAlgorithms openrPrefixForwardingAlgorithm;
   12: optional OpenrPrefixForwardingTypes openrPrefixForwardingType;
+  13: optional OpenrIgpCostRanges openrIgpCostRange;
 }
 
 // I wish this could be union of
@@ -272,6 +285,7 @@ struct FilterCriteria {
   45: optional string openrSourcePreference;
   46: optional string openrPrefixForwardingType; // IP|MPLS
   47: optional string openrPrefixForwardingAlgorithm; // ECMP|KSP2
+  48: optional string OpenrIgpCostRange;
 
   90: optional string condition;
   91: optional RuleCondition condition_id;
