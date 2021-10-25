@@ -296,6 +296,27 @@ struct FilterCriteria {
   106: optional string regex;
 }
 
+/**
+ * Documentation - https://fb.quip.com/xqf4Ai6ySsDm#bVWACA0Hh3q
+ */
+enum BgpLbwExtCommunityActionType {
+  // common actions for both recv/advertise
+  DISABLE = 1, // pruneLbw()
+  SET_LINK_BPS = 2, // set lbw with link-bps defined in config
+
+  // actions ONLY for recv
+  ACCEPT = 3, // does nothing, take Lbw as is
+
+  // actions ONLY for advertise
+  BEST_PATH = 4, // announce the best path's lbw
+  AGGREGATE_LOCAL = 5, // set lbw with aggregate-local (from config)
+  AGGREGATE_RECEIVED = 6, // set lbw with aggregate-received (from peers)
+}
+
+struct BgpLbwExtCommunityAction {
+  1: BgpLbwExtCommunityActionType type;
+}
+
 struct FilterTransform {
   1: optional string _remark;
 
@@ -306,6 +327,7 @@ struct FilterTransform {
   5: optional string bgpOrigin;
   6: optional string nextHop;
   7: optional string bgpPath;
+  8: optional BgpLbwExtCommunityAction bgpLbwExtCommunityAction;
 
   // openr (index range 20:)
 
@@ -342,7 +364,7 @@ struct FilterTransform {
   /*
    * flag that indicates if prependLabel attribute is accepted. If not, the
    * attribute is reset.
-   * Note: openrAcceptPrependLabel does not need operators.
+   * Note: openrAcceptPrependLabel does not require operators.
    */
   27: optional bool openrAcceptPrependLabel;
 
