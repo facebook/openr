@@ -728,6 +728,14 @@ struct BgpRouteTranslationConfig {
    * new behavior.
    */
   11: bool enable_path_pref_to_local_pref_translation = 0;
+
+  /**
+   * Translate igp cost to community. Note since igp cost is
+   * non transitive and there is no policy between openr<->bgp
+   * Note this is only one way translation: openr -> bgp
+   * When translating bgp->openr, these community will be stripped
+   */
+  12: map<i32, string> igp_cost_to_community;
 } (cpp.minimize_padding)
 
 struct OpenrConfig {
