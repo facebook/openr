@@ -2362,6 +2362,59 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
       *link.networks.begin());
 }
 
+class InitializationTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+
+    // override LM config
+    tConfig.enable_new_gr_behavior_ref() = true;
+    tConfig.enable_ordered_adj_publication_ref() = true;
+
+    return tConfig;
+  }
+};
+
+TEST_F(InitializationTestFixture, AdjacencyUpHoldTest) {
+  {
+    // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
+    // with `adjOnlyUsedByOtherNode` set to true.
+    auto nb2Copy = folly::copy(nb2);
+    nb2Copy.adjOnlyUsedByOtherNode_ref() = true;
+
+    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2Copy);
+    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+
+    // kvstore peer initial sync
+    kvStoreSyncEventsQueue.push(
+        KvStoreSyncEvent(nb2Copy.get_nodeName(), kTestingAreaName));
+
+    // NOTE: adjacency db will contain adj_2_1 with
+    // `adjOnlyUsedByOtherNode=true`
+    auto adj_2_1Copy = folly::copy(adj_2_1);
+    adj_2_1Copy.adjOnlyUsedByOtherNode_ref() = true;
+    auto adjDb = createAdjDb("node-1", {adj_2_1Copy}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+    checkNextAdjPub("adj:node-1");
+  }
+
+  {
+    // push NB_UP_ADJ_SYNCED event to indicate adj is unblcoked
+    auto neighborEvent =
+        NeighborEvent(NeighborEventType::NEIGHBOR_ADJ_SYNCED, nb2);
+    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+
+    // check adjacency will be published as `adjOnlyUsedByOtherNode` is reset
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+    checkNextAdjPub("adj:node-1");
+
+    // check kvstore received peer event
+    checkPeerDump(adj_2_1.get_otherNodeName(), peerSpec_2_1);
+  }
+}
+
 class MultiAreaTestFixture : public LinkMonitorTestFixture {
  public:
   std::vector<thrift::AreaConfig>

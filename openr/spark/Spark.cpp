@@ -258,48 +258,48 @@ Spark::SparkNeighbor::toThrift() const {
   info.rttUs_ref() = this->rtt.count();
   info.label_ref() = this->label;
   info.enableFloodOptimization_ref() = this->enableFloodOptimization;
-  info.isAdjacencyOnHold_ref() = this->isAdjacencyOnHold;
+  info.adjOnlyUsedByOtherNode_ref() = this->adjOnlyUsedByOtherNode;
 
   return info;
 }
 
 /*
- * This is the util function to determine if flag `isAdjacencyOnHold` will be
- * reset based on received `SparkHeartbeatMsg`.
+ * This is the util function to determine if flag `adjOnlyUsedByOtherNode` will
+ * be reset based on received `SparkHeartbeatMsg`.
  *
  * A few situations to consider for backward compatibility.
  *
  * 1) local node + remote peer both have `enable_ordered_adj_publication=false`
  *
- *      `isAdjacencyOnHold` will ALWAYS be false(e.g. default)
+ *      `adjOnlyUsedByOtherNode` will ALWAYS be false(e.g. default)
  *      Processing logic will keep the SAME as existing flow.
  *
  * 2) local node + remote peer both have `enable_ordered_adj_publication=true`
  *
- *      `isAdjacencyOnHold` will first be set to TRUE when `SparkHandshakeMsg`
- *      is received. The local node will wait until remote peer sends the
- *      `SparkHeartbeatMsg` with `holdAdjacency=false`. `isAdjacencyOnHold`
- *      will be reset.
+ *      `adjOnlyUsedByOtherNode` will first be set to TRUE when
+ * `SparkHandshakeMsg` is received. The local node will wait until remote peer
+ * sends the `SparkHeartbeatMsg` with `holdAdjacency=false`.
+ * `adjOnlyUsedByOtherNode` will be reset.
  *
  * 3) local node: `enable_ordered_adj_publication=true`
  *    remote peer: `enable_ordered_adj_publication=false`
  *
- *      `isAdjacencyOnHold` will first be set to TRUE when `SparkHandshakeMsg`
- *      is received. The remote peer will always send `SparkHeartbeatMsg` with
- *      `holdAdjacency=false` since knob is off.
+ *      `adjOnlyUsedByOtherNode` will first be set to TRUE when
+ * `SparkHandshakeMsg` is received. The remote peer will always send
+ * `SparkHeartbeatMsg` with `holdAdjacency=false` since knob is off.
  *
  * 4) local node: `enable_ordered_adj_publication=false`
  *    remote peer: `enable_ordered_adj_publication=true`
  *
  *      From local node's perspective, it directly report NEIGHBOR_UP when
- *      `SparkHandshakeMsg` is received. `isAdjacencyOnHold` will be kept false
- *      as the default value.
+ *      `SparkHandshakeMsg` is received. `adjOnlyUsedByOtherNode` will be kept
+ * false as the default value.
  */
 bool
-Spark::SparkNeighbor::shouldResetAdjacencyHold(
+Spark::SparkNeighbor::shouldResetAdjacency(
     const thrift::SparkHeartbeatMsg& heartbeatMsg) {
   // Skip resetting if adjacency is NOT on hold.
-  if (not this->isAdjacencyOnHold) {
+  if (not this->adjOnlyUsedByOtherNode) {
     return false;
   }
 
@@ -342,7 +342,7 @@ Spark::Spark(
           config->getThriftServerConfig().get_openr_ctrl_port()),
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
-      enableOrderedAdjPublication(
+      enableOrderedAdjPublication_(
           config->getConfig().get_enable_ordered_adj_publication()),
       config_(std::move(config)) {
   CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
@@ -982,7 +982,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   heartbeatMsg.nodeName_ref() = myNodeName_;
   heartbeatMsg.seqNum_ref() = mySeqNum_;
   heartbeatMsg.holdAdjacency_ref() = false;
-  if (enableOrderedAdjPublication) {
+  if (enableOrderedAdjPublication_) {
     // ATTN: notify peer to hold adjacency when adjacencyDb still in syncing
     heartbeatMsg.holdAdjacency_ref() = (not adjacencyDbSynced_);
   }
@@ -1168,12 +1168,12 @@ Spark::neighborUpWrapper(
   ifNameToActiveNeighbors_[ifName].emplace(neighborName);
 
   // notify LinkMonitor about neighbor UP state
-  if (enableOrderedAdjPublication) {
-    // ATTN: expect adjacency hold to be removed later with heartbeatMsg
-    neighbor.isAdjacencyOnHold = true;
+  if (enableOrderedAdjPublication_) {
+    // ATTN: expect adjacency attribute to be removed later with heartbeatMsg
+    neighbor.adjOnlyUsedByOtherNode = true;
 
     LOG(INFO) << fmt::format(
-        "[Initialization] Set isAdjacencyOnHold to true for neighbor: {}",
+        "[Initialization] Mark neighbor: {} only used by other node in adj population",
         neighborName);
   }
   // TODO: avoid thrift transformation between modules
@@ -1769,15 +1769,14 @@ Spark::processHeartbeatMsg(
   // Reset the hold-timer for neighbor as we have received a keep-alive msg
   neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
 
-  // Check isAdjacencyOnHold bit to report to LinkMonitor
-  if (neighbor.shouldResetAdjacencyHold(heartbeatMsg)) {
-    neighbor.isAdjacencyOnHold = false;
-    // TODO: may potentially report a different event
+  // Check adjOnlyUsedByOtherNode bit to report to LinkMonitor
+  if (neighbor.shouldResetAdjacency(heartbeatMsg)) {
+    neighbor.adjOnlyUsedByOtherNode = false;
     notifySparkNeighborEvent(
-        NeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
+        NeighborEventType::NEIGHBOR_ADJ_SYNCED, neighbor.toThrift());
 
     LOG(INFO) << fmt::format(
-        "[Initialization] Reset isAdjacencyOnHold for neighbor: {}",
+        "[Initialization] Reset flag for neighbor: {} to mark adj to be used globally",
         neighborName);
   }
 }

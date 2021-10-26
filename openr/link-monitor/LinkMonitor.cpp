@@ -119,6 +119,8 @@ LinkMonitor::LinkMonitor(
       areas_(config->getAreas()),
       enableKvStoreRequestQueue_(
           config->getConfig().get_enable_kvstore_request_queue()),
+      enableOrderedAdjPublication_(
+          config->getConfig().get_enable_ordered_adj_publication()),
       interfaceUpdatesQueue_(interfaceUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
@@ -309,6 +311,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   const auto openrCtrlThriftPort = *info.openrCtrlThriftPort_ref();
   const auto rttUs = *info.rttUs_ref();
   const auto supportFloodOptimization = *info.enableFloodOptimization_ref();
+  const auto onlyUsedByOtherNode = info.get_adjOnlyUsedByOtherNode();
 
   // current unixtime
   auto now = std::chrono::system_clock::now();
@@ -329,14 +332,15 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
       1 /* weight */,
       remoteIfName);
 
-  SYSLOG(INFO) << EventTag() << "Neighbor " << remoteNodeName
-               << " is up on interface " << localIfName
-               << ". Remote Interface: " << remoteIfName
-               << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
-               << ", addrV4: " << toString(neighborAddrV4)
-               << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area
-               << ", supportFloodOptimization: " << std::boolalpha
-               << supportFloodOptimization;
+  SYSLOG(INFO)
+      << EventTag() << "Neighbor " << remoteNodeName << " is up on interface "
+      << localIfName << ". Remote Interface: " << remoteIfName
+      << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
+      << ", addrV4: " << toString(neighborAddrV4)
+      << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area
+      << ", supportFloodOptimization: " << std::boolalpha
+      << supportFloodOptimization << ", onlyUsedByOtherNode: " << std::boolalpha
+      << onlyUsedByOtherNode;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
   std::string repUrl{""};
@@ -383,12 +387,45 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
           thrift::KvStorePeerState::IDLE,
           supportFloodOptimization),
       std::move(newAdj),
-      isRestarting);
+      isRestarting,
+      onlyUsedByOtherNode);
 
   // update kvstore peer
   updateKvStorePeerNeighborUp(area, adjId, adjacencies_[adjId]);
 
   // Advertise new adjancies in a throttled fashion
+  advertiseAdjacenciesThrottled_->operator()();
+}
+
+void
+LinkMonitor::neighborAdjSyncedEvent(const thrift::SparkNeighbor& info) {
+  // DO NOT processing this event if feature is NOT activated
+  if (not enableOrderedAdjPublication_) {
+    return;
+  }
+
+  const auto& localIfName = info.get_localIfName();
+  const auto& remoteNodeName = info.get_nodeName();
+  const auto adjId = std::make_pair(remoteNodeName, localIfName);
+
+  auto adjIt = adjacencies_.find(adjId);
+  if (adjIt == adjacencies_.end()) {
+    LOG(WARNING) << fmt::format(
+        "Skip processing neighbor event due to adjKey: [{}, {}] not found",
+        remoteNodeName,
+        localIfName);
+    return;
+  }
+
+  LOG(INFO) << fmt::format(
+      "[Initialization] Reset onlyUsedByOtherNode flag for adjKey: [{}, {}]",
+      remoteNodeName,
+      localIfName);
+
+  // reset flag to indicate adjacency can be used by everyone
+  adjIt->second.onlyUsedByOtherNode = false;
+
+  // advertise new adjacencies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
 }
 
@@ -643,8 +680,10 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   // Extract information from `adjacencies_`
   auto adjDb = buildAdjacencyDatabase(area);
 
-  XLOG(INFO) << "Updating adjacency database in KvStore with "
-             << adjDb.adjacencies_ref()->size() << " entries in area: " << area;
+  XLOG(INFO) << fmt::format(
+      "Updating adjacency database in KvStore with {} entries in area: {}",
+      adjDb.get_adjacencies().size(),
+      area);
 
   // Persist `adj:node_Id` key into KvStore
   const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
@@ -854,6 +893,35 @@ LinkMonitor::getRetryTimeOnUnstableInterfaces() {
   return minRemainMs;
 }
 
+bool
+LinkMonitor::shouldSkipAdjAnnouncement(
+    const AdjacencyKey& adjKey, const AdjacencyValue& adjVal) {
+  // TODO: once `enable_ordered_adj_publication` is enabled everywhere, the
+  // logic to skip adjacency announcement can be removed.
+  if (enableOrderedAdjPublication_) {
+    return false;
+  }
+
+  // ignore adjs that are waiting first KvStore full sync
+  bool waitingInitialSync{true};
+
+  const auto& areaPeers = peers_.find(adjVal.area);
+  if (areaPeers != peers_.end()) {
+    const auto& peerVal = areaPeers->second.find(adjKey.first);
+    // set waitingInitialSync false if peer has reached initial sync state
+    if (peerVal != areaPeers->second.end() && peerVal->second.initialSynced) {
+      waitingInitialSync = false;
+    }
+  }
+
+  // If adj is not in GR and it's waiting for kvstore sync,
+  // skip announcement
+  if (not adjVal.isRestarting && waitingInitialSync) {
+    return true;
+  }
+  return false;
+}
+
 thrift::AdjacencyDatabase
 LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   // prepare adjacency database
@@ -870,49 +938,46 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
     }
   }
 
+  // populate thrift::AdjacencyDatabase.adjacencies based on
+  // various condition.
   for (auto& [adjKey, adjValue] : adjacencies_) {
-    // ignore unrelated area
+    // TODO: enhance the data-structure to store adjacencies_ to avoid
+    // duplicate cycle to go through. Multiple areas can lead to multiple
+    // rounds of traversing inside `adjacencies_`.
     if (adjValue.area != area) {
       continue;
     }
 
-    // ignore adjs that are waiting first KvStore full sync
-    bool waitingInitialSync{true};
-
-    const auto& areaPeers = peers_.find(area);
-    if (areaPeers != peers_.end()) {
-      const auto& peerVal = areaPeers->second.find(adjKey.first);
-      // set waitingInitialSync false if peer has reached initial sync state
-      if (peerVal != areaPeers->second.end() && peerVal->second.initialSynced) {
-        waitingInitialSync = false;
-      }
-    }
-
-    // If adj is not in GR and it's waiting for kvstore sync,
-    // skip announcement
-    if (not adjValue.isRestarting && waitingInitialSync) {
+    if (shouldSkipAdjAnnouncement(adjKey, adjValue)) {
+      LOG(INFO) << fmt::format(
+          "Skip announcement of adjKey: [{}, {}] without initial sync.",
+          adjKey.first,
+          adjKey.second);
       continue;
     }
 
     // NOTE: copy on purpose
     auto adj = folly::copy(adjValue.adjacency);
 
-    // Set link overload bit
+    // set link overload bit
     adj.isOverloaded_ref() =
         state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
 
-    // Override metric with link metric if it exists
+    // override metric with link metric if it exists
     adj.metric_ref() = folly::get_default(
         *state_.linkMetricOverrides_ref(),
         *adj.ifName_ref(),
         *adj.metric_ref());
 
-    // Override metric with adj metric if it exists
+    // override metric with adj metric if it exists
     thrift::AdjKey tAdjKey;
-    tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
-    tAdjKey.ifName_ref() = *adj.ifName_ref();
+    tAdjKey.nodeName_ref() = adj.get_otherNodeName();
+    tAdjKey.ifName_ref() = adj.get_ifName();
     adj.metric_ref() = folly::get_default(
-        *state_.adjMetricOverrides_ref(), tAdjKey, *adj.metric_ref());
+        state_.get_adjMetricOverrides(), tAdjKey, adj.get_metric());
+
+    // set flag to indicate if adjacency will ONLY be used by other node
+    adj.adjOnlyUsedByOtherNode_ref() = adjValue.onlyUsedByOtherNode;
 
     adjDb.adjacencies_ref()->emplace_back(std::move(adj));
   }
@@ -1145,6 +1210,11 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
     case NeighborEventType::NEIGHBOR_RESTARTED: {
       logNeighborEvent(event);
       neighborUpEvent(info);
+      break;
+    }
+    case NeighborEventType::NEIGHBOR_ADJ_SYNCED: {
+      logNeighborEvent(event);
+      neighborAdjSyncedEvent(info);
       break;
     }
     case NeighborEventType::NEIGHBOR_RESTARTING: {

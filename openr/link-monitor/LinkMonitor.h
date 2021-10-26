@@ -35,21 +35,24 @@ using AdjacencyKey = std::
     pair<std::string /* remoteNodeName */, std::string /* localInterfaceName*/>;
 
 struct AdjacencyValue {
+  std::string area;
   thrift::PeerSpec peerSpec;
   thrift::Adjacency adjacency;
   bool isRestarting{false};
-  std::string area{};
+  bool onlyUsedByOtherNode{false};
 
   AdjacencyValue() {}
   AdjacencyValue(
       std::string areaId,
       thrift::PeerSpec spec,
       thrift::Adjacency adj,
-      bool restarting = false)
-      : peerSpec(spec),
+      bool restarting = false,
+      bool onlyUsedByOtherNode = false)
+      : area(areaId),
+        peerSpec(spec),
         adjacency(adj),
         isRestarting(restarting),
-        area(areaId) {}
+        onlyUsedByOtherNode(onlyUsedByOtherNode) {}
 };
 
 // KvStore Peer Value
@@ -174,6 +177,7 @@ class LinkMonitor final : public OpenrEventBase {
 
   // individual neighbor event function
   void neighborUpEvent(const thrift::SparkNeighbor& info);
+  void neighborAdjSyncedEvent(const thrift::SparkNeighbor& info);
   void neighborRestartingEvent(const thrift::SparkNeighbor& info);
   void neighborDownEvent(const thrift::SparkNeighbor& info);
   void neighborRttChangeEvent(const thrift::SparkNeighbor& info);
@@ -275,6 +279,10 @@ class LinkMonitor final : public OpenrEventBase {
   // return 0 if no more unstable interface
   std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
 
+  // util function to check if adj announcement should be skipped
+  bool shouldSkipAdjAnnouncement(
+      const AdjacencyKey& adjKey, const AdjacencyValue& adjVal);
+
   // build AdjacencyDatabase
   thrift::AdjacencyDatabase buildAdjacencyDatabase(const std::string& area);
 
@@ -342,8 +350,12 @@ class LinkMonitor final : public OpenrEventBase {
   std::chrono::milliseconds ttlKeyInKvStore_;
 
   std::unordered_map<std::string, AreaConfiguration> const areas_;
+
   // Send update requests to KvStore via queue
   bool enableKvStoreRequestQueue_{false};
+
+  // flag to indicate if ordered publication is enabled
+  bool enableOrderedAdjPublication_{false};
 
   //
   // Mutable state

@@ -79,9 +79,9 @@ enum class NeighborEventType {
   NEIGHBOR_RESTARTING = 5,
 
   /**
-   * Neighbor is UP but will hold advertising of the adjacencyDb
+   * Neighbor is UP with adjacency database synced
    */
-  NEIGHBOR_ADJ_DB_HOLD = 6,
+  NEIGHBOR_ADJ_SYNCED = 6,
 };
 
 /**

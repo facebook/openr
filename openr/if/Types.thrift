@@ -1563,7 +1563,7 @@ struct SparkNeighbor {
   12: bool enableFloodOptimization = 0;
 
   /**
-   * Flag to indicate if adjacency is on hold
+   * Flag to mark attribute in thrift::Adjacency. See definition for details.
    */
-  13: bool isAdjacencyOnHold;
+  13: bool adjOnlyUsedByOtherNode = 0;
 } (cpp.minimize_padding)

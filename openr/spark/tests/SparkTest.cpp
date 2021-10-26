@@ -50,6 +50,7 @@ const folly::CIDRNetwork ip3V6 = folly::IPAddress::createNetwork("fe80::3/128");
 
 // alias for neighbor event
 const auto NB_UP = NeighborEventType::NEIGHBOR_UP;
+const auto NB_UP_ADJ_SYNCED = NeighborEventType::NEIGHBOR_ADJ_SYNCED;
 const auto NB_DOWN = NeighborEventType::NEIGHBOR_DOWN;
 const auto NB_RESTARTING = NeighborEventType::NEIGHBOR_RESTARTING;
 const auto NB_RESTARTED = NeighborEventType::NEIGHBOR_RESTARTED;
@@ -248,7 +249,7 @@ class InitializationTestFixture : public SimpleSparkFixture {
       auto info = events.value().back().info;
       EXPECT_EQ(iface1, info.localIfName_ref());
       EXPECT_EQ(nodeName2_, info.nodeName_ref());
-      EXPECT_EQ(true, info.get_isAdjacencyOnHold());
+      EXPECT_EQ(true, info.get_adjOnlyUsedByOtherNode());
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {} with adjacency hold",
           nodeName1_,
@@ -260,7 +261,7 @@ class InitializationTestFixture : public SimpleSparkFixture {
       auto info = events.value().back().info;
       EXPECT_EQ(iface2, info.localIfName_ref());
       EXPECT_EQ(nodeName1_, info.nodeName_ref());
-      EXPECT_EQ(true, info.get_isAdjacencyOnHold());
+      EXPECT_EQ(true, info.get_adjOnlyUsedByOtherNode());
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {} with adjacency hold",
           nodeName2_,
@@ -279,11 +280,11 @@ TEST_F(InitializationTestFixture, NeighborAdjDbHold) {
 
   // Now wait for sparks to detect each other
   {
-    auto events = node1_->waitForEvents(NB_UP);
+    auto events = node1_->waitForEvents(NB_UP_ADJ_SYNCED);
     auto info = events.value().back().info;
     EXPECT_EQ(iface1, info.localIfName_ref());
     EXPECT_EQ(nodeName2_, info.nodeName_ref());
-    EXPECT_EQ(false, info.get_isAdjacencyOnHold());
+    EXPECT_EQ(false, info.get_adjOnlyUsedByOtherNode());
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {} without adjacency hold",
         nodeName1_,
@@ -291,11 +292,11 @@ TEST_F(InitializationTestFixture, NeighborAdjDbHold) {
   }
 
   {
-    auto events = node2_->waitForEvents(NB_UP);
+    auto events = node2_->waitForEvents(NB_UP_ADJ_SYNCED);
     auto info = events.value().back().info;
     EXPECT_EQ(iface2, info.localIfName_ref());
     EXPECT_EQ(nodeName1_, info.nodeName_ref());
-    EXPECT_EQ(false, info.get_isAdjacencyOnHold());
+    EXPECT_EQ(false, info.get_adjOnlyUsedByOtherNode());
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {} without adjacency hold",
         nodeName2_,
@@ -330,15 +331,15 @@ class InitializationBackwardCompatibilityTestFixture
       auto info = events.value().back().info;
       EXPECT_EQ(iface1, info.localIfName_ref());
       EXPECT_EQ(nodeName2_, info.nodeName_ref());
-      EXPECT_EQ(true, info.get_isAdjacencyOnHold());
+      EXPECT_EQ(true, info.get_adjOnlyUsedByOtherNode());
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {} with adjacency hold",
           nodeName1_,
           nodeName2_);
 
-      events = node1_->waitForEvents(NB_UP);
+      events = node1_->waitForEvents(NB_UP_ADJ_SYNCED);
       info = events.value().back().info;
-      EXPECT_EQ(false, info.get_isAdjacencyOnHold());
+      EXPECT_EQ(false, info.get_adjOnlyUsedByOtherNode());
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {} without adjacency hold",
           nodeName1_,
@@ -350,7 +351,7 @@ class InitializationBackwardCompatibilityTestFixture
       auto info = events.value().back().info;
       EXPECT_EQ(iface2, info.localIfName_ref());
       EXPECT_EQ(nodeName1_, info.nodeName_ref());
-      EXPECT_EQ(false, info.get_isAdjacencyOnHold());
+      EXPECT_EQ(false, info.get_adjOnlyUsedByOtherNode());
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
     }

@@ -305,8 +305,7 @@ class Spark final : public OpenrEventBase {
     thrift::SparkNeighbor toThrift() const;
 
     // util function to unblock adjacency hold
-    bool shouldResetAdjacencyHold(
-        const thrift::SparkHeartbeatMsg& heartbeatMsg);
+    bool shouldResetAdjacency(const thrift::SparkHeartbeatMsg& heartbeatMsg);
 
     // doamin name
     const std::string domainName{};
@@ -382,8 +381,8 @@ class Spark final : public OpenrEventBase {
     // area on which adjacency is formed
     std::string area{};
 
-    // flag to indicate if Spark will hold on reporting neighbor adjacency
-    bool isAdjacencyOnHold{false};
+    // flag to indicate if adj will be exclude for SPF computation
+    bool adjOnlyUsedByOtherNode{false};
   };
 
   // util function to log Spark neighbor state transition
@@ -558,7 +557,7 @@ class Spark final : public OpenrEventBase {
       timeSeriesVector_{};
 
   // flag to indicate if ordered publication is enabled
-  bool enableOrderedAdjPublication{false};
+  bool enableOrderedAdjPublication_{false};
 
   // global openr config
   std::shared_ptr<const Config> config_{nullptr};

@@ -91,6 +91,8 @@ toString(NeighborEventType const& type) {
     return "NEIGHBOR_RTT_CHANGE";
   case NeighborEventType::NEIGHBOR_RESTARTING:
     return "NEIGHBOR_RESTARTING";
+  case NeighborEventType::NEIGHBOR_ADJ_SYNCED:
+    return "NEIGHBOR_ADJ_SYNCED";
   default:
     return "UNKNOWN";
   }
