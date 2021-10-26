@@ -334,38 +334,34 @@ dumpDifference(
   thriftPub.area_ref() = area;
 
   thriftPub.tobeUpdatedKeys_ref() = std::vector<std::string>{};
-  std::unordered_set<std::string> allKeys;
-  for (const auto& [key, _] : myKeyVal) {
-    allKeys.insert(key);
-  }
-  for (const auto& [key, _] : reqKeyVal) {
-    allKeys.insert(key);
-  }
 
-  for (const auto& key : allKeys) {
-    const auto& myKv = myKeyVal.find(key);
-    const auto& reqKv = reqKeyVal.find(key);
-    if (myKv == myKeyVal.end()) {
-      // not exist in myKeyVal
-      thriftPub.tobeUpdatedKeys_ref()->emplace_back(key);
-      continue;
-    }
+  for (const auto& [myKey, myVal] : myKeyVal) {
+    const auto& reqKv = reqKeyVal.find(myKey);
+
     if (reqKv == reqKeyVal.end()) {
       // not exist in reqKeyVal
-      thriftPub.keyVals_ref()->emplace(key, myKv->second);
+      thriftPub.keyVals_ref()->emplace(myKey, myVal);
       continue;
     }
-    // common key
-    const auto& myVal = myKv->second;
+
     const auto& reqVal = reqKv->second;
     int rc = compareValues(myVal, reqVal);
+
     if (rc == 1 or rc == -2) {
       // myVal is better or unknown
-      thriftPub.keyVals_ref()->emplace(key, myVal);
+      thriftPub.keyVals_ref()->emplace(myKey, myVal);
     }
     if (rc == -1 or rc == -2) {
       // reqVal is better or unknown
-      thriftPub.tobeUpdatedKeys_ref()->emplace_back(key);
+      thriftPub.tobeUpdatedKeys_ref()->emplace_back(myKey);
+    }
+  }
+
+  for (const auto& [reqKey, reqVal] : reqKeyVal) {
+    const auto& myKv = myKeyVal.find(reqKey);
+    if (myKv == myKeyVal.end()) {
+      // not exist in myKeyVal
+      thriftPub.tobeUpdatedKeys_ref()->emplace_back(reqKey);
     }
   }
 
