@@ -114,7 +114,7 @@ dumpAllWithThriftClientFromMultiple(
   auto addrStrs =
       folly::gen::from(sockAddrs) |
       folly::gen::mapped([](const folly::SocketAddress& sockAddr) {
-        return folly::sformat(
+        return fmt::format(
             "[{}, {}]", sockAddr.getAddressStr(), sockAddr.getPort());
       }) |
       folly::gen::as<std::vector<std::string>>();

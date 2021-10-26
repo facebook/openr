@@ -164,10 +164,10 @@ addLoopbackAddress(thrift::PrefixDatabase& prefixDb, bool v4Enabled) {
   const auto index = folly::to<size_t>(prefixDb.thisNodeName_ref().value());
   if (v4Enabled) {
     prefixDb.prefixEntries_ref()->emplace_back(
-        createPrefixEntry(toIpPrefix(folly::sformat("172.0.0.{}/32", index))));
+        createPrefixEntry(toIpPrefix(fmt::format("172.0.0.{}/32", index))));
   } else {
     prefixDb.prefixEntries_ref()->emplace_back(
-        createPrefixEntry(toIpPrefix(folly::sformat("fd00::{}/128", index))));
+        createPrefixEntry(toIpPrefix(fmt::format("fd00::{}/128", index))));
   }
 }
 
@@ -4497,10 +4497,10 @@ addAdj(
 
   auto neighbor = i * n + j;
   adjs.emplace_back(createThriftAdjacency(
-      folly::sformat("{}", neighbor),
+      fmt::format("{}", neighbor),
       ifName,
-      folly::sformat("fe80::{}", neighbor),
-      folly::sformat("192.168.{}.{}", neighbor / 256, neighbor % 256),
+      fmt::format("fe80::{}", neighbor),
+      fmt::format("192.168.{}.{}", neighbor / 256, neighbor % 256),
       1,
       100001 + neighbor /* adjacency-label */,
       false /* overload-bit */,
@@ -4512,7 +4512,7 @@ addAdj(
 
 string
 nodeToPrefixV6(int node) {
-  return folly::sformat("::ffff:10.1.{}.{}/128", node / 256, node % 256);
+  return fmt::format("::ffff:10.1.{}.{}/128", node / 256, node % 256);
 }
 
 void
@@ -4524,7 +4524,7 @@ createGrid(LinkState& linkState, PrefixState& prefixState, int n) {
   for (int i = 0; i < n; ++i) {
     for (int j = 0; j < n; ++j) {
       auto node = i * n + j;
-      auto nodeName = folly::sformat("{}", node);
+      auto nodeName = fmt::format("{}", node);
 
       // adjacency
       vector<thrift::Adjacency> adjs;
@@ -4587,7 +4587,7 @@ gridDistance(int a, int b, int n) {
 TEST_P(GridTopologyFixture, ShortestPathTest) {
   vector<string> allNodes;
   for (int i = 0; i < n * n; ++i) {
-    allNodes.push_back(folly::sformat("{}", i));
+    allNodes.push_back(fmt::format("{}", i));
   }
 
   auto routeMap = getRouteMap(spfSolver, allNodes, areaLinkStates, prefixState);
@@ -4607,8 +4607,7 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
   dst = n * n - 1;
   LOG(INFO) << "distance " << src << " -> " << dst << ": "
             << gridDistance(src, dst, n);
-  nextHops =
-      routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
+  nextHops = routeMap[make_pair(fmt::format("{}", src), nodeToPrefixV6(dst))];
   EXPECT_EQ(gridDistance(src, dst, n), *nextHops.begin()->metric_ref());
 
   // secondary diagnal
@@ -4616,27 +4615,19 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
   dst = n * (n - 1);
   LOG(INFO) << "distance " << src << " -> " << dst << ": "
             << gridDistance(src, dst, n);
-  nextHops =
-      routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
+  nextHops = routeMap[make_pair(fmt::format("{}", src), nodeToPrefixV6(dst))];
   EXPECT_EQ(gridDistance(src, dst, n), *nextHops.begin()->metric_ref());
-
-  // 2) from origin (i.e., node 0) to random inner node
   src = 0;
   dst = folly::Random::rand32() % (n * n - 1) + 1;
   LOG(INFO) << "distance " << src << " -> " << dst << ": "
             << gridDistance(src, dst, n);
-  nextHops =
-      routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
+  nextHops = routeMap[make_pair(fmt::format("{}", src), nodeToPrefixV6(dst))];
   EXPECT_EQ(gridDistance(src, dst, n), *nextHops.begin()->metric_ref());
-
-  // 3) from one random node to another
-  src = folly::Random::rand32() % (n * n);
   while ((dst = folly::Random::rand32() % (n * n)) == src) {
   }
   LOG(INFO) << "distance " << src << " -> " << dst << ": "
             << gridDistance(src, dst, n);
-  nextHops =
-      routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
+  nextHops = routeMap[make_pair(fmt::format("{}", src), nodeToPrefixV6(dst))];
   EXPECT_EQ(gridDistance(src, dst, n), *nextHops.begin()->metric_ref());
 }
 
@@ -6814,7 +6805,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
     const std::string src = folly::to<std::string>(i);
 
     // Create prefixDb value
-    const auto addr = toIpPrefix(folly::sformat("face:cafe:babe::{}/128", i));
+    const auto addr = toIpPrefix(fmt::format("face:cafe:babe::{}/128", i));
     auto kv = createPrefixKeyValue(src, 1, addr);
     if (1 == i) {
       // arbitrarily choose the first key to send duplicate publications for
@@ -6830,16 +6821,16 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
       const std::string dst = folly::to<std::string>(j);
       auto adj = createAdjacency(
           dst,
-          folly::sformat("{}/{}", src, dst),
-          folly::sformat("{}/{}", dst, src),
-          folly::sformat("fe80::{}", dst),
+          fmt::format("{}/{}", src, dst),
+          fmt::format("{}/{}", dst, src),
+          fmt::format("fe80::{}", dst),
           "192.168.0.1" /* unused */,
           10 /* metric */,
           0 /* adj label */);
       adjs.emplace_back(std::move(adj));
     }
     initialPub.keyVals_ref()->emplace(
-        folly::sformat("adj:{}", src), createAdjValue(src, 1, adjs));
+        fmt::format("adj:{}", src), createAdjValue(src, 1, adjs));
   }
 
   //

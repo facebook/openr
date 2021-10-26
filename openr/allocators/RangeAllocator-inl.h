@@ -95,7 +95,7 @@ RangeAllocator<T>::~RangeAllocator() {
 template <typename T>
 std::string
 RangeAllocator<T>::createKey(const T val) const noexcept {
-  return folly::sformat("{}{}", keyPrefix_, val);
+  return fmt::format("{}{}", keyPrefix_, val);
 }
 
 template <typename T>

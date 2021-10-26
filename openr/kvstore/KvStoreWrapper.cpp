@@ -21,7 +21,7 @@ KvStoreWrapper::KvStoreWrapper(
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
     : nodeId(config->getNodeName()),
-      globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
+      globalCmdUrl(fmt::format("inproc://{}-kvstore-global-cmd", nodeId)),
       config_(config) {
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,

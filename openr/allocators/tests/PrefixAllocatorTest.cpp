@@ -56,7 +56,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
     tConfig.prefix_allocation_config_ref() = pfxAllocationConf;
     tConfig.persistent_config_store_path_ref() =
-        folly::sformat("/tmp/openr.{}", tid);
+        fmt::format("/tmp/openr.{}", tid);
     config_ = std::make_shared<Config>(tConfig);
 
     // Start KvStore and attach a client to it
@@ -260,9 +260,9 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
   // Create seed prefix
   const auto seedPrefix = folly::IPAddress::createNetwork(
-      folly::sformat("fc00:cafe:babe::/{}", kSeedPrefixLen));
+      fmt::format("fc00:cafe:babe::/{}", kSeedPrefixLen));
   const auto newSeedPrefix = folly::IPAddress::createNetwork(
-      folly::sformat("fc00:cafe:b00c::/{}", kSeedPrefixLen));
+      fmt::format("fc00:cafe:b00c::/{}", kSeedPrefixLen));
 
   // allocate all subprefixes
   auto numAllocators = 0x1U << (kAllocPrefixLen - kSeedPrefixLen);
@@ -376,7 +376,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     //
     // 1) spin up a kvstore and create KvStoreClientInternal
     //
-    const auto nodeId = folly::sformat("test_store{}", round);
+    const auto nodeId = fmt::format("test_store{}", round);
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
@@ -391,7 +391,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // Set seed prefix in KvStore
       if (emptySeedPrefix) {
         // inject seed prefix
-        auto prefixAllocParam = folly::sformat(
+        auto prefixAllocParam = fmt::format(
             "{},{}",
             folly::IPAddress::networkToString(seedPrefix),
             kAllocPrefixLen);
@@ -407,7 +407,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     // 2) start threads for allocators
     //
     for (uint32_t i = 0; i < numAllocators; ++i) {
-      const auto myNodeName = folly::sformat("node-{}", i);
+      const auto myNodeName = fmt::format("node-{}", i);
 
       // subscribe to prefixDb updates from KvStore for node
       evb.getEvb()->runInEventBaseThreadAndWait([&]() {
@@ -419,7 +419,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       });
 
       // get a unique temp file name
-      auto tempFileName = folly::sformat("/tmp/openr.{}.{}", tid, i);
+      auto tempFileName = fmt::format("/tmp/openr.{}.{}", tid, i);
       auto tConfig1 = getBasicOpenrConfig();
       tConfig1.persistent_config_store_path_ref() = tempFileName;
       auto config1 = std::make_shared<Config>(tConfig1);
@@ -433,7 +433,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // Temporary config store for PrefixManager so that they are not being
       // used
-      tempFileName = folly::sformat("/tmp/openr.{}.{}.{}", tid, round, i);
+      tempFileName = fmt::format("/tmp/openr.{}.{}.{}", tid, round, i);
       auto tConfig2 = getBasicOpenrConfig();
       tConfig.persistent_config_store_path_ref() = tempFileName;
       auto config2 = std::make_shared<Config>(tConfig2);
@@ -455,7 +455,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         pfxAllocationConf.prefix_allocation_mode_ref() =
             thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
         pfxAllocationConf.seed_prefix_ref() =
-            folly::sformat("fc00:cafe:babe::/{}", kSeedPrefixLen);
+            fmt::format("fc00:cafe:babe::/{}", kSeedPrefixLen);
         pfxAllocationConf.allocate_prefix_len_ref() = kAllocPrefixLen;
       }
       currTConfig.prefix_allocation_config_ref() = pfxAllocationConf;
@@ -518,7 +518,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           [&](auto& nodeToPrefix) { nodeToPrefix.clear(); });
 
       // announce new seed prefix
-      auto prefixAllocParam = folly::sformat(
+      auto prefixAllocParam = fmt::format(
           "{},{}",
           folly::IPAddress::networkToString(newSeedPrefix),
           kAllocPrefixLen);
@@ -595,7 +595,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         EXPECT_EQ(lastPrefixes_[i], *index);
       }
 
-      const auto myNodeName = folly::sformat("node-{}", i);
+      const auto myNodeName = fmt::format("node-{}", i);
       const auto prefix = getNthPrefix(
           emptySeedPrefix ? newSeedPrefix : seedPrefix,
           kAllocPrefixLen,
@@ -620,7 +620,7 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
   std::atomic<bool> hasAllocPrefix{false};
   const uint8_t allocPrefixLen = 24;
   const auto seedPrefix = folly::IPAddress::createNetwork("10.1.0.0/16");
-  auto prefixAllocParam = folly::sformat(
+  auto prefixAllocParam = fmt::format(
       "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
 
   auto cb = [&](const std::string& prefixStr,
@@ -824,7 +824,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
   //
   // announce new seed prefix
   const auto seedPrefix = folly::IPAddress::createNetwork(ip6);
-  auto prefixAllocParam = folly::sformat(
+  auto prefixAllocParam = fmt::format(
       "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res = kvStoreClient_->setKey(
@@ -836,8 +836,8 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     // dump key with regex: "prefix:<node_name>" from KvStore
-    auto expPrefixKey = folly::sformat(
-        "{}{}", Constants::kPrefixDbMarker.toString(), myNodeName_);
+    auto expPrefixKey =
+        fmt::format("{}{}", Constants::kPrefixDbMarker.toString(), myNodeName_);
     std::optional<thrift::KeyVals> maybeKeyVals;
 
     while (true) {
@@ -903,7 +903,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
             << " has been inserted static allocation params";
 
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    auto expPrefixKey = folly::sformat(
+    auto expPrefixKey = fmt::format(
         "{}{}:[{}]",
         Constants::kPrefixDbMarker.toString(),
         myNodeName_,
@@ -983,7 +983,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
   //       via cb. Under per-prfix-key situation, key withdrawn/advertising
   //       can come in any order.
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    auto expPrefixKey = folly::sformat(
+    auto expPrefixKey = fmt::format(
         "{}{}:[{}/{}]",
         Constants::kPrefixDbMarker.toString(),
         myNodeName_,

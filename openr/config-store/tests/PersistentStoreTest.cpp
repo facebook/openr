@@ -196,8 +196,8 @@ TEST(PersistentStoreTest, BulkStoreLoad) {
 
     for (auto index = 0; index < 100; index++) {
       const std::pair<std::string, std::string> tmpKeyVal{
-          folly::sformat("key-{}", index),
-          folly::sformat("val-{}", folly::Random::rand32())};
+          fmt::format("key-{}", index),
+          fmt::format("val-{}", folly::Random::rand32())};
 
       database[tmpKeyVal.first] = tmpKeyVal.second;
       auto responseStoreTmpKey =

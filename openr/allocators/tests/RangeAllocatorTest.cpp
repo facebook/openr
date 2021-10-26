@@ -57,7 +57,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   SetUp() override {
     for (uint32_t i = 0; i < kNumStores; i++) {
       auto config = std::make_shared<Config>(
-          getBasicOpenrConfig(folly::sformat("store{}", i + 1)));
+          getBasicOpenrConfig(fmt::format("store{}", i + 1)));
       auto store = std::make_unique<KvStoreWrapper>(zmqContext, config);
       stores.emplace_back(std::move(store));
       configs.emplace_back(std::move(config));
@@ -104,7 +104,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   static std::string
   createClientName(int id) {
     CHECK_LT(kNumClients, 100) << "Clients must be in 2 digits.";
-    return folly::sformat("client-{}{}", id / 10, id % 10);
+    return fmt::format("client-{}{}", id / 10, id % 10);
   }
 
   template <typename T>

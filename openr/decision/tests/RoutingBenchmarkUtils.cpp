@@ -18,7 +18,7 @@ getId(const uint8_t swMarker, const int podId, const int swId) {
 
 std::string
 getNodeName(const uint8_t swMarker, const int podId, const int swId) {
-  return folly::sformat("{}-{}-{}", swMarker, podId, swId);
+  return fmt::format("{}-{}-{}", swMarker, podId, swId);
 }
 
 // Accumulate the time extracted from perfevent
@@ -39,13 +39,13 @@ accumulatePerfTimes(
 // Convert an integer to hex
 inline std::string
 toHex(const int num) {
-  return folly::sformat("{:02x}", num);
+  return fmt::format("{:02x}", num);
 }
 
 // Convert an integer to prefix IPv6
 inline std::string
 nodeToPrefixV6(const uint32_t nodeId) {
-  return folly::sformat(
+  return fmt::format(
       "fc00:{}::{}/128", toHex(nodeId >> 16), toHex(nodeId & 0xffff));
 }
 
@@ -118,7 +118,7 @@ sendRecvAdjUpdate(
   addPerfEvent(perfEvents, nodeName, "DECISION_ADJ_UPDATE");
 
   pub.keyVals_ref() = {
-      {folly::sformat("adj:{}", nodeName),
+      {fmt::format("adj:{}", nodeName),
        decisionWrapper->createAdjValue(
            nodeName, 2, adjs, std::move(perfEvents), overloadBit)}};
   sendRecvUpdate(decisionWrapper, processTimes, pub);
@@ -153,11 +153,10 @@ createAdjacencyEntry(
     std::vector<thrift::Adjacency>& adjs,
     const std::string& otherIfName) {
   adjs.emplace_back(createThriftAdjacency(
-      folly::sformat("{}", nodeId),
+      fmt::format("{}", nodeId),
       ifName,
-      folly::sformat(
-          "fe80:{}::{}", toHex(nodeId >> 16), toHex(nodeId & 0xffff)),
-      folly::sformat(
+      fmt::format("fe80:{}::{}", toHex(nodeId >> 16), toHex(nodeId & 0xffff)),
+      fmt::format(
           "10.{}.{}.{}", nodeId >> 16, (nodeId >> 8) & 0xff, nodeId & 0xff),
       1,
       100001 + nodeId /* adjacency-label */,
@@ -171,7 +170,7 @@ createAdjacencyEntry(
 std::string
 getFabricIfName(const std::string& id, const std::string& otherId) {
   // Naming convention of ifName: "if_<my-id>_<neighbor-id>"
-  return folly::sformat("if_{}_{}", id, otherId);
+  return fmt::format("if_{}_{}", id, otherId);
 }
 
 /**
@@ -188,10 +187,8 @@ createFabricAdjacency(
   adjs.emplace_back(createThriftAdjacency(
       otherName,
       getFabricIfName(sourceNodeName, otherName),
-      folly::sformat(
-          "fe80:{}:{}::{}", toHex(swMarker), toHex(podId), toHex(swId)),
-      folly::sformat(
-          "{}.{}.{}.{}", swMarker, (podId >> 8), (podId & 0xff), swId),
+      fmt::format("fe80:{}:{}::{}", toHex(swMarker), toHex(podId), toHex(swId)),
+      fmt::format("{}.{}.{}.{}", swMarker, (podId >> 8), (podId & 0xff), swId),
       1,
       getId(swMarker, podId, swId) /* adjacency-label */,
       false /* overload-bit */,
@@ -222,7 +219,7 @@ createGridAdjacency(
 std::string
 getIfName(const uint32_t id, const uint32_t otherId) {
   // Naming convention of ifName: "if_<my-id>_<neighbor-id>"
-  return folly::sformat("if_{}_{}", id, otherId);
+  return fmt::format("if_{}_{}", id, otherId);
 }
 
 // Add all adjacencies to node at (row, col)
@@ -285,12 +282,11 @@ createGrid(
   for (int row = 0; row < n; ++row) {
     for (int col = 0; col < n; ++col) {
       auto nodeId = row * n + col;
-      auto nodeName = folly::sformat("{}", nodeId);
+      auto nodeName = fmt::format("{}", nodeId);
       // Add adjs
       auto adjs = createGridAdjacencys(row, col, n);
       adjDbs.emplace(
-          folly::sformat("adj:{}", nodeName),
-          createAdjDb(nodeName, adjs, nodeId));
+          fmt::format("adj:{}", nodeName), createAdjDb(nodeName, adjs, nodeId));
 
       // prefixes
       for (int i = 0; i < numPrefixes; i++) {
@@ -339,7 +335,7 @@ createSswsAdjacencies(
         // Add to publication
         (*initialPub.keyVals_ref())
             .emplace(
-                folly::sformat("adj:{}", nodeName),
+                fmt::format("adj:{}", nodeName),
                 decisionWrapper->createAdjValue(
                     nodeName, 1, adjs, std::nullopt));
       }
@@ -376,7 +372,7 @@ createFswsAdjacencies(
       // Add all rsws within the pod to adjacencies.
       for (int otherId = 0; otherId < numOfRswsPerPod; otherId++) {
         auto otherName =
-            getNodeName(rswMarker, podId, otherId); // folly::sformat("{}",
+            getNodeName(rswMarker, podId, otherId); // fmt::format("{}",
                                                     // otherId); //
         createFabricAdjacency(nodeName, rswMarker, podId, otherId, adjs);
       }
@@ -384,7 +380,7 @@ createFswsAdjacencies(
       // Add to publication
       (*initialPub.keyVals_ref())
           .emplace(
-              folly::sformat("adj:{}", nodeName),
+              fmt::format("adj:{}", nodeName),
               decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
     }
   }
@@ -416,7 +412,7 @@ createRswsAdjacencies(
       // Add to publication
       (*initialPub.keyVals_ref())
           .emplace(
-              folly::sformat("adj:{}", nodeName),
+              fmt::format("adj:{}", nodeName),
               decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
     }
   }
@@ -535,7 +531,7 @@ updateRandomGridAdjs(
   auto col = selectedNode.has_value() ? selectedNode.value().second
                                       : folly::Random::rand32() % n;
 
-  auto nodeName = folly::sformat("{}", row * n + col);
+  auto nodeName = fmt::format("{}", row * n + col);
   auto adjs = createGridAdjacencys(row, col, n);
   auto overloadBit = selectedNode.has_value() ? false : true;
   // Record the updated nodeId
@@ -564,7 +560,7 @@ updateRandomGridPrefixes(
   auto col = selectedNode.has_value() ? selectedNode.value().second
                                       : folly::Random::rand32() % n;
 
-  auto nodeName = folly::sformat("{}", row * n + col);
+  auto nodeName = fmt::format("{}", row * n + col);
   // withdraw this iteration if we advertised in the last
   bool withdraw = selectedNode.has_value();
   auto keyDbPair = createPrefixKeyAndDb(
@@ -743,7 +739,7 @@ BM_DecisionFabric(
     thrift::PrefixForwardingAlgorithm /* forwardingAlgorithm */,
     uint32_t /* numberOfPrefixes */) {
   auto suspender = folly::BenchmarkSuspender();
-  const std::string nodeName = folly::sformat("{}-{}", kFswMarker, "0-0");
+  const std::string nodeName = fmt::format("{}-{}", kFswMarker, "0-0");
   auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
   const int numOfFswsPerPod = kNumOfFswsPerPod;
   const int numOfRswsPerPod = kNumOfRswsPerPod;

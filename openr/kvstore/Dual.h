@@ -176,7 +176,7 @@ class Dual {
         break;
       }
       }
-      return folly::sformat(
+      return fmt::format(
           "[{}] {} ({}, {}, {})",
           state,
           nexthop.value_or("None"),

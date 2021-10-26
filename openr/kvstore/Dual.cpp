@@ -291,7 +291,7 @@ std::string
 Dual::getStatusString() const noexcept {
   std::vector<std::string> counterStrs;
   for (const auto& [neighbor, counters] : counters_) {
-    counterStrs.emplace_back(folly::sformat(
+    counterStrs.emplace_back(fmt::format(
         "{}: Q ({}, {}), R ({}, {}), U ({}, {}), total ({}, {})",
         neighbor,
         *counters.querySent_ref(),
@@ -303,7 +303,7 @@ Dual::getStatusString() const noexcept {
         *counters.totalSent_ref(),
         *counters.totalRecv_ref()));
   }
-  return folly::sformat(
+  return fmt::format(
       "root({})::{}: {}\n{}",
       rootId,
       nodeId,
@@ -823,8 +823,7 @@ DualNode::getInfos() const noexcept {
 std::string
 DualNode::getStatusString(const std::string& rootId) const noexcept {
   if (duals_.count(rootId) == 0) {
-    return folly::sformat(
-        "{}: route info for root {} not exist", nodeId, rootId);
+    return fmt::format("{}: route info for root {} not exist", nodeId, rootId);
   }
   return duals_.at(rootId).getStatusString();
 }
@@ -835,7 +834,7 @@ DualNode::getStatusStrings() const noexcept {
   for (const auto& kv : counters_) {
     const auto& neighbor = kv.first;
     const auto& counters = kv.second;
-    strs.emplace_back(folly::sformat(
+    strs.emplace_back(fmt::format(
         "{}: pkt ({}, {}), msg ({}, {})",
         neighbor,
         *counters.pktSent_ref(),
@@ -849,7 +848,7 @@ DualNode::getStatusStrings() const noexcept {
     allStatus.emplace(kv.first, kv.second.getStatusString());
   }
   return std::make_pair(
-      folly::sformat("=== {} status ===\n{}", nodeId, folly::join("\n", strs)),
+      fmt::format("=== {} status ===\n{}", nodeId, folly::join("\n", strs)),
       allStatus);
 }
 

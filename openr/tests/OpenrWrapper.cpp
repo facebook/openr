@@ -30,7 +30,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
       kvStoreGlobalCmdUrl_(
-          folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)) {
+          fmt::format("inproc://{}-kvstore-cmd-global", nodeId_)) {
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
@@ -83,7 +83,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // persistent config-store config
   tConfig.persistent_config_store_path_ref() =
-      folly::sformat("/tmp/{}_openr_config_store.bin", nodeId_);
+      fmt::format("/tmp/{}_openr_config_store.bin", nodeId_);
 
   config_ = std::make_shared<Config>(tConfig);
 
@@ -129,7 +129,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // Subscribe our own prefixDb
   kvStoreClient_->subscribeKey(
       kTestingAreaName,
-      folly::sformat("prefix:{}", nodeId_),
+      fmt::format("prefix:{}", nodeId_),
       [&](const std::string& /* key */,
           std::optional<thrift::Value> value) noexcept {
         if (!value.has_value()) {
@@ -413,7 +413,7 @@ OpenrWrapper<Serializer>::getIpPrefix() {
 
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
   eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    const std::string keyPrefix = folly::sformat("prefix:{}", nodeId_);
+    const std::string keyPrefix = fmt::format("prefix:{}", nodeId_);
     try {
       thrift::KeyDumpParams params;
       params.prefix_ref() = keyPrefix;
@@ -479,7 +479,7 @@ OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
   eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
     keys = kvStoreClient_->dumpAllWithPrefix(
-        kTestingAreaName, folly::sformat("prefix:{}", nodeId_));
+        kTestingAreaName, fmt::format("prefix:{}", nodeId_));
   });
   return keys.has_value();
 }

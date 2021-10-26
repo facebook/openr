@@ -362,12 +362,12 @@ Link::operator==(const Link& other) const {
 
 std::string
 Link::toString() const {
-  return folly::sformat("{} - {}%{} <---> {}%{}", area_, n1_, if1_, n2_, if2_);
+  return fmt::format("{} - {}%{} <---> {}%{}", area_, n1_, if1_, n2_, if2_);
 }
 
 std::string
 Link::directionalToString(const std::string& fromNode) const {
-  return folly::sformat(
+  return fmt::format(
       "{} - {}%{} ---> {}%{}",
       area_,
       fromNode,
@@ -643,7 +643,7 @@ LinkState::updateAdjacencyDatabase(
     // change the metric on the link object we already have
     if (newLink.getMetricFromNode(nodeName) !=
         oldLink.getMetricFromNode(nodeName)) {
-      XLOG(DBG1) << folly::sformat(
+      XLOG(DBG1) << fmt::format(
           "[LINK UPDATE] Metric change on link {}, {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getMetricFromNode(nodeName),
@@ -657,7 +657,7 @@ LinkState::updateAdjacencyDatabase(
 
     if (newLink.getOverloadFromNode(nodeName) !=
         oldLink.getOverloadFromNode(nodeName)) {
-      XLOG(DBG1) << folly::sformat(
+      XLOG(DBG1) << fmt::format(
           "[LINK UPDATE] Overload change on link {}: {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getOverloadFromNode(nodeName),
@@ -672,7 +672,7 @@ LinkState::updateAdjacencyDatabase(
     // Check if adjacency label has changed
     if (newLink.getAdjLabelFromNode(nodeName) !=
         oldLink.getAdjLabelFromNode(nodeName)) {
-      XLOG(DBG1) << folly::sformat(
+      XLOG(DBG1) << fmt::format(
           "[LINK UPDATE] AdjLabel change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getAdjLabelFromNode(nodeName),
@@ -688,7 +688,7 @@ LinkState::updateAdjacencyDatabase(
     // check if local nextHops Changed
     if (newLink.getNhV4FromNode(nodeName) !=
         oldLink.getNhV4FromNode(nodeName)) {
-      XLOG(DBG1) << folly::sformat(
+      XLOG(DBG1) << fmt::format(
           "[LINK UPDATE] V4-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV4FromNode(nodeName)),
@@ -699,7 +699,7 @@ LinkState::updateAdjacencyDatabase(
     }
     if (newLink.getNhV6FromNode(nodeName) !=
         oldLink.getNhV6FromNode(nodeName)) {
-      XLOG(DBG1) << folly::sformat(
+      XLOG(DBG1) << fmt::format(
           "[LINK UPDATE] V6-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV6FromNode(nodeName)),

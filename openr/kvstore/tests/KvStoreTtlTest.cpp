@@ -64,7 +64,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
    */
   std::string
   buildNodeId(const std::string& prefix, const int index) const {
-    return folly::sformat("{}{}", prefix, index);
+    return fmt::format("{}{}", prefix, index);
   }
 
   /**
@@ -128,7 +128,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
       // Submit a bunch of keys/values to the first store.
       for (unsigned int j = 0; j < kNumKeys; ++j) {
         // Create new key-value pair.
-        const std::string key = folly::sformat("key-{}-{}", i, j);
+        const std::string key = fmt::format("key-{}-{}", i, j);
         const auto value = fmt::format("value-{}-{}", i, j);
         auto thriftVal = createThriftValue(
             version,

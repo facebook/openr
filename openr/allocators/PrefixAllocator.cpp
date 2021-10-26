@@ -402,7 +402,7 @@ PrefixAllocator::processNetworkAllocationsUpdate(
     if (e2eAllocIndex_.first == *e2eValue.version_ref()) {
       return;
     }
-    XLOG(INFO) << folly::sformat(
+    XLOG(INFO) << fmt::format(
         "Updating prefix index from {}",
         Constants::kStaticPrefixAllocParamKey.toString());
     e2eAllocIndex_.second.clear();
@@ -417,7 +417,7 @@ PrefixAllocator::processNetworkAllocationsUpdate(
     if (myPrefixIndex_.has_value() &&
         e2eAllocIndex_.second.find(myPrefixIndex_.value()) !=
             e2eAllocIndex_.second.end()) {
-      XLOG(INFO) << folly::sformat(
+      XLOG(INFO) << fmt::format(
           "Index {} exits in {}, restarting prefix allocator",
           myPrefixIndex_.value(),
           Constants::kStaticPrefixAllocParamKey.toString());

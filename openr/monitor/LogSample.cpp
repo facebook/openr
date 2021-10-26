@@ -183,7 +183,7 @@ LogSample::getInnerValue(
   }
 
   throw std::invalid_argument(
-      folly::sformat("invalid key: {} with keyType: {} ", key, keyType));
+      fmt::format("invalid key: {} with keyType: {} ", key, keyType));
 }
 
 } // namespace openr

@@ -100,7 +100,7 @@ class KvStoreTestFixture : public ::testing::Test {
    */
   std::string
   getNodeId(const std::string& prefix, const int index) const {
-    return folly::sformat("{}{}", prefix, index);
+    return fmt::format("{}{}", prefix, index);
   }
 
   void
@@ -1777,11 +1777,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
   for (auto& store : peerStores) {
-    auto key = folly::sformat("test-key-{}", store->getNodeId());
+    auto key = fmt::format("test-key-{}", store->getNodeId());
     auto thriftVal = createThriftValue(
         1 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-{}", store->getNodeId()),
+        fmt::format("test-value-{}", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -1849,11 +1849,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   //
   LOG(INFO) << "Submitting the second round of key-values...";
   for (auto& store : peerStores) {
-    auto key = folly::sformat("test-key-{}", store->getNodeId());
+    auto key = fmt::format("test-key-{}", store->getNodeId());
     auto thriftVal = createThriftValue(
         2 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-new-{}", store->getNodeId()),
+        fmt::format("test-value-new-{}", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -1908,11 +1908,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Set new key
   {
     auto& store = peerStores[0];
-    auto key = folly::sformat("flood-test-key-1", store->getNodeId());
+    auto key = fmt::format("flood-test-key-{}", store->getNodeId());
     auto thriftVal = createThriftValue(
         2 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("flood-test-value-1", store->getNodeId()),
+        fmt::format("flood-test-value-{}", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -2121,11 +2121,11 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   int index = 0;
   for (auto& store : peerStores) {
-    auto key = folly::sformat("{}-test-key-{}", index % 2, store->getNodeId());
+    auto key = fmt::format("{}-test-key-{}", index % 2, store->getNodeId());
     auto thriftVal = createThriftValue(
         1 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-{}", store->getNodeId()),
+        fmt::format("test-value-{}", store->getNodeId()),
         Constants::kTtlInfinity /* ttl */);
 
     // Submit the key-value to store
@@ -2204,11 +2204,11 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   std::unordered_map<std::string, thrift::Value> diffKeyVals;
   const std::unordered_map<std::string, thrift::Value> emptyKeyVals;
   for (int i = 0; i < 3; ++i) {
-    const auto key = folly::sformat("test-key-{}", i);
+    const auto key = fmt::format("test-key-{}", i);
     auto thriftVal = createThriftValue(
         1 /* version */,
         "gotham_city" /* originatorId */,
-        folly::sformat("test-value-{}", myStore->getNodeId()),
+        fmt::format("test-value-{}", myStore->getNodeId()),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -2239,7 +2239,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
 
   // Add missing key, test-key-0, into peerKeyVals
   const auto key = "test-key-0";
-  const auto strVal = folly::sformat("test-value-{}", myStore->getNodeId());
+  const auto strVal = fmt::format("test-value-{}", myStore->getNodeId());
   const auto thriftVal = createThriftValue(
       1 /* version */,
       "gotham_city" /* originatorId */,
@@ -2400,7 +2400,7 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
         300000 /* ttl */,
         1 /* ttl version */,
         0 /* hash */);
-    std::string key = folly::sformat("key{}", ++expectNumKeys);
+    std::string key = fmt::format("key{}", ++expectNumKeys);
     thriftVal.hash_ref() = generateHash(
         *thriftVal.version_ref(),
         *thriftVal.originatorId_ref(),
@@ -2548,7 +2548,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   int i3{0};
   uint64_t elapsedTime3{0};
   do {
-    auto key = folly::sformat("key3{}", ++i3);
+    auto key = fmt::format("key3{}", ++i3);
     auto thriftVal = createThriftValue(
         1 /* version */,
         "store1" /* originatorId */,
@@ -2595,7 +2595,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   uint64_t elapsedTime4{0};
   int64_t ttlLow = 50; // in msec
   do {
-    auto key = folly::sformat("key4{}", ++i4);
+    auto key = fmt::format("key4{}", ++i4);
     auto thriftVal = createThriftValue(
         1 /* version */,
         "store1" /* originatorId */,

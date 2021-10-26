@@ -29,10 +29,10 @@ using namespace openr;
 
 namespace {
 
-const folly::StringPiece kPrefixV4{"192.168.{}.{}/32"};
-const folly::StringPiece kPrefixV6{"fc00:cafe:{}::{}/128"};
-const folly::StringPiece kNextHopV4{"169.254.0.{}"};
-const folly::StringPiece kNextHopV6{"fe80::{}"};
+std::string_view kPrefixV4 = "192.168.{}.{}/32";
+std::string_view kPrefixV6 = "fc00:cafe:{}::{}/128";
+std::string_view kNextHopV4 = "169.254.0.{}";
+std::string_view kNextHopV6 = "fe80::{}";
 const std::vector<std::string> kInterfaces{"eth0", "eth1", "eth2", "eth4"};
 
 thrift::NextHopThrift
@@ -43,7 +43,7 @@ createNextHop(
   CHECK(kInterfaces.size());
   thrift::NextHopThrift nh;
   const auto& nhFormat = isV4 ? kNextHopV4 : kNextHopV6;
-  *nh.address_ref() = toBinaryAddress(folly::sformat(nhFormat, 1 + index));
+  nh.address_ref() = toBinaryAddress(fmt::format(nhFormat, 1 + index));
   nh.address_ref()->ifName_ref() =
       kInterfaces.at(folly::Random::rand32() % kInterfaces.size());
   nh.weight_ref() = 0;
@@ -73,7 +73,7 @@ createUnicastRoute(size_t index, size_t numNhs, bool isV4) {
   thrift::UnicastRoute route;
   const auto& format = isV4 ? kPrefixV4 : kPrefixV6;
   route.dest_ref() =
-      toIpPrefix(folly::sformat(format, index / 255, 1 + index % 255));
+      toIpPrefix(fmt::format(format, index / 255, 1 + index % 255));
   route.nextHops_ref() = createNextHops(numNhs, isV4);
   return route;
 }

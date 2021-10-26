@@ -458,7 +458,7 @@ class DualBaseFixture : public ::testing::Test {
           continue;
         }
         LOG(ERROR)
-            << folly::sformat("{}\n{}", nodeStatus, rootsStatus.at(*rootId));
+            << fmt::format("{}\n{}", nodeStatus, rootsStatus.at(*rootId));
       } else {
         // print all roots status
         std::vector<std::string> strs;
@@ -466,7 +466,7 @@ class DualBaseFixture : public ::testing::Test {
           strs.emplace_back(rootStr.second);
         }
         LOG(ERROR)
-            << folly::sformat("{}\n{}", nodeStatus, folly::join("\n", strs));
+            << fmt::format("{}\n{}", nodeStatus, folly::join("\n", strs));
       }
     }
   }
@@ -890,12 +890,12 @@ TEST_P(DualFixture, CircularTest) {
   // add nodes
   for (int i = 0; i < numNodes; ++i) {
     bool isRoot = i < totalRoots;
-    addNode(folly::sformat("n{}", i), isRoot);
+    addNode(fmt::format("n{}", i), isRoot);
   }
   // add links
   for (int i = 0; i < numNodes; ++i) {
     int j = (i + 1) % numNodes;
-    addLink(folly::sformat("n{}", i), folly::sformat("n{}", j), 1);
+    addLink(fmt::format("n{}", i), fmt::format("n{}", j), 1);
   }
 
   /* sleep override */
@@ -926,12 +926,12 @@ TEST_P(DualFixture, FabricTest) {
 
   for (int i = 0; i < m + n; ++i) {
     bool isRoot = i < totalRoots;
-    addNode(folly::sformat("n{}", i), isRoot);
+    addNode(fmt::format("n{}", i), isRoot);
   }
 
   for (int i = 0; i < m; ++i) {
     for (int j = m; j < m + n; ++j) {
-      addLink(folly::sformat("n{}", i), folly::sformat("n{}", j), 1);
+      addLink(fmt::format("n{}", i), fmt::format("n{}", j), 1);
     }
   }
 
@@ -957,7 +957,7 @@ TEST_P(DualFixture, FullMeshTest) {
   // add nodes
   for (int i = 0; i < numNodes; ++i) {
     bool isRoot = i < totalRoots;
-    addNode(folly::sformat("n{}", i), isRoot);
+    addNode(fmt::format("n{}", i), isRoot);
   }
 
   // add links
@@ -966,7 +966,7 @@ TEST_P(DualFixture, FullMeshTest) {
       if (i == j) {
         continue;
       }
-      addLink(folly::sformat("n{}", i), folly::sformat("n{}", j), 1);
+      addLink(fmt::format("n{}", i), fmt::format("n{}", j), 1);
     }
   }
 
@@ -993,24 +993,20 @@ TEST_P(DualFixture, GridTest) {
   // add nodes
   for (int i = 0; i < m * n; ++i) {
     bool isRoot = i < totalRoots;
-    addNode(folly::sformat("n{}", i), isRoot);
+    addNode(fmt::format("n{}", i), isRoot);
   }
 
   // add links
   for (int i = 0; i < m; ++i) {
     for (int j = 1; j < n; ++j) {
       addLink(
-          folly::sformat("n{}", i * n + j),
-          folly::sformat("n{}", i * n + j - 1),
-          1);
+          fmt::format("n{}", i * n + j), fmt::format("n{}", i * n + j - 1), 1);
     }
   }
   for (int i = 1; i < m; ++i) {
     for (int j = 0; j < n; ++j) {
       addLink(
-          folly::sformat("n{}", i * n + j),
-          folly::sformat("n{}", i * n + j - n),
-          1);
+          fmt::format("n{}", i * n + j), fmt::format("n{}", i * n + j - n), 1);
     }
   }
 

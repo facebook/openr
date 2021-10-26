@@ -58,8 +58,8 @@ PrefixGenerator::getRandomNextHops(
 
   for (uint32_t index = 0; index < numOfNextHops; index++) {
     // Random local IPV6
-    auto ipv6Addr = folly::IPAddress(folly::sformat(
-        "fe80::{}", folly::sformat("{:02x}", folly::Random::rand32() >> 16)));
+    auto ipv6Addr = folly::IPAddress(fmt::format(
+        "fe80::{}", fmt::format("{:02x}", folly::Random::rand32() >> 16)));
 
     // Create nexthop
     const auto path = createNextHop(toBinaryAddress(ipv6Addr), ifname, 1);

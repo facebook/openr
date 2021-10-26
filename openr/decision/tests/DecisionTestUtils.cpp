@@ -15,7 +15,7 @@
 namespace openr {
 LinkState
 getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
-  using folly::sformat;
+  using fmt::format;
   LinkState linkState{kTestingAreaName};
   for (auto const& [node, adjList] : adjMap) {
     CHECK_LT(node, 0x1 << 16);
@@ -27,17 +27,17 @@ getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
       int bottomByte = adj & 0xFF;
       int topByte = (adj & 0xFF00) >> 8;
       adjs.push_back(createAdjacency(
-          sformat("{}", adj),
-          sformat("{}/{}/{}", node, adj, adjNum),
-          sformat("{}/{}/{}", adj, node, adjNum),
-          sformat("fe80::{:02x}{:02x}", topByte, bottomByte),
-          sformat("192.168.{}.{}", topByte, bottomByte),
+          format("{}", adj),
+          format("{}/{}/{}", node, adj, adjNum),
+          format("{}/{}/{}", adj, node, adjNum),
+          format("fe80::{:02x}{:02x}", topByte, bottomByte),
+          format("192.168.{}.{}", topByte, bottomByte),
           weight,
           // label top 16 bits are me, bottom is neighbor
           ((node << 16) + adj)));
     }
     linkState.updateAdjacencyDatabase(
-        createAdjDb(sformat("{}", node), adjs, node), 0, 0);
+        createAdjDb(format("{}", node), adjs, node), 0, 0);
   }
   return linkState;
 }
