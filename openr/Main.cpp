@@ -496,13 +496,13 @@ main(int argc, char** argv) {
   auto vipPluginArgs = VipPluginArgs{
       vipRouteEvb->getEvb(), prefixUpdatesQueue, config, sslContext};
   if (config->isVipServiceEnabled()) {
-    vipPluginStart(vipPluginArgs);
     startEventBase(
         allThreads,
         orderedEvbs,
         watchdog,
         "vipRouteManager",
         std::move(vipRouteEvb));
+    vipPluginStart(vipPluginArgs);
   }
 
   // Wait for the above three modules to start and run before running
