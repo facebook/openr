@@ -138,7 +138,7 @@ KvStoreWrapper::pushToKvStoreUpdatesQueue(
   thrift::Publication pub;
   pub.area_ref() = area;
   pub.keyVals_ref() = keyVals;
-  kvStoreUpdatesQueue_.push(Publication(pub));
+  kvStoreUpdatesQueue_.push(std::move(pub));
 }
 
 std::optional<thrift::Value>
@@ -228,21 +228,37 @@ KvStoreWrapper::syncKeyVals(
 
 thrift::Publication
 KvStoreWrapper::recvPublication() {
-  auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
-  if (maybePublication.hasError()) {
-    throw std::runtime_error(std::string("recvPublication failed"));
+  while (true) {
+    auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
+    if (maybePublication.hasError()) {
+      throw std::runtime_error(std::string("recvPublication failed"));
+    }
+
+    // TODO: add timeout to avoid infinite waiting
+    if (auto* pub =
+            std::get_if<thrift::Publication>(&maybePublication.value())) {
+      return *pub;
+    }
   }
-  return maybePublication.value().tPublication;
+  throw std::runtime_error(std::string("timeout receiving publication"));
 }
 
 void
 KvStoreWrapper::recvKvStoreSyncedSignal() {
-  // Read publication from queue, and make sure kvStoreSynced flag is set.
-  auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
-  if (maybePublication.hasError()) {
-    throw std::runtime_error(std::string("recvPublication failed"));
+  while (true) {
+    auto maybeEvent = kvStoreUpdatesQueueReader_.get(); // perform read
+    if (maybeEvent.hasError()) {
+      throw std::runtime_error(std::string("recvPublication failed"));
+    }
+
+    // TODO: add timeout to avoid infinite waiting
+    if (auto* event =
+            std::get_if<thrift::InitializationEvent>(&maybeEvent.value())) {
+      CHECK(*event == thrift::InitializationEvent::KVSTORE_SYNCED);
+      return;
+    }
   }
-  CHECK(maybePublication.value().kvStoreSynced);
+  throw std::runtime_error(std::string("timeout receiving publication"));
 }
 
 thrift::SptInfos

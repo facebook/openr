@@ -1636,8 +1636,6 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
       2);
   path1_2_2.area_ref() = areaStrB;
 
-  auto kvStoreUpdatesQueue = kvStoreWrapper->getReader();
-
   //
   // 1. Inject prefix1 from area A, {B, C} should receive announcement
   //
@@ -1684,10 +1682,10 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     expected.emplace(prefixKeyAreaB, expectedPrefixEntry1A);
     expected.emplace(prefixKeyAreaC, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub2 = kvStoreWrapper->recvPublication();
     readPublication(pub2, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1733,13 +1731,13 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     expected.emplace(prefixKeyAreaA, expectedPrefixEntry1B);
     expected.emplace(prefixKeyAreaC, expectedPrefixEntry1B);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub2 = kvStoreWrapper->recvPublication();
     readPublication(pub2, got, gotDeleted);
 
-    auto pub3 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub3 = kvStoreWrapper->recvPublication();
     readPublication(pub3, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1760,10 +1758,10 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
         got, gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub2 = kvStoreWrapper->recvPublication();
     readPublication(pub2, got, gotDeleted);
 
     EXPECT_EQ(0, got.size());
@@ -1804,8 +1802,6 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
       2);
   path1_2_3.area_ref() = areaStrC;
 
-  auto kvStoreUpdatesQueue = kvStoreWrapper->getReader();
-
   //
   // 1. Inject prefix1 with ecmp areas = [A, B], best area = A
   //    => only C receive announcement
@@ -1840,7 +1836,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
         got, gotDeleted;
     expected.emplace(prefixKeyAreaC, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1860,7 +1856,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> got,
         gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(0, got.size());
@@ -1882,7 +1878,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
         got, gotDeleted;
     expected.emplace(prefixKeyAreaB, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value().tPublication;
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1923,7 +1919,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     // here skip ttl updates
     int expectedPubCnt{3}, gotPubCnt{0};
     while (gotPubCnt < expectedPubCnt) {
-      auto pub = kvStoreUpdatesQueue.get().value().tPublication;
+      auto pub = kvStoreWrapper->recvPublication();
       gotPubCnt += readPublication(pub, got, gotDeleted);
     }
 
@@ -1946,7 +1942,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
         gotDeleted;
 
     while (gotDeleted.size() < 2) {
-      auto pub = kvStoreUpdatesQueue.get().value().tPublication;
+      auto pub = kvStoreWrapper->recvPublication();
       readPublication(pub, got, gotDeleted);
     }
 
@@ -2000,39 +1996,40 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
   // return false if publication is tll update.
   void
   waitForKvStorePublication(
-      messaging::RQueue<Publication>& reader,
+      messaging::RQueue<KvStorePublication>& reader,
       std::unordered_map<
           std::pair<std::string /* prefixStr */, std::string /* areaStr */>,
           thrift::PrefixEntry>& exp,
       std::unordered_set<std::pair<std::string, std::string>>& expDeleted) {
     while (exp.size() or expDeleted.size()) {
-      auto pub = reader.get().value();
-      for (const auto& [key, thriftVal] : *pub.tPublication.keyVals_ref()) {
-        if (not thriftVal.value_ref().has_value()) {
-          // skip TTL update
-          continue;
-        }
+      auto maybePub = reader.get().value();
+      if (auto* pub = std::get_if<thrift::Publication>(&maybePub)) {
+        for (const auto& [key, thriftVal] : pub->get_keyVals()) {
+          if (not thriftVal.value_ref().has_value()) {
+            // skip TTL update
+            continue;
+          }
 
-        auto db = readThriftObjStr<thrift::PrefixDatabase>(
-            thriftVal.value_ref().value(), serializer);
-        auto isDeleted = *db.deletePrefix_ref();
-        auto prefixEntry = db.prefixEntries_ref()->at(0);
-        auto prefixKeyWithArea =
-            std::make_pair(key, pub.tPublication.get_area());
-        if (isDeleted and expDeleted.count(prefixKeyWithArea)) {
-          VLOG(2) << fmt::format(
-              "Withdraw of prefix: {} in area: {} received",
-              prefixKeyWithArea.first,
-              prefixKeyWithArea.second);
-          expDeleted.erase(prefixKeyWithArea);
-        }
-        if ((not isDeleted) and exp.count(prefixKeyWithArea) and
-            prefixEntry == exp.at(prefixKeyWithArea)) {
-          VLOG(2) << fmt::format(
-              "Advertising of prefix: {} in area: {} received",
-              prefixKeyWithArea.first,
-              prefixKeyWithArea.second);
-          exp.erase(prefixKeyWithArea);
+          auto db = readThriftObjStr<thrift::PrefixDatabase>(
+              thriftVal.value_ref().value(), serializer);
+          auto isDeleted = *db.deletePrefix_ref();
+          auto prefixEntry = db.prefixEntries_ref()->at(0);
+          auto prefixKeyWithArea = std::make_pair(key, pub->get_area());
+          if (isDeleted and expDeleted.count(prefixKeyWithArea)) {
+            VLOG(2) << fmt::format(
+                "Withdraw of prefix: {} in area: {} received",
+                prefixKeyWithArea.first,
+                prefixKeyWithArea.second);
+            expDeleted.erase(prefixKeyWithArea);
+          }
+          if ((not isDeleted) and exp.count(prefixKeyWithArea) and
+              prefixEntry == exp.at(prefixKeyWithArea)) {
+            VLOG(2) << fmt::format(
+                "Advertising of prefix: {} in area: {} received",
+                prefixKeyWithArea.first,
+                prefixKeyWithArea.second);
+            exp.erase(prefixKeyWithArea);
+          }
         }
       }
 

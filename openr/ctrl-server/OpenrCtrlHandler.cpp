@@ -80,69 +80,14 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               break;
             }
 
-            kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
-              for (auto& [_, publisher] : kvStorePublishers_) {
-                publisher->publish(maybePub.value().tPublication);
-              }
-            });
-
-            bool isAdjChanged = false;
-            // check if any of KeyVal has 'adj' update
-            for (auto& [key, val] :
-                 maybePub.value().tPublication.get_keyVals()) {
-              // check if we have any value update.
-              // Ttl refreshing won't update any value.
-              if (!val.value_ref().has_value()) {
-                continue;
-              }
-
-              // "adj:*" key has changed. Update local collection
-              if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-                XLOG(DBG3) << "Adj key: " << key << " change received";
-                isAdjChanged = true;
-                break;
-              }
-            }
-
-            if (isAdjChanged) {
-              // thrift::Publication contains "adj:*" key change.
-              // Clean ALL pending promises
-              longPollReqs_.withWLock([&](auto& longPollReqs) {
-                for (auto& kv :
-                     longPollReqs[maybePub->tPublication.get_area()]) {
-                  auto& p = kv.second.first;
-                  p.setValue(true);
-                }
-                longPollReqs.clear();
-              });
-            } else {
-              longPollReqs_.withWLock([&](auto& longPollReqs) {
-                auto now = getUnixTimeStampMs();
-                std::vector<int64_t> reqsToClean;
-                for (auto& kv :
-                     longPollReqs[maybePub->tPublication.get_area()]) {
-                  auto& clientId = kv.first;
-                  auto& req = kv.second;
-
-                  auto& p = req.first;
-                  auto& timeStamp = req.second;
-                  if (now - timeStamp >=
-                      Constants::kLongPollReqHoldTime.count()) {
-                    XLOG(INFO) << "Elapsed time: " << now - timeStamp
-                               << " is over hold limit: "
-                               << Constants::kLongPollReqHoldTime.count();
-                    reqsToClean.emplace_back(clientId);
-                    p.setValue(false);
-                  }
-                }
-
-                // cleanup expired requests since no ADJ change observed
-                for (auto& clientId : reqsToClean) {
-                  longPollReqs[maybePub->tPublication.get_area()].erase(
-                      clientId);
-                }
-              });
-            }
+            folly::variant_match(
+                std::move(maybePub).value(),
+                [this](thrift::Publication&& pub) {
+                  processPublication(std::move(pub));
+                },
+                [](thrift::InitializationEvent&&) {
+                  // skip the processing of initialization event
+                });
           }
           XLOG(INFO) << "KvStore updates processing fiber stopped";
         });
@@ -243,6 +188,66 @@ OpenrCtrlHandler::closeFibPublishers() {
              << " active Fib snoop stream(s).";
   for (auto& fibPublisher : fibPublishers_close) {
     std::move(fibPublisher).complete();
+  }
+}
+
+void
+OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
+  // publish via KvStorePublisher
+  kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
+    for (auto& [_, publisher] : kvStorePublishers_) {
+      publisher->publish(pub);
+    }
+  });
+
+  // check if any of KeyVal has 'adj' update
+  bool isAdjChanged = false;
+  for (auto& [key, val] : pub.get_keyVals()) {
+    // check if we have any value update.
+    // Ttl refreshing won't update any value.
+    if (!val.value_ref().has_value()) {
+      continue;
+    }
+
+    // "adj:*" key has changed. Update local collection
+    if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+      XLOG(DBG3) << "Adj key: " << key << " change received";
+      isAdjChanged = true;
+      break;
+    }
+  }
+
+  if (isAdjChanged) {
+    // thrift::Publication contains "adj:*" key change.
+    // Clean ALL pending promises
+    longPollReqs_.withWLock([&](auto& longPollReqs) {
+      for (auto& [_, req] : longPollReqs[pub.get_area()]) {
+        auto& p = req.first; // get the promise
+        p.setValue(true);
+      }
+      longPollReqs.clear();
+    });
+  } else {
+    longPollReqs_.withWLock([&](auto& longPollReqs) {
+      auto now = getUnixTimeStampMs();
+      std::vector<int64_t> reqsToClean;
+      for (auto& [clientId, req] : longPollReqs[pub.get_area()]) {
+        auto& p = req.first;
+        auto& timeStamp = req.second;
+        if (now - timeStamp >= Constants::kLongPollReqHoldTime.count()) {
+          XLOG(INFO) << "Elapsed time: " << now - timeStamp
+                     << " is over hold limit: "
+                     << Constants::kLongPollReqHoldTime.count();
+          reqsToClean.emplace_back(clientId);
+          p.setValue(false);
+        }
+      }
+
+      // cleanup expired requests since no ADJ change observed
+      for (auto& clientId : reqsToClean) {
+        longPollReqs[pub.get_area()].erase(clientId);
+      }
+    });
   }
 }
 

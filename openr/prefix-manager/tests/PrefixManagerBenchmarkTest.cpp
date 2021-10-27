@@ -116,7 +116,7 @@ class PrefixManagerBenchmarkTestFixture {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue_;
-  messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue_;
+  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestMockQueue_;

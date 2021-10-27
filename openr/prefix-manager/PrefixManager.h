@@ -89,7 +89,7 @@ class PrefixManager final : public OpenrEventBase {
       messaging::ReplicateQueue<DecisionRouteUpdate>&
           prefixMgrRouteUpdatesQueue,
       // consumer queue
-      messaging::RQueue<Publication> kvStoreUpdatesQueue,
+      messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
       // config

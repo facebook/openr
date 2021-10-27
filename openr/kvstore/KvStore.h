@@ -67,7 +67,7 @@ struct KvStoreParams {
   std::string nodeId;
 
   // Queue for publishing KvStore updates to other modules within a process
-  messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue;
 
   // Queue for publishing kvstore peer initial sync events
   messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue;
@@ -101,7 +101,7 @@ struct KvStoreParams {
 
   KvStoreParams(
       std::string nodeId,
-      messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue,
+      messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
       messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
@@ -747,7 +747,7 @@ class KvStore final : public OpenrEventBase {
       // the zmq context to use for IO
       fbzmq::Context& zmqContext,
       // Queue for publishing kvstore updates
-      messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue,
+      messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
       // Queue for publishing kvstore peer initial sync events
       messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue,
       // Queue for receiving peer updates
@@ -842,7 +842,7 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<std::map<std::string, int64_t>> semifuture_getCounters();
 
   // API to get reader for kvStoreUpdatesQueue
-  messaging::RQueue<Publication> getKvStoreUpdatesReader();
+  messaging::RQueue<KvStorePublication> getKvStoreUpdatesReader();
 
   // API to fetch state of peerNode, used for unit-testing
   folly::SemiFuture<std::optional<thrift::KvStorePeerState>>

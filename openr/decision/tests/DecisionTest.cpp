@@ -4774,10 +4774,10 @@ class DecisionTestFixture : public ::testing::Test {
   void
   sendKvPublication(
       const thrift::Publication& tPublication, bool prefixPubExists = true) {
-    kvStoreUpdatesQueue.push(Publication(tPublication));
+    kvStoreUpdatesQueue.push(tPublication);
     if (prefixPubExists and (not kvStoreSyncEventSent)) {
       // Send KvStore initial synced event.
-      kvStoreUpdatesQueue.push(Publication(true /*kvStoreSynced*/));
+      kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
 
       kvStoreSyncEventSent = true;
     }
@@ -4890,7 +4890,7 @@ class DecisionTestFixture : public ::testing::Test {
   CompactSerializer serializer{};
 
   std::shared_ptr<Config> config;
-  messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
@@ -6196,7 +6196,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
   auto config = std::make_shared<Config>(tConfig);
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
-  messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   auto decision = std::make_unique<Decision>(

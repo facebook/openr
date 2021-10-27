@@ -81,7 +81,7 @@ class KvStoreBenchmarkTestFixture {
 
   void
   checkThriftPublication(
-      uint32_t num, messaging::RQueue<Publication> kvStoreUpdatesQ) {
+      uint32_t num, messaging::RQueue<KvStorePublication> kvStoreUpdatesQ) {
     auto suspender = folly::BenchmarkSuspender();
     uint32_t total{0};
 
@@ -95,7 +95,9 @@ class KvStoreBenchmarkTestFixture {
 
       // stop measuring time as this is just parsing
       suspender.rehire();
-      total += thriftPub.value().tPublication.keyVals_ref()->size();
+      if (auto* pub = std::get_if<thrift::Publication>(&(thriftPub.value()))) {
+        total += pub->keyVals_ref()->size();
+      }
 
       // start measuring time again
       suspender.dismiss();

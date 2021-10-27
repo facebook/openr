@@ -105,7 +105,7 @@ DecisionPendingUpdates::addUpdate(
 Decision::Decision(
     std::shared_ptr<const Config> config,
     // consumer queue
-    messaging::RQueue<Publication> kvStoreUpdatesQueue,
+    messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     // producer queue
     messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
@@ -192,21 +192,27 @@ Decision::Decision(
         break;
       }
       try {
-        auto& pub = maybePub.value();
-        // kvStoreSynced and tPublication are exclusive with each other.
-        if (pub.kvStoreSynced) {
-          // Received all initial KvStore publications.
-          XLOG(INFO) << "[Initialization] All initial publications are "
-                        "received from KvStore.";
-          initialKvStoreSynced_ = true;
-          triggerInitialBuildRoutes();
-        } else {
-          processPublication(std::move(pub.tPublication));
-          // Compute routes with exponential backoff timer if needed
-          if (pendingUpdates_.needsRouteUpdate()) {
-            rebuildRoutesDebounced_();
-          }
-        }
+        folly::variant_match(
+            std::move(maybePub).value(),
+            [this](thrift::Publication&& pub) {
+              processPublication(std::move(pub));
+              // Compute routes with exponential backoff timer if needed
+              if (pendingUpdates_.needsRouteUpdate()) {
+                rebuildRoutesDebounced_();
+              }
+            },
+            [this](thrift::InitializationEvent&& event) {
+              CHECK(event == thrift::InitializationEvent::KVSTORE_SYNCED)
+                  << fmt::format(
+                         "Unexpected initialization event: {}",
+                         apache::thrift::util::enumNameSafe(event));
+
+              // Received all initial KvStore publications.
+              XLOG(INFO) << "[Initialization] All initial publications are "
+                            "received from KvStore.";
+              initialKvStoreSynced_ = true;
+              triggerInitialBuildRoutes();
+            });
       } catch (const std::exception& e) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
         // collect stack strace then fail the process

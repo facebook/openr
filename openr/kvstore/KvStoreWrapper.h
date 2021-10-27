@@ -54,7 +54,7 @@ class KvStoreWrapper {
   /**
    * Get reader for KvStore updates queue
    */
-  messaging::RQueue<Publication>
+  messaging::RQueue<KvStorePublication>
   getReader() {
     return kvStoreUpdatesQueue_.getReader();
   }
@@ -112,7 +112,7 @@ class KvStoreWrapper {
 
   void
   publishKvStoreSynced() {
-    kvStoreUpdatesQueue_.push(Publication(true /*kvStoreSynced*/));
+    kvStoreUpdatesQueue_.push(thrift::InitializationEvent::KVSTORE_SYNCED);
   }
 
   void pushToKvStoreUpdatesQueue(
@@ -242,8 +242,8 @@ class KvStoreWrapper {
   apache::thrift::CompactSerializer serializer_;
 
   // Queue for streaming KvStore updates
-  messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue_;
-  messaging::RQueue<Publication> kvStoreUpdatesQueueReader_{
+  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
+  messaging::RQueue<KvStorePublication> kvStoreUpdatesQueueReader_{
       kvStoreUpdatesQueue_.getReader()};
 
   // Queue to get KvStore Initial Sync Updates

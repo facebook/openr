@@ -581,26 +581,14 @@ using KvStoreEvent = std::variant<
     KvStoreSyncEvent /* KvStore peer sync event */,
     thrift::InitializationEvent /* PREFIX_DB_SYNCED initialization event */>;
 
-// TODO: migrate it towards std::variant
 /**
- * Structure defining KvStore publication, either kvStoreSynced signal or
- * Thrift format KvStore publication.
- * NOTE: kvStoreSynced{true} is published once only in OpenR initialization
- * process. kvStoreSynced and tPublication are exclusive, aka, only one of them
- * should be set in the struct. Defined explicit constructor to realize that.
+ * Structure representing:
+ *  1) thrift::Publication;
+ *  2) Open/R Initialization event;
  */
-struct Publication {
-  // Boolean flag indicating whether KvStoreDb is synced with all peers among
-  // all areas.
-  bool kvStoreSynced{false};
-
-  // Thrift format KvStore publication.
-  thrift::Publication tPublication;
-
-  explicit Publication(bool kvStoreSynced) : kvStoreSynced(kvStoreSynced) {}
-
-  explicit Publication(const thrift::Publication& tPub) : tPublication(tPub) {}
-};
+using KvStorePublication = std::variant<
+    thrift::Publication /* publication reflecting key-val change */,
+    thrift::InitializationEvent /* KVSTORE_SYNCED */>;
 
 /**
  * Provides match capability on list of regexes. Will default to prefix match

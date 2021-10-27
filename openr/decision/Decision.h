@@ -141,7 +141,7 @@ class Decision : public OpenrEventBase {
  public:
   Decision(
       std::shared_ptr<const Config> config,
-      messaging::RQueue<Publication> kvStoreUpdatesQueue,
+      messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
 

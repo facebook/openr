@@ -33,7 +33,7 @@ PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue,
-    messaging::RQueue<Publication> kvStoreUpdatesQueue,
+    messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
     std::shared_ptr<const Config> config,
@@ -259,21 +259,29 @@ PrefixManager::PrefixManager(
       if (not maybePub.hasValue()) {
         continue;
       }
-      auto& pub = maybePub.value();
-      // kvStoreSynced and tPublication are exclusive with each other.
-      if (pub.kvStoreSynced) {
-        XLOG(INFO)
-            << "[Initialization] All prefix keys are retrieved from KvStore.";
-        initialKvStoreSynced_ = true;
-        triggerInitialPrefixDbSync();
-      } else {
-        // TODO: Do not call KvStoreClient_ to process publications after
-        // persistKey() and clearKey() are natively supported in KvStore.
-        kvStoreClient_->processPublication(pub.tPublication);
 
-        // Process KvStore Thrift publication.
-        processPublication(std::move(pub.tPublication));
-      }
+      // process different types of event
+      folly::variant_match(
+          std::move(maybePub).value(),
+          [this](thrift::Publication&& pub) {
+            // TODO: Do not call KvStoreClient_ to process publications after
+            // persistKey() and clearKey() are natively supported in KvStore.
+            kvStoreClient_->processPublication(pub);
+
+            // Process KvStore Thrift publication.
+            processPublication(std::move(pub));
+          },
+          [this](thrift::InitializationEvent&& event) {
+            CHECK(event == thrift::InitializationEvent::KVSTORE_SYNCED)
+                << fmt::format(
+                       "Unexpected initialization event: {}",
+                       apache::thrift::util::enumNameSafe(event));
+
+            XLOG(INFO)
+                << "[Initialization] All prefix keys are retrieved from KvStore.";
+            initialKvStoreSynced_ = true;
+            triggerInitialPrefixDbSync();
+          });
     }
   });
 }

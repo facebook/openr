@@ -235,7 +235,7 @@ main(int argc, char** argv) {
   ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue;
   ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
-  ReplicateQueue<Publication> kvStoreUpdatesQueue;
+  ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
   ReplicateQueue<KeyValueRequest> kvRequestQueue;
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;

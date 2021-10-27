@@ -138,7 +138,7 @@ class DecisionWrapper {
   // publish routeDb
   void
   sendKvPublication(const thrift::Publication& publication) {
-    kvStoreUpdatesQueue.push(Publication(publication));
+    kvStoreUpdatesQueue.push(publication);
   }
 
  private:
@@ -167,7 +167,7 @@ class DecisionWrapper {
   CompactSerializer serializer{};
 
   std::shared_ptr<Config> config;
-  messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{

@@ -410,6 +410,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // eaxclty 1 area is configured
   std::unique_ptr<std::string> getSingleAreaOrThrow(std::string const& caller);
 
+  void processPublication(thrift::Publication&& pub);
   void authorizeConnection();
   void closeKvStorePublishers();
   void closeFibPublishers();

@@ -103,16 +103,16 @@ class PMToKvStoreBMTestFixture {
 
       // stop measuring time as this is just parsing
       suspender.rehire();
-      if (not checkDeletion) {
-        total += thriftPub.value().tPublication.keyVals_ref()->size();
-      } else {
-        for (const auto& [key, tVal] :
-             *thriftPub.value().tPublication.keyVals_ref()) {
-          if (auto value = tVal.value_ref()) {
-            const auto prefixDb =
-                readThriftObjStr<thrift::PrefixDatabase>(*value, serializer_);
-            if (*prefixDb.deletePrefix_ref()) {
-              ++total;
+
+      if (auto* pub = std::get_if<thrift::Publication>(&thriftPub.value())) {
+        if (not checkDeletion) {
+          total += pub->get_keyVals().size();
+        } else {
+          for (const auto& [key, tVal] : pub->get_keyVals()) {
+            if (auto value = tVal.value_ref()) {
+              const auto prefixDb =
+                  readThriftObjStr<thrift::PrefixDatabase>(*value, serializer_);
+              total += (prefixDb.get_deletePrefix() ? 1 : 0);
             }
           }
         }

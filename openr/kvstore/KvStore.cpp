@@ -30,7 +30,7 @@ namespace openr {
 KvStore::KvStore(
     // initializers for immutable state
     fbzmq::Context& zmqContext,
-    messaging::ReplicateQueue<Publication>& kvStoreUpdatesQueue,
+    messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
     messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue,
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
@@ -341,7 +341,7 @@ KvStore::processRequestMsg(
   return {folly::makeUnexpected(fbzmq::Error())};
 }
 
-messaging::RQueue<Publication>
+messaging::RQueue<KvStorePublication>
 KvStore::getKvStoreUpdatesReader() {
   return kvParams_.kvStoreUpdatesQueue.getReader();
 }
@@ -762,7 +762,8 @@ KvStore::initialKvStoreDbSynced() {
 
   if (not initialSyncSignalSent_) {
     // Publish KvStore synced signal.
-    kvParams_.kvStoreUpdatesQueue.push(Publication(true /*kvStoreSynced*/));
+    kvParams_.kvStoreUpdatesQueue.push(
+        thrift::InitializationEvent::KVSTORE_SYNCED);
     initialSyncSignalSent_ = true;
     logInitializationEvent(
         "KvStore",
@@ -3277,7 +3278,7 @@ KvStoreDb::floodPublication(
   publication.nodeIds_ref()->emplace_back(kvParams_.nodeId);
 
   // Flood publication to internal subscribers
-  kvParams_.kvStoreUpdatesQueue.push(Publication(publication));
+  kvParams_.kvStoreUpdatesQueue.push(publication);
   fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
 
   // Process potential update to self-originated key-vals
@@ -3291,7 +3292,7 @@ KvStoreDb::floodPublication(
   }
 
   // Key collection to be flooded
-  auto keysToUpdate = folly::gen::from(*publication.keyVals_ref()) |
+  auto keysToUpdate = folly::gen::from(publication.get_keyVals()) |
       folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
 
   XLOG(DBG2) << AreaTag()
