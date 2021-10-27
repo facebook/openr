@@ -572,6 +572,15 @@ struct KvStoreSyncEvent {
   }
 };
 
+/**
+ * Structure representing:
+ *  1) KvStoreSyncEvent;
+ *  2) Open/R Initialization event;
+ */
+using KvStoreEvent = std::variant<
+    KvStoreSyncEvent /* KvStore peer sync event */,
+    thrift::InitializationEvent /* PREFIX_DB_SYNCED initialization event */>;
+
 // TODO: migrate it towards std::variant
 /**
  * Structure defining KvStore publication, either kvStoreSynced signal or

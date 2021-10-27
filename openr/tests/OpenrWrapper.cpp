@@ -108,7 +108,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStore_ = std::make_unique<KvStore>(
       context_,
       kvStoreUpdatesQueue_,
-      kvStoreSyncEventsQueue_,
+      kvStoreEventsQueue_,
       peerUpdatesQueue_.getReader(),
       kvRequestQueue_.getReader(),
       logSampleQueue_,
@@ -177,7 +177,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       logSampleQueue_,
       kvRequestQueue_,
       neighborUpdatesQueue_.getReader(),
-      kvStoreSyncEventsQueue_.getReader(),
+      kvStoreEventsQueue_.getReader(),
       nlSock_->getReader(),
       false /* overrideDrainState */);
 
@@ -358,7 +358,7 @@ OpenrWrapper<Serializer>::stop() {
   kvRequestQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
-  kvStoreSyncEventsQueue_.close();
+  kvStoreEventsQueue_.close();
   nlSock_->closeQueue();
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();

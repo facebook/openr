@@ -231,7 +231,7 @@ main(int argc, char** argv) {
 
   // Queue for inter-module communication
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue;
+  ReplicateQueue<KvStoreEvent> kvStoreEventsQueue;
   ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue;
   ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
@@ -255,12 +255,12 @@ main(int argc, char** argv) {
   auto linkMonitorNeighborUpdatesQueueReader =
       neighborUpdatesQueue.getReader("linkMonitor");
   auto linkMonitorKvStoreSyncEventsQueueReader =
-      kvStoreSyncEventsQueue.getReader("linkMonitor");
+      kvStoreEventsQueue.getReader("linkMonitor");
   auto linkMonitorNetlinkEventsQueueReader =
       netlinkEventsQueue.getReader("linkMonitor");
   auto decisionKvStoreUpdatesQueueReader =
       kvStoreUpdatesQueue.getReader("decision");
-  auto PrefixManagerKvStoreUpdatesReader =
+  auto prefixMgrKvStoreUpdatesReader =
       kvStoreUpdatesQueue.getReader("prefixManager");
   auto pluginRouteReader =
       prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates");
@@ -364,7 +364,7 @@ main(int argc, char** argv) {
       std::make_unique<KvStore>(
           context,
           kvStoreUpdatesQueue,
-          kvStoreSyncEventsQueue,
+          kvStoreEventsQueue,
           peerUpdatesQueue.getReader("kvStore"),
           kvRequestQueue.getReader("kvStore"),
           logSampleQueue,
@@ -373,7 +373,7 @@ main(int argc, char** argv) {
               *config->getConfig().listen_addr_ref(),
               Constants::kKvStoreRepPort)},
           config));
-  watchdog->addQueue(kvStoreSyncEventsQueue, "kvStoreSyncEventsQueue");
+  watchdog->addQueue(kvStoreEventsQueue, "kvStoreEventsQueue");
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
   watchdog->addQueue(logSampleQueue, "logSampleQueue");
 
@@ -393,7 +393,7 @@ main(int argc, char** argv) {
           staticRouteUpdatesQueue,
           kvRequestQueue,
           prefixMgrRouteUpdatesQueue,
-          PrefixManagerKvStoreUpdatesReader,
+          prefixMgrKvStoreUpdatesReader,
           prefixUpdatesQueue.getReader("prefixManager"),
           std::move(routeUpdatesQueueReader),
           config,
@@ -569,7 +569,7 @@ main(int argc, char** argv) {
   peerUpdatesQueue.close();
   kvRequestQueue.close();
   neighborUpdatesQueue.close();
-  kvStoreSyncEventsQueue.close();
+  kvStoreEventsQueue.close();
   prefixUpdatesQueue.close();
   kvStoreUpdatesQueue.close();
   staticRouteUpdatesQueue.close();

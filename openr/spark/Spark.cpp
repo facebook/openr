@@ -1889,6 +1889,11 @@ Spark::sendHelloMsg(
 
 void
 Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
+  // NOTE: do NOT process this event if feature is NOT enabled
+  if (not enableOrderedAdjPublication_) {
+    return;
+  }
+
   CHECK(event == thrift::InitializationEvent::ADJACENCY_DB_SYNCED)
       << fmt::format(
              "Unexpected initialization event: {}",

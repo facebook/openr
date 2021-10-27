@@ -62,7 +62,7 @@ class KvStoreWrapper {
   /**
    * Get reader for KvStore Initial Sync queue
    */
-  messaging::RQueue<KvStoreSyncEvent>
+  messaging::RQueue<KvStoreEvent>
   getInitialSyncEventsReader() {
     return kvStoreSyncEventsQueue_.getReader();
   }
@@ -153,11 +153,6 @@ class KvStoreWrapper {
    * API to listen for KvStore sync signal on PUB queue.
    */
   void recvKvStoreSyncedSignal();
-
-  /*
-   * API to read initial sync event from kvStoreSyncEventsQueue
-   */
-  KvStoreSyncEvent recvSyncEvent();
 
   /*
    * Get flooding topology information
@@ -252,8 +247,8 @@ class KvStoreWrapper {
       kvStoreUpdatesQueue_.getReader()};
 
   // Queue to get KvStore Initial Sync Updates
-  messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue_;
-  messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueueReader_{
+  messaging::ReplicateQueue<KvStoreEvent> kvStoreSyncEventsQueue_;
+  messaging::RQueue<KvStoreEvent> kvStoreSyncEventsQueueReader_{
       kvStoreSyncEventsQueue_.getReader()};
 
   // Queue for publishing the event log

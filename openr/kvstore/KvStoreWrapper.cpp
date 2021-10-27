@@ -245,16 +245,6 @@ KvStoreWrapper::recvKvStoreSyncedSignal() {
   CHECK(maybePublication.value().kvStoreSynced);
 }
 
-KvStoreSyncEvent
-KvStoreWrapper::recvSyncEvent() {
-  auto maybeEvent = kvStoreSyncEventsQueueReader_.get(); // perform read
-  if (maybeEvent.hasError()) {
-    throw std::runtime_error(std::string("recvPublication failed"));
-  }
-  auto event = maybeEvent.value();
-  return event;
-}
-
 thrift::SptInfos
 KvStoreWrapper::getFloodTopo(AreaId const& area) {
   auto sptInfos = *(kvStore_->semifuture_getSpanningTreeInfos(area).get());

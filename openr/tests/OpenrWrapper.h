@@ -168,7 +168,7 @@ class OpenrWrapper {
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
-  messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue_;
+  messaging::ReplicateQueue<KvStoreEvent> kvStoreEventsQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<Publication> kvStoreUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesQueue_;

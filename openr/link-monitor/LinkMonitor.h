@@ -112,7 +112,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
       messaging::RQueue<NeighborEvents> neighborUpdatesQueue,
-      messaging::RQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue,
+      messaging::RQueue<KvStoreEvent> kvStoreEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will override drain state from persistent store with
       // assumeDrained value
@@ -186,6 +186,7 @@ class LinkMonitor final : public OpenrEventBase {
    * [KvStore] initial sync event
    */
   void processKvStoreSyncEvent(KvStoreSyncEvent&& event);
+  void processInitializationEvent(thrift::InitializationEvent&& event);
 
   /*
    * [Netlink Platform]
