@@ -205,7 +205,6 @@ thrift::Publication dumpAllWithFilters(
     const std::string& area,
     const std::unordered_map<std::string, thrift::Value>& kvStore,
     const KvStoreFilters& kvFilters,
-    thrift::FilterOperator oper = thrift::FilterOperator::OR,
     bool doNotPublishValue = false);
 
 // Dump the hashes of my KV store whose keys match the given prefix

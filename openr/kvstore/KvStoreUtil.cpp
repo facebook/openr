@@ -369,42 +369,28 @@ dumpDifference(
 }
 
 // dump the entries of my KV store whose keys match filter
+// KvStoreFilters contains `thrift::FilterOperator`
+// Default to thrift::FilterOperator::OR
 thrift::Publication
 dumpAllWithFilters(
     const std::string& area,
     const std::unordered_map<std::string, thrift::Value>& kvStore,
     const KvStoreFilters& kvFilters,
-    thrift::FilterOperator oper,
     bool doNotPublishValue) {
   thrift::Publication thriftPub;
   thriftPub.area_ref() = area;
 
-  // TODO: simplify the operations to OR case only in accordance with practice
-  switch (oper) {
-  case thrift::FilterOperator::AND:
-    for (auto const& [key, val] : kvStore) {
-      if (not kvFilters.keyMatchAll(key, val)) {
-        continue;
-      }
-      if (not doNotPublishValue) {
-        thriftPub.keyVals_ref()[key] = val;
-      } else {
-        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
-      }
+  for (auto const& [key, val] : kvStore) {
+    if (not kvFilters.keyMatch(key, val)) {
+      continue;
     }
-    break;
-  default:
-    for (auto const& [key, val] : kvStore) {
-      if (not kvFilters.keyMatch(key, val)) {
-        continue;
-      }
-      if (not doNotPublishValue) {
-        thriftPub.keyVals_ref()[key] = val;
-      } else {
-        thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
-      }
+    if (not doNotPublishValue) {
+      thriftPub.keyVals_ref()[key] = val;
+    } else {
+      thriftPub.keyVals_ref()[key] = createThriftValueWithoutBinaryValue(val);
     }
   }
+
   return thriftPub;
 }
 

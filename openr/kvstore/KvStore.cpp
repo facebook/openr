@@ -453,19 +453,21 @@ KvStore::semifuture_dumpKvStoreKeys(
         } else {
           folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
         }
-        const auto keyPrefixMatch =
-            KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
 
         thrift::FilterOperator oper = thrift::FilterOperator::OR;
         if (keyDumpParams.oper_ref().has_value()) {
           oper = *keyDumpParams.oper_ref();
         }
+        // KvStoreFilters contains `thrift::FilterOperator`
+        // Default to thrift::FilterOperator::OR
+
+        const auto keyPrefixMatch = KvStoreFilters(
+            keyPrefixList, *keyDumpParams.originatorIds_ref(), oper);
 
         auto thriftPub = dumpAllWithFilters(
             area,
             kvStoreDb.getKeyValueMap(),
             keyPrefixMatch,
-            oper,
             keyDumpParams.get_doNotPublishValue());
         if (keyDumpParams.keyValHashes_ref().has_value()) {
           thriftPub = dumpDifference(

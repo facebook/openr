@@ -414,19 +414,13 @@ BM_KvStoreDumpAllWithFilters(
       auto keyVal =
           genRandomKvStoreKeyVal(kKeyLen, kValLen, 1, std::to_string(deviceId));
       keyVals[keyVal.first] = keyVal.second;
-      if (prefixSet.size() <= numOfKeysToMatch)
+      if (prefixSet.size() <= numOfKeysToMatch) {
         prefixSet.emplace(keyVal.first);
+      }
     }
 
     keyPrefixList.insert(
         keyPrefixList.end(), prefixSet.begin(), prefixSet.end());
-
-    thrift::FilterOperator oper;
-    if (numOfKeysToMatch == 0 || numOfOriginatorIds == 0) {
-      oper = thrift::FilterOperator::OR;
-    } else {
-      oper = thrift::FilterOperator::AND;
-    }
 
     for (int k = 0; k < numOfOriginatorIds; ++k) {
       keyDumpParams.originatorIds_ref()->insert(std::to_string(k));
@@ -438,7 +432,7 @@ BM_KvStoreDumpAllWithFilters(
     suspender.dismiss();
 
     dumpAllWithFilters(
-        kTestingAreaName, keyVals, keyPrefixMatch, oper, doNotPublishValue);
+        kTestingAreaName, keyVals, keyPrefixMatch, doNotPublishValue);
 
     // Stop measuring time
     suspender.rehire();
@@ -450,7 +444,7 @@ BM_KvStoreDumpAllWithFilters(
  * Tech setup:
  *  - Generate `numOfExistingKeyVals` and push into kvStore
  *  - Generate the filter condition by specifying `numOfKeysToMatch`,
- *    `numOfOriginatorIds` and `doNotPublishValue` flag
+ *    `numOfOriginatorIds`
  * Benchmark:
  *  - Call dumpHashWithFilters function to dump a thrift with all
  *    matching keyVals
@@ -632,9 +626,6 @@ BENCHMARK_NAMED_PARAM(
  * @third integer: num of OriginatorIds to be matched in the filter setting
  * @fourth boolean: flag if the thrift::Value.value is not set in publications
  *
- * Logic design: by setting different `numOfKeysToMatch` and
- * `numOfOriginatorIds` to control filter operaton AND/OR
- *
  * Consider cases:
  *  - Keys only, regardless of originator_Ids
  *  - originator_Ids, regardless of keys
@@ -694,14 +685,34 @@ BENCHMARK_NAMED_PARAM(
     1000,
     40,
     false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters, 1000000_1000_1_true, 1000000, 1000, 1, true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters,
+    1000000_1000_40_true,
+    1000000,
+    1000,
+    40,
+    true);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters,
+    1000000_1000_1_false,
+    1000000,
+    1000,
+    1,
+    false);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpAllWithFilters,
+    1000000_1000_40_false,
+    1000000,
+    1000,
+    40,
+    false);
 
 /*
  * @first integer: num of existing keyVals in unordered_map
  * @second integer: num of keys to be matched in the filter setting
  * @third integer: num of OriginatorIds to be matched in the filter setting
- *
- * Logic design: by setting different `numOfKeysToMatch` and
- * `numOfOriginatorIds` to control filter operaton AND/OR
  *
  * Consider cases:
  *  - Keys only, regardless of originator_Ids
@@ -709,6 +720,11 @@ BENCHMARK_NAMED_PARAM(
  *  - originator_Ids and keys
  */
 
+// Keys only, regardless of originator_Ids
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 100000_1000_0_true, 100000, 1000, 0);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 1000000_1000_0_true, 1000000, 1000, 0);
 // originator_Ids, regardless of keys
 BENCHMARK_NAMED_PARAM(BM_KvStoreDumpHashWithFilters, 100000_0_1, 100000, 0, 1);
 BENCHMARK_NAMED_PARAM(
@@ -728,6 +744,12 @@ BENCHMARK_NAMED_PARAM(
     BM_KvStoreDumpHashWithFilters, 100000_1000_10, 100000, 1000, 10);
 BENCHMARK_NAMED_PARAM(
     BM_KvStoreDumpHashWithFilters, 100000_1000_40, 100000, 1000, 40);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 1000000_1000_1, 1000000, 1000, 1);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 1000000_1000_10, 1000000, 1000, 10);
+BENCHMARK_NAMED_PARAM(
+    BM_KvStoreDumpHashWithFilters, 1000000_1000_40, 1000000, 1000, 40);
 
 } // namespace openr
 
