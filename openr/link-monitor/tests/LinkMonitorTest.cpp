@@ -2387,7 +2387,25 @@ TEST_F(InitializationTestFixture, AdjDbSyncEventUnblockTest) {
   recvInitializationEvent();
 }
 
-TEST_F(InitializationTestFixture, AdjacencyUpHoldTest) {
+TEST_F(InitializationTestFixture, AdjacencyUpWithGracefulRestartTest) {
+  // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
+  // with `adjOnlyUsedByOtherNode` set to true.
+  auto nb2Copy = folly::copy(nb2);
+  nb2Copy.adjOnlyUsedByOtherNode_ref() = true;
+
+  auto neighborEvent =
+      NeighborEvent(NeighborEventType::NEIGHBOR_RESTARTED, nb2Copy);
+  neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+
+  // NOTE: adjacency db will contain adj_2_1 with
+  // `adjOnlyUsedByOtherNode=false` as special flag will be ignored under
+  // WARM_BOOT(GR) case.
+  auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
+  expectedAdjDbs.push(std::move(adjDb));
+  checkNextAdjPub("adj:node-1");
+}
+
+TEST_F(InitializationTestFixture, AdjacencyUpTest) {
   {
     // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
     // with `adjOnlyUsedByOtherNode` set to true.

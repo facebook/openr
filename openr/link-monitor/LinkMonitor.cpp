@@ -303,7 +303,8 @@ LinkMonitor::stop() {
 }
 
 void
-LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
+LinkMonitor::neighborUpEvent(
+    const thrift::SparkNeighbor& info, bool isGracefulRestart) {
   // ATTN: all the thrift field is guaranteed to be there since it is
   // transformed from SparkNeighbor structure.
   // TODO: instead of using thrift structure, inter-module commmunication
@@ -318,7 +319,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   const auto openrCtrlThriftPort = *info.openrCtrlThriftPort_ref();
   const auto rttUs = *info.rttUs_ref();
   const auto supportFloodOptimization = *info.enableFloodOptimization_ref();
-  const auto onlyUsedByOtherNode = info.get_adjOnlyUsedByOtherNode();
+  const auto onlyUsedByOtherNode = *info.adjOnlyUsedByOtherNode_ref();
 
   // current unixtime
   auto now = std::chrono::system_clock::now();
@@ -379,12 +380,18 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
   // We record GR status of old adj, KvStore Sync event will reset this field.
   // Else: GR = neighbor restart -> spark neighbor establishment.
   // We restart isRestarting flag to False here.
+  //
+  // TODO: remove `isRestarting` flag once enable_ordered_adj_publication is
+  // fully rolled out to PROD.
   bool isRestarting{false};
   if (enableNewGRBehavior_ and oldAdj != adjacencies_.end() and
       oldAdj->second.isRestarting) {
     isRestarting = true;
   }
 
+  // NOTE: for Graceful Restart(GR) case, we don't expect any adjacency
+  // information change. Ignore the `onlyUsedByOtherNode` flag for adjacency
+  // advertisement.
   adjacencies_[adjId] = AdjacencyValue(
       area,
       createPeerSpec(
@@ -395,7 +402,7 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighbor& info) {
           supportFloodOptimization),
       std::move(newAdj),
       isRestarting,
-      onlyUsedByOtherNode);
+      isGracefulRestart ? false : onlyUsedByOtherNode);
 
   // update kvstore peer
   updateKvStorePeerNeighborUp(area, adjId, adjacencies_[adjId]);
@@ -1233,9 +1240,12 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
 
     switch (event.eventType) {
     case NeighborEventType::NEIGHBOR_UP:
+      logNeighborEvent(event);
+      neighborUpEvent(info, false);
+      break;
     case NeighborEventType::NEIGHBOR_RESTARTED: {
       logNeighborEvent(event);
-      neighborUpEvent(info);
+      neighborUpEvent(info, true);
       break;
     }
     case NeighborEventType::NEIGHBOR_ADJ_SYNCED: {
