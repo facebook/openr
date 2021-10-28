@@ -19,8 +19,27 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/monitor/Monitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
+#include <chrono>
+#include <memory>
+#include "openr/if/gen-cpp2/OpenrCtrl.h"
 
 namespace openr {
+
+struct FibStreamSubscriber {
+  FibStreamSubscriber(
+      std::chrono::steady_clock::time_point upSince,
+      std::unique_ptr<apache::thrift::ServerStreamPublisher<
+          thrift::RouteDatabaseDeltaDetail>> publisher)
+      : upSince(upSince), publisher(std::move(publisher)), total_messages(0) {}
+
+  std::chrono::steady_clock::time_point upSince;
+  std::unique_ptr<
+      apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDeltaDetail>>
+      publisher;
+  int64_t total_messages;
+  std::chrono::system_clock::time_point last_message_time;
+};
+
 class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
                                public facebook::fb303::BaseService {
  public:
@@ -393,8 +412,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   }
 
   inline size_t
-  getNumFibDetailPublishers() {
-    return fibDetailPublishers_.wlock()->size();
+  getNumFibDetailSubscribers() {
+    return fibDetailSubscribers_.wlock()->size();
   }
 
   //
@@ -444,10 +463,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       fibPublishers_;
 
   // Active Fib Detail streaming publishers
-  folly::Synchronized<std::unordered_map<
-      int64_t,
-      apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDeltaDetail>>>
-      fibDetailPublishers_;
+  folly::Synchronized<std::unordered_map<int64_t, FibStreamSubscriber>>
+      fibDetailSubscribers_;
 
   // pending longPoll requests from clients, which consists of
   // 1). promise; 2). timestamp when req received on server

@@ -6,7 +6,6 @@
  */
 
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
-#include <openr/if/gen-cpp2/Types_types.h>
 
 #if __has_include("filesystem")
 #include <filesystem>
@@ -120,15 +119,16 @@ OpenrCtrlHandler::OpenrCtrlHandler(
             });
 
             // Publish the detailed update to all active streams
-            fibDetailPublishers_.withWLock([&maybeUpdate](auto& fibPublishers) {
-              if (fibPublishers.size()) {
-                const auto fibUpdateDetail =
-                    maybeUpdate.value().toThriftDetail();
-                for (auto& fibPublisher : fibPublishers) {
-                  fibPublisher.second.next(fibUpdateDetail);
-                }
-              }
-            });
+            fibDetailSubscribers_.withWLock(
+                [&maybeUpdate](auto& fibSubscribers) {
+                  if (fibSubscribers.size()) {
+                    const auto fibUpdateDetail =
+                        maybeUpdate.value().toThriftDetail();
+                    for (auto& fibSubscriber : fibSubscribers) {
+                      fibSubscriber.second.publisher->next(fibUpdateDetail);
+                    }
+                  }
+                });
           }
           XLOG(INFO) << "Fib updates processing fiber stopped";
         });
@@ -1009,27 +1009,32 @@ OpenrCtrlHandler::subscribeFibDetail() {
 
   auto streamAndPublisher = apache::thrift::ServerStream<
       thrift::RouteDatabaseDeltaDetail>::createPublisher([this, clientToken]() {
-    fibDetailPublishers_.withWLock([&clientToken](auto& fibDetailPublishers) {
-      if (fibDetailPublishers.erase(clientToken)) {
+    fibDetailSubscribers_.withWLock([&clientToken](auto& fibDetailSubscribers) {
+      if (fibDetailSubscribers.erase(clientToken)) {
         XLOG(INFO) << "Fib detail snoop stream-" << clientToken << " ended.";
       } else {
         XLOG(ERR) << "Can't remove unknown Fib detail snoop stream-"
                   << clientToken;
       }
       fb303::fbData->setCounter(
-          "subscribers.fibDetail", fibDetailPublishers.size());
+          "subscribers.fibDetail", fibDetailSubscribers.size());
     });
   });
 
-  fibDetailPublishers_.withWLock(
-      [&clientToken, &streamAndPublisher](auto& fibDetailPublishers) {
-        assert(fibDetailPublishers.count(clientToken) == 0);
+  fibDetailSubscribers_.withWLock(
+      [&clientToken, &streamAndPublisher](auto& fibDetailSubscribers) {
+        assert(fibDetailSubscribers.count(clientToken) == 0);
         XLOG(INFO) << "Fib detail snoop stream-" << clientToken << " started.";
-        fibDetailPublishers.emplace(
-            clientToken, std::move(streamAndPublisher.second));
+        auto publisher = std::make_unique<apache::thrift::ServerStreamPublisher<
+            thrift::RouteDatabaseDeltaDetail>>(
+            std::move(streamAndPublisher.second));
+        FibStreamSubscriber fib_subscriber(
+            std::chrono::steady_clock::now(), std::move(publisher));
+        fibDetailSubscribers.emplace(clientToken, std::move(fib_subscriber));
         fb303::fbData->setCounter(
-            "subscribers.fibDetail", fibDetailPublishers.size());
+            "subscribers.fibDetail", fibDetailSubscribers.size());
       });
+
   return std::move(streamAndPublisher.first);
 }
 

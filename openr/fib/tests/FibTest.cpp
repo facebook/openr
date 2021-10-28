@@ -507,7 +507,7 @@ class FibTestFixture : public ::testing::Test {
               received++;
             });
 
-    EXPECT_EQ(1, handler_->getNumFibDetailPublishers());
+    EXPECT_EQ(1, handler_->getNumFibDetailSubscribers());
 
     // Check we should receive 1 updates
     while (received < 1) {
@@ -519,7 +519,7 @@ class FibTestFixture : public ::testing::Test {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler_->getNumFibDetailPublishers() != 0) {
+    while (handler_->getNumFibDetailSubscribers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -823,7 +823,7 @@ TEST_F(FibTestFixture, fibDetailStreaming) {
                 received++;
               });
 
-  EXPECT_EQ(1, handler_->getNumFibDetailPublishers());
+  EXPECT_EQ(1, handler_->getNumFibDetailSubscribers());
 
   routeUpdatesQueue.push(routeUpdate2);
   // Synced routes are sent to fibRouteUpdatesQueue_.
@@ -841,7 +841,7 @@ TEST_F(FibTestFixture, fibDetailStreaming) {
   std::move(subscription).detach();
 
   // Wait until publisher is destroyed
-  while (handler_->getNumFibDetailPublishers() != 0) {
+  while (handler_->getNumFibDetailSubscribers() != 0) {
     std::this_thread::yield();
   }
 }
