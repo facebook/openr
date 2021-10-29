@@ -49,5 +49,6 @@ class KvStorePublisher {
  public:
   std::chrono::steady_clock::time_point subscription_time_;
   int64_t total_messages_;
+  std::chrono::system_clock::time_point last_message_time_;
 };
 } // namespace openr

@@ -22,6 +22,7 @@
 #include <chrono>
 #include <memory>
 #include "openr/if/gen-cpp2/OpenrCtrl.h"
+#include "openr/if/gen-cpp2/OpenrCtrl_types.h"
 
 namespace openr {
 
@@ -221,6 +222,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
   semifuture_getRouteDbComputed(std::unique_ptr<std::string> nodeName) override;
+
+  // Subscriber Info API
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>
+  semifuture_getSubscriberInfo(int64_t type) override;
 
   //
   // KvStore APIs
@@ -438,6 +444,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
 
   // Pointers to Open/R modules
+  OpenrEventBase* ctrlEvb_{nullptr};
   Decision* decision_{nullptr};
   Fib* fib_{nullptr};
   KvStore* kvStore_{nullptr};

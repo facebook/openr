@@ -52,6 +52,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     : fb303::BaseService("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
+      ctrlEvb_(ctrlEvb),
       decision_(decision),
       fib_(fib),
       kvStore_(kvStore),
@@ -125,6 +126,9 @@ OpenrCtrlHandler::OpenrCtrlHandler(
                     const auto fibUpdateDetail =
                         maybeUpdate.value().toThriftDetail();
                     for (auto& fibSubscriber : fibSubscribers) {
+                      fibSubscriber.second.total_messages++;
+                      fibSubscriber.second.last_message_time =
+                          std::chrono::system_clock::now();
                       fibSubscriber.second.publisher->next(fibUpdateDetail);
                     }
                   }
@@ -196,6 +200,8 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
   // publish via KvStorePublisher
   kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
     for (auto& [_, publisher] : kvStorePublishers_) {
+      publisher->last_message_time_ = std::chrono::system_clock::now();
+      publisher->total_messages_++;
       publisher->publish(pub);
     }
   });
@@ -866,6 +872,69 @@ OpenrCtrlHandler::semifuture_getKvStoreAreaSummary(
       std::move(*selectAreas));
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>
+OpenrCtrlHandler::semifuture_getSubscriberInfo(int64_t type) {
+  folly::Promise<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>
+      stream_sessions;
+  auto sf = stream_sessions.getSemiFuture();
+
+  ctrlEvb_->runInEventBaseThread([stream_sessions = std::move(stream_sessions),
+                                  type = std::move(type),
+                                  this]() mutable {
+    std::vector<thrift::StreamSubscriberInfo> subscribers;
+    if (type == 0) {
+      kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
+        for (auto& [id, publisher] : kvStorePublishers_) {
+          thrift::StreamSubscriberInfo subscriber;
+          subscriber.subscriber_id_ref() = id;
+
+          auto currentTime = std::chrono::steady_clock::now();
+          auto duration_time =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  currentTime - publisher->subscription_time_);
+          subscriber.uptime_ref() = duration_time.count();
+          subscriber.last_msg_sent_time_ref() =
+              std::chrono::time_point_cast<std::chrono::milliseconds>(
+                  publisher->last_message_time_)
+                  .time_since_epoch()
+                  .count();
+          subscriber.total_streamed_msgs_ref() = publisher->total_messages_;
+
+          subscribers.emplace_back(subscriber);
+        }
+      });
+    } else if (type == 1) {
+      fibDetailSubscribers_.withWLock([&](auto& fibDetailSubscribers_) {
+        for (auto& [id, publisher] : fibDetailSubscribers_) {
+          thrift::StreamSubscriberInfo subscriber;
+          subscriber.subscriber_id_ref() = id;
+
+          auto currentTime = std::chrono::steady_clock::now();
+          auto duration_time =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  currentTime - publisher.upSince);
+          subscriber.uptime_ref() = duration_time.count();
+          subscriber.last_msg_sent_time_ref() =
+              std::chrono::time_point_cast<std::chrono::milliseconds>(
+                  publisher.last_message_time)
+                  .time_since_epoch()
+                  .count();
+          subscriber.total_streamed_msgs_ref() = publisher.total_messages;
+
+          subscribers.emplace_back(subscriber);
+        }
+      });
+    } else {
+      XLOG(INFO) << "Invalid type input. Specify type as KVstore or FIB";
+    }
+    stream_sessions.setValue(
+        std::make_unique<std::vector<thrift::StreamSubscriberInfo>>(
+            std::move(subscribers)));
+  });
+
+  return sf;
+}
+
 apache::thrift::ServerStream<thrift::Publication>
 OpenrCtrlHandler::subscribeKvStoreFilter(
     std::unique_ptr<thrift::KeyDumpParams> filter,
@@ -894,7 +963,11 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
     XLOG(INFO) << "KvStore snoop stream-" << clientToken
                << " started for areas: " << folly::join(", ", *selectAreas);
     auto kvStorePublisher = std::make_unique<KvStorePublisher>(
-        *selectAreas, std::move(*filter), std::move(streamAndPublisher.second));
+        *selectAreas,
+        std::move(*filter),
+        std::move(streamAndPublisher.second),
+        std::chrono::steady_clock::now(),
+        0);
     kvStorePublishers_.emplace(clientToken, std::move(kvStorePublisher));
     fb303::fbData->setCounter("subscribers.kvstore", kvStorePublishers_.size());
   });
@@ -983,6 +1056,7 @@ OpenrCtrlHandler::subscribeFib() {
     fibPublishers.emplace(clientToken, std::move(streamAndPublisher.second));
     fb303::fbData->setCounter("subscribers.fib", fibPublishers.size());
   });
+
   return std::move(streamAndPublisher.first);
 }
 
