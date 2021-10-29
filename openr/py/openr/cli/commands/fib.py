@@ -5,16 +5,20 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
+import datetime
 import ipaddress
 import time
 from builtins import object
 from typing import List, Optional, Union, Sequence
 
+import prettytable
+import pytz
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.OpenrCtrl.ttypes import StreamSubscriberType
 from openr.thrift.Network import types as network_types_py3
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types import types as openr_types_py3
@@ -481,3 +485,92 @@ class FibSnoopCmd(OpenrCtrlCmd):
                 msg = await done.pop()
 
             self.print_route_db_delta(msg, prefixes)
+
+
+def ip_key(ip):
+    net = ipaddress.ip_network(ip)
+    return (net.version, net.network_address, net.prefixlen)
+
+
+def convertTime(intTime):
+    formatted_time = datetime.datetime.fromtimestamp(intTime / 1000)
+    timezone = pytz.timezone("US/Pacific")
+    formatted_time = timezone.localize(formatted_time)
+    formatted_time = formatted_time.strftime("%Y-%m-%d %H:%M:%S.%f %Z")
+    return formatted_time
+
+
+class StreamSummaryCmd(OpenrCtrlCmd):
+    def get_subscriber_row(self, stream_session_info):
+        """
+        Takes StreamSubscriberInfo from thrift and returns list[str] (aka row)
+        representing the subscriber
+        """
+
+        uptime = "unknown"
+        last_msg_time = "unknown"
+        if (
+            stream_session_info.uptime is not None
+            and stream_session_info.last_msg_sent_time is not None
+        ):
+            uptime_str = str(
+                datetime.timedelta(milliseconds=stream_session_info.uptime)
+            )
+            last_msg_time_str = convertTime(stream_session_info.last_msg_sent_time)
+            uptime = uptime_str.split(".")[0]
+            last_msg_time = last_msg_time_str
+
+        # assert isinstance(stream_session_info, StreamSubscriberInfo)
+        row = [
+            stream_session_info.subscriber_id,
+            uptime,
+            stream_session_info.total_streamed_msgs,
+            last_msg_time,
+        ]
+        return row
+
+    def run(self, *args, **kwargs) -> int:
+        async def _wrapper() -> int:
+            client_type = ClientType.THRIFT_ROCKET_CLIENT_TYPE
+            async with get_openr_ctrl_cpp_client(
+                self.host, self.cli_opts, client_type
+            ) as client:
+                await self._run(client, *args, **kwargs)
+            return 0
+
+        return asyncio.run(_wrapper())
+
+    async def _run(
+        self,
+        client: OpenrCtrlCppClient,
+        *args,
+        **kwargs,
+    ) -> None:
+
+        subscribers = await client.getSubscriberInfo(StreamSubscriberType.FIB)
+
+        # Prepare the table
+        columns = [
+            "SubscriberID",
+            "Uptime",
+            "Total Messages",
+            "Time of Last Message",
+        ]
+        table = ""
+        table = prettytable.PrettyTable(columns)
+        table.set_style(prettytable.PLAIN_COLUMNS)
+        table.align = "l"
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+
+        for subscriber in sorted(subscribers, key=lambda x: ip_key(x.subscriber_id)):
+            table.add_row(self.get_subscriber_row(subscriber))
+
+        # Print header
+        print("FIB stream summary information for subscribers\n")
+
+        if not subscribers:
+            print("No subscribers available")
+
+        # Print the table body
+        print(table)

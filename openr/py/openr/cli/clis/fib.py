@@ -31,6 +31,7 @@ class FibCli(object):
         self.fib.add_command(FibSyncRoutesCli().sync_routes, name="sync")
         self.fib.add_command(FibSnoopCli().snoop)
         self.fib.add_command(FibValidateRoutesCli().validate)
+        self.fib.add_command(StreamSummaryCli()._stream_summary, name="stream-summary")
 
     @click.group()
     @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
@@ -181,3 +182,12 @@ class FibSnoopCli(object):
         """Snoop on fib streaming updates."""
 
         fib.FibSnoopCmd(cli_opts).run(duration, initial_dump, prefixes)
+
+
+class StreamSummaryCli(object):
+    @click.command()
+    @click.pass_obj
+    def _stream_summary(cli_opts):  # noqa: B902
+        """Show basic info on all FIB subscribers"""
+        cli_options = {}
+        fib.StreamSummaryCmd(cli_opts).run(cli_options)
