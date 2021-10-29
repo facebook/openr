@@ -35,6 +35,9 @@ class KvStoreCli(object):
         self.kvstore.add_command(AllocationsCli().unset, name="alloc-unset")
         self.kvstore.add_command(AreasCli().areas, name="areas")
         self.kvstore.add_command(SummaryCli().summary)
+        self.kvstore.add_command(
+            StreamSummaryCli().stream_summary, name="stream-summary"
+        )
 
     @click.group()
     @breeze_option("--area", type=str, help="area identifier")
@@ -349,3 +352,12 @@ class SummaryCli(object):
         """show the KV store summary for each area"""
 
         kvstore.SummaryCmd(cli_opts).run(set(area))
+
+
+class StreamSummaryCli(object):
+    @click.command()
+    @click.pass_obj
+    def stream_summary(cli_opts):  # noqa: B902
+        """Show basic info on all KVstore subscribers"""
+        cli_options = {}
+        kvstore.StreamSummaryCmd(cli_opts).run(cli_options)
