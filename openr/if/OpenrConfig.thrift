@@ -630,7 +630,7 @@ struct AreaConfig {
   6: list<string> redistribute_interface_regexes;
 
   /**
-   * Area import policy, applied when a route enter this area
+   * Area import policy, applied when a route enters this area
    */
   7: optional string import_policy_name;
 
