@@ -168,8 +168,8 @@ struct OpenrSourcePreferences {
 
 struct OpenrIgpCostRange {
   1: string _description;
-  2: optional i32 max_cost;
-  3: optional i32 min_cost;
+  2: optional i32 maxCost;
+  3: optional i32 minCost;
 }
 
 struct OpenrIgpCostRanges {
@@ -285,7 +285,7 @@ struct FilterCriteria {
   45: optional string openrSourcePreference;
   46: optional string openrPrefixForwardingType; // IP|MPLS
   47: optional string openrPrefixForwardingAlgorithm; // ECMP|KSP2
-  48: optional string OpenrIgpCostRange;
+  48: optional string openrIgpCostRange;
 
   90: optional string condition;
   91: optional RuleCondition condition_id;
