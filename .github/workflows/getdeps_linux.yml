@@ -17,6 +17,8 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests cmake
     - name: Fetch googletest
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests googletest
+    - name: Fetch range-v3
+      run: python3 build/fbcode_builder/getdeps.py fetch --no-tests range-v3
     - name: Fetch re2
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests re2
     - name: Fetch fmt
@@ -71,6 +73,8 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py build --no-tests cmake
     - name: Build googletest
       run: python3 build/fbcode_builder/getdeps.py build --no-tests googletest
+    - name: Build range-v3
+      run: python3 build/fbcode_builder/getdeps.py build --no-tests range-v3
     - name: Build re2
       run: python3 build/fbcode_builder/getdeps.py build --no-tests re2
     - name: Build fmt
