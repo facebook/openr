@@ -231,9 +231,9 @@ main(int argc, char* argv[]) {
   testing::InitGoogleMock(&argc, argv);
   folly::init(&argc, &argv);
   google::InstallFailureSignalHandler();
-
-  auto rc = RUN_ALL_TESTS();
+  FLAGS_logtostderr = true;
 
   // Run the tests
+  auto rc = RUN_ALL_TESTS();
   return rc;
 }

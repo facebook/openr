@@ -161,6 +161,7 @@ main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

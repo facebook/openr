@@ -661,6 +661,7 @@ main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

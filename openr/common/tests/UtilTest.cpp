@@ -14,7 +14,6 @@
 #include <folly/ScopeGuard.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <sodium.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Types.h>
@@ -1341,12 +1340,7 @@ main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
-
-  // init sodium security library
-  if (::sodium_init() == -1) {
-    LOG(ERROR) << "Failed initializing sodium";
-    return 1;
-  }
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();
