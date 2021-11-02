@@ -133,6 +133,7 @@ class PrefixManagerTestFixture : public testing::Test {
     kvRequestQueue.close();
     prefixUpdatesQueue.close();
     prefixMgrRouteUpdatesQueue.close();
+    prefixMgrInitializationEventsQueue.close();
     staticRouteUpdatesQueue.close();
     fibRouteUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
@@ -143,6 +144,7 @@ class PrefixManagerTestFixture : public testing::Test {
     kvRequestQueue.open();
     prefixUpdatesQueue.open();
     prefixMgrRouteUpdatesQueue.open();
+    prefixMgrInitializationEventsQueue.open();
     staticRouteUpdatesQueue.open();
     fibRouteUpdatesQueue.open();
     kvStoreWrapper->openQueue();
@@ -155,6 +157,7 @@ class PrefixManagerTestFixture : public testing::Test {
         staticRouteUpdatesQueue,
         kvRequestQueue,
         prefixMgrRouteUpdatesQueue,
+        prefixMgrInitializationEventsQueue,
         kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
@@ -236,6 +239,8 @@ class PrefixManagerTestFixture : public testing::Test {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      prefixMgrInitializationEventsQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 

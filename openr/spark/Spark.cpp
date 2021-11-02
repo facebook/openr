@@ -308,7 +308,8 @@ Spark::SparkNeighbor::shouldResetAdjacency(
 }
 
 Spark::Spark(
-    messaging::RQueue<InterfaceEvent> interfaceUpdatesQueue,
+    messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
+    messaging::RQueue<thrift::InitializationEvent> initializationEventQueue,
     messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
@@ -413,18 +414,22 @@ Spark::Spark(
         initializationHoldTimer_->scheduleTimeout(initializationHoldTime_);
         initialInterfacesReceived_ = true;
       }
-
-      // process different types of event
-      folly::variant_match(
-          std::move(interfaceUpdates).value(),
-          [this](InterfaceDatabase&& ifDb) {
-            processInterfaceUpdates(std::move(ifDb));
-          },
-          [this](thrift::InitializationEvent&& event) {
-            processInitializationEvent(std::move(event));
-          });
+      processInterfaceUpdates(std::move(interfaceUpdates).value());
     }
   });
+
+  // Fiber to process Open/R initialization event from PrefixManager
+  addFiberTask(
+      [q = std::move(initializationEventQueue), this]() mutable noexcept {
+        while (true) {
+          auto maybeEvent = q.get();
+          if (maybeEvent.hasError()) {
+            XLOG(INFO) << "Terminating initialization events processing fiber";
+            break;
+          }
+          processInitializationEvent(std::move(maybeEvent).value());
+        }
+      });
 
   // Initialize UDP socket for neighbor discovery
   prepareSocket();
@@ -983,8 +988,9 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   heartbeatMsg.seqNum_ref() = mySeqNum_;
   heartbeatMsg.holdAdjacency_ref() = false;
   if (enableOrderedAdjPublication_) {
-    // ATTN: notify peer to hold adjacency when adjacencyDb still in syncing
-    heartbeatMsg.holdAdjacency_ref() = (not adjacencyDbSynced_);
+    // ATTN: notify peer to set special adjacency flag when node is still within
+    // initialization procedure
+    heartbeatMsg.holdAdjacency_ref() = (not initialized_);
   }
 
   thrift::SparkHelloPacket pkt;
@@ -1894,13 +1900,27 @@ Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
     return;
   }
 
-  CHECK(event == thrift::InitializationEvent::ADJACENCY_DB_SYNCED)
-      << fmt::format(
-             "Unexpected initialization event: {}",
-             apache::thrift::util::enumNameSafe(event));
-  adjacencyDbSynced_ = true;
+  CHECK(event == thrift::InitializationEvent::PREFIX_DB_SYNCED) << fmt::format(
+      "Unexpected initialization event: {}",
+      apache::thrift::util::enumNameSafe(event));
 
-  LOG(INFO) << "[Initialization] Adjacency database in-sync signal received.";
+  LOG(INFO) << fmt::format(
+      "[Initialization] {} event received.",
+      apache::thrift::util::enumNameSafe(event));
+
+  // ATTN: must toggle this flag before sending SparkHeartbeatMsg
+  initialized_ = true;
+
+  // force to send SparkHeartbeatMsg immediately to notify peers.
+  // NOTE: it is ok for this pkt to be lost as we will continuously send it as
+  // the name suggests.
+  for (const auto& [ifName, _] : interfaceDb_) {
+    sendHeartbeatMsg(ifName);
+  }
+
+  // logging for initialization stage duration computation
+  logInitializationEvent(
+      "Spark", thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
 }
 
 void

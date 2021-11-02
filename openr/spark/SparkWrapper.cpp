@@ -26,6 +26,7 @@ SparkWrapper::SparkWrapper(
   spark_ = isRateLimitEnabled
       ? std::make_shared<Spark>(
             interfaceUpdatesQueue_.getReader(),
+            initializationEventQueue_.getReader(),
             neighborUpdatesQueue_,
             std::move(ioProvider),
             config,
@@ -33,6 +34,7 @@ SparkWrapper::SparkWrapper(
             std::nullopt) // no Spark receive rate-limit, for testing
       : std::make_shared<Spark>(
             interfaceUpdatesQueue_.getReader(),
+            initializationEventQueue_.getReader(),
             neighborUpdatesQueue_,
             std::move(ioProvider),
             config,
@@ -64,6 +66,7 @@ SparkWrapper::run() {
 void
 SparkWrapper::stop() {
   interfaceUpdatesQueue_.close();
+  initializationEventQueue_.close();
   spark_->stop();
   spark_->waitUntilStopped();
   thread_->join();
@@ -75,8 +78,8 @@ SparkWrapper::updateInterfaceDb(const InterfaceDatabase& ifDb) {
 }
 
 void
-SparkWrapper::sendAdjDbSyncedSignal() {
-  interfaceUpdatesQueue_.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+SparkWrapper::sendPrefixDbSyncedSignal() {
+  initializationEventQueue_.push(thrift::InitializationEvent::PREFIX_DB_SYNCED);
 }
 
 std::optional<NeighborEvents>

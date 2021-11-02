@@ -275,8 +275,8 @@ TEST_F(InitializationTestFixture, NeighborAdjDbHold) {
   createAndConnect();
 
   // mimick LM queue to send adjDbSync event
-  node1_->sendAdjDbSyncedSignal();
-  node2_->sendAdjDbSyncedSignal();
+  node1_->sendPrefixDbSyncedSignal();
+  node2_->sendPrefixDbSyncedSignal();
 
   // Now wait for sparks to detect each other
   {

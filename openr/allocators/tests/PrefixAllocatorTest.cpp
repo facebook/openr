@@ -119,6 +119,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         staticRouteUpdatesQueue_,
         kvRequestQueue_,
         prefixMgrRouteUpdatesQueue_,
+        prefixMgrInitializationEventsQueue_,
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
@@ -136,6 +137,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     prefixMgrRouteUpdatesQueue_.close();
+    prefixMgrInitializationEventsQueue_.close();
     fibRouteUpdatesQueue_.close();
     kvRequestQueue_.close();
     logSampleQueue_.close();
@@ -199,6 +201,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      prefixMgrInitializationEventsQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue_;
@@ -301,6 +305,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
     messaging::ReplicateQueue<LogSample> logSampleQueue;
     messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
+    messaging::ReplicateQueue<thrift::InitializationEvent>
+        prefixMgrInitializationEventsQueue;
 
     // needed while allocators manipulate test state
     folly::Synchronized<std::unordered_map<std::string, folly::CIDRNetwork>>
@@ -466,6 +472,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           staticRouteUpdatesQueue,
           kvRequestQueue,
           prefixMgrRouteUpdatesQueue,
+          prefixMgrInitializationEventsQueue,
           kvStoreWrapper->getReader(),
           prefixQueues.at(i).getReader(),
           fibRouteUpdatesQueues.at(i).getReader(),
@@ -545,6 +552,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     }
     staticRouteUpdatesQueue.close();
     prefixMgrRouteUpdatesQueue.close();
+    prefixMgrInitializationEventsQueue.close();
     kvRequestQueue.close();
     logSampleQueue.close();
     kvStoreWrapper->closeQueue();

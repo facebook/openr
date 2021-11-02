@@ -92,13 +92,13 @@ LinkMonitor::LinkMonitor(
     fbnl::NetlinkProtocolSocket* nlSock,
     KvStore* kvStore,
     PersistentStore* configStore,
-    messaging::ReplicateQueue<InterfaceEvent>& interfaceUpdatesQueue,
+    messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     messaging::RQueue<NeighborEvents> neighborUpdatesQueue,
-    messaging::RQueue<KvStoreEvent> kvStoreEventsQueue,
+    messaging::RQueue<KvStoreSyncEvent> kvStoreEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool overrideDrainState)
     : nodeId_(config->getNodeName()),
@@ -255,6 +255,7 @@ LinkMonitor::LinkMonitor(
   });
 
   // Add fiber to process KvStore Sync events
+  // TODO: remove this queue to reduce KvStore dependency
   addFiberTask([q = std::move(kvStoreEventsQueue), this]() mutable noexcept {
     while (true) {
       auto maybeEvent = q.get();
@@ -263,14 +264,7 @@ LinkMonitor::LinkMonitor(
         break;
       }
       // process different types of event
-      folly::variant_match(
-          std::move(maybeEvent).value(),
-          [this](KvStoreSyncEvent&& event) {
-            processKvStoreSyncEvent(std::move(event));
-          },
-          [this](thrift::InitializationEvent&& event) {
-            processInitializationEvent(std::move(event));
-          });
+      processKvStoreSyncEvent(std::move(maybeEvent).value());
     }
   });
 
@@ -559,25 +553,6 @@ LinkMonitor::processKvStoreSyncEvent(KvStoreSyncEvent&& event) {
   }
 
   advertiseAdjacenciesThrottled_->operator()();
-}
-
-void
-LinkMonitor::processInitializationEvent(thrift::InitializationEvent&& event) {
-  // NOTE: do NOT process this event if feature is NOT enabled
-  if (not enableOrderedAdjPublication_) {
-    return;
-  }
-
-  CHECK(event == thrift::InitializationEvent::PREFIX_DB_SYNCED) << fmt::format(
-      "Unexpected initialization event: {}",
-      apache::thrift::util::enumNameSafe(event));
-
-  LOG(INFO) << "[Initialization] Prefix database in-sync signal received";
-
-  // NOTE: LM now doesn't have dependency on SR_SID_ALLOCATION stage for
-  // initialization as Segment Routing node label is pre-allocated.
-  // For future expansion, the place of notification can be changed.
-  interfaceUpdatesQueue_.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
 }
 
 void

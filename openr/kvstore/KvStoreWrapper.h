@@ -62,7 +62,7 @@ class KvStoreWrapper {
   /**
    * Get reader for KvStore Initial Sync queue
    */
-  messaging::RQueue<KvStoreEvent>
+  messaging::RQueue<KvStoreSyncEvent>
   getInitialSyncEventsReader() {
     return kvStoreSyncEventsQueue_.getReader();
   }
@@ -247,9 +247,7 @@ class KvStoreWrapper {
       kvStoreUpdatesQueue_.getReader()};
 
   // Queue to get KvStore Initial Sync Updates
-  messaging::ReplicateQueue<KvStoreEvent> kvStoreSyncEventsQueue_;
-  messaging::RQueue<KvStoreEvent> kvStoreSyncEventsQueueReader_{
-      kvStoreSyncEventsQueue_.getReader()};
+  messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreSyncEventsQueue_;
 
   // Queue for publishing the event log
   messaging::ReplicateQueue<LogSample> logSampleQueue_;

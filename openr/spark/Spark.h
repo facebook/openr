@@ -85,7 +85,8 @@ class Spark final : public OpenrEventBase {
  public:
   Spark(
       // consumer Queue
-      messaging::RQueue<InterfaceEvent> interfaceUpdatesQueue,
+      messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
+      messaging::RQueue<thrift::InitializationEvent> initializationEventQueue,
       // producer Queue
       messaging::ReplicateQueue<NeighborEvents>& nbrUpdatesQueue,
       // raw ptr of modules
@@ -573,9 +574,8 @@ class Spark final : public OpenrEventBase {
   // Open/R initialization procedure.
   bool initialInterfacesReceived_{false};
 
-  // Boolean flag indicating whether adjacency database is synced during
-  // Open/R initialization procedure.
-  bool adjacencyDbSynced_{false};
+  // Boolean flag indicating whether Open/R initialization procedure is done.
+  bool initialized_{false};
 
   // Optional rate-limit on processing inbound Spark messages
   std::optional<uint32_t> maybeMaxAllowedPps_;

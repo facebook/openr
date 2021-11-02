@@ -231,8 +231,10 @@ main(int argc, char** argv) {
 
   // Queue for inter-module communication
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  ReplicateQueue<KvStoreEvent> kvStoreEventsQueue;
-  ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue;
+  ReplicateQueue<KvStoreSyncEvent> kvStoreEventsQueue;
+  ReplicateQueue<thrift::InitializationEvent>
+      prefixMgrInitializationEventsQueue;
+  ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
@@ -248,6 +250,8 @@ main(int argc, char** argv) {
   // messages from the writer(s)
   auto decisionStaticRouteUpdatesQueueReader =
       staticRouteUpdatesQueue.getReader("decision");
+  auto decisionKvStoreUpdatesQueueReader =
+      kvStoreUpdatesQueue.getReader("decision");
   auto fibStaticRouteUpdatesQueueReader =
       staticRouteUpdatesQueue.getReader("fib");
   auto fibDecisionRouteUpdatesQueueReader =
@@ -258,8 +262,10 @@ main(int argc, char** argv) {
       kvStoreEventsQueue.getReader("linkMonitor");
   auto linkMonitorNetlinkEventsQueueReader =
       netlinkEventsQueue.getReader("linkMonitor");
-  auto decisionKvStoreUpdatesQueueReader =
-      kvStoreUpdatesQueue.getReader("decision");
+  auto sparkInitializationEventsQueueReader =
+      prefixMgrInitializationEventsQueue.getReader("spark");
+  auto sparkInterfaceUpdatesQueueReader =
+      interfaceUpdatesQueue.getReader("spark");
   auto prefixMgrKvStoreUpdatesReader =
       kvStoreUpdatesQueue.getReader("prefixManager");
   auto pluginRouteReader =
@@ -393,6 +399,7 @@ main(int argc, char** argv) {
           staticRouteUpdatesQueue,
           kvRequestQueue,
           prefixMgrRouteUpdatesQueue,
+          prefixMgrInitializationEventsQueue,
           prefixMgrKvStoreUpdatesReader,
           prefixUpdatesQueue.getReader("prefixManager"),
           std::move(routeUpdatesQueueReader),
@@ -429,7 +436,8 @@ main(int argc, char** argv) {
       watchdog,
       "spark",
       std::make_unique<Spark>(
-          interfaceUpdatesQueue.getReader("spark"),
+          std::move(sparkInterfaceUpdatesQueueReader),
+          std::move(sparkInitializationEventsQueueReader),
           neighborUpdatesQueue,
           std::make_shared<IoProvider>(),
           config));

@@ -105,14 +105,14 @@ class LinkMonitor final : public OpenrEventBase {
       KvStore* kvstore,
       PersistentStore* configStore,
       // producer queue
-      messaging::ReplicateQueue<InterfaceEvent>& interfaceUpdatesQueue,
+      messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
       messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
       messaging::RQueue<NeighborEvents> neighborUpdatesQueue,
-      messaging::RQueue<KvStoreEvent> kvStoreEventsQueue,
+      messaging::RQueue<KvStoreSyncEvent> kvStoreEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will override drain state from persistent store with
       // assumeDrained value
@@ -187,7 +187,6 @@ class LinkMonitor final : public OpenrEventBase {
    * [KvStore] initial sync event
    */
   void processKvStoreSyncEvent(KvStoreSyncEvent&& event);
-  void processInitializationEvent(thrift::InitializationEvent&& event);
 
   /*
    * [Netlink Platform]
@@ -370,7 +369,7 @@ class LinkMonitor final : public OpenrEventBase {
   thrift::LinkMonitorState state_;
 
   // Queue to publish interface updates to fib/spark
-  messaging::ReplicateQueue<InterfaceEvent>& interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue_;
 
   // Queue to publish prefix updates to PrefixManager
   messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue_;

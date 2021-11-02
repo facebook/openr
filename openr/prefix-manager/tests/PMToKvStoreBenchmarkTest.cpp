@@ -36,6 +36,7 @@ class PMToKvStoreBMTestFixture {
         staticRouteUpdatesQueue_,
         kvRequestQueue_,
         prefixMgrRouteUpdatesQueue_,
+        prefixMgrInitializationEventsQueue_,
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
@@ -51,6 +52,7 @@ class PMToKvStoreBMTestFixture {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     prefixMgrRouteUpdatesQueue_.close();
+    prefixMgrInitializationEventsQueue_.close();
 
     fibRouteUpdatesQueue_.close();
     kvRequestQueue_.close();
@@ -136,6 +138,8 @@ class PMToKvStoreBMTestFixture {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      prefixMgrInitializationEventsQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 

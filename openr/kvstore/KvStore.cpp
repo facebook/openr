@@ -31,7 +31,7 @@ KvStore::KvStore(
     // initializers for immutable state
     fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-    messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue,
+    messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,

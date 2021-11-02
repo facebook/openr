@@ -33,6 +33,8 @@ PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue,
+    messaging::ReplicateQueue<thrift::InitializationEvent>&
+        initializationEventQueue,
     messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
@@ -45,6 +47,7 @@ PrefixManager::PrefixManager(
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvRequestQueue_(kvRequestQueue),
       prefixMgrRouteUpdatesQueue_(prefixMgrRouteUpdatesQueue),
+      initializationEventQueue_(initializationEventQueue),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       kvStore_(kvStore),
       preferOpenrOriginatedRoutes_(
@@ -672,13 +675,19 @@ PrefixManager::triggerInitialPrefixDbSync() {
     // Trigger initial syncKvStore(), after receiving prefixes of all expected
     // types and all inital prefix keys from KvStore.
     syncKvStore();
-    logInitializationEvent(
-        "PrefixManager", thrift::InitializationEvent::PREFIX_DB_SYNCED);
 
     // Send FULL_SYNC to bgp speaker, signal bgp speaker to send EoR
     DecisionRouteUpdate routeUpdatesForBgp;
     routeUpdatesForBgp.type = DecisionRouteUpdate::FULL_SYNC;
     prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
+
+    // Logging for initialization stage duration computation
+    logInitializationEvent(
+        "PrefixManager", thrift::InitializationEvent::PREFIX_DB_SYNCED);
+
+    // Notify downstream for initialization event
+    initializationEventQueue_.push(
+        thrift::InitializationEvent::PREFIX_DB_SYNCED);
   }
 }
 

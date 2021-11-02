@@ -159,6 +159,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   spark_ = std::make_unique<Spark>(
       interfaceUpdatesQueue_.getReader(),
+      initializationEventQueue_.getReader(),
       neighborUpdatesQueue_,
       ioProvider_,
       config_);
@@ -196,6 +197,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       staticRoutesQueue_,
       kvRequestQueue_,
       prefixMgrRoutesQueue_,
+      initializationEventQueue_,
       kvStoreUpdatesQueue_.getReader(),
       prefixUpdatesQueue_.getReader(),
       fibRouteUpdatesQueue_.getReader(),
@@ -362,6 +364,7 @@ OpenrWrapper<Serializer>::stop() {
   nlSock_->closeQueue();
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
+  initializationEventQueue_.close();
   staticRoutesQueue_.close();
   prefixMgrRoutesQueue_.close();
   fibRouteUpdatesQueue_.close();

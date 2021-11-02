@@ -100,6 +100,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         staticRoutesUpdatesQueue_,
         kvRequestQueue_,
         prefixMgrRoutesUpdatesQueue_,
+        prefixMgrInitializationEventsQueue_,
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
@@ -150,6 +151,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     routeUpdatesQueue_.close();
     staticRoutesUpdatesQueue_.close();
     prefixMgrRoutesUpdatesQueue_.close();
+    prefixMgrInitializationEventsQueue_.close();
     interfaceUpdatesQueue_.close();
     peerUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
@@ -208,12 +210,14 @@ class OpenrCtrlFixture : public ::testing::Test {
 
  private:
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
-  messaging::ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
   messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRoutesUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      prefixMgrInitializationEventsQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   messaging::ReplicateQueue<LogSample> logSampleQueue_;

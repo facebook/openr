@@ -88,6 +88,8 @@ class PrefixManager final : public OpenrEventBase {
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       messaging::ReplicateQueue<DecisionRouteUpdate>&
           prefixMgrRouteUpdatesQueue,
+      messaging::ReplicateQueue<thrift::InitializationEvent>&
+          initializationEventQueue,
       // consumer queue
       messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
@@ -398,6 +400,10 @@ class PrefixManager final : public OpenrEventBase {
 
   // Queue to publish prefix updates to bgprib
   messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue_;
+
+  // Queue to publish thrift::InitializationEvent to downstream consumer
+  messaging::ReplicateQueue<thrift::InitializationEvent>&
+      initializationEventQueue_;
 
   // V4 prefix over V6 nexthop enabled
   const bool v4OverV6Nexthop_{false};

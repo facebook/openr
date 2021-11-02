@@ -206,6 +206,7 @@ class LinkMonitorTestFixture : public testing::Test {
         staticRouteUpdatesQueue,
         kvRequestQueue,
         prefixMgrRouteUpdatesQueue,
+        initializationEventQueue,
         kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
@@ -230,6 +231,7 @@ class LinkMonitorTestFixture : public testing::Test {
     kvRequestQueue.close();
     neighborUpdatesQueue.close();
     kvStoreEventsQueue.close();
+    initializationEventQueue.close();
     prefixUpdatesQueue.close();
     fibRouteUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
@@ -405,26 +407,17 @@ class LinkMonitorTestFixture : public testing::Test {
   // Receive and process interface updates from the update queue
   void
   recvAndReplyIfUpdate() {
-    auto update = interfaceUpdatesReader.get().value();
+    auto ifDb = interfaceUpdatesReader.get();
+    ASSERT_TRUE(ifDb.hasValue());
 
     // ATTN: update class variable `sparkIfDb` for later verification
-    if (auto* db = std::get_if<InterfaceDatabase>(&update)) {
-      sparkIfDb = *db;
-      LOG(INFO) << "----------- Interface Updates ----------";
-      for (const auto& info : sparkIfDb) {
-        LOG(INFO) << "  Name=" << info.ifName << ", Status=" << info.isUp
-                  << ", IfIndex=" << info.ifIndex
-                  << ", networks=" << info.networks.size();
-      }
+    sparkIfDb = ifDb.value();
+    LOG(INFO) << "----------- Interface Updates ----------";
+    for (const auto& info : sparkIfDb) {
+      LOG(INFO) << "  Name=" << info.ifName << ", Status=" << info.isUp
+                << ", IfIndex=" << info.ifIndex
+                << ", networks=" << info.networks.size();
     }
-  }
-
-  // receive initialization event notification
-  void
-  recvInitializationEvent() {
-    auto update = interfaceUpdatesReader.get().value();
-    auto* event = std::get_if<thrift::InitializationEvent>(&update);
-    ASSERT_EQ(*event, thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
   }
 
   // check the ifDb has expected number of UP interfaces
@@ -598,6 +591,7 @@ class LinkMonitorTestFixture : public testing::Test {
     // close queue first
     neighborUpdatesQueue.close();
     kvStoreEventsQueue.close();
+    initializationEventQueue.close();
     nlSock->closeQueue();
     kvStoreWrapper->closeQueue();
 
@@ -610,16 +604,18 @@ class LinkMonitorTestFixture : public testing::Test {
   folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 
-  messaging::ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
   messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
-  messaging::ReplicateQueue<KvStoreEvent> kvStoreEventsQueue;
+  messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreEventsQueue;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      initializationEventQueue;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
-  messaging::RQueue<InterfaceEvent> interfaceUpdatesReader{
+  messaging::RQueue<InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
 
@@ -699,6 +695,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
   kvStoreEventsQueue.open();
+  initializationEventQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
   createLinkMonitor(config, false /*overrideDrainState*/);
@@ -717,6 +714,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
   kvStoreEventsQueue.open();
+  initializationEventQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
   createLinkMonitor(config, true /*overrideDrainState*/);
@@ -1022,7 +1020,9 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // Create new
   // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
   neighborUpdatesQueue = messaging::ReplicateQueue<NeighborEvents>();
-  kvStoreEventsQueue = messaging::ReplicateQueue<KvStoreEvent>();
+  kvStoreEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
+  initializationEventQueue =
+      messaging::ReplicateQueue<thrift::InitializationEvent>(),
   peerUpdatesQueue = messaging::ReplicateQueue<PeerEvent>();
   kvRequestQueue = messaging::ReplicateQueue<KeyValueRequest>();
   nlSock->openQueue();
@@ -1074,6 +1074,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
     // Create new neighbor update queue. Previous one is closed
     neighborUpdatesQueue.open();
     kvStoreEventsQueue.open();
+    initializationEventQueue.open();
     nlSock->openQueue();
     kvStoreWrapper->openQueue();
 
@@ -2168,6 +2169,7 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
   nlSock->closeQueue();
   neighborUpdatesQueue.close();
   kvStoreEventsQueue.close();
+  initializationEventQueue.close();
   kvStoreWrapper->closeQueue();
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
     linkMonitors[i]->stop();
@@ -2379,13 +2381,6 @@ class InitializationTestFixture : public LinkMonitorTestFixture {
     return tConfig;
   }
 };
-
-TEST_F(InitializationTestFixture, AdjDbSyncEventUnblockTest) {
-  kvStoreEventsQueue.push(thrift::InitializationEvent::PREFIX_DB_SYNCED);
-
-  // directly receive the event from LM queue
-  recvInitializationEvent();
-}
 
 TEST_F(InitializationTestFixture, AdjacencyUpWithGracefulRestartTest) {
   // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM

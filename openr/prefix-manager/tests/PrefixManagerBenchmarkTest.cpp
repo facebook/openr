@@ -30,14 +30,14 @@ class PrefixManagerBenchmarkTestFixture {
     config_ = std::make_shared<Config>(tConfig);
 
     // Spawn `KvStore` and `PrefixManager`
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_, config_, std::nullopt, kvRequestMockQueue_.getReader());
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config_);
     kvStoreWrapper_->run();
 
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
         kvRequestQueue_,
         prefixMgrRouteUpdatesQueue_,
+        initializationEventQueue_,
         kvStoreUpdatesQueue_.getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
@@ -57,7 +57,7 @@ class PrefixManagerBenchmarkTestFixture {
     fibRouteUpdatesQueue_.close();
     kvRequestQueue_.close();
     kvStoreUpdatesQueue_.close();
-    kvRequestMockQueue_.close();
+    initializationEventQueue_.close();
     kvStoreWrapper_->closeQueue();
 
     prefixManager_->stop();
@@ -117,9 +117,10 @@ class PrefixManagerBenchmarkTestFixture {
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue_;
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      initializationEventQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
-  messaging::ReplicateQueue<KeyValueRequest> kvRequestMockQueue_;
 
   std::shared_ptr<Config> config_;
   std::unique_ptr<PrefixManager> prefixManager_;

@@ -50,7 +50,7 @@ class SparkWrapper {
   void updateInterfaceDb(const InterfaceDatabase& ifDb);
 
   // send ADJ_DB_SYNC signal to Spark
-  void sendAdjDbSyncedSignal();
+  void sendPrefixDbSyncedSignal();
 
   // receive spark neighbor event
   std::optional<NeighborEvents> recvNeighborEvent(
@@ -92,7 +92,11 @@ class SparkWrapper {
       neighborUpdatesQueue_.getReader()};
 
   // Queue to receive interface update from LinkMonitor
-  messaging::ReplicateQueue<InterfaceEvent> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
+
+  // Queue to receive interface update from PrefixManager
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      initializationEventQueue_;
 
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};

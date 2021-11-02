@@ -70,7 +70,7 @@ struct KvStoreParams {
   messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue;
 
   // Queue for publishing kvstore peer initial sync events
-  messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue;
+  messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue;
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue;
@@ -102,7 +102,7 @@ struct KvStoreParams {
   KvStoreParams(
       std::string nodeId,
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-      messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue,
+      messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       int zmqhwm,
@@ -749,7 +749,7 @@ class KvStore final : public OpenrEventBase {
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
       // Queue for publishing kvstore peer initial sync events
-      messaging::ReplicateQueue<KvStoreEvent>& kvStoreEventsQueue,
+      messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
       // Queue for receiving peer updates
       messaging::RQueue<PeerEvent> peerUpdatesQueue,
       // Queue for receiving key-value update requests

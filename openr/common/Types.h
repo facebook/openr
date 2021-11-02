@@ -547,15 +547,6 @@ struct InterfaceInfo {
 using InterfaceDatabase = std::vector<InterfaceInfo>;
 
 /**
- * Structure representing:
- *  1) Interface database update;
- *  2) Open/R Initialization event;
- */
-using InterfaceEvent = std::variant<
-    InterfaceDatabase /* interface db for neighbor discovery */,
-    thrift::InitializationEvent /* ADJ_DB_SYNCED initialization event */>;
-
-/**
  * Structure defining KvStore peer sync event, published to subscribers.
  * LinkMonitor subscribes this event for signal adjancency UP event propagation
  */
@@ -571,15 +562,6 @@ struct KvStoreSyncEvent {
     return (nodeName == other.nodeName) && (area == other.area);
   }
 };
-
-/**
- * Structure representing:
- *  1) KvStoreSyncEvent;
- *  2) Open/R Initialization event;
- */
-using KvStoreEvent = std::variant<
-    KvStoreSyncEvent /* KvStore peer sync event */,
-    thrift::InitializationEvent /* PREFIX_DB_SYNCED initialization event */>;
 
 /**
  * Structure representing:
