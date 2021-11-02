@@ -81,6 +81,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create Decision module
     decision = std::make_shared<Decision>(
         config,
+        peerUpdatesQueue_.getReader(),
         kvStoreWrapper_->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         routeUpdatesQueue_);

@@ -248,6 +248,7 @@ main(int argc, char** argv) {
 
   // Create the readers in the first place to make sure they can receive every
   // messages from the writer(s)
+  auto peerUpdatesQueueReader = peerUpdatesQueue.getReader("decision");
   auto decisionStaticRouteUpdatesQueueReader =
       staticRouteUpdatesQueue.getReader("decision");
   auto decisionKvStoreUpdatesQueueReader =
@@ -525,6 +526,7 @@ main(int argc, char** argv) {
       "decision",
       std::make_unique<Decision>(
           config,
+          std::move(peerUpdatesQueueReader),
           std::move(decisionKvStoreUpdatesQueueReader),
           std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));

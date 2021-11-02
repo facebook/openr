@@ -105,6 +105,7 @@ DecisionPendingUpdates::addUpdate(
 Decision::Decision(
     std::shared_ptr<const Config> config,
     // consumer queue
+    messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     // producer queue
@@ -180,6 +181,20 @@ Decision::Decision(
     counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
+
+  // Add reader to process peer updates from LinkMonitor
+  addFiberTask([q = std::move(peerUpdatesQueue), this]() mutable noexcept {
+    XLOG(INFO) << "Starting peer updates processing fiber";
+    while (true) {
+      auto maybePeerUpdate = q.get(); // perform read
+      XLOG(DBG3) << "Received peer update";
+      if (maybePeerUpdate.hasError()) {
+        XLOG(INFO) << "Terminating peer updates processing fiber";
+        break;
+      }
+      processPeerUpdates(std::move(maybePeerUpdate).value());
+    }
+  });
 
   // Add reader to process publication from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
@@ -435,6 +450,33 @@ Decision::getRibPolicy() {
     }
   });
   return std::move(sf);
+}
+
+void
+Decision::processPeerUpdates(PeerEvent&& event) {
+  if (not initialPeersReceived_) {
+    // LinkMonitor publishes detected peers in one shot in Open/R initialization
+    // process. Initial route computation will blocked until adjacence with all
+    // peers are received.
+    for (const auto& [area, areaPeerEvent] : event) {
+      for (const auto& [peerName, _] : areaPeerEvent.peersToAdd) {
+        areaToPeersWaitingAdjUp_[area].insert(peerName);
+      }
+    }
+    initialPeersReceived_ = true;
+    return;
+  }
+
+  // Incremental peer events.
+  for (const auto& [area, areaPeerEvent] : event) {
+    // Remove deleted peers from areaToPeersWaitingAdjUp_.
+    for (const auto& peerName : areaPeerEvent.peersToDel) {
+      areaToPeersWaitingAdjUp_[area].erase(peerName);
+    }
+    // Note: Incremental added peers are not added into
+    // areaToPeersWaitingAdjUp_. This makes sure Decision could converge in
+    // Open/R initialization process.
+  }
 }
 
 void

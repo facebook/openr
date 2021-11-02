@@ -4665,6 +4665,7 @@ class DecisionTestFixture : public ::testing::Test {
 
     decision = make_shared<Decision>(
         config,
+        peerUpdatesQueue.getReader(),
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
@@ -4682,6 +4683,7 @@ class DecisionTestFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    peerUpdatesQueue.close();
     kvStoreUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
 
@@ -4890,6 +4892,7 @@ class DecisionTestFixture : public ::testing::Test {
   CompactSerializer serializer{};
 
   std::shared_ptr<Config> config;
+  messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
@@ -6196,11 +6199,13 @@ TEST(Decision, RibPolicyFeatureKnob) {
   auto config = std::make_shared<Config>(tConfig);
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
+  messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   auto decision = std::make_unique<Decision>(
       config,
+      peerUpdatesQueue.getReader(),
       kvStoreUpdatesQueue.getReader(),
       staticRouteUpdatesQueue.getReader(),
       routeUpdatesQueue);
@@ -6232,6 +6237,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
     EXPECT_THROW(std::move(sf).get(), thrift::OpenrError);
   }
 
+  peerUpdatesQueue.close();
   kvStoreUpdatesQueue.close();
   staticRouteUpdatesQueue.close();
   routeUpdatesQueue.close();

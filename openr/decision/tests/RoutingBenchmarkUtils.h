@@ -82,6 +82,7 @@ class DecisionWrapper {
 
     decision = std::make_shared<Decision>(
         config,
+        peerUpdatesQueue.getReader(),
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
         routeUpdatesQueue);
@@ -95,6 +96,7 @@ class DecisionWrapper {
   }
 
   ~DecisionWrapper() {
+    peerUpdatesQueue.close();
     kvStoreUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     LOG(INFO) << "Stopping the decision thread";
@@ -167,6 +169,7 @@ class DecisionWrapper {
   CompactSerializer serializer{};
 
   std::shared_ptr<Config> config;
+  messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;

@@ -120,29 +120,35 @@ class DecisionPendingUpdates {
 
 } // namespace detail
 
-//
-// The decision thread announces FIB updates for myNodeName every time
-// there is a change in LSDB. The announcements are made on a PUB socket. At
-// the same time, it listens on a REP socket to respond with the recent
-// FIB state if requested by clients.
-//
-// On the "client" side of things, it uses REQ socket to request a full dump
-// of link-state information from KvStore, and before that it subscribes to
-// the PUB address of the KvStore to receive ongoing LSDB updates from KvStore.
-//
-// The prefix/adjacency Db markers are used to find the keys in KvStore that
-// correspond to the prefix information or link state information. This way
-// we do not need to try and parse the values to tell that. For example,
-// the key name could be "adj:router1" or "prefix:router2" to tell of
-// the AdjacencyDatabase of router1 and PrefixDatabase of router2
-//
+/**
+ * Decision handles RIB (routes) computation and sends to FIB for programming.
+ * RIB computation is triggered in following events,
+ * - Link State updates received from KvStore publications
+ * - Prefix announcement updates from KvStore publications
+ * - Static route updates from other modules (PrefixManager, BgpSpeaker)
+ * - RibPolicy updates from API `setRibPolicy`.
+ *
+ * Decision also provides APIs to retrieve route/adjacency database and
+ * RibPolicy.
+ *
+ * The prefix/adjacency Db markers are used to find the keys in KvStore that
+ * correspond to the prefix information or link state information. This way
+ * we do not need to try and parse the values to tell that. For example,
+ * the key name could be "adj:router1" or "prefix:router2" to tell of
+ * the AdjacencyDatabase of router1 and PrefixDatabase of router2
+ */
 
 class Decision : public OpenrEventBase {
  public:
   Decision(
       std::shared_ptr<const Config> config,
+      // Queue for receiving peer updates
+      messaging::RQueue<PeerEvent> peerUpdatesQueue,
+      // Queue for receiving KvStore publications
       messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
+      // Queue for receiving static route updates
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
+      // Queue for publishing route updates
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
 
   virtual ~Decision() = default;
@@ -197,18 +203,14 @@ class Decision : public OpenrEventBase {
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
 
+  // Process peer updates
+  void processPeerUpdates(PeerEvent&& event);
+
   // Process thrift publication from KvStore
   void processPublication(thrift::Publication&& thriftPub);
 
   // Process publication from PrefixManager
   void processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate);
-
-  // Openr config
-  std::shared_ptr<const Config> config_;
-
-  // Callback timer used on startup to publish routes after
-  // gracefulRestartDuration
-  std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
 
   /**
    * Rebuild all routes and send out update delta. Check current pendingUpdates_
@@ -221,13 +223,16 @@ class Decision : public OpenrEventBase {
   // Trigger initial route build in OpenR initialization process.
   void triggerInitialBuildRoutes();
 
-  void sendRouteUpdate(
-      DecisionRouteDb&& routeDb,
-      std::optional<thrift::PerfEvents>&& perfEvents);
-
   // node to prefix entries database for nodes advertising per prefix keys
   std::optional<thrift::PrefixDatabase> updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
+
+  // Openr config
+  std::shared_ptr<const Config> config_;
+
+  // Callback timer used on startup to publish routes after
+  // gracefulRestartDuration
+  std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
 
   // cached routeDb
   DecisionRouteDb routeDb_;
@@ -242,18 +247,18 @@ class Decision : public OpenrEventBase {
   // aims to revert the policy effects on programmed routes.
   std::unique_ptr<folly::AsyncTimeout> ribPolicyTimer_;
 
-  // the pointer to the SPF path calculator
+  // The pointer to the SPF path calculator
   std::unique_ptr<SpfSolver> spfSolver_;
 
-  // per area link states
+  // Per area link states
   std::unordered_map<std::string, LinkState> areaLinkStates_;
 
-  // global prefix state
+  // Global prefix state
   PrefixState prefixState_;
 
   apache::thrift::CompactSerializer serializer_;
 
-  // base interval to submit to monitor with (jitter will be added)
+  // Base interval to submit to monitor with (jitter will be added)
   std::chrono::seconds monitorSyncInterval_{0};
 
   // Timer for submitting to monitor periodically
@@ -273,6 +278,15 @@ class Decision : public OpenrEventBase {
    * queue and static routes update queue
    */
   AsyncDebounce<std::chrono::milliseconds> rebuildRoutesDebounced_;
+
+  // Flag indicating whether all initial peers are received in Open/R
+  // initialization process.
+  bool initialPeersReceived_{false};
+
+  // Peers with adjacency not received in each area. OpenR initialization
+  // process will be blocked until having received adjacency with all peers.
+  std::unordered_map<std::string, std::unordered_set<std::string>>
+      areaToPeersWaitingAdjUp_;
 
   // Boolean flag indicating whether KvStore synced signal is received in OpenR
   // initialization procedure.
