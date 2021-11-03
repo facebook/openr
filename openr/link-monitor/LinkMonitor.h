@@ -27,7 +27,6 @@
 #include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
-#include <openr/spark/Spark.h>
 
 namespace openr {
 
