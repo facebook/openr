@@ -19,43 +19,38 @@ KvStoreClientInternal::KvStoreClientInternal(
     OpenrEventBase* eventBase,
     std::string const& nodeId,
     KvStore* kvStore,
-    bool createKvStoreUpdatesReader,
-    bool useThrottle,
-    std::optional<std::chrono::milliseconds> checkPersistKeyPeriod)
+    bool useThrottle)
     : nodeId_(nodeId),
       useThrottle_(useThrottle),
       eventBase_(eventBase),
-      kvStore_(kvStore),
-      checkPersistKeyPeriod_(checkPersistKeyPeriod) {
+      kvStore_(kvStore) {
   // sanity check
   CHECK_NE(eventBase_, static_cast<void*>(nullptr));
   CHECK(not nodeId.empty());
   CHECK(kvStore_);
 
-  if (createKvStoreUpdatesReader) {
-    // Fiber to process thrift::Publication from KvStore
-    taskFuture_ = eventBase_->addFiberTaskFuture(
-        [q = std::move(kvStore_->getKvStoreUpdatesReader()),
-         this]() mutable noexcept {
-          XLOG(INFO) << "Starting KvStore updates processing fiber";
-          while (true) {
-            auto maybePub = q.get(); // perform read
-            if (maybePub.hasError()) {
-              XLOG(INFO) << "Terminating KvStore updates processing fiber";
-              break;
-            }
-
-            folly::variant_match(
-                std::move(maybePub).value(),
-                [this](thrift::Publication&& pub) {
-                  processPublication(std::move(pub));
-                },
-                [](thrift::InitializationEvent&&) {
-                  // Do not interested in initialization event
-                });
+  // Fiber to process thrift::Publication from KvStore
+  taskFuture_ = eventBase_->addFiberTaskFuture(
+      [q = std::move(kvStore_->getKvStoreUpdatesReader()),
+       this]() mutable noexcept {
+        XLOG(INFO) << "Starting KvStore updates processing fiber";
+        while (true) {
+          auto maybePub = q.get(); // perform read
+          if (maybePub.hasError()) {
+            XLOG(INFO) << "Terminating KvStore updates processing fiber";
+            break;
           }
-        });
-  }
+
+          folly::variant_match(
+              std::move(maybePub).value(),
+              [this](thrift::Publication&& pub) {
+                processPublication(std::move(pub));
+              },
+              [](thrift::InitializationEvent&&) {
+                // Do not interested in initialization event
+              });
+        }
+      });
 
   if (useThrottle_) {
     // create throttled fashion of pending keys advertisement
@@ -87,7 +82,6 @@ KvStoreClientInternal::~KvStoreClientInternal() {
     counterUpdateTimer_.reset();
     advertiseKeyValsTimer_.reset();
     ttlTimer_.reset();
-    checkPersistKeyTimer_.reset();
     advertiseTtlUpdatesThrottled_.reset();
     advertisePendingKeysThrottled_.reset();
     clearPendingKeysThrottled_.reset();
@@ -130,13 +124,6 @@ KvStoreClientInternal::initTimers() {
   ttlTimer_ = folly::AsyncTimeout::make(
       *eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
 
-  // Create check persistKey timer
-  if (checkPersistKeyPeriod_.has_value()) {
-    checkPersistKeyTimer_ = folly::AsyncTimeout::make(
-        *eventBase_->getEvb(), [this]() noexcept { checkPersistKeyInStore(); });
-    checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
-  }
-
   // Create counter update timer to update counters periodically
   counterUpdateTimer_ =
       folly::AsyncTimeout::make(*eventBase_->getEvb(), [this]() noexcept {
@@ -169,54 +156,6 @@ KvStoreClientInternal::initTimers() {
         counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
       });
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
-}
-
-void
-KvStoreClientInternal::checkPersistKeyInStore() {
-  std::chrono::milliseconds timeout{checkPersistKeyPeriod_.value()};
-
-  // go through persisted keys map for each area
-  for (const auto& [area, persistedKeyVals] : persistedKeyVals_) {
-    if (persistedKeyVals.empty()) {
-      continue;
-    }
-
-    thrift::KeyGetParams params;
-    thrift::Publication pub;
-    for (auto const& [key, _] : persistedKeyVals) {
-      params.keys_ref()->emplace_back(key);
-    }
-
-    // Get KvStore response
-    try {
-      pub = *(kvStore_->semifuture_getKvStoreKeyVals(area, params).get());
-    } catch (const std::exception& ex) {
-      XLOG(ERR) << "Failed to get keyvals from kvstore. Exception: "
-                << ex.what();
-      // retry in 1 sec
-      timeout = 1000ms;
-      checkPersistKeyTimer_->scheduleTimeout(1000ms);
-      continue;
-    }
-
-    // Find expired keys from latest KvStore
-    std::unordered_map<std::string, thrift::Value> keyVals;
-    for (auto const& [key, _] : persistedKeyVals) {
-      auto rxkey = pub.keyVals_ref()->find(key);
-      if (rxkey == pub.keyVals_ref()->end()) {
-        keyVals.emplace(key, persistedKeyVals.at(key));
-      }
-    }
-
-    // Advertise to KvStore
-    if (not keyVals.empty()) {
-      setKeysHelper(area, std::move(keyVals));
-    }
-    processPublication(pub);
-  }
-
-  timeout = std::min(timeout, checkPersistKeyPeriod_.value());
-  checkPersistKeyTimer_->scheduleTimeout(timeout);
 }
 
 bool

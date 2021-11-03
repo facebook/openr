@@ -46,9 +46,7 @@ class KvStoreClientInternal {
       OpenrEventBase* eventBase,
       std::string const& nodeId,
       KvStore* kvStore,
-      bool createKvStoreUpdatesReader = true,
-      bool useThrottle = false,
-      std::optional<std::chrono::milliseconds> checkPersistKeyPeriod = 60000ms);
+      bool useThrottle = false);
 
   ~KvStoreClientInternal();
 
@@ -267,8 +265,6 @@ class KvStoreClientInternal {
    */
   void advertiseTtlUpdates();
 
-  void checkPersistKeyInStore();
-
   /*
    * Wrapper function to initialize timer
    */
@@ -290,12 +286,6 @@ class KvStoreClientInternal {
 
   // Pointers to KvStore module
   KvStore* kvStore_{nullptr};
-
-  // periodic timer to check existence of persist key in kv store
-  std::optional<std::chrono::milliseconds> checkPersistKeyPeriod_{std::nullopt};
-
-  // check persist key timer event
-  std::unique_ptr<folly::AsyncTimeout> checkPersistKeyTimer_;
 
   // throttled version of `advertisePendingKeys`
   std::unique_ptr<AsyncThrottle> advertisePendingKeysThrottled_;

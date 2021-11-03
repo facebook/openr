@@ -107,12 +107,7 @@ class MultipleStoreFixture : public ::testing::Test {
         &evb, node1, store1->getKvStore());
 
     client2 = std::make_shared<KvStoreClientInternal>(
-        &evb,
-        node2,
-        store2->getKvStore(),
-        true /* createKvStoreUpdatesReader */,
-        false, /* useThrottle */
-        persistKeyTimer /* checkPersistKeyPeriod */);
+        &evb, node2, store2->getKvStore(), false /* useThrottle */);
 
     client3 = std::make_shared<KvStoreClientInternal>(
         &evb, node3, store3->getKvStore());
@@ -134,7 +129,6 @@ class MultipleStoreFixture : public ::testing::Test {
   std::shared_ptr<KvStoreWrapper> store1, store2, store3;
   std::shared_ptr<KvStoreClientInternal> client1, client2, client3;
 
-  const std::chrono::milliseconds persistKeyTimer{100};
   const std::string node1{"node1"}, node2{"node2"}, node3{"node3"};
 
   std::vector<folly::SocketAddress> sockAddrs_;
@@ -439,7 +433,6 @@ TEST(KvStoreClientInternal, CounterReport) {
       &evb,
       store->getNodeId(),
       store->getKvStore(),
-      true /* createKvStoreUpdatesReader */,
       false /* do NOT use throttle */);
 
   evb.scheduleTimeout(
@@ -520,12 +513,7 @@ TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
   store->run();
 
   auto client = std::make_shared<KvStoreClientInternal>(
-      &evb,
-      store->getNodeId(),
-      store->getKvStore(),
-      true /* createKvStoreUpdatesReader */,
-      true, /* use throttle */
-      100s /* NOTE: explicitly set big number */);
+      &evb, store->getNodeId(), store->getKvStore(), true /* use throttle */);
 
   //
   // Test1: - persist key X;
@@ -633,12 +621,7 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
 
   // create kvstore client for store 1
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      &evb,
-      store1->getNodeId(),
-      store1->getKvStore(),
-      true /* createKvStoreUpdatesReader */,
-      false,
-      1000ms);
+      &evb, store1->getNodeId(), store1->getKvStore(), false);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(
@@ -769,12 +752,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      &evb,
-      nodeId,
-      store->getKvStore(),
-      true /* createKvStoreUpdatesReader */,
-      false,
-      1000ms);
+      &evb, nodeId, store->getKvStore(), false);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
@@ -809,15 +787,6 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
   evb.scheduleTimeout(std::chrono::milliseconds(60), [&]() noexcept {
     auto maybeVal3 = client1->getKey(kTestingAreaName, "test_key3");
     ASSERT_FALSE(maybeVal3.has_value());
-  });
-
-  // Schedule after a second, key will be erased and set back in kvstore
-  // with persist key check callback
-  evb.scheduleTimeout(std::chrono::milliseconds(3000), [&]() noexcept {
-    auto maybeVal3 = client1->getKey(kTestingAreaName, "test_key3");
-    ASSERT_TRUE(maybeVal3.has_value());
-    EXPECT_EQ(1, *maybeVal3->version_ref());
-    EXPECT_EQ("test_value3", maybeVal3->value_ref());
 
     // Synchronization primitive
     waitBaton.post();
@@ -871,12 +840,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_unique<KvStoreClientInternal>(
-      &evb,
-      nodeId,
-      store->getKvStore(),
-      true /* createKvStoreUpdatesReader */,
-      false,
-      1000ms);
+      &evb, nodeId, store->getKvStore(), false);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(std::chrono::seconds(0), [&]() noexcept {
@@ -1641,8 +1605,6 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
  * 1. add key in node2 by calling persistKey()
  * 2. use the kvstore API to delete the key in node2 be setting a short TTL
  * 3. verify key is deleted from node2 kvstore
- * 4. wait until checkPersistKeyInStore() kicks in to repopulate the key
- * 5. verify kvstore in node2 has the key
  */
 TEST_F(MultipleAreaFixture, PersistKeyArea) {
   const std::chrono::milliseconds ttl{Constants::kTtlThreshold.count() + 100};
@@ -1685,14 +1647,6 @@ TEST_F(MultipleAreaFixture, PersistKeyArea) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 1), [&]() noexcept {
         EXPECT_FALSE(
-            client2->getKey(planeArea, "test_ttl_key_plane").has_value());
-      });
-
-  // checkPersistKey should kick in and repopulate the key node1 kvstore,
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += persistKeyTimer.count() + 500),
-      [&]() noexcept {
-        EXPECT_TRUE(
             client2->getKey(planeArea, "test_ttl_key_plane").has_value());
         // Synchronization primitive
         waitBaton.post();
