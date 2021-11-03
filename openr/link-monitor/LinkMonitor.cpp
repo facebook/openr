@@ -192,12 +192,7 @@ LinkMonitor::LinkMonitor(
   // [TO BE DEPRECATED]
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      this,
-      nodeId_,
-      kvStore,
-      true /* createKvStoreUpdatesReader */,
-      false, /* useThrottle */
-      std::nullopt /* persist key timer */);
+      this, nodeId_, kvStore, false /* useThrottle */);
 
   if (enableSegmentRouting_) {
     // create range allocator to get unique node labels

@@ -97,11 +97,7 @@ PrefixManager::PrefixManager(
 
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      this,
-      nodeId_,
-      kvStore_,
-      false /* createKvStoreUpdatesReader */,
-      true /* useThrottle */);
+      this, nodeId_, kvStore_, true /* useThrottle */);
 
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
   // TODO: deprecate this after prefix_hold_time_s after OpenR initialization
