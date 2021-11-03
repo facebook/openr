@@ -1265,7 +1265,7 @@ struct OriginatedPrefixEntry {
   /**
    * List of supporting sub-prefixes for this route
    */
-  2: list<string> supporting_prefixes = {};
+  2: list<string> supporting_prefixes = [];
 
   /**
    * Is this route installed in local FIB or not. Route is installed with the
