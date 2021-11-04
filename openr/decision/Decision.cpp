@@ -77,6 +77,7 @@ DecisionPendingUpdates::moveOutEvents() {
   perfEvents_ = std::nullopt;
   return events;
 }
+
 void
 DecisionPendingUpdates::addUpdate(
     apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents) {
@@ -243,26 +244,27 @@ Decision::Decision(
   });
 
   // Add reader to process static routes publication from prefix-manager
-  addFiberTask([q = std::move(staticRouteUpdatesQueue),
-                this]() mutable noexcept {
-    XLOG(INFO) << "Starting static routes update processing fiber";
-    while (true) {
-      auto maybeThriftPub = q.get(); // perform read
-      if (maybeThriftPub.hasError()) {
-        XLOG(INFO) << "Terminating static routes update processing fiber";
-        break;
-      }
-      const auto prefixType = maybeThriftPub.value().prefixType;
-      if (prefixType.has_value()) {
-        XLOG(DBG2) << "Received static routes update of prefix type"
-                   << apache::thrift::util::enumNameSafe<thrift::PrefixType>(
-                          prefixType.value());
-      } else {
-        XLOG(DBG2) << "Received static routes update";
-      }
-      processStaticRoutesUpdate(std::move(maybeThriftPub).value());
-    }
-  });
+  addFiberTask(
+      [q = std::move(staticRouteUpdatesQueue), this]() mutable noexcept {
+        XLOG(INFO) << "Starting static routes update processing fiber";
+        while (true) {
+          auto maybeThriftPub = q.get(); // perform read
+          if (maybeThriftPub.hasError()) {
+            XLOG(INFO) << "Terminating static routes update processing fiber";
+            break;
+          }
+          const auto prefixType = maybeThriftPub.value().prefixType;
+          if (prefixType.has_value()) {
+            XLOG(DBG2) << fmt::format(
+                "Received static routes update of prefix type {}",
+                apache::thrift::util::enumNameSafe<thrift::PrefixType>(
+                    prefixType.value()));
+          } else {
+            XLOG(DBG2) << "Received static routes update";
+          }
+          processStaticRoutesUpdate(std::move(maybeThriftPub).value());
+        }
+      });
 
   // Create RibPolicy timer to process routes on policy expiry
   ribPolicyTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -455,12 +457,15 @@ Decision::getRibPolicy() {
 void
 Decision::processPeerUpdates(PeerEvent&& event) {
   if (not initialPeersReceived_) {
+    XLOG(INFO) << "[Initialization] Received initial PeerEvent.";
     // LinkMonitor publishes detected peers in one shot in Open/R initialization
     // process. Initial route computation will blocked until adjacence with all
     // peers are received.
     for (const auto& [area, areaPeerEvent] : event) {
       for (const auto& [peerName, _] : areaPeerEvent.peersToAdd) {
         areaToPeersWaitingAdjUp_[area].insert(peerName);
+        XLOG(INFO) << "[Initialization] Decision should wait for adjacency "
+                   << "with up peer " << peerName;
       }
     }
     initialPeersReceived_ = true;
@@ -471,11 +476,92 @@ Decision::processPeerUpdates(PeerEvent&& event) {
   for (const auto& [area, areaPeerEvent] : event) {
     // Remove deleted peers from areaToPeersWaitingAdjUp_.
     for (const auto& peerName : areaPeerEvent.peersToDel) {
+      XLOG(INFO)
+          << "[Initialization] No need to wait for adjacency with down peer "
+          << peerName;
       areaToPeersWaitingAdjUp_[area].erase(peerName);
+      if (areaToPeersWaitingAdjUp_[area].empty()) {
+        areaToPeersWaitingAdjUp_.erase(area);
+      }
+      if (areaToPeersWaitingAdjUp_.empty()) {
+        triggerInitialBuildRoutes();
+      }
     }
     // Note: Incremental added peers are not added into
     // areaToPeersWaitingAdjUp_. This makes sure Decision could converge in
     // Open/R initialization process.
+  }
+}
+
+void
+Decision::filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb) {
+  if (not *config_->getConfig().enable_ordered_adj_publication_ref()) {
+    return;
+  }
+  // In order to make Open/R initialization process of cold boot node hitless,
+  // we would like to have the cold node compute & program all required routes
+  // ahead of peers sending traffic through it. There are two stages from
+  // adjacency propagation perspective to achieve this.
+  // Stage1:
+  // - coldboot_node injects `adj:coldboot_node->peer_node`,
+  // - peer_node injects `adj:peer_node->coldboot_node` with
+  //   `adjOnlyUsedByOtherNode=true`
+  // NOTE: This means `adj:peer_node<->coldboot_node` can only be used by
+  // coldboot_node, As a result, coldboot_node compute & program routes first.
+  //
+  // Stage2:
+  // - peer_node updates `adj:peer_node->coldboot_node`
+  // In this way, peers start using coldboot_node for route computation &
+  // programming.
+  for (auto adjIter = adjacencyDb.adjacencies_ref()->begin();
+       adjIter != adjacencyDb.adjacencies_ref()->end();) {
+    if (*adjIter->adjOnlyUsedByOtherNode_ref() and
+        *adjIter->otherNodeName_ref() != myNodeName_) {
+      // Remove thrift::Adjacency if `adjOnlyUsedByOtherNode=true` but
+      // `myNodeName_!=otherNodeName`
+      adjacencyDb.adjacencies_ref()->erase(adjIter);
+      XLOG(INFO) << fmt::format(
+          "Filtered adjacency {}:{}->{}:{} since it cannot be used by {}.",
+          *adjacencyDb.thisNodeName_ref(),
+          *adjIter->ifName_ref(),
+          *adjIter->otherNodeName_ref(),
+          *adjIter->otherIfName_ref(),
+          myNodeName_);
+    } else {
+      ++adjIter;
+    }
+  }
+}
+
+void
+Decision::updatePeersWaitingAdjacencyUp(
+    const std::string& area,
+    const std::vector<std::shared_ptr<Link>>& addedLinks) {
+  if (addedLinks.empty() or areaToPeersWaitingAdjUp_.count(area) == 0) {
+    return;
+  }
+
+  // Check received adjacency with up peers in Open/R initialization
+  // process.
+  for (const auto addedLink : addedLinks) {
+    const auto& firstNode = addedLink->firstNodeName();
+    const auto& secondNode = addedLink->secondNodeName();
+    if (firstNode != myNodeName_ and secondNode != myNodeName_) {
+      // Skip link not related to this node.
+      continue;
+    }
+    const auto& peerName = (firstNode == myNodeName_ ? secondNode : firstNode);
+    if (areaToPeersWaitingAdjUp_[area].erase(peerName)) {
+      XLOG(INFO) << "[Initialization] Received adjacency with peer "
+                 << peerName;
+    }
+    if (areaToPeersWaitingAdjUp_[area].empty()) {
+      areaToPeersWaitingAdjUp_.erase(area);
+    }
+    if (areaToPeersWaitingAdjUp_.empty()) {
+      // Received adjacency with all peers, trigger initial route build.
+      triggerInitialBuildRoutes();
+    }
   }
 }
 
@@ -509,6 +595,10 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
         // adjacencyDb: update keys starting with "adj:"
         auto adjacencyDb = readThriftObjStr<thrift::AdjacencyDatabase>(
             rawVal.value_ref().value(), serializer_);
+
+        // Filter adjacency that cannot be used by this node.
+        filterUnuseableAdjacency(adjacencyDb);
+
         auto& nodeName = adjacencyDb.get_thisNodeName();
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
         // TODO: can we directly use area in AdjacencyDatabase?
@@ -516,11 +606,13 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
         // TODO: Is this useful?
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
+        auto linkStateChange = areaLinkState.updateAdjacencyDatabase(
+            adjacencyDb, holdUpTtl, holdDownTtl);
         pendingUpdates_.applyLinkStateChange(
-            nodeName,
-            areaLinkState.updateAdjacencyDatabase(
-                adjacencyDb, holdUpTtl, holdDownTtl),
-            adjacencyDb.perfEvents_ref());
+            nodeName, linkStateChange, adjacencyDb.perfEvents_ref());
+
+        // Process added links to unblock Open/R initialization.
+        updatePeersWaitingAdjacencyUp(area, linkStateChange.addedLinks);
       } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
         // prefixDb: update keys starting with "prefix:"
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
@@ -649,12 +741,11 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
 
 void
 Decision::rebuildRoutes(std::string const& event) {
-  // If OpenR initialization procedure is enable, donot trigger initial route
-  // computation until KvStoreSynced_ signal and routes of expected prefix types
-  // are all received.
+  // If OpenR initialization procedure is enable, do not trigger initial route
+  // computation until all conditions are fulfilled.
   // Otherwise, wait for coldStartTimer_ before initial route computation.
   if (config_->getConfig().get_enable_initialization_process()) {
-    if (not initialKvStoreSynced_ or unreceivedRouteTypes_.size() > 0) {
+    if (not unblockInitialRoutesBuild()) {
       return;
     }
   } else if (coldStartTimer_->isScheduled()) {
@@ -728,20 +819,40 @@ Decision::rebuildRoutes(std::string const& event) {
   routeUpdatesQueue_.push(std::move(update));
 }
 
+bool
+Decision::unblockInitialRoutesBuild() {
+  bool adjReceivedForPeers{true};
+  if (config_->getConfig().get_enable_ordered_adj_publication()) {
+    // Wait till receiving initial peers and adjacencies with initial peers.
+    adjReceivedForPeers =
+        initialPeersReceived_ and areaToPeersWaitingAdjUp_.empty();
+  }
+  // Initial routes build will be unblocked if all following conditions are
+  // fulfilled,
+  // - Received all types of static routes, aka, unreceivedRouteTypes_ is empty
+  // - Received initial KvStore publication, aka, initialKvStoreSynced_ is true
+  // - Received adjacency with initial live peers, aka, adjReceivedForPeers is
+  //   true.
+  return unreceivedRouteTypes_.empty() and initialKvStoreSynced_ and
+      adjReceivedForPeers;
+}
+
 void
 Decision::triggerInitialBuildRoutes() {
   if (not config_->getConfig().get_enable_initialization_process()) {
     return;
   }
-  if (unreceivedRouteTypes_.empty() and initialKvStoreSynced_) {
-    // Trigger initial RIB computation, after receiving routes of all expected
-    // prefix types and inital publications from KvStore.
-    rebuildRoutesDebounced_.cancelScheduledTimeout();
-    pendingUpdates_.setNeedsFullRebuild();
-    rebuildRoutes("INITIALIZATION");
-    logInitializationEvent(
-        "Decision", thrift::InitializationEvent::RIB_COMPUTED);
+
+  if (not unblockInitialRoutesBuild()) {
+    return;
   }
+
+  // Trigger initial RIB computation, after receiving routes of all expected
+  // prefix types and inital publications from KvStore.
+  rebuildRoutesDebounced_.cancelScheduledTimeout();
+  pendingUpdates_.setNeedsFullRebuild();
+  rebuildRoutes("INITIALIZATION");
+  logInitializationEvent("Decision", thrift::InitializationEvent::RIB_COMPUTED);
 }
 
 void

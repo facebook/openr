@@ -278,7 +278,8 @@ thrift::Adjacency createAdjacency(
     const std::string& nextHopV4,
     int32_t metric,
     int32_t adjLabel,
-    int64_t weight = Constants::kDefaultAdjWeight);
+    int64_t weight = Constants::kDefaultAdjWeight,
+    bool adjOnlyUsedByOtherNode = false);
 
 thrift::Adjacency createThriftAdjacency(
     const std::string& nodeName,
@@ -291,7 +292,8 @@ thrift::Adjacency createThriftAdjacency(
     int32_t rtt,
     int64_t timestamp,
     int64_t weight,
-    const std::string& remoteIfName);
+    const std::string& remoteIfName,
+    bool adjOnlyUsedByOtherNode = false);
 
 thrift::AdjacencyDatabase createAdjDb(
     const std::string& nodeName,

@@ -163,8 +163,12 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_EQ(kTestingAreaName.t, state.getArea());
 
   EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb2, 0, 0).topologyChanged);
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb3, 0, 0).topologyChanged);
+  auto update = state.updateAdjacencyDatabase(adjDb2, 0, 0);
+  EXPECT_TRUE(update.topologyChanged);
+  EXPECT_EQ(update.addedLinks.size(), 1);
+  update = state.updateAdjacencyDatabase(adjDb3, 0, 0);
+  EXPECT_TRUE(update.topologyChanged);
+  EXPECT_EQ(update.addedLinks.size(), 2);
 
   EXPECT_THAT(
       state.linksFromNode(n1), UnorderedElementsAre(Pointee(l1), Pointee(l3)));

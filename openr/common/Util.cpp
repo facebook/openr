@@ -575,7 +575,8 @@ createThriftAdjacency(
     int32_t rtt,
     int64_t timestamp,
     int64_t weight,
-    const std::string& remoteIfName) {
+    const std::string& remoteIfName,
+    bool adjOnlyUsedByOtherNode) {
   thrift::Adjacency adj;
   adj.otherNodeName_ref() = nodeName;
   adj.ifName_ref() = ifName;
@@ -587,7 +588,8 @@ createThriftAdjacency(
   adj.rtt_ref() = rtt;
   adj.timestamp_ref() = timestamp;
   adj.weight_ref() = weight;
-  *adj.otherIfName_ref() = remoteIfName;
+  adj.otherIfName_ref() = remoteIfName;
+  adj.adjOnlyUsedByOtherNode_ref() = adjOnlyUsedByOtherNode;
   return adj;
 }
 
@@ -600,7 +602,8 @@ createAdjacency(
     const std::string& nextHopV4,
     int32_t metric,
     int32_t adjLabel,
-    int64_t weight) {
+    int64_t weight,
+    bool adjOnlyUsedByOtherNode) {
   return createThriftAdjacency(
       nodeName,
       ifName,
@@ -612,7 +615,8 @@ createAdjacency(
       metric * 100,
       getUnixTimeStampMs() / 1000,
       weight,
-      remoteIfName);
+      remoteIfName,
+      adjOnlyUsedByOtherNode);
 }
 
 thrift::AdjacencyDatabase

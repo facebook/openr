@@ -618,6 +618,7 @@ LinkState::updateAdjacencyDatabase(
       // and check for holds when running spf. this ensures we don't add the
       // same hold twice
       addLink(*newIter);
+      change.addedLinks.emplace_back(*newIter);
       XLOG(DBG1) << "[LINK UP]" << (*newIter)->toString();
       ++newIter;
       continue;

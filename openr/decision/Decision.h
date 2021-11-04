@@ -213,12 +213,32 @@ class Decision : public OpenrEventBase {
   void processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate);
 
   /**
+   * Update peers waiting for adjacency coming up to unblock initial RIB
+   * computation.
+   */
+  void updatePeersWaitingAdjacencyUp(
+      const std::string& area,
+      const std::vector<std::shared_ptr<Link>>& addedLinks);
+
+  /*
+   * Filter adjacency that can not be used by this node.
+   * thrift::Adjacency `A->B` with `adjOnlyUsedByOtherNode=true` is filtered if
+   * myNodeName_ is not B.
+   */
+  void filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb);
+
+  /*
    * Rebuild all routes and send out update delta. Check current pendingUpdates_
    * to decide which routes need rebuilding, otherwise rebuild all. Use
    * pendingUpdates_.perfEvents() in the sent route delta appended with param
    * event before rebuild and "ROUTE_UPDATE" after.
    */
   void rebuildRoutes(std::string const& event);
+
+  /*
+   * Return true if all conditions of initial routes build are fulfilled.
+   */
+  bool unblockInitialRoutesBuild();
 
   // Trigger initial route build in OpenR initialization process.
   void triggerInitialBuildRoutes();
@@ -279,12 +299,16 @@ class Decision : public OpenrEventBase {
    */
   AsyncDebounce<std::chrono::milliseconds> rebuildRoutesDebounced_;
 
-  // Flag indicating whether all initial peers are received in Open/R
-  // initialization process.
+  /*
+   * Flag indicating whether all initial peers are received in Open/R
+   * initialization process.
+   */
   bool initialPeersReceived_{false};
 
-  // Peers with adjacency not received in each area. OpenR initialization
-  // process will be blocked until having received adjacency with all peers.
+  /*
+   * Peers with adjacency not received in each area. OpenR initialization
+   * process will be blocked until having received adjacency with all peers.
+   */
   std::unordered_map<std::string, std::unordered_set<std::string>>
       areaToPeersWaitingAdjUp_;
 

@@ -47,6 +47,16 @@ namespace {
 /// R1 -> R2, R3
 const auto adj12 =
     createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 100002);
+const auto adj12OnlyUsedBy2 = createAdjacency(
+    "2",
+    "1/2",
+    "2/1",
+    "fe80::2",
+    "192.168.0.2",
+    10,
+    100002,
+    Constants::kDefaultAdjWeight,
+    true);
 const auto adj13 =
     createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 100003);
 const auto adj14 =
@@ -60,6 +70,16 @@ const auto adj13_old =
 // R2 -> R1, R3, R4
 const auto adj21 =
     createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 100001);
+const auto adj21OnlyUsedBy1 = createAdjacency(
+    "1",
+    "2/1",
+    "1/2",
+    "fe80::1",
+    "192.168.0.1",
+    10,
+    100001,
+    Constants::kDefaultAdjWeight,
+    true);
 const auto adj21_old_1 =
     createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 1000011);
 const auto adj23 =
@@ -7134,6 +7154,7 @@ class InitialRibBuildTestFixture
   openr::thrift::OpenrConfig
   createConfig() override {
     auto tConfig = DecisionTestFixture::createConfig();
+    tConfig.enable_ordered_adj_publication_ref() = true;
 
     // Set config originated prefixes.
     thrift::OriginatedPrefix originatedPrefixV4;
@@ -7170,11 +7191,22 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Values(thrift::PrefixType::BGP, thrift::PrefixType::VIP));
 
 TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
-  // Send adj publication
+  // Add peers "2" and "3".
+  thrift::PeersMap peers;
+  peers.emplace("2", thrift::PeerSpec());
+  peers.emplace("3", thrift::PeerSpec());
+  PeerEvent peerEvent{
+      {kTestingAreaName, AreaPeerEvent(peers, {} /*peersToDel*/)}};
+  peerUpdatesQueue.push(std::move(peerEvent));
+
+  // Send adj publication.
+  // Adjacency for peer "2" is not up,
+  // * adjacency "1->2" can only be used by node 2, thus filtered.
+  // * adjacency "2->1" can only be used by node 1.
   sendKvPublication(
       createThriftPublication(
-          {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-           {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
+          {{"adj:1", createAdjValue("1", 1, {adj12OnlyUsedBy2}, false, 1)},
+           {"adj:2", createAdjValue("2", 1, {adj21OnlyUsedBy1}, false, 2)}},
           {},
           {},
           {},
@@ -7240,6 +7272,39 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
               thrift::Types_constants::kDefaultArea()));
           staticRouteUpdatesQueue.push(std::move(vipStaticRoutes));
         }
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // Initial RIB computation not triggered yet.
+        EXPECT_EQ(0, routeUpdatesQueueReader.size());
+
+        // Initial UP peer "3" goes down. Open/R initialization does not wait
+        // for adjacency with the peer.
+        PeerEvent newPeerEvent{
+            {kTestingAreaName, AreaPeerEvent({} /*peersToAdd*/, {"3"})}};
+        peerUpdatesQueue.push(std::move(newPeerEvent));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // Initial RIB computation not triggered yet.
+        EXPECT_EQ(0, routeUpdatesQueueReader.size());
+
+        // Send adj publication.
+        // Adjacency for peer "2" is received,
+        // * adjacency "1->2" can be used by all nodes.
+        // * adjacency "2->1" can only be used by node 1 (this node).
+        sendKvPublication(createThriftPublication(
+            {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)}},
+            {},
+            {},
+            {},
+            std::string("")));
 
         auto routeDbDelta = recvRouteUpdates();
         if (prefixType == thrift::PrefixType::BGP) {

@@ -319,8 +319,14 @@ class LinkState {
           nodeLabelChanged == other.nodeLabelChanged;
     }
 
+    // Whether topology has changed
     bool topologyChanged{false};
+    // Newly added links in the topology. Today it is only populated in
+    // `updateAdjacencyDatabase()`.
+    std::vector<std::shared_ptr<Link>> addedLinks;
+    // Whether attributes of links have changed
     bool linkAttributesChanged{false};
+    // Whehter node labels have changed
     bool nodeLabelChanged{false};
   };
 
