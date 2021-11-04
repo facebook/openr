@@ -581,6 +581,7 @@ main(int argc, char** argv) {
   neighborUpdatesQueue.close();
   kvStoreEventsQueue.close();
   prefixUpdatesQueue.close();
+  prefixMgrInitializationEventsQueue.close();
   kvStoreUpdatesQueue.close();
   staticRouteUpdatesQueue.close();
   fibRouteUpdatesQueue.close();
