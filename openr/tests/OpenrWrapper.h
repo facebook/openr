@@ -20,7 +20,6 @@
 #include <openr/monitor/Monitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
-#include <openr/spark/SparkWrapper.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <openr/watchdog/Watchdog.h>

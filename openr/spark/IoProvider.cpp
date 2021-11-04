@@ -8,7 +8,6 @@
 #include <glog/logging.h>
 #include <net/if.h>
 
-#include <folly/Format.h>
 #include <folly/SocketAddress.h>
 #include <folly/logging/xlog.h>
 #include <openr/spark/IoProvider.h>

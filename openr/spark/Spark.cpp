@@ -5,26 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <chrono>
-
 #include <fb303/ServiceData.h>
-#include <folly/GLog.h>
 #include <folly/IPAddress.h>
-#include <folly/MapUtil.h>
 #include <folly/SocketAddress.h>
-#include <folly/String.h>
-#include <folly/fibers/FiberManagerMap.h>
 #include <folly/futures/Future.h>
 #include <folly/futures/Promise.h>
-#include <folly/gen/Base.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
-#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>

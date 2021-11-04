@@ -16,6 +16,7 @@
 
 #include <folly/IPAddress.h>
 #include <folly/SocketAddress.h>
+#include <folly/String.h>
 
 namespace openr {
 

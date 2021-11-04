@@ -8,9 +8,6 @@
 #pragma once
 
 #include <fmt/format.h>
-#include <chrono>
-#include <functional>
-
 #include <folly/SocketAddress.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/stats/BucketedTimeSeries.h>

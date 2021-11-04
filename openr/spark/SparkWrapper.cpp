@@ -7,7 +7,6 @@
 
 #include <folly/logging/xlog.h>
 
-#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/spark/SparkWrapper.h>
 
 namespace openr {
