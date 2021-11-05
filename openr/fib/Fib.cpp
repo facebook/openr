@@ -8,16 +8,12 @@
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/logging/xlog.h>
-#include <thrift/lib/cpp/protocol/TProtocolTypes.h>
-#include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
-#include <openr/decision/RouteUpdate.h>
 #include <openr/fib/Fib.h>
-#include <openr/if/gen-cpp2/Platform_types.h>
 
 namespace fb303 = facebook::fb303;
 
