@@ -7,22 +7,13 @@
 
 #pragma once
 
-#include <chrono>
-#include <string>
-#include <unordered_map>
-
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
-#include <folly/Memory.h>
-#include <folly/String.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
-#include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/AsyncDebounce.h>
 #include <openr/common/AsyncThrottle.h>
-#include <openr/common/MplsUtil.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
@@ -33,10 +24,6 @@
 #include <openr/decision/RibPolicy.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/decision/SpfSolver.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
-#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
-#include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {

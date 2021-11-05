@@ -5,19 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <chrono>
-#include <set>
-#include <string>
-#include <unordered_set>
-
 #include <fb303/ServiceData.h>
-#include <folly/Format.h>
-#include <folly/MapUtil.h>
-#include <folly/Memory.h>
-#include <folly/Optional.h>
-#include <folly/String.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
+
 #ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif

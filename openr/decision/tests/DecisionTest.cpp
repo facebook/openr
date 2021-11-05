@@ -5,9 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <memory>
-#include "openr/if/gen-cpp2/OpenrConfig_types.h"
-
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/IPAddressV4.h>
