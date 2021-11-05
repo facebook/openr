@@ -199,6 +199,12 @@ Decision::Decision(
 
   // Add reader to process publication from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
+    // Block processing KvStore publication until initial peers are received.
+    // This helps avoid missing KvStore adjacency publications for peers.
+    if (*config_->getConfig().enable_ordered_adj_publication_ref()) {
+      initialPeersReceivedBaton_.wait();
+    }
+
     XLOG(INFO) << "Starting KvStore updates processing fiber";
     while (true) {
       auto maybePub = q.get(); // perform read
@@ -456,7 +462,7 @@ Decision::getRibPolicy() {
 
 void
 Decision::processPeerUpdates(PeerEvent&& event) {
-  if (not initialPeersReceived_) {
+  if (not initialPeersReceivedBaton_.try_wait()) {
     XLOG(INFO) << "[Initialization] Received initial PeerEvent.";
     // LinkMonitor publishes detected peers in one shot in Open/R initialization
     // process. Initial route computation will blocked until adjacence with all
@@ -468,7 +474,7 @@ Decision::processPeerUpdates(PeerEvent&& event) {
                    << "with up peer " << peerName;
       }
     }
-    initialPeersReceived_ = true;
+    initialPeersReceivedBaton_.post();
     return;
   }
 
@@ -824,8 +830,8 @@ Decision::unblockInitialRoutesBuild() {
   bool adjReceivedForPeers{true};
   if (config_->getConfig().get_enable_ordered_adj_publication()) {
     // Wait till receiving initial peers and adjacencies with initial peers.
-    adjReceivedForPeers =
-        initialPeersReceived_ and areaToPeersWaitingAdjUp_.empty();
+    adjReceivedForPeers = initialPeersReceivedBaton_.try_wait() and
+        areaToPeersWaitingAdjUp_.empty();
   }
   // Initial routes build will be unblocked if all following conditions are
   // fulfilled,

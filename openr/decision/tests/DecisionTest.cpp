@@ -7191,34 +7191,53 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Values(thrift::PrefixType::BGP, thrift::PrefixType::VIP));
 
 TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
-  // Add peers "2" and "3".
-  thrift::PeersMap peers;
-  peers.emplace("2", thrift::PeerSpec());
-  peers.emplace("3", thrift::PeerSpec());
-  PeerEvent peerEvent{
-      {kTestingAreaName, AreaPeerEvent(peers, {} /*peersToDel*/)}};
-  peerUpdatesQueue.push(std::move(peerEvent));
+  thrift::PrefixType prefixType = GetParam();
 
   // Send adj publication.
-  // Adjacency for peer "2" is not up,
+  // Adjacency 1<->2 is not up,
   // * adjacency "1->2" can only be used by node 2, thus filtered.
   // * adjacency "2->1" can only be used by node 1.
+  // Adjacency 3<->4 is up.
   sendKvPublication(
       createThriftPublication(
           {{"adj:1", createAdjValue("1", 1, {adj12OnlyUsedBy2}, false, 1)},
-           {"adj:2", createAdjValue("2", 1, {adj21OnlyUsedBy1}, false, 2)}},
+           {"adj:2", createAdjValue("2", 1, {adj21OnlyUsedBy1}, false, 2)},
+           {"adj:3", createAdjValue("3", 1, {adj34}, false, 2)},
+           {"adj:4", createAdjValue("4", 1, {adj43}, false, 2)}},
           {},
           {},
           {},
           std::string("")),
       false /*prefixPubExists*/);
 
-  thrift::PrefixType prefixType = GetParam();
-
   int scheduleAt{0};
   OpenrEventBase evb;
   evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // KvStore publication is not process yet since initial peers are not
+        // received.
+        auto adjDb = decision->getDecisionAdjacenciesFiltered().get();
+        ASSERT_EQ(adjDb->size(), 0);
+
+        // Add peers "2" and "3".
+        thrift::PeersMap peers;
+        peers.emplace("2", thrift::PeerSpec());
+        peers.emplace("3", thrift::PeerSpec());
+        PeerEvent peerEvent{
+            {kTestingAreaName, AreaPeerEvent(peers, {} /*peersToDel*/)}};
+        peerUpdatesQueue.push(std::move(peerEvent));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // KvStore publication is processed and adjacence is extracted.
+        auto adjDb = decision->getDecisionAdjacenciesFiltered().get();
+        ASSERT_NE(adjDb->size(), 0);
+
         // Received KvStoreSynced signal.
         auto publication = createThriftPublication(
             /* prefix key format v2 */

@@ -300,10 +300,12 @@ class Decision : public OpenrEventBase {
   AsyncDebounce<std::chrono::milliseconds> rebuildRoutesDebounced_;
 
   /*
-   * Flag indicating whether all initial peers are received in Open/R
-   * initialization process.
+   * Baton for synchronization between ProcessPeerUpdates and ProcessPublication
+   * fibers.
+   * post() when  all initial peers are received in Open/R initialization
+   * process.
    */
-  bool initialPeersReceived_{false};
+  folly::fibers::Baton initialPeersReceivedBaton_;
 
   /*
    * Peers with adjacency not received in each area. OpenR initialization
@@ -312,8 +314,10 @@ class Decision : public OpenrEventBase {
   std::unordered_map<std::string, std::unordered_set<std::string>>
       areaToPeersWaitingAdjUp_;
 
-  // Boolean flag indicating whether KvStore synced signal is received in OpenR
-  // initialization procedure.
+  /*
+   * Boolean flag indicating whether KvStore synced signal is received in OpenR
+   * initialization procedure.
+   */
   bool initialKvStoreSynced_{false};
 
   /*
