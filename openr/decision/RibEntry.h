@@ -24,9 +24,14 @@ struct RibEntry {
   // TODO: should this be map<area, nexthops>?
   std::unordered_set<thrift::NextHopThrift> nexthops;
 
+  // igp cost of all routes (ecmp) or of lowest cost route (if ucmp)
+  unsigned int igpCost;
+
   // constructor
-  explicit RibEntry(std::unordered_set<thrift::NextHopThrift> nexthops)
-      : nexthops(std::move(nexthops)) {}
+  explicit RibEntry(
+      std::unordered_set<thrift::NextHopThrift> nexthops,
+      unsigned int igpCost = 0)
+      : nexthops(std::move(nexthops)), igpCost(igpCost) {}
 
   RibEntry() = default;
 
@@ -61,8 +66,9 @@ struct RibUnicastEntry : RibEntry {
       thrift::PrefixEntry bestPrefixEntryThrift,
       const std::string& bestArea,
       bool doNotInstall = false,
-      std::optional<int32_t> prependLabel = std::nullopt)
-      : RibEntry(std::move(nexthops)),
+      std::optional<int32_t> prependLabel = std::nullopt,
+      unsigned int igpCost = 0)
+      : RibEntry(std::move(nexthops), igpCost),
         prefix(prefix),
         bestPrefixEntry(std::move(bestPrefixEntryThrift)),
         bestArea(bestArea),

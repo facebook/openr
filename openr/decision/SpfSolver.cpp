@@ -410,13 +410,15 @@ SpfSolver::createRouteForPrefix(
         // Only use next-hops in areas with the shortest IGP metric
         if (shortestMetric >= metricsAreaNextHops.first) {
           if (shortestMetric > metricsAreaNextHops.first) {
-            shortestMetric = metricsAreaNextHops.first;
             totalNextHops.clear();
           }
           totalNextHops.insert(
               metricsAreaNextHops.second.begin(),
               metricsAreaNextHops.second.end());
         }
+      }
+      if (shortestMetric > metricsAreaNextHops.first) {
+        shortestMetric = metricsAreaNextHops.first;
       }
     } break;
     case thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP: {
@@ -456,7 +458,8 @@ SpfSolver::createRouteForPrefix(
       prefixEntries,
       hasBGP,
       std::move(totalNextHops),
-      routeComputationRules);
+      routeComputationRules,
+      shortestMetric);
 
   // SrPolicy TODO: (T94500292) before returning need to apply prepend label
   // rules. Prepend label rules, may create a new MPLS route (RibMplsEntry)
@@ -972,7 +975,8 @@ SpfSolver::addBestPaths(
     const PrefixEntries& prefixEntries,
     const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops,
-    const thrift::RouteComputationRules& routeComputationRules) {
+    const thrift::RouteComputationRules& routeComputationRules,
+    const Metric shortestMetric) {
   // Check if next-hop list is empty
   if (nextHops.empty()) {
     return std::nullopt;
@@ -1039,7 +1043,8 @@ SpfSolver::addBestPaths(
       *(prefixEntries.at(routeSelectionResult.bestNodeArea)),
       routeSelectionResult.bestNodeArea.second,
       isBgp & (not enableBgpRouteProgramming_), // doNotInstall
-      prependLabel);
+      prependLabel,
+      shortestMetric);
 }
 
 std::optional<int32_t>

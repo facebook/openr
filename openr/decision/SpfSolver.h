@@ -214,7 +214,8 @@ class SpfSolver {
       const PrefixEntries& prefixEntries,
       const bool isBgp,
       std::unordered_set<thrift::NextHopThrift>&& nextHops,
-      const thrift::RouteComputationRules& routeComputationRules);
+      const thrift::RouteComputationRules& routeComputationRules,
+      const openr::LinkStateMetric shortestMetric);
 
   // Helper function to find the nodes for the nexthop for bgp route
   RouteSelectionResult runBestPathSelectionBgp(

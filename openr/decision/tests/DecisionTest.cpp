@@ -41,7 +41,7 @@ using apache::thrift::CompactSerializer;
 
 namespace {
 
-/// R1 -> R2, R3
+/// R1 -> R2, R3, R4
 const auto adj12 =
     createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 100002);
 const auto adj12OnlyUsedBy2 = createAdjacency(
@@ -1177,6 +1177,67 @@ TEST(BGPRedistribution, IgpMetric) {
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 20),
                   createNextHopFromAdj(adj13, false, 20))))));
+}
+
+TEST(Decision, IgpCost) {
+  auto config = std::make_shared<Config>(createConfig());
+  std::string nodeName("1");
+  const auto expectedAddr = addr1;
+  SpfSolver spfSolver(
+      config,
+      nodeName,
+      false /* enableV4 */,
+      true /* enable segment label */,
+      true /* enable adj labels */,
+      true /* enableBgpRouteProgramming */,
+      true /* enableBestRouteSelection */);
+
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+  PrefixState prefixState;
+
+  // Test topology: spine
+  // Setup adjacencies: note each link cost is 10
+  // 1     4 (SSW)
+  // |  x  |
+  // 2     3 (FSW)
+
+  // Setup adjacency
+  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
+  auto adjacencyDb2 = createAdjDb("2", {adj21, adj24}, 2);
+  auto adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
+  auto adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3).topologyChanged);
+  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb4).topologyChanged);
+
+  // Setup prefixes. node2 annouces the prefix
+  const auto node2Prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
+  EXPECT_FALSE(
+      updatePrefixDatabase(prefixState, createPrefixDb("2", {node2Prefix}))
+          .empty());
+
+  // Case-1 node1 route to 2 with direct link: igp cost = 1 * 10
+  {
+    auto decisionRouteDb =
+        *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
+    auto route = decisionRouteDb.unicastRoutes.at(toIPNetwork(expectedAddr));
+    EXPECT_EQ(route.igpCost, 10);
+  }
+
+  // Case-2 link 21 broken, node1 route to 2 (1->3->4->2): igp cost = 3 * 10
+  {
+    auto newAdjacencyDb2 = createAdjDb("2", {adj24}, 4);
+    EXPECT_TRUE(
+        linkState.updateAdjacencyDatabase(newAdjacencyDb2).topologyChanged);
+    auto decisionRouteDb =
+        *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
+    auto route = decisionRouteDb.unicastRoutes.at(toIPNetwork(expectedAddr));
+    EXPECT_EQ(route.igpCost, 30);
+  }
 }
 
 TEST(Decision, BestRouteSelection) {
