@@ -22,4 +22,16 @@ struct OpenrPolicyActionData {
   std::optional<int32_t> prependLabel;
 };
 
+/**
+ * Additional information for policy matching
+ *
+ * Additional information that should not be transmitted and reused
+ * apart of policy matching
+ */
+
+struct OpenrPolicyMatchData {
+  unsigned int igpCost = 0;
+  explicit OpenrPolicyMatchData(unsigned int igpCost = 0) : igpCost(igpCost) {}
+};
+
 } // namespace openr

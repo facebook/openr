@@ -19,7 +19,8 @@ std::pair<std::shared_ptr<thrift::PrefixEntry>, std::string /*policy name*/>
 PolicyManager::applyPolicy(
     const std::string& policyStatementName,
     const std::shared_ptr<thrift::PrefixEntry>& prefixEntry,
-    const std::optional<OpenrPolicyActionData>& policyActionData) noexcept {
+    const std::optional<OpenrPolicyActionData>& policyActionData,
+    const std::optional<OpenrPolicyMatchData>& policyMatchData) noexcept {
   return {prefixEntry, "Always Allow"};
 }
 

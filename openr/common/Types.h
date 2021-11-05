@@ -187,15 +187,19 @@ struct PrefixEntry {
    */
   std::optional<OpenrPolicyActionData> policyActionData{std::nullopt};
 
+  OpenrPolicyMatchData policyMatchData{};
+
   PrefixEntry() = default;
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
       std::unordered_set<std::string>&& dstAreas,
-      std::optional<OpenrPolicyActionData> policyActionData = std::nullopt)
+      std::optional<OpenrPolicyActionData> policyActionData = std::nullopt,
+      OpenrPolicyMatchData policyMatchData = OpenrPolicyMatchData())
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
         network(toIPNetwork(*tPrefixEntry->prefix_ref())),
-        policyActionData(policyActionData) {}
+        policyActionData(policyActionData),
+        policyMatchData(policyMatchData) {}
 
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,

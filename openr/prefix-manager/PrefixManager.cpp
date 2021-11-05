@@ -551,7 +551,10 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
     if (policy) {
       std::tie(postPolicyTPrefixEntry, hitPolicyName) =
           policyManager_->applyPolicy(
-              *policy, tPrefixEntry, entry.policyActionData);
+              *policy,
+              tPrefixEntry,
+              entry.policyActionData,
+              entry.policyMatchData);
 
       // policy reject prefix, nothing to do.
       if (not postPolicyTPrefixEntry) {
@@ -1762,6 +1765,7 @@ PrefixManager::redistributePrefixesAcrossAreas(
       policyActionData =
           OpenrPolicyActionData(prefixEntry.prependLabel_ref().value());
     }
+    OpenrPolicyMatchData policyMatchData(route.igpCost);
 
     // Reset non-transitive attributes before redistribution across areas.
     resetNonTransitiveAttrs(prefixEntry);
@@ -1776,7 +1780,8 @@ PrefixManager::redistributePrefixesAcrossAreas(
     advertisedPrefixes.emplace_back(
         std::make_shared<thrift::PrefixEntry>(std::move(prefixEntry)),
         std::move(dstAreas),
-        policyActionData);
+        policyActionData,
+        policyMatchData);
 
     // Adjust supporting route count due to prefix advertisement
     aggregatesToAdvertise(prefix);

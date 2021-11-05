@@ -29,6 +29,8 @@ class PolicyManager {
       const std::string& policyStatementName,
       const std::shared_ptr<thrift::PrefixEntry>& prefixEntry,
       const std::optional<OpenrPolicyActionData>& policyActionData =
+          std::nullopt,
+      const std::optional<OpenrPolicyMatchData>& policyMatchData =
           std::nullopt) noexcept;
 
   // PolicyManagerImpl uses forward declaration
