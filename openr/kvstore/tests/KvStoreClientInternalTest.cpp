@@ -5,10 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <sodium.h>
-#include <thread>
-#include <unordered_set>
-
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/init/Init.h>

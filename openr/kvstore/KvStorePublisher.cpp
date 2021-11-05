@@ -7,9 +7,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
-#include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStorePublisher.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
 
 namespace openr {
 

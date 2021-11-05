@@ -20,6 +20,7 @@
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>

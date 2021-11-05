@@ -20,7 +20,6 @@
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>

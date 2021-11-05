@@ -12,10 +12,7 @@
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
-#include <openr/common/OpenrClient.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
-#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {

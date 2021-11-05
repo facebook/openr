@@ -9,13 +9,8 @@
 
 #include <openr/common/Types.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
-#include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStore.h>
-#include <chrono>
-#include <cstddef>
-#include <optional>
+#include <openr/kvstore/KvStoreUtil.h>
+#include <thrift/lib/cpp2/async/ServerPublisherStream.h>
 
 namespace openr {
 class KvStorePublisher {

@@ -22,8 +22,7 @@
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStoreClientInternal.h>
-#include <openr/messaging/Queue.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
 
 namespace openr {
