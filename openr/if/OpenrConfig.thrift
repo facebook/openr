@@ -217,6 +217,12 @@ struct DecisionConfig {
   /** Decision debounce time to update SPF in frequent adj db update
     (in milliseconds). */
   2: i32 debounce_max_ms = 250;
+  /** Fast reaction time to save rib policy upon receiving setRibPolicy request
+  (in milliseconds). */
+  3: i32 save_rib_policy_min_ms = 10000;
+  /** Decision time to save rib policy  in frequent setRibPolicy requests
+  (in milliseconds). */
+  4: i32 save_rib_policy_max_ms = 60000;
 
   /** Knob to enable/disable BGP route programming. */
   101: bool enable_bgp_route_programming = true;

@@ -20,12 +20,14 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/Flags.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/PrependLabelAllocator.h>
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/RouteUpdate.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -4757,6 +4759,12 @@ class DecisionTestFixture : public ::testing::Test {
 
     // Reset initial KvStore sync event as not sent.
     kvStoreSyncEventSent = false;
+
+    // Override default rib policy file with file based on thread id.
+    // This ensures stress run will use different file for each run.
+    FLAGS_rib_policy_file = fmt::format(
+        "/dev/shm/rib_policy.txt.{}",
+        std::hash<std::thread::id>{}(std::this_thread::get_id()));
   }
 
   void
@@ -4784,6 +4792,8 @@ class DecisionTestFixture : public ::testing::Test {
         true, /* enableAdjLabels */
         true /* enablePrependLabels */);
     tConfig.enable_initialization_process_ref() = true;
+    tConfig.decision_config_ref()->save_rib_policy_min_ms_ref() = 500;
+    tConfig.decision_config_ref()->save_rib_policy_max_ms_ref() = 2000;
     return tConfig;
   }
 
@@ -6319,6 +6329,218 @@ TEST(Decision, RibPolicyFeatureKnob) {
   kvStoreUpdatesQueue.close();
   staticRouteUpdatesQueue.close();
   routeUpdatesQueue.close();
+}
+
+/**
+ * Test graceful restart support of Rib policy in Decision.
+ *
+ * Test covers
+ * - Set policy
+ * - Get policy after setting
+ * - Wait longer than debounce time so Decision have saved Rib policy
+ * - Create a new Decision instance to load the still live Rib policy
+ * - Setup initial topology and prefixes to trigger route computation
+ * - Verify that loaded Rib policy is applied on generated routes
+ */
+TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
+  auto saveRibPolicyMaxMs =
+      config->getConfig().get_decision_config().get_save_rib_policy_max_ms();
+
+  // Get policy test. Expect failure
+  EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+
+  // Create rib policy
+  thrift::RibRouteActionWeight actionWeight;
+  actionWeight.neighbor_to_weight_ref()->emplace("2", 2);
+  thrift::RibPolicyStatement policyStatement;
+  policyStatement.matcher_ref()->prefixes_ref() =
+      std::vector<thrift::IpPrefix>({addr2});
+  policyStatement.action_ref()->set_weight_ref() = actionWeight;
+  thrift::RibPolicy policy;
+  policy.statements_ref()->emplace_back(policyStatement);
+  // Set policy ttl as long as 10*saveRibPolicyMaxMs.
+  policy.ttl_secs_ref() = saveRibPolicyMaxMs * 10 / 1000;
+
+  // Set rib policy
+  EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
+
+  // Get rib policy and verify
+  {
+    auto retrievedPolicy = decision->getRibPolicy().get();
+    EXPECT_EQ(*policy.statements_ref(), *retrievedPolicy.statements_ref());
+    EXPECT_GE(*policy.ttl_secs_ref(), *retrievedPolicy.ttl_secs_ref());
+  }
+
+  std::unique_ptr<Decision> decision{nullptr};
+  std::unique_ptr<std::thread> decisionThread{nullptr};
+  int scheduleAt{0};
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += saveRibPolicyMaxMs),
+      [&]() noexcept {
+        // Wait for saveRibPolicyMaxMs to make sure Rib policy is saved to file.
+        messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
+        messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
+        messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+        messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+        auto routeUpdatesQueueReader = routeUpdatesQueue.getReader();
+        decision = std::make_unique<Decision>(
+            config,
+            peerUpdatesQueue.getReader(),
+            kvStoreUpdatesQueue.getReader(),
+            staticRouteUpdatesQueue.getReader(),
+            routeUpdatesQueue);
+        decisionThread =
+            std::make_unique<std::thread>([&]() { decision->run(); });
+        decision->waitUntilRunning();
+
+        // Setup topology and prefixes. 1 unicast route will be computed
+        auto publication = createThriftPublication(
+            {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+             {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+             {"prefix:1", createPrefixValue("1", 1, {addr1})},
+             {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+            {},
+            {},
+            {},
+            std::string(""));
+        kvStoreUpdatesQueue.push(publication);
+        kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+
+        // Expect route update with live rib policy applied.
+        auto maybeRouteDb = routeUpdatesQueueReader.get();
+        EXPECT_FALSE(maybeRouteDb.hasError());
+        auto updates = maybeRouteDb.value();
+        ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+        EXPECT_EQ(
+            2,
+            *updates.unicastRoutesToUpdate.begin()
+                 ->second.nexthops.begin()
+                 ->weight_ref());
+
+        // Get rib policy and verify
+        auto retrievedPolicy = decision->getRibPolicy().get();
+        EXPECT_EQ(*policy.statements_ref(), *retrievedPolicy.statements_ref());
+        EXPECT_GE(*policy.ttl_secs_ref(), *retrievedPolicy.ttl_secs_ref());
+
+        kvStoreUpdatesQueue.close();
+        staticRouteUpdatesQueue.close();
+        routeUpdatesQueue.close();
+        peerUpdatesQueue.close();
+
+        evb.stop();
+      });
+
+  // let magic happen
+  evb.run();
+  decision->stop();
+  decisionThread->join();
+}
+
+/**
+ * Test Decision ignores expired rib policy.
+ *
+ * Test covers
+ * - Set policy
+ * - Get policy after setting
+ * - Wait long enough so Decision have saved Rib policy and policy expired
+ * - Create a new Decision instance which will skip loading expired Rib policy
+ * - Setup initial topology and prefixes to trigger route computation
+ * - Verify that expired Rib policy is not applied on generated routes
+ */
+TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
+  auto saveRibPolicyMaxMs =
+      config->getConfig().get_decision_config().get_save_rib_policy_max_ms();
+
+  // Get policy test. Expect failure
+  EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+
+  // Create rib policy
+  thrift::RibRouteActionWeight actionWeight;
+  actionWeight.neighbor_to_weight_ref()->emplace("2", 2);
+  thrift::RibPolicyStatement policyStatement;
+  policyStatement.matcher_ref()->prefixes_ref() =
+      std::vector<thrift::IpPrefix>({addr2});
+  policyStatement.action_ref()->set_weight_ref() = actionWeight;
+  thrift::RibPolicy policy;
+  policy.statements_ref()->emplace_back(policyStatement);
+  policy.ttl_secs_ref() = saveRibPolicyMaxMs / 1000;
+
+  // Set rib policy
+  EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
+
+  // Get rib policy and verify
+  auto retrievedPolicy = decision->getRibPolicy().get();
+  EXPECT_EQ(*policy.statements_ref(), *retrievedPolicy.statements_ref());
+  EXPECT_GE(*policy.ttl_secs_ref(), *retrievedPolicy.ttl_secs_ref());
+
+  std::unique_ptr<Decision> decision{nullptr};
+  std::unique_ptr<std::thread> decisionThread{nullptr};
+
+  int scheduleAt{0};
+  OpenrEventBase evb;
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 2 * saveRibPolicyMaxMs), [&]() {
+        // Wait for 2 * saveRibPolicyMaxMs.
+        // This makes sure expired rib policy is saved to file.
+        messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
+        messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
+        messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+        messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+        auto routeUpdatesQueueReader = routeUpdatesQueue.getReader();
+        decision = std::make_unique<Decision>(
+            config,
+            peerUpdatesQueue.getReader(),
+            kvStoreUpdatesQueue.getReader(),
+            staticRouteUpdatesQueue.getReader(),
+            routeUpdatesQueue);
+        decisionThread = std::make_unique<std::thread>([&]() {
+          LOG(INFO) << "Decision thread starting";
+          decision->run();
+          LOG(INFO) << "Decision thread finishing";
+        });
+        decision->waitUntilRunning();
+
+        // Setup topology and prefixes. 1 unicast route will be computed
+        auto publication = createThriftPublication(
+            {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+             {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+             {"prefix:1", createPrefixValue("1", 1, {addr1})},
+             {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+            {},
+            {},
+            {},
+            std::string(""));
+        kvStoreUpdatesQueue.push(publication);
+        kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+
+        // Expect route update without rib policy applied.
+        auto maybeRouteDb = routeUpdatesQueueReader.get();
+        EXPECT_FALSE(maybeRouteDb.hasError());
+        auto updates = maybeRouteDb.value();
+        ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+        EXPECT_EQ(
+            0,
+            *updates.unicastRoutesToUpdate.begin()
+                 ->second.nexthops.begin()
+                 ->weight_ref());
+
+        // Expired rib policy was not loaded.
+        EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+
+        kvStoreUpdatesQueue.close();
+        staticRouteUpdatesQueue.close();
+        routeUpdatesQueue.close();
+        peerUpdatesQueue.close();
+
+        evb.stop();
+      });
+
+  // let magic happen
+  evb.run();
+  decision->stop();
+  decisionThread->join();
 }
 
 // The following topology is used:

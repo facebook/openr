@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fstream>
+
 #include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
@@ -14,11 +16,13 @@
 #endif
 
 #include <openr/common/Constants.h>
+#include <openr/common/Flags.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
+#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 
 namespace fb303 = facebook::fb303;
 
@@ -114,7 +118,16 @@ Decision::Decision(
           std::chrono::milliseconds(*config->getConfig()
                                          .decision_config_ref()
                                          ->debounce_max_ms_ref()),
-          [this]() noexcept { rebuildRoutes("DECISION_DEBOUNCE"); }) {
+          [this]() noexcept { rebuildRoutes("DECISION_DEBOUNCE"); }),
+      saveRibPolicyDebounced_(
+          getEvb(),
+          std::chrono::milliseconds(*config->getConfig()
+                                         .decision_config_ref()
+                                         ->save_rib_policy_min_ms_ref()),
+          std::chrono::milliseconds(*config->getConfig()
+                                         .decision_config_ref()
+                                         ->save_rib_policy_max_ms_ref()),
+          [this]() noexcept { saveRibPolicy(); }) {
   spfSolver_ = std::make_unique<SpfSolver>(
       config,
       config->getNodeName(),
@@ -262,6 +275,15 @@ Decision::Decision(
           processStaticRoutesUpdate(std::move(maybeThriftPub).value());
         }
       });
+
+  // Read rib policy from saved file.
+  addFiberTask([this]() mutable noexcept {
+    XLOG(INFO) << "Starting readRibPolicy fiber";
+    readRibPolicy();
+
+    initialRibPolicyRead_ = true;
+    triggerInitialBuildRoutes();
+  });
 
   // Create RibPolicy timer to process routes on policy expiry
   ribPolicyTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -423,6 +445,9 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
         pendingUpdates_.setNeedsFullRebuild();
         rebuildRoutes("RIB_POLICY_UPDATE");
 
+        // Save rib policy to file.
+        saveRibPolicyDebounced_();
+
         // Mark the policy update request to be done
         p.setValue();
       });
@@ -560,6 +585,90 @@ Decision::updatePeersWaitingAdjacencyUp(
       triggerInitialBuildRoutes();
     }
   }
+}
+
+void
+Decision::saveRibPolicy() {
+  // Only save rib policy when Open/R initialization is enabled.
+  if (not config_->getConfig().get_enable_initialization_process()) {
+    return;
+  }
+
+  std::ofstream ribPolicyFile;
+  ribPolicyFile.open(FLAGS_rib_policy_file, std::ios::out | std::ios::trunc);
+  if (not ribPolicyFile.is_open()) {
+    XLOG(ERR) << "Could not open rib policy file for writing";
+    return;
+  }
+
+  const auto nowInSec = std::chrono::duration_cast<std::chrono::seconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+
+  // 1st line: epoch time
+  ribPolicyFile << nowInSec << "\n";
+  // 2nd line: ttl duration in milliseconds since epoch time
+  ribPolicyFile << ribPolicy_->getTtlDuration().count() << "\n";
+  // 3rd line: rib policy
+  ribPolicyFile << apache::thrift::SimpleJSONSerializer::serialize<std::string>(
+      ribPolicy_->toThrift());
+
+  ribPolicyFile.close();
+  XLOG(INFO) << "Saved rib policy to " << FLAGS_rib_policy_file;
+}
+
+void
+Decision::readRibPolicy() {
+  // Only save rib policy when Open/R initialization is enabled.
+  if (not config_->getConfig().get_enable_initialization_process() or
+      not config_->isRibPolicyEnabled()) {
+    return;
+  }
+
+  std::ifstream ribPolicyFile;
+  ribPolicyFile.open(FLAGS_rib_policy_file);
+  if (not ribPolicyFile.is_open()) {
+    XLOG(INFO) << "Could not open rib policy file " << FLAGS_rib_policy_file;
+    return;
+  }
+
+  std::string line;
+  std::vector<std::string> lines;
+  while (getline(ribPolicyFile, line)) {
+    lines.emplace_back(line);
+  }
+  ribPolicyFile.close();
+
+  if (lines.size() != 3) {
+    XLOG(ERR) << "Invalid lines size " << lines.size();
+    return;
+  }
+
+  auto storeTimeInSec = std::stol(lines[0], nullptr, 10);
+  auto storeTtlDurationMs = std::stol(lines[1], nullptr, 10);
+  auto ribPolicyThrift =
+      apache::thrift::SimpleJSONSerializer::deserialize<thrift::RibPolicy>(
+          lines[2]);
+
+  const auto nowInSec = std::chrono::duration_cast<std::chrono::seconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+  int64_t ttlDurationSec =
+      storeTimeInSec + storeTtlDurationMs / 1000 - nowInSec;
+  if (ttlDurationSec < 0) {
+    XLOG(INFO) << "[Initialization] Skip loading expired rib policy file "
+               << FLAGS_rib_policy_file;
+    return;
+  }
+
+  ribPolicyThrift.ttl_secs_ref() = ttlDurationSec;
+  ribPolicy_ = std::make_unique<RibPolicy>(ribPolicyThrift);
+  XLOG(INFO) << fmt::format(
+      "[Initialization] Read Rib policy successfully from {}, ttlDurationSec: "
+      "{} seconds",
+      FLAGS_rib_policy_file,
+      ttlDurationSec);
+  return;
 }
 
 void
@@ -828,10 +937,11 @@ Decision::unblockInitialRoutesBuild() {
   // fulfilled,
   // - Received all types of static routes, aka, unreceivedRouteTypes_ is empty
   // - Received initial KvStore publication, aka, initialKvStoreSynced_ is true
+  // - Read persisted Rib policy
   // - Received adjacency with initial live peers, aka, adjReceivedForPeers is
   //   true.
   return unreceivedRouteTypes_.empty() and initialKvStoreSynced_ and
-      adjReceivedForPeers;
+      initialRibPolicyRead_ and adjReceivedForPeers;
 }
 
 void

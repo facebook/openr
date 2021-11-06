@@ -191,6 +191,7 @@ add_library(openrlib
   openr/common/BuildInfo.cpp
   openr/common/Constants.cpp
   openr/common/ExponentialBackoff.cpp
+  openr/common/Flags.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
   openr/common/OpenrThriftCtrlServer.cpp

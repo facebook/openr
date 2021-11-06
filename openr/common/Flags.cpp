@@ -60,3 +60,7 @@ DEFINE_string(
     "A comma separated list of strings. Strings are x509 common names to "
     "accept SSL connections from. If an empty string is provided, the server "
     "will accept connections from any authenticated peer.");
+DEFINE_string(
+    rib_policy_file,
+    "/dev/shm/rib_policy.txt",
+    "File in which thrift::RibPolicy is stored across Open/R restarts");

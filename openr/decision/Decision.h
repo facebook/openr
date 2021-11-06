@@ -241,6 +241,12 @@ class Decision : public OpenrEventBase {
   // gracefulRestartDuration
   std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
 
+  // Save received Rib policy to file
+  void saveRibPolicy();
+
+  // Read persisted Rib policy from file
+  void readRibPolicy();
+
   // cached routeDb
   DecisionRouteDb routeDb_;
 
@@ -301,11 +307,20 @@ class Decision : public OpenrEventBase {
   std::unordered_map<std::string, std::unordered_set<std::string>>
       areaToPeersWaitingAdjUp_;
 
-  /*
-   * Boolean flag indicating whether KvStore synced signal is received in OpenR
-   * initialization procedure.
+  /**
+   * Debounced trigger for saveRibPolicy invoked by setRibPolicy.
    */
+  AsyncDebounce<std::chrono::milliseconds> saveRibPolicyDebounced_;
+
+  // Boolean flag indicating whether KvStore synced signal is received in OpenR
+  // initialization procedure.
   bool initialKvStoreSynced_{false};
+
+  /**
+   * Boolean flag indicating whether rib policy is read from persisted file in
+   * OpenR initialization procedure. Set as true if such file does not exist.
+   */
+  bool initialRibPolicyRead_{false};
 
   /*
    * Set of prefix types whose static routes Decision awaits before initial RIB

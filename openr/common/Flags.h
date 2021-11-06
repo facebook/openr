@@ -33,3 +33,6 @@ DECLARE_string(x509_ca_path);
 DECLARE_string(tls_ticket_seed_path);
 DECLARE_string(tls_ecc_curve_name);
 DECLARE_string(tls_acceptable_peers);
+
+// file storing thrift::RibPolicy
+DECLARE_string(rib_policy_file);
