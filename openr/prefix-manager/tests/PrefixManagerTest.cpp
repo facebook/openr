@@ -258,90 +258,6 @@ class PrefixManagerTestFixture : public testing::Test {
       earlyStaticRoutesReaderPtr;
 };
 
-/*
- * This is to test backward compatibility between old and new prefix key format.
- * We will make sure:
- *  1) There will be no crash due to parsing old/new prefix keys;
- *  2) Prefix key format upgrade/downgrade is supported;
- */
-TEST_F(PrefixManagerTestFixture, PrefixKeyFormatBackwardCompatibility) {
-  // Make sure we have new format of keys added
-  auto prefixKey1 = PrefixKey(
-      nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName, true);
-  auto prefixKey2 = PrefixKey(
-      nodeId_, toIPNetwork(*prefixEntry2.prefix_ref()), kTestingAreaName, true);
-
-  // ATTN: record v2 format of keys for future validation.
-  auto keyStr1 = prefixKey1.getPrefixKeyV2();
-  auto keyStr2 = prefixKey2.getPrefixKeyV2();
-
-  // Inject 2 prefixes and validate format prefixStr
-  {
-    prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2}).get();
-
-    auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_EQ(2, pub.keyVals_ref()->size());
-    EXPECT_EQ(1, pub.keyVals_ref()->count(keyStr1));
-    EXPECT_EQ(1, pub.keyVals_ref()->count(keyStr2));
-  }
-
-  // Withdraw 1 out of 2 previously advertised prefixes and validate format
-  // prefixStr ATTNL: make sure there will be no crash for prefix manager
-  {
-    prefixManager->withdrawPrefixes({prefixEntry1}).get();
-
-    auto pub = kvStoreWrapper->recvPublication();
-    EXPECT_EQ(1, pub.keyVals_ref()->size());
-    EXPECT_EQ(1, pub.keyVals_ref()->count(prefixKey1.getPrefixKeyV2()));
-  }
-
-  // ATTN: this is to mimick the "downgrade/roll-back" step of PrefixManager
-  // with `enable_new_prefix_format` change from true to false.
-  {
-    // mimick PrefixManager shutting down procedure
-    closeQueue();
-
-    prefixManager->stop();
-    prefixManagerThread->join();
-    prefixManager.reset();
-
-    // mimick PrefixManager restarting procedure with knob turned off
-    openQueue();
-    // ATTN: explicitly set control knob with old format to make sure
-    // backward compatibility is good.
-    auto tConfig = PrefixManagerTestFixture::createConfig();
-    tConfig.enable_new_prefix_format_ref() = false;
-
-    auto cfg = std::make_shared<Config>(tConfig);
-    createPrefixManager(cfg); // util call will override `prefixManager`
-
-    // Wait for throttled update
-    // consider prefixManager throttle + kvstoreClientInternal throttle
-    evb.scheduleTimeout(
-        std::chrono::milliseconds(
-            3 * Constants::kKvStoreSyncThrottleTimeout.count()),
-        [&]() {
-          // Wait for throttled update to announce to kvstore
-          auto maybeValue1 = kvStoreWrapper->getKey(kTestingAreaName, keyStr1);
-          auto maybeValue2 = kvStoreWrapper->getKey(kTestingAreaName, keyStr2);
-          EXPECT_TRUE(maybeValue1.has_value());
-          EXPECT_TRUE(maybeValue2.has_value());
-
-          auto db1 = readThriftObjStr<thrift::PrefixDatabase>(
-              maybeValue1.value().value_ref().value(), serializer);
-          auto db2 = readThriftObjStr<thrift::PrefixDatabase>(
-              maybeValue2.value().value_ref().value(), serializer);
-          EXPECT_EQ(*db2.deletePrefix_ref(), false);
-          EXPECT_EQ(*db1.deletePrefix_ref(), true);
-
-          evb.stop();
-        });
-
-    // let magic happen
-    evb.run();
-  }
-}
-
 TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   // Expect no throw
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
@@ -705,9 +621,10 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
   int staleKeyVersion{100};
   const auto prefixEntry =
       createPrefixEntry(toIpPrefix("5001::/64"), thrift::PrefixType::DEFAULT);
-  auto prefixKey = PrefixKey(
-      nodeId_, toIPNetwork(*prefixEntry.prefix_ref()), kTestingAreaName);
-  auto prefixKeyStr = prefixKey.getPrefixKeyV2();
+  auto prefixKeyStr =
+      PrefixKey(
+          nodeId_, toIPNetwork(*prefixEntry.prefix_ref()), kTestingAreaName)
+          .getPrefixKeyV2();
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(
@@ -1061,8 +978,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     auto prefixKey9 = PrefixKey(
                           nodeId_,
                           toIPNetwork(*prefixEntry9.prefix_ref()),
-                          thrift::Types_constants::kDefaultArea(),
-                          true)
+                          thrift::Types_constants::kDefaultArea())
                           .getPrefixKeyV2();
 
     evb.scheduleTimeout(
@@ -3756,10 +3672,7 @@ TEST_F(
         // Initial KvStore sync happens after initial full Fib updates and all
         // prefix updates are received.
         auto prefixKey9 = PrefixKey(
-            nodeId_,
-            toIPNetwork(*prefixEntry9.prefix_ref()),
-            kTestingAreaName,
-            true);
+            nodeId_, toIPNetwork(*prefixEntry9.prefix_ref()), kTestingAreaName);
 
         auto pub = kvStoreWrapper->recvPublication();
         // VIP and config originated prefix are both advertised.

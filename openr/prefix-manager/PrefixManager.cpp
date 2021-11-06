@@ -51,9 +51,7 @@ PrefixManager::PrefixManager(
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       kvStore_(kvStore),
       preferOpenrOriginatedRoutes_(
-          config->getConfig().get_prefer_openr_originated_routes()),
-      enableNewPrefixFormat_(
-          config->getConfig().get_enable_new_prefix_format()) {
+          config->getConfig().get_prefer_openr_originated_routes()) {
   CHECK(kvStore_);
   CHECK(config);
 
@@ -296,41 +294,25 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
       continue;
     }
 
-    // TODO: remove fromStr() key parsing logic once every key is on V2 format
     auto const& area = thriftPub.get_area();
-    auto prefixKey = PrefixKey::fromStr(keyStr, area);
-    // Skip bad format of key.
-    if (prefixKey.hasError()) {
-      XLOG(ERR) << fmt::format(
-          "Unable to parse prefix key: {} with error: {}",
-          keyStr,
-          prefixKey.error());
-      continue;
-    }
-    // Skip none-self advertised prefixes or already persisted keys.
-    if (prefixKey->getNodeName() != nodeId_ or
-        advertiseStatus_.count(prefixKey->getCIDRNetwork()) > 0) {
-      continue;
-    }
-    // ATTN: to avoid prefix churn, skip processing prefixes from previous
-    // incarnation with different prefix key format.
-    if (enableNewPrefixFormat_ != prefixKey.value().isPrefixKeyV2()) {
-      const std::string version =
-          prefixKey.value().isPrefixKeyV2() ? "v2" : "v1";
-      XLOG(INFO) << fmt::format(
-          "Skip processing {} format of prefix: {}", version, keyStr);
-      return;
-    }
     try {
       const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           *val.get_value(), serializer_);
-      CHECK_EQ(prefixDb.get_prefixEntries().size(), 1)
-          << "Expect single entry inside prefix database";
+      if (prefixDb.prefixEntries()->size() != 1) {
+        LOG(WARNING) << "Skip processing unexpected number of prefix entries";
+        continue;
+      }
 
       if (not *prefixDb.deletePrefix_ref()) {
         // get the key prefix and area from the thrift::PrefixDatabase
         auto const& tPrefixEntry = prefixDb.get_prefixEntries().front();
+        auto const& thisNodeName = prefixDb.get_thisNodeName();
         auto const& network = toIPNetwork(tPrefixEntry.get_prefix());
+
+        // Skip none-self advertised prefixes or already persisted keys.
+        if (thisNodeName != nodeId_ or advertiseStatus_.count(network) > 0) {
+          continue;
+        }
 
         XLOG(DBG1) << fmt::format(
             "[Prefix Update]: Area: {}, {} updated inside KvStore",
@@ -575,10 +557,8 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
       postPolicyTPrefixEntry = tPrefixEntry;
     }
 
-    const auto prefixKey = PrefixKey(nodeId_, entry.network, toArea);
-    const auto prefixKeyStr = enableNewPrefixFormat_
-        ? prefixKey.getPrefixKeyV2()
-        : prefixKey.getPrefixKey();
+    const auto prefixKeyStr =
+        PrefixKey(nodeId_, entry.network, toArea).getPrefixKeyV2();
     auto prefixDb = createPrefixDb(nodeId_, {*postPolicyTPrefixEntry}, toArea);
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
@@ -610,9 +590,9 @@ PrefixManager::deletePrefixKeysInKvStore(
   // delete actual keys being advertised in the cache
   //
   // Sample format:
-  //  prefix    :    node1    :    0    :    0.0.0.0/32
-  //    |              |           |             |
-  //  marker        nodeId      areaId        prefixStr
+  //  prefix    :    node1    :    0.0.0.0/32
+  //    |              |               |
+  //  marker         nodeId         prefixStr
   auto prefixIter = advertiseStatus_.find(prefix);
   if (prefixIter != advertiseStatus_.end()) {
     deleteKvStoreKeyHelper(prefix, prefixIter->second.areas);
@@ -633,27 +613,24 @@ PrefixManager::deleteKvStoreKeyHelper(
   deletedPrefixDb.deletePrefix_ref() = true;
 
   for (const auto& area : deletedArea) {
+    const auto prefixKeyStr = PrefixKey(nodeId_, prefix, area).getPrefixKeyV2();
     thrift::PrefixEntry entry;
     entry.prefix_ref() = toIpPrefix(prefix);
     deletedPrefixDb.prefixEntries_ref() = {entry};
     deletedPrefixDb.area_ref() = area;
 
-    const auto prefixKey = PrefixKey(nodeId_, prefix, area);
-    const auto prefixStr = enableNewPrefixFormat_ ? prefixKey.getPrefixKeyV2()
-                                                  : prefixKey.getPrefixKey();
-
     // Remove prefix from KvStore and flood deletion by setting deleted value.
     if (config_->getConfig().get_enable_kvstore_request_queue()) {
       auto unsetPrefixRequest = ClearKeyValueRequest(
           AreaId{area},
-          prefixStr,
+          prefixKeyStr,
           writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
           true);
       kvRequestQueue_.push(std::move(unsetPrefixRequest));
     } else {
       kvStoreClient_->clearKey(
           AreaId{area},
-          prefixStr,
+          prefixKeyStr,
           writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
           ttlKeyInKvStore_);
     }

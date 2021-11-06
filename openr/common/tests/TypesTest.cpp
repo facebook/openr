@@ -16,41 +16,8 @@ TEST(TypesTest, fromStrTest) {
   const std::string nodeName{"node-1"};
   const std::string badNodeName{"\\\\[]{}"};
   const std::string areaId = "default-area";
-  const std::string badAreaId{"{FILL_ME_IN}"};
   const std::string prefix{"1.1.1.1/32"};
   const std::string badPrefix{"1.1."};
-
-  // v1 format prefix key string
-  const std::string validStrV1{fmt::format(
-      "{}{}:{}:[{}]",
-      Constants::kPrefixDbMarker.toString(),
-      nodeName,
-      areaId,
-      prefix)};
-  const std::string invalidStrWithBadTypeV1{fmt::format(
-      "{}{}:{}:[{}]",
-      Constants::kAdjDbMarker.toString(),
-      nodeName,
-      areaId,
-      prefix)};
-  const std::string invalidStrWithBadNodeV1{fmt::format(
-      "{}{}:{}:[{}]",
-      Constants::kPrefixDbMarker.toString(),
-      badNodeName,
-      areaId,
-      prefix)};
-  const std::string invalidStrWithBadAreaIdV1{fmt::format(
-      "{}{}:{}:[{}]",
-      Constants::kPrefixDbMarker.toString(),
-      nodeName,
-      badAreaId,
-      prefix)};
-  const std::string invalidStrWithBadPrefixV1{fmt::format(
-      "{}{}:{}:[{}]",
-      Constants::kPrefixDbMarker.toString(),
-      nodeName,
-      areaId,
-      badPrefix)};
 
   // v2 format prefix key string
   const std::string validStrV2{fmt::format(
@@ -68,54 +35,23 @@ TEST(TypesTest, fromStrTest) {
   const std::string invalidStrWithBadPrefixV2{fmt::format(
       "{}{}:[{}]", Constants::kPrefixDbMarker.toString(), nodeName, badPrefix)};
 
-  {
-    // validate v1 format prefix key string
-    auto maybePrefixKey = PrefixKey::fromStr(validStrV1);
-    EXPECT_FALSE(maybePrefixKey.hasError());
-    EXPECT_EQ(nodeName, maybePrefixKey.value().getNodeName());
-    EXPECT_EQ(areaId, maybePrefixKey.value().getPrefixArea());
-    EXPECT_EQ(
-        folly::IPAddress::createNetwork(prefix),
-        maybePrefixKey.value().getCIDRNetwork());
-    EXPECT_EQ(
-        fmt::format(
-            "{}{}:{}:[{}]",
-            Constants::kPrefixDbMarker.toString(),
-            nodeName,
-            areaId,
-            prefix),
-        maybePrefixKey.value().getPrefixKey());
+  // validate v2 format prefix key string
+  auto maybePrefixKey = PrefixKey::fromStr(validStrV2, areaId);
+  EXPECT_FALSE(maybePrefixKey.hasError());
+  EXPECT_EQ(nodeName, maybePrefixKey.value().getNodeName());
+  EXPECT_EQ(areaId, maybePrefixKey.value().getPrefixArea());
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork(prefix),
+      maybePrefixKey.value().getCIDRNetwork());
+  EXPECT_EQ(
+      fmt::format(
+          "{}{}:[{}]", Constants::kPrefixDbMarker.toString(), nodeName, prefix),
+      maybePrefixKey.value().getPrefixKeyV2());
 
-    EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadTypeV1).hasError());
-    EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadNodeV1).hasError());
-    EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadAreaIdV1).hasError());
-    EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadPrefixV1).hasError());
-  }
-
-  {
-    // validate v2 format prefix key string
-    auto maybePrefixKey = PrefixKey::fromStr(validStrV2, areaId);
-    EXPECT_FALSE(maybePrefixKey.hasError());
-    EXPECT_EQ(nodeName, maybePrefixKey.value().getNodeName());
-    EXPECT_EQ(areaId, maybePrefixKey.value().getPrefixArea());
-    EXPECT_EQ(
-        folly::IPAddress::createNetwork(prefix),
-        maybePrefixKey.value().getCIDRNetwork());
-    EXPECT_EQ(
-        fmt::format(
-            "{}{}:[{}]",
-            Constants::kPrefixDbMarker.toString(),
-            nodeName,
-            prefix),
-        maybePrefixKey.value().getPrefixKeyV2());
-
-    EXPECT_TRUE(
-        PrefixKey::fromStr(invalidStrWithBadFormatV2, areaId).hasError());
-    EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadTypeV2, areaId).hasError());
-    EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadNodeV2, areaId).hasError());
-    EXPECT_TRUE(
-        PrefixKey::fromStr(invalidStrWithBadPrefixV2, areaId).hasError());
-  }
+  EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadFormatV2, areaId).hasError());
+  EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadTypeV2, areaId).hasError());
+  EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadNodeV2, areaId).hasError());
+  EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadPrefixV2, areaId).hasError());
 }
 
 int

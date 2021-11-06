@@ -137,7 +137,7 @@ sendRecvPrefixUpdate(
   thrift::Publication pub;
   pub.area_ref() = kTestingAreaName;
   pub.keyVals_ref() = {
-      {keyDbPair.first.getPrefixKey(),
+      {keyDbPair.first.getPrefixKeyV2(),
        createThriftValue(
            1,
            nodeName,
@@ -301,7 +301,7 @@ createGrid(
                     ? thrift::PrefixForwardingType::SR_MPLS
                     : thrift::PrefixForwardingType::IP,
                 forwardingAlgorithm));
-        prefixDbs.emplace(key.getPrefixKey(), std::move(db));
+        prefixDbs.emplace(key.getPrefixKeyV2(), std::move(db));
       }
     }
   }

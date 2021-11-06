@@ -537,11 +537,6 @@ class PrefixManager final : public OpenrEventBase {
   bool preferOpenrOriginatedRoutes_{false};
 
   /*
-   * TODO: temp flag to indicate usage of new prefix key format
-   */
-  bool enableNewPrefixFormat_{false};
-
-  /*
    * prefixes to be originated from prefix-manager
    * ATTN: to support quick information retrieval, cache the mapping:
    *

@@ -608,28 +608,12 @@ class PrefixKey {
   PrefixKey(
       std::string const& node,
       folly::CIDRNetwork const& prefix,
-      const std::string& area,
-      bool isPrefixKeyV2 = false);
-
-  // Util function to check string is with v1 or v2 format of prefix key
-  static bool isPrefixKeyV2Str(const std::string& key);
+      const std::string& area);
 
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStr(
       const std::string& key,
       const std::string& area = thrift::Types_constants::kDefaultArea());
-
-  // TODO: deprecate after migration
-  static const RE2&
-  getPrefixRE2() {
-    static const RE2 prefixKeyPattern{fmt::format(
-        "{}(?P<node>[a-zA-Z\\d\\.\\-\\_]+):"
-        "(?P<area>[a-zA-Z0-9\\.\\_\\-]+):"
-        "\\[(?P<IPAddr>[a-fA-F\\d\\.\\:]+)/"
-        "(?P<plen>[\\d]{{1,3}})\\]",
-        Constants::kPrefixDbMarker.toString())};
-    return prefixKeyPattern;
-  }
 
   static const RE2&
   getPrefixRE2V2() {
@@ -665,22 +649,10 @@ class PrefixKey {
     return prefix_;
   }
 
-  // return raw prefix key string from kvstore
-  inline std::string const&
-  getPrefixKey() const {
-    return prefixKeyString_;
-  }
-
   // return raw prefix key string v2 from kvstore
   inline std::string const&
   getPrefixKeyV2() const {
     return prefixKeyStringV2_;
-  }
-
-  // return v2 format flag
-  inline bool
-  isPrefixKeyV2() const {
-    return isPrefixKeyV2_;
   }
 
   bool
@@ -695,11 +667,7 @@ class PrefixKey {
   // IP address
   folly::CIDRNetwork const prefix_;
 
-  // flag to indicate v2 format
-  const bool isPrefixKeyV2_;
-
   // raw key string from KvStore
-  std::string const prefixKeyString_;
   std::string const prefixKeyStringV2_;
 };
 

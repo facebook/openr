@@ -46,18 +46,9 @@ RegexSet::match(std::string const& key) const {
 PrefixKey::PrefixKey(
     std::string const& node,
     folly::CIDRNetwork const& prefix,
-    const std::string& area,
-    bool isPrefixKeyV2)
+    const std::string& area)
     : nodeAndArea_(node, area),
       prefix_(prefix),
-      isPrefixKeyV2_(isPrefixKeyV2),
-      prefixKeyString_(fmt::format(
-          "{}{}:{}:[{}/{}]",
-          Constants::kPrefixDbMarker.toString(),
-          node,
-          area,
-          prefix_.first.str(),
-          prefix_.second)),
       prefixKeyStringV2_(fmt::format(
           "{}{}:[{}/{}]",
           Constants::kPrefixDbMarker.toString(),
@@ -65,39 +56,19 @@ PrefixKey::PrefixKey(
           prefix_.first.str(),
           prefix_.second)) {}
 
-bool
-PrefixKey::isPrefixKeyV2Str(const std::string& key) {
-  int64_t plen{0};
-  std::string node{};
-  std::string ipStr{};
-  folly::CIDRNetwork ipAddress;
-  auto patt =
-      RE2::FullMatch(key, PrefixKey::getPrefixRE2(), &node, &ipStr, &plen);
-  auto pattV2 =
-      RE2::FullMatch(key, PrefixKey::getPrefixRE2V2(), &node, &ipStr, &plen);
-
-  return (not patt) and pattV2;
-}
-
 folly::Expected<PrefixKey, std::string>
 PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
   bool isV2PrefixKey{false};
   int plen{0};
-  std::string area{};
   std::string node{};
   std::string ipStr{};
   folly::CIDRNetwork network;
 
-  auto patt = RE2::FullMatch(key, getPrefixRE2(), &node, &area, &ipStr, &plen);
-  if (not patt) {
-    auto pattV2 =
-        RE2::FullMatch(key, PrefixKey::getPrefixRE2V2(), &node, &ipStr, &plen);
-    if (not pattV2) {
-      return folly::makeUnexpected(
-          fmt::format("Invalid format for key: {}.", key));
-    }
-    // this is a v2 format prefix key
-    isV2PrefixKey = true;
+  auto pattV2 =
+      RE2::FullMatch(key, PrefixKey::getPrefixRE2V2(), &node, &ipStr, &plen);
+  if (not pattV2) {
+    return folly::makeUnexpected(
+        fmt::format("Invalid format for key: {}.", key));
   }
 
   try {
@@ -109,11 +80,7 @@ PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
         key,
         e.what()));
   }
-  return PrefixKey(
-      node,
-      network,
-      isV2PrefixKey ? areaIn : area, /* use passed in area for v2 format */
-      isV2PrefixKey);
+  return PrefixKey(node, network, areaIn);
 }
 
 } // namespace openr

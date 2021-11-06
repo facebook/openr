@@ -4997,180 +4997,6 @@ class DecisionTestFixture : public ::testing::Test {
   bool kvStoreSyncEventSent{false};
 };
 
-/*
- * This is for backward compatibility test with prefix key format
- * migration.
- *
- * Topology:
- *
- * 1 ---- 2 (advertising prefix with both v1 and v2)
- *
- * - (Old binary flow): Format v1 expiration without v2
- *    1) publish v1 format prefix keys;
- *    2) expire v1 format prefix keys;
- *    3) verify route is removed;
- *
- * - (New binary flow): Format v2 expiration without v1
- *    1) publish v2 format prefix keys;
- *    2) expire v2 format prefix keys;
- *    3) verify route is removed;
- *
- * - (Canary-on flow): Format v1 expiration with v1 + v2
- *    1) publish v1 + v2 format prefix keys;
- *    2) expire v1 format prefix keys;
- *    3) verify route is still there;
- *    4) expire v2 format prefix keys;
- *    5) verify route is removed;
- *
- * - (Canary-off flow): Format v2 expiration with v1 + v2
- *    1) publish v1 + v2 format prefix keys;
- *    2) expire v2 format prefix keys;
- *    3) verify route is still there;
- *    4) expire v1 format prefix keys;
- *    5) verify route is removed;
- */
-TEST_F(DecisionTestFixture, PrefixKeyBackwardCompatibility) {
-  //
-  // (Old binary flow): Format v1 expiration without v2
-  //
-  {
-    // publish initial link-state + prefix-state
-    // ATTN: need bi-direction adjacency for decision to calculate route
-    auto publication = createThriftPublication(
-        /* prefix key format v1 */
-        {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-         {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
-         createPrefixKeyValue("2", 1, addr1)},
-        /* expired-keys */
-        {});
-    sendKvPublication(publication);
-
-    // verify prefix-state
-    verifyReceivedRoutes(toIPNetwork(addr1), false);
-
-    // prefix key with v1 format expired
-    publication = createThriftPublication(
-        /* no prefix key update */
-        {},
-        /* expired-keys */
-        {createPrefixKeyValue("2", 1, addr1).first});
-    sendKvPublication(publication);
-
-    // verify route withdrawn
-    verifyReceivedRoutes(toIPNetwork(addr1), true);
-  }
-
-  //
-  // (New binary flow): Format v2 expiration without v1
-  //
-  {
-    // publish initial prefix-state
-    auto publication = createThriftPublication(
-        /* prefix key format v2 */
-        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)},
-        /* expired-keys */
-        {});
-    sendKvPublication(publication);
-
-    // verify prefix-state
-    verifyReceivedRoutes(toIPNetwork(addr1), false);
-
-    // prefix key with v2 format expired
-    publication = createThriftPublication(
-        /* no prefix key update */
-        {},
-        /* expired-keys */
-        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)
-             .first});
-    sendKvPublication(publication);
-
-    // verify route withdrawn
-    verifyReceivedRoutes(toIPNetwork(addr1), true);
-  }
-
-  //
-  // (Canary-on flow): Format v1 expiration with v1 + v2
-  //
-  {
-    // publish initial prefix-state
-    auto publication = createThriftPublication(
-        {/* prefix key format v1 */
-         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, false),
-         /* prefix key format v2 */
-         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)},
-        /* expired-keys */
-        {});
-    sendKvPublication(publication);
-
-    // verify prefix-state
-    verifyReceivedRoutes(toIPNetwork(addr1), false);
-
-    // prefix key with v1 format expired
-    publication = createThriftPublication(
-        /* no prefix key update */
-        {},
-        /* expired-keys */
-        {createPrefixKeyValue("2", 1, addr1).first});
-    sendKvPublication(publication);
-
-    // ATTN: no route withdrawn since we have received format v2
-    verifyReceivedRoutes(toIPNetwork(addr1), false);
-
-    // prefix key with v2 format expired
-    publication = createThriftPublication(
-        /* no prefix key update */
-        {},
-        /* expired-keys */
-        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)
-             .first});
-    sendKvPublication(publication);
-
-    // verify route withdrawn
-    verifyReceivedRoutes(toIPNetwork(addr1), true);
-  }
-
-  //
-  // (Canary-off flow): Format v2 expiration with v1 + v2
-  //
-  {
-    // publish initial prefix-state
-    auto publication = createThriftPublication(
-        {/* prefix key format v1 */
-         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, false),
-         /* prefix key format v2 */
-         createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)},
-        /* expired-keys */
-        {});
-    sendKvPublication(publication);
-
-    // verify prefix-state
-    verifyReceivedRoutes(toIPNetwork(addr1), false);
-
-    // prefix key with v2 format expired
-    publication = createThriftPublication(
-        /* no prefix key update */
-        {},
-        /* expired-keys */
-        {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false, true)
-             .first});
-    sendKvPublication(publication);
-
-    // ATTN: no route withdrawn since we have received format v1
-    verifyReceivedRoutes(toIPNetwork(addr1), false);
-
-    // prefix key with v1 format expired
-    publication = createThriftPublication(
-        /* no prefix key update */
-        {},
-        /* expired-keys */
-        {createPrefixKeyValue("2", 1, addr1).first});
-    sendKvPublication(publication);
-
-    // verify route withdrawn
-    verifyReceivedRoutes(toIPNetwork(addr1), true);
-  }
-}
-
 // The following topology is used:
 //
 // 1---2---3
@@ -5984,7 +5810,7 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   // publish area A adj and prefix
   // "2" originate addr2 into A
   //
-  auto originKeyStr = PrefixKey("2", toIPNetwork(addr2), "A").getPrefixKey();
+  auto originKeyStr = PrefixKey("2", toIPNetwork(addr2), "A").getPrefixKeyV2();
   auto originPfx = createPrefixEntry(addr2);
   originPfx.area_stack_ref() = {"65000"};
   auto originPfxVal =
@@ -6023,7 +5849,7 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   //   - not route update
   //
   auto redistributeKeyStr =
-      PrefixKey("1", toIPNetwork(addr2), "B").getPrefixKey();
+      PrefixKey("1", toIPNetwork(addr2), "B").getPrefixKeyV2();
   auto redistributePfx = createPrefixEntry(addr2, thrift::PrefixType::RIB);
   redistributePfx.area_stack_ref() = {"65000", "A"};
   auto redistributePfxVal =
@@ -7521,8 +7347,7 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
         // Received KvStoreSynced signal.
         auto publication = createThriftPublication(
             /* prefix key format v2 */
-            {createPrefixKeyValue(
-                "2", 1, addr1, kTestingAreaName, false, true)},
+            {createPrefixKeyValue("2", 1, addr1, kTestingAreaName, false)},
             /* expired-keys */
             {});
         sendKvPublication(publication);

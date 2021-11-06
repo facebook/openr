@@ -750,10 +750,7 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
         // construct new prefix key with local publication area id
         PrefixKey prefixKey(
-            prefixDb.get_thisNodeName(),
-            toIPNetwork(entry.get_prefix()),
-            area,
-            PrefixKey::isPrefixKeyV2Str(key));
+            prefixDb.get_thisNodeName(), toIPNetwork(entry.get_prefix()), area);
 
         // TODO: Is this useful?
         fb303::fbData->addStatValue(
