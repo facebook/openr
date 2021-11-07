@@ -7,12 +7,7 @@
 
 #pragma once
 
-#include <optional>
-#include <string>
-#include <unordered_map>
-#include <utility>
 #include <variant>
-#include <vector>
 
 #include <boost/heap/priority_queue.hpp>
 #include <boost/serialization/strong_typedef.hpp>

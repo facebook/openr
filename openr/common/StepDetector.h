@@ -7,12 +7,7 @@
 
 #pragma once
 
-#include <cmath>
-#include <functional>
-#include <stdexcept>
-
 #include <folly/stats/BucketedTimeSeries.h>
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {

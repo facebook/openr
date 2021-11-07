@@ -5,9 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/common/ExponentialBackoff.h>
-
 #include <folly/logging/xlog.h>
+#include <openr/common/ExponentialBackoff.h>
 
 namespace openr {
 

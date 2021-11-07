@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <chrono>
-
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 
