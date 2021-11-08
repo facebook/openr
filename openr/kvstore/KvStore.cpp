@@ -7,12 +7,7 @@
 
 #include <fb303/ServiceData.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/Format.h>
-#include <folly/GLog.h>
-#include <folly/Random.h>
-#include <folly/String.h>
 #include <folly/logging/xlog.h>
-#include <openr/common/Util.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>

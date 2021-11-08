@@ -11,8 +11,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 

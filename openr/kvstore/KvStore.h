@@ -8,11 +8,8 @@
 #pragma once
 
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/Optional.h>
 #include <folly/TokenBucket.h>
-#include <folly/futures/Future.h>
 #include <folly/gen/Base.h>
-#include <folly/io/IOBuf.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -24,7 +21,6 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/Dual.h>
