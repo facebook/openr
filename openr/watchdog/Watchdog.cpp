@@ -5,14 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/watchdog/Watchdog.h"
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/watchdog/Watchdog.h>
-#include "folly/Range.h"
-#include "openr/messaging/ReplicateQueue.h"
 
 namespace fb303 = facebook::fb303;
 

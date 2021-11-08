@@ -7,12 +7,8 @@
 
 #pragma once
 
-#include <list>
-#include <vector>
-
 #include <folly/IPAddress.h>
 
-#include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
 #include <openr/if/gen-cpp2/Platform_types.h>

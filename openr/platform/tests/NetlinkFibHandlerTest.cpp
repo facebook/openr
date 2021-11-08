@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>

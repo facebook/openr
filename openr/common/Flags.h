@@ -9,8 +9,6 @@
 
 #include <gflags/gflags.h>
 
-#include <openr/common/Constants.h>
-
 // openr config file
 DECLARE_string(config);
 

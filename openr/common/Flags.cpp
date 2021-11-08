@@ -6,7 +6,6 @@
  */
 
 #include <openr/common/Flags.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
 
 DEFINE_string(config, "", "OpenR config file path");
 DEFINE_bool(

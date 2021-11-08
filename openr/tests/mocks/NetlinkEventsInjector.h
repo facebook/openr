@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <openr/if/gen-cpp2/Platform_types.h>
+#include <openr/common/Types.h>
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
 namespace openr {

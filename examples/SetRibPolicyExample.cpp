@@ -11,6 +11,7 @@
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
+#include <openr/if/gen-cpp2/Types_constants.h>
 
 DEFINE_string(host, "::1", "Host to talk to");
 

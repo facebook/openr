@@ -10,11 +10,10 @@
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/io/async/AsyncTimeout.h>
-#include <openr/common/Constants.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/config/Config.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/SystemMetrics.h>
-#include "openr/messaging/ReplicateQueue.h"
 
 namespace openr {
 

@@ -13,7 +13,6 @@
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RouteUpdate.h>

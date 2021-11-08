@@ -5,14 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "NetlinkFibHandler.h"
-
-#include <algorithm>
-#include <functional>
-#include <iterator>
-#include <thread>
-#include <utility>
-
 #include <folly/Format.h>
 #include <folly/gen/Base.h>
 #include <folly/logging/xlog.h>

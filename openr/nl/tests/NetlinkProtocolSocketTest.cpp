@@ -6,8 +6,6 @@
  */
 
 #include <fb303/ServiceData.h>
-#include <folly/Exception.h>
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
 #include <folly/Subprocess.h>
@@ -20,6 +18,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/nl/NetlinkProtocolSocket.h>

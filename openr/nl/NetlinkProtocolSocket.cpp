@@ -5,12 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <thread>
-
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
 
-#include <openr/common/Util.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 
 using facebook::fb303::fbData;

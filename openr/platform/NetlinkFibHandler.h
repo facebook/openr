@@ -7,19 +7,12 @@
 
 #pragma once
 
-#include <chrono>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <vector>
-
 #include <fb303/BaseService.h>
 #include <folly/Expected.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
 
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/NeighborListenerClientForFibagent.h>
 #include <openr/if/gen-cpp2/Types_types.h>
