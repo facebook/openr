@@ -10,9 +10,7 @@
 #include <folly/io/SocketOptionMap.h>
 #include <folly/io/async/AsyncSSLSocket.h>
 #include <folly/io/async/AsyncSocket.h>
-#include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-#include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>

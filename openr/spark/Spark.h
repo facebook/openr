@@ -17,7 +17,6 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
-#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_constants.h>
