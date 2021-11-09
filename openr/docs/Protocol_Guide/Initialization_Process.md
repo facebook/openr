@@ -81,17 +81,6 @@ distributed computation using RangeAllocator.
 NOTE - The SID allocation must not affect existing SID allocation of other
 participating nodes in the network.
 
-### ADJACENCY_DB_SYNCED
-
-The local link-state, aka **Adjacency Database**, of a node is **persisted** in
-the **KvStore** for the first time. The link-state would include, all discovered
-neighbors, their metrics, their adjacency SIDs, node SIDs, and node overload
-state.
-
-The second most important part is that, this would also **unblock** the
-**Adjacency Hold** on neighboring nodes to complete bi-directional adjacency
-establishment for path computation.
-
 ### PREFIX_DB_SYNCED
 
 A node has synchronized all of the route advertisements, aka prefix entries, to
@@ -106,6 +95,13 @@ produce the Routing Information Base (RIB) of the node.
 ### FIB_SYNCED
 
 Computed RIB is programmed to the underlying Forwarding Information Base (FIB).
+
+### INITIALIZED
+
+This would **unblock** the special flag of **AdjOnlyUsedByOtherNode** on
+neighboring nodes to complete bi-directional adjacency establishment for path
+computation and start pouring traffic to node which undergoes INITIALIZATION
+sequence.
 
 ## Formal Specification (FS)
 

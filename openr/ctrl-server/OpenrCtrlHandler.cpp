@@ -409,7 +409,7 @@ void
 OpenrCtrlHandler::getInitializationEvents(
     std::map<thrift::InitializationEvent, int64_t>& _return) {
   for (int eventInt = int(thrift::InitializationEvent::INITIALIZING);
-       eventInt <= int(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+       eventInt <= int(thrift::InitializationEvent::INITIALIZED);
        ++eventInt) {
     auto event = static_cast<thrift::InitializationEvent>(eventInt);
 
@@ -425,7 +425,7 @@ OpenrCtrlHandler::getInitializationEvents(
 
 bool
 OpenrCtrlHandler::initializationConverged() {
-  // TODO: Change to ADJACENCY_DB_SYNCED after OpenR initialization stage2 is
+  // TODO: Change to INITIALIZED after OpenR initialization stage2 is
   // completed.
   // The fb303 counter is set in function logInitializationEvent().
   auto convergenceKey = fmt::format(
@@ -437,7 +437,7 @@ OpenrCtrlHandler::initializationConverged() {
 
 int64_t
 OpenrCtrlHandler::getInitializationDurationMs() {
-  // TODO: Change to ADJACENCY_DB_SYNCED after OpenR initialization stage2 is
+  // TODO: Change to INITIALIZED after OpenR initialization stage2 is
   // completed.
   // The fb303 counter is set in function logInitializationEvent().
   auto convergenceKey = fmt::format(

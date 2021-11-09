@@ -1908,8 +1908,7 @@ Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
   }
 
   // logging for initialization stage duration computation
-  logInitializationEvent(
-      "Spark", thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+  logInitializationEvent("Spark", thrift::InitializationEvent::INITIALIZED);
 }
 
 void
