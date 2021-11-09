@@ -2987,8 +2987,7 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
  */
 TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
   thrift::AreaConfig defaultAreaConfig, nonDefaultAreaConfig;
-  defaultAreaConfig.area_id_ref() =
-      openr::thrift::Types_constants::kDefaultArea();
+  defaultAreaConfig.area_id_ref() = Constants::kDefaultArea.toString();
   defaultAreaConfig.neighbor_regexes_ref()->emplace_back(".*");
   nonDefaultAreaConfig.area_id_ref() = kTestingAreaName;
   nonDefaultAreaConfig.neighbor_regexes_ref()->emplace_back(".*");

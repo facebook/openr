@@ -16,12 +16,6 @@ namespace wiki Open_Routing.Thrift_APIs.Types
 include "Network.thrift"
 include "OpenrConfig.thrift"
 
-/**
- * Default area constant. This is relevant only during the course of transition
- * to new area functionality.
- */
-const string kDefaultArea = "0";
-
 /*
  * Events in OpenR initialization process.
  * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html

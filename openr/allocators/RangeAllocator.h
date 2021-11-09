@@ -7,18 +7,11 @@
 
 #pragma once
 
-#include <chrono>
-#include <random>
-#include <string>
-
-#include <folly/Format.h>
-#include <folly/Optional.h>
 #include <folly/Random.h>
 #include <folly/gen/Base.h>
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 

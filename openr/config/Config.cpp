@@ -9,7 +9,6 @@
 #include <folly/FileUtil.h>
 #include <folly/logging/xlog.h>
 #include <glog/logging.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <stdexcept>
@@ -203,7 +202,7 @@ Config::populateAreaConfig() {
   if (config_.get_areas().empty()) {
     // TODO remove once transition to areas is complete
     thrift::AreaConfig defaultArea;
-    defaultArea.area_id_ref() = thrift::Types_constants::kDefaultArea();
+    defaultArea.area_id_ref() = Constants::kDefaultArea.toString();
     config_.areas_ref() = {defaultArea};
   }
 

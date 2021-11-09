@@ -11,7 +11,6 @@
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
 
 DEFINE_string(host, "::1", "Host to talk to");
 
@@ -50,7 +49,7 @@ main(int argc, char* argv[]) {
   thrift::RibRouteActionWeight actionWeight;
   actionWeight.default_weight_ref() = FLAGS_default_weight;
   actionWeight.area_to_weight_ref()->emplace(
-      thrift::Types_constants::kDefaultArea(), FLAGS_area0_weight);
+      Constants::kDefaultArea.toString(), FLAGS_area0_weight);
   // Parse neighbor->weight map and insert into the policy statement
   std::vector<std::string> neighborWeights;
   folly::split(",", FLAGS_neighbor_weight, neighborWeights, true);

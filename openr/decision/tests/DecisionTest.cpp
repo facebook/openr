@@ -7368,7 +7368,7 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
             toIPNetwork(addr1V4),
             {},
             addr1V4ConfigPrefixEntry,
-            thrift::Types_constants::kDefaultArea()));
+            Constants::kDefaultArea.toString()));
         staticRouteUpdatesQueue.push(std::move(configStaticRoutes));
       });
 
@@ -7393,7 +7393,7 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
               toIPNetwork(addr2V4),
               {},
               addr2VipPrefixEntry,
-              thrift::Types_constants::kDefaultArea()));
+              Constants::kDefaultArea.toString()));
           staticRouteUpdatesQueue.push(std::move(vipStaticRoutes));
         }
       });

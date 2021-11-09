@@ -20,7 +20,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Network_types.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/policy/PolicyStructs.h>
 
@@ -608,7 +607,7 @@ class PrefixKey {
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStr(
       const std::string& key,
-      const std::string& area = thrift::Types_constants::kDefaultArea());
+      const std::string& area = Constants::kDefaultArea.toString());
 
   static const RE2&
   getPrefixRE2V2() {

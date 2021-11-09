@@ -21,7 +21,6 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/Types_constants.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/Dual.h>
 #include <openr/kvstore/KvStoreUtil.h>

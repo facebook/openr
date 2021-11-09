@@ -206,6 +206,13 @@ class Constants {
   // delimiter separating prefix and name in kvstore key
   static constexpr folly::StringPiece kPrefixNameSeparator{":"};
 
+  // KvStore default areaId
+  //
+  // NOTE: this is a special areaId that is treated as the wildcard area.
+  // Interfaces configured into this area will form adjacencies with any other
+  // node not validating what area they claim to be in.
+  static constexpr folly::StringPiece kDefaultArea{"0"};
+
   // KvStore key markers
   static constexpr folly::StringPiece kAdjDbMarker{"adj:"};
   static constexpr folly::StringPiece kPrefixDbMarker{"prefix:"};

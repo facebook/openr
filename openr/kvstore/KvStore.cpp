@@ -219,15 +219,19 @@ KvStore::getAreaDbOrThrow(
     std::string const& areaId, std::string const& caller) {
   auto search = kvStoreDb_.find(areaId);
   if (kvStoreDb_.end() == search) {
-    XLOG(WARNING) << "Area " << areaId
-                  << " requested but not configured for this node.";
-    // TODO: migration workaround => if me/peer does is using default area,
-    // always honor my config, ignore peer's config.
+    XLOG(WARNING) << fmt::format(
+        "Area {} requested but not configured for this node.", areaId);
+
+    // ATTN: AreaId "0" a special area that is treated as the wildcard area.
+    // We will still do FULL_SYNC if:
+    //  1) We are ONLY configured with single areaId "0";
+    //  2) We are ONLY configured with single areaId(may NOT be "0") and
+    //     with areaId "0" from peer's sync request;
+    const auto defaultArea = Constants::kDefaultArea.toString();
     if (kvStoreDb_.size() == 1 and
-        (kvStoreDb_.count(openr::thrift::Types_constants::kDefaultArea()) or
-         areaId == openr::thrift::Types_constants::kDefaultArea())) {
-      XLOG(INFO) << "Falling back to my single area: "
-                 << kvStoreDb_.begin()->first;
+        (kvStoreDb_.count(defaultArea) or areaId == defaultArea)) {
+      XLOG(INFO) << fmt::format(
+          "Falling back to my single area: {}", kvStoreDb_.begin()->first);
       fb303::fbData->addStatValue(
           fmt::format("kvstore.default_area_compatibility.{}", caller),
           1,

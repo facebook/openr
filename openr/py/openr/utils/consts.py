@@ -12,6 +12,7 @@ from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 class Consts:
     # Defaults for OpenrCtrlCmd
+    DEFAULT_AREA_ID = "0"
     DEFAULT_HOST = "::1"
     DEFAULT_TIMEOUT = 2  # seconds
     DEFAULT_FIB_AGENT_PORT = 5909

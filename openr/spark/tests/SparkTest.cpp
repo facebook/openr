@@ -35,7 +35,6 @@ const int ifIndex3{3};
 const std::string area1{"area1"};
 const std::string area2{"area2"};
 const std::string area3{"area3"};
-const std::string defaultArea{thrift::Types_constants::kDefaultArea()};
 
 const folly::CIDRNetwork ip1V4 =
     folly::IPAddress::createNetwork("192.168.0.1", 24, false /* apply mask */);
@@ -1853,8 +1852,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   auto tConfig1 = getBasicOpenrConfig(
       nodeName1,
       kDomainName,
-      {createAreaConfig(
-          thrift::Types_constants::kDefaultArea(), {".*"}, {".*"})});
+      {createAreaConfig(Constants::kDefaultArea.toString(), {".*"}, {".*"})});
   auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
@@ -1892,7 +1890,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
     ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(event1.info.nodeName_ref(), nodeName2);
-    EXPECT_EQ(event1.info.area_ref(), defaultArea);
+    EXPECT_EQ(event1.info.area_ref(), Constants::kDefaultArea.toString());
 
     auto events2 = node2->waitForEvents(NB_UP);
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);

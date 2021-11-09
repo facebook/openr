@@ -978,7 +978,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     auto prefixKey9 = PrefixKey(
                           nodeId_,
                           toIPNetwork(*prefixEntry9.prefix_ref()),
-                          thrift::Types_constants::kDefaultArea())
+                          Constants::kDefaultArea.toString())
                           .getPrefixKeyV2();
 
     evb.scheduleTimeout(
@@ -1019,7 +1019,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
               toIPNetwork(addr9),
               nexthops,
               prefixEntry9,
-              thrift::Types_constants::kDefaultArea()));
+              Constants::kDefaultArea.toString()));
           fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
           // Wait for prefix update in KvStore
@@ -2016,7 +2016,7 @@ class RouteOriginationOverrideFixture : public RouteOriginationFixture {
         toIPNetwork(addressV4),
         {},
         entryV4,
-        thrift::Types_constants::kDefaultArea()));
+        Constants::kDefaultArea.toString()));
     fibRouteUpdatesQueue.push(std::move(routeUpdate));
   }
 
@@ -2152,30 +2152,27 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
       v4Network_1,
       {nh_v4},
       prefixEntryV4_1,
-      thrift::Types_constants::kDefaultArea());
+      Constants::kDefaultArea.toString());
   auto unicastEntryV6_1 = RibUnicastEntry(
       v6Network_1,
       {nh_v6},
       prefixEntryV6_1,
-      thrift::Types_constants::kDefaultArea());
+      Constants::kDefaultArea.toString());
   auto unicastEntryV4_2 = RibUnicastEntry(
       v4Network_2,
       {nh_v4, nh_3},
       prefixEntryV4_2,
-      thrift::Types_constants::kDefaultArea());
+      Constants::kDefaultArea.toString());
   auto unicastEntryV6_2 = RibUnicastEntry(
       v6Network_2,
       {nh_v6, nh_3},
       prefixEntryV6_2,
-      thrift::Types_constants::kDefaultArea());
+      Constants::kDefaultArea.toString());
 
   auto addressV4 = toIpPrefix(v4Prefix_);
   const auto entryV4 = createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
   auto unicastEntryV4 = RibUnicastEntry(
-      toIPNetwork(addressV4),
-      {},
-      entryV4,
-      thrift::Types_constants::kDefaultArea());
+      toIPNetwork(addressV4), {}, entryV4, Constants::kDefaultArea.toString());
   //
   // Step1: this tests:
   //  - originated prefix whose supporting routes passed across threshold
@@ -2597,7 +2594,7 @@ TEST_F(
         toIPNetwork(addressV4),
         {},
         entryV4,
-        thrift::Types_constants::kDefaultArea());
+        Constants::kDefaultArea.toString());
     const std::string v4Prefix_1 = "192.108.0.11/30";
     const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
     const auto prefixEntryV4_1 =
@@ -2606,7 +2603,7 @@ TEST_F(
         v4Network_1,
         {nh_v6}, // doesn't matter but we are enabling v6 nexthop only :-)
         prefixEntryV4_1,
-        thrift::Types_constants::kDefaultArea());
+        Constants::kDefaultArea.toString());
     DecisionRouteUpdate routeUpdate1;
     routeUpdate1.addRouteToUpdate(unicastEntryV4);
     routeUpdate1.addRouteToUpdate(unicastEntryV4_1);
@@ -2637,7 +2634,7 @@ TEST_F(
         v4Network_2,
         {nh_v6}, // doesn't matter but we are enabling v6 nexhop only :-)
         prefixEntryV4_2,
-        thrift::Types_constants::kDefaultArea());
+        Constants::kDefaultArea.toString());
     DecisionRouteUpdate routeUpdate2;
     routeUpdate2.addRouteToUpdate(unicastEntryV4_2);
     fibRouteUpdatesQueue.push(std::move(routeUpdate2));
@@ -2928,10 +2925,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   auto addressV4 = toIpPrefix(v4Prefix_);
   const auto entryV4 = createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
   const auto unicastEntryV4 = RibUnicastEntry(
-      toIPNetwork(addressV4),
-      {},
-      entryV4,
-      thrift::Types_constants::kDefaultArea());
+      toIPNetwork(addressV4), {}, entryV4, Constants::kDefaultArea.toString());
 
   // supporting V4 prefix and related structs
   const std::string v4Prefix_1 = "192.108.0.8/30";
@@ -2942,7 +2936,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
       v4Network_1,
       {nh_v4},
       prefixEntryV4_1,
-      thrift::Types_constants::kDefaultArea());
+      Constants::kDefaultArea.toString());
 
   // supporting V6 prefix #1 and related RIB structs
   const std::string v6Prefix_1 = "2001:1:2:3::1/70";
@@ -2953,7 +2947,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
       v6Network_1,
       {nh_v6},
       prefixEntryV6_1,
-      thrift::Types_constants::kDefaultArea());
+      Constants::kDefaultArea.toString());
 
   // supporting V6 prefix #2 and related RIB structs
   const std::string v6Prefix_2 = "2001:1:2:3::1/120";
@@ -2964,7 +2958,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
       v6Network_2,
       {nh_v6, nh_3},
       prefixEntryV6_2,
-      thrift::Types_constants::kDefaultArea());
+      Constants::kDefaultArea.toString());
 
   // Originated prefixes have specific thrift::PrefixType::CONFIG
   const auto bestPrefixEntryV4_ =
@@ -3533,7 +3527,7 @@ TEST_P(
       toIPNetwork(addr4),
       {},
       prefixEntry4,
-      thrift::Types_constants::kDefaultArea()));
+      Constants::kDefaultArea.toString()));
   fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
 
   // kvstore should receive publication with 3 routes 2 config + 1 bgp
@@ -3649,7 +3643,7 @@ TEST_F(
             toIPNetwork(addr9),
             nexthops,
             prefixEntry9,
-            thrift::Types_constants::kDefaultArea()));
+            Constants::kDefaultArea.toString()));
         fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
       });
 

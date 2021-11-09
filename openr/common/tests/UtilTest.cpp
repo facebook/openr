@@ -5,13 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <stdlib.h>
-#include <memory>
-#include <utility>
-
 #include <fb303/ServiceData.h>
-#include <folly/Random.h>
-#include <folly/ScopeGuard.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -124,7 +118,7 @@ struct PrefixKeyEntry {
   std::string pkey{};
   std::string node{};
   folly::CIDRNetwork ipaddr;
-  std::string area{thrift::Types_constants::kDefaultArea()};
+  std::string area{Constants::kDefaultArea.toString()};
   thrift::IpPrefix ipPrefix;
   folly::IPAddress addr;
   int plen{0};
