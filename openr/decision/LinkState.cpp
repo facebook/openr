@@ -1020,6 +1020,9 @@ LinkState::resolveUcmpWeights(
           *currNodeResult.weight());
     }
 
+    // Normalize UCMP weights.
+    currNode->result.normalizeNextHopWeights();
+
     // Cache the UCMP results for currNode
     ucmpResult.emplace(currNode->nodeName, std::move(currNode->result));
   }

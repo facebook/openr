@@ -462,8 +462,8 @@ TEST(LinkStateTest, UcmpTest) {
     EXPECT_THAT(
         getNodeUcmpResults(ucmpResult.at("2")),
         UnorderedElementsAre(
-            std::make_pair("2/3/0", 4 * Constants::kDefaultAdjWeight),
-            std::make_pair("2/4/0", 2 * Constants::kDefaultAdjWeight)));
+            std::make_pair("2/3/0", 2 * Constants::kDefaultAdjWeight),
+            std::make_pair("2/4/0", 1 * Constants::kDefaultAdjWeight)));
     EXPECT_EQ(6 * Constants::kDefaultAdjWeight, ucmpResult.at("2").weight());
 
     // Check UCMP weights at node 1

@@ -312,6 +312,20 @@ class LinkState {
       weight_ = weight;
     }
 
+    void
+    normalizeNextHopWeights() {
+      int64_t gcd{0};
+      for (auto& [_, nh] : nextHopLinks_) {
+        gcd = std::gcd(gcd, nh.weight);
+      }
+
+      if (gcd > 1) {
+        for (auto& [_, nh] : nextHopLinks_) {
+          nh.weight = nh.weight / gcd;
+        }
+      }
+    }
+
    private:
     std::unordered_map<std::string, NextHopLink> nextHopLinks_;
     std::optional<int64_t> weight_{std::nullopt};
