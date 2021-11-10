@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -101,6 +102,8 @@ class Link {
   HoldableValue<LinkStateMetric> metric1_{1}, metric2_{1};
   HoldableValue<bool> overload1_{false}, overload2_{false};
   int32_t adjLabel1_{0}, adjLabel2_{0};
+  // Weight represents a link's capacity (ex: 100Gbps)
+  int64_t weight1_, weight2_;
   thrift::BinaryAddress nhV41_, nhV42_, nhV61_, nhV62_;
   LinkStateMetric holdUpTtl_{0};
 
@@ -137,6 +140,8 @@ class Link {
 
   int32_t getAdjLabelFromNode(const std::string& nodeName) const;
 
+  int64_t getWeightFromNode(const std::string& nodeName) const;
+
   bool getOverloadFromNode(const std::string& nodeName) const;
 
   const thrift::BinaryAddress& getNhV4FromNode(
@@ -158,6 +163,8 @@ class Link {
       LinkStateMetric holdDownTtl);
 
   void setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel);
+
+  void setWeightFromNode(const std::string& nodeName, int64_t weight);
 
   bool setOverloadFromNode(
       const std::string& nodeName,
@@ -259,6 +266,59 @@ class LinkState {
   using SpfResult =
       std::unordered_map<std::string /* otherNodeName */, NodeSpfResult>;
 
+  // Class which holds the UCMP results for a specific node which is part of the
+  // SPF graph from a root node to a list of weighted leaf nodes. The class
+  // holds the following node UCMP results.
+  //   - Node's next-hop weights
+  //   - Node's advertised weight
+  class NodeUcmpResult {
+   public:
+    class NextHopLink {
+     public:
+      NextHopLink(
+          std::shared_ptr<Link> const& l, std::string const& n, int64_t w)
+          : link(l), nextHopNode(n), weight(w) {}
+      std::shared_ptr<Link> const link;
+      std::string const nextHopNode;
+      int64_t weight{0};
+    };
+
+    explicit NodeUcmpResult() {}
+
+    std::unordered_map<std::string, NextHopLink> const&
+    nextHopLinks() const {
+      return nextHopLinks_;
+    }
+
+    std::optional<int64_t>
+    weight() const {
+      return weight_;
+    }
+
+    void
+    addNextHopLink(
+        const std::string& localIface,
+        std::shared_ptr<Link> const& link,
+        std::string const& nextHopNode,
+        int64_t weight) {
+      nextHopLinks_.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(localIface),
+          std::forward_as_tuple(link, nextHopNode, weight));
+    }
+
+    void
+    setWeight(int64_t weight) {
+      weight_ = weight;
+    }
+
+   private:
+    std::unordered_map<std::string, NextHopLink> nextHopLinks_;
+    std::optional<int64_t> weight_{std::nullopt};
+  };
+
+  using UcmpResult = std::unordered_map<std::string, NodeUcmpResult>;
+
   using Path = std::vector<std::shared_ptr<Link>>;
 
   // Shortest paths API:
@@ -270,6 +330,14 @@ class LinkState {
   // deleteAdjacencyDatabase() returns with LinkState::topologyChanged set true
   SpfResult const& getSpfResult(
       const std::string& nodeName, bool useLinkMetric = true) const;
+
+  // API to resolve UCMP weights for all node's on the shortest path
+  // between a root node and a list of weighted leaf nodes.
+  UcmpResult resolveUcmpWeights(
+      const SpfResult& spfGraph,
+      const std::unordered_map<std::string, int64_t>& dstWeights,
+      thrift::PrefixForwardingAlgorithm algo,
+      bool useLinkMetric = true) const;
 
  private:
   // LinkState belongs to a unique area
@@ -482,6 +550,23 @@ class DijkstraQSpfNode {
 
   const std::string nodeName{""};
   LinkState::NodeSpfResult result;
+};
+
+// Dijkstra queue element used to derive UCMP weights for all node's
+// on the shortest path between a root node and a list of weighted lead nodes
+class DijkstraQUcmpNode {
+ public:
+  DijkstraQUcmpNode(const std::string& n, LinkStateMetric m)
+      : nodeName(n), metric_(m) {}
+
+  LinkStateMetric
+  metric() {
+    return metric_;
+  }
+
+  const std::string nodeName{""};
+  LinkStateMetric metric_{0};
+  LinkState::NodeUcmpResult result;
 };
 
 // Dijkstra Q template class.

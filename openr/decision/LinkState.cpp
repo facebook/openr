@@ -14,6 +14,7 @@
 #include <folly/logging/xlog.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/decision/LinkState.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 
 namespace fb303 = facebook::fb303;
 
@@ -158,6 +159,8 @@ Link::Link(
   nhV42_ = *adj2.nextHopV4_ref();
   nhV61_ = *adj1.nextHopV6_ref();
   nhV62_ = *adj2.nextHopV6_ref();
+  weight1_ = *adj1.weight_ref();
+  weight2_ = *adj2.weight_ref();
 }
 
 const std::string&
@@ -210,6 +213,17 @@ Link::getAdjLabelFromNode(const std::string& nodeName) const {
   }
   if (n2_ == nodeName) {
     return adjLabel2_;
+  }
+  throw std::invalid_argument(nodeName);
+}
+
+int64_t
+Link::getWeightFromNode(const std::string& nodeName) const {
+  if (n1_ == nodeName) {
+    return weight1_;
+  }
+  if (n2_ == nodeName) {
+    return weight2_;
   }
   throw std::invalid_argument(nodeName);
 }
@@ -320,6 +334,17 @@ Link::setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel) {
     adjLabel1_ = adjLabel;
   } else if (n2_ == nodeName) {
     adjLabel2_ = adjLabel;
+  } else {
+    throw std::invalid_argument(nodeName);
+  }
+}
+
+void
+Link::setWeightFromNode(const std::string& nodeName, int64_t weight) {
+  if (n1_ == nodeName) {
+    weight1_ = weight;
+  } else if (n2_ == nodeName) {
+    weight2_ = weight;
   } else {
     throw std::invalid_argument(nodeName);
   }
@@ -580,7 +605,8 @@ LinkState::updateAdjacencyDatabase(
                << ", ifName: " << *adj.ifName_ref()
                << ", metric: " << *adj.metric_ref()
                << ", overloaded: " << *adj.isOverloaded_ref()
-               << ", rtt: " << *adj.rtt_ref();
+               << ", rtt: " << *adj.rtt_ref()
+               << ", weight: " << *adj.weight_ref();
   }
 
   // Default construct if it did not exist
@@ -684,6 +710,21 @@ LinkState::updateAdjacencyDatabase(
       // change the adjLabel on the link object we already have
       oldLink.setAdjLabelFromNode(
           nodeName, newLink.getAdjLabelFromNode(nodeName));
+    }
+
+    // Check if link weight has changed
+    if (newLink.getWeightFromNode(nodeName) !=
+        oldLink.getWeightFromNode(nodeName)) {
+      XLOG(DBG1) << folly::sformat(
+          "[LINK UPDATE] Weight change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getWeightFromNode(nodeName),
+          newLink.getWeightFromNode(nodeName));
+
+      change.linkAttributesChanged |= true;
+
+      // change the weight on the link object we already have
+      oldLink.setWeightFromNode(nodeName, newLink.getWeightFromNode(nodeName));
     }
 
     // check if local nextHops Changed
@@ -872,6 +913,125 @@ LinkState::runSpf(
   XLOG(DBG3) << "SPF elapsed time: " << deltaTime.count() << "ms.";
   fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
   return result;
+}
+
+LinkState::UcmpResult
+LinkState::resolveUcmpWeights(
+    const SpfResult& spfGraph,
+    const std::unordered_map<std::string, int64_t>& leafNodeToWeights,
+    thrift::PrefixForwardingAlgorithm algo,
+    bool useLinkMetric) const {
+  CHECK(
+      algo ==
+          thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION ||
+      algo ==
+          thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION);
+  UcmpResult ucmpResult;
+
+  fb303::fbData->addStatValue("decision.ucmp_runs", 1, fb303::COUNT);
+  const auto startTime = std::chrono::steady_clock::now();
+
+  // Initialize the dijkstra queue. This block of code those two
+  // things:
+  //
+  // (1) Add all leafs nodes to the queue only if they are present in the
+  // SPF graph.
+  //
+  // (2) Make sure all leaf nodes are the same distance away from the SPF
+  // graph's root node.
+  DijkstraQ<DijkstraQUcmpNode> q;
+  std::optional<int32_t> spfMetric{std::nullopt};
+  for (const auto& [leafNodeName, leafNodeWeight] : leafNodeToWeights) {
+    auto spfGraphDstNodeIt = spfGraph.find(leafNodeName);
+    if (spfGraphDstNodeIt == spfGraph.end()) {
+      continue;
+    }
+
+    auto dstMetric = spfGraphDstNodeIt->second.metric();
+    if (!spfMetric.has_value()) {
+      spfMetric = dstMetric;
+    } else if (spfMetric.value() != dstMetric) {
+      LOG(ERROR) << "Skipping resolveUcmpWeights. Leaf node " << leafNodeName
+                 << ", has metric " << dstMetric
+                 << " away from root node. Other nodes have a metric of "
+                 << *spfMetric;
+      return ucmpResult;
+    }
+
+    // Insert leaf node into priority queue with metric zero
+    q.insertNode(leafNodeName, 0);
+    q.get(leafNodeName)->result.setWeight(leafNodeWeight);
+  }
+
+  // Walk SPF graph from leaf node to root node
+  while (auto currNode = q.extractMin()) {
+    auto& currNodeResult = currNode->result;
+
+    // Compute the advertised weight for non-leaf nodes.
+    if (!currNodeResult.weight().has_value()) {
+      int64_t advertisedWeight{0};
+      for (auto& [iface, nextHop] : currNodeResult.nextHopLinks()) {
+        switch (algo) {
+        case thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION:
+          // Weight is the sum of the next-hop link weight
+          advertisedWeight +=
+              nextHop.link->getWeightFromNode(currNode->nodeName);
+          break;
+        case thrift::PrefixForwardingAlgorithm::
+            SP_UCMP_PREFIX_WEIGHT_PROPAGATION:
+          // Weight is the sum of the next-hop prefix weight
+          advertisedWeight += nextHop.weight;
+          break;
+        default:
+          CHECK(false) << "Unsupported algo type "
+                       << apache::thrift::util::enumNameSafe(algo);
+        }
+      }
+
+      // Set the prefix weight this node will advertise
+      currNodeResult.setWeight(advertisedWeight);
+    }
+
+    // Find the current node in the SPF graph
+    auto spfGraphNodeIt = spfGraph.find(currNode->nodeName);
+    CHECK(spfGraphNodeIt != spfGraph.end());
+
+    // Walk the current node's upstream neighbors (previous node)
+    for (const auto& pathLink : spfGraphNodeIt->second.pathLinks()) {
+      // Resolve the link metric for the link from prev node to current node
+      auto linkMetric = useLinkMetric
+          ? pathLink.link->getMetricFromNode(pathLink.prevNode)
+          : 1;
+
+      // Check to see if the previous node is already in the queue.
+      // If not create it and add it to the queue.
+      auto prevNode = q.get(pathLink.prevNode);
+      if (!prevNode) {
+        q.insertNode(pathLink.prevNode, currNode->metric() + linkMetric);
+        prevNode = q.get(pathLink.prevNode);
+      }
+
+      // Add the link to prevNode along with the resolved weight
+      auto interface = pathLink.link->getIfaceFromNode(prevNode->nodeName);
+      prevNode->result.addNextHopLink(
+          interface,
+          pathLink.link,
+          currNode->nodeName,
+          *currNodeResult.weight());
+    }
+
+    // Cache the UCMP results for currNode
+    ucmpResult.emplace(currNode->nodeName, std::move(currNode->result));
+  }
+
+  auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - startTime);
+
+  XLOG(DBG3) << "UCMP elapsed time: " << deltaTime.count() << "ms.";
+  fb303::fbData->addStatValue(
+      "decision.ucmp_ms", deltaTime.count(), fb303::AVG);
+
+  return ucmpResult;
 }
 
 } // namespace openr

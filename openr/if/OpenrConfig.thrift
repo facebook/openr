@@ -35,6 +35,18 @@ enum PrefixForwardingAlgorithm {
    * KSP2_ED_ECMP is set.
    */
   KSP2_ED_ECMP = 1,
+
+  /**
+   * Use shortest path with UCMP as prefix forwarding algorithm
+   * The prefix weight advertised by each node is the sum of its next-hop adjacency weights
+   */
+  SP_UCMP_ADJ_WEIGHT_PROPAGATION = 2,
+
+  /**
+   * Use shortest path with UCMP as prefix forwarding algorithm
+   * The prefix weight advertised by each node is the sum of its next-hop node prefix weights
+   */
+  SP_UCMP_PREFIX_WEIGHT_PROPAGATION = 3,
 }
 
 exception ConfigError {

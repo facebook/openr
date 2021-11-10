@@ -7,7 +7,9 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "openr/if/gen-cpp2/OpenrConfig_types.h"
 
+#include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
@@ -15,6 +17,7 @@
 #include <openr/tests/utils/Utils.h>
 
 using namespace testing;
+using namespace openr;
 
 TEST(HoldableValueTest, BasicOperation) {
   openr::HoldableValue<bool> hv{true};
@@ -316,6 +319,161 @@ TEST(LinkStateTest, getKthPaths) {
         EXPECT_TRUE(set.insert(link).second);
       }
     }
+  }
+}
+
+TEST(LinkStateTest, UcmpTest) {
+  // Ucmp algorithm: LWP
+  //
+  // w:2     w:1  w:1
+  //  (4)    (5)  (6)
+  //    \   /   /   /
+  //     \ /   /   /
+  //     ( 2 )/  (3)
+  //       \     /
+  //        \   /
+  //        ( 1 )
+  {
+    auto linkState = openr::getLinkState({
+        {1, {2, 3}},
+        {2, {1, 4, 5, 6}},
+        {3, {1, 6}},
+        {4, {2}},
+        {5, {2}},
+        {6, {2, 3}},
+    });
+
+    auto ucmpResult = linkState.resolveUcmpWeights(
+        linkState.getSpfResult("1"),
+        {{"4", 2 * Constants::kDefaultAdjWeight},
+         {"5", Constants::kDefaultAdjWeight},
+         {"6", Constants::kDefaultAdjWeight}},
+        thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION);
+
+    EXPECT_EQ(6, ucmpResult.size());
+
+    // Check UCMP weights at node 2
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("2")),
+        UnorderedElementsAre(
+            std::make_pair("2/4/0", 2 * Constants::kDefaultAdjWeight),
+            std::make_pair("2/5/0", Constants::kDefaultAdjWeight),
+            std::make_pair("2/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(3 * Constants::kDefaultAdjWeight, ucmpResult.at("2").weight());
+
+    // Check UCMP weights at node 3
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("3")),
+        UnorderedElementsAre(
+            std::make_pair("3/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(Constants::kDefaultAdjWeight, ucmpResult.at("3").weight());
+
+    // Check UCMP weights at node 1
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("1")),
+        UnorderedElementsAre(
+            std::make_pair("1/2/0", 3 * Constants::kDefaultAdjWeight),
+            std::make_pair("1/3/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(2 * Constants::kDefaultAdjWeight, ucmpResult.at("1").weight());
+  }
+
+  // Ucmp algorithm: AWP
+  //
+  // w:2     w:1  w:1
+  //  (4)    (5)  (6)
+  //    \   /   /   /
+  //     \ /   /   /
+  //     ( 2 )/  (3)
+  //       \     /
+  //        \   /
+  //        ( 1 )
+  {
+    auto linkState = openr::getLinkState({
+        {1, {2, 3}},
+        {2, {1, 4, 5, 6}},
+        {3, {1, 6}},
+        {4, {2}},
+        {5, {2}},
+        {6, {2, 3}},
+    });
+
+    auto ucmpResult = linkState.resolveUcmpWeights(
+        linkState.getSpfResult("1"),
+        {{"4", 2 * Constants::kDefaultAdjWeight},
+         {"5", Constants::kDefaultAdjWeight},
+         {"6", Constants::kDefaultAdjWeight}},
+        openr::thrift::PrefixForwardingAlgorithm::
+            SP_UCMP_PREFIX_WEIGHT_PROPAGATION);
+
+    EXPECT_EQ(6, ucmpResult.size());
+
+    // Check UCMP weights at node 2
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("2")),
+        UnorderedElementsAre(
+            std::make_pair("2/4/0", 2 * Constants::kDefaultAdjWeight),
+            std::make_pair("2/5/0", Constants::kDefaultAdjWeight),
+            std::make_pair("2/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(4 * Constants::kDefaultAdjWeight, ucmpResult.at("2").weight());
+
+    // Check UCMP weights at node 3
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("3")),
+        UnorderedElementsAre(
+            std::make_pair("3/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(Constants::kDefaultAdjWeight, ucmpResult.at("3").weight());
+
+    // Check UCMP weights at node 1
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("1")),
+        UnorderedElementsAre(
+            std::make_pair("1/2/0", 4 * Constants::kDefaultAdjWeight),
+            std::make_pair("1/3/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(5 * Constants::kDefaultAdjWeight, ucmpResult.at("1").weight());
+  }
+
+  // Ucmp algorithm: AWP
+  // Testing topology with non one link cost and double
+  // links between nodes
+  //
+  //  w:4    w:2   w:1
+  //  (3)    (4)   (5)
+  //    \   /     / /
+  //     \ /     / /
+  //     (2)    / / cost=2
+  //       \   / /
+  //        \ / /
+  //        (1)
+  {
+    auto linkState = openr::getLinkState(
+        {{1, {{2, 1}, {5, 2}, {5, 2}}},
+         {2, {{1, 1}, {3, 1}, {4, 1}}},
+         {3, {{2, 1}}},
+         {4, {{2, 1}}},
+         {5, {{1, 2}, {1, 2}}}});
+    auto ucmpResult = linkState.resolveUcmpWeights(
+        linkState.getSpfResult("1"),
+        {{"3", 4 * Constants::kDefaultAdjWeight},
+         {"4", 2 * Constants::kDefaultAdjWeight},
+         {"5", Constants::kDefaultAdjWeight}},
+        thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION);
+
+    // Check UCMP weights at node 2
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("2")),
+        UnorderedElementsAre(
+            std::make_pair("2/3/0", 4 * Constants::kDefaultAdjWeight),
+            std::make_pair("2/4/0", 2 * Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(6 * Constants::kDefaultAdjWeight, ucmpResult.at("2").weight());
+
+    // Check UCMP weights at node 1
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("1")),
+        UnorderedElementsAre(
+            std::make_pair("1/2/0", 6 * Constants::kDefaultAdjWeight),
+            std::make_pair("1/5/0", Constants::kDefaultAdjWeight),
+            std::make_pair("1/5/1", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(8 * Constants::kDefaultAdjWeight, ucmpResult.at("1").weight());
   }
 }
 

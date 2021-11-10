@@ -42,4 +42,9 @@ LinkState getLinkState(
 // overload without providing link weight
 LinkState getLinkState(
     std::unordered_map<int /* node */, std::vector<int /* adjNode */>> adjMap);
+
+// Returns a convenient list of interface and next-hop weight pairs
+std::vector<std::pair<std::string, int64_t>> getNodeUcmpResults(
+    const LinkState::NodeUcmpResult& result);
+
 } // namespace openr

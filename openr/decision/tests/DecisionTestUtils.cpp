@@ -21,7 +21,7 @@ getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
     CHECK_LT(node, 0x1 << 16);
     std::vector<thrift::Adjacency> adjs;
     std::unordered_map<int, int> numParallel;
-    for (auto const [adj, weight] : adjList) {
+    for (auto const [adj, metric] : adjList) {
       CHECK_LT(adj, 0x1 << 16);
       auto adjNum = numParallel[adj]++;
       int bottomByte = adj & 0xFF;
@@ -32,7 +32,7 @@ getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
           format("{}/{}/{}", adj, node, adjNum),
           format("fe80::{:02x}{:02x}", topByte, bottomByte),
           format("192.168.{}.{}", topByte, bottomByte),
-          weight,
+          metric,
           // label top 16 bits are me, bottom is neighbor
           ((node << 16) + adj)));
     }
@@ -53,4 +53,17 @@ getLinkState(std::unordered_map<int, std::vector<int>> adjMap) {
   }
   return getLinkState(weightedAdjMap);
 }
+
+std::vector<std::pair<std::string, int64_t>>
+getNodeUcmpResults(const LinkState::NodeUcmpResult& result) {
+  std::vector<std::pair<std::string, int64_t>> ret;
+
+  const auto& nextHopLinks = result.nextHopLinks();
+  for (const auto& [iface, nextHopLink] : nextHopLinks) {
+    ret.emplace_back(iface, nextHopLink.weight);
+  }
+
+  return ret;
+}
+
 } // namespace openr
