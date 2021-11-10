@@ -466,30 +466,41 @@ class LinkState {
 
 }; // class LinkState
 
-// Classes needed for running Dijkstra
-// In addition to implementing the priority queue at the heart of Dijkstra's
-// algorithm, this structure also allows us to store appication specfic data:
-// nexthops.
-class DijkstraQNode {
+// Classes needed for running Dijkstra to build an SPF graph starting at a root
+// node to all other nodes the link state topology. In addition to implementing
+// the priority queue element at the heart of Dijkstra's algorithm, this
+// structure also allows us to store appication specfic data: nexthops.
+class DijkstraQSpfNode {
  public:
-  DijkstraQNode(const std::string& n, LinkStateMetric m)
+  DijkstraQSpfNode(const std::string& n, LinkStateMetric m)
       : nodeName(n), result(m) {}
-  const std::string nodeName;
+
+  LinkStateMetric
+  metric() {
+    return result.metric();
+  }
+
+  const std::string nodeName{""};
   LinkState::NodeSpfResult result;
 };
 
+// Dijkstra Q template class.
+// Implements a priority queue using a heap.
+//
+// Template object must have the following elements
+//   - metric
+//   - nodeName
+template <class T>
 class DijkstraQ {
  private:
-  std::vector<std::shared_ptr<DijkstraQNode>> heap_;
-  std::unordered_map<std::string, std::shared_ptr<DijkstraQNode>> nameToNode_;
+  std::vector<std::shared_ptr<T>> heap_;
+  std::unordered_map<std::string, std::shared_ptr<T>> nameToNode_;
 
   struct {
     bool
-    operator()(
-        std::shared_ptr<DijkstraQNode> a,
-        std::shared_ptr<DijkstraQNode> b) const {
-      if (a->result.metric() != b->result.metric()) {
-        return a->result.metric() > b->result.metric();
+    operator()(std::shared_ptr<T> a, std::shared_ptr<T> b) const {
+      if (a->metric() != b->metric()) {
+        return a->metric() > b->metric();
       }
       return a->nodeName > b->nodeName;
     }
@@ -498,12 +509,12 @@ class DijkstraQ {
  public:
   void
   insertNode(const std::string& nodeName, LinkStateMetric d) {
-    heap_.push_back(std::make_shared<DijkstraQNode>(nodeName, d));
+    heap_.emplace_back(std::make_shared<T>(nodeName, d));
     nameToNode_[nodeName] = heap_.back();
     std::push_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
   }
 
-  std::shared_ptr<DijkstraQNode>
+  std::shared_ptr<T>
   get(const std::string& nodeName) {
     if (nameToNode_.count(nodeName)) {
       return nameToNode_.at(nodeName);
@@ -511,7 +522,7 @@ class DijkstraQ {
     return nullptr;
   }
 
-  std::shared_ptr<DijkstraQNode>
+  std::shared_ptr<T>
   extractMin() {
     if (heap_.empty()) {
       return nullptr;

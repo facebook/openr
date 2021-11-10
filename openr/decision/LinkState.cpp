@@ -807,7 +807,7 @@ LinkState::runSpf(
   fb303::fbData->addStatValue("decision.spf_runs", 1, fb303::COUNT);
   const auto startTime = std::chrono::steady_clock::now();
 
-  DijkstraQ q;
+  DijkstraQ<DijkstraQSpfNode> q;
   q.insertNode(thisNodeName, 0);
   uint64_t loop = 0;
   while (auto node = q.extractMin()) {
@@ -846,21 +846,22 @@ LinkState::runSpf(
         q.insertNode(otherNodeName, recordedNodeMetric + metric);
         otherNode = q.get(otherNodeName);
       }
-      if (otherNode->result.metric() >= recordedNodeMetric + metric) {
+      if (otherNode->metric() >= recordedNodeMetric + metric) {
         // recordedNodeName is either along an alternate shortest path towards
         // otherNodeName or is along a new shorter path. In either case,
         // otherNodeName should use recordedNodeName's nextHops until it finds
         // some shorter path
-        if (otherNode->result.metric() > recordedNodeMetric + metric) {
+        if (otherNode->metric() > recordedNodeMetric + metric) {
           // if this is strictly better, forget about any other paths
           otherNode->result.reset(recordedNodeMetric + metric);
           q.reMake();
         }
-        otherNode->result.addPath(link, recordedNodeName);
-        otherNode->result.addNextHops(recordedNodeNextHops);
-        if (otherNode->result.nextHops().empty()) {
+        auto& otherNodeResult = otherNode->result;
+        otherNodeResult.addPath(link, recordedNodeName);
+        otherNodeResult.addNextHops(recordedNodeNextHops);
+        if (otherNodeResult.nextHops().empty()) {
           // directly connected node
-          otherNode->result.addNextHop(otherNodeName);
+          otherNodeResult.addNextHop(otherNodeName);
         }
       }
     }
