@@ -355,7 +355,7 @@ BM_RedistributeFibDeleteRoute(
     // Generate numOfRedistributeRoutes of unicast routes to be redistributed
     // All routes are contained in single DecisionRouteUpdate
     DecisionRouteUpdate routeUpdate;
-    for (auto& prefixEntry : prefixEntries) {
+    for (auto& prefixEntry : prefixesToRedistribute) {
       routeUpdate.unicastRoutesToDelete.emplace_back(
           toIPNetwork(prefixEntry.get_prefix()));
     }
