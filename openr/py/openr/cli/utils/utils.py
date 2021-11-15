@@ -33,6 +33,7 @@ from typing import (
 import bunch
 import click
 from openr.clients.openr_client import get_openr_ctrl_client
+from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as config_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
@@ -253,7 +254,7 @@ def parse_prefix_database(
         if isinstance(prefix_filter, str):
             prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
 
-    if isinstance(prefix_db, openr_types.Value):
+    if isinstance(prefix_db, kv_store_types.Value):
         prefix_db = deserialize_thrift_object(
             prefix_db.value, openr_types.PrefixDatabase
         )
@@ -319,7 +320,7 @@ def metric_vector_to_dict(metric_vector):
 
 
 def collate_prefix_keys(
-    kvstore_keyvals: openr_types.KeyVals,
+    kvstore_keyvals: kv_store_types.KeyVals,
 ) -> Dict[str, openr_types.PrefixDatabase]:
     """collate all the prefixes of node and return a map of
     nodename - PrefixDatabase
@@ -370,7 +371,7 @@ def prefix_entry_to_dict(prefix_entry):
 def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
     """convert PrefixDatabase from thrift instance to a dictionary"""
 
-    if isinstance(prefix_db, openr_types.Value):
+    if isinstance(prefix_db, kv_store_types.Value):
         prefix_db = deserialize_thrift_object(
             prefix_db.value, openr_types.PrefixDatabase
         )
@@ -413,7 +414,7 @@ def build_global_adj_db(resp):
     """build a map of all adjacencies in the network. this is used
     for bi-directional validation
 
-    :param resp openr_types.Publication: the parsed publication
+    :param resp kv_store_types.Publication: the parsed publication
 
     :return map(node, AdjacencyDatabase): the global
         adj map, devices name mapped to devices it connects to, and
@@ -436,7 +437,7 @@ def build_global_prefix_db(resp):
     """build a map of all prefixes in the network. this is used
     for checking for changes in topology
 
-    :param resp openr_types.Publication: the parsed publication
+    :param resp kv_store_types.Publication: the parsed publication
 
     :return map(node, set([prefix])): the global prefix map,
         prefixes mapped to the node
@@ -529,7 +530,7 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
 def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
     """get parsed adjacency db
 
-    :param resp openr_types.Publication, or decision_types.adjDbs
+    :param resp kv_store_types.Publication, or decision_types.adjDbs
     :param nodes set: the set of the nodes to print prefixes for
     :param bidir bool: only dump bidirectional adjacencies
 
@@ -537,12 +538,12 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
         adjacency DB in a map with keys and values in strings
     """
     adj_dbs = resp
-    if isinstance(adj_dbs, openr_types.Publication):
+    if isinstance(adj_dbs, kv_store_types.Publication):
         adj_dbs = build_global_adj_db(resp)
 
     def _parse_adj(adjs_map, adj_db):
         version = None
-        if isinstance(adj_db, openr_types.Value):
+        if isinstance(adj_db, kv_store_types.Value):
             version = adj_db.version
             adj_db = deserialize_thrift_object(
                 adj_db.value, openr_types.AdjacencyDatabase
@@ -1035,7 +1036,7 @@ def sprint_pub_update(global_publication_db, key, value):
     """
 
     rows = []
-    old_value = global_publication_db.get(key, openr_types.Value())
+    old_value = global_publication_db.get(key, kv_store_types.Value())
 
     if old_value.version != value.version:
         rows.append(["version:", old_value.version, "-->", value.version])
@@ -1190,11 +1191,11 @@ def dump_node_kvs(
     cli_opts: bunch.Bunch,
     host: str,
     area: Optional[str] = None,
-) -> openr_types.Publication:
+) -> kv_store_types.Publication:
     pub = None
 
     with get_openr_ctrl_client(host, cli_opts) as client:
-        keyDumpParams = openr_types.KeyDumpParams(Consts.ALL_DB_MARKER)
+        keyDumpParams = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
         keyDumpParams.keys = [Consts.ALL_DB_MARKER]
         if area is None:
             pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
@@ -1789,7 +1790,7 @@ def get_routes(
 
 
 def print_spt_infos(
-    spt_infos: openr_types.SptInfos,
+    spt_infos: kv_store_types.SptInfos,
     roots: List[str],
     area: Optional[str] = None,
 ) -> None:

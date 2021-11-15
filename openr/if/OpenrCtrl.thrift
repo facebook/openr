@@ -18,6 +18,7 @@ include "fb303/thrift/fb303_core.thrift"
 include "Network.thrift"
 include "OpenrConfig.thrift"
 include "Types.thrift"
+include "KvStore.thrift"
 
 exception OpenrError {
   1: string message;
@@ -489,14 +490,14 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get specific key-values from KvStore. If `filterKeys` is empty then no
    * keys will be returned
    */
-  Types.Publication getKvStoreKeyVals(1: list<string> filterKeys) throws (
+  KvStore.Publication getKvStoreKeyVals(1: list<string> filterKeys) throws (
     1: OpenrError error,
   );
 
   /**
    * with area option
    */
-  Types.Publication getKvStoreKeyValsArea(
+  KvStore.Publication getKvStoreKeyValsArea(
     1: list<string> filterKeys,
     2: string area,
   ) throws (1: OpenrError error);
@@ -504,31 +505,31 @@ service OpenrCtrl extends fb303_core.BaseService {
   /**
    * Get raw key-values from KvStore with more control over filter
    */
-  Types.Publication getKvStoreKeyValsFiltered(
-    1: Types.KeyDumpParams filter,
+  KvStore.Publication getKvStoreKeyValsFiltered(
+    1: KvStore.KeyDumpParams filter,
   ) throws (1: OpenrError error);
 
   /**
    * Get raw key-values from KvStore with more control over filter with 'area'
    * option
    */
-  Types.Publication getKvStoreKeyValsFilteredArea(
-    1: Types.KeyDumpParams filter,
+  KvStore.Publication getKvStoreKeyValsFilteredArea(
+    1: KvStore.KeyDumpParams filter,
     2: string area,
   ) throws (1: OpenrError error);
 
   /**
    * Get kvstore metadata (no values) with filter
    */
-  Types.Publication getKvStoreHashFiltered(
-    1: Types.KeyDumpParams filter,
+  KvStore.Publication getKvStoreHashFiltered(
+    1: KvStore.KeyDumpParams filter,
   ) throws (1: OpenrError error);
 
   /**
    * with area
    */
-  Types.Publication getKvStoreHashFilteredArea(
-    1: Types.KeyDumpParams filter,
+  KvStore.Publication getKvStoreHashFilteredArea(
+    1: KvStore.KeyDumpParams filter,
     2: string area,
   ) throws (1: OpenrError error);
 
@@ -536,7 +537,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Set/Update key-values in KvStore.
    */
   void setKvStoreKeyVals(
-    1: Types.KeySetParams setParams,
+    1: KvStore.KeySetParams setParams,
     2: string area,
   ) throws (1: OpenrError error);
 
@@ -546,12 +547,12 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   bool longPollKvStoreAdjArea(
     1: string area,
-    2: Types.KeyVals snapshot,
+    2: KvStore.KeyVals snapshot,
   ) throws (1: OpenrError error);
 
   // Deprecated, prefer API sepcfying area
   // TODO, remove once EBB has transition away from this
-  bool longPollKvStoreAdj(1: Types.KeyVals snapshot) throws (
+  bool longPollKvStoreAdj(1: KvStore.KeyVals snapshot) throws (
     1: OpenrError error,
   );
 
@@ -559,7 +560,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Send Dual message
    */
   void processKvStoreDualMessage(
-    1: Types.DualMessages messages,
+    1: KvStore.DualMessages messages,
     2: string area,
   ) throws (1: OpenrError error);
 
@@ -567,23 +568,23 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Set flood-topology parameters. Called by neighbors
    */
   void updateFloodTopologyChild(
-    1: Types.FloodTopoSetParams params,
+    1: KvStore.FloodTopoSetParams params,
     2: string area,
   ) throws (1: OpenrError error);
 
   /**
    * Get spanning tree information
    */
-  Types.SptInfos getSpanningTreeInfos(1: string area) throws (
+  KvStore.SptInfos getSpanningTreeInfos(1: string area) throws (
     1: OpenrError error,
   );
 
   /**
    * Get KvStore peers
    */
-  Types.PeersMap getKvStorePeers() throws (1: OpenrError error);
+  KvStore.PeersMap getKvStorePeers() throws (1: OpenrError error);
 
-  Types.PeersMap getKvStorePeersArea(1: string area) throws (
+  KvStore.PeersMap getKvStorePeersArea(1: string area) throws (
     1: OpenrError error,
   );
 
@@ -591,7 +592,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get KvStore Summary for each configured area (provided as the filter set).
    * The resp is a list of Summary structs, one for each area
    */
-  list<Types.KvStoreAreaSummary> getKvStoreAreaSummary(
+  list<KvStore.KvStoreAreaSummary> getKvStoreAreaSummary(
     1: set<string> selectAreas,
   ) throws (1: OpenrError error);
 

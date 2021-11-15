@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <thrift/lib/cpp2/async/ServerPublisherStream.h>
 

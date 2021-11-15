@@ -7,14 +7,10 @@
 
 #pragma once
 
-#include <functional>
-#include <limits>
-#include <stack>
-#include <unordered_map>
-
 #include <folly/Format.h>
+#include <stack>
 
-#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
 

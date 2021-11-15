@@ -8,7 +8,7 @@
 #include <folly/gen/Base.h>
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {

@@ -186,7 +186,7 @@ folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
 
 For more information about `KvStore` parameters, check out
 
-- [if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)
+- [if/KvStore.thrift](https://github.com/facebook/openr/blob/master/openr/if/KvStore.thrift)
 
 ### KvStore Sync via Thrift
 

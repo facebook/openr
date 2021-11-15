@@ -24,6 +24,8 @@
 #include <openr/decision/RibPolicy.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/decision/SpfSolver.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {

@@ -6,6 +6,11 @@
 
 # pyre-ignore-all-errors
 
+from openr.KvStore.ttypes import (
+    KvStoreAreaSummary,
+    Publication,
+    Value,
+)
 from openr.Network.ttypes import (
     BinaryAddress,
     IpPrefix,
@@ -18,13 +23,10 @@ from openr.OpenrCtrl.ttypes import (
 from openr.Types.ttypes import (
     Adjacency,
     AdjacencyDatabase,
-    KvStoreAreaSummary,
     PerfEvents,
     PerfEvent,
     PrefixEntry,
     PrefixMetrics,
-    Publication,
-    Value,
 )
 
 

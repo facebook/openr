@@ -5,9 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <sodium.h>
-#include <thread>
-
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
@@ -15,7 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/utils/Utils.h>

@@ -11,6 +11,7 @@ namespace wiki Open_Routing.Thrift_APIs.OpenrCtrlCpp
 
 include "openr/if/OpenrCtrl.thrift"
 include "openr/if/Types.thrift"
+include "openr/if/KvStore.thrift"
 
 /**
  * Extends OpenrCtrl and implements stream APIs as streams are only
@@ -25,19 +26,19 @@ service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
    * There may be some replicated entries in stream that are also in snapshot.
    */
   // DEPRECATED
-  Types.Publication, stream<Types.Publication> subscribeAndGetKvStore();
+  KvStore.Publication, stream<KvStore.Publication> subscribeAndGetKvStore();
   // DEPRECATED
-  Types.Publication, stream<Types.Publication> subscribeAndGetKvStoreFiltered(
-    1: Types.KeyDumpParams filter,
-  );
+  KvStore.Publication, stream<
+    KvStore.Publication
+  > subscribeAndGetKvStoreFiltered(1: KvStore.KeyDumpParams filter);
 
   // Prefer this API, above do not specfy area to subcribe to, default
   // constructing filter will yield all kvstore keys. provide set of areas to
   // dump and subscribe to. Providing an empty set will subscribe on all areas
-  list<Types.Publication>, stream<
-    Types.Publication
+  list<KvStore.Publication>, stream<
+    KvStore.Publication
   > subscribeAndGetAreaKvStores(
-    1: Types.KeyDumpParams filter,
+    1: KvStore.KeyDumpParams filter,
     2: set<string> selectAreas,
   );
 

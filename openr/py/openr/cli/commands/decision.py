@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Sequence, Tuple
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
@@ -107,7 +108,7 @@ class PathCmd(OpenrCtrlCmd):
         area = utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
 
-        params = openr_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
+        params = kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
         params.keys = [Consts.PREFIX_DB_MARKER]
         if area is None:
             pub = client.getKvStoreKeyValsFiltered(params)
@@ -503,7 +504,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         area_id = utils.get_area_id(client, area)
         # get LSDB from KvStore
-        params = openr_types.KeyDumpParams(Consts.ALL_DB_MARKER)
+        params = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
         params.keys = [Consts.ALL_DB_MARKER]
         if area_id is None:
             kvstore_publication = client.getKvStoreKeyValsFiltered(params)

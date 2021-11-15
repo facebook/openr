@@ -24,6 +24,7 @@
 #include <openr/common/Types.h>
 #include <openr/decision/LinkState.h>
 #include <openr/decision/RibEntry.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl.h>

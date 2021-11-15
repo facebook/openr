@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, Set, Optional
 
 import bunch
 from openr.clients.openr_client import get_openr_ctrl_client
-from openr.Types import ttypes as openr_types
+from openr.KvStore import ttypes as kv_store_types
 from openr.utils import printing
 from openr.utils.consts import Consts
 
@@ -129,12 +129,12 @@ class OpenrCtrlCmd:
         self,
         prefix: str = Consts.ALL_DB_MARKER,
         originator_ids: Optional[Set[str]] = None,
-        keyval_hash: Optional[Dict[str, openr_types.Value]] = None,
-    ) -> openr_types.KeyDumpParams:
+        keyval_hash: Optional[Dict[str, kv_store_types.Value]] = None,
+    ) -> kv_store_types.KeyDumpParams:
         """
         Build KeyDumpParams based on input parameter list
         """
-        params = openr_types.KeyDumpParams(prefix)
+        params = kv_store_types.KeyDumpParams(prefix)
         params.originatorIds = originator_ids if originator_ids else None
         params.keyValHashes = keyval_hash if keyval_hash else None
         if prefix:

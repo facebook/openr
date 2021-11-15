@@ -12,7 +12,7 @@
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 
 namespace openr {

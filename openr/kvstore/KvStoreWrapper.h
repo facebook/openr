@@ -8,9 +8,8 @@
 #pragma once
 
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/Memory.h>
-#include <folly/Optional.h>
 
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>

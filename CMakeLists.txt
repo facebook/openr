@@ -76,6 +76,10 @@ include_directories(
   ${ZMQ_INCLUDE_DIR}
 )
 
+#
+# Build thrift libs
+#
+
 SET(OPENR_THRIFT_LIBS)
 
 add_fbthrift_cpp_library(
@@ -138,6 +142,14 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} platform_cpp2)
 
 add_fbthrift_cpp_library(
+  kv_store_cpp2
+  openr/if/KvStore.thrift
+  OPTIONS
+    json
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} kv_store_cpp2)
+
+add_fbthrift_cpp_library(
   types_cpp2
   openr/if/Types.thrift
   OPTIONS
@@ -157,6 +169,7 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     openr_config_cpp2
+    kv_store_cpp2
     types_cpp2
     network_cpp2
     fb303::fb303_thrift_cpp
@@ -174,6 +187,7 @@ add_fbthrift_cpp_library(
     server_stream
   DEPENDS
     openr_ctrl_cpp2
+    kv_store_cpp2
     types_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp_cpp2)

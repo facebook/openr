@@ -20,6 +20,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
