@@ -18,8 +18,7 @@ SrPolicy::~SrPolicy() = default;
 
 std::optional<thrift::RouteComputationRules>
 SrPolicy::matchAndGetRules(
-    const std::shared_ptr<thrift::PrefixEntry>& prefixEntry,
-    const std::string& receivedAreaId) const {
+    const std::shared_ptr<thrift::PrefixEntry>& prefixEntry) const {
   return std::nullopt;
 }
 
