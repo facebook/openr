@@ -208,13 +208,11 @@ class SpfSolver {
 
   std::optional<RibUnicastEntry> addBestPaths(
       const std::string& myNodeName,
-      const std::unordered_map<std::string, LinkState>& areaLinkStates,
       const folly::CIDRNetwork& prefix,
       const RouteSelectionResult& routeSelectionResult,
       const PrefixEntries& prefixEntries,
       const bool isBgp,
       std::unordered_set<thrift::NextHopThrift>&& nextHops,
-      const thrift::RouteComputationRules& routeComputationRules,
       const openr::LinkStateMetric shortestMetric);
 
   // Helper function to find the nodes for the nexthop for bgp route
@@ -293,18 +291,6 @@ class SpfSolver {
       const std::string& area,
       const LinkState& linkState,
       PrefixEntries const& prefixEntries = {}) const;
-
-  // Generate prepend label for a given prefix and nexthop set.
-  // Depending on the configured SR policy, prepend label will be
-  // returned in two ways:
-  // 1. node segment label of the best route is used
-  // 2. TODO: generate prepend label based off subset of ip route next-hops
-  std::optional<int32_t> generatePrependLabel(
-      const std::string& myNodeName,
-      const std::unordered_map<std::string, LinkState>& areaLinkStates,
-      const folly::CIDRNetwork& prefix,
-      const NodeAndArea& bestNodeArea,
-      const thrift::PrependLabelRules& prependLabelRules);
 
   // Collection to store static IP/MPLS routes
   StaticMplsRoutes staticMplsRoutes_;

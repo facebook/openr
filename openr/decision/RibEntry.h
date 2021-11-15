@@ -63,20 +63,15 @@ struct RibUnicastEntry : RibEntry {
   RibUnicastEntry(
       const folly::CIDRNetwork& prefix,
       std::unordered_set<thrift::NextHopThrift> nexthops,
-      thrift::PrefixEntry bestPrefixEntryThrift,
+      thrift::PrefixEntry bestPrefixEntry,
       const std::string& bestArea,
       bool doNotInstall = false,
-      std::optional<int32_t> prependLabel = std::nullopt,
       unsigned int igpCost = 0)
       : RibEntry(std::move(nexthops), igpCost),
         prefix(prefix),
-        bestPrefixEntry(std::move(bestPrefixEntryThrift)),
+        bestPrefixEntry(std::move(bestPrefixEntry)),
         bestArea(bestArea),
-        doNotInstall(doNotInstall) {
-    if (prependLabel.has_value()) {
-      bestPrefixEntry.prependLabel_ref() = prependLabel.value();
-    }
-  }
+        doNotInstall(doNotInstall) {}
 
   bool
   operator==(const RibUnicastEntry& other) const {
