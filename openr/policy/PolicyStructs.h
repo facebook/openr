@@ -15,11 +15,7 @@ namespace openr {
 // but can NOT be pre-configured in Policy Configuration
 // (e.g some data needs to be dynamically derived on the fly).
 struct OpenrPolicyActionData {
-  explicit OpenrPolicyActionData(int32_t prependLabel)
-      : prependLabel(prependLabel) {}
-
-  // Prepend label to append to the label.
-  std::optional<int32_t> prependLabel;
+  // place holder, add policy-action data
 };
 
 /**
