@@ -183,6 +183,7 @@ KvStoreWrapper::dumpAll(
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
     params.prefix_ref() = keyPrefix;
     params.originatorIds_ref() = filters.value().getOriginatorIdList();
+    params.senderId_ref() = nodeId;
     if (not keyPrefix.empty()) {
       params.keys_ref() = filters.value().getKeyPrefixes();
     }
@@ -200,6 +201,7 @@ KvStoreWrapper::dumpHashes(AreaId const& area, std::string const& prefix) {
   thrift::KeyDumpParams params;
   params.prefix_ref() = prefix;
   params.keys_ref() = {prefix};
+  params.senderId_ref() = nodeId;
 
   auto pub =
       *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
@@ -219,6 +221,7 @@ KvStoreWrapper::syncKeyVals(
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
   params.keyValHashes_ref() = keyValHashes;
+  params.senderId_ref() = nodeId;
 
   auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                   .get()

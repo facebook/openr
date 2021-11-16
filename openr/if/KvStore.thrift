@@ -231,6 +231,11 @@ struct KeySetParams {
    * system timestamp in milliseconds since epoch
    */
   7: optional i64 timestamp_ms;
+
+  /**
+   * ID representing sender of the request.
+   */
+  8: optional string senderId;
 } (cpp.minimize_padding)
 
 /**
@@ -289,6 +294,11 @@ struct KeyDumpParams {
    * getting "adj:.*" keys from open/r domain.
    */
   5: optional list<string> keys;
+
+  /**
+   * ID representing sender of the request.
+   */
+  8: optional string senderId;
 } (cpp.minimize_padding)
 
 /**

@@ -434,11 +434,15 @@ KvStore::semifuture_dumpKvStoreKeys(
                         p = std::move(p),
                         selectAreas = std::move(selectAreas),
                         keyDumpParams = std::move(keyDumpParams)]() mutable {
-    XLOG(DBG3)
-        << "Dump all keys requested for "
-        << (selectAreas.empty()
-                ? "all areas."
-                : fmt::format("areas: {}.", folly::join(", ", selectAreas)));
+    // Empty senderID means local call.
+    XLOG(DBG3) << fmt::format(
+        "Dump all keys requested for {}, by sender: {}",
+        (selectAreas.empty()
+             ? "all areas."
+             : fmt::format("areas: {}", folly::join(", ", selectAreas))),
+        (keyDumpParams.senderId_ref().has_value()
+             ? keyDumpParams.senderId_ref().value()
+             : ""));
 
     auto result = std::make_unique<std::vector<thrift::Publication>>();
     for (auto& area : selectAreas) {
@@ -513,7 +517,13 @@ KvStore::semifuture_dumpKvStoreHashes(
                         p = std::move(p),
                         keyDumpParams = std::move(keyDumpParams),
                         area]() mutable {
-    XLOG(DBG3) << "Dump all hashes requested for AREA: " << area;
+    // Empty senderID means local call.
+    XLOG(DBG3) << fmt::format(
+        "Dump all hashes requested for AREA: {}, by sender: {}",
+        area,
+        (keyDumpParams.senderId_ref().has_value()
+             ? keyDumpParams.senderId_ref().value()
+             : ""));
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_dumpKvStoreHashes");
       fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
@@ -547,7 +557,13 @@ KvStore::semifuture_setKvStoreKeyVals(
                         p = std::move(p),
                         keySetParams = std::move(keySetParams),
                         area]() mutable {
-    XLOG(DBG3) << "Set key requested for AREA: " << area;
+    // Empty senderID means local call.
+    XLOG(DBG3) << fmt::format(
+        "Set key requested for AREA: {}, by sender: {}",
+        area,
+        (keySetParams.senderId_ref().has_value()
+             ? keySetParams.senderId_ref().value()
+             : ""));
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
       kvStoreDb.setKeyVals(std::move(keySetParams));
@@ -1766,6 +1782,7 @@ KvStoreDb::requestThriftPeerSync() {
         std::set<std::string>{} /* originator */);
     params.keyValHashes_ref() =
         dumpHashWithFilters(area_, kvStore_, kvFilters).get_keyVals();
+    params.senderId_ref() = nodeId;
 
     // record telemetry for initial full-sync
     fb303::fbData->addStatValue(
@@ -3155,7 +3172,7 @@ KvStoreDb::finalizeFullSync(
     // Skip final full-sync with those peers.
     return;
   }
-
+  params.senderId_ref() = kvParams_.nodeId;
   XLOG(INFO)
       << AreaTag()
       << fmt::format(
@@ -3314,6 +3331,7 @@ KvStoreDb::floodPublication(
   params.nodeIds_ref().copy_from(publication.nodeIds_ref());
   params.floodRootId_ref().copy_from(publication.floodRootId_ref());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
+  params.senderId_ref() = kvParams_.nodeId;
 
   std::optional<std::string> floodRootId{std::nullopt};
   if (params.floodRootId_ref().has_value()) {
@@ -3505,6 +3523,8 @@ KvStoreDb::mergePublication(
     keysTobeUpdated.insert(key);
   }
   if (senderId.has_value()) {
+    XLOG(DBG3) << "[" << kvParams_.nodeId << "]: Received publication from "
+               << senderId.value();
     auto peerIt = thriftPeers_.find(senderId.value());
     if (peerIt != thriftPeers_.end()) {
       keysTobeUpdated.merge(peerIt->second.pendingKeysDuringInitialization);
