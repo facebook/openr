@@ -299,6 +299,8 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
                 prefix_entry.prefix.forwardingType
             )
             rows.append(
+                # pyre-fixme[58]: `+` is not supported for operand types `str` and
+                #  `Optional[str]`.
                 f"     Forwarding - algorithm: {fwd_algo:>7} {'Type: ' + fwd_type:>23}"
             )
             rows.append(

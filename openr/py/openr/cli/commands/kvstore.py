@@ -372,9 +372,7 @@ class KvKeyValsCmd(KvStoreCmdBase):
             val = self.deserialize_kvstore_publication(key, value)
             if not val:
                 if isinstance(value.value, Iterable) and all(
-                    # pyre-fixme[6]: Expected `str` for 1st param but got `int`.
-                    isinstance(c, str) and c in string.printable
-                    for c in value.value
+                    isinstance(c, str) and c in string.printable for c in value.value
                 ):
                     val = value.value
                 else:
