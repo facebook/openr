@@ -22,8 +22,14 @@ namespace openr {
  */
 class SystemMetrics {
  public:
-  // get RSS memory the process used
+  // get RSS memory the process used, aka, memory is allocated to the process in
+  // RAM.
   std::optional<size_t> getRSSMemBytes();
+
+  // get virtual memory the process used, aka, all memory that the process can
+  // access, including memory in RAM and swapped out, memory that is allocated
+  // but not used, and memory that is from shared libraries
+  std::optional<size_t> getVirtualMemBytes();
 
   // get CPU% the process used
   std::optional<double> getCPUpercentage();

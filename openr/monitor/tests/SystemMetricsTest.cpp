@@ -26,6 +26,11 @@ TEST(MonitorTestFixture, SystemMetrics) {
   EXPECT_GT(rssMem1.value() / 1e6, 1);
   EXPECT_LT(rssMem1.value() / 1e6, 170);
 
+  auto virtualMem1 = systemMetrics_.getVirtualMemBytes();
+  EXPECT_TRUE(virtualMem1.has_value());
+  // Check sanity of return value, check for > 1MB
+  EXPECT_GT(virtualMem1.value() / 1e6, 1);
+
   // Fill about 100 Mbytes of memory and check if monitor reports the increase
   std::vector<int64_t> v(13 * 0x100000);
   fill(v.begin(), v.end(), 1);
@@ -34,6 +39,9 @@ TEST(MonitorTestFixture, SystemMetrics) {
   auto rssMem2 = systemMetrics_.getRSSMemBytes();
   EXPECT_TRUE(rssMem2.has_value());
   EXPECT_GT(rssMem2.value(), rssMem1.value() + 100);
+  auto virtualMem2 = systemMetrics_.getVirtualMemBytes();
+  EXPECT_TRUE(virtualMem2.has_value());
+  EXPECT_GT(virtualMem2.value(), virtualMem1.value() + 100);
 
   // Expect the second cpu% query has value
   auto cpu2 = systemMetrics_.getCPUpercentage();
