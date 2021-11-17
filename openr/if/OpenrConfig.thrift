@@ -168,7 +168,7 @@ struct AreaPathComputationRules {
  */
 union PrependLabelRules {
   /* Advertise node segment label of the best route */
-  1: bool bestRouteNodeSegmentLabel;
+  1: bool bestRouteNodeSegmentLabel = false;
 
   /*
    * Allocate prepend label and use next-hops from given areas.
@@ -192,18 +192,6 @@ struct RouteComputationRules {
   3: optional PrependLabelRules prependLabelRules;
 } (cpp.minimize_padding)
 
-/* SR Policy Matcher defines route filter criterias and area ID route is received at. */
-struct SrPolicyMatcher {
-  /*
-   * Route matching filters. All criterias should be matched.
-   * openrTags and openrAreaStack are applied in SR Policy.
-   */
-  1: list<routing_policy.FilterCriteria> criterias;
-
-  /* Area ID route is received at */
-  2: optional string areaId;
-}
-
 /* SR Policy Configuration defines a route's path computation and LSP setup rules. */
 struct SrPolicy {
   /* SR Policy name */
@@ -212,8 +200,10 @@ struct SrPolicy {
   /* Description of the SR Policy */
   2: string description;
 
-  /* Policy matcher */
-  3: SrPolicyMatcher matcher;
+  /*
+   * Route matching filter. Policy is applied all criterias return a successful match
+   */
+  3: list<routing_policy.FilterCriteria> criterias;
 
   /* Route computation rules */
   4: RouteComputationRules rules;

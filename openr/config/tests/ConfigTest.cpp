@@ -75,7 +75,7 @@ getSRPolicy() {
   criteria.bgpCommunityFilters_ref() = {"COMM1", "COMM2"};
   criteria.openrTagFilters_ref() = {"TAG1", "TAG2"};
   criteria.openrAreaStack_ref() = "empty_area_stack_name";
-  sr_policy.matcher_ref()->criterias_ref()->emplace_back(criteria);
+  sr_policy.criterias_ref()->emplace_back(criteria);
 
   openr::thrift::RouteComputationRules rules;
   openr::thrift::AreaPathComputationRules areaRules;
@@ -829,8 +829,7 @@ TEST(ConfigTest, PopulateInternalDb) {
     conf.segment_routing_config_ref()
         ->sr_policies_ref()
         ->at(0)
-        .matcher_ref()
-        ->criterias_ref()
+        .criterias_ref()
         ->emplace_back(criteria);
     conf.segment_routing_config_ref()
         ->sr_policies_ref()
