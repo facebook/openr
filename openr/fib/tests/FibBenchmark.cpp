@@ -25,8 +25,13 @@
  * benchmarking and passes a parameter to another one. This is common for
  * benchmarks that need a "problem size" in addition to "number of iterations".
  */
-#define BENCHMARK_COUNTERS_PARAM(name, counters, param) \
-  BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param, param)
+#define BENCHMARK_COUNTERS_PARAM(name, counters, existing, update) \
+  BENCHMARK_COUNTERS_NAME_PARAM(                                   \
+      name,                                                        \
+      counters,                                                    \
+      FB_CONCATENATE(existing, FB_CONCATENATE(_, update)),         \
+      existing,                                                    \
+      update)
 
 /*
  * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
@@ -48,8 +53,7 @@ namespace {
 const std::string kVethNameY("vethTestY");
 // Prefix length of a subnet
 static const long kBitMaskLen = 128;
-// Updating kDeltaSize routing entries
-static const uint32_t kDeltaSize = 10;
+
 // Number of nexthops
 const uint8_t kNumOfNexthops = 128;
 
@@ -101,28 +105,6 @@ class FibWrapper {
       LOG(INFO) << "Fib thread finishing";
     });
     fib->waitUntilRunning();
-
-    // instantiate openrCtrlHandler to invoke fib API
-    handler = std::make_shared<OpenrCtrlHandler>(
-        "node-1",
-        std::unordered_set<std::string>{} /* acceptable peers */,
-        &evb,
-        nullptr /* decision */,
-        fib.get() /* fib */,
-        nullptr /* kvStore */,
-        nullptr /* linkMonitor */,
-        nullptr /* monitor */,
-        nullptr /* configStore */,
-        nullptr /* prefixManager */,
-        nullptr /* spark */,
-        config /* config */);
-
-    evbThread = std::make_unique<std::thread>([this]() {
-      LOG(INFO) << "Starting ctrlEvb";
-      evb.run();
-      LOG(INFO) << "ctrlEvb finished";
-    });
-    evb.waitUntilRunning();
   }
 
   ~FibWrapper() {
@@ -131,12 +113,6 @@ class FibWrapper {
     routeUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     logSampleQueue.close();
-
-    LOG(INFO) << "Stopping openr-ctrl handler";
-    handler.reset();
-    evb.stop();
-    evb.waitUntilStopped();
-    evbThread->join();
 
     // This will be invoked before Fib's d-tor
     fib->stop();
@@ -147,37 +123,6 @@ class FibWrapper {
     fibThriftThread.stop();
   }
 
-  thrift::PerfDatabase
-  getPerfDb() {
-    thrift::PerfDatabase perfDb;
-    auto resp = handler->semifuture_getPerfDb().get();
-    EXPECT_TRUE(resp);
-
-    perfDb = *resp;
-    return perfDb;
-  }
-
-  void
-  accumulatePerfTimes(std::vector<uint64_t>& processTimes) {
-    // Get perfDB
-    auto perfDB = getPerfDb();
-    // If get empty perfDB, just log it
-    if (perfDB.eventInfo_ref()->size() == 0 or
-        perfDB.eventInfo_ref()[0].events_ref()->size() == 0) {
-      LOG(INFO) << "perfDB is emtpy.";
-    } else {
-      // Accumulate time into processTimes
-      // Each time get the latest perf event.
-      auto perfDBInfoSize = perfDB.eventInfo_ref()->size();
-      auto eventInfo = perfDB.eventInfo_ref()[perfDBInfoSize - 1];
-      for (size_t index = 1; index < eventInfo.events_ref()->size(); index++) {
-        processTimes[index - 1] +=
-            (*eventInfo.events_ref()[index].unixTs_ref() -
-             *eventInfo.events_ref()[index - 1].unixTs_ref());
-      }
-    }
-  }
-
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
 
@@ -186,16 +131,11 @@ class FibWrapper {
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::ReplicateQueue<LogSample> logSampleQueue;
 
-  // ctrlEvb for openrCtrlHandler instantiation
-  OpenrEventBase evb;
-  std::unique_ptr<std::thread> evbThread;
-
   std::shared_ptr<Config> config;
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
 
   std::shared_ptr<MockNetlinkFibHandler> mockFibHandler{nullptr};
-  std::shared_ptr<OpenrCtrlHandler> handler{nullptr};
   PrefixGenerator prefixGenerator;
 };
 
@@ -207,46 +147,43 @@ class FibWrapper {
  * 4. Wait until the completion of routes update
  */
 static void
-BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
+BM_Fib(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    unsigned numOfRoutes,
+    unsigned numOfUpdateRoutes) {
   auto suspender = folly::BenchmarkSuspender();
-  // Fib starts with clean route database
-  auto fibWrapper = std::make_unique<FibWrapper>();
-
-  // Initial syncFib debounce
-  fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
-  fibWrapper->mockFibHandler->waitForSyncFib();
-
-  // Generate random prefixes
-  auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
-      numOfPrefixes, kBitMaskLen);
-  {
-    DecisionRouteUpdate routeUpdate;
-    for (auto& prefix : prefixes) {
-      auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
-          kNumOfNexthops, kVethNameY);
-      auto nhsSet =
-          std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
-      routeUpdate.unicastRoutesToUpdate.emplace(
-          toIPNetwork(prefix), RibUnicastEntry(toIPNetwork(prefix), nhsSet));
-    }
-    // Send routeDB to Fib and wait for updating completing
-    fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-  }
-  fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
-
-  // Customized time counter
-  // processTimes[0] is the time of sending routDB from decision to Fib
-  // processTimes[1] is the time of processing DB within Fib
-  // processTimes[2] is the time of programming routs with Fib agent server
-  std::vector<uint64_t> processTimes{0, 0, 0};
-  // Maek sure deltaSize <= numOfPrefixes
-  auto deltaSize = kDeltaSize <= numOfPrefixes ? kDeltaSize : numOfPrefixes;
-  suspender.dismiss(); // Start measuring benchmark time
-
   for (uint32_t i = 0; i < iters; i++) {
-    // Update routes by randomly regenerating nextHops for deltaSize prefixes.
+    // Fib starts with clean route database
+    auto fibWrapper = std::make_unique<FibWrapper>();
+
+    // Initial syncFib debounce
+    fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
+    fibWrapper->mockFibHandler->waitForSyncFib();
+
+    // Generate random `numOfRoutes` prefixes
+    auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
+        numOfRoutes, kBitMaskLen);
+    {
+      DecisionRouteUpdate routeUpdate;
+      for (auto& prefix : prefixes) {
+        auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
+            kNumOfNexthops, kVethNameY);
+        auto nhsSet =
+            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+        routeUpdate.unicastRoutesToUpdate.emplace(
+            toIPNetwork(prefix), RibUnicastEntry(toIPNetwork(prefix), nhsSet));
+      }
+
+      // Send routeDB to Fib and wait for updating completing
+      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
+    }
+    fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
+
+    // Update routes by randomly regenerating nextHops for numOfUpdateRoutes
+    // prefixes.
     DecisionRouteUpdate routeUpdate;
-    for (uint32_t index = 0; index < deltaSize; index++) {
+    for (uint32_t index = 0; index < numOfUpdateRoutes; index++) {
       auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
           kNumOfNexthops, kVethNameY);
       auto nhsSet =
@@ -255,35 +192,29 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
           toIPNetwork(prefixes[index]),
           RibUnicastEntry(toIPNetwork(prefixes[index]), nhsSet));
     }
-    // Add perfevents
-    thrift::PerfEvents perfEvents;
-    addPerfEvent(perfEvents, "node-1", "FIB_INIT_UPDATE");
-    routeUpdate.perfEvents = perfEvents;
 
+    suspender.dismiss(); // Start measuring benchmark time
     // Send routeDB to Fib for updates
     fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
     fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
-
-    // Get time information from perf event
-    fibWrapper->accumulatePerfTimes(processTimes);
+    suspender.rehire(); // Stop measuring time again
   }
-
-  suspender.rehire(); // Stop measuring time again
-  // Get average time for each itaration
-  for (auto& processTime : processTimes) {
-    processTime /= iters == 0 ? 1 : iters;
-  }
-
-  // Add customized counters to state.
-  counters["route_receive"] = processTimes[0];
-  counters["route_install"] = processTimes[2];
 }
 
-// The parameter is the number of prefixes sent to fib
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 9000);
+/*
+ * @params counters: reserved counter for customized profile
+ * @params first integer: num of existing routes
+ * @params second integer: num of updating routes
+ */
+
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 1000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 100000);
 
 } // namespace openr
 
