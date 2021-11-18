@@ -14,7 +14,6 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
-#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -64,25 +63,6 @@ getAreaConfig(const std::string& areaId) {
   area.include_interface_regexes_ref()->emplace_back("fboss.*");
   area.neighbor_regexes_ref()->emplace_back("rsw.*");
   return area;
-}
-
-openr::thrift::SrPolicy
-getSRPolicy() {
-  openr::thrift::SrPolicy sr_policy;
-  sr_policy.name_ref() = "sr_policy_1";
-
-  neteng::config::routing_policy::FilterCriteria criteria;
-  criteria.bgpCommunityFilters_ref() = {"COMM1", "COMM2"};
-  criteria.openrTagFilters_ref() = {"TAG1", "TAG2"};
-  criteria.openrAreaStack_ref() = "empty_area_stack_name";
-  sr_policy.criterias_ref()->emplace_back(criteria);
-
-  openr::thrift::RouteComputationRules rules;
-  openr::thrift::AreaPathComputationRules areaRules;
-  rules.areaPathComputationRules_ref()->emplace(kTestingAreaName, areaRules);
-  sr_policy.rules_ref() = rules;
-
-  return sr_policy;
 }
 
 openr::thrift::SegmentRoutingConfig
@@ -969,37 +949,6 @@ TEST(ConfigTest, PrefixAllocatorGetter) {
   // getPrefixAllocationParams
   const PrefixAllocationParams& params = {testSeedPrefix, testAllocationPfxLen};
   EXPECT_EQ(params, config.getPrefixAllocationParams());
-}
-
-TEST(ConfigTest, SRPolicyConfig) {
-  auto tConfig = getBasicOpenrConfig();
-  auto srConf = getSegmentRoutingConfig();
-  auto srPolicy = getSRPolicy();
-  srConf.sr_policies_ref() = {srPolicy};
-  tConfig.segment_routing_config_ref() = srConf;
-
-  thrift::BgpConfig bgpConfig;
-  thrift::BgpPeer bgpPeer;
-  bgpPeer.add_path_ref() = thrift::AddPath::RECEIVE;
-  bgpPeer.peer_addr_ref() = "::1";
-  bgpConfig.peers_ref() = {bgpPeer};
-  tConfig.enable_bgp_peering_ref() = true;
-  tConfig.enable_segment_routing_ref() = true;
-  tConfig.bgp_config_ref() = bgpConfig;
-
-  // Segment routing (SR) policies should not be configured
-  // when BGP add_path is configured
-  EXPECT_THROW((Config(tConfig)), std::invalid_argument);
-
-  tConfig.enable_segment_routing_ref() = false;
-  // Segment routing should be configured when BGP add_path is configured
-  EXPECT_THROW((Config(tConfig)), std::invalid_argument);
-
-  tConfig.enable_segment_routing_ref() = true;
-  tConfig.segment_routing_config_ref()->sr_policies_ref().reset();
-
-  // No SR Policy configured and BGP add_path is enabled
-  EXPECT_NO_THROW((Config(tConfig)));
 }
 
 TEST(ConfigTest, SegmentRoutingConfig) {
