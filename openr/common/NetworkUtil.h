@@ -212,13 +212,4 @@ toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
   return network;
 }
 
-/**
- * TO BE DEPRECATED SOON: Backward compatible with empty remoteIfName
- * Translate remote interface name from local interface name
- * This is only applicable when remoteIfName is empty from peer adjacency
- * update It returns remoteIfName if it is there else constructs one from
- * localIfName
- */
-std::string getRemoteIfName(const thrift::Adjacency& adj);
-
 } // namespace openr

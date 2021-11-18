@@ -655,8 +655,7 @@ SpfSolver::selectBestRoutes(
     // Perform best route selection based on metrics
     ret.allNodeAreas = selectRoutes(
         prefixEntries, thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE);
-    ret.bestNodeArea =
-        selectBestNodeArea(ret.allNodeAreas, myNodeName, areaLinkStates);
+    ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
     ret.success = true;
   } else if (isBgp) {
     ret = runBestPathSelectionBgp(prefix, prefixEntries, areaLinkStates);
@@ -678,7 +677,7 @@ SpfSolver::extendRoutes(
     const PrefixEntries& prefixEntries,
     const std::unordered_map<std::string, LinkState>& areaLinkStates,
     RouteSelectionResult& selectedRoutes) {
-  // Select routes according to specified algorithm, and store the results in
+  // Select rouets according to specified algorithm, and store the results in
   // selectedRoutes.allNodeAreas.
   for (const auto& nodeArea : selectRoutes(prefixEntries, algorithm)) {
     selectedRoutes.allNodeAreas.insert(nodeArea);
@@ -721,8 +720,7 @@ SpfSolver::maybeFilterDrainedNodes(
   // Update the bestNodeArea to a valid key
   if (not filtered.allNodeAreas.empty() and
       filtered.bestNodeArea != result.bestNodeArea) {
-    filtered.bestNodeArea =
-        selectBestNodeArea(filtered.allNodeAreas, myNodeName_, areaLinkStates);
+    filtered.bestNodeArea = *filtered.allNodeAreas.begin();
   }
 
   return filtered.allNodeAreas.empty() ? result : filtered;

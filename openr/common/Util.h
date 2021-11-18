@@ -22,7 +22,6 @@
 #include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
-#include <openr/decision/LinkState.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -168,6 +167,15 @@ int64_t generateHash(
     const int64_t version,
     const std::string& originatorId,
     const apache::thrift::optional_field_ref<const std::string&> value);
+
+/**
+ * TO BE DEPRECATED SOON: Backward compatible with empty remoteIfName
+ * Translate remote interface name from local interface name
+ * This is only applicable when remoteIfName is empty from peer adjacency
+ * update It returns remoteIfName if it is there else constructs one from
+ * localIfName
+ */
+std::string getRemoteIfName(const thrift::Adjacency& adj);
 
 /**
  * Find delta between two route databases, it requires input to be sorted.
@@ -454,13 +462,11 @@ std::set<NodeAndArea> selectRoutes(
     const PrefixEntries& prefixEntries,
     thrift::RouteSelectionAlgorithm algorithm);
 
-// Deterministically choose one as best path from multipaths. Used in
-// Decision. Choose local if local node is a part of the multipaths. Otherwise
-// choose the NodeAndArea with smallest IGP distance.
+// Deterministically choose one as best path from multipaths. Used in Decision.
+// Choose local if local node is a part of the multipaths.
+// Otherwise choose smallest key: allNodeAreas.begin().
 NodeAndArea selectBestNodeArea(
-    const std::set<NodeAndArea>& allNodeAreas,
-    const std::string& myNodeName,
-    const std::unordered_map<std::string, LinkState>& areaLinkStates);
+    std::set<NodeAndArea> const& allNodeAreas, std::string const& myNodeName);
 
 /**
  * TODO: Deprecated and the support for best route selection based on metric

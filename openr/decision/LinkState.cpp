@@ -12,7 +12,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/Format.h>
 #include <folly/logging/xlog.h>
-#include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 

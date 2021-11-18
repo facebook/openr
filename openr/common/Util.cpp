@@ -341,6 +341,14 @@ generateHash(
   return generateHashImpl(version, originatorId, value);
 }
 
+std::string
+getRemoteIfName(const thrift::Adjacency& adj) {
+  if (not adj.otherIfName_ref()->empty()) {
+    return *adj.otherIfName_ref();
+  }
+  return fmt::format("neigh-{}", *adj.ifName_ref());
+}
+
 thrift::RouteDatabaseDelta
 findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
@@ -974,33 +982,12 @@ getNodeNameFromKey(const std::string& key) {
 
 NodeAndArea
 selectBestNodeArea(
-    const std::set<NodeAndArea>& allNodeAreas,
-    const std::string& myNodeName,
-    const std::unordered_map<std::string, LinkState>& areaLinkStates) {
-  NodeAndArea bestNodeArea;
-  int32_t shortestIgpDist = std::numeric_limits<int32_t>::max();
-
+    std::set<NodeAndArea> const& allNodeAreas, std::string const& myNodeName) {
+  NodeAndArea bestNodeArea = *allNodeAreas.begin();
   for (const auto& nodeAndArea : allNodeAreas) {
-    const auto& [node, area] = nodeAndArea;
-    if (node == myNodeName) {
-      // Always prefer local node with lowest area-ID.
-
-      // Deterministically select bestNodeArea if local node advertises prefix
-      // into multiple areas with same metrics.
-      if (bestNodeArea.first != myNodeName or bestNodeArea.second > area) {
-        bestNodeArea = nodeAndArea;
-      }
-    } else {
-      CHECK(areaLinkStates.count(area));
-      const auto& mySpfResult =
-          areaLinkStates.at(area).getSpfResult(myNodeName);
-      CHECK(mySpfResult.count(node));
-      const auto& metric = mySpfResult.at(node).metric();
-      // Perfer NodeArea with smaller IGP distance within the area.
-      if (bestNodeArea.first != myNodeName and metric < shortestIgpDist) {
-        shortestIgpDist = metric;
-        bestNodeArea = nodeAndArea;
-      }
+    if (nodeAndArea.first == myNodeName) {
+      bestNodeArea = nodeAndArea;
+      break;
     }
   }
   return bestNodeArea;
