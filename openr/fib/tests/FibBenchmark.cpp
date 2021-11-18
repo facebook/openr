@@ -221,6 +221,89 @@ BM_Fib(
   }
 }
 
+/**
+ * Benchmark for fib delete unicast route
+ * 1. Create a fib
+ * 2. Generate random IpV6s and routes
+ * 3. Send routes to fib
+ * 4. Wait until the completion of routes update
+ * 5. Create a DecisionRouteUpdate for routes-to-delete
+ * 6. Wait until the completion of routes update
+ */
+static void
+BM_FibDeleteUnicastRoute(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    unsigned numOfRoutes,
+    unsigned numOfDeleteRoutes) {
+  auto suspender = folly::BenchmarkSuspender();
+  SystemMetrics sysMetrics;
+  // Add boolean to control profiling memory for the 1st iteration
+  bool record = true;
+  for (uint32_t i = 0; i < iters; i++) {
+    // Fib starts with clean route database
+    auto fibWrapper = std::make_unique<FibWrapper>();
+
+    // Initial syncFib debounce
+    fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
+    fibWrapper->mockFibHandler->waitForSyncFib();
+
+    // Generate random `numOfRoutes` prefixes
+    auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
+        numOfRoutes, kBitMaskLen);
+
+    {
+      DecisionRouteUpdate routeUpdate;
+      for (auto& prefix : prefixes) {
+        auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
+            kNumOfNexthops, kVethNameY);
+        auto nhsSet =
+            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+        routeUpdate.unicastRoutesToUpdate.emplace(
+            toIPNetwork(prefix), RibUnicastEntry(toIPNetwork(prefix), nhsSet));
+      }
+      // Send routeDB to Fib and wait for updating completing
+      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
+    }
+    fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
+
+    // Profile memory before the routeUpdate is generated
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory before deleting routes(MB)"] =
+            mem.value() / 1024 / 1024;
+      }
+    }
+
+    auto prefixToDelete = prefixes;
+    prefixToDelete.resize(numOfDeleteRoutes);
+    {
+      // Delete routes
+      DecisionRouteUpdate routeUpdate;
+      for (auto& prefix : prefixToDelete) {
+        routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix));
+      }
+
+      suspender.dismiss(); // Start measuring benchmark time
+      // Send routeDB to Fib for updates
+      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
+      fibWrapper->mockFibHandler->waitForDeleteUnicastRoutes();
+      suspender.rehire(); // Stop measuring time again
+    }
+
+    // Profile memory after the routeUpdate is handled by Fib
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory after deleting routes(MB)"] =
+            mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
+  }
+}
+
 /*
  * @params counters: reserved counter for customized profile
  * @params first integer: num of existing routes
@@ -235,6 +318,21 @@ BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 100);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 1000);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 10000);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 100000);
+
+/*
+ * @params counters: reserved counter for customized profile
+ * @params first integer: num of existing routes
+ * @params second integer: num of deleting routes
+ */
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100, 100);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 1000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 100000);
 
 } // namespace openr
 
