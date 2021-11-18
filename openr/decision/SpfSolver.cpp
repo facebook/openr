@@ -8,7 +8,6 @@
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
 
-#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/SpfSolver.h>
@@ -75,7 +74,6 @@ DecisionRouteDb::update(DecisionRouteUpdate const& update) {
 }
 
 SpfSolver::SpfSolver(
-    std::shared_ptr<const Config> config,
     const std::string& myNodeName,
     bool enableV4,
     bool enableNodeSegmentLabel,
@@ -120,9 +118,6 @@ SpfSolver::SpfSolver(
       srPolicies_.emplace_back(srPolicy, *areaPolicyConfig->definitions_ref());
     }
   }
-
-  prependLabelAllocator_ =
-      std::make_unique<PrependLabelAllocator<thrift::NextHopThrift>>(config);
 }
 
 SpfSolver::~SpfSolver() = default;

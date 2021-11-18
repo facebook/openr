@@ -6,7 +6,6 @@
  */
 
 #include <openr/common/NetworkUtil.h>
-#include <unordered_set>
 
 namespace std {
 
@@ -62,26 +61,6 @@ hash<openr::thrift::NextHopThrift>::operator()(
   res += hash<int32_t>()(*nextHop.metric_ref());
   if (nextHop.mplsAction_ref().has_value()) {
     res += hash<openr::thrift::MplsAction>()(nextHop.mplsAction_ref().value());
-  }
-  return res;
-}
-
-/**
- * Make a collection of NextHopThrift hashable.
- * Note that only important attributes (address, weight and MPLS action) of
- * NextHopThrift are considered for computing hash values.
- */
-size_t
-hash<std::unordered_set<openr::thrift::NextHopThrift>>::operator()(
-    std::unordered_set<openr::thrift::NextHopThrift> const& nextHopSet) const {
-  size_t res = 0;
-  for (const auto& nextHop : nextHopSet) {
-    res += hash<openr::thrift::BinaryAddress>()(*nextHop.address_ref());
-    res += hash<int32_t>()(*nextHop.weight_ref());
-    if (nextHop.mplsAction_ref().has_value()) {
-      res +=
-          hash<openr::thrift::MplsAction>()(nextHop.mplsAction_ref().value());
-    }
   }
   return res;
 }

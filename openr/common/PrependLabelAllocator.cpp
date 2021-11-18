@@ -5,15 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <folly/IPAddress.h>
 #include <folly/logging/xlog.h>
 #include <openr/common/PrependLabelAllocator.h>
 #include <optional>
 
 namespace openr {
 
-template <class T>
-PrependLabelAllocator<T>::PrependLabelAllocator(
+PrependLabelAllocator::PrependLabelAllocator(
     std::shared_ptr<const Config> config) {
   if (config->isSegmentRoutingEnabled() &&
       config->isSegmentRoutingConfigured()) {
@@ -30,9 +28,8 @@ PrependLabelAllocator<T>::PrependLabelAllocator(
   }
 }
 
-template <class T>
 int32_t
-PrependLabelAllocator<T>::getNewMplsLabel(bool isV4) {
+PrependLabelAllocator::getNewMplsLabel(bool isV4) {
   // Return label from free range if any available
   if (isV4) {
     if (freedMplsLabelsV4_.size()) {
@@ -57,9 +54,8 @@ PrependLabelAllocator<T>::getNewMplsLabel(bool isV4) {
   }
 }
 
-template <class T>
 void
-PrependLabelAllocator<T>::freeMplsLabel(
+PrependLabelAllocator::freeMplsLabel(
     bool isV4, int32_t label, const std::string& nh_str) {
   auto labelRange = getPrependLabelRange(isV4);
   const std::string ip_family = fmt::format("IPv{}", isV4 ? 4 : 6);
@@ -73,9 +69,8 @@ PrependLabelAllocator<T>::freeMplsLabel(
   }
 }
 
-template <class T>
 const std::pair<int32_t, int32_t>
-PrependLabelAllocator<T>::getPrependLabelRange(bool isV4) {
+PrependLabelAllocator::getPrependLabelRange(bool isV4) {
   if (isV4) {
     return labelRangeV4_;
   } else {
@@ -83,9 +78,9 @@ PrependLabelAllocator<T>::getPrependLabelRange(bool isV4) {
   }
 }
 
-template <class T>
 std::optional<int32_t>
-PrependLabelAllocator<T>::decrementRefCount(const std::set<T>& nextHopSet) {
+PrependLabelAllocator::decrementRefCount(
+    const std::set<folly::IPAddress>& nextHopSet) {
   std::optional<int32_t> oldLabel = std::nullopt;
   if (nextHopSet.size()) {
     auto& [refCount, label] = nextHopSetToLabel_.at(nextHopSet);
@@ -102,16 +97,16 @@ PrependLabelAllocator<T>::decrementRefCount(const std::set<T>& nextHopSet) {
         for (auto const& nhEntry : nextHopSet) {
           XLOG(DBG1) << " " << toString(nhEntry);
         }
-        freeMplsLabel(isAddressFamilyV4(nh), oldLabel.value(), toString(nh));
+        freeMplsLabel(nh.isV4(), oldLabel.value(), nh.str());
       }
     }
   }
   return oldLabel;
 }
 
-template <class T>
 std::pair<std::optional<int32_t>, bool>
-PrependLabelAllocator<T>::incrementRefCount(const std::set<T>& nextHopSet) {
+PrependLabelAllocator::incrementRefCount(
+    const std::set<folly::IPAddress>& nextHopSet) {
   std::optional<int32_t> newOrCurrentLabel = std::nullopt;
   auto isNewLabel = false;
   if (nextHopSet.size()) {
@@ -121,7 +116,7 @@ PrependLabelAllocator<T>::incrementRefCount(const std::set<T>& nextHopSet) {
       CHECK_GT(nextHopSet.size(), 0) << "Nexthop set must have a valid entry";
       const auto& nh = *nextHopSet.begin();
       // Create a new label
-      label = getNewMplsLabel(isAddressFamilyV4(nh));
+      label = getNewMplsLabel(nh.isV4());
       XLOG(DBG1) << "Allocating label " << label
                  << " for nexthop set consisting of";
       for (auto const& nhEntry : nextHopSet) {
@@ -134,7 +129,4 @@ PrependLabelAllocator<T>::incrementRefCount(const std::set<T>& nextHopSet) {
   return std::make_pair(newOrCurrentLabel, isNewLabel);
 }
 
-// explicit instantiations for our use cases
-template class PrependLabelAllocator<folly::IPAddress>;
-template class PrependLabelAllocator<thrift::NextHopThrift>;
 } // namespace openr

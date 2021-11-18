@@ -129,7 +129,6 @@ Decision::Decision(
                                          ->save_rib_policy_max_ms_ref()),
           [this]() noexcept { saveRibPolicy(); }) {
   spfSolver_ = std::make_unique<SpfSolver>(
-      config,
       config->getNodeName(),
       config->isV4Enabled(),
       config->isSegmentRoutingEnabled(),

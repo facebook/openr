@@ -56,11 +56,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         "domain",
         areaConfig,
         true /* enableV4 */,
-        true /* enableSegmentRouting */,
-        true /* dryrun */,
-        false /* enableV4OverV6Nexthop */,
-        true /* enableAdjLabels */,
-        true /* enablePrependLabels */);
+        true /* enableSegmentRouting */);
 
     // override kvstore config
     tConfig.kvstore_config_ref()->enable_flood_optimization_ref() = true;

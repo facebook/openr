@@ -209,7 +209,6 @@ add_library(openrlib
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
   openr/common/OpenrThriftCtrlServer.cpp
-  openr/common/PrependLabelAllocator.cpp
   openr/common/Types.cpp
   openr/common/Util.cpp
   openr/config/Config.cpp

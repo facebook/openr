@@ -38,10 +38,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       {}, /* area config */
       v4Enabled,
       true /*enableSegmentRouting*/,
-      true /*dryrun*/,
-      false /* enableV4OverV6Nexthop */,
-      false /* enableAdjLabels */,
-      true /* enablePrependLabels */);
+      false /*orderedFibProgramming*/,
+      true /*dryrun*/);
 
   // link monitor config
   auto& lmConf = *tConfig.link_monitor_config_ref();

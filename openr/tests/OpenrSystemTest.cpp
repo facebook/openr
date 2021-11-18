@@ -559,7 +559,7 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 //
 // Verify system metrics
 //
-TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
+TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   // define interface names for the test
   mockIoProvider->addIfNameIfIndex(
       {{iface12, ifIndex12}, {iface21, ifIndex21}});

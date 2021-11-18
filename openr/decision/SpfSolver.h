@@ -11,14 +11,11 @@
 #include <string>
 #include <unordered_map>
 
-#include <openr/common/PrependLabelAllocator.h>
-#include <openr/config/Config.h>
 #include <openr/decision/LinkState.h>
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/decision/SrPolicy.h>
-#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {
@@ -108,7 +105,6 @@ class SpfSolver {
   // these need to be defined in the .cpp so they can refer
   // to the actual implementation of SpfSolverImpl
   SpfSolver(
-      std::shared_ptr<const Config> config,
       const std::string& myNodeName,
       bool enableV4,
       bool enableNodeSegmentLabel,
@@ -322,24 +318,5 @@ class SpfSolver {
 
   // SR Policies own the route computation rules
   std::vector<SrPolicy> srPolicies_;
-
-  // Routes - Information received from a peer. Maintains a mapping from
-  // `prefix -> nextHopSet`.
-  // The NextHopThrift fields we want to key on are:
-  //  1. address
-  //  2. weight
-  //  3. mplsAction
-  // We do not want to key on `metric` because it may differ for next-hops
-  // computing using IP forwarding type.
-  // `area` and `neighborNodeName` are not important.
-
-  std::unordered_map<
-      folly::CIDRNetwork,
-      std::unordered_set<thrift::NextHopThrift>>
-      prefixToNextHopSet_;
-
-  // Allocate and deallocate prepend labels per address family (v4/v6)
-  std::unique_ptr<PrependLabelAllocator<thrift::NextHopThrift>>
-      prependLabelAllocator_;
 };
 } // namespace openr
