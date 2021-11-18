@@ -136,7 +136,7 @@ Decision::Decision(
       config->isBgpRouteProgrammingEnabled(),
       config->isBestRouteSelectionEnabled(),
       config->isV4OverV6NexthopEnabled(),
-      config->getSegmentRoutingPolicyConfig(),
+      config->getDecisionSrPolicyConfig(),
       config->getAreaPolicies());
   // Populate prefix types whose static routes Decision awaits before initial
   // RIB computation.

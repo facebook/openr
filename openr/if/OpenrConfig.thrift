@@ -222,6 +222,12 @@ struct DecisionConfig {
   /** Decision time to save rib policy  in frequent setRibPolicy requests
   (in milliseconds). */
   4: i32 save_rib_policy_max_ms = 60000;
+  /*
+   * List of SR Policies. SR Policies defines a route's path computation and LSP setup rules.
+   * For each route, Decision walks the list and tries to match an SR Policy to the route's attributes
+   * using the SR Policy matcher field. The first matching SR Policy is used to compute the route.
+   */
+  5: optional list<SrPolicy> sr_policies;
 
   /** Knob to enable/disable BGP route programming. */
   101: bool enable_bgp_route_programming = true;
@@ -557,13 +563,6 @@ struct SegmentRoutingConfig {
    * topology(non-CLOS)
    */
   3: optional MplsLabelRanges prepend_label_ranges;
-
-  /*
-   * List of SR Policies. SR Policies defines a route's path computation and LSP setup rules.
-   * For each route, Decision walks the list and tries to match an SR Policy to the route's attributes
-   * using the SR Policy matcher field. The first matching SR Policy is used to compute the route.
-   */
-  4: optional list<SrPolicy> sr_policies;
 } (cpp.minimize_padding)
 /**
  * The area config specifies the area name, interfaces to perform discovery

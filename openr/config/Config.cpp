@@ -460,44 +460,6 @@ Config::checkSegmentRoutingConfig() {
         }
       }
     }
-
-    // Validate SR Policy configuration
-    if (srConfig->sr_policies_ref().has_value()) {
-      const auto areaCfgs = getAreas();
-      for (const auto& srPolicy : srConfig->sr_policies_ref().value()) {
-        // Validate areaPathComputationRules
-        // 1. Must be non empty
-        // 2. Each SR Policy area path computation rules must have corresponding
-        // area
-        //    configuation
-        if (0 == srPolicy.rules_ref()->areaPathComputationRules_ref()->size()) {
-          throw std::invalid_argument(fmt::format(
-              "SR Policy with name {} has an empty areaPathComputationRules list",
-              *srPolicy.name_ref()));
-        }
-        for (const auto& [areaId, areaRule] :
-             *srPolicy.rules_ref()->areaPathComputationRules_ref()) {
-          if (areaCfgs.find(areaId) == areaCfgs.end()) {
-            throw std::invalid_argument(fmt::format(
-                "SR Policy with name {} has an areaPathComputation rule for an area "
-                "ID {} which has no configuration",
-                *srPolicy.name_ref(),
-                areaId));
-          }
-        }
-
-        // Validate each filter criteria type is supported. Currently we only
-        // support openrTags and openrAreaStack SR Policy filters.
-        for (const auto& criteria : *srPolicy.criterias_ref()) {
-          if (not criteria.openrTags_ref() &&
-              not criteria.openrAreaStack_ref()) {
-            throw std::invalid_argument(fmt::format(
-                "SR Policy with name {} has an invalid filter criteria type",
-                *srPolicy.name_ref()));
-          }
-        }
-      }
-    }
   }
 }
 

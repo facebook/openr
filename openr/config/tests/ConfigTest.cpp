@@ -779,52 +779,6 @@ TEST(ConfigTest, PopulateInternalDb) {
     conf.route_delete_delay_ms_ref() = 1000;
     EXPECT_NO_THROW((Config(conf)));
   }
-
-  // Validate SR Policy configuration
-  {
-    auto conf = getBasicOpenrConfig();
-    conf.enable_segment_routing_ref() = true;
-
-    // Test SR Policy config with no area path computation rules
-    thrift::SegmentRoutingConfig srCfg;
-    thrift::SrPolicy srPolicyCfg1;
-    srPolicyCfg1.name_ref() = "SR Policy 1";
-    srCfg.sr_policies_ref() = {srPolicyCfg1};
-    conf.segment_routing_config_ref() = srCfg;
-    EXPECT_THROW((Config(conf)), std::invalid_argument);
-
-    // Add area path computation rules for an area with no configuration
-    thrift::AreaPathComputationRules areaRules;
-    conf.segment_routing_config_ref()
-        ->sr_policies_ref()
-        ->at(0)
-        .rules_ref()
-        ->areaPathComputationRules_ref()
-        ->emplace("foo", areaRules);
-    EXPECT_THROW((Config(conf)), std::invalid_argument);
-
-    // Add an invalid matcher
-    neteng::config::routing_policy::FilterCriteria criteria;
-    criteria.bgpCommunityFilters_ref() = {"COMM1", "COMM2"};
-    conf.segment_routing_config_ref()
-        ->sr_policies_ref()
-        ->at(0)
-        .criterias_ref()
-        ->emplace_back(criteria);
-    conf.segment_routing_config_ref()
-        ->sr_policies_ref()
-        ->at(0)
-        .rules_ref()
-        ->areaPathComputationRules_ref()
-        ->clear();
-    conf.segment_routing_config_ref()
-        ->sr_policies_ref()
-        ->at(0)
-        .rules_ref()
-        ->areaPathComputationRules_ref()
-        ->emplace("test_area_name", areaRules);
-    EXPECT_THROW((Config(conf)), std::invalid_argument);
-  }
 }
 
 TEST(ConfigTest, GeneralGetter) {
