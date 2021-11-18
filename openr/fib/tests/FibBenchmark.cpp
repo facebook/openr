@@ -16,6 +16,7 @@
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/fib/Fib.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/SystemMetrics.h>
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 #include <openr/tests/utils/Utils.h>
@@ -153,6 +154,9 @@ BM_Fib(
     unsigned numOfRoutes,
     unsigned numOfUpdateRoutes) {
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
   for (uint32_t i = 0; i < iters; i++) {
     // Fib starts with clean route database
     auto fibWrapper = std::make_unique<FibWrapper>();
@@ -164,6 +168,13 @@ BM_Fib(
     // Generate random `numOfRoutes` prefixes
     auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
         numOfRoutes, kBitMaskLen);
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory before adding existing routes(MB)"] =
+            mem.value() / 1024 / 1024;
+      }
+    }
     {
       DecisionRouteUpdate routeUpdate;
       for (auto& prefix : prefixes) {
@@ -174,30 +185,39 @@ BM_Fib(
         routeUpdate.unicastRoutesToUpdate.emplace(
             toIPNetwork(prefix), RibUnicastEntry(toIPNetwork(prefix), nhsSet));
       }
-
       // Send routeDB to Fib and wait for updating completing
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
     }
     fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
-
-    // Update routes by randomly regenerating nextHops for numOfUpdateRoutes
-    // prefixes.
-    DecisionRouteUpdate routeUpdate;
-    for (uint32_t index = 0; index < numOfUpdateRoutes; index++) {
-      auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
-          kNumOfNexthops, kVethNameY);
-      auto nhsSet =
-          std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
-      routeUpdate.unicastRoutesToUpdate.emplace(
-          toIPNetwork(prefixes[index]),
-          RibUnicastEntry(toIPNetwork(prefixes[index]), nhsSet));
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory after adding existing routes(MB)"] =
+            mem.value() / 1024 / 1024;
+      }
+      record = false;
     }
 
-    suspender.dismiss(); // Start measuring benchmark time
-    // Send routeDB to Fib for updates
-    fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-    fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
-    suspender.rehire(); // Stop measuring time again
+    {
+      // Update routes by randomly regenerating nextHops for numOfUpdatePrefixes
+      // prefixes.
+      DecisionRouteUpdate routeUpdate;
+      for (uint32_t index = 0; index < numOfUpdateRoutes; index++) {
+        auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
+            kNumOfNexthops, kVethNameY);
+        auto nhsSet =
+            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+        routeUpdate.unicastRoutesToUpdate.emplace(
+            toIPNetwork(prefixes[index]),
+            RibUnicastEntry(toIPNetwork(prefixes[index]), nhsSet));
+      }
+
+      suspender.dismiss(); // Start measuring benchmark time
+      // Send routeDB to Fib for updates
+      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
+      fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
+      suspender.rehire(); // Stop measuring time again
+    }
   }
 }
 
@@ -206,7 +226,7 @@ BM_Fib(
  * @params first integer: num of existing routes
  * @params second integer: num of updating routes
  */
-
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100, 100);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 1000, 1000);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10000, 10000);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 1);
