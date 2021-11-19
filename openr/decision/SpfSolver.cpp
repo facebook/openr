@@ -81,9 +81,7 @@ SpfSolver::SpfSolver(
     bool enableBgpRouteProgramming,
     bool enableBestRouteSelection,
     bool v4OverV6Nexthop,
-    const std::optional<std::vector<thrift::SrPolicy>>& srPoliciesConfig,
-    const std::optional<neteng::config::routing_policy::PolicyConfig>&
-        areaPolicyConfig)
+    const std::optional<std::vector<thrift::SrPolicy>>& srPoliciesConfig)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
@@ -113,9 +111,9 @@ SpfSolver::SpfSolver(
   fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
 
   // Create SrPolicy internal classes
-  if (srPoliciesConfig && areaPolicyConfig) {
+  if (srPoliciesConfig) {
     for (const auto& srPolicy : *srPoliciesConfig) {
-      srPolicies_.emplace_back(srPolicy, *areaPolicyConfig->definitions_ref());
+      srPolicies_.emplace_back(srPolicy);
     }
   }
 }

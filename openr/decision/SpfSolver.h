@@ -113,9 +113,7 @@ class SpfSolver {
       bool enableBestRouteSelection = false,
       bool v4OverV6Nexthop = false,
       const std::optional<std::vector<thrift::SrPolicy>>& srPoliciesConfig =
-          std::nullopt,
-      const std::optional<neteng::config::routing_policy::PolicyConfig>&
-          areaPolicyConfig = std::nullopt);
+          std::nullopt);
   ~SpfSolver();
 
   //
