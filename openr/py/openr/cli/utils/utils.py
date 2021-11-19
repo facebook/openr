@@ -2082,6 +2082,8 @@ def print_route_helper(
             and route.hitPolicy
         ):
             rows.append(f"     Policy - {route.hitPolicy}")
+        if isinstance(route, ctrl_types.AdvertisedRoute) and route.igpCost is not None:
+            rows.append(f"     IGP Cost - {route.igpCost}")
     else:
         min_nexthop = (
             route.route.minNexthop if route.route.minNexthop is not None else "-"

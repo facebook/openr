@@ -1177,6 +1177,7 @@ PrefixManager::filterAndAddAdvertisedRoute(
     auto& route = routeDetail.routes_ref()->back();
     route.key_ref() = prefixType;
     route.route_ref() = *prefixEntry.tPrefixEntry;
+    route.igpCost_ref() = prefixEntry.policyMatchData.igpCost;
   }
 
   // Add detail if there are entries to return
@@ -1212,11 +1213,12 @@ PrefixManager::filterAndAddAreaRoute(
   }
 
   const auto& prePolicyTPrefixEntry = bestPrefixEntry.tPrefixEntry;
+  thrift::AdvertisedRoute route;
+  route.igpCost_ref() = bestPrefixEntry.policyMatchData.igpCost;
+  route.key_ref() = bestPrefixType;
 
   // prefilter advertised route
   if (routeFilterType == thrift::RouteFilterType::PREFILTER_ADVERTISED) {
-    thrift::AdvertisedRoute route;
-    route.set_key(bestPrefixType);
     route.set_route(*prePolicyTPrefixEntry);
     routes.emplace_back(std::move(route));
     return;
@@ -1237,8 +1239,6 @@ PrefixManager::filterAndAddAreaRoute(
   if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED and
       postPolicyTPrefixEntry) {
     // add post filter advertised route
-    thrift::AdvertisedRoute route;
-    route.set_key(bestPrefixType);
     route.set_route(*postPolicyTPrefixEntry);
     if (not hitPolicyName.empty()) {
       route.set_hitPolicy(hitPolicyName);
@@ -1250,8 +1250,6 @@ PrefixManager::filterAndAddAreaRoute(
   if (routeFilterType == thrift::RouteFilterType::REJECTED_ON_ADVERTISE and
       not postPolicyTPrefixEntry) {
     // add post filter rejected route
-    thrift::AdvertisedRoute route;
-    route.set_key(bestPrefixType);
     route.set_route(*prePolicyTPrefixEntry);
     route.set_hitPolicy(hitPolicyName);
     routes.emplace_back(std::move(route));

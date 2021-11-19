@@ -51,6 +51,8 @@ struct AdvertisedRoute {
   // nullopt otherwise.
   // Get populated in getAreaAdvertisedRoutes()
   3: optional string hitPolicy;
+  // Min igp of the route (for the immediate area)
+  4: i32 igpCost;
 }
 
 struct AdvertisedRouteDetail {

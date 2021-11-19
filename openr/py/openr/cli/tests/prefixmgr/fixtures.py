@@ -142,6 +142,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
     "routes": [
       {
         "hitPolicy": null,
+        "igpCost": null,
         "key": 3,
         "route": {
           "area_stack": [
@@ -183,6 +184,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
     "routes": [
       {
         "hitPolicy": null,
+        "igpCost": null,
         "key": 3,
         "route": {
           "area_stack": [
