@@ -1050,9 +1050,11 @@ PrefixManager::filterAndAddOriginatedRoute(
       continue;
     }
 
-    auto [postPolicyTPrefixEntry, hitPolicyName] =
-        policyManager_->applyPolicy(policy, prePolicyTPrefixEntry);
-
+    auto [postPolicyTPrefixEntry, hitPolicyName] = policyManager_->applyPolicy(
+        policy,
+        prePolicyTPrefixEntry,
+        std::nullopt /* policy Action Data */,
+        prePolicyPrefixEntry.policyMatchData);
     if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED and
         postPolicyTPrefixEntry) {
       // add post filter advertised route
@@ -1231,7 +1233,11 @@ PrefixManager::filterAndAddAreaRoute(
   const auto& policy = areaToPolicy_.at(area);
   if (policy) {
     std::tie(postPolicyTPrefixEntry, hitPolicyName) =
-        policyManager_->applyPolicy(*policy, prePolicyTPrefixEntry);
+        policyManager_->applyPolicy(
+            *policy,
+            prePolicyTPrefixEntry,
+            std::nullopt /* policy Action Data */,
+            bestPrefixEntry.policyMatchData);
   } else {
     postPolicyTPrefixEntry = prePolicyTPrefixEntry;
   }
@@ -1264,8 +1270,11 @@ PrefixManager::applyOriginationPolicy(
   storeOriginatedPrefixes(prefixEntries, policyName);
   std::vector<PrefixEntry> postOriginationPrefixes = {};
   for (auto prefix : prefixEntries) {
-    auto [postPolicyTPrefixEntry, _] =
-        policyManager_->applyPolicy(policyName, prefix.tPrefixEntry);
+    auto [postPolicyTPrefixEntry, _] = policyManager_->applyPolicy(
+        policyName,
+        prefix.tPrefixEntry,
+        std::nullopt /* policy Action Data */,
+        prefix.policyMatchData);
     if (postPolicyTPrefixEntry) {
       XLOG(DBG1) << fmt::format(
           "Prefixes {} : accepted/modified by origination policy {}",
