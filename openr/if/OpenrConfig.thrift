@@ -160,53 +160,12 @@ struct AreaPathComputationRules {
   2: PrefixForwardingType forwardingType = PrefixForwardingType.IP;
 } (cpp.minimize_padding)
 
-/*
- * Rules that describe the allocation of prepend-label. This label would be
- * assigned to RibUnicastEntry, thus available for inter-area route
- * redistribution. Area policy would govern the advertisement of this prepend
- * label to other areas on redistribution.
- */
-union PrependLabelRules {
-  /* Advertise node segment label of the best route */
-  1: bool bestRouteNodeSegmentLabel = false;
-
-  /*
-   * Allocate prepend label and use next-hops from given areas.
-   * Areas must be a subset of areaPathComputationRules areas.
-   *
-   * The label is re-used across routes with the same next-hop group
-   * (next-hop IP + label stack)
-   *
-   */
-  2: set<string> nextHopAreas;
-} (cpp.minimize_padding)
-
 struct RouteComputationRules {
   /* Route selection algorithm the route will use */
   1: RouteSelectionAlgorithm routeSelectionAlgo = RouteSelectionAlgorithm.SHORTEST_DISTANCE;
 
   /* Map of path computation rules per area. Key is the areaId string */
   2: map<string, AreaPathComputationRules> areaPathComputationRules;
-
-  /* Rules to allocate and compute the route's prepend label */
-  3: optional PrependLabelRules prependLabelRules;
-} (cpp.minimize_padding)
-
-/* SR Policy Configuration defines a route's path computation and LSP setup rules. */
-struct SrPolicy {
-  /* SR Policy name */
-  1: string name;
-
-  /* Description of the SR Policy */
-  2: string description;
-
-  /*
-   * Route matching filter. Policy is applied all criterias return a successful match
-   */
-  3: list<routing_policy.FilterCriteria> criterias;
-
-  /* Route computation rules */
-  4: RouteComputationRules rules;
 } (cpp.minimize_padding)
 
 struct DecisionConfig {
@@ -222,12 +181,6 @@ struct DecisionConfig {
   /** Decision time to save rib policy  in frequent setRibPolicy requests
   (in milliseconds). */
   4: i32 save_rib_policy_max_ms = 60000;
-  /*
-   * List of SR Policies. SR Policies defines a route's path computation and LSP setup rules.
-   * For each route, Decision walks the list and tries to match an SR Policy to the route's attributes
-   * using the SR Policy matcher field. The first matching SR Policy is used to compute the route.
-   */
-  5: optional list<SrPolicy> sr_policies;
 
   /** Knob to enable/disable BGP route programming. */
   101: bool enable_bgp_route_programming = true;
