@@ -80,8 +80,7 @@ SpfSolver::SpfSolver(
     bool enableAdjacencyLabels,
     bool enableBgpRouteProgramming,
     bool enableBestRouteSelection,
-    bool v4OverV6Nexthop,
-    const std::optional<std::vector<thrift::SrPolicy>>& srPoliciesConfig)
+    bool v4OverV6Nexthop)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
@@ -109,13 +108,6 @@ SpfSolver::SpfSolver(
   fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
   fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
-
-  // Create SrPolicy internal classes
-  if (srPoliciesConfig) {
-    for (const auto& srPolicy : *srPoliciesConfig) {
-      srPolicies_.emplace_back(srPolicy);
-    }
-  }
 }
 
 SpfSolver::~SpfSolver() = default;
@@ -1175,27 +1167,12 @@ SpfSolver::getNextHopsThrift(
   return nextHops;
 }
 
-size_t
-SpfSolver::getNumSrPolicies() const {
-  return srPolicies_.size();
-}
-
 thrift::RouteComputationRules
 SpfSolver::getRouteComputationRules(
     const PrefixEntries& prefixEntries,
     const RouteSelectionResult& routeSelectionResult,
     const std::unordered_map<std::string, LinkState>& areaLinkStates) const {
-  // Walk the srPolicies_ list and return the rules of the first one that
-  // matches the route attributes
-  for (const auto& srPolicy : srPolicies_) {
-    auto rules = srPolicy.matchAndGetRules(
-        prefixEntries.at(routeSelectionResult.bestNodeArea));
-    if (rules) {
-      return *rules;
-    }
-  }
-
-  // No SR Policy has matched. Construct default route computation rules.
+  // Construct default route computation rules.
   //
   // 1. Best route selection = SHORTEST_DISTANCE
   // 2. forwarding algorithm and forwarding type based on PrefixEntry

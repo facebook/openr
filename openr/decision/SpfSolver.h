@@ -15,8 +15,6 @@
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RouteUpdate.h>
-#include <openr/decision/SrPolicy.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {
 
@@ -111,9 +109,7 @@ class SpfSolver {
       bool enableAdjacencyLabels,
       bool enableBgpRouteProgramming = false,
       bool enableBestRouteSelection = false,
-      bool v4OverV6Nexthop = false,
-      const std::optional<std::vector<thrift::SrPolicy>>& srPoliciesConfig =
-          std::nullopt);
+      bool v4OverV6Nexthop = false);
   ~SpfSolver();
 
   //
@@ -147,9 +143,6 @@ class SpfSolver {
   getBestRoutesCache() const {
     return bestRoutesCache_;
   }
-
-  // Returns the number of SR Policies
-  size_t getNumSrPolicies() const;
 
   // Walk all SR Policies and return the route computation rules of the first
   // one that matches. If none of them match then the default route computation
@@ -313,8 +306,5 @@ class SpfSolver {
   // prefixes with v6 nexthops to Fib module for programming. Else it will just
   // use v4 over v4 nexthop.
   const bool v4OverV6Nexthop_{false};
-
-  // SR Policies own the route computation rules
-  std::vector<SrPolicy> srPolicies_;
 };
 } // namespace openr
