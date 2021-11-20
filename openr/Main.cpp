@@ -245,6 +245,8 @@ main(int argc, char** argv) {
   ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
   ReplicateQueue<LogSample> logSampleQueue;
+  std::unique_ptr<messaging::RQueue<DecisionRouteUpdate>> pluginRouteReaderPtr{
+      nullptr};
 
   // Create the readers in the first place to make sure they can receive every
   // messages from the writer(s)
@@ -269,8 +271,11 @@ main(int argc, char** argv) {
       interfaceUpdatesQueue.getReader("spark");
   auto prefixMgrKvStoreUpdatesReader =
       kvStoreUpdatesQueue.getReader("prefixManager");
-  auto pluginRouteReader =
-      prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates");
+  if (config->isBgpPeeringEnabled()) {
+    pluginRouteReaderPtr =
+        std::make_unique<messaging::RQueue<DecisionRouteUpdate>>(
+            prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates"));
+  }
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -490,13 +495,15 @@ main(int argc, char** argv) {
   }
 
   // Create bgp speaker module
-  auto pluginArgs = PluginArgs{
-      prefixUpdatesQueue,
-      staticRouteUpdatesQueue,
-      pluginRouteReader,
-      config,
-      sslContext};
   if (config->isBgpPeeringEnabled()) {
+    assert(pluginRouteReaderPtr);
+    auto pluginArgs = PluginArgs{
+        prefixUpdatesQueue,
+        staticRouteUpdatesQueue,
+        *pluginRouteReaderPtr,
+        config,
+        sslContext};
+
     pluginStart(pluginArgs);
   }
 
