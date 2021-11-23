@@ -40,7 +40,11 @@ elif [ "$1" == "start" ]; then
     openr_binary="$HOME/fbsource/fbcode/buck-out/gen/openr/openr"
     config="$CONFIG_DIR/$(ip netns identify).conf"
     echo "--> Starting Open/R using --config=$config"
-    "$openr_binary" --config="$config" --logtostderr --v=2 --enable_secure_thrift_server=false |& tee "/tmp/$(ip netns identify).log"
+    "$openr_binary" \
+        --config="$config" \
+        --logtostderr \
+        --v=2 \
+        --enable_secure_thrift_server=false |& tee "/tmp/$(ip netns identify).log"
     exit $?
 fi
 
