@@ -28,6 +28,11 @@ struct OpenrPolicyActionData {
 struct OpenrPolicyMatchData {
   unsigned int igpCost = 0;
   explicit OpenrPolicyMatchData(unsigned int igpCost = 0) : igpCost(igpCost) {}
+
+  bool
+  operator==(const OpenrPolicyMatchData& other) const {
+    return igpCost == other.igpCost;
+  }
 };
 
 } // namespace openr
