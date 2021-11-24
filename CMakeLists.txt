@@ -840,7 +840,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(decision_benchmark
-    openr/decision/tests/DecisionBenchmark.cpp
+    openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
   )
 
   target_link_libraries(decision_benchmark

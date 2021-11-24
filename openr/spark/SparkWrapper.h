@@ -8,7 +8,6 @@
 #pragma once
 
 #include <openr/common/Constants.h>
-#include <openr/config/Config.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/Spark.h>
 
@@ -19,6 +18,32 @@ struct SparkInterfaceEntry {
   int ifIndex;
   folly::CIDRNetwork v4Network;
   folly::CIDRNetwork v6LinkLocalNetwork;
+};
+
+struct SparkTimeConfig {
+  SparkTimeConfig(
+      std::chrono::milliseconds helloTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds helloFastInitTime =
+          std::chrono::milliseconds{0},
+      std::chrono::milliseconds handshakeTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds heartbeatTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds negotiateHoldTime =
+          std::chrono::milliseconds{0},
+      std::chrono::milliseconds heartbeatHoldTime =
+          std::chrono::milliseconds{0})
+      : myHelloTime(helloTime),
+        myHelloFastInitTime(helloFastInitTime),
+        myHandshakeTime(handshakeTime),
+        myHeartbeatTime(heartbeatTime),
+        myNegotiateHoldTime(negotiateHoldTime),
+        myHeartbeatHoldTime(heartbeatHoldTime) {}
+
+  std::chrono::milliseconds myHelloTime;
+  std::chrono::milliseconds myHelloFastInitTime;
+  std::chrono::milliseconds myHandshakeTime;
+  std::chrono::milliseconds myHeartbeatTime;
+  std::chrono::milliseconds myNegotiateHoldTime;
+  std::chrono::milliseconds myHeartbeatHoldTime;
 };
 
 /**
@@ -32,10 +57,18 @@ struct SparkInterfaceEntry {
 class SparkWrapper {
  public:
   SparkWrapper(
+      std::string const& myDomainName,
       std::string const& myNodeName,
+      std::chrono::milliseconds myHoldTime,
+      std::chrono::milliseconds myKeepAliveTime,
+      std::chrono::milliseconds myFastInitKeepAliveTime,
+      bool enableV4,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
-      std::shared_ptr<const Config> config);
+      std::shared_ptr<thrift::OpenrConfig> config,
+      bool enableSpark2,
+      bool increaseHelloInterval,
+      SparkTimeConfig timeConfig);
 
   ~SparkWrapper();
 
@@ -67,15 +100,14 @@ class SparkWrapper {
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
       const thrift::SparkNeighborEvent& event);
 
-  // utility function to construct thrift::AreaConfig.SparkConfigs
-  const openr::thrift::SparkConfig
-  getSparkConfig() {
-    return config_->getSparkConfig();
-  }
+  // utility function to construct thrift::AreaConfig
+  static thrift::AreaConfig createAreaConfig(
+      const std::string& areaId,
+      const std::vector<std::string>& nodeRegexes,
+      const std::vector<std::string>& interfaceRegexes);
 
  private:
   std::string myNodeName_{""};
-  std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;

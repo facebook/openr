@@ -66,6 +66,9 @@ DECLARE_int32(spark_hold_time_s);
 DECLARE_int32(spark_keepalive_time_s);
 DECLARE_int32(spark_fastinit_keepalive_time_ms);
 
+DECLARE_string(spark_report_url);
+DECLARE_string(spark_cmd_url);
+
 DECLARE_uint64(step_detector_fast_window_size);
 DECLARE_uint64(step_detector_slow_window_size);
 DECLARE_uint32(step_detector_lower_threshold);
