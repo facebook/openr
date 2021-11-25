@@ -202,12 +202,10 @@ class Decision : public OpenrEventBase {
   void processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate);
 
   /**
-   * Update peers waiting for adjacency coming up to unblock initial RIB
-   * computation.
+   * Update pending adjacency for up peers to unblock initial RIB computation.
    */
-  void updatePeersWaitingAdjacencyUp(
-      const std::string& area,
-      const std::vector<std::shared_ptr<Link>>& addedLinks);
+  void updatePendingAdjacency(
+      const std::string& area, const thrift::AdjacencyDatabase& newAdjacencyDb);
 
   /*
    * Filter adjacency that can not be used by this node.
@@ -303,11 +301,16 @@ class Decision : public OpenrEventBase {
   folly::fibers::Baton initialPeersReceivedBaton_;
 
   /*
-   * Peers with adjacency not received in each area. OpenR initialization
-   * process will be blocked until having received adjacency with all peers.
+   * Adjacency not received in each area. OpenR initialization process will be
+   * blocked until having received adjacency with all live peers.
+   * key: area
+   * val: set of unreceived unidirectional adjacency (A->B). For one live peer,
+   * both peer->theNode and theNode->peer adj are expected to be received.
    */
-  std::unordered_map<std::string, std::unordered_set<std::string>>
-      areaToPeersWaitingAdjUp_;
+  std::unordered_map<
+      std::string,
+      std::unordered_set<std::pair<std::string, std::string>>>
+      areaToPendingAdjacency_;
 
   /**
    * Debounced trigger for saveRibPolicy invoked by setRibPolicy.

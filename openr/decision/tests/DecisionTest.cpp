@@ -7225,21 +7225,32 @@ INSTANTIATE_TEST_CASE_P(
     InitialRibBuildTestInstance,
     InitialRibBuildTestFixture,
     ::testing::Values(thrift::PrefixType::BGP, thrift::PrefixType::VIP));
-
+/*
+ * Verify OpenR initialzation could succeed at current node (1),
+ * - Receives adjacencies 1->2 (only used by 2) and 2->1 (only used by 1)
+ * - Receives initial up peers 2 and 3 (Decision needs to wait for adjacencies
+ *   with both peers).
+ * - Receives CONFIG type static routes.
+ * - Receives BGP or VIP type static routes
+ * - Receives peer down event for node 3 (Decision does not need to wait for
+ *   adjacencies with peer 3 anymore).
+ * - Initial route computation is triggered, generating static routes.
+ * - Receives updated adjacency 1->2 (can be used by anyone). Node 1 and 2 get
+ *   connected, thus computed routes for prefixes advertised by node 2 and
+ *   label route of node 2.
+ */
 TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
   thrift::PrefixType prefixType = GetParam();
 
-  // Send adj publication.
-  // Adjacency 1<->2 is not up,
-  // * adjacency "1->2" can only be used by node 2, thus filtered.
+  // Send adj publication (current node is 1).
+  // * adjacency "1->2" can only be used by node 2,
   // * adjacency "2->1" can only be used by node 1.
-  // Adjacency 3<->4 is up.
+  // Link 1<->2 is not up since "1->2" cannot be used by node 1.
+  // However, the two adjacencies will unblock
   sendKvPublication(
       createThriftPublication(
           {{"adj:1", createAdjValue("1", 1, {adj12OnlyUsedBy2}, false, 1)},
-           {"adj:2", createAdjValue("2", 1, {adj21OnlyUsedBy1}, false, 2)},
-           {"adj:3", createAdjValue("3", 1, {adj34}, false, 2)},
-           {"adj:4", createAdjValue("4", 1, {adj43}, false, 2)}},
+           {"adj:2", createAdjValue("2", 1, {adj21OnlyUsedBy1}, false, 2)}},
           {},
           {},
           {},
@@ -7257,7 +7268,9 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
         auto adjDb = decision->getDecisionAdjacenciesFiltered().get();
         ASSERT_EQ(adjDb->size(), 0);
 
-        // Add peers "2" and "3".
+        // Add initial UP peers "2" and "3".
+        // Initial RIB computation will be blocked until dual directional
+        // adjacencies are received for both peers.
         thrift::PeersMap peers;
         peers.emplace("2", thrift::PeerSpec());
         peers.emplace("3", thrift::PeerSpec());
@@ -7346,13 +7359,27 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
-        // Initial RIB computation not triggered yet.
-        EXPECT_EQ(0, routeUpdatesQueueReader.size());
+        // Initial RIB computation is triggered.
+        // Generated static routes and node label route for node 1.
+        auto routeDbDelta = recvRouteUpdates();
+        if (prefixType == thrift::PrefixType::BGP) {
+          // Static config originated route.
+          EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+          // Static MPLS routes; Node label routes for the node itself.
+          EXPECT_EQ(2, routeDbDelta.mplsRoutesToUpdate.size());
+          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(1));
+          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(65000));
+        } else if (prefixType == thrift::PrefixType::VIP) {
+          // Static config originated route and static VIP route.
+          EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
+          // Node label routes for the node itself (1).
+          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
+          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(1));
+        }
 
         // Send adj publication.
-        // Adjacency for peer "2" is received,
+        // Updated adjacency for peer "2" is received,
         // * adjacency "1->2" can be used by all nodes.
-        // * adjacency "2->1" can only be used by node 1 (this node).
         sendKvPublication(createThriftPublication(
             {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)}},
             {},
@@ -7360,19 +7387,16 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
             {},
             std::string("")));
 
-        auto routeDbDelta = recvRouteUpdates();
-        if (prefixType == thrift::PrefixType::BGP) {
-          // Static config originated route and route for addr1.
-          EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
-          // Static MPLS routes; Two node label routes.
-          EXPECT_EQ(3, routeDbDelta.mplsRoutesToUpdate.size());
-        } else if (prefixType == thrift::PrefixType::VIP) {
-          // Static config originated route, static VIP route, and route for
-          // addr1.
-          EXPECT_EQ(3, routeDbDelta.unicastRoutesToUpdate.size());
-          // Two node label routes.
-          EXPECT_EQ(2, routeDbDelta.mplsRoutesToUpdate.size());
-        }
+        routeDbDelta = recvRouteUpdates();
+        // Unicast route for addr1 advertised by node 2.
+        EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+        EXPECT_EQ(
+            routeDbDelta.unicastRoutesToUpdate.begin()->second.prefix,
+            toIPNetwork(addr1));
+        // Node label route for node 2.
+        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
+        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(2));
+
         evb.stop();
       });
   // let magic happen

@@ -10,6 +10,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
+#include <utility>
 
 #ifndef NO_FOLLY_EXCEPTION_TRACER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
@@ -482,32 +483,46 @@ Decision::processPeerUpdates(PeerEvent&& event) {
     // peers are received.
     for (const auto& [area, areaPeerEvent] : event) {
       for (const auto& [peerName, _] : areaPeerEvent.peersToAdd) {
-        areaToPeersWaitingAdjUp_[area].insert(peerName);
-        XLOG(INFO) << "[Initialization] Decision should wait for adjacency "
-                   << "with up peer " << peerName;
-      }
-    }
+        // Both unidirectional adj are expected to be received.
+        areaToPendingAdjacency_[area].insert(
+            std::make_pair(peerName, myNodeName_));
+        areaToPendingAdjacency_[area].insert(
+            std::make_pair(myNodeName_, peerName));
+        XLOG(INFO) << fmt::format(
+            "[Initialization] Decision should wait for bi-directional "
+            "adjacency with up peer {}",
+            peerName);
+      };
+    };
     initialPeersReceivedBaton_.post();
     return;
   }
 
   // Incremental peer events.
   for (const auto& [area, areaPeerEvent] : event) {
-    // Remove deleted peers from areaToPeersWaitingAdjUp_.
+    if (areaToPendingAdjacency_.count(area) == 0) {
+      continue;
+    }
+    // Remove deleted peers from areaToPendingAdjacency_.
     for (const auto& peerName : areaPeerEvent.peersToDel) {
-      XLOG(INFO)
-          << "[Initialization] No need to wait for adjacency with down peer "
-          << peerName;
-      areaToPeersWaitingAdjUp_[area].erase(peerName);
-      if (areaToPeersWaitingAdjUp_[area].empty()) {
-        areaToPeersWaitingAdjUp_.erase(area);
+      if (areaToPendingAdjacency_[area].erase(
+              std::make_pair(peerName, myNodeName_)) and
+          areaToPendingAdjacency_[area].erase(
+              std::make_pair(myNodeName_, peerName))) {
+        XLOG(INFO) << "[Initialization] No need to wait for dual directional "
+                      "adjacency with down peer "
+                   << peerName;
       }
-      if (areaToPeersWaitingAdjUp_.empty()) {
-        triggerInitialBuildRoutes();
+      if (areaToPendingAdjacency_[area].empty()) {
+        areaToPendingAdjacency_.erase(area);
+        if (areaToPendingAdjacency_.empty()) {
+          triggerInitialBuildRoutes();
+          return;
+        }
       }
     }
     // Note: Incremental added peers are not added into
-    // areaToPeersWaitingAdjUp_. This makes sure Decision could converge in
+    // areaToPendingAdjacency_. This makes sure Decision could converge in
     // Open/R initialization process.
   }
 }
@@ -553,33 +568,37 @@ Decision::filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb) {
 }
 
 void
-Decision::updatePeersWaitingAdjacencyUp(
-    const std::string& area,
-    const std::vector<std::shared_ptr<Link>>& addedLinks) {
-  if (addedLinks.empty() or areaToPeersWaitingAdjUp_.count(area) == 0) {
-    return;
-  }
-
-  // Check received adjacency with up peers in Open/R initialization
-  // process.
-  for (const auto addedLink : addedLinks) {
-    const auto& firstNode = addedLink->firstNodeName();
-    const auto& secondNode = addedLink->secondNodeName();
-    if (firstNode != myNodeName_ and secondNode != myNodeName_) {
-      // Skip link not related to this node.
-      continue;
+Decision::updatePendingAdjacency(
+    const std::string& area, const thrift::AdjacencyDatabase& newAdjacencyDb) {
+  // Update pending adjacency with up peers in Open/R initialization process.
+  //
+  // In case of two nodes (A, B) restart simultaneously,
+  // - A will inject A->B adj (only used by B, `adjOnlyUsedByOtherNode=true`).
+  // - B will inject B->A adj (only used by A, `adjOnlyUsedByOtherNode=true`).
+  // In order to make sure initialization process could proceed at both nodes
+  // without deadlock, here we will ignore `adjOnlyUsedByOtherNode` and remove
+  // adj `A->B` and 'B->A' from pending list.
+  for (const auto& adj : *newAdjacencyDb.adjacencies_ref()) {
+    if (areaToPendingAdjacency_.count(area) == 0) {
+      return;
     }
-    const auto& peerName = (firstNode == myNodeName_ ? secondNode : firstNode);
-    if (areaToPeersWaitingAdjUp_[area].erase(peerName)) {
-      XLOG(INFO) << "[Initialization] Received adjacency with peer "
-                 << peerName;
+    const auto& node = *newAdjacencyDb.thisNodeName_ref();
+    const auto& otherNode = *adj.otherNodeName_ref();
+    if (areaToPendingAdjacency_[area].erase(std::make_pair(node, otherNode))) {
+      XLOG(INFO) << fmt::format(
+          "[Initialization] Received adjacency {}:{}->{}:{}.",
+          node,
+          *adj.ifName_ref(),
+          *adj.otherNodeName_ref(),
+          *adj.otherIfName_ref());
     }
-    if (areaToPeersWaitingAdjUp_[area].empty()) {
-      areaToPeersWaitingAdjUp_.erase(area);
-    }
-    if (areaToPeersWaitingAdjUp_.empty()) {
-      // Received adjacency with all peers, trigger initial route build.
-      triggerInitialBuildRoutes();
+    if (areaToPendingAdjacency_[area].empty()) {
+      areaToPendingAdjacency_.erase(area);
+      if (areaToPendingAdjacency_.empty()) {
+        // Received adjacency with all peers, trigger initial route build.
+        triggerInitialBuildRoutes();
+        return;
+      }
     }
   }
 }
@@ -699,7 +718,11 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
         auto adjacencyDb = readThriftObjStr<thrift::AdjacencyDatabase>(
             rawVal.value_ref().value(), serializer_);
 
-        // Filter adjacency that cannot be used by this node.
+        // Process adjacency to unblock Open/R initialization.
+        updatePendingAdjacency(area, adjacencyDb);
+
+        // Filter adjacency that cannot be used by this node in route
+        // computation.
         filterUnuseableAdjacency(adjacencyDb);
 
         auto& nodeName = adjacencyDb.get_thisNodeName();
@@ -709,13 +732,11 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
         // TODO: Is this useful?
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
-        auto linkStateChange = areaLinkState.updateAdjacencyDatabase(
-            adjacencyDb, holdUpTtl, holdDownTtl);
         pendingUpdates_.applyLinkStateChange(
-            nodeName, linkStateChange, adjacencyDb.perfEvents_ref());
-
-        // Process added links to unblock Open/R initialization.
-        updatePeersWaitingAdjacencyUp(area, linkStateChange.addedLinks);
+            nodeName,
+            areaLinkState.updateAdjacencyDatabase(
+                adjacencyDb, holdUpTtl, holdDownTtl),
+            adjacencyDb.perfEvents_ref());
       } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
         // prefixDb: update keys starting with "prefix:"
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
@@ -923,9 +944,10 @@ bool
 Decision::unblockInitialRoutesBuild() {
   bool adjReceivedForPeers{true};
   if (config_->getConfig().get_enable_ordered_adj_publication()) {
-    // Wait till receiving initial peers and adjacencies with initial peers.
+    // Wait till receiving initial peers and dual directional adjacencies with
+    // initial peers.
     adjReceivedForPeers = initialPeersReceivedBaton_.try_wait() and
-        areaToPeersWaitingAdjUp_.empty();
+        areaToPendingAdjacency_.empty();
   }
   // Initial routes build will be unblocked if all following conditions are
   // fulfilled,
