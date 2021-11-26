@@ -525,8 +525,13 @@ KvStore::processRequestMsg(
   }
 
   auto& thriftRequest = maybeThriftReq.value();
-  CHECK(not thriftRequest.area.empty());
-  std::string area = thriftRequest.area; // NOTE: Non constness is intended
+  // XXX HACK: assume kDefaultArea if thriftRequest.area is empty
+  std::string area;
+  if (!thriftRequest.area.empty()) {
+    area = openr::thrift::KvStore_constants::kDefaultArea();
+  } else {
+    area = thriftRequest.area; // NOTE: Non constness is intended
+  }
   // TODO: migration workaround => if me/peer does is using default area,
   // always honor my config, ignore peer's config.
   if (areas_.size() == 1 and
