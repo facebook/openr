@@ -644,6 +644,8 @@ Spark::sanityCheckHelloPkt(
     return PacketValidationResult::FAILURE;
   }
   // version check
+  // XXX HACK: Don't check version for Spark/Spark2 compatibility
+  #if 0
   if (remoteVersion < static_cast<uint32_t>(kVersion_.lowestSupportedVersion)) {
     LOG(ERROR) << "Unsupported version: " << neighborName << " "
                << remoteVersion
@@ -652,6 +654,7 @@ Spark::sanityCheckHelloPkt(
         "spark.invalid_keepalive.invalid_version", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
   }
+  #endif
   return PacketValidationResult::SUCCESS;
 }
 
