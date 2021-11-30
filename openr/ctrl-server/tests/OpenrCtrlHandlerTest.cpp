@@ -260,13 +260,13 @@ TEST_F(OpenrCtrlFixture, InitializationApis) {
   handler_->getInitializationEvents(events);
   EXPECT_EQ(events.count(thrift::InitializationEvent::KVSTORE_SYNCED), 1);
 
-  // Add PREFIX_DB_SYNCED event into fb303. Initialization converged.
+  // Add INITIALIZED event into fb303. Initialization converged.
   logInitializationEvent(
-      "PrefixManager", thrift::InitializationEvent::PREFIX_DB_SYNCED);
+      "PrefixManager", thrift::InitializationEvent::INITIALIZED);
   EXPECT_TRUE(handler_->initializationConverged());
   EXPECT_GE(handler_->getInitializationDurationMs(), 0);
   handler_->getInitializationEvents(events);
-  EXPECT_EQ(events.count(thrift::InitializationEvent::PREFIX_DB_SYNCED), 1);
+  EXPECT_EQ(events.count(thrift::InitializationEvent::INITIALIZED), 1);
 }
 
 TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
