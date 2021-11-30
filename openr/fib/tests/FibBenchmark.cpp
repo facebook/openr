@@ -154,6 +154,8 @@ class FibWrapper {
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
+  messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader{
+      fibRouteUpdatesQueue.getReader()};
   messaging::ReplicateQueue<LogSample> logSampleQueue;
 
   std::shared_ptr<Config> config;
@@ -172,7 +174,7 @@ class FibWrapper {
  * 4. Wait until the completion of routes update
  */
 static void
-BM_Fib(
+BM_FibAddUnicastRoute(
     folly::UserCounters& counters,
     uint32_t iters,
     unsigned numOfRoutes,
@@ -187,7 +189,7 @@ BM_Fib(
 
     // Initial syncFib debounce
     fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
-    fibWrapper->mockFibHandler->waitForSyncFib();
+    fibWrapper->fibRouteUpdatesQueueReader.get().value();
 
     // Generate random `numOfRoutes` prefixes
     auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
@@ -211,8 +213,8 @@ BM_Fib(
       }
       // Send routeDB to Fib and wait for updating completing
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
     }
-    fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
@@ -239,7 +241,7 @@ BM_Fib(
       suspender.dismiss(); // Start measuring benchmark time
       // Send routeDB to Fib for updates
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
       suspender.rehire(); // Stop measuring time again
     }
   }
@@ -270,7 +272,7 @@ BM_FibDeleteUnicastRoute(
 
     // Initial syncFib debounce
     fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
-    fibWrapper->mockFibHandler->waitForSyncFib();
+    fibWrapper->fibRouteUpdatesQueueReader.get().value();
 
     // Generate random `numOfRoutes` prefixes
     auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
@@ -288,8 +290,8 @@ BM_FibDeleteUnicastRoute(
       }
       // Send routeDB to Fib and wait for updating completing
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
     }
-    fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
     // Profile memory before the routeUpdate is generated
     if (record) {
@@ -312,7 +314,7 @@ BM_FibDeleteUnicastRoute(
       suspender.dismiss(); // Start measuring benchmark time
       // Send routeDB to Fib for updates
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->mockFibHandler->waitForDeleteUnicastRoutes();
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
       suspender.rehire(); // Stop measuring time again
     }
 
@@ -353,7 +355,7 @@ BM_FibAddMplsRoute(
 
     // Initial syncFib debounce
     fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
-    fibWrapper->mockFibHandler->waitForSyncFib();
+    fibWrapper->fibRouteUpdatesQueueReader.get().value();
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -377,7 +379,7 @@ BM_FibAddMplsRoute(
       }
       // Send routeDB to Fib and wait for updating completing
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->mockFibHandler->waitForUpdateMplsRoutes();
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
     }
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -403,7 +405,7 @@ BM_FibAddMplsRoute(
       suspender.dismiss(); // Start measuring benchmark time
       // Send routeDB to Fib for updates
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->mockFibHandler->waitForUpdateMplsRoutes();
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
       suspender.rehire(); // Stop measuring time again
     }
   }
@@ -434,7 +436,7 @@ BM_FibDeleteMplsRoute(
 
     // Initial syncFib debounce
     fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
-    fibWrapper->mockFibHandler->waitForSyncFib();
+    fibWrapper->fibRouteUpdatesQueueReader.get().value();
 
     std::vector<int32_t> labels;
     {
@@ -450,7 +452,7 @@ BM_FibDeleteMplsRoute(
       }
       // Send routeDB to Fib and wait for updating completing
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->mockFibHandler->waitForUpdateMplsRoutes();
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
     }
 
     // Profile memory before the routeUpdate is generated
@@ -474,7 +476,7 @@ BM_FibDeleteMplsRoute(
       suspender.dismiss(); // Start measuring benchmark time
       // Send routeDB to Fib for updates
       fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->mockFibHandler->waitForDeleteMplsRoutes();
+      fibWrapper->fibRouteUpdatesQueueReader.get().value();
       suspender.rehire(); // Stop measuring time again
     }
 
@@ -495,15 +497,15 @@ BM_FibDeleteMplsRoute(
  * @params first integer: num of existing routes
  * @params second integer: num of updating routes
  */
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100, 100);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 1000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100, 100);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 1000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 100000);
 
 /*
  * @params counters: reserved counter for customized profile
