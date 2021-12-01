@@ -109,7 +109,8 @@ class SpfSolver {
       bool enableAdjacencyLabels,
       bool enableBgpRouteProgramming = false,
       bool enableBestRouteSelection = false,
-      bool v4OverV6Nexthop = false);
+      bool v4OverV6Nexthop = false,
+      bool enableUcmp = false);
   ~SpfSolver();
 
   //
@@ -168,9 +169,19 @@ class SpfSolver {
       const LinkState::SpfResult& spfResult,
       const std::set<NodeAndArea>& dstNodeAreas);
 
+  // Structure which holds the results of per area spf next-hop selection
+  // for a single prefix
+  struct SpfAreaResults {
+    // metric of the shortest path within the area
+    LinkStateMetric bestMetric{0};
+    // ucmp weight resulting from the selected next-hops within the area
+    std::optional<int64_t> ucmpWeight{std::nullopt};
+    // selected next-hops within the area
+    std::unordered_set<thrift::NextHopThrift> nextHops;
+  };
+
   // Given prefixes and the nodes who announce it, get the ecmp next-hops.
-  std::pair<LinkStateMetric, std::unordered_set<thrift::NextHopThrift>>
-  selectBestPathsSpf(
+  SpfAreaResults selectBestPathsSpf(
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       RouteSelectionResult const& routeSelectionResult,
@@ -179,7 +190,7 @@ class SpfSolver {
       thrift::PrefixForwardingType const& forwardingType,
       const std::string& area,
       const LinkState& linkState,
-      PrefixState const& prefixState);
+      thrift::PrefixForwardingAlgorithm fwdingAlgo);
 
   // Given prefixes and the nodes who announce it, get the kspf2 routes, aka,
   // shortest paths and second shortest paths.
@@ -200,7 +211,8 @@ class SpfSolver {
       const PrefixEntries& prefixEntries,
       const bool isBgp,
       std::unordered_set<thrift::NextHopThrift>&& nextHops,
-      const openr::LinkStateMetric shortestMetric);
+      const openr::LinkStateMetric shortestMetric,
+      const std::optional<int64_t>& ucmpWeight);
 
   // Helper function to find the nodes for the nexthop for bgp route
   RouteSelectionResult runBestPathSelectionBgp(
@@ -277,7 +289,18 @@ class SpfSolver {
       std::optional<int32_t> swapLabel,
       const std::string& area,
       const LinkState& linkState,
-      PrefixEntries const& prefixEntries = {}) const;
+      PrefixEntries const& prefixEntries = {},
+      const std::optional<LinkState::NodeUcmpResult>& ucmpResults =
+          std::nullopt) const;
+
+  std::optional<LinkState::NodeUcmpResult> getNodeUcmpResult(
+      const std::string& myNodeName,
+      thrift::PrefixForwardingAlgorithm fwdingAlgo,
+      const std::string& area,
+      const LinkState& linkState,
+      const PrefixEntries& prefixEntries,
+      const std::set<NodeAndArea>& bestPrefixEntriesKeys,
+      openr::LinkStateMetric bestMetric) const;
 
   // Collection to store static IP/MPLS routes
   StaticMplsRoutes staticMplsRoutes_;
@@ -306,5 +329,7 @@ class SpfSolver {
   // prefixes with v6 nexthops to Fib module for programming. Else it will just
   // use v4 over v4 nexthop.
   const bool v4OverV6Nexthop_{false};
+
+  const bool enableUcmp_{false};
 };
 } // namespace openr

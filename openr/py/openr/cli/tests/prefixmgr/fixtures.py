@@ -170,7 +170,8 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
             "65529:15990",
             "COMMODITY:EGRESS"
           ],
-          "type": 3
+          "type": 3,
+          "weight": null
         }
       }
     ]
@@ -212,7 +213,8 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
             "65529:15990",
             "COMMODITY:EGRESS"
           ],
-          "type": 3
+          "type": 3,
+          "weight": null
         }
       }
     ]

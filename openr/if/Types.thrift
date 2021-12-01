@@ -436,6 +436,8 @@ struct PrefixEntry {
    * set to empty on origination
    */
   12: list<string> area_stack;
+
+  13: optional i64 weight;
 } (cpp.minimize_padding)
 
 /**

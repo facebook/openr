@@ -237,7 +237,8 @@ createNextHopFromAdj(
     int32_t metric,
     std::optional<thrift::MplsAction> mplsAction = std::nullopt,
     const std::string& area = kTestingAreaName,
-    bool v4OverV6Nexthop = false) {
+    bool v4OverV6Nexthop = false,
+    int64_t weight = 0) {
   return createNextHop(
       isV4 and not v4OverV6Nexthop ? *adj.nextHopV4_ref()
                                    : *adj.nextHopV6_ref(),
@@ -245,7 +246,8 @@ createNextHopFromAdj(
       metric,
       std::move(mplsAction),
       area,
-      *adj.otherNodeName_ref());
+      *adj.otherNodeName_ref(),
+      weight);
 }
 
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order
@@ -5900,7 +5902,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
     for (auto& nh :
          updates.unicastRoutesToUpdate.at(toIPNetwork(addr2)).nexthops) {
-      EXPECT_FALSE(nh.weight_ref().is_set());
+      EXPECT_EQ(0, *nh.weight_ref());
     }
     auto counters = fb303::fbData->getCounters();
     EXPECT_EQ(1, counters.at("decision.rib_policy.invalidated_routes.count"));
@@ -5926,7 +5928,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
     ASSERT_EQ(1, updates.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
     for (auto& nh :
          updates.unicastRoutesToUpdate.at(toIPNetwork(addr2)).nexthops) {
-      EXPECT_FALSE(nh.weight_ref().is_set());
+      EXPECT_EQ(0, *nh.weight_ref());
     }
     auto counters = fb303::fbData->getCounters();
     EXPECT_EQ(2, counters.at("decision.rib_policy.invalidated_routes.count"));
@@ -7729,6 +7731,287 @@ TEST(DecisionPendingUpdates, perfEvents) {
   EXPECT_EQ(
       *updates.perfEvents()->events_ref()->back().eventDescr_ref(),
       "DECISION_RECEIVED");
+}
+
+// Topology:
+//
+//  (4)    (5)  (6)
+//    \   /     /
+//     \ /     /
+//     (2)   (3)
+//       \   /
+//        \ /
+//        (1)
+//
+TEST(DecisionTest, Ucmp) {
+  std::string nodeName("1");
+  auto spfSolver = std::make_unique<SpfSolver>(
+      nodeName,
+      false, /* enableV4 */
+      false, /* enableNodeSegmentLabel */
+      false, /* enableAdjacencyLabels */
+      true, /* enableBgpRouteProgramming */
+      true, /* enableBestRouteSelection */
+      false, /* v4OverV6Nexthop */
+      true /* enableUcmp*/);
+
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  PrefixState prefixState;
+
+  // R1
+  auto adj12 = createAdjacency(
+      "2", "1/2", "2/1", "fe80::2", "192.168.1.2", 10, 0, 100 * 1e9);
+  auto adj13 = createAdjacency(
+      "3", "1/3", "3/1", "fe80::3", "192.168.1.3", 10, 0, 100 * 1e9);
+  // R2
+  auto adj21 = createAdjacency(
+      "1", "2/1", "1/2", "fe80::1", "192.168.1.1", 10, 0, 100 * 1e9);
+  auto adj24 = createAdjacency(
+      "4", "2/4", "4/2", "fe80::4", "192.168.1.4", 10, 0, 100 * 1e9);
+  auto adj25 = createAdjacency(
+      "5", "2/5", "5/2", "fe80::5", "192.168.1.5", 10, 0, 100 * 1e9);
+  // R3
+  auto adj31 = createAdjacency(
+      "1", "3/1", "1/3", "fe80::1", "192.168.1.1", 10, 0, 100 * 1e9);
+  auto adj36 = createAdjacency(
+      "6", "3/6", "6/3", "fe80::6", "192.168.1.6", 10, 0, 100 * 1e9);
+  // R4
+  auto adj42 = createAdjacency(
+      "2", "4/2", "2/4", "fe80::2", "192.168.1.2", 10, 0, 100 * 1e9);
+  // R5
+  auto adj52 = createAdjacency(
+      "2", "5/2", "2/5", "fe80::2", "192.168.1.2", 10, 0, 100 * 1e9);
+  // R6
+  auto adj63 = createAdjacency(
+      "3", "6/3", "3/6", "fe80::3", "192.168.1.3", 10, 0, 100 * 1e9);
+
+  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
+  auto adjacencyDb2 = createAdjDb("2", {adj21, adj24, adj25}, 2);
+  auto adjacencyDb3 = createAdjDb("3", {adj31, adj36}, 3);
+  auto adjacencyDb4 = createAdjDb("4", {adj42}, 4);
+  auto adjacencyDb5 = createAdjDb("5", {adj52}, 5);
+  auto adjacencyDb6 = createAdjDb("6", {adj63}, 6);
+
+  // Adjacency db's
+  linkState.updateAdjacencyDatabase(adjacencyDb1);
+  linkState.updateAdjacencyDatabase(adjacencyDb2);
+  linkState.updateAdjacencyDatabase(adjacencyDb3);
+  linkState.updateAdjacencyDatabase(adjacencyDb4);
+  linkState.updateAdjacencyDatabase(adjacencyDb5);
+  linkState.updateAdjacencyDatabase(adjacencyDb6);
+
+  // Prefix db's
+  const auto defaultPrefixV6 = toIpPrefix("::/0");
+
+  // Test 1:
+  // Default route is advertised from following nodes:
+  //
+  //   Node 4 -> algo = SP_UCMP_PREFIX_WEIGHT_PROPAGATION
+  //          -> weight = 200 Gbps
+  //
+  //   Node 5 -> algo = SP_UCMP_PREFIX_WEIGHT_PROPAGATION
+  //          -> weight = 100 Gbps
+  //
+  //   Node 6 -> algo = SP_UCMP_PREFIX_WEIGHT_PROPAGATION
+  //          -> weight = 100 Gbps
+  {
+    const auto prefixDb4_ = createPrefixDb(
+        "4",
+        {createPrefixEntry(
+            defaultPrefixV6,
+            thrift::PrefixType::BGP,
+            {},
+            thrift::PrefixForwardingType::IP,
+            thrift::PrefixForwardingAlgorithm::
+                SP_UCMP_PREFIX_WEIGHT_PROPAGATION,
+            std::nullopt,
+            std::nullopt,
+            200 * 1e9)});
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb4_).empty());
+    const auto prefixDb5_ = createPrefixDb(
+        "5",
+        {createPrefixEntry(
+            defaultPrefixV6,
+            thrift::PrefixType::BGP,
+            {},
+            thrift::PrefixForwardingType::IP,
+            thrift::PrefixForwardingAlgorithm::
+                SP_UCMP_PREFIX_WEIGHT_PROPAGATION,
+            std::nullopt,
+            std::nullopt,
+            100 * 1e9)});
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb5_).empty());
+    const auto prefixDb6_ = createPrefixDb(
+        "6",
+        {createPrefixEntry(
+            defaultPrefixV6,
+            thrift::PrefixType::BGP,
+            {},
+            thrift::PrefixForwardingType::IP,
+            thrift::PrefixForwardingAlgorithm::
+                SP_UCMP_PREFIX_WEIGHT_PROPAGATION,
+            std::nullopt,
+            std::nullopt,
+            100 * 1e9)});
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb6_).empty());
+
+    // Verify node 1
+    auto routeDb1 = spfSolver->buildRouteDb("1", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb1->unicastRoutes.size());
+    auto& defaultRoute1 =
+        routeDb1->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_EQ(400 * 1e9, *defaultRoute1.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops(
+            {createNextHopFromAdj(
+                 adj12, false, 20, std::nullopt, kTestingAreaName, false, 3),
+             createNextHopFromAdj(
+                 adj13, false, 20, std::nullopt, kTestingAreaName, false, 1)}),
+        defaultRoute1.nexthops);
+
+    // Verify node 2
+    auto routeDb2 = spfSolver->buildRouteDb("2", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb2->unicastRoutes.size());
+    auto& defaultRoute2 =
+        routeDb2->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_EQ(300 * 1e9, *defaultRoute2.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops(
+            {createNextHopFromAdj(
+                 adj24, false, 10, std::nullopt, kTestingAreaName, false, 2),
+             createNextHopFromAdj(
+                 adj25, false, 10, std::nullopt, kTestingAreaName, false, 1)}),
+        defaultRoute2.nexthops);
+
+    // Verify node 3
+    auto routeDb3 = spfSolver->buildRouteDb("3", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb3->unicastRoutes.size());
+    auto& defaultRoute3 =
+        routeDb3->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_EQ(100 * 1e9, *defaultRoute3.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops({createNextHopFromAdj(
+            adj36, false, 10, std::nullopt, kTestingAreaName, false, 1)}),
+        defaultRoute3.nexthops);
+  }
+
+  // Test 2:
+  // Change node 6's route advertisement to SP_UCMP_ADJ_WEIGHT_PROPAGATION
+  // forwarding algorithm. Nodes 1, 2, and 3 will now use
+  // SP_UCMP_ADJ_WEIGHT_PROPAGATION to derive their advertised weight
+  {
+    const auto prefixDb6NoWeight = createPrefixDb(
+        "6",
+        {createPrefixEntry(
+            defaultPrefixV6,
+            thrift::PrefixType::BGP,
+            {},
+            thrift::PrefixForwardingType::IP,
+            thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION,
+            std::nullopt,
+            std::nullopt,
+            100 * 1e9)});
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb6NoWeight).empty());
+
+    // Verify node 1
+    auto routeDb1 = spfSolver->buildRouteDb("1", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb1->unicastRoutes.size());
+    auto& defaultRoute1 =
+        routeDb1->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_EQ(200 * 1e9, *defaultRoute1.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops(
+            {createNextHopFromAdj(
+                 adj12, false, 20, std::nullopt, kTestingAreaName, false, 2),
+             createNextHopFromAdj(
+                 adj13, false, 20, std::nullopt, kTestingAreaName, false, 1)}),
+        defaultRoute1.nexthops);
+
+    // Verify node 2
+    auto routeDb2 = spfSolver->buildRouteDb("2", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb2->unicastRoutes.size());
+    auto& defaultRoute2 =
+        routeDb2->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_EQ(200 * 1e9, *defaultRoute2.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops(
+            {createNextHopFromAdj(
+                 adj24, false, 10, std::nullopt, kTestingAreaName, false, 2),
+             createNextHopFromAdj(
+                 adj25, false, 10, std::nullopt, kTestingAreaName, false, 1)}),
+        defaultRoute2.nexthops);
+
+    // Verify node 3
+    auto routeDb3 = spfSolver->buildRouteDb("3", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb3->unicastRoutes.size());
+    auto& defaultRoute3 =
+        routeDb3->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_EQ(100 * 1e9, *defaultRoute3.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops({createNextHopFromAdj(
+            adj36, false, 10, std::nullopt, kTestingAreaName, false, 1)}),
+        defaultRoute3.nexthops);
+  }
+
+  // Test 3:
+  // Change node 6's route advertisement to not advertise a weight.
+  // Nodes 1 and 3 will fallback to ECMP routing.
+  // Node 2 will use SP_UCMP_PREFIX_WEIGHT_PROPAGATION
+  {
+    const auto prefixDb6NoWeight = createPrefixDb(
+        "6",
+        {createPrefixEntry(
+            defaultPrefixV6,
+            thrift::PrefixType::BGP,
+            {},
+            thrift::PrefixForwardingType::IP,
+            thrift::PrefixForwardingAlgorithm::
+                SP_UCMP_PREFIX_WEIGHT_PROPAGATION,
+            std::nullopt,
+            std::nullopt)});
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb6NoWeight).empty());
+
+    // Verify node 1
+    auto routeDb1 = spfSolver->buildRouteDb("1", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb1->unicastRoutes.size());
+    auto& defaultRoute1 =
+        routeDb1->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_FALSE(defaultRoute1.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops(
+            {createNextHopFromAdj(
+                 adj12, false, 20, std::nullopt, kTestingAreaName, false, 0),
+             createNextHopFromAdj(
+                 adj13, false, 20, std::nullopt, kTestingAreaName, false, 0)}),
+        defaultRoute1.nexthops);
+
+    // Verify node 2
+    auto routeDb2 = spfSolver->buildRouteDb("2", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb2->unicastRoutes.size());
+    auto& defaultRoute2 =
+        routeDb2->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_EQ(300 * 1e9, *defaultRoute2.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops(
+            {createNextHopFromAdj(
+                 adj24, false, 10, std::nullopt, kTestingAreaName, false, 2),
+             createNextHopFromAdj(
+                 adj25, false, 10, std::nullopt, kTestingAreaName, false, 1)}),
+        defaultRoute2.nexthops);
+
+    // Verify node 3
+    auto routeDb3 = spfSolver->buildRouteDb("3", areaLinkStates, prefixState);
+    EXPECT_EQ(1, routeDb3->unicastRoutes.size());
+    auto& defaultRoute3 =
+        routeDb3->unicastRoutes.at(toIPNetwork(defaultPrefixV6));
+    EXPECT_FALSE(defaultRoute3.bestPrefixEntry.weight_ref());
+    EXPECT_EQ(
+        NextHops({createNextHopFromAdj(
+            adj36, false, 10, std::nullopt, kTestingAreaName, false, 0)}),
+        defaultRoute3.nexthops);
+  }
 }
 
 int

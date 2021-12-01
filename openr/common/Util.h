@@ -325,7 +325,8 @@ thrift::PrefixEntry createPrefixEntry(
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm =
         thrift::PrefixForwardingAlgorithm::SP_ECMP,
     std::optional<thrift::MetricVector> mv = std::nullopt,
-    std::optional<int64_t> minNexthop = std::nullopt);
+    std::optional<int64_t> minNexthop = std::nullopt,
+    std::optional<int64_t> weight = std::nullopt);
 
 thrift::PrefixEntry createPrefixEntryWithPrependLabel(
     thrift::IpPrefix prefix,
@@ -412,7 +413,8 @@ thrift::NextHopThrift createNextHop(
     int32_t metric = 0,
     std::optional<thrift::MplsAction> maybeMplsAction = std::nullopt,
     const std::optional<std::string>& area = std::nullopt,
-    const std::optional<std::string>& neighborNodeName = std::nullopt);
+    const std::optional<std::string>& neighborNodeName = std::nullopt,
+    int64_t weight = 0);
 
 thrift::MplsAction createMplsAction(
     thrift::MplsActionCode const mplsActionCode,

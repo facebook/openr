@@ -669,7 +669,8 @@ createPrefixEntry(
     thrift::PrefixForwardingType forwardingType,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
     std::optional<thrift::MetricVector> mv,
-    std::optional<int64_t> minNexthop) {
+    std::optional<int64_t> minNexthop,
+    std::optional<int64_t> weight) {
   thrift::PrefixEntry prefixEntry;
   prefixEntry.prefix_ref() = prefix;
   prefixEntry.type_ref() = type;
@@ -680,6 +681,7 @@ createPrefixEntry(
   prefixEntry.forwardingAlgorithm_ref() = forwardingAlgorithm;
   prefixEntry.mv_ref().from_optional(mv);
   prefixEntry.minNexthop_ref().from_optional(minNexthop);
+  prefixEntry.weight_ref().from_optional(weight);
   return prefixEntry;
 }
 
@@ -881,7 +883,8 @@ createNextHop(
     int32_t metric,
     std::optional<thrift::MplsAction> maybeMplsAction,
     const std::optional<std::string>& area,
-    const std::optional<std::string>& neighborNodeName) {
+    const std::optional<std::string>& neighborNodeName,
+    int64_t weight) {
   thrift::NextHopThrift nextHop;
   nextHop.address_ref() = addr;
   nextHop.address_ref()->ifName_ref().from_optional(std::move(ifName));
@@ -889,6 +892,7 @@ createNextHop(
   nextHop.mplsAction_ref().from_optional(maybeMplsAction);
   nextHop.area_ref().from_optional(area);
   nextHop.neighborNodeName_ref().from_optional(neighborNodeName);
+  nextHop.weight_ref() = weight;
   return nextHop;
 }
 

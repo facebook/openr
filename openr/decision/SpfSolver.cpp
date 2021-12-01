@@ -80,14 +80,16 @@ SpfSolver::SpfSolver(
     bool enableAdjacencyLabels,
     bool enableBgpRouteProgramming,
     bool enableBestRouteSelection,
-    bool v4OverV6Nexthop)
+    bool v4OverV6Nexthop,
+    bool enableUcmp)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
       enableAdjacencyLabels_(enableAdjacencyLabels),
       enableBgpRouteProgramming_(enableBgpRouteProgramming),
       enableBestRouteSelection_(enableBestRouteSelection),
-      v4OverV6Nexthop_(v4OverV6Nexthop) {
+      v4OverV6Nexthop_(v4OverV6Nexthop),
+      enableUcmp_(enableUcmp) {
   // Initialize stat keys
   fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
   fb303::fbData->addStatExportType(
@@ -361,6 +363,7 @@ SpfSolver::createRouteForPrefix(
   //    - Combine shortest metric next-hops from all area
   std::unordered_set<thrift::NextHopThrift> totalNextHops;
   std::unordered_set<thrift::NextHopThrift> ksp2NextHops;
+  std::optional<int64_t> ucmpWeight;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
   for (const auto& [area, areaRules] :
        *routeComputationRules.areaPathComputationRules_ref()) {
@@ -375,8 +378,10 @@ SpfSolver::createRouteForPrefix(
     }
 
     switch (*areaRules.forwardingAlgo_ref()) {
-    case thrift::PrefixForwardingAlgorithm::SP_ECMP: {
-      auto metricsAreaNextHops = selectBestPathsSpf(
+    case thrift::PrefixForwardingAlgorithm::SP_ECMP:
+    case thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION:
+    case thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION: {
+      auto spfAreaResults = selectBestPathsSpf(
           myNodeName,
           prefix,
           routeSelectionResult,
@@ -385,19 +390,26 @@ SpfSolver::createRouteForPrefix(
           *areaRules.forwardingType_ref(),
           area,
           linkState->second,
-          prefixState);
+          *areaRules.forwardingAlgo_ref());
       // Only use next-hops in areas with the shortest IGP metric
       //
       // TODO: bypass this code to allow UCMP paths between areas if
       // new RouteComputationRules flag allowUcmpPathsBetweenAreas is true
-      if (shortestMetric >= metricsAreaNextHops.first) {
-        if (shortestMetric > metricsAreaNextHops.first) {
-          shortestMetric = metricsAreaNextHops.first;
+      if (shortestMetric >= spfAreaResults.bestMetric) {
+        if (shortestMetric > spfAreaResults.bestMetric) {
+          shortestMetric = spfAreaResults.bestMetric;
           totalNextHops.clear();
+          ucmpWeight = std::nullopt;
         }
         totalNextHops.insert(
-            metricsAreaNextHops.second.begin(),
-            metricsAreaNextHops.second.end());
+            spfAreaResults.nextHops.begin(), spfAreaResults.nextHops.end());
+
+        if (not ucmpWeight) {
+          ucmpWeight = spfAreaResults.ucmpWeight;
+        } else if (spfAreaResults.ucmpWeight) {
+          // Add the ucmp weight from all areas where we will use next-hops.
+          *ucmpWeight += *spfAreaResults.ucmpWeight;
+        }
       }
     } break;
     case thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP: {
@@ -436,7 +448,8 @@ SpfSolver::createRouteForPrefix(
       prefixEntries,
       hasBGP,
       std::move(totalNextHops),
-      shortestMetric);
+      shortestMetric,
+      ucmpWeight);
 
   // SrPolicy TODO: (T94500292) before returning need to apply prepend label
   // rules. Prepend label rules, may create a new MPLS route (RibMplsEntry)
@@ -754,7 +767,7 @@ SpfSolver::runBestPathSelectionBgp(
   return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
 }
 
-std::pair<Metric, std::unordered_set<thrift::NextHopThrift>>
+SpfSolver::SpfAreaResults
 SpfSolver::selectBestPathsSpf(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
@@ -764,7 +777,8 @@ SpfSolver::selectBestPathsSpf(
     thrift::PrefixForwardingType const& forwardingType,
     const std::string& area,
     const LinkState& linkState,
-    PrefixState const& prefixState) {
+    thrift::PrefixForwardingAlgorithm fwdingAlgo) {
+  SpfAreaResults result;
   const bool isV4Prefix = prefix.first.isV4();
   const bool perDestination =
       forwardingType == thrift::PrefixForwardingType::SR_MPLS;
@@ -789,28 +803,44 @@ SpfSolver::selectBestPathsSpf(
   // Get next-hops
   const auto nextHopsWithMetric = getNextHopsWithMetric(
       myNodeName, filteredBestNodeAreas, perDestination, linkState);
+  result.bestMetric = nextHopsWithMetric.first;
   if (nextHopsWithMetric.second.empty()) {
     XLOG(DBG3) << "No route to prefix "
                << folly::IPAddress::networkToString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
-    return std::make_pair(
-        nextHopsWithMetric.first, std::unordered_set<thrift::NextHopThrift>());
+    return result;
   }
 
-  return std::make_pair(
+  // Get UCMP results for myNodeName. Will return nullopt if the UCMP
+  // feature is disabled, the route is not UCMP enabled, or an error
+  // occurs while resolving the UCMP weights.
+  auto maybeUcmpResult = getNodeUcmpResult(
+      myNodeName,
+      fwdingAlgo,
+      area,
+      linkState,
+      prefixEntries,
+      routeSelectionResult.allNodeAreas,
+      result.bestMetric);
+  if (maybeUcmpResult) {
+    result.ucmpWeight = maybeUcmpResult->weight();
+  }
+
+  result.nextHops = getNextHopsThrift(
+      myNodeName,
+      routeSelectionResult.allNodeAreas,
+      isV4Prefix,
+      v4OverV6Nexthop_,
+      perDestination,
       nextHopsWithMetric.first,
-      getNextHopsThrift(
-          myNodeName,
-          routeSelectionResult.allNodeAreas,
-          isV4Prefix,
-          v4OverV6Nexthop_,
-          perDestination,
-          nextHopsWithMetric.first,
-          nextHopsWithMetric.second,
-          std::nullopt /* swapLabel */,
-          area,
-          linkState,
-          prefixEntries));
+      nextHopsWithMetric.second,
+      std::nullopt /* swapLabel */,
+      area,
+      linkState,
+      prefixEntries,
+      maybeUcmpResult);
+
+  return result;
 }
 
 std::unordered_set<thrift::NextHopThrift>
@@ -949,7 +979,8 @@ SpfSolver::addBestPaths(
     const PrefixEntries& prefixEntries,
     const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops,
-    const Metric shortestMetric) {
+    const Metric shortestMetric,
+    const std::optional<int64_t>& ucmpWeight) {
   // Check if next-hop list is empty
   if (nextHops.empty()) {
     return std::nullopt;
@@ -1004,7 +1035,8 @@ SpfSolver::addBestPaths(
       *(prefixEntries.at(routeSelectionResult.bestNodeArea)),
       routeSelectionResult.bestNodeArea.second,
       isBgp & (not enableBgpRouteProgramming_), // doNotInstall
-      shortestMetric);
+      shortestMetric,
+      ucmpWeight);
 }
 
 std::pair<
@@ -1055,6 +1087,78 @@ SpfSolver::getNextHopsWithMetric(
   return std::make_pair(shortestMetric, nextHopNodes);
 }
 
+std::optional<LinkState::NodeUcmpResult>
+SpfSolver::getNodeUcmpResult(
+    const std::string& myNodeName,
+    thrift::PrefixForwardingAlgorithm fwdingAlgo,
+    const std::string& area,
+    const LinkState& linkState,
+    const PrefixEntries& prefixEntries,
+    const std::set<NodeAndArea>& bestPrefixEntriesKeys,
+    Metric bestMetric) const {
+  // Return nullopt if the UCMP is not globally enabled
+  if (not enableUcmp_) {
+    return std::nullopt;
+  }
+
+  // Return nullopt if the route is not UCMP enabled
+  if (fwdingAlgo !=
+          thrift::PrefixForwardingAlgorithm::
+              SP_UCMP_PREFIX_WEIGHT_PROPAGATION &&
+      fwdingAlgo !=
+          thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION) {
+    return std::nullopt;
+  }
+
+  // Walk the best routes and construct a dest node to weight map.
+  const auto& mySpfResult = linkState.getSpfResult(myNodeName);
+  std::unordered_map<std::string, int64_t> dstWeights;
+  for (const auto& [dstNode, dstArea] : bestPrefixEntriesKeys) {
+    auto& prefixEntry = prefixEntries.at({dstNode, dstArea});
+
+    // Ignore best routes from different areas
+    if (dstArea != area) {
+      continue;
+    }
+
+    // Find the SPF results for the route's destination. This should
+    // never fail, there should always be an available path to the
+    // node advertising the route.
+    auto dstSpfResultIt = mySpfResult.find(dstNode);
+    if (dstSpfResultIt == mySpfResult.end()) {
+      continue;
+    }
+
+    // Skip routes which do not have the best metric. These routes
+    // will not be used for next-hop resolution.
+    if (bestMetric != dstSpfResultIt->second.metric()) {
+      continue;
+    }
+
+    // Ignore routes that have no weight or a weight of zero.
+    if (not prefixEntry->weight_ref() || 0 == *prefixEntry->weight_ref()) {
+      return std::nullopt;
+    }
+
+    dstWeights.emplace(dstNode, *prefixEntry->weight_ref());
+  }
+
+  // Resolve UCMP weights. This API returns the UCMP results
+  // for all nodes in the SPF graph.
+  auto ucmpResults = linkState.resolveUcmpWeights(
+      linkState.getSpfResult(myNodeName), dstWeights, fwdingAlgo);
+
+  // Find the UCMP results for the local node. This should never
+  // fail
+  auto myNodeResultIt = ucmpResults.find(myNodeName);
+  if (myNodeResultIt == ucmpResults.end()) {
+    LOG(ERROR) << "Could not find local node in UCMP results";
+    return std::nullopt;
+  }
+
+  return std::move(myNodeResultIt->second);
+}
+
 // TODO Let's use strong-types for the bools to detect any abusement at the
 // building time.
 std::unordered_set<thrift::NextHopThrift>
@@ -1070,7 +1174,8 @@ SpfSolver::getNextHopsThrift(
     std::optional<int32_t> swapLabel,
     const std::string& area,
     const LinkState& linkState,
-    PrefixEntries const& prefixEntries) const {
+    PrefixEntries const& prefixEntries,
+    const std::optional<LinkState::NodeUcmpResult>& ucmpResults) const {
   // Note: perDestination flag determines the next-hop search range by whether
   // filtering those not-in dstNodeAreas or not.
   // TODO: Reorg this function to make the logic cleaner, and cleanup unused
@@ -1154,6 +1259,16 @@ SpfSolver::getNextHopsThrift(
         }
       }
 
+      // Get the UCMP weight for this next-hop if present
+      int32_t weight{0};
+      if (ucmpResults) {
+        auto nextHopLinkIt = ucmpResults->nextHopLinks().find(
+            link->getIfaceFromNode(myNodeName));
+        if (nextHopLinkIt != ucmpResults->nextHopLinks().end()) {
+          weight = static_cast<int32_t>(nextHopLinkIt->second.weight);
+        }
+      }
+
       nextHops.emplace(createNextHop(
           isV4 and not v4OverV6Nexthop ? link->getNhV4FromNode(myNodeName)
                                        : link->getNhV6FromNode(myNodeName),
@@ -1161,7 +1276,8 @@ SpfSolver::getNextHopsThrift(
           distOverLink,
           mplsAction,
           link->getArea(),
-          link->getOtherNodeName(myNodeName)));
+          link->getOtherNodeName(myNodeName),
+          weight));
     } // end for perDestination ...
   } // end for linkState ...
   return nextHops;

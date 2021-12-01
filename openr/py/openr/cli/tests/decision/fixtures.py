@@ -534,7 +534,8 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
             "INTERFACE_SUBNET",
             "openr-center:lo"
           ],
-          "type": 1
+          "type": 1,
+          "weight": null
         }
       }
     ]
@@ -576,7 +577,8 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
             "INTERFACE_SUBNET",
             "openr-center:lo"
           ],
-          "type": 1
+          "type": 1,
+          "weight": null
         }
       }
     ]
@@ -618,7 +620,8 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
             "INTERFACE_SUBNET",
             "openr-right:lo"
           ],
-          "type": 1
+          "type": 1,
+          "weight": null
         }
       }
     ]
