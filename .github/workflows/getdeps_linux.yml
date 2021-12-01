@@ -125,7 +125,7 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py build --src-dir=. openr  --project-install-prefix openr:/usr/local
     - name: Copy artifacts
       run: python3 build/fbcode_builder/getdeps.py fixup-dyn-deps --strip --src-dir=. openr _artifacts/linux  --project-install-prefix openr:/usr/local --final-install-prefix /usr/local
-    - uses: actions/upload-artifact@main
+    - uses: actions/upload-artifact@v2
       with:
         name: openr
         path: _artifacts
