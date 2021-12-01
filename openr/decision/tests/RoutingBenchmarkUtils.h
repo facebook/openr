@@ -55,7 +55,6 @@
 namespace {
 // We have 24 SSWs per plane as of now and moving towards 36 per plane.
 const int kNumOfSswsPerPlane = 36;
-const int kNumOfFswsPerPod = 8;
 const int kNumOfRswsPerPod = 48;
 const uint8_t kSswMarker = 1;
 const uint8_t kFswMarker = 2;
@@ -286,7 +285,8 @@ void createSswsAdjacencies(
     const uint8_t fswMarker,
     const int numOfPods,
     const int numOfPlanes,
-    const int numOfSswsPerPlane);
+    const int numOfSswsPerPlane,
+    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
 
 /**
  * Create Adjacencies for fabric switches.
@@ -301,7 +301,8 @@ void createFswsAdjacencies(
     const int numOfPods,
     const int numOfFswsPerPod,
     const int numOfSswsPerPlane,
-    const int numOfRswsPerPod);
+    const int numOfRswsPerPod,
+    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
 
 /**
  * Create Adjacencies for rack switches.
@@ -314,7 +315,8 @@ void createRswsAdjacencies(
     const uint8_t rswMarker,
     const int numOfPods,
     const int numOfFswsPerPod,
-    const int numOfRswsPerPod);
+    const int numOfRswsPerPod,
+    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
 
 //
 // Create a fabric topology
@@ -322,9 +324,11 @@ void createRswsAdjacencies(
 thrift::Publication createFabric(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     const int numOfPods,
+    const int numOfPlanes,
     const int numOfSswsPerPlane,
     const int numOfFswsPerPod,
-    const int numOfRswsPerPod);
+    const int numOfRswsPerPod,
+    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
 
 //
 // Randomly choose one rsw from a random pod,
@@ -357,6 +361,14 @@ void updateRandomGridAdjs(
     std::optional<std::pair<int, int>>& selectedNode,
     const int n);
 
+// Generate prefix updates for nodes and add into thrift::Publication
+void generatePrefixUpdatePublication(
+    const uint32_t& numOfPrefixes,
+    const std::unordered_map<std::string, std::vector<std::string>>&
+        listOfNodenames,
+    const thrift::PrefixForwardingAlgorithm& forwardingAlgorithm,
+    thrift::Publication& initialPub);
+
 //
 // Benchmark tests for grid topology
 //
@@ -385,12 +397,20 @@ void BM_DecisionGridAdjUpdates(
 //
 // Benchmark test for fabric topology.
 //
-void BM_DecisionFabric(
-    folly::UserCounters& counters,
+void BM_DecisionFabricInitialUpdate(
     uint32_t iters,
-    uint32_t numOfSws,
-    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
-    uint32_t numberOfPrefixes = 1);
+    uint32_t numOfPods,
+    uint32_t numOfPlanes,
+    uint32_t numberOfPrefixes,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
+
+void BM_DecisionFabricPrefixUpdates(
+    uint32_t iters,
+    uint32_t numOfPods,
+    uint32_t numOfPlanes,
+    uint32_t numberOfPrefixes,
+    uint32_t numOfUpdatePrefixes,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
 
 const auto SP_ECMP = thrift::PrefixForwardingAlgorithm::SP_ECMP;
 const auto KSP2_ED_ECMP = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;

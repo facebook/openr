@@ -311,11 +311,15 @@ createSswsAdjacencies(
     const uint8_t fswMarker,
     const int numOfPods,
     const int numOfPlanes,
-    const int numOfSswsPerPlane) {
+    const int numOfSswsPerPlane,
+    std::unordered_map<std::string, std::vector<std::string>>&
+        listOfNodenames) {
+  std::vector<std::string> nodeNames;
   for (int planeId = 0; planeId < numOfPlanes; planeId++) {
     for (int sswIdInPlane = 0; sswIdInPlane < numOfSswsPerPlane;
          sswIdInPlane++) {
       auto nodeName = getNodeName(sswMarker, planeId, sswIdInPlane);
+      nodeNames.push_back(nodeName);
       // Add one fsw in each pod to ssw's adjacencies.
       for (int podId = 0; podId < numOfPods; podId++) {
         std::vector<thrift::Adjacency> adjs;
@@ -331,6 +335,7 @@ createSswsAdjacencies(
       }
     }
   }
+  listOfNodenames.emplace("ssw", std::move(nodeNames));
 }
 
 /**
@@ -347,10 +352,14 @@ createFswsAdjacencies(
     const int numOfPods,
     const int numOfFswsPerPod,
     const int numOfSswsPerPlane,
-    const int numOfRswsPerPod) {
+    const int numOfRswsPerPod,
+    std::unordered_map<std::string, std::vector<std::string>>&
+        listOfNodenames) {
+  std::vector<std::string> nodeNames;
   for (int podId = 0; podId < numOfPods; podId++) {
     for (int swIdInPod = 0; swIdInPod < numOfFswsPerPod; swIdInPod++) {
       auto nodeName = getNodeName(fswMarker, podId, swIdInPod);
+      nodeNames.push_back(nodeName);
       std::vector<thrift::Adjacency> adjs;
       // Add ssws within the plane to adjacencies
       auto planeId = swIdInPod;
@@ -374,6 +383,7 @@ createFswsAdjacencies(
               decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
     }
   }
+  listOfNodenames.emplace("fsw", std::move(nodeNames));
 }
 
 /**
@@ -388,10 +398,14 @@ createRswsAdjacencies(
     const uint8_t rswMarker,
     const int numOfPods,
     const int numOfFswsPerPod,
-    const int numOfRswsPerPod) {
+    const int numOfRswsPerPod,
+    std::unordered_map<std::string, std::vector<std::string>>&
+        listOfNodenames) {
+  std::vector<std::string> nodeNames;
   for (int podId = 0; podId < numOfPods; podId++) {
     for (int swIdInPod = 0; swIdInPod < numOfRswsPerPod; swIdInPod++) {
       auto nodeName = getNodeName(rswMarker, podId, swIdInPod);
+      nodeNames.push_back(nodeName);
       // Add all fsws within the pod to adjacencies.
       std::vector<thrift::Adjacency> adjs;
       for (int otherId = 0; otherId < numOfFswsPerPod; otherId++) {
@@ -406,6 +420,7 @@ createRswsAdjacencies(
               decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
     }
   }
+  listOfNodenames.emplace("rsw", std::move(nodeNames));
 }
 
 //
@@ -415,15 +430,18 @@ thrift::Publication
 createFabric(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     const int numOfPods,
+    const int numOfPlanes,
     const int numOfSswsPerPlane,
     const int numOfFswsPerPod,
-    const int numOfRswsPerPod) {
+    const int numOfRswsPerPod,
+    std::unordered_map<std::string, std::vector<std::string>>&
+        listOfNodenames) {
   LOG(INFO) << "Pods number: " << numOfPods;
   thrift::Publication initialPub;
   initialPub.area_ref() = kTestingAreaName;
 
   // ssw: each ssw connects to one fsw of each pod
-  auto numOfPlanes = numOfFswsPerPod;
+  // auto numOfPlanes = numOfFswsPerPod;
   createSswsAdjacencies(
       decisionWrapper,
       initialPub,
@@ -431,7 +449,8 @@ createFabric(
       kFswMarker,
       numOfPods,
       numOfPlanes,
-      numOfSswsPerPlane);
+      numOfSswsPerPlane,
+      listOfNodenames);
 
   // fsw: each fsw connects to all ssws within a plane,
   // each fsw also connects to all rsws within its pod
@@ -444,7 +463,8 @@ createFabric(
       numOfPods,
       numOfFswsPerPod,
       numOfSswsPerPlane,
-      numOfRswsPerPod);
+      numOfRswsPerPod,
+      listOfNodenames);
 
   // rsw: each rsw connects to all fsws within the pod
   createRswsAdjacencies(
@@ -454,7 +474,8 @@ createFabric(
       kRswMarker,
       numOfPods,
       numOfFswsPerPod,
-      numOfRswsPerPod);
+      numOfRswsPerPod,
+      listOfNodenames);
 
   return initialPub;
 }
@@ -578,6 +599,40 @@ updateRandomGridPrefixes(
 }
 
 void
+generatePrefixUpdatePublication(
+    const uint32_t& numOfPrefixes,
+    const std::unordered_map<std::string, std::vector<std::string>>&
+        listOfNodenames,
+    const thrift::PrefixForwardingAlgorithm& forwardingAlgorithm,
+    thrift::Publication& initialPub) {
+  PrefixGenerator prefixGenerator;
+  apache::thrift::CompactSerializer serializer;
+  std::unordered_map<std::string, thrift::Value> keyVals;
+  for (auto& [_, names] : listOfNodenames) {
+    for (auto& nodeName : names) {
+      auto prefixEntries =
+          generatePrefixEntries(prefixGenerator, numOfPrefixes);
+      for (auto& prefixEntry : prefixEntries) {
+        prefixEntry.forwardingType_ref() =
+            (thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
+                     forwardingAlgorithm
+                 ? thrift::PrefixForwardingType::SR_MPLS
+                 : thrift::PrefixForwardingType::IP);
+        prefixEntry.forwardingAlgorithm_ref() = forwardingAlgorithm;
+        auto keyDbPair = createPrefixKeyAndDb(nodeName, prefixEntry);
+        keyVals.emplace(
+            keyDbPair.first.getPrefixKeyV2(),
+            createThriftValue(
+                1,
+                nodeName,
+                writeThriftObjStr(std::move(keyDbPair.second), serializer)));
+      }
+    }
+  }
+  initialPub.keyVals_ref()->merge(std::move(keyVals));
+}
+
+void
 BM_DecisionGridInitialUpdate(
     folly::UserCounters& counters,
     uint32_t iters,
@@ -658,63 +713,95 @@ BM_DecisionGridPrefixUpdates(
 // Benchmark test for fabric topology.
 //
 void
-BM_DecisionFabric(
-    folly::UserCounters& counters,
+BM_DecisionFabricInitialUpdate(
     uint32_t iters,
-    uint32_t numOfSws,
-    // TODO: allow for variance in forwadrting algo and number of prefixes
-    // per node
-    thrift::PrefixForwardingAlgorithm /* forwardingAlgorithm */,
-    uint32_t /* numberOfPrefixes */) {
+    uint32_t numOfPods,
+    uint32_t numOfPlanes,
+    uint32_t numberOfPrefixes,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
   auto suspender = folly::BenchmarkSuspender();
-  const std::string nodeName = fmt::format("{}-{}", kFswMarker, "0-0");
-  auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
-  const int numOfFswsPerPod = kNumOfFswsPerPod;
-  const int numOfRswsPerPod = kNumOfRswsPerPod;
-  const int numOfSswsPerPlane = kNumOfSswsPerPlane;
-  const int numOfPlanes = numOfFswsPerPod;
-
-  // Check the total number of switches is no smaller than (the number of ssws
-  // + the number of switches in one pod)
-  CHECK_LE(
-      numOfPlanes * numOfSswsPerPlane + numOfFswsPerPod + numOfRswsPerPod,
-      numOfSws);
-
-  // #pods = (#total_switches - #ssws) / (sws_per_pod)
-  const int numOfPods = (numOfSws - numOfPlanes * numOfSswsPerPlane) /
-      (numOfFswsPerPod + numOfRswsPerPod);
-
-  auto initialPub = createFabric(
-      decisionWrapper,
-      numOfPods,
-      numOfSswsPerPlane,
-      numOfFswsPerPod,
-      numOfRswsPerPod);
-
-  //
-  // Publish initial link state info to KvStore, This should trigger the
-  // SPF run.
-  //
-  decisionWrapper->sendKvPublication(initialPub);
-
-  // Receive RouteUpdate from Decision
-  decisionWrapper->recvMyRouteDb();
-
-  // Record the updated node
-  std::optional<std::pair<int, int>> selectedNode = std::nullopt;
-
-  suspender.dismiss(); // Start measuring benchmark time
-
+  const std::string nodeName = getNodeName(kFswMarker, 0, 0);
   for (uint32_t i = 0; i < iters; i++) {
-    // Advertise adj update. This should trigger the SPF run.
-    updateRandomFabricAdjs(
-        decisionWrapper,
-        selectedNode,
-        numOfPods,
-        numOfFswsPerPod,
-        numOfRswsPerPod);
-  }
+    auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
+    std::unordered_map<std::string, std::vector<std::string>> listOfNodenames;
 
-  suspender.rehire(); // Stop measuring time again
+    auto initialPub = createFabric(
+        decisionWrapper,
+        numOfPods,
+        numOfPlanes,
+        kNumOfSswsPerPlane,
+        numOfPlanes,
+        kNumOfRswsPerPod,
+        listOfNodenames);
+
+    generatePrefixUpdatePublication(
+        numberOfPrefixes, listOfNodenames, forwardingAlgorithm, initialPub);
+
+    suspender.dismiss(); // Start measuring benchmark time
+    //
+    // Publish initial link state info to KvStore, This should trigger the
+    // SPF run.
+    //
+    decisionWrapper->sendKvPublication(initialPub);
+    // Trigger initial route build by pushing initialization event
+    // to kvStoreUpdatesQueue
+    decisionWrapper->sendKvStoreSyncedEvent();
+
+    // Receive RouteUpdate from Decision
+    decisionWrapper->recvMyRouteDb();
+    suspender.rehire(); // Stop measuring time again
+  }
+}
+
+void
+BM_DecisionFabricPrefixUpdates(
+    uint32_t iters,
+    uint32_t numOfPods,
+    uint32_t numOfPlanes,
+    uint32_t numberOfPrefixes,
+    uint32_t numOfUpdatePrefixes,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
+  auto suspender = folly::BenchmarkSuspender();
+  const std::string nodeName = getNodeName(kFswMarker, 0, 0);
+  for (uint32_t i = 0; i < iters; i++) {
+    auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
+    std::unordered_map<std::string, std::vector<std::string>> listOfNodenames;
+
+    auto initialPub = createFabric(
+        decisionWrapper,
+        numOfPods,
+        numOfPlanes,
+        kNumOfSswsPerPlane,
+        numOfPlanes, // numOfFswsPerPod == numOfPlanes
+        kNumOfRswsPerPod,
+        listOfNodenames);
+
+    generatePrefixUpdatePublication(
+        numberOfPrefixes, listOfNodenames, forwardingAlgorithm, initialPub);
+
+    //
+    // Publish initial link state info to KvStore, This should trigger the
+    // SPF run.
+    //
+    decisionWrapper->sendKvPublication(initialPub);
+    // Trigger initial route build by pushing initialization event
+    // to kvStoreUpdatesQueue
+    decisionWrapper->sendKvStoreSyncedEvent();
+
+    // Receive RouteUpdate from Decision
+    decisionWrapper->recvMyRouteDb();
+
+    thrift::Publication pub;
+    pub.area_ref() = kTestingAreaName;
+    generatePrefixUpdatePublication(
+        numOfUpdatePrefixes, listOfNodenames, forwardingAlgorithm, pub);
+
+    suspender.dismiss(); // Start measuring benchmark time
+
+    decisionWrapper->sendKvPublication(pub);
+    decisionWrapper->recvMyRouteDb();
+
+    suspender.rehire(); // Stop measuring time again
+  }
 }
 } // namespace openr

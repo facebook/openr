@@ -166,15 +166,194 @@ BENCHMARK_NAMED_PARAM(
     KSP2_ED_ECMP,
     1000,
     1000);
-// The integer parameter is numOfGivenNodes in topology,
-// which >= numOfActualNodesInTopo.
-// numOfPods = (numOfGivenNodes - numOfSsws) / numOfFswsAndRswsPerPod
-// numOfActualNodesInTopo = numOfSsws + numOfPods * numOfFswsAndRswsPerPod
-// The minimum number of switches of one pod =
-// numOfPlanes * numOfSswsPerPlane + numOfPods * numOfFswsAndRswsPerPod = 344
-BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 344, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 1000, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 5000, SP_ECMP, 1);
+/*
+ * BM_DecisionFabricInitialUpdate:
+ * @first param - integer: num of pods in a fabric topology
+ * @second param - integer: num of planes in a fabric topology
+ * @third param - integer: num of prefixes per node
+ * @fourth param - string: type of the forwarding algorithm
+ *
+ * Measures preformance of initiating route build for a fabric topology.
+ * i.e. How long does it take to estalish all routes given
+ * `numberOfPrefixes` per node
+ */
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_1_100_SP_ECMP, 1, 1, 100, SP_ECMP);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_2_100_SP_ECMP, 1, 2, 100, SP_ECMP);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_3_100_SP_ECMP, 1, 3, 100, SP_ECMP);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_4_100_SP_ECMP, 1, 4, 100, SP_ECMP);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_5_100_SP_ECMP, 1, 5, 100, SP_ECMP);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_6_100_SP_ECMP, 1, 6, 100, SP_ECMP);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_7_100_SP_ECMP, 1, 7, 100, SP_ECMP);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_8_100_SP_ECMP, 1, 8, 100, SP_ECMP);
+/*
+ * BM_DecisionFabricPrefixUpdates:
+ * @first param - integer: num of pods in a fabric topology
+ * @second param - integer: num of planes in a fabric topology
+ * @third param - integer: num of prefixes per node
+ * @fourth param - integer: num of updating prefixes per node
+ * @fifth param - string: name of the forwarding algorithm
+ *
+ * Measures preformance of incremental route build for a fabric topology.
+ * i.e. How long does it take to incremental change routes given
+ * `numOfUpdatePrefixes` per node
+ *
+ * total # of sws = numOfPlanes * kNumOfSswsPerPlane + numOfPods * numOfPlanes +
+ *                 numOfPods * kNumOfRswsPerPod
+ *                = 36 * numOfPlanes + numOfPods * numOfPlanes +
+ *                 48 * kNumOfRswsPerPod
+ */
+// total = 85
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_1_100_10_SP_ECMP,
+    1,
+    1,
+    100,
+    100,
+    SP_ECMP);
+// total = 122
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_2_100_10_SP_ECMP,
+    1,
+    2,
+    100,
+    100,
+    SP_ECMP);
+// total = 159
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_3_100_10_SP_ECMP,
+    1,
+    3,
+    100,
+    100,
+    SP_ECMP);
+// total = 196
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_4_100_10_SP_ECMP,
+    1,
+    4,
+    100,
+    100,
+    SP_ECMP);
+// total = 233
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_5_100_10_SP_ECMP,
+    1,
+    5,
+    100,
+    100,
+    SP_ECMP);
+// total = 270
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_6_100_10_SP_ECMP,
+    1,
+    6,
+    100,
+    100,
+    SP_ECMP);
+// total = 307
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_7_100_10_SP_ECMP,
+    1,
+    7,
+    100,
+    100,
+    SP_ECMP);
+// total = 344
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    1_8_100_10_SP_ECMP,
+    1,
+    8,
+    100,
+    100,
+    SP_ECMP);
+// total = 526
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_1_100_10_SP_ECMP,
+    10,
+    1,
+    100,
+    100,
+    SP_ECMP);
+// total = 572
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_2_100_10_SP_ECMP,
+    10,
+    2,
+    100,
+    100,
+    SP_ECMP);
+// total = 618
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_3_100_10_SP_ECMP,
+    10,
+    3,
+    100,
+    100,
+    SP_ECMP);
+// total = 664
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_4_100_10_SP_ECMP,
+    10,
+    4,
+    100,
+    100,
+    SP_ECMP);
+// total = 710
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_5_100_10_SP_ECMP,
+    10,
+    5,
+    100,
+    100,
+    SP_ECMP);
+// total = 756
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_6_100_10_SP_ECMP,
+    10,
+    6,
+    100,
+    100,
+    SP_ECMP);
+// total = 802
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_7_100_10_SP_ECMP,
+    10,
+    7,
+    100,
+    100,
+    SP_ECMP);
+// total = 848
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionFabricPrefixUpdates,
+    10_8_100_10_SP_ECMP,
+    10,
+    8,
+    100,
+    100,
+    SP_ECMP);
 } // namespace openr
 
 int
