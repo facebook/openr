@@ -874,7 +874,7 @@ Decision::rebuildRoutes(std::string const& event) {
   }
 
   pendingUpdates_.addEvent(event);
-  XLOG(DBG1) << "Decision: processing " << pendingUpdates_.getCount()
+  XLOG(INFO) << "Decision: processing " << pendingUpdates_.getCount()
              << " accumulated updates. " << event;
   if (pendingUpdates_.perfEvents()) {
     if (auto expectedDuration = getDurationBetweenPerfEvents(

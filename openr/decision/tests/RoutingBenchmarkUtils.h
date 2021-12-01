@@ -18,6 +18,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/tests/utils/Utils.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -59,6 +60,7 @@ const int kNumOfRswsPerPod = 48;
 const uint8_t kSswMarker = 1;
 const uint8_t kFswMarker = 2;
 const uint8_t kRswMarker = 3;
+const long kBitMaskLen = 128;
 
 } // namespace
 
@@ -78,6 +80,7 @@ class DecisionWrapper {
     tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
     tConfig.decision_config_ref()->debounce_max_ms_ref() = 500;
     tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
+    tConfig.enable_initialization_process_ref() = true;
     config = std::make_shared<Config>(tConfig);
 
     decision = std::make_shared<Decision>(
@@ -143,6 +146,11 @@ class DecisionWrapper {
     kvStoreUpdatesQueue.push(publication);
   }
 
+  void
+  sendKvStoreSyncedEvent() {
+    kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+  }
+
  private:
   //
   // private member methods
@@ -196,19 +204,13 @@ inline uint32_t getId(const uint8_t swMarker, const int podId, const int swId);
 std::string getNodeName(
     const uint8_t swMarker, const int podId, const int swId);
 
-// Accumulate the time extracted from perfevent
-void accumulatePerfTimes(
-    const thrift::PerfEvents& perfEvents, std::vector<uint64_t>& processTimes);
-
 // Send kvstore update to decision and receive routes
 void sendRecvUpdate(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    std::vector<uint64_t>& processTimes,
     thrift::Publication& newPub);
 
 void sendRecvInitialUpdate(
     std::shared_ptr<DecisionWrapper> const& decisionWrapper,
-    std::vector<uint64_t>& processTimes,
     const std::string& nodeName,
     std::unordered_map<std::string, thrift::AdjacencyDatabase>&& adjs,
     std::unordered_map<std::string, thrift::PrefixDatabase>&& prefixes);
@@ -216,7 +218,6 @@ void sendRecvInitialUpdate(
 // Send kvstore update for a given node's adjacency DB
 void sendRecvAdjUpdate(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    std::vector<uint64_t>& processTimes,
     const std::string& nodeName,
     const std::vector<thrift::Adjacency>& adjs,
     bool overloadBit);
@@ -224,9 +225,9 @@ void sendRecvAdjUpdate(
 // Send kvstore update for a given node's prefox advertisement
 void sendRecvPrefixUpdate(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    std::vector<uint64_t>& processTimes,
     const std::string& nodeName,
-    std::pair<PrefixKey, thrift::PrefixDatabase>&& keyDbPair);
+    std::pair<PrefixKey, thrift::PrefixDatabase>&& keyDbPair,
+    folly::BenchmarkSuspender& suspender);
 
 // Add an adjacency to node
 inline void createAdjacencyEntry(
@@ -334,8 +335,7 @@ void updateRandomFabricAdjs(
     std::optional<std::pair<int, int>>& selectedNode,
     const int numOfPods,
     const int numOfFswsPerPod,
-    const int numOfRswsPerPod,
-    std::vector<uint64_t>& processTimes);
+    const int numOfRswsPerPod);
 
 //
 // Choose a random nodeId for update or revert the last updated nodeId:
@@ -345,7 +345,8 @@ void updateRandomGridPrefixes(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::optional<std::pair<int, int>>& selectedNode,
     const int n,
-    std::vector<uint64_t>& processTimes);
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
+    folly::BenchmarkSuspender& suspender);
 
 //
 // Choose a random nodeId for update or revert the last updated nodeId:
@@ -354,17 +355,7 @@ void updateRandomGridPrefixes(
 void updateRandomGridAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::optional<std::pair<int, int>>& selectedNode,
-    const int n,
-    std::vector<uint64_t>& processTimes);
-
-//
-// Get average processTimes and insert as user counters.
-//
-void insertUserCounters(
-    folly::UserCounters& counters,
-    uint32_t iters,
-    std::vector<uint64_t>& processTimes,
-    std::optional<thrift::PrefixForwardingAlgorithm> forwardingAlgorithm);
+    const int n);
 
 //
 // Benchmark tests for grid topology
@@ -378,11 +369,11 @@ void BM_DecisionGridInitialUpdate(
     uint32_t numberOfPrefixes);
 
 void BM_DecisionGridPrefixUpdates(
-    folly::UserCounters& counters,
     uint32_t iters,
-    uint32_t numOfSws,
+    uint32_t numOfNodes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
-    uint32_t numberOfPrefixes);
+    uint32_t numOfPrefixes,
+    uint32_t numOfUpdatePrefixes);
 
 void BM_DecisionGridAdjUpdates(
     folly::UserCounters& counters,

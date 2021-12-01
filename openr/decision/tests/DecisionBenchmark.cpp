@@ -55,25 +55,117 @@ BENCHMARK_COUNTERS_PARAM(
 
 /*
  * BM_DecisionGridPrefixUpdates:
- * measures preformance of a prefix change for a grid topology.
- * i.e. How long does it take to update a route for a prefix after an
- * advertisemnet or withdrawal from some node
+ * @first param - integer: num of nodes in a grid topology
+ * @second param - string: the forwarding algorithm
+ * @third param - integer: num of prefixes per node
+ * @fourth param - integer: num of updating prefixes per node
+ *
+ * Measures preformance of changing prefixes for a grid topology.
+ * i.e. How long does it take to update a number of routes after
+ * advertisemnet
  */
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_10_10, 100, SP_ECMP, 10, 10);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_100_100, 100, SP_ECMP, 100, 100);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_1k_1k, 100, SP_ECMP, 1000, 1000);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_10k_1, 100, SP_ECMP, 10000, 1);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_10k_10, 100, SP_ECMP, 10000, 10);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    SP_ECMP_100_10k_100,
+    100,
+    SP_ECMP,
+    10000,
+    100);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    SP_ECMP_100_10k_1k,
+    100,
+    SP_ECMP,
+    10000,
+    1000);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    SP_ECMP_100_10k_10k,
+    100,
+    SP_ECMP,
+    10000,
+    10000);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    SP_ECMP_1000_1k_1k,
+    1000,
+    SP_ECMP,
+    1000,
+    1000);
 
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridPrefixUpdates, counters, 100, SP_ECMP, 10);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridPrefixUpdates, counters, 100, SP_ECMP, 100);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridPrefixUpdates, counters, 100, SP_ECMP, 1000);
-
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridPrefixUpdates, counters, 100, KSP2_ED_ECMP, 10);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridPrefixUpdates, counters, 100, KSP2_ED_ECMP, 100);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridPrefixUpdates, counters, 100, KSP2_ED_ECMP, 1000);
-
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_10_10,
+    100,
+    KSP2_ED_ECMP,
+    10,
+    10);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_100_100,
+    100,
+    KSP2_ED_ECMP,
+    100,
+    100);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_1k_1k,
+    100,
+    KSP2_ED_ECMP,
+    1000,
+    1000);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_10k_1,
+    100,
+    KSP2_ED_ECMP,
+    10000,
+    1);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_10k_10,
+    100,
+    KSP2_ED_ECMP,
+    10000,
+    10);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_10k_100,
+    100,
+    KSP2_ED_ECMP,
+    10000,
+    100);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_10k_1k,
+    100,
+    KSP2_ED_ECMP,
+    10000,
+    1000);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_100_10k_10k,
+    100,
+    KSP2_ED_ECMP,
+    10000,
+    10000);
+BENCHMARK_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates,
+    KSP2_ED_ECMP_1000_1k_1k,
+    1000,
+    KSP2_ED_ECMP,
+    1000,
+    1000);
 // The integer parameter is numOfGivenNodes in topology,
 // which >= numOfActualNodesInTopo.
 // numOfPods = (numOfGivenNodes - numOfSsws) / numOfFswsAndRswsPerPod
