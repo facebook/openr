@@ -425,21 +425,25 @@ OpenrCtrlHandler::getInitializationEvents(
 
 bool
 OpenrCtrlHandler::initializationConverged() {
+  // TODO: Change to INITIALIZED after OpenR initialization stage2 is
+  // completed.
   // The fb303 counter is set in function logInitializationEvent().
   auto convergenceKey = fmt::format(
       Constants::kInitEventCounterFormat.toString(),
       apache::thrift::util::enumNameSafe(
-          thrift::InitializationEvent::INITIALIZED));
+          thrift::InitializationEvent::PREFIX_DB_SYNCED));
   return fb303::fbData->hasCounter(convergenceKey);
 }
 
 int64_t
 OpenrCtrlHandler::getInitializationDurationMs() {
+  // TODO: Change to INITIALIZED after OpenR initialization stage2 is
+  // completed.
   // The fb303 counter is set in function logInitializationEvent().
   auto convergenceKey = fmt::format(
       Constants::kInitEventCounterFormat.toString(),
       apache::thrift::util::enumNameSafe(
-          thrift::InitializationEvent::INITIALIZED));
+          thrift::InitializationEvent::PREFIX_DB_SYNCED));
   // Throw std::invalid_argument exception if convergenceKey does not exist.
   return fb303::fbData->getCounter(convergenceKey);
 }
