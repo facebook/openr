@@ -634,6 +634,8 @@ Spark::sanityCheckHelloPkt(
     return PacketValidationResult::SKIP_LOOPED_SELF;
   }
   // domain check
+  // XXX HACK: Skip domain check
+  #if 0
   if (domainName != myDomainName_) {
     LOG(ERROR) << "Ignoring hello packet from node " << neighborName
                << " on interface " << remoteIfName
@@ -643,6 +645,7 @@ Spark::sanityCheckHelloPkt(
         "spark.invalid_keepalive.different_domain", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
   }
+  #endif
   // version check
   // XXX HACK: Don't check version for Spark/Spark2 compatibility
   #if 0
