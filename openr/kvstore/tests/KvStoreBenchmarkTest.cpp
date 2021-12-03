@@ -11,7 +11,59 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/monitor/SystemMetrics.h>
 #include <openr/tests/utils/Utils.h>
+
+#define STR_CONCATENATE(s1, s2, s3, s4) s1##_##s2##_##s3##_##s4
+#define THREE_CONCATENATE(s1, s2, s3) s1##_##s2##_##s3
+
+/**
+ * Defines a benchmark that allows users to record customized counter during
+ * benchmarking and passes a parameter to another one. This is common for
+ * benchmarks that need a "problem size" in addition to "number of iterations".
+ */
+#define BENCHMARK_COUNTERS_PARAM(name, counters, existing, update) \
+  BENCHMARK_COUNTERS_NAME_PARAM(                                   \
+      name,                                                        \
+      counters,                                                    \
+      FB_CONCATENATE(existing, FB_CONCATENATE(_, update)),         \
+      existing,                                                    \
+      update)
+
+#define BENCHMARK_COUNTERS_PARAM2(                     \
+    name, counters, param1, param2, param3, param4)    \
+  BENCHMARK_COUNTERS_NAME_PARAM(                       \
+      name,                                            \
+      counters,                                        \
+      STR_CONCATENATE(param1, param2, param3, param4), \
+      param1,                                          \
+      param2,                                          \
+      param3,                                          \
+      param4)
+
+#define BENCHMARK_COUNTERS_PARAM3(name, counters, param1, param2, param3) \
+  BENCHMARK_COUNTERS_NAME_PARAM(                                          \
+      name,                                                               \
+      counters,                                                           \
+      THREE_CONCATENATE(param1, param2, param3),                          \
+      param1,                                                             \
+      param2,                                                             \
+      param3)
+
+/*
+ * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
+ * each parameter, rather than using the parameter value.
+ */
+#define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
+  BENCHMARK_IMPL_COUNTERS(                                             \
+      FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
+      FOLLY_PP_STRINGIZE(name) "(" FOLLY_PP_STRINGIZE(param_name) ")", \
+      counters,                                                        \
+      iters,                                                           \
+      unsigned,                                                        \
+      iters) {                                                         \
+    name(counters, iters, ##__VA_ARGS__);                              \
+  }
 
 namespace openr {
 
@@ -136,9 +188,15 @@ class KvStoreBenchmarkTestFixture {
 
 static void
 BM_KvStoreFirstTimePersistKey(
-    uint32_t iters, uint32_t numOfExistingKeys, uint32_t numOfUpdatedKeys) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfExistingKeys,
+    uint32_t numOfUpdatedKeys) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
@@ -157,6 +215,12 @@ BM_KvStoreFirstTimePersistKey(
     // Start measuring benchmark time
     suspender.dismiss();
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
     for (int cnt = 0; cnt < numOfUpdatedKeys; ++cnt) {
       // Stop measuring benchmark time, just generating key
       suspender.rehire();
@@ -176,6 +240,14 @@ BM_KvStoreFirstTimePersistKey(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -192,9 +264,15 @@ BM_KvStoreFirstTimePersistKey(
 
 static void
 BM_KvStoreUpdatePersistKey(
-    uint32_t iters, uint32_t numOfExistingKeys, uint32_t numOfUpdatedKeys) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfExistingKeys,
+    uint32_t numOfUpdatedKeys) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
@@ -216,6 +294,12 @@ BM_KvStoreUpdatePersistKey(
     auto updateKeys = keyList;
     updateKeys.resize(numOfUpdatedKeys);
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -238,6 +322,14 @@ BM_KvStoreUpdatePersistKey(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -254,9 +346,14 @@ BM_KvStoreUpdatePersistKey(
 
 static void
 BM_KvStoreClearKey(
-    uint32_t iters, uint32_t numOfExistingKeys, uint32_t numOfClearKeys) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfExistingKeys,
+    uint32_t numOfClearKeys) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
@@ -278,6 +375,12 @@ BM_KvStoreClearKey(
     auto clearKeys = keyList;
     clearKeys.resize(numOfClearKeys);
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -300,6 +403,13 @@ BM_KvStoreClearKey(
 
     // Stop measuring benchmark time
     suspender.rehire();
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -316,9 +426,14 @@ BM_KvStoreClearKey(
 
 static void
 BM_KvStoreDumpDifference(
-    uint32_t iters, uint32_t numOfMyKeyVals, uint32_t numOfComparedKeyVals) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfMyKeyVals,
+    uint32_t numOfComparedKeyVals) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
@@ -333,10 +448,23 @@ BM_KvStoreDumpDifference(
       }
     }
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
     suspender.dismiss();
     // Call dumpDifference
     dumpDifference(kTestingAreaName, myKeyVals, comparedKeyVals);
     suspender.rehire();
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -352,9 +480,14 @@ BM_KvStoreDumpDifference(
 
 static void
 BM_KvStoreUpdatePubTtl(
-    uint32_t iters, uint32_t numOfMyEntries, uint32_t numOfPubEntries) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfMyEntries,
+    uint32_t numOfPubEntries) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
@@ -370,6 +503,12 @@ BM_KvStoreUpdatePubTtl(
     thriftPub.keyVals_ref() = std::move(keyVals);
     thriftPub.area_ref() = kTestingAreaName;
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
     // Start measuring time
     suspender.dismiss();
 
@@ -378,6 +517,14 @@ BM_KvStoreUpdatePubTtl(
 
     // Stop measuring time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -393,6 +540,7 @@ BM_KvStoreUpdatePubTtl(
  */
 static void
 BM_KvStoreDumpAllWithFilters(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingKeyVals,
     uint32_t numOfKeysToMatch,
@@ -400,6 +548,8 @@ BM_KvStoreDumpAllWithFilters(
     bool doNotPublishValue) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   // TODO: Move the common code to KvStoreBenchmarkTestFixture
   for (int i = 0; i < iters; ++i) {
@@ -428,6 +578,13 @@ BM_KvStoreDumpAllWithFilters(
 
     const auto keyPrefixMatch =
         KvStoreFilters(keyPrefixList, keyDumpParams.get_originatorIds());
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
     // Start measuring time
     suspender.dismiss();
 
@@ -436,6 +593,13 @@ BM_KvStoreDumpAllWithFilters(
 
     // Stop measuring time
     suspender.rehire();
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -451,12 +615,15 @@ BM_KvStoreDumpAllWithFilters(
  */
 static void
 BM_KvStoreDumpHashWithFilters(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingKeyVals,
     uint32_t numOfKeysToFilter,
     uint32_t numOfOriginatorIds) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
@@ -486,6 +653,12 @@ BM_KvStoreDumpHashWithFilters(
     const auto keyPrefixMatch =
         KvStoreFilters(keyPrefixList, keyDumpParams.get_originatorIds());
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
     // Start measuring time
     suspender.dismiss();
 
@@ -493,6 +666,13 @@ BM_KvStoreDumpHashWithFilters(
 
     // Stop measuring time
     suspender.rehire();
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -501,124 +681,119 @@ BM_KvStoreDumpHashWithFilters(
  * @second integer: number of keys to persist for the first time
  */
 
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreFirstTimePersistKey, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreFirstTimePersistKey, 100000_100000, 100000, 100000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 1000000_1, 1000000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreFirstTimePersistKey, 1000000_100, 1000000, 100);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreFirstTimePersistKey, 1000000_10000, 1000000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreFirstTimePersistKey, 1000000_100000, 1000000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_KvStoreFirstTimePersistKey, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_KvStoreFirstTimePersistKey, counters, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 1000000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreFirstTimePersistKey, counters, 1000000, 100);
+BENCHMARK_COUNTERS_PARAM(
+    BM_KvStoreFirstTimePersistKey, counters, 1000000, 10000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_KvStoreFirstTimePersistKey, counters, 1000000, 100000);
 
 /*
  * @first integer: number of keys existing inside kvStore
  * @second integer: number of keys to persist for second time
  */
 
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreUpdatePersistKey, 100000_100000, 100000, 100000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 1000000_1, 1000000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePersistKey, 1000000_100, 1000000, 100);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreUpdatePersistKey, 1000000_10000, 1000000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreUpdatePersistKey, 1000000_100000, 1000000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 1000000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 1000000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 1000000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePersistKey, counters, 1000000, 100000);
 
 /*
  * @first integer: number of keys existing inside kvStore
  * @second integer: number of keys to clear
  */
 
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 100000_100000, 100000, 100000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_1, 1000000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_100, 1000000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_10000, 1000000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreClearKey, 1000000_1000000, 1000000, 1000000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 1000000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 1000000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 1000000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreClearKey, counters, 1000000, 1000000);
 
 /*
  * @first integer: number of myKeyVals
  * @second integer: number of comparedKeyVals
  */
 
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 100000_100000, 100000, 100000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 1000000_1, 1000000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 1000000_100, 1000000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpDifference, 1000000_10000, 1000000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpDifference, 1000000_1000000, 1000000, 1000000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 1000000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 1000000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 1000000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreDumpDifference, counters, 1000000, 1000000);
 
 /*
  * @first integer: num of keyVals in ttlCountdownQueue
  * @second integer: num Of keyVals that will get compared in publication
  */
 
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 100000_100000, 100000, 100000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 1000000_1, 1000000, 1);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 1000000_100, 1000000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreUpdatePubTtl, 1000000_10000, 1000000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreUpdatePubTtl, 1000000_1000000, 1000000, 1000000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 1000000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 1000000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 1000000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_KvStoreUpdatePubTtl, counters, 1000000, 1000000);
 
 /*
  * @first integer: num of existing keyVals in unordered_map
@@ -633,81 +808,56 @@ BENCHMARK_NAMED_PARAM(
  */
 
 // Keys only, regardless of originator_Ids
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_1000_0_true, 100000, 1000, 0, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_1000_0_false, 100000, 1000, 0, false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_1000_0_true, 1000000, 1000, 0, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters,
-    1000000_1000_0_false,
-    1000000,
-    1000,
-    0,
-    false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 1000, 0, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 1000, 0, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 1000, 0, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 1000, 0, false);
 // originator_Ids, regardless of keys
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_0_1_true, 100000, 0, 1, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_0_10_true, 100000, 0, 10, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_0_40_true, 100000, 0, 40, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_0_1_false, 100000, 0, 1, false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_0_10_false, 100000, 0, 10, false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_0_40_false, 100000, 0, 40, false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_0_1_true, 1000000, 0, 1, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_0_10_true, 1000000, 0, 10, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_0_40_true, 1000000, 0, 40, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_0_1_false, 1000000, 0, 1, false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_0_10_false, 100000, 0, 10, false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_0_40_false, 1000000, 0, 40, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 0, 1, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 0, 10, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 0, 40, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 0, 1, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 0, 10, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 0, 40, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 0, 1, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 0, 10, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 0, 40, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 0, 1, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 0, 10, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 0, 40, false);
 // originator_Ids and keys
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_1000_1_true, 100000, 1000, 1, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_1000_40_true, 100000, 1000, 40, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 100000_1000_1_false, 100000, 1000, 1, false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters,
-    100000_1000_40_false,
-    100000,
-    1000,
-    40,
-    false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters, 1000000_1000_1_true, 1000000, 1000, 1, true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters,
-    1000000_1000_40_true,
-    1000000,
-    1000,
-    40,
-    true);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters,
-    1000000_1000_1_false,
-    1000000,
-    1000,
-    1,
-    false);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpAllWithFilters,
-    1000000_1000_40_false,
-    1000000,
-    1000,
-    40,
-    false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 1000, 1, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 1000, 40, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 1000, 1, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 100000, 1000, 40, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 1000, 1, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 1000, 40, true);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 1000, 1, false);
+BENCHMARK_COUNTERS_PARAM2(
+    BM_KvStoreDumpAllWithFilters, counters, 1000000, 1000, 40, false);
 
 /*
  * @first integer: num of existing keyVals in unordered_map
@@ -721,35 +871,36 @@ BENCHMARK_NAMED_PARAM(
  */
 
 // Keys only, regardless of originator_Ids
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 100000_1000_0_true, 100000, 1000, 0);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 1000000_1000_0_true, 1000000, 1000, 0);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 100000, 1000, 0);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 1000000, 1000, 0);
 // originator_Ids, regardless of keys
-BENCHMARK_NAMED_PARAM(BM_KvStoreDumpHashWithFilters, 100000_0_1, 100000, 0, 1);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 100000_0_10, 100000, 0, 10);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 100000_0_40, 100000, 0, 40);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 1000000_0_1, 1000000, 0, 1);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 1000000_0_10, 1000000, 0, 10);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 1000000_0_40, 1000000, 0, 40);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 100000, 0, 1);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 100000, 0, 10);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 100000, 0, 40);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 1000000, 0, 1);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 1000000, 0, 10);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 1000000, 0, 40);
 // originator_Ids and keys
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 100000_1000_1, 100000, 1000, 1);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 100000_1000_10, 100000, 1000, 10);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 100000_1000_40, 100000, 1000, 40);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 1000000_1000_1, 1000000, 1000, 1);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 1000000_1000_10, 1000000, 1000, 10);
-BENCHMARK_NAMED_PARAM(
-    BM_KvStoreDumpHashWithFilters, 1000000_1000_40, 1000000, 1000, 40);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 100000, 1000, 1);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 100000, 1000, 10);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 100000, 1000, 40);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 1000000, 1000, 1);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 1000000, 1000, 10);
+BENCHMARK_COUNTERS_PARAM3(
+    BM_KvStoreDumpHashWithFilters, counters, 1000000, 1000, 40);
 
 } // namespace openr
 
