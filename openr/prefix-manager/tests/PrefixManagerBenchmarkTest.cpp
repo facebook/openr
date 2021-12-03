@@ -10,7 +10,36 @@
 #include <folly/Benchmark.h>
 #include <folly/gen/Base.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/monitor/SystemMetrics.h>
 #include <openr/prefix-manager/PrefixManager.h>
+
+/**
+ * Defines a benchmark that allows users to record customized counter during
+ * benchmarking and passes a parameter to another one. This is common for
+ * benchmarks that need a "problem size" in addition to "number of iterations".
+ */
+#define BENCHMARK_COUNTERS_PARAM(name, counters, existing, update) \
+  BENCHMARK_COUNTERS_NAME_PARAM(                                   \
+      name,                                                        \
+      counters,                                                    \
+      FB_CONCATENATE(existing, FB_CONCATENATE(_, update)),         \
+      existing,                                                    \
+      update)
+
+/*
+ * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
+ * each parameter, rather than using the parameter value.
+ */
+#define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
+  BENCHMARK_IMPL_COUNTERS(                                             \
+      FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
+      FOLLY_PP_STRINGIZE(name) "(" FOLLY_PP_STRINGIZE(param_name) ")", \
+      counters,                                                        \
+      iters,                                                           \
+      unsigned,                                                        \
+      iters) {                                                         \
+    name(counters, iters, ##__VA_ARGS__);                              \
+  }
 
 namespace openr {
 
@@ -141,11 +170,15 @@ class PrefixManagerBenchmarkTestFixture {
  */
 static void
 BM_AdvertiseWithKvRequestQueue(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingPrefixes,
     uint32_t numOfUpdatedPrefixes) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   const std::string nodeId{"node-1"};
   for (uint32_t i = 0; i < iters; ++i) {
@@ -175,6 +208,13 @@ BM_AdvertiseWithKvRequestQueue(
         thrift::PrefixType::BGP,
         prefixesToAdvertise);
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -185,6 +225,14 @@ BM_AdvertiseWithKvRequestQueue(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -198,11 +246,15 @@ BM_AdvertiseWithKvRequestQueue(
  */
 static void
 BM_WithdrawWithKvRequestQueue(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingPrefixes,
     uint32_t numOfWithdrawnPrefixes) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   // Make sure num of withdrawn prefixes are subset of existing prefixes
   CHECK_LE(numOfWithdrawnPrefixes, numOfExistingPrefixes);
@@ -234,6 +286,13 @@ BM_WithdrawWithKvRequestQueue(
         thrift::PrefixType::BGP,
         prefixesToWithdraw);
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -244,6 +303,14 @@ BM_WithdrawWithKvRequestQueue(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -262,11 +329,15 @@ BM_WithdrawWithKvRequestQueue(
 
 static void
 BM_RedistributeFibAddRoute(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingPrefixes,
     uint32_t numOfRedistributeRoutes) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   const std::string nodeId{"node-1"};
   for (uint32_t i = 0; i < iters; ++i) {
@@ -290,6 +361,13 @@ BM_RedistributeFibAddRoute(
     auto routeUpdate = generateDecisionRouteUpdate(
         testFixture->getPrefixGenerator(), numOfRedistributeRoutes);
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -300,6 +378,14 @@ BM_RedistributeFibAddRoute(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -318,11 +404,15 @@ BM_RedistributeFibAddRoute(
 
 static void
 BM_RedistributeFibDeleteRoute(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingPrefixes,
     uint32_t numOfRedistributeRoutes) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   // Make sure the number of delete routes are subset of existing routes
   CHECK_LE(numOfRedistributeRoutes, numOfExistingPrefixes);
@@ -360,6 +450,13 @@ BM_RedistributeFibDeleteRoute(
           toIPNetwork(prefixEntry.get_prefix()));
     }
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -370,6 +467,14 @@ BM_RedistributeFibDeleteRoute(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -378,85 +483,84 @@ BM_RedistributeFibDeleteRoute(
  * @second integer: number of prefixes to advertise
  */
 
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_AdvertiseWithKvRequestQueue, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(
-    BM_AdvertiseWithKvRequestQueue, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_AdvertiseWithKvRequestQueue, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_AdvertiseWithKvRequestQueue, 100000_100000, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_AdvertiseWithKvRequestQueue, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(
+    BM_AdvertiseWithKvRequestQueue, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_AdvertiseWithKvRequestQueue, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_AdvertiseWithKvRequestQueue, counters, 100000, 100000);
 
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of prefixes to withdraw
  */
 
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_WithdrawWithKvRequestQueue, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_WithdrawWithKvRequestQueue, 100000_100000, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_WithdrawWithKvRequestQueue, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_WithdrawWithKvRequestQueue, counters, 100000, 100000);
 
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of redistributed Fib add route
  */
 
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_RedistributeFibAddRoute, 100000_100000, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 100000);
 
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of redistributed Fib delete route
  */
 
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_RedistributeFibDeleteRoute, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_RedistributeFibDeleteRoute, 100000_100000, 100000, 100000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 1000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 1);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 10);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 100);
+BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 1000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_RedistributeFibDeleteRoute, counters, 100000, 10000);
+BENCHMARK_COUNTERS_PARAM(
+    BM_RedistributeFibDeleteRoute, counters, 100000, 100000);
 } // namespace openr
 
 int
