@@ -91,10 +91,38 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
   if (status) {
     return status;
   }
+
+  // add cache info if set
+  status = addCacheInfo(ifAddr);
+  if (status) {
+    return status;
+  }
+
   // For IPv4, need to specify the ip address in IFA_LOCAL attribute as well
   // for point-to-point interfaces
   // For IPv6, the extra attribute has no effect
   return addAttributes(IFA_LOCAL, ipptr, ip.byteCount());
+}
+
+int
+NetlinkAddrMessage::addCacheInfo(const IfAddress& ifAddr) {
+  int status{0};
+  if (!ifAddr.getPreferredLft().has_value()) {
+    return 0;
+  }
+  std::array<char, kMaxNlPayloadSize> cacheInfo = {};
+  struct ifa_cacheinfo* rta =
+      reinterpret_cast<struct ifa_cacheinfo*>(cacheInfo.data());
+  rta->ifa_prefered = ifAddr.getPreferredLft().value();
+  // valid forever
+  rta->ifa_valid = 0xffffffff;
+
+  status = addAttributes(IFA_CACHEINFO, cacheInfo.data(), sizeof(*rta));
+  if (status) {
+    return status;
+  }
+
+  return 0;
 }
 
 IfAddress

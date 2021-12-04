@@ -65,6 +65,8 @@ class NetlinkAddrMessage final : public NetlinkMessageBase {
   // inherited class implementation
   void rcvdIfAddress(IfAddress&& ifAddr) override;
 
+  int addCacheInfo(const IfAddress& ifAddr);
+
   //
   // Private variables for rtnetlink msg exchange
   //

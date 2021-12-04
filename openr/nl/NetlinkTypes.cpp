@@ -699,6 +699,17 @@ IfAddressBuilder::isValid() const {
   return isValid_;
 }
 
+std::optional<uint32_t>
+IfAddressBuilder::getPreferredLft() const {
+  return preferredLft_;
+}
+
+IfAddressBuilder&
+IfAddressBuilder::setPreferredLft(uint32_t preferredLft) {
+  preferredLft_ = preferredLft;
+  return *this;
+}
+
 void
 IfAddressBuilder::reset() {
   ifIndex_ = 0;
@@ -707,6 +718,7 @@ IfAddressBuilder::reset() {
   scope_.reset();
   flags_.reset();
   family_.reset();
+  preferredLft_.reset();
 }
 
 IfAddress::IfAddress(const IfAddressBuilder& builder)
@@ -715,7 +727,8 @@ IfAddress::IfAddress(const IfAddressBuilder& builder)
       isValid_(builder.isValid()),
       scope_(builder.getScope()),
       flags_(builder.getFlags()),
-      family_(builder.getFamily()) {}
+      family_(builder.getFamily()),
+      preferredLft_(builder.getPreferredLft()) {}
 
 IfAddress::~IfAddress() {}
 
@@ -735,6 +748,7 @@ IfAddress::operator=(IfAddress&& other) noexcept {
   scope_ = std::move(other.scope_);
   flags_ = std::move(other.flags_);
   family_ = std::move(other.family_);
+  preferredLft_ = std::move(other.preferredLft_);
   return *this;
 }
 
@@ -754,6 +768,7 @@ IfAddress::operator=(const IfAddress& other) {
   scope_ = other.scope_;
   flags_ = other.flags_;
   family_ = other.family_;
+  preferredLft_ = other.preferredLft_;
 
   return *this;
 }
@@ -800,15 +815,22 @@ IfAddress::getFlags() const {
   return flags_;
 }
 
+std::optional<uint32_t>
+IfAddress::getPreferredLft() const {
+  return preferredLft_;
+}
+
 std::string
 IfAddress::str() const {
   return fmt::format(
-      "addr {} {} intf-index {}, valid {}, scope {}",
+      "addr {} {} intf-index {}, valid {}, scope {}, preferred_lft {}",
       getFamily() == AF_INET ? "inet" : "inet6",
       prefix_.has_value() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
       ifIndex_,
       isValid_ ? "Yes" : "No",
-      scope_.has_value() ? scope_.value() : -1);
+      scope_.has_value() ? scope_.value() : -1,
+      preferredLft_.has_value() ? folly::to<std::string>(preferredLft_.value())
+                                : "forever");
 }
 
 bool
@@ -817,7 +839,8 @@ operator==(const IfAddress& lhs, const IfAddress& rhs) {
       lhs.getPrefix() == rhs.getPrefix() &&
       lhs.getIfIndex() == rhs.getIfIndex() && lhs.isValid() == rhs.isValid() &&
       lhs.getScope() == rhs.getScope() && lhs.getFlags() == rhs.getFlags() &&
-      lhs.getFamily() == rhs.getFamily());
+      lhs.getFamily() == rhs.getFamily() &&
+      lhs.getPreferredLft() == rhs.getPreferredLft());
 }
 
 /*================================Neighbor====================================*/

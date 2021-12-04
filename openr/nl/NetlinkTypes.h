@@ -349,6 +349,10 @@ class IfAddressBuilder final {
 
   IfAddressBuilder& setValid(bool isValid);
 
+  std::optional<uint32_t> getPreferredLft() const;
+
+  IfAddressBuilder& setPreferredLft(uint32_t preferredLft);
+
   bool isValid() const;
 
   // Reset builder, all the required fields need to be set again
@@ -361,6 +365,7 @@ class IfAddressBuilder final {
   std::optional<uint8_t> scope_;
   std::optional<uint8_t> flags_;
   std::optional<uint8_t> family_;
+  std::optional<uint32_t> preferredLft_;
 };
 
 class IfAddress final {
@@ -391,6 +396,8 @@ class IfAddress final {
 
   std::string str() const;
 
+  std::optional<uint32_t> getPreferredLft() const;
+
  private:
   std::optional<folly::CIDRNetwork> prefix_;
   int ifIndex_{0};
@@ -398,6 +405,7 @@ class IfAddress final {
   std::optional<uint8_t> scope_;
   std::optional<uint8_t> flags_;
   std::optional<uint8_t> family_;
+  std::optional<uint32_t> preferredLft_;
 };
 
 bool operator==(const IfAddress& lhs, const IfAddress& rhs);
