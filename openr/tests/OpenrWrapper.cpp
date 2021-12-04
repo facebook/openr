@@ -168,7 +168,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   linkMonitor_ = std::make_unique<LinkMonitor>(
       config_,
       nlSock_.get(),
-      kvStore_.get(),
       configStore_.get(),
       interfaceUpdatesQueue_,
       prefixUpdatesQueue_,
@@ -199,8 +198,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreUpdatesQueue_.getReader(),
       prefixUpdatesQueue_.getReader(),
       fibRouteUpdatesQueue_.getReader(),
-      config_,
-      kvStore_.get());
+      config_);
 
   //
   // create decision

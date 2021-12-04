@@ -5,11 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "InterfaceEntry.h"
 #include <folly/gen/Base.h>
 #include <folly/logging/xlog.h>
+
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/link-monitor/InterfaceEntry.h>
 
 namespace openr {
 

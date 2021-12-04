@@ -10,7 +10,6 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
-#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
@@ -89,7 +88,6 @@ struct LinkMonitor::NetlinkEventProcessor {
 LinkMonitor::LinkMonitor(
     std::shared_ptr<const Config> config,
     fbnl::NetlinkProtocolSocket* nlSock,
-    KvStore* kvStore,
     PersistentStore* configStore,
     messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
@@ -114,10 +112,7 @@ LinkMonitor::LinkMonitor(
           *config->getLinkMonitorConfig().linkflap_initial_backoff_ms_ref())),
       linkflapMaxBackoff_(std::chrono::milliseconds(
           *config->getLinkMonitorConfig().linkflap_max_backoff_ms_ref())),
-      ttlKeyInKvStore_(config->getKvStoreKeyTtl()),
       areas_(config->getAreas()),
-      enableKvStoreRequestQueue_(
-          config->getConfig().get_enable_kvstore_request_queue()),
       enableOrderedAdjPublication_(
           config->getConfig().get_enable_ordered_adj_publication()),
       interfaceUpdatesQueue_(interfaceUpdatesQueue),
@@ -129,7 +124,6 @@ LinkMonitor::LinkMonitor(
       configStore_(configStore),
       nlSock_(nlSock) {
   // Check non-empty module ptr
-  CHECK(kvStore);
   CHECK(configStore_);
   CHECK(nlSock_);
 
@@ -188,11 +182,6 @@ LinkMonitor::LinkMonitor(
         "Override node as {}", assumeDrained ? "DRAINED" : "UNDRAINED");
     state_.isOverloaded_ref() = assumeDrained;
   }
-
-  // [TO BE DEPRECATED]
-  // Create KvStore client
-  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      this, nodeId_, kvStore, false /* useThrottle */);
 
   if (enableSegmentRouting_) {
     // create range allocator to get unique node labels
@@ -280,10 +269,6 @@ LinkMonitor::stop() {
   // Send stop signal for internal fibers
   syncInterfaceStopSignal_.post();
   XLOG(INFO) << "Successfully posted stop signal for interface-syncing fiber";
-
-  // Stop KvStoreClient first
-  kvStoreClient_->stop();
-  XLOG(INFO) << "KvStoreClient successfully stopped in LinkMonitor";
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
@@ -690,14 +675,9 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   // Persist `adj:node_Id` key into KvStore
   const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
   std::string adjDbStr = writeThriftObjStr(adjDb, serializer_);
-  if (enableKvStoreRequestQueue_) {
-    auto persistAdjacencyKeyVal =
-        PersistKeyValueRequest(AreaId{area}, keyName, adjDbStr);
-    kvRequestQueue_.push(std::move(persistAdjacencyKeyVal));
-  } else {
-    kvStoreClient_->persistKey(
-        AreaId{area}, keyName, adjDbStr, ttlKeyInKvStore_);
-  }
+  auto persistAdjacencyKeyVal =
+      PersistKeyValueRequest(AreaId{area}, keyName, adjDbStr);
+  kvRequestQueue_.push(std::move(persistAdjacencyKeyVal));
 
   // Config is most likely to have changed. Update it in `ConfigStore`
   configStore_->storeThriftObj(kConfigKey, state_); // not awaiting on result

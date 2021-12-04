@@ -101,8 +101,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
-        config,
-        kvStoreWrapper_->getKvStore());
+        config);
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 
     // create fakeNetlinkProtocolSocket
@@ -112,7 +111,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     linkMonitor = std::make_shared<LinkMonitor>(
         config,
         nlSock_.get(),
-        kvStoreWrapper_->getKvStore(),
         persistentStore.get(),
         interfaceUpdatesQueue_,
         prefixUpdatesQueue_,

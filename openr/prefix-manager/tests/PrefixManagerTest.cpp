@@ -162,8 +162,7 @@ class PrefixManagerTestFixture : public testing::Test {
         kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
-        cfg,
-        kvStoreWrapper->getKvStore());
+        cfg);
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "PrefixManager thread starting";

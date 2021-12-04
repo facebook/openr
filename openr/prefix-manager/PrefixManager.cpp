@@ -22,7 +22,6 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStore.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
 namespace openr {
@@ -38,21 +37,16 @@ PrefixManager::PrefixManager(
     messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
-    std::shared_ptr<const Config> config,
-    KvStore* kvStore)
+    std::shared_ptr<const Config> config)
     : nodeId_(config->getNodeName()),
       config_(config),
-      ttlKeyInKvStore_(std::chrono::milliseconds(
-          *config->getKvStoreConfig().key_ttl_ms_ref())),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvRequestQueue_(kvRequestQueue),
       prefixMgrRouteUpdatesQueue_(prefixMgrRouteUpdatesQueue),
       initializationEventQueue_(initializationEventQueue),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
-      kvStore_(kvStore),
       preferOpenrOriginatedRoutes_(
           config->getConfig().get_prefer_openr_originated_routes()) {
-  CHECK(kvStore_);
   CHECK(config);
 
   // Always add RIB type prefixes, since Fib routes updates are always expected
@@ -92,10 +86,6 @@ PrefixManager::PrefixManager(
   //
   const std::chrono::seconds initialPrefixHoldTime{
       *config->getConfig().prefix_hold_time_s_ref()};
-
-  // Create KvStore client
-  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      this, nodeId_, kvStore_, true /* useThrottle */);
 
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
   // TODO: deprecate this after prefix_hold_time_s after OpenR initialization
@@ -261,10 +251,6 @@ PrefixManager::PrefixManager(
       folly::variant_match(
           std::move(maybePub).value(),
           [this](thrift::Publication&& pub) {
-            // TODO: Do not call KvStoreClient_ to process publications after
-            // persistKey() and clearKey() are natively supported in KvStore.
-            kvStoreClient_->processPublication(pub);
-
             // Process KvStore Thrift publication.
             processPublication(std::move(pub));
           },
@@ -340,17 +326,6 @@ PrefixManager::~PrefixManager() {
     initialSyncKvStoreTimer_.reset();
     syncKvStoreThrottled_.reset();
   });
-  kvStoreClient_.reset();
-}
-
-void
-PrefixManager::stop() {
-  // Stop KvStoreClient first
-  kvStoreClient_->stop();
-  XLOG(DBG1) << "KvStoreClient successfully stopped.";
-
-  // Invoke stop method of super class
-  OpenrEventBase::stop();
 }
 
 thrift::PrefixEntry
@@ -560,14 +535,9 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     // advertise key to `KvStore`
-    if (config_->getConfig().get_enable_kvstore_request_queue()) {
-      auto persistPrefixKeyVal =
-          PersistKeyValueRequest(AreaId{toArea}, prefixKeyStr, prefixDbStr);
-      kvRequestQueue_.push(std::move(persistPrefixKeyVal));
-    } else {
-      kvStoreClient_->persistKey(
-          AreaId{toArea}, prefixKeyStr, prefixDbStr, ttlKeyInKvStore_);
-    }
+    auto persistPrefixKeyVal =
+        PersistKeyValueRequest(AreaId{toArea}, prefixKeyStr, prefixDbStr);
+    kvRequestQueue_.push(std::move(persistPrefixKeyVal));
 
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
@@ -617,20 +587,12 @@ PrefixManager::deleteKvStoreKeyHelper(
     deletedPrefixDb.area_ref() = area;
 
     // Remove prefix from KvStore and flood deletion by setting deleted value.
-    if (config_->getConfig().get_enable_kvstore_request_queue()) {
-      auto unsetPrefixRequest = ClearKeyValueRequest(
-          AreaId{area},
-          prefixKeyStr,
-          writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
-          true);
-      kvRequestQueue_.push(std::move(unsetPrefixRequest));
-    } else {
-      kvStoreClient_->clearKey(
-          AreaId{area},
-          prefixKeyStr,
-          writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
-          ttlKeyInKvStore_);
-    }
+    auto unsetPrefixRequest = ClearKeyValueRequest(
+        AreaId{area},
+        prefixKeyStr,
+        writeThriftObjStr(std::move(deletedPrefixDb), serializer_),
+        true);
+    kvRequestQueue_.push(std::move(unsetPrefixRequest));
 
     XLOG(DBG1) << "[Prefix Withdraw] "
                << "Area: " << area << ", " << toString(*entry.prefix_ref());

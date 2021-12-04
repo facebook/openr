@@ -8,11 +8,8 @@
 #pragma once
 
 #include <folly/IPAddress.h>
-#include <folly/Optional.h>
 #include <folly/futures/Future.h>
-#include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
-#include <folly/io/async/EventBase.h>
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -22,11 +19,10 @@
 #include <openr/config-store/PersistentStore.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
-#include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/LogSample.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr {
@@ -102,7 +98,6 @@ class LinkMonitor final : public OpenrEventBase {
       std::shared_ptr<const Config> config,
       // raw ptr for modules
       fbnl::NetlinkProtocolSocket* nlSock,
-      KvStore* kvstore,
       PersistentStore* configStore,
       // producer queue
       messaging::ReplicateQueue<InterfaceDatabase>& interfaceUpdatesQueue,
@@ -238,7 +233,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   /*
    * [Kvstore] Advertise my adjacencies_
-   * kvStoreClient_->persistKey OR kvRequestQueue.push(PersistKeyValueRequest)
    *
    * Called upon spark neighbor events: up/down/rtt (restarting does not trigger
    * adj update)
@@ -347,13 +341,8 @@ class LinkMonitor final : public OpenrEventBase {
   // link flap back offs
   std::chrono::milliseconds linkflapInitBackoff_;
   std::chrono::milliseconds linkflapMaxBackoff_;
-  // TTL for a key in the key value store
-  std::chrono::milliseconds ttlKeyInKvStore_;
 
   std::unordered_map<std::string, AreaConfiguration> const areas_;
-
-  // Send update requests to KvStore via queue
-  bool enableKvStoreRequestQueue_{false};
 
   // flag to indicate if ordered publication is enabled
   bool enableOrderedAdjPublication_{false};
@@ -419,10 +408,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Exp backoff for resyncing InterfaceDb from netlink
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
-
-  // [TO BE DEPRECATED]
-  // client to interact with KvStore
-  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 
   // Raw ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};

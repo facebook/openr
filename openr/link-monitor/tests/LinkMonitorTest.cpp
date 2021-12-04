@@ -208,8 +208,7 @@ class LinkMonitorTestFixture : public testing::Test {
         kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
         fibRouteUpdatesQueue.getReader(),
-        config,
-        kvStoreWrapper->getKvStore());
+        config);
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";
       prefixManager->run();
@@ -381,7 +380,6 @@ class LinkMonitorTestFixture : public testing::Test {
     linkMonitor = std::make_unique<LinkMonitor>(
         config,
         nlSock.get(),
-        kvStoreWrapper->getKvStore(),
         configStore.get(),
         interfaceUpdatesQueue,
         prefixUpdatesQueue,
@@ -2113,7 +2111,6 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
     auto lm = std::make_unique<LinkMonitor>(
         currConfig,
         nlSock.get(),
-        kvStoreWrapper->getKvStore(),
         configStore.get(),
         interfaceUpdatesQueue,
         prefixUpdatesQueue,

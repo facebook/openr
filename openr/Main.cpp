@@ -409,8 +409,7 @@ main(int argc, char** argv) {
           prefixMgrKvStoreUpdatesReader,
           prefixUpdatesQueue.getReader("prefixManager"),
           std::move(routeUpdatesQueueReader),
-          config,
-          kvStore));
+          config));
   watchdog->addQueue(kvRequestQueue, "kvRequestQueue");
   watchdog->addQueue(staticRouteUpdatesQueue, "staticRouteUpdatesQueue");
 
@@ -458,7 +457,6 @@ main(int argc, char** argv) {
       std::make_unique<LinkMonitor>(
           config,
           nlSock.get(),
-          kvStore,
           configStore,
           interfaceUpdatesQueue,
           prefixUpdatesQueue,

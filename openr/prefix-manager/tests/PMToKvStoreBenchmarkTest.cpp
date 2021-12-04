@@ -40,8 +40,7 @@ class PMToKvStoreBMTestFixture {
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
-        config_,
-        kvStoreWrapper_->getKvStore());
+        config_);
 
     prefixManagerThread_ =
         std::make_unique<std::thread>([this]() { prefixManager_->run(); });

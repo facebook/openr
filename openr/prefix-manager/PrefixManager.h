@@ -8,20 +8,18 @@
 #pragma once
 
 #include <folly/IPAddress.h>
-#include <folly/Optional.h>
 #include <folly/futures/Future.h>
+#include <folly/gen/Base.h>
 
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
-#include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/kvstore/KvStoreClientInternal.h>
-#include <openr/messaging/Queue.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/policy/PolicyManager.h>
 
 namespace openr {
@@ -95,16 +93,9 @@ class PrefixManager final : public OpenrEventBase {
       messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
       messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
       // config
-      std::shared_ptr<const Config> config,
-      // raw ptr for modules
-      KvStore* kvStore);
+      std::shared_ptr<const Config> config);
 
   ~PrefixManager();
-
-  /**
-   * Override stop method of OpenrEventBase
-   */
-  void stop() override;
 
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
@@ -389,9 +380,6 @@ class PrefixManager final : public OpenrEventBase {
   // map from area id to area policy
   std::unordered_map<std::string, std::optional<std::string>> areaToPolicy_;
 
-  // TTL for a key in the key value store
-  const std::chrono::milliseconds ttlKeyInKvStore_{0};
-
   // queue to publish originated route updates to decision
   messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue_;
 
@@ -408,16 +396,10 @@ class PrefixManager final : public OpenrEventBase {
   // V4 prefix over V6 nexthop enabled
   const bool v4OverV6Nexthop_{false};
 
-  // module ptr to interact with KvStore
-  KvStore* kvStore_{nullptr};
-
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
   std::unique_ptr<AsyncThrottle> syncKvStoreThrottled_;
   std::unique_ptr<folly::AsyncTimeout> initialSyncKvStoreTimer_;
-
-  // kvStoreClient for persisting our prefix db
-  std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
 
   // TODO: Merge this with advertiseStatus_.
   // The current prefix db this node is advertising. In-case if multiple entries
