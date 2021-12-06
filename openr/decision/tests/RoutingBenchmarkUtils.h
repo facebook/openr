@@ -19,6 +19,7 @@
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/monitor/SystemMetrics.h>
 #include <openr/tests/utils/Utils.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -36,6 +37,42 @@
       size,                                                                   \
       forwarding,                                                             \
       prefixNum)
+
+#define BENCHMARK_COUNTERS_PARAM2( \
+    name,                          \
+    counters,                      \
+    testName,                      \
+    numOfPods,                     \
+    numOfPlanes,                   \
+    numberOfPrefixes,              \
+    forwardingAlgorithm)           \
+  BENCHMARK_COUNTERS_NAME_PARAM(   \
+      name,                        \
+      counters,                    \
+      testName,                    \
+      numOfPods,                   \
+      numOfPlanes,                 \
+      numberOfPrefixes,            \
+      forwardingAlgorithm)
+
+#define BENCHMARK_COUNTERS_PARAM3( \
+    name,                          \
+    counters,                      \
+    testName,                      \
+    numOfPods,                     \
+    numOfPlanes,                   \
+    numberOfPrefixes,              \
+    numOfUpdatePrefixes,           \
+    forwardingAlgorithm)           \
+  BENCHMARK_COUNTERS_NAME_PARAM(   \
+      name,                        \
+      counters,                    \
+      testName,                    \
+      numOfPods,                   \
+      numOfPlanes,                 \
+      numberOfPrefixes,            \
+      numOfUpdatePrefixes,         \
+      forwardingAlgorithm)
 
 /*
  * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
@@ -381,6 +418,7 @@ void BM_DecisionGridInitialUpdate(
     uint32_t numberOfPrefixes);
 
 void BM_DecisionGridPrefixUpdates(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfNodes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
@@ -398,6 +436,7 @@ void BM_DecisionGridAdjUpdates(
 // Benchmark test for fabric topology.
 //
 void BM_DecisionFabricInitialUpdate(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfPods,
     uint32_t numOfPlanes,
@@ -405,6 +444,7 @@ void BM_DecisionFabricInitialUpdate(
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
 
 void BM_DecisionFabricPrefixUpdates(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfPods,
     uint32_t numOfPlanes,

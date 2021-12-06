@@ -640,17 +640,39 @@ BM_DecisionGridInitialUpdate(
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
     uint32_t numberOfPrefixes) {
   auto suspender = folly::BenchmarkSuspender();
-  const std::string nodeName{"1"};
-  int n = std::sqrt(numOfSws);
-  auto [adjs, prefixes] = createGrid(n, numberOfPrefixes, forwardingAlgorithm);
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
-  suspender.dismiss(); // Start measuring benchmark time
   for (uint32_t i = 0; i < iters; i++) {
-    auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
-    sendRecvInitialUpdate(
-        decisionWrapper, nodeName, std::move(adjs), std::move(prefixes));
+    const std::string nodeName{"1"};
+    int n = std::sqrt(numOfSws);
+    auto [adjs, prefixes] =
+        createGrid(n, numberOfPrefixes, forwardingAlgorithm);
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
+    suspender.dismiss(); // Start measuring benchmark time
+    for (uint32_t i = 0; i < iters; i++) {
+      auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
+      sendRecvInitialUpdate(
+          decisionWrapper, nodeName, std::move(adjs), std::move(prefixes));
+    }
+    suspender.rehire(); // Stop measuring time again
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
-  suspender.rehire(); // Stop measuring time again
 }
 
 void
@@ -684,12 +706,17 @@ BM_DecisionGridAdjUpdates(
 
 void
 BM_DecisionGridPrefixUpdates(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfNodes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
     uint32_t numOfPrefixes,
     uint32_t numOfUpdatePrefixes) {
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
+
   for (uint32_t i = 0; i < iters; i++) {
     const std::string nodeName{"1"};
     auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
@@ -699,6 +726,13 @@ BM_DecisionGridPrefixUpdates(
     sendRecvInitialUpdate(
         decisionWrapper, nodeName, std::move(adjs), std::move(prefixes));
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     // Advertise new random prefix from random node to build route
     updateRandomGridPrefixes(
         decisionWrapper,
@@ -706,6 +740,14 @@ BM_DecisionGridPrefixUpdates(
         numOfUpdatePrefixes,
         forwardingAlgorithm,
         suspender);
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -714,16 +756,28 @@ BM_DecisionGridPrefixUpdates(
 //
 void
 BM_DecisionFabricInitialUpdate(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfPods,
     uint32_t numOfPlanes,
     uint32_t numberOfPrefixes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
+
   const std::string nodeName = getNodeName(kFswMarker, 0, 0);
   for (uint32_t i = 0; i < iters; i++) {
     auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
     std::unordered_map<std::string, std::vector<std::string>> listOfNodenames;
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
 
     auto initialPub = createFabric(
         decisionWrapper,
@@ -750,11 +804,20 @@ BM_DecisionFabricInitialUpdate(
     // Receive RouteUpdate from Decision
     decisionWrapper->recvMyRouteDb();
     suspender.rehire(); // Stop measuring time again
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
 void
 BM_DecisionFabricPrefixUpdates(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfPods,
     uint32_t numOfPlanes,
@@ -762,6 +825,9 @@ BM_DecisionFabricPrefixUpdates(
     uint32_t numOfUpdatePrefixes,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
   const std::string nodeName = getNodeName(kFswMarker, 0, 0);
   for (uint32_t i = 0; i < iters; i++) {
     auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
@@ -791,6 +857,13 @@ BM_DecisionFabricPrefixUpdates(
     // Receive RouteUpdate from Decision
     decisionWrapper->recvMyRouteDb();
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     thrift::Publication pub;
     pub.area_ref() = kTestingAreaName;
     generatePrefixUpdatePublication(
@@ -802,6 +875,13 @@ BM_DecisionFabricPrefixUpdates(
     decisionWrapper->recvMyRouteDb();
 
     suspender.rehire(); // Stop measuring time again
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 } // namespace openr
