@@ -152,14 +152,37 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   // create spark
   //
+  const auto& sparkConf = config_->getSparkConfig();
   spark_ = std::make_unique<Spark>(
+      config_->getConfig().domain, // My domain
+      config_->getNodeName(), // myNodeName
+      static_cast<uint16_t>(sparkConf.neighbor_discovery_port),
+      std::chrono::seconds(
+          sparkConf.graceful_restart_time_s), // hold_time_s
+      std::chrono::seconds(1),
+      std::chrono::milliseconds(1000),
+      std::chrono::seconds(sparkConf.hello_time_s),
+      std::chrono::milliseconds(sparkConf.fastinit_hello_time_ms),
+      std::chrono::milliseconds(
+          sparkConf.fastinit_hello_time_ms), // spark2_handshake_time_ms
+      std::chrono::seconds(
+          sparkConf.keepalive_time_s), // spark2_heartbeat_time_s
+      std::chrono::seconds(
+          sparkConf.keepalive_time_s), // spark2_negotiate_hold_time_s
+      std::chrono::seconds(
+          sparkConf.hold_time_s), // spark2_heartbeat_hold_time_s
       std::nullopt, // ip-tos
+      config_->isV4Enabled(),
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
-      KvStoreCmdPort{0},
-      OpenrCtrlThriftPort{0},
-      ioProvider_,
-      config_);
+      KvStoreCmdPort{static_cast<uint16_t>(0)},
+      OpenrCtrlThriftPort{static_cast<uint16_t>(0)},
+      std::make_pair(
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
+      ioProvider,
+      false, // FloodOptimizationEnabled
+      false, // enable_spark2
+      false); // spark2_increase_hello_interval
 
   //
   // create link monitor

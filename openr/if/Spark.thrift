@@ -12,14 +12,27 @@ namespace py3 openr.thrift
 namespace lua openr.Spark
 
 include "Network.thrift"
+include "KvStore.thrift"
 
 //
-// Data structure to send with SparkNeighborEvent to convey
-// info for a single unique neighbor for upper module usage
+// The below uses "required" a lot. This helps with
+// strict protocol message parsing, as we bork if
+// a field is missing. This is kind of a simple way
+// of avoiding to check for default values
+//
+
+//
+// Describe a single neighbor
 //
 struct SparkNeighbor {
+  // the name of the domain to which this neighbor belongs to
+  6: string domainName
+
   // the name of the node sending hello packets
   1: string nodeName
+
+  // how long to retain our data for in milliseconds
+  2: i32 holdTime
 
   // our transport addresses (right now - link local)
   4: Network.BinaryAddress transportAddressV6
@@ -30,7 +43,7 @@ struct SparkNeighbor {
   8: i32 kvStoreCmdPort = 0
 
   // the interface name of the node sending hello packets over
-  9: string ifName
+  9: string ifName = ""
 }
 
 //
@@ -54,6 +67,38 @@ struct ReflectedNeighborInfo {
 // OpenR version
 //
 typedef i32 OpenrVersion
+
+//
+// This is the data embedded in the payload of hello packet
+// [Plan to deprecate]: remove after Spark2 fully in use
+//
+struct SparkPayload {
+  7: OpenrVersion version = 20180307
+
+  1: required SparkNeighbor originator
+
+  // the senders sequence number, incremented on each hello
+  3: required i64 seqNum
+
+  // neighbor to hello packet timestamp information
+  4: required map<string, ReflectedNeighborInfo> neighborInfos;
+
+  // current timestamp of this packet. This will be reflected back to neighbor
+  // in next hello packet just like sequence number in neighborInfos
+  5: i64 timestamp;
+
+  // solicit for an immediate hello packet back cause I am in fast initial state
+  6: bool solicitResponse = 0;
+
+  // support flood optimization or not
+  8: bool supportFloodOptimization = 0;
+
+  // indicating I'm going to restart gracefully
+  9: optional bool restarting = 0;
+
+  // list of areas that the advertising node belong to
+  10: optional set<string>  (cpp.template = "std::unordered_set") areas
+}
 
 //
 // Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
@@ -122,7 +167,16 @@ struct SparkHandshakeMsg {
   11: optional string neighborNodeName
 }
 
+//
+// This is used to create a new timer
+//
 struct SparkHelloPacket {
+  // Will be DEPRECATED after Spark2
+  1: SparkPayload payload
+
+  // Will be DEPRECATED after Spark2
+  2: binary signature
+
   // - Msg to announce node's presence on link with its
   //   own params;
   // - Send out periodically and on receipt of hello msg
@@ -149,11 +203,8 @@ enum SparkNeighborEventType {
 }
 
 //
-// SparkNeighborEvent wraps up info comsumed by
-// upper level module for neighbor event defined
-// in `SparkNeighborEventType`
+// This is used to inform clients of new neighbor
 //
-// TODO: Migrate SparkNeighborEvent to NOT use thrift structure
 struct SparkNeighborEvent {
   1: required SparkNeighborEventType eventType
   2: required string ifName
@@ -163,7 +214,7 @@ struct SparkNeighborEvent {
   // support flood optimization or not
   6: bool supportFloodOptimization = 0
   // area ID
-  7: string area
+  7: string area = KvStore.kDefaultArea
 }
 
 //

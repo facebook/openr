@@ -37,7 +37,7 @@
 #
 
 # OpenR binary path or command name present on bin paths
-OPENR=openr
+OPENR=openr_bin
 
 # Keep this list in sorted order
 ALLOC_PREFIX_LEN=128

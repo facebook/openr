@@ -317,6 +317,7 @@ endif()
 
 target_link_libraries(openrlib
   build_info
+  ${BENCHMARK}
   ${OPENR_THRIFT_LIBS}
   fbzmq::fbzmq
   fbzmq::monitor_cpp2
@@ -839,7 +840,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(decision_benchmark
-    openr/decision/tests/DecisionBenchmark.cpp
+    openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
   )
 
   target_link_libraries(decision_benchmark

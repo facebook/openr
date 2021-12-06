@@ -10,7 +10,12 @@
 #include <chrono>
 #include <functional>
 
+#include <boost/serialization/strong_typedef.hpp>
+#include <fbzmq/service/monitor/ZmqMonitorClient.h>
+#include <fbzmq/zmq/Zmq.h>
 #include <folly/SocketAddress.h>
+#include <folly/container/EvictingCacheMap.h>
+#include <folly/fibers/FiberManager.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -19,7 +24,6 @@
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -38,7 +42,7 @@ enum class PacketValidationResult {
 };
 
 //
-// Define SparkNeighState for Spark usage. This is used to define
+// Define SparkNeighState for Spark2 usage. This is used to define
 // transition state for neighbors as part of the Finite State Machine.
 //
 enum class SparkNeighState {
@@ -74,20 +78,35 @@ enum class SparkNeighEvent {
 class Spark final : public OpenrEventBase {
  public:
   Spark(
+      std::string const& myDomainName,
+      std::string const& myNodeName,
+      uint16_t const udpMcastPort,
+      std::chrono::milliseconds myHoldTime,
+      std::chrono::milliseconds myKeepAliveTime,
+      std::chrono::milliseconds fastInitKeepAliveTime,
+      std::chrono::milliseconds myHelloTime,
+      std::chrono::milliseconds myHelloFastInitTime,
+      std::chrono::milliseconds myHandshakeTime,
+      std::chrono::milliseconds myHeartbeatTime,
+      std::chrono::milliseconds myNegotiateHoldTime,
+      std::chrono::milliseconds myHeartbeatHoldTime,
       std::optional<int> ipTos,
+      bool enableV4,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
       KvStoreCmdPort kvStoreCmdPort,
       OpenrCtrlThriftPort openrCtrlThriftPort,
+      std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
-      std::shared_ptr<const Config> config,
-      std::pair<uint32_t, uint32_t> version = std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion));
+      bool enableFloodOptimization = false,
+      bool enableSpark2 = false,
+      bool increaseHelloInterval = false,
+      std::shared_ptr<thrift::OpenrConfig> config = nullptr);
 
   ~Spark() override = default;
 
   // get the current state of neighborNode, used for unit-testing
-  folly::SemiFuture<std::optional<SparkNeighState>> getSparkNeighState(
+  std::optional<SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
   // override eventloop stop()
@@ -137,6 +156,21 @@ class Spark final : public OpenrEventBase {
       std::string const& remoteIfName,
       uint32_t const& remoteVersion);
 
+  // [Plan to deprecate]
+  PacketValidationResult validateHelloPacket(
+      std::string const& ifName, thrift::SparkHelloPacket const& helloPacket);
+
+  // invoked when a neighbor's rtt changes
+  void processNeighborRttChange(
+      std::string const& ifName,
+      thrift::SparkNeighbor const& originator,
+      int64_t const newRtt);
+
+  // Invoked when a neighbor's hold timer is expired. We remove the neighbor
+  // from our tracking list.
+  void processNeighborHoldTimeout(
+      std::string const& ifName, std::string const& neighborName);
+
   // Determine if we should process the next packte from this ifName, addr pair
   bool shouldProcessHelloPacket(
       std::string const& ifName, folly::IPAddress const& addr);
@@ -145,35 +179,11 @@ class Spark final : public OpenrEventBase {
   // the neighbor could be added as adjacent peer.
   void processPacket();
 
-  // process helloMsg in Spark context
-  void processHelloMsg(
-      thrift::SparkHelloMsg const& helloMsg,
-      std::string const& ifName,
-      std::chrono::microseconds const& myRecvTimeInUs);
-
-  // process heartbeatMsg in Spark context
-  void processHeartbeatMsg(
-      thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName);
-
-  // process handshakeMsg to update sparkNeighbors_ db
-  void processHandshakeMsg(
-      thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName);
-
-  // util call to send hello msg
-  void sendHelloMsg(
+  // originate my hello packet on given interface
+  void sendHelloPacket(
       std::string const& ifName,
       bool inFastInitState = false,
       bool restarting = false);
-
-  // util call to send handshake msg
-  void sendHandshakeMsg(
-      std::string const& ifName,
-      std::string const& neighborName,
-      std::string const& neighborAreaId,
-      bool isAdjEstablished);
-
-  // util call to send heartbeat msg
-  void sendHeartbeatMsg(std::string const& ifName);
 
   // Function processes interface updates from LinkMonitor and appropriately
   // enable/disable neighbor discovery
@@ -203,6 +213,9 @@ class Spark final : public OpenrEventBase {
   // set flat counter/stats
   void updateGlobalCounters();
 
+  // utility method to initialize/reload openr config
+  void loadConfig();
+
   // utility method to add regex for:
   //
   //  tuple(areaId, neighbor_regex, interface_regex)
@@ -227,8 +240,10 @@ class Spark final : public OpenrEventBase {
   static std::optional<std::string> getNeighborArea(
       const std::string& peerNodeName,
       const std::string& ifName,
-      const std::unordered_map<std::string /* areaId */, AreaConfiguration>&
-          areaConfigs);
+      const std::vector<std::tuple<
+          std::string,
+          std::shared_ptr<re2::RE2::Set>,
+          std::shared_ptr<re2::RE2::Set>>>& areaIdRegexList);
 
   // function to receive and parse received pkt
   bool parsePacket(
@@ -251,11 +266,10 @@ class Spark final : public OpenrEventBase {
       std::string const& ifName);
 
   //
-  // Spark related function call
+  // Spark2 related function call
   //
-  struct SparkNeighbor {
-    SparkNeighbor(
-        const thrift::StepDetectorConfig&,
+  struct Spark2Neighbor {
+    Spark2Neighbor(
         std::string const& domainName,
         std::string const& nodeName,
         std::string const& remoteIfName,
@@ -269,7 +283,9 @@ class Spark final : public OpenrEventBase {
     thrift::SparkNeighbor
     toThrift() const {
       thrift::SparkNeighbor res;
+      res.domainName = domainName;
       res.nodeName = nodeName;
+      res.holdTime = gracefulRestartHoldTime.count();
       res.transportAddressV4 = transportAddressV4;
       res.transportAddressV6 = transportAddressV6;
       res.kvStoreCmdPort = kvStoreCmdPort;
@@ -341,8 +357,8 @@ class Spark final : public OpenrEventBase {
 
   std::unordered_map<
       std::string /* ifName */,
-      std::unordered_map<std::string /* neighborName */, SparkNeighbor>>
-      sparkNeighbors_{};
+      std::unordered_map<std::string /* neighborName */, Spark2Neighbor>>
+      spark2Neighbors_{};
 
   // util function to log Spark neighbor state transition
   void logStateTransition(
@@ -353,17 +369,17 @@ class Spark final : public OpenrEventBase {
 
   // util function to check SparkNeighState
   void checkNeighborState(
-      SparkNeighbor const& neighbor, SparkNeighState const& state);
+      Spark2Neighbor const& neighbor, SparkNeighState const& state);
 
   // wrapper call to declare neighborship down
   void neighborUpWrapper(
-      SparkNeighbor& neighbor,
+      Spark2Neighbor& neighbor,
       std::string const& ifName,
       std::string const& neighborName);
 
   // wrapper call to declare neighborship down
   void neighborDownWrapper(
-      SparkNeighbor const& neighbor,
+      Spark2Neighbor const& neighbor,
       std::string const& ifName,
       std::string const& neighborName);
 
@@ -384,11 +400,35 @@ class Spark final : public OpenrEventBase {
       std::string const& neighborName,
       int64_t const newRtt);
 
+  // utility call to send handshake msg
+  void sendHandshakeMsg(
+      std::string const& ifName,
+      std::string const& neighborName,
+      std::string const& neighborAreaId,
+      bool isAdjEstablished);
+
+  // utility call to send heartbeat msg
+  void sendHeartbeatMsg(std::string const& ifName);
+
   // wrapper function to process GR msg
   void processGRMsg(
       std::string const& neighborName,
       std::string const& ifName,
-      SparkNeighbor& neighbor);
+      Spark2Neighbor& neighbor);
+
+  // process helloMsg in Spark2 context
+  void processHelloMsg(
+      thrift::SparkHelloMsg const& helloMsg,
+      std::string const& ifName,
+      std::chrono::microseconds const& myRecvTimeInUs);
+
+  // process heartbeatMsg in Spark2 context
+  void processHeartbeatMsg(
+      thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName);
+
+  // process handshakeMsg to update spark2Neighbors_ db
+  void processHandshakeMsg(
+      thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName);
 
   // process timeout for heartbeat
   void processHeartbeatTimeout(
@@ -417,32 +457,40 @@ class Spark final : public OpenrEventBase {
   // This node's domain name
   const std::string myDomainName_{};
 
-  // This node's name
+  // this node's name
   const std::string myNodeName_{};
 
   // UDP port for send/recv of spark hello messages
-  const uint16_t neighborDiscoveryPort_{6666};
+  const uint16_t udpMcastPort_{6666};
 
-  // Spark hello msg sendout interval
-  const std::chrono::milliseconds helloTime_{0};
+  // the hold time to announce on all interfaces. Can't be less than 3s
+  const std::chrono::milliseconds myHoldTime_{0};
 
-  // Spark hello msg sendout interval under fast-init case
-  const std::chrono::milliseconds fastInitHelloTime_{0};
+  // hello message (keepAlive) exchange interval. Must be less than holdtime
+  // and greater than 0
+  const std::chrono::milliseconds myKeepAliveTime_{0};
 
-  // Spark handshake msg sendout interval
-  const std::chrono::milliseconds handshakeTime_{0};
+  // hello message exchange interval during fast init state, much faster than
+  // usual keep alive interval
+  const std::chrono::milliseconds fastInitKeepAliveTime_{0};
 
-  // Spark heartbeat msg sendout interval (keepAliveTime)
-  const std::chrono::milliseconds keepAliveTime_{0};
+  // Spark2 hello msg sendout interval
+  const std::chrono::milliseconds myHelloTime_{0};
 
-  // Spark negotiate stage hold time
-  const std::chrono::milliseconds handshakeHoldTime_{0};
+  // Spark2 hello msg sendout interval under fast-init case
+  const std::chrono::milliseconds myHelloFastInitTime_{0};
 
-  // Spark heartbeat msg hold time
-  const std::chrono::milliseconds holdTime_{0};
+  // Spark2 handshake msg sendout interval
+  const std::chrono::milliseconds myHandshakeTime_{0};
 
-  // Spark hold time under graceful-restart mode
-  const std::chrono::milliseconds gracefulRestartTime_{0};
+  // Spark2 heartbeat msg sendout interval
+  const std::chrono::milliseconds myHeartbeatTime_{0};
+
+  // Spark2 negotiate stage hold time
+  const std::chrono::milliseconds myNegotiateHoldTime_{0};
+
+  // Spark2 heartbeat msg hold time
+  const std::chrono::milliseconds myHeartbeatHoldTime_{0};
 
   // This flag indicates that we will also exchange v4 transportAddress in
   // Spark HelloMessage
@@ -472,6 +520,12 @@ class Spark final : public OpenrEventBase {
   // enable dual or not
   const bool enableFloodOptimization_{false};
 
+  // enable Spark2 or not
+  const bool enableSpark2_{false};
+
+  // increase Hello interval in Spark2
+  const bool increaseHelloInterval_{false};
+
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};
 
@@ -493,8 +547,66 @@ class Spark final : public OpenrEventBase {
       std::unordered_set<std::string> /* neighbors */>
       ifNameToActiveNeighbors_{};
 
-  // ordered set to keep track of allocated labels
+  // Ordered set to keep track of allocated labels
   std::set<int32_t> allocatedLabels_{};
+
+  //
+  // Neighbor state tracking
+  //
+
+  // Struct for neighbor information per interface
+  struct Neighbor {
+    Neighbor(
+        thrift::SparkNeighbor const& info,
+        uint32_t label,
+        uint64_t seqNum,
+        std::unique_ptr<folly::AsyncTimeout> holdTimer,
+        const std::chrono::milliseconds& samplingPeriod,
+        std::function<void(const int64_t&)> rttChangeCb,
+        std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+    // Neighbor info
+    thrift::SparkNeighbor info;
+
+    // Hold timer. If expired will declare the neighbor as stopped.
+    const std::unique_ptr<folly::AsyncTimeout> holdTimer{nullptr};
+
+    // SR Label to reach Neighbor over this specific adjacency. Generated
+    // using ifIndex to this neighbor. Only local within the node.
+    const uint32_t label{0};
+
+    // Last sequence number received from neighbor
+    uint64_t seqNum{0};
+
+    // Timestamps of last hello packet received from this neighbor. All
+    // timestamps are derived from std::chrono::steady_clock.
+    std::chrono::microseconds neighborTimestamp{0};
+    std::chrono::microseconds localTimestamp{0};
+
+    // Do we have adjacency with this neighbor. We use this to see if an UP/DOWN
+    // notification is needed
+    bool isAdjacent{false};
+
+    // counters to track number of restarting packets received
+    int numRecvRestarting{0};
+
+    // Currently RTT value being used to neighbor. Must be initialized to zero
+    std::chrono::microseconds rtt{0};
+
+    // Lastest measured RTT on receipt of every hello packet
+    std::chrono::microseconds rttLatest{0};
+
+    // detect rtt changes
+    StepDetector<int64_t, std::chrono::milliseconds> stepDetector;
+
+    // area on which adjacency is formed
+    std::string area{};
+  };
+
+  std::unordered_map<
+      std::string /* ifName */,
+      std::unordered_map<std::string /* neighborName */, Neighbor>>
+      neighbors_{};
 
   // to serdeser messages over ZMQ sockets
   apache::thrift::CompactSerializer serializer_;
@@ -510,7 +622,14 @@ class Spark final : public OpenrEventBase {
       timeSeriesVector_{};
 
   // global openr config
-  std::shared_ptr<const Config> config_{nullptr};
+  std::shared_ptr<const thrift::OpenrConfig> config_{nullptr};
+
+  // areaId -> node name regex parsed from areaConfig
+  std::vector<std::tuple<
+      std::string /* areaId */,
+      std::shared_ptr<re2::RE2::Set> /* neighbor regex */,
+      std::shared_ptr<re2::RE2::Set> /* interface regex */>>
+      areaIdRegexList_{};
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};

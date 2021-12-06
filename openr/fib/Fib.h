@@ -124,6 +124,12 @@ class Fib final : public OpenrEventBase {
   void processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta);
 
   /**
+   * Compare the old and new routes and update the counter if
+   * it is the default route and it has changed.
+   */
+   void compareDefaultRoutes(const thrift::UnicastRoute& oldRoute, const thrift::UnicastRoute& newRoute);
+
+  /**
    * Process interface status information from LinkMonitor. We remove all
    * routes associated with interface if we detect that it just went down.
    */
@@ -263,6 +269,12 @@ class Fib final : public OpenrEventBase {
   bool hasSyncedFib_{false};
 
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
+
+  // Stats
+  struct fibStats {
+    int64_t countDefaultRouteChanged_;
+    int64_t countDefaultRouteDeleted_;
+  } stats;
 
   // Semaphore to serialize route programming across two fibers (interface
   // updates & route updates)

@@ -16,6 +16,7 @@
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
 #include <folly/Optional.h>
+#include <folly/SocketAddress.h>
 #include <folly/gen/Base.h>
 #include <folly/gen/String.h>
 #include <folly/init/Init.h>
@@ -318,7 +319,9 @@ main(int argc, char** argv) {
     netlinkFibServer->setThreadManager(thriftThreadMgr);
     netlinkFibServer->setNumIOWorkerThreads(1);
     netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
-    netlinkFibServer->setPort(config->getConfig().fib_port);
+    folly::SocketAddress netlinkFibServerAddr("::1", config->getConfig().fib_port);
+    netlinkFibServer->setAddress(netlinkFibServerAddr);
+
 
     netlinkFibServerThread =
         std::make_unique<std::thread>([&netlinkFibServer, &nlSock]() {
@@ -441,13 +444,36 @@ main(int argc, char** argv) {
       watchdog,
       "Spark",
       std::make_unique<Spark>(
+          config->getConfig().domain, // My domain
+          config->getNodeName(), // myNodeName
+          static_cast<uint16_t>(sparkConf.neighbor_discovery_port),
+          std::chrono::seconds(
+              sparkConf.graceful_restart_time_s), // hold_time_s
+          std::chrono::seconds(FLAGS_spark_keepalive_time_s),
+          std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
+          std::chrono::seconds(sparkConf.hello_time_s),
+          std::chrono::milliseconds(sparkConf.fastinit_hello_time_ms),
+          std::chrono::milliseconds(
+              sparkConf.fastinit_hello_time_ms), // spark2_handshake_time_ms
+          std::chrono::seconds(
+              sparkConf.keepalive_time_s), // spark2_heartbeat_time_s
+          std::chrono::seconds(
+              sparkConf.keepalive_time_s), // spark2_negotiate_hold_time_s
+          std::chrono::seconds(
+              sparkConf.hold_time_s), // spark2_heartbeat_hold_time_s
           maybeIpTos,
+          config->isV4Enabled(),
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
           OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
+          std::make_pair(
+              Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
           std::make_shared<IoProvider>(),
-          config));
+          config->isFloodOptimizationEnabled(),
+          FLAGS_enable_spark2,
+          FLAGS_spark2_increase_hello_interval));
+
 
   // Create link monitor instance.
   auto linkMonitor = startEventBase(
@@ -551,7 +577,8 @@ main(int argc, char** argv) {
         sslContext);
   }
   // set the port and interface
-  thriftCtrlServer.setPort(config->getConfig().openr_ctrl_port);
+  folly::SocketAddress thriftCtrlServerAddr("::1", config->getConfig().openr_ctrl_port);
+  thriftCtrlServer.setAddress(thriftCtrlServerAddr);
 
   std::unordered_set<std::string> acceptableNamesSet; // empty set by default
   if (FLAGS_enable_secure_thrift_server) {
