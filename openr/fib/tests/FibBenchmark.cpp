@@ -197,8 +197,7 @@ BM_FibAddUnicastRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory before adding existing routes(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
       }
     }
     {
@@ -218,8 +217,7 @@ BM_FibAddUnicastRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory after adding existing routes(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
       }
       record = false;
     }
@@ -297,8 +295,7 @@ BM_FibDeleteUnicastRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory before deleting routes(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
       }
     }
 
@@ -322,8 +319,7 @@ BM_FibDeleteUnicastRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory after deleting routes(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
       }
       record = false;
     }
@@ -360,8 +356,7 @@ BM_FibAddMplsRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory before adding existing routes(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
       }
     }
 
@@ -384,8 +379,7 @@ BM_FibAddMplsRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory after adding existing routes(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
       }
       record = false;
     }
@@ -459,8 +453,7 @@ BM_FibDeleteMplsRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory before processing route deletion(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
       }
     }
 
@@ -484,8 +477,7 @@ BM_FibDeleteMplsRoute(
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
       if (mem.has_value()) {
-        counters["memory after processing route deletion(MB)"] =
-            mem.value() / 1024 / 1024;
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
       }
       record = false;
     }
