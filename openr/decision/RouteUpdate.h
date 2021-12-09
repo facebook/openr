@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <sstream>
+
 #include <folly/IPAddress.h>
 
 #include <openr/decision/RibEntry.h>
