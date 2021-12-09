@@ -917,6 +917,14 @@ struct OpenrConfig {
    */
   60: i32 route_delete_delay_ms = 1000;
 
+  /**
+   * Enables the UCMP feature. The UCMP feature allows routes to be programmed
+   * with UCMP weights according to the prefix's weight propagation algorithm which
+   * is defined by the forwarding algorithm (either SP_UCMP_ADJ_WEIGHT_PROPAGATION
+   * or SP_UCMP_PREFIX_WEIGHT_PROPAGATION)
+   */
+  61: bool enable_ucmp = false;
+
   # vip thrift injection service
   90: optional bool enable_vip_service;
   91: optional vip_service_config.VipServiceConfig vip_service_config;

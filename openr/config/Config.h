@@ -209,6 +209,11 @@ class Config {
   }
 
   bool
+  isUcmpEnabled() const {
+    return *config_.enable_ucmp_ref();
+  }
+
+  bool
   isInitializationProcessEnabled() const {
     return *config_.enable_initialization_process_ref();
   }

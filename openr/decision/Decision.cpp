@@ -136,7 +136,8 @@ Decision::Decision(
       config->isAdjacencyLabelsEnabled(),
       config->isBgpRouteProgrammingEnabled(),
       config->isBestRouteSelectionEnabled(),
-      config->isV4OverV6NexthopEnabled());
+      config->isV4OverV6NexthopEnabled(),
+      config->isUcmpEnabled());
   // Populate prefix types whose static routes Decision awaits before initial
   // RIB computation.
   if (config->isSegmentRoutingEnabled() and
