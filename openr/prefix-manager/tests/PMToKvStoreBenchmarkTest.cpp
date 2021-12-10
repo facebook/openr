@@ -8,9 +8,25 @@
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/monitor/SystemMetrics.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 #include <openr/tests/utils/Utils.h>
+
+/*
+ * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
+ * each parameter, rather than using the parameter value.
+ */
+#define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
+  BENCHMARK_IMPL_COUNTERS(                                             \
+      FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
+      FOLLY_PP_STRINGIZE(name) "(" FOLLY_PP_STRINGIZE(param_name) ")", \
+      counters,                                                        \
+      iters,                                                           \
+      unsigned,                                                        \
+      iters) {                                                         \
+    name(counters, iters, ##__VA_ARGS__);                              \
+  }
 
 namespace detail {
 // Prefix length of a subnet
@@ -162,11 +178,15 @@ class PMToKvStoreBMTestFixture {
  */
 static void
 BM_PrefixManagerAdvertisePrefixes(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingPrefixes,
     uint32_t numOfUpdatedPrefixes) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   for (uint32_t i = 0; i < iters; ++i) {
     const std::string nodeId{"node-1"};
@@ -185,6 +205,13 @@ BM_PrefixManagerAdvertisePrefixes(
     auto prefixesToAdvertise = generatePrefixEntries(
         testFixture->getPrefixGenerator(), numOfUpdatedPrefixes);
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -194,6 +221,14 @@ BM_PrefixManagerAdvertisePrefixes(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -207,11 +242,15 @@ BM_PrefixManagerAdvertisePrefixes(
  */
 static void
 BM_PrefixManagerWithdrawPrefixes(
+    folly::UserCounters& counters,
     uint32_t iters,
     uint32_t numOfExistingPrefixes,
     uint32_t numOfWithdrawnPrefixes) {
   // Spawn suspender object to NOT calculating setup time into benchmark
   auto suspender = folly::BenchmarkSuspender();
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
   // Make sure num of withdrawn prefixes are subset of existing prefixes
   CHECK_LE(numOfWithdrawnPrefixes, numOfExistingPrefixes);
@@ -232,6 +271,13 @@ BM_PrefixManagerWithdrawPrefixes(
     // Verify pre-existing prefixes inside `KvStore
     testFixture->checkPrefixesInKvStore(numOfExistingPrefixes);
 
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
     // Start measuring benchmark time
     suspender.dismiss();
 
@@ -241,6 +287,14 @@ BM_PrefixManagerWithdrawPrefixes(
 
     // Stop measuring benchmark time
     suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -447,45 +501,58 @@ BM_PrefixManagerPrefixFlap(
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of prefixes to advertise
  */
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerAdvertisePrefixes, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerAdvertisePrefixes, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerAdvertisePrefixes, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerAdvertisePrefixes, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerAdvertisePrefixes, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerAdvertisePrefixes, 100000_100000, 100000, 100000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 100_1, 100, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 1000_1, 1000, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 10000_1, 10000, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 10000_10, 10000, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 10000_100, 10000, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 10000_1000, 10000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerAdvertisePrefixes, counters, 100000_100000, 100000, 100000);
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of prefixes to withdraw
  */
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 100_1, 100, 1);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 1000_1, 1000, 1);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 10000_1, 10000, 1);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerWithdrawPrefixes, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerWithdrawPrefixes, 10000_10000, 10000, 10000);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 100000_1, 100000, 1);
-BENCHMARK_NAMED_PARAM(BM_PrefixManagerWithdrawPrefixes, 100000_10, 100000, 10);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerWithdrawPrefixes, 100000_100, 100000, 100);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerWithdrawPrefixes, 100000_1000, 100000, 1000);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerWithdrawPrefixes, 100000_10000, 100000, 10000);
-BENCHMARK_NAMED_PARAM(
-    BM_PrefixManagerWithdrawPrefixes, 100000_100000, 100000, 100000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 100_1, 100, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 1000_1, 1000, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 10000_1, 10000, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 10000_10, 10000, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 10000_100, 10000, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 10000_1000, 10000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_PrefixManagerWithdrawPrefixes, counters, 100000_100000, 100000, 100000);
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of prefixes to flap
