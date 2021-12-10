@@ -30,14 +30,63 @@ struct RouteLimit {
 } (cpp.minimize_padding)
 
 /**
- * AdvertiseLinkBandwidth:
- * - NONE: Do not advertise Link Bandwidth Ext Community to this peer/group
- * - AGGREGATE: Advertise aggregate of received Link Bandwidth values of paths
- *   we use in ECMP (only if received from all speakers)
+ * Control knob for advertising link bandwidth community to a peer or
+ * peer-group. There are multiple options for advertising the link-bandwidth.
+ *
+ * The knobs classify into two, ORIGINATE and TRANSFORM.
+ *   ORIGINATE - For origination the link-bandwidth community for the route is
+ *               derived from configuration, either the peer to whom we’re
+ *               advertising or the peers associated with ECMP paths.
+ *   TRANSFORM - These knobs transforms the associated/received link-bandwidth
+ *               community of the ECMP paths. For the transforms to be
+ *               effective, all ECMP paths must have a link-bandwidth community.
  */
 enum AdvertiseLinkBandwidth {
-  NONE = 0,
-  AGGREGATE = 1,
+  // (default) Do not advertise the link bandwidth
+  DISABLE = 0,
+
+  // Transform - Advertise the link-bandwidth of the best-path
+  BEST_PATH = 1,
+
+  // Originate - Set the link-bandwidth community to a specified BPS value in
+  // the peer/peer-group configuration - `link_bandwidth_bps`
+  SET_LINK_BPS = 2,
+
+  // Transform - Sum the link-bandwidth associated of all ECMP paths (received
+  // from peer). All ECMP paths must have a link-bandwidth else the community
+  // will not be set and any existing community will be removed
+  AGGREGATE_RECEIVED = 3,
+
+  // Originate - Sum the link-bandwidth-bps of all ECMP paths peers. BPS is
+  // inferred from the peer or peer-group configuration. For route programming
+  // the received link-bandwidth on route is used. All ECMP path peers must have
+  // `link_bandwidth_bps` configured in config, else community will be not set
+  // and any existing community will be removed.
+  AGGREGATE_LOCAL = 4,
+
+  // link-bandwidth-bps set by external entity via rib-policy api. e.g. FA Controller
+  RIB_POLICY_LBW = 5,
+}
+
+/**
+ * Control knob for link bandwidth community association on a received route
+ * from peer. Knobs here provides a way to originate the link-bandwidth even
+ * if peer doesn’t announce or reject the announced link-bandwidth community
+ * from the peer.
+ */
+enum ReceiveLinkBandwidth {
+  // Do not accept any link bandwidth advertised from peer. This is a safety
+  // knob to ensure any un-expected link-bandwidth community received from
+  // peer is rejected.
+  DISABLE = 0,
+
+  // Accept community advertised from peer if any
+  ACCEPT = 1,
+
+  // Originate - Set the link-bandwidth to the link bps value after accepting
+  // the route in AdjRib-In. Any link-bandwidth community sent by peer will be
+  // ignored.
+  SET_LINK_BPS = 2,
 }
 
 /**
@@ -84,7 +133,13 @@ struct PeerGroup {
   25: optional string peer_tag;
   /* Local-AS# RFC-7705 */
   26: optional i32 local_as;
+
+  /**
+   * BGP Link-Bandwidth advertisement & receipt knobs
+   */
   27: optional AdvertiseLinkBandwidth advertise_link_bandwidth;
+  35: optional ReceiveLinkBandwidth receive_link_bandwidth;
+
   /* Route caps for pre & post filter prefixes */
   28: optional RouteLimit pre_filter;
   29: optional RouteLimit post_filter;
@@ -190,7 +245,11 @@ struct BgpPeer {
    */
   25: optional i32 local_as;
 
+  /**
+   * BGP Link-Bandwidth advertisement & receipt knobs
+   */
   26: optional AdvertiseLinkBandwidth advertise_link_bandwidth;
+  34: optional ReceiveLinkBandwidth receive_link_bandwidth;
 
   /* Route caps for pre & post filter prefixes */
   27: optional RouteLimit pre_filter;
