@@ -115,7 +115,7 @@ Markers: * - One of the best entries, @ - The best entry
      Forwarding - algorithm: SP_ECMP, type: SR_MPLS
      Metrics - path-preference: 1000, source-preference: 100, distance: 4
      Performance - min-nexthops: 24
-     Misc - prepend-label: 65001
+     Misc - prepend-label: 65001, weight: None
      Tags - 65520:822, 65527:896, 65529:15990, COMMODITY:EGRESS
      Area Stack - 64984, 65333, 64900, 65301
 
@@ -124,7 +124,7 @@ Markers: * - One of the best entries, @ - The best entry
      Forwarding - algorithm: SP_ECMP, type: SR_MPLS
      Metrics - path-preference: 1000, source-preference: 100, distance: 4
      Performance - min-nexthops: 24
-     Misc - prepend-label: 60000
+     Misc - prepend-label: 60000, weight: None
      Tags - 65520:822, 65527:896, 65529:15990, COMMODITY:EGRESS
      Area Stack - 64984, 65333, 64900, 65301
 

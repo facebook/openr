@@ -2069,8 +2069,10 @@ def print_route_helper(
         )
         if route.route.minNexthop:
             rows.append(f"     Performance - min-nexthops: {route.route.minNexthop}")
-        if route.route.prependLabel:
-            rows.append(f"     Misc - prepend-label: {route.route.prependLabel}")
+        if route.route.prependLabel or route.route.weight:
+            rows.append(
+                f"     Misc - prepend-label: {route.route.prependLabel}, weight: {route.route.weight}"
+            )
         tag_map = tag_map if tag_map is not None else {}
         rows.append(
             f"     Tags - {', '.join(sorted([tag_map.get(t,t) for t in route.route.tags]))}"
