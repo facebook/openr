@@ -18,7 +18,19 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/monitor/SystemMetrics.h>
 #include <openr/tests/utils/Utils.h>
+
+#define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
+  BENCHMARK_IMPL_COUNTERS(                                             \
+      FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
+      FOLLY_PP_STRINGIZE(name) "(" FOLLY_PP_STRINGIZE(param_name) ")", \
+      counters,                                                        \
+      iters,                                                           \
+      unsigned,                                                        \
+      iters) {                                                         \
+    name(counters, iters, ##__VA_ARGS__);                              \
+  }
 
 namespace {
 
@@ -69,51 +81,6 @@ class KvStoreTestFixture {
 };
 
 /**
- * Merge update with kvStore:
- * 1. Randomly choose #numOfUpdateKeys keys from kvStore
- * 2. Randomly choose a newValue for each key
- * 3. Insert (key, newValue)s into update
- * 4. Merge update with kvStore
- */
-void
-updateKvStore(
-    const uint32_t numOfUpdateKeys,
-    uint64_t& version,
-    std::unordered_map<std::string, thrift::Value>& kvStore) {
-  auto suspender = folly::BenchmarkSuspender();
-  std::unordered_map<std::string, thrift::Value> update;
-  // Randomly choose the start index of the keys to be updated
-  auto offsetIdx = folly::Random::rand32() % kvStore.size();
-  offsetIdx = offsetIdx > kvStore.size() - numOfUpdateKeys
-      ? kvStore.size() - numOfUpdateKeys
-      : offsetIdx;
-
-  for (uint32_t idx = offsetIdx; idx < offsetIdx + numOfUpdateKeys; idx++) {
-    auto kvIt = kvStore.begin();
-    std::advance(kvIt, idx);
-    auto key = kvIt->first;
-    auto newValue = genRandomStr(kSizeOfValue);
-    auto thriftValue = createThriftValue(
-        version, /* version */
-        "kvStore", /* node id */
-        newValue,
-        3600, /* ttl */
-        0 /* ttl version */,
-        0 /* hash */);
-
-    update.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(key),
-        std::forward_as_tuple(thriftValue));
-  }
-  version++;
-  suspender.dismiss(); // Start measuring benchmark time
-
-  // Merge update with kvStore
-  mergeKeyValues(kvStore, update);
-}
-
-/**
  * Set keys into kvStore and make sure they appear in kvStore
  */
 void
@@ -161,35 +128,71 @@ floodingUpdate(
  */
 static void
 BM_KvStoreMergeKeyValues(
-    uint32_t iters, uint32_t numOfKeysInStore, size_t numOfUpdateKeys) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfKeysInStore,
+    size_t numOfUpdateKeys) {
   CHECK_LE(numOfUpdateKeys, numOfKeysInStore);
   auto suspender = folly::BenchmarkSuspender();
-  std::unordered_map<std::string, thrift::Value> kvStore;
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
 
-  // Insert (key, value)s into kvStore
   uint64_t version = 1;
-  for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
-    auto key = genRandomStr(kSizeOfKey);
-    auto value = genRandomStr(kSizeOfValue);
-    auto thriftValue = createThriftValue(
-        version, /* version */
-        "kvStore", /* node id */
-        value,
-        3600, /* ttl */
-        0 /* ttl version */,
-        0 /* hash */);
-
-    kvStore.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(key),
-        std::forward_as_tuple(thriftValue));
-  }
-
-  // Version starts with 2 since keys aleady in kvStore have a version of 1
-  version++;
-  suspender.dismiss(); // Start measuring benchmark time
   for (uint32_t i = 0; i < iters; i++) {
-    updateKvStore(numOfUpdateKeys, version, kvStore);
+    std::unordered_map<std::string, thrift::Value> kvStore;
+    std::unordered_map<std::string, thrift::Value> update;
+    // Insert (key, value)s into kvStore
+
+    for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
+      auto key = genRandomStr(kSizeOfKey);
+      auto value = genRandomStr(kSizeOfValue);
+      auto thriftValue = createThriftValue(
+          version, /* version */
+          "kvStore", /* node id */
+          value,
+          3600, /* ttl */
+          0 /* ttl version */,
+          0 /* hash */);
+
+      kvStore.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(key),
+          std::forward_as_tuple(thriftValue));
+
+      if (idx < numOfUpdateKeys) {
+        auto updateThriftValue = createThriftValue(
+            version + 1, /* version */
+            "kvStore", /* node id */
+            value,
+            3600, /* ttl */
+            0 /* ttl version */,
+            0 /* hash */);
+        update.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(key),
+            std::forward_as_tuple(updateThriftValue));
+      }
+    }
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+    suspender.dismiss(); // Start measuring benchmark time
+    // Merge update with kvStore
+    mergeKeyValues(kvStore, update);
+    // Stop measuring benchmark time
+    suspender.rehire();
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -200,34 +203,56 @@ BM_KvStoreMergeKeyValues(
  * 3. Benchmark the time for dumpAll()
  */
 static void
-BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
+BM_KvStoreDumpAll(
+    folly::UserCounters& counters, uint32_t iters, size_t numOfKeysInStore) {
   auto suspender = folly::BenchmarkSuspender();
-  auto kvStoreTestFixture = std::make_unique<KvStoreTestFixture>();
-  auto kvStore = kvStoreTestFixture->createKvStore("kvStore");
-  kvStore->run();
-
-  for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
-    auto key = genRandomStr(kSizeOfKey);
-    auto value = genRandomStr(kSizeOfValue);
-    auto thriftVal = createThriftValue(
-        1 /* version */,
-        "kvStore" /* originatorId */,
-        value /* value */,
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-    thriftVal.hash_ref() = generateHash(
-        *thriftVal.version_ref(),
-        *thriftVal.originatorId_ref(),
-        thriftVal.value_ref());
-
-    // Adding key to kvStore
-    kvStore->setKey(kTestingAreaName, key, thriftVal);
-  }
-
-  suspender.dismiss(); // Start measuring benchmark time
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
   for (uint32_t i = 0; i < iters; i++) {
+    auto kvStoreTestFixture = std::make_unique<KvStoreTestFixture>();
+    auto kvStore = kvStoreTestFixture->createKvStore("kvStore");
+    kvStore->run();
+
+    for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
+      auto key = genRandomStr(kSizeOfKey);
+      auto value = genRandomStr(kSizeOfValue);
+      auto thriftVal = createThriftValue(
+          1 /* version */,
+          "kvStore" /* originatorId */,
+          value /* value */,
+          Constants::kTtlInfinity /* ttl */,
+          0 /* ttl version */,
+          0 /* hash */);
+      thriftVal.hash_ref() = generateHash(
+          *thriftVal.version_ref(),
+          *thriftVal.originatorId_ref(),
+          thriftVal.value_ref());
+
+      // Adding key to kvStore
+      kvStore->setKey(kTestingAreaName, key, thriftVal);
+    }
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
+    suspender.dismiss(); // Start measuring benchmark time
+
     kvStore->dumpAll(kTestingAreaName);
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
@@ -237,51 +262,108 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
  * 2. Advertise keys in kvStore and wait until they appear in kvStore
  */
 static void
-BM_KvStoreFloodingUpdate(uint32_t iters, size_t numOfUpdateKeys) {
+BM_KvStoreFloodingUpdate(
+    folly::UserCounters& counters, uint32_t iters, size_t numOfUpdateKeys) {
   auto suspender = folly::BenchmarkSuspender();
-  auto kvStoreTestFixture = std::make_unique<KvStoreTestFixture>();
-  auto kvStore = kvStoreTestFixture->createKvStore("kvStore");
-
-  // Start stores in their respective threads.
-  kvStore->run();
-
-  // Generate random keys beforehand for updating
-  std::vector<std::string> keys;
-  keys.reserve(numOfUpdateKeys);
-  for (uint32_t idx = 0; idx < numOfUpdateKeys; idx++) {
-    keys.emplace_back(genRandomStr(kSizeOfKey));
-  }
-
-  // Version starts with 1
-  uint64_t version = 1;
-  suspender.dismiss(); // Start measuring benchmark time
-
+  // Add boolean to control profiling memory for the 1st iteration
+  SystemMetrics sysMetrics;
+  bool record = true;
   for (uint32_t i = 0; i < iters; i++) {
+    auto kvStoreTestFixture = std::make_unique<KvStoreTestFixture>();
+    auto kvStore = kvStoreTestFixture->createKvStore("kvStore");
+
+    // Start stores in their respective threads.
+    kvStore->run();
+
+    // Generate random keys beforehand for updating
+    std::vector<std::string> keys;
+    keys.reserve(numOfUpdateKeys);
+    for (uint32_t idx = 0; idx < numOfUpdateKeys; idx++) {
+      keys.emplace_back(genRandomStr(kSizeOfKey));
+    }
+
+    // Version starts with 1
+    uint64_t version = 1;
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
+      }
+    }
+
+    suspender.dismiss(); // Start measuring benchmark time
+
     floodingUpdate(numOfUpdateKeys, version, keys, kvStore);
+    // Stop measuring benchmark time
+    suspender.rehire();
+
+    if (record) {
+      auto mem = sysMetrics.getVirtualMemBytes();
+      if (mem.has_value()) {
+        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
+      }
+      record = false;
+    }
   }
 }
 
 // The first integer parameter is number of keyVals already in store
 // The second integer parameter is the number of keyVals for update
-BENCHMARK_NAMED_PARAM(BM_KvStoreMergeKeyValues, 10_10, 10, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreMergeKeyValues, 100_10, 100, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreMergeKeyValues, 1000_10, 1000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreMergeKeyValues, 10000_10, 10000, 10);
-BENCHMARK_NAMED_PARAM(BM_KvStoreMergeKeyValues, 10000_100, 10000, 100);
-BENCHMARK_NAMED_PARAM(BM_KvStoreMergeKeyValues, 10000_1000, 10000, 1000);
-BENCHMARK_NAMED_PARAM(BM_KvStoreMergeKeyValues, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 10_10, 10, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 100_10, 100, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 1000_10, 1000, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 10000_10, 10000, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 10000_100, 10000, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 10000_1000, 10000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 100000_100000, 100000, 100000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 1000000_1, 1000000, 1);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 1000000_100, 1000000, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 1000000_10000, 1000000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 1000000_100000, 1000000, 100000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreMergeKeyValues, counters, 1000000_1000000, 1000000, 1000000);
 
 // The parameter is number of keyVals already in store
-BENCHMARK_PARAM(BM_KvStoreDumpAll, 10);
-BENCHMARK_PARAM(BM_KvStoreDumpAll, 100);
-BENCHMARK_PARAM(BM_KvStoreDumpAll, 1000);
-BENCHMARK_PARAM(BM_KvStoreDumpAll, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreDumpAll, counters, 10, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreDumpAll, counters, 100, 100);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreDumpAll, counters, 1000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreDumpAll, counters, 10000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreDumpAll, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreDumpAll, counters, 1000000, 1000000);
 
 // The parameter is number of keyVals for update
-BENCHMARK_PARAM(BM_KvStoreFloodingUpdate, 10);
-BENCHMARK_PARAM(BM_KvStoreFloodingUpdate, 100);
-BENCHMARK_PARAM(BM_KvStoreFloodingUpdate, 1000);
-BENCHMARK_PARAM(BM_KvStoreFloodingUpdate, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreFloodingUpdate, counters, 10, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreFloodingUpdate, counters, 100, 10);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreFloodingUpdate, counters, 1000, 1000);
+BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreFloodingUpdate, counters, 10000, 10000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreFloodingUpdate, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAME_PARAM(
+    BM_KvStoreFloodingUpdate, counters, 1000000, 1000000);
 
 } // namespace openr
 
