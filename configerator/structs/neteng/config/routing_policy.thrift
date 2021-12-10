@@ -120,6 +120,8 @@ enum OpenrPrefixForwardingTypeValues {
 enum OpenrPrefixForwardingAlgorithmValues {
   SP_ECMP = 0,
   KSP2_ED_ECMP = 1,
+  SP_UCMP_ADJ_WEIGHT_PROPAGATION = 2,
+  SP_UCMP_PREFIX_WEIGHT_PROPAGATION = 3,
 }
 
 struct OpenrTag {
@@ -382,6 +384,12 @@ struct FilterTransform {
    * Note: openrAcceptPrependLabel does not require operators.
    */
   27: optional bool openrAcceptPrependLabel;
+  /*
+   * flag that indicates if weight attribute is accepted. If not, the
+   * attribute is reset.
+   * Note: openrAcceptWeight does not require operators.
+   */
+  28: optional bool openrAcceptWeight;
 
   // not all operation is applicable to all fields:
   // e.g. subset/add are only applicable to bgpLocalPref

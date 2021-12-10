@@ -508,7 +508,10 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
     if (policy) {
       std::tie(postPolicyTPrefixEntry, hitPolicyName) =
           policyManager_->applyPolicy(
-              *policy, tPrefixEntry, std::nullopt, entry.policyMatchData);
+              *policy,
+              tPrefixEntry,
+              entry.policyActionData,
+              entry.policyMatchData);
 
       // policy reject prefix, nothing to do.
       if (not postPolicyTPrefixEntry) {
@@ -1235,7 +1238,7 @@ PrefixManager::applyOriginationPolicy(
     auto [postPolicyTPrefixEntry, _] = policyManager_->applyPolicy(
         policyName,
         prefix.tPrefixEntry,
-        std::nullopt /* policy Action Data */,
+        prefix.policyActionData,
         prefix.policyMatchData);
     if (postPolicyTPrefixEntry) {
       XLOG(DBG1) << fmt::format(
@@ -1653,6 +1656,7 @@ resetNonTransitiveAttrs(thrift::PrefixEntry& prefixEntry) {
   prefixEntry.forwardingType_ref() = thrift::PrefixForwardingType::IP;
   prefixEntry.minNexthop_ref().reset();
   prefixEntry.prependLabel_ref().reset();
+  prefixEntry.weight_ref().reset();
 }
 } // namespace
 
@@ -1701,6 +1705,14 @@ PrefixManager::redistributePrefixesAcrossAreas(
     // 3. normalize to RIB routes
     prefixEntry.type_ref() = thrift::PrefixType::RIB;
 
+    // Keep weight in OpenrPolicyActionData. Area policy will later decide
+    // whether it should be advertised into one area.
+    std::optional<OpenrPolicyActionData> policyActionData{std::nullopt};
+    if (prefixEntry.weight_ref().has_value()) {
+      policyActionData =
+          OpenrPolicyActionData(prefixEntry.weight_ref().value());
+    }
+
     OpenrPolicyMatchData policyMatchData(route.igpCost);
 
     // Reset non-transitive attributes before redistribution across areas.
@@ -1716,7 +1728,7 @@ PrefixManager::redistributePrefixesAcrossAreas(
     advertisedPrefixes.emplace_back(
         std::make_shared<thrift::PrefixEntry>(std::move(prefixEntry)),
         std::move(dstAreas),
-        std::nullopt,
+        policyActionData,
         policyMatchData);
 
     // Adjust supporting route count due to prefix advertisement

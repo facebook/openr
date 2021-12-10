@@ -15,7 +15,15 @@ namespace openr {
 // but can NOT be pre-configured in Policy Configuration
 // (e.g some data needs to be dynamically derived on the fly).
 struct OpenrPolicyActionData {
-  // place holder, add policy-action data
+  explicit OpenrPolicyActionData(int64_t weight) : weight(weight) {}
+
+  // Prefix Entry weight (AKA BGP link bandwidth attribute).
+  std::optional<int64_t> weight;
+
+  bool
+  operator==(const OpenrPolicyActionData& other) const {
+    return weight == other.weight;
+  }
 };
 
 /**

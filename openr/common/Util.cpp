@@ -71,6 +71,9 @@ toString(thrift::PrefixEntry const& entry, bool detailed) {
   if (entry.prependLabel_ref()) {
     ss << ", PL: " << *entry.prependLabel_ref();
   }
+  if (entry.weight_ref()) {
+    ss << ", W: " << *entry.weight_ref();
+  }
   if (detailed) {
     ss << ", Tags: [" << folly::join(", ", *entry.tags_ref()) << "]";
     ss << ", AreaStack: [" << folly::join(", ", *entry.area_stack_ref()) << "]";

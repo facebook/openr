@@ -222,7 +222,8 @@ struct PrefixEntry {
   bool
   operator==(const PrefixEntry& other) const {
     return *tPrefixEntry == *other.tPrefixEntry && dstAreas == other.dstAreas &&
-        network == other.network && policyMatchData == other.policyMatchData;
+        network == other.network && policyMatchData == other.policyMatchData &&
+        policyActionData == other.policyActionData;
   }
 };
 
