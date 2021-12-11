@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <stdio.h>
+
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/IPAddressV4.h>
@@ -4708,6 +4710,9 @@ class DecisionTestFixture : public ::testing::Test {
     peerUpdatesQueue.close();
     kvStoreUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
+
+    // Delete default rib policy file.
+    remove(FLAGS_rib_policy_file.c_str());
 
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
