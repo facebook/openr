@@ -16,6 +16,7 @@ namespace fs = std::experimental::filesystem;
 #endif
 #include <folly/IPAddress.h>
 #include <folly/io/async/SSLContext.h>
+#include <openr/common/FileUtil.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <re2/re2.h>

@@ -206,6 +206,7 @@ add_library(openrlib
   openr/common/Constants.cpp
   openr/common/ExponentialBackoff.cpp
   openr/common/Flags.cpp
+  openr/common/FileUtil.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
   openr/common/OpenrThriftCtrlServer.cpp

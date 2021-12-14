@@ -6,7 +6,6 @@
  */
 
 #include <fb303/ServiceData.h>
-#include <folly/FileUtil.h>
 #include <folly/logging/xlog.h>
 #include <glog/logging.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
@@ -52,7 +51,7 @@ AreaConfiguration::compileRegexSet(std::vector<std::string> const& strings) {
 
 Config::Config(const std::string& configFile) {
   std::string contents;
-  if (not folly::readFile(configFile.c_str(), contents)) {
+  if (not FileUtil::readFileToString(configFile, contents)) {
     auto errStr = fmt::format("Could not read config file: {}", configFile);
     XLOG(ERR) << errStr;
     throw thrift::ConfigError(errStr);
