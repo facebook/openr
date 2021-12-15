@@ -7,7 +7,6 @@
 
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
-#include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 
@@ -53,14 +52,14 @@ KvStoreClientInternal::KvStoreClientInternal(
       [this]() noexcept { advertiseTtlUpdates(); });
 
   // initialize timers
-  initTimers();
+  ttlTimer_ = folly::AsyncTimeout::make(
+      *eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
 }
 
 KvStoreClientInternal::~KvStoreClientInternal() {
   // - If EventBase is stopped or it is within the evb thread, run immediately;
   // - Otherwise, will wait the EventBase to run;
   eventBase_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
-    counterUpdateTimer_.reset();
     ttlTimer_.reset();
     advertiseTtlUpdatesThrottled_.reset();
   });
@@ -76,32 +75,8 @@ KvStoreClientInternal::stop() {
   taskFuture_.wait();
 }
 
-void
-KvStoreClientInternal::initTimers() {
-  // Create ttl timer
-  ttlTimer_ = folly::AsyncTimeout::make(
-      *eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
-
-  // Create counter update timer to update counters periodically
-  counterUpdateTimer_ =
-      folly::AsyncTimeout::make(*eventBase_->getEvb(), [this]() noexcept {
-        fb303::fbData->setCounter(
-            fmt::format(
-                "{}.kvstore_client.key_callbacks", eventBase_->getEvbName()),
-            getKeyCallbackCount());
-        fb303::fbData->setCounter(
-            fmt::format(
-                "{}.kvstore_client.key_ttl_backoffs", eventBase_->getEvbName()),
-            getKeyTtlBackoffCount());
-
-        // Schedule next counters update
-        counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
-      });
-  counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
-}
-
-thrift::Value
-KvStoreClientInternal::buildThriftValue(
+std::optional<folly::Unit>
+KvStoreClientInternal::setKey(
     AreaId const& area,
     std::string const& key,
     std::string const& value,
@@ -113,7 +88,7 @@ KvStoreClientInternal::buildThriftValue(
   CHECK(thriftValue.value_ref());
 
   // Use one version number higher than currently in KvStore if not specified
-  if (!version) {
+  if (not version) {
     auto maybeValue = getKey(area, key);
     if (maybeValue.has_value()) {
       thriftValue.version_ref() = *maybeValue->version_ref() + 1;
@@ -121,17 +96,7 @@ KvStoreClientInternal::buildThriftValue(
       thriftValue.version_ref() = 1;
     }
   }
-  return thriftValue;
-}
-
-std::optional<folly::Unit>
-KvStoreClientInternal::setKey(
-    AreaId const& area,
-    std::string const& key,
-    std::string const& value,
-    uint32_t version /* = 0 */,
-    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */) {
-  return setKey(area, key, buildThriftValue(area, key, value, version, ttl));
+  return setKey(area, key, thriftValue);
 }
 
 std::optional<folly::Unit>

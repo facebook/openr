@@ -111,38 +111,11 @@ class KvStoreClientInternal {
     return eventBase_;
   }
 
-  /*
-   * Counter-exposing related methods
+ private:
+  /**
+   * Function to process received expired keys
    */
-
-  // templated method to get stats for total number of keys from two-level map:
-  //
-  //  - T will be containers with key-val store-like structures. E.g.
-  //  std::unordered_map/std::map/etc.
-  //  - t will be containers which are able to be checked for size. E.g.
-  //    - std::unordered_set, std::unordered_map
-  //    - std::set, std::map
-  //    - std::vector
-  //    - etc.
-  template <typename T>
-  int64_t
-  getCount(const T& mp) {
-    int64_t count{0};
-    for (auto const& [_, t] : mp) {
-      count += t.size();
-    }
-    return count;
-  }
-
-  int64_t
-  getKeyCallbackCount() {
-    return getCount(keyCallbacks_);
-  }
-
-  int64_t
-  getKeyTtlBackoffCount() {
-    return getCount(keyTtlBackoffs_);
-  }
+  void processExpiredKeys(thrift::Publication const& publication);
 
   /**
    * Function to process received publication over SUB channel which are
@@ -151,43 +124,12 @@ class KvStoreClientInternal {
    */
   void processPublication(thrift::Publication const& publication);
 
- private:
-  /**
-   * Function to process received expired keys
-   */
-  void processExpiredKeys(thrift::Publication const& publication);
-
-  /*
-   * Utility function to build thrift::Value in KvStoreClientInternal
-   * This method will:
-   *  1. create ThriftValue based on input param;
-   *  2. check if version is specified:
-   *    1) YES - return ThriftValue just created;
-   *    2) NO - bump up version number to <lastKnownVersion> + 1
-   *            <lastKnownVersion> will be checked against KvStore
-   */
-  thrift::Value buildThriftValue(
-      AreaId const& area,
-      std::string const& key,
-      std::string const& value,
-      uint32_t version = 0,
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
-
   /**
    * Utility function to SET keys in KvStore.
    */
   std::optional<folly::Unit> setKeysHelper(
       AreaId const& area,
       std::unordered_map<std::string, thrift::Value> keyVals);
-
-  /**
-   * Helper function to advertise the pending keys considering the exponential
-   * backoff with one more than the latest version to KvStore. It also
-   * schedules the timeout.
-   */
-  void advertisePendingKeys(
-      std::optional<std::unordered_map<AreaId, std::unordered_set<std::string>>>
-          pendingKeysToAdvertise = std::nullopt);
 
   /**
    * Helper function to schedule TTL update advertisement
@@ -204,11 +146,6 @@ class KvStoreClientInternal {
    * Helper function to advertise TTL update
    */
   void advertiseTtlUpdates();
-
-  /*
-   * Wrapper function to initialize timer
-   */
-  void initTimers();
 
   //
   // Immutable state
@@ -250,14 +187,8 @@ class KvStoreClientInternal {
               ExponentialBackoff<std::chrono::milliseconds>>>>
       keyTtlBackoffs_;
 
-  // Timer to advertised pending key-vals
-  std::unique_ptr<folly::AsyncTimeout> advertiseKeyValsTimer_;
-
   // Timer to advertise ttl updates for key-vals
   std::unique_ptr<folly::AsyncTimeout> ttlTimer_;
-
-  // Timer to periodically advertise counters
-  std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_;
 
   // prefix key filter to apply for key updates
   KvStoreFilters keyPrefixFilter_{{}, {}};
