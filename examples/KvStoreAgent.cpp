@@ -39,7 +39,7 @@ KvStoreAgent::KvStoreAgent(std::string nodeId, KvStore* kvStore)
   periodicValueChanger_ =
       folly::AsyncTimeout::make(*getEvb(), [this, nodeId]() noexcept {
         static int val = 0;
-        this->kvStoreClient_->persistKey(
+        this->kvStoreClient_->setKey(
             AreaId{"my_area_name"},
             agentKeyPrefix + nodeId,
             std::to_string(++val));

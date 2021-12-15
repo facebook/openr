@@ -16,14 +16,8 @@ namespace fb303 = facebook::fb303;
 namespace openr {
 
 KvStoreClientInternal::KvStoreClientInternal(
-    OpenrEventBase* eventBase,
-    std::string const& nodeId,
-    KvStore* kvStore,
-    bool useThrottle)
-    : nodeId_(nodeId),
-      useThrottle_(useThrottle),
-      eventBase_(eventBase),
-      kvStore_(kvStore) {
+    OpenrEventBase* eventBase, std::string const& nodeId, KvStore* kvStore)
+    : nodeId_(nodeId), eventBase_(eventBase), kvStore_(kvStore) {
   // sanity check
   CHECK_NE(eventBase_, static_cast<void*>(nullptr));
   CHECK(not nodeId.empty());
@@ -52,19 +46,6 @@ KvStoreClientInternal::KvStoreClientInternal(
         }
       });
 
-  if (useThrottle_) {
-    // create throttled fashion of pending keys advertisement
-    advertisePendingKeysThrottled_ = std::make_unique<AsyncThrottle>(
-        eventBase_->getEvb(),
-        Constants::kKvStoreSyncThrottleTimeout,
-        [this]() noexcept { advertisePendingKeys(); });
-
-    clearPendingKeysThrottled_ = std::make_unique<AsyncThrottle>(
-        eventBase_->getEvb(),
-        Constants::kKvStoreClearThrottleTimeout,
-        [this]() noexcept { clearPendingKeys(); });
-  }
-
   // create throttled fashion of ttl update
   advertiseTtlUpdatesThrottled_ = std::make_unique<AsyncThrottle>(
       eventBase_->getEvb(),
@@ -83,8 +64,6 @@ KvStoreClientInternal::~KvStoreClientInternal() {
     advertiseKeyValsTimer_.reset();
     ttlTimer_.reset();
     advertiseTtlUpdatesThrottled_.reset();
-    advertisePendingKeysThrottled_.reset();
-    clearPendingKeysThrottled_.reset();
   });
 
   // Stop kvstore internal if not stopped yet
@@ -156,125 +135,6 @@ KvStoreClientInternal::initTimers() {
         counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
       });
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
-}
-
-bool
-KvStoreClientInternal::persistKey(
-    AreaId const& area,
-    std::string const& key,
-    std::string const& val,
-    std::chrono::milliseconds const ttl) {
-  CHECK(eventBase_->getEvb()->isInEventBaseThread());
-
-  XLOG(DBG3) << "KvStoreClientInternal: persistKey called for key:" << key
-             << " area:" << area.t;
-
-  // local variable to hold pending keys to advertise
-  std::unordered_map<AreaId, std::unordered_set<std::string>>
-      pendingKeysToAdvertise{};
-
-  auto& persistedKeyVals = persistedKeyVals_[area];
-  auto& keysToAdvertise =
-      useThrottle_ ? keysToAdvertise_[area] : pendingKeysToAdvertise[area];
-  auto& callbacks = keyCallbacks_[area];
-
-  // Look it up in local cached storage
-  auto keyIt = persistedKeyVals.find(key);
-
-  // Decide if we need to advertise key to kv-store
-  bool shouldAdvertise = false;
-
-  // Default thrift value to use with invalid version(0)
-  thrift::Value thriftValue = createThriftValue(0, nodeId_, val, ttl.count());
-  CHECK(thriftValue.value_ref());
-
-  // Two cases for this particular (k, v) pair:
-  //  1) Key has been persisted before:
-  //     Retrieve it from local cached storage;
-  //  2) Key is first-time persisted:
-  //     Retrieve it from `KvStore` via `getKey()` API;
-  //      <1> Key is found in `KvStore`, use it;
-  //      <2> Key is NOT found in `KvStore` (ATTN:
-  //          new key advertisement)
-  if (keyIt == persistedKeyVals.end()) {
-    // Get latest value from KvStore
-    if (auto maybeValue = getKey(area, key)) {
-      thriftValue = maybeValue.value();
-      // TTL update pub is never saved in kvstore
-      DCHECK(thriftValue.value_ref());
-    } else {
-      thriftValue.version_ref() = 1;
-      shouldAdvertise = true;
-    }
-  } else {
-    thriftValue = keyIt->second;
-    if (*thriftValue.value_ref() == val and
-        *thriftValue.ttl_ref() == ttl.count()) {
-      // this is a no op, return early and change no state
-      return false;
-    }
-
-    const auto& keyTtlBackoffs = keyTtlBackoffs_[area];
-    auto ttlIt = keyTtlBackoffs.find(key);
-    if (ttlIt != keyTtlBackoffs.end()) {
-      // override the default ttl version(0)
-      thriftValue.ttlVersion_ref() = *ttlIt->second.first.ttlVersion_ref();
-    }
-  }
-
-  // Override `thrift::Value` if we detect:
-  //  1) Someone else is advertising the SAME key;
-  //  2) Value field has changed;
-  if (*thriftValue.originatorId_ref() != nodeId_ or
-      *thriftValue.value_ref() != val) {
-    (*thriftValue.version_ref())++;
-    thriftValue.ttlVersion_ref() = 0;
-    thriftValue.value_ref() = val;
-    thriftValue.originatorId_ref() = nodeId_;
-    shouldAdvertise = true;
-  }
-
-  // We must update ttl value to new one. When ttl changes but value doesn't
-  // then we should advertise ttl immediately so that new ttl is in effect
-  const bool hasTtlChanged =
-      (ttl.count() != *thriftValue.ttl_ref()) ? true : false;
-  thriftValue.ttl_ref() = ttl.count();
-
-  // Cache it in persistedKeyVals_. Override the existing one
-  persistedKeyVals[key] = thriftValue;
-
-  // Override existing backoff as well
-  backoffs_[area][key] = ExponentialBackoff<std::chrono::milliseconds>(
-      Constants::kInitialBackoff, Constants::kMaxBackoff);
-
-  // Invoke callback with updated value
-  auto cb = callbacks.find(key);
-  if (cb != callbacks.end() and shouldAdvertise) {
-    (cb->second)(key, thriftValue);
-  }
-
-  // Add keys to list of pending keys
-  if (shouldAdvertise) {
-    keysToAdvertise.insert(key);
-  }
-
-  if (useThrottle_) {
-    // Throttled fashion to advertise pending keys
-    advertisePendingKeysThrottled_->operator()();
-  } else {
-    // ONLY advertise this key. Will NOT advertise any throttled keys
-    advertisePendingKeys(pendingKeysToAdvertise);
-  }
-
-  scheduleTtlUpdates(
-      area,
-      key,
-      *thriftValue.version_ref(),
-      *thriftValue.ttlVersion_ref(),
-      ttl.count(),
-      hasTtlChanged);
-
-  return true;
 }
 
 thrift::Value
@@ -391,97 +251,6 @@ KvStoreClientInternal::unsetKey(AreaId const& area, std::string const& key) {
   backoffs_[area].erase(key);
   keyTtlBackoffs_[area].erase(key);
   keysToAdvertise_[area].erase(key);
-}
-
-void
-KvStoreClientInternal::clearKey(
-    AreaId const& area,
-    std::string const& key,
-    std::string keyValue,
-    std::chrono::milliseconds ttl) {
-  CHECK(eventBase_->getEvb()->isInEventBaseThread());
-
-  XLOG(DBG2) << "KvStoreClientInternal: clear key called for key " << key;
-
-  // erase keys
-  unsetKey(area, key);
-
-  // if key doesn't exist in KvStore no need to add it as "empty". This
-  // condition should not exist.
-  auto maybeValue = getKey(area, key);
-  if (!maybeValue.has_value()) {
-    return;
-  }
-  // overwrite all values, increment version
-  auto& thriftValue = maybeValue.value();
-  *thriftValue.originatorId_ref() = nodeId_;
-  (*thriftValue.version_ref())++;
-  thriftValue.ttl_ref() = ttl.count();
-  thriftValue.ttlVersion_ref() = 0;
-  thriftValue.value_ref() = std::move(keyValue);
-
-  if (useThrottle_) {
-    clearedKeyVals_[area].emplace(key, std::move(thriftValue));
-    // Wait for batch processing
-    clearPendingKeysThrottled_->operator()();
-  } else {
-    std::unordered_map<std::string, thrift::Value> keyVals;
-    keyVals.emplace(key, std::move(thriftValue));
-    // Send updates to KvStore
-    setKeysHelper(area, std::move(keyVals));
-  }
-}
-
-void
-KvStoreClientInternal::clearPendingKeys() {
-  for (auto& [area, clearedKeyVals] : clearedKeyVals_) {
-    if (clearedKeyVals.empty()) {
-      continue;
-    }
-
-    auto& persistedKeyVals = persistedKeyVals_[area];
-
-    // Build set of keys to update KvStore
-    std::unordered_map<std::string, thrift::Value> keyVals;
-    // Build keys to be cleaned from local storage
-    std::vector<std::string> keysToClear;
-
-    for (auto const& [key, thriftVal] : clearedKeyVals) {
-      if (persistedKeyVals.count(key)) {
-        // ATTN: consider corner case of key X being:
-        //  1) first persisted then cleared before throttling triggers
-        //    X will NOT be persisted at all
-        //
-        //  2) first cleared then persisted before throttling kicks in
-        //    X will NOT be cleared since it is inside `persistedKeyVals_`
-        //
-        //  Source of truth will be `persistedKeyVals_` as `clearKey()`
-        //  will do `unsetKey()`, which wipes out its existence.
-        keysToClear.emplace_back(key);
-        continue;
-      }
-
-      printKeyValInArea(
-          1 /*logLevel*/,
-          "Clearing",
-          fmt::format("[Area: {}] ", area.t),
-          key,
-          thriftVal);
-      DCHECK(thriftVal.value_ref());
-      keyVals.emplace(key, thriftVal);
-      keysToClear.emplace_back(key);
-    }
-
-    // Send updates to KvStore
-    const auto ret = setKeysHelper(area, std::move(keyVals));
-    if (ret.has_value()) {
-      // ATTN: only wipe out throttled to be cleared keys when we
-      // successfully send update to KvStore
-      for (auto const& key : keysToClear) {
-        clearedKeyVals.erase(key);
-      }
-    }
-  }
 }
 
 std::optional<thrift::Value>

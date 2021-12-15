@@ -40,10 +40,7 @@ class KvStoreClientInternal {
    * KvStore.
    */
   KvStoreClientInternal(
-      OpenrEventBase* eventBase,
-      std::string const& nodeId,
-      KvStore* kvStore,
-      bool useThrottle = false);
+      OpenrEventBase* eventBase, std::string const& nodeId, KvStore* kvStore);
 
   ~KvStoreClientInternal();
 
@@ -51,24 +48,6 @@ class KvStoreClientInternal {
    * Stop methods provides a clean way for termination when OpenrEventBase.
    */
   void stop();
-
-  /**
-   * Set specified key-value into KvStore. This is an authoratitive call. It
-   * means that if someone else advertise the same key we try to win over it
-   * by re-advertising KV with higher version.
-   * Key will expire and be removed in ttl time after client stops updating,
-   * e.g., client process terminates. Client will update TTL every ttl/3 when
-   * running.
-   * By default key is published to default area kvstore instance.
-   *
-   * returns true if call results in state change for this client, i.e. we
-   * change the value or ttl for the persistented key or start persisting a key
-   */
-  bool persistKey(
-      AreaId const& area,
-      std::string const& key,
-      std::string const& value,
-      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval);
 
   /**
    * Advertise the key-value into KvStore with specified version. If version is
@@ -93,16 +72,6 @@ class KvStoreClientInternal {
    * instead it just leave it as it is.
    */
   void unsetKey(AreaId const& area, std::string const& key);
-
-  /**
-   * Clear key's value by seeting default value of empty string or value passed
-   * by the caller, cancel ttl timers, advertise with higher version.
-   */
-  void clearKey(
-      AreaId const& area,
-      std::string const& key,
-      std::string value = "",
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
 
   /**
    * Get key from KvStore. It gets from local snapshot KeyVals of the kvstore.
@@ -241,12 +210,6 @@ class KvStoreClientInternal {
           pendingKeysToAdvertise = std::nullopt);
 
   /**
-   * Helper function to clear keys with throttled fashion
-   * ATTN: should ONLY be triggered by `AsyncThrottle`
-   */
-  void clearPendingKeys();
-
-  /**
    * Helper function to schedule TTL update advertisement
    */
   void scheduleTtlUpdates(
@@ -274,9 +237,6 @@ class KvStoreClientInternal {
   // Our local node identifier
   const std::string nodeId_{};
 
-  // Knob to enable batched processing of keys
-  const bool useThrottle_{false};
-
   // OpenrEventBase pointer for scheduling async events and socket callback
   // registration
   OpenrEventBase* const eventBase_{nullptr};
@@ -284,14 +244,8 @@ class KvStoreClientInternal {
   // Pointers to KvStore module
   KvStore* kvStore_{nullptr};
 
-  // throttled version of `advertisePendingKeys`
-  std::unique_ptr<AsyncThrottle> advertisePendingKeysThrottled_;
-
   // throttled version of `advertisedTtlUpdates`
   std::unique_ptr<AsyncThrottle> advertiseTtlUpdatesThrottled_;
-
-  // throttled version of `clearKey`
-  std::unique_ptr<AsyncThrottle> clearPendingKeysThrottled_;
 
   //
   // Mutable state

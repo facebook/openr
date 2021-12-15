@@ -103,7 +103,7 @@ class MultipleStoreFixture : public ::testing::Test {
         &evb, node1, store1->getKvStore());
 
     client2 = std::make_shared<KvStoreClientInternal>(
-        &evb, node2, store2->getKvStore(), false /* useThrottle */);
+        &evb, node2, store2->getKvStore());
 
     client3 = std::make_shared<KvStoreClientInternal>(
         &evb, node3, store3->getKvStore());
@@ -426,10 +426,7 @@ TEST(KvStoreClientInternal, CounterReport) {
 
   evb.setEvbName(evbName);
   auto client = std::make_shared<KvStoreClientInternal>(
-      &evb,
-      store->getNodeId(),
-      store->getKvStore(),
-      false /* do NOT use throttle */);
+      &evb, store->getNodeId(), store->getKvStore());
 
   evb.scheduleTimeout(
       std::chrono::seconds(
@@ -451,7 +448,7 @@ TEST(KvStoreClientInternal, CounterReport) {
         ASSERT_TRUE(counters.count(
             fmt::format("{}.kvstore_client.key_ttl_backoffs", evbName)));
 
-        client->persistKey(kTestingAreaName, key, val, kTtl);
+        client->setKey(kTestingAreaName, key, val);
       });
 
   evb.scheduleTimeout(
@@ -487,424 +484,6 @@ TEST(KvStoreClientInternal, CounterReport) {
   LOG(INFO) << "Stopping stores";
   store->stop();
   client.reset();
-
-  evb.stop();
-  evb.waitUntilStopped();
-  evbThread.join();
-}
-
-TEST(KvStoreClientInternal, PersistKeyClearKeyThrottle) {
-  OpenrEventBase evb;
-  fbzmq::Context context;
-  folly::Baton waitBaton;
-
-  int scheduleAt{0};
-  const std::string key{"k1"};
-  const std::string val{"v1"};
-  const std::string emptyVal{""};
-
-  // start kvstore for interaction
-  auto config = std::make_shared<Config>(getBasicOpenrConfig("node1"));
-  auto store = std::make_unique<KvStoreWrapper>(context, config);
-  store->run();
-
-  auto client = std::make_shared<KvStoreClientInternal>(
-      &evb, store->getNodeId(), store->getKvStore(), true /* use throttle */);
-
-  //
-  // Test1: - persist key X;
-  //        - clear key X;
-  //        - expect key X is NOT received by `KvStore` at all
-  //
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
-        // persistKey will throttle the request and hold for 100ms
-        client->persistKey(kTestingAreaName, key, val, kTtl);
-
-        // immediately clear this key with empty value to mimick race condition
-        client->clearKey(kTestingAreaName, key, emptyVal, kTtl);
-      });
-
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
-        // No key-val injected after throttled time
-        auto maybeThriftVal = store->getKey(kTestingAreaName, key);
-        ASSERT_FALSE(maybeThriftVal.has_value());
-      });
-
-  //
-  // Test2: - persist key X and wait for throttle to kick in;
-  //        - clear key X;
-  //        - persist key X again before `clearKey()` throttle kicks in;
-  //        - expect key X is presented in `KvStore` as persistKey() operation
-  //          happens chronologically later;
-  //
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 100),
-      [&]() noexcept { client->persistKey(kTestingAreaName, key, val, kTtl); });
-
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
-        // Verify k1 has been populated to KvStore
-        auto maybeThriftVal = store->getKey(kTestingAreaName, key);
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
-
-        // clearKey() call with throttled fashion
-        client->clearKey(kTestingAreaName, key, emptyVal, kTtl);
-
-        // immediately persist this key again to mimick race condition
-        client->persistKey(kTestingAreaName, key, val, kTtl);
-      });
-
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
-        // Verify k1 is still populated to KvStore
-        // without corrupted by clearKey() call
-        auto maybeThriftVal = store->getKey(kTestingAreaName, key);
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
-
-        // Synchronization primitive
-        waitBaton.post();
-      });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evbThread([&]() { evb.run(); });
-  evb.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
-
-  // Stop store
-  LOG(INFO) << "Stopping stores";
-  store->stop();
-  client.reset();
-
-  evb.stop();
-  evb.waitUntilStopped();
-  evbThread.join();
-}
-
-TEST(KvStoreClientInternal, EmptyValueKey) {
-  fbzmq::Context context;
-  folly::Baton waitBaton;
-
-  // start store1, store2, store 3
-  auto config1 = std::make_shared<Config>(getBasicOpenrConfig("node1"));
-  auto store1 = std::make_unique<KvStoreWrapper>(context, config1);
-  store1->run();
-  auto config2 = std::make_shared<Config>(getBasicOpenrConfig("node2"));
-  auto store2 = std::make_unique<KvStoreWrapper>(context, config2);
-  store2->run();
-  auto config3 = std::make_shared<Config>(getBasicOpenrConfig("node3"));
-  auto store3 = std::make_unique<KvStoreWrapper>(context, config3);
-  store3->run();
-
-  // add peers store1 <---> store2 <---> store3
-  store1->addPeer(kTestingAreaName, store2->getNodeId(), store2->getPeerSpec());
-  store2->addPeer(kTestingAreaName, store1->getNodeId(), store1->getPeerSpec());
-  store2->addPeer(kTestingAreaName, store3->getNodeId(), store3->getPeerSpec());
-  store3->addPeer(kTestingAreaName, store2->getNodeId(), store2->getPeerSpec());
-  store1->recvKvStoreSyncedSignal();
-  store2->recvKvStoreSyncedSignal();
-  store3->recvKvStoreSyncedSignal();
-
-  // add key in store1, check for the key in all stores
-  // Create another OpenrEventBase instance for looping clients
-  OpenrEventBase evb;
-  int waitDuration{0};
-
-  // create kvstore client for store 1
-  auto client1 = std::make_shared<KvStoreClientInternal>(
-      &evb, store1->getNodeId(), store1->getKvStore(), false);
-
-  // Schedule callback to set keys from client1 (this will be executed first)
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
-        client1->persistKey(kTestingAreaName, "k1", "v1", kTtl);
-      });
-
-  // check keys on all stores after sometime
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
-        auto maybeThriftVal = store1->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v1", maybeThriftVal.value().value_ref());
-
-        maybeThriftVal = store2->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v1", maybeThriftVal.value().value_ref());
-
-        maybeThriftVal = store3->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v1", maybeThriftVal.value().value_ref());
-        EXPECT_EQ("node1", *maybeThriftVal.value().originatorId_ref());
-        EXPECT_EQ(1, *maybeThriftVal.value().version_ref());
-      });
-
-  // set empty value on store1, check for empty value on other stores, and
-  // key version is higher
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 10),
-      [&]() noexcept { client1->clearKey(kTestingAreaName, "k1", "", kTtl); });
-
-  // check key has empty value on all stores and version is incremented
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
-        auto maybeThriftVal = store1->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("", maybeThriftVal.value().value_ref());
-
-        maybeThriftVal = store2->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("", maybeThriftVal.value().value_ref());
-
-        maybeThriftVal = store3->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("", maybeThriftVal.value().value_ref());
-        EXPECT_EQ("node1", *maybeThriftVal.value().originatorId_ref());
-        EXPECT_EQ(*maybeThriftVal.value().version_ref(), 2);
-      });
-
-  // persist key with new value, and check for new value and higher key version
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
-        client1->persistKey(kTestingAreaName, "k1", "v2", kTtl);
-      });
-
-  // check key's value is udpated on all stores and version is incremented
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
-        auto maybeThriftVal = store1->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v2", maybeThriftVal.value().value_ref());
-
-        maybeThriftVal = store2->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v2", maybeThriftVal.value().value_ref());
-
-        maybeThriftVal = store3->getKey(kTestingAreaName, "k1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v2", maybeThriftVal.value().value_ref());
-        EXPECT_EQ("node1", *maybeThriftVal.value().originatorId_ref());
-        EXPECT_EQ(*maybeThriftVal.value().version_ref(), 3);
-      });
-
-  // set empty value on store1, and check for key expiry
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 10),
-      [&]() noexcept { client1->clearKey(kTestingAreaName, "k1", "", kTtl); });
-
-  // after kTtl duration key must have been deleted due to ttl expiry
-  evb.scheduleTimeout(
-      // add 100 msec more to avoid flakiness
-      std::chrono::milliseconds(waitDuration += kTtl.count() + 300),
-      [&]() noexcept {
-        auto maybeThriftVal = store1->getKey(kTestingAreaName, "k1");
-        ASSERT_FALSE(maybeThriftVal.has_value());
-
-        maybeThriftVal = store2->getKey(kTestingAreaName, "k1");
-        ASSERT_FALSE(maybeThriftVal.has_value());
-
-        maybeThriftVal = store3->getKey(kTestingAreaName, "k1");
-        ASSERT_FALSE(maybeThriftVal.has_value());
-
-        // Synchronization primitive
-        waitBaton.post();
-      });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evbThread([&]() { evb.run(); });
-  evb.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
-
-  // Stop store
-  LOG(INFO) << "Stopping stores";
-  store1->stop();
-  store2->stop();
-  store3->stop();
-  client1.reset();
-
-  evb.stop();
-  evb.waitUntilStopped();
-  evbThread.join();
-}
-
-TEST(KvStoreClientInternal, PersistKeyTest) {
-  fbzmq::Context context;
-  folly::Baton waitBaton;
-  const std::string nodeId{"test_store"};
-
-  // Initialize and start KvStore with one fake peer
-  auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config);
-  store->run();
-
-  // Create another OpenrEventBase instance for looping clients
-  OpenrEventBase evb;
-
-  // Create and initialize kvstore-client, with persist key timer
-  auto client1 = std::make_shared<KvStoreClientInternal>(
-      &evb, nodeId, store->getKvStore(), false);
-
-  // Schedule callback to set keys from client1 (this will be executed first)
-  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
-    client1->persistKey(kTestingAreaName, "test_key3", "test_value3");
-  });
-
-  // Schedule callback to get persist key from client1
-  evb.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
-    // 1st get key
-    auto maybeVal1 = client1->getKey(kTestingAreaName, "test_key3");
-
-    ASSERT_TRUE(maybeVal1.has_value());
-    EXPECT_EQ(1, *maybeVal1->version_ref());
-    EXPECT_EQ("test_value3", maybeVal1->value_ref());
-  });
-
-  // simulate kvstore restart by erasing the test_key3
-  // set a TTL of 1ms in the store so that it gets deleted before refresh
-  // event
-  evb.scheduleTimeout(std::chrono::milliseconds(3), [&]() noexcept {
-    auto keyExpVal = createThriftValue(
-        1,
-        nodeId,
-        std::string("test_value3"),
-        1, /* ttl in msec */
-        500 /* ttl version */,
-        0 /* hash */);
-    store->setKey(kTestingAreaName, "test_key3", keyExpVal, std::nullopt);
-  });
-
-  // check after few ms if key is deleted,
-  evb.scheduleTimeout(std::chrono::milliseconds(60), [&]() noexcept {
-    auto maybeVal3 = client1->getKey(kTestingAreaName, "test_key3");
-    ASSERT_FALSE(maybeVal3.has_value());
-
-    // Synchronization primitive
-    waitBaton.post();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evbThread([&]() { evb.run(); });
-  evb.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
-
-  // Stop store
-  LOG(INFO) << "Stopping store";
-  store->closeQueue();
-  client1.reset();
-  store->stop();
-  store.reset();
-
-  evb.stop();
-  evb.waitUntilStopped();
-  evbThread.join();
-}
-
-/**
- * Test ttl change with persist key while keeping value and version same
- * - Set key with ttl 1s
- *   - Verify key is set and remains after ttl + 1s (2s)
- *   - Verify "1s < ttl"
- * - Update key with ttl 3s
- *   - Verify key remains set after ttl + 1s (4s)
- *   - Verify "1s < ttl < 3s"
- * - Update key with ttl 1s
- *   - Verify key remains set after ttl + 1s (2s)
- *   - Verify "1s < ttl"
- */
-TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
-  fbzmq::Context context;
-  folly::Baton waitBaton;
-  const std::string nodeId{"test_store"};
-  const std::string testKey{"test-key"};
-  const std::string testValue{"test-value"};
-
-  // Initialize and start KvStore
-  auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config);
-  store->run();
-
-  // Create another OpenrEventBase instance for looping clients
-  OpenrEventBase evb;
-
-  // Create and initialize kvstore-client, with persist key timer
-  auto client1 = std::make_unique<KvStoreClientInternal>(
-      &evb, nodeId, store->getKvStore(), false);
-
-  // Schedule callback to set keys from client1 (this will be executed first)
-  evb.scheduleTimeout(std::chrono::seconds(0), [&]() noexcept {
-    // Set key with ttl=1s
-    client1->persistKey(
-        kTestingAreaName, testKey, testValue, std::chrono::seconds(1));
-  });
-
-  // Verify key exists after (ttl + 1s) = 2s
-  evb.scheduleTimeout(std::chrono::seconds(2), [&]() noexcept {
-    // Ensure key exists
-    auto maybeVal = client1->getKey(kTestingAreaName, testKey);
-    ASSERT_TRUE(maybeVal.has_value());
-    EXPECT_EQ(1, *maybeVal->version_ref());
-    EXPECT_EQ(testValue, maybeVal->value_ref());
-    EXPECT_LT(0, *maybeVal->ttl_ref());
-    EXPECT_GE(1000, *maybeVal->ttl_ref());
-    EXPECT_LE(6, *maybeVal->ttlVersion_ref()); // can be flaky under stress
-
-    // Set key with higher ttl=3s
-    client1->persistKey(
-        kTestingAreaName, testKey, testValue, std::chrono::seconds(3));
-  });
-
-  // Verify key exists after (ttl + 1s) = 4s (+ 2s offset)
-  evb.scheduleTimeout(std::chrono::seconds(6), [&]() noexcept {
-    // Ensure key exists
-    auto maybeVal = client1->getKey(kTestingAreaName, testKey);
-    ASSERT_TRUE(maybeVal.has_value());
-    EXPECT_EQ(1, *maybeVal->version_ref());
-    EXPECT_EQ(testValue, maybeVal->value_ref());
-    EXPECT_LT(1000, *maybeVal->ttl_ref());
-    EXPECT_GE(3000, *maybeVal->ttl_ref());
-    EXPECT_LE(9, *maybeVal->ttlVersion_ref()); // can be flaky under stress
-
-    // Set key with lower ttl=1s
-    client1->persistKey(
-        kTestingAreaName, testKey, testValue, std::chrono::seconds(1));
-  });
-
-  // Verify key exists after (ttl + 1s) = 2s (+ 6s offset)
-  evb.scheduleTimeout(std::chrono::seconds(8), [&]() noexcept {
-    // Ensure key exists
-    auto maybeVal = client1->getKey(kTestingAreaName, testKey);
-    ASSERT_TRUE(maybeVal.has_value());
-    EXPECT_EQ(1, *maybeVal->version_ref());
-    EXPECT_EQ(testValue, maybeVal->value_ref());
-    EXPECT_LT(0, *maybeVal->ttl_ref());
-    EXPECT_GE(1000, *maybeVal->ttl_ref());
-    EXPECT_LE(12, *maybeVal->ttlVersion_ref()); // can be flaky under stress
-
-    // Synchronization primitive
-    waitBaton.post();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evbThread([&]() { evb.run(); });
-  evb.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
-
-  // Stop store
-  LOG(INFO) << "Stopping store";
-  store->closeQueue();
-  client1.reset();
-  store->stop();
-  store.reset();
 
   evb.stop();
   evb.waitUntilStopped();
@@ -947,7 +526,7 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Schedule callback to set keys from client1 (this will be executed first)
   openrEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
-    client1->persistKey(kTestingAreaName, "test_key1", "test_value1");
+    client1->setKey(kTestingAreaName, "test_key1", "test_value1");
     client1->setKey(kTestingAreaName, "test_key2", "test_value2");
   });
 
@@ -974,7 +553,7 @@ TEST(KvStoreClientInternal, ApiTest) {
       EXPECT_EQ("test_value2", maybeVal1->value_ref());
 
       // persistKey with new value
-      client2->persistKey(kTestingAreaName, "test_key2", "test_value2-client2");
+      client2->setKey(kTestingAreaName, "test_key2", "test_value2-client2");
 
       // 2nd getkey
       auto maybeVal2 = client2->getKey(kTestingAreaName, "test_key2");
@@ -1052,8 +631,8 @@ TEST(KvStoreClientInternal, ApiTest) {
           0);
       client1->setKey(kTestingAreaName, "test_ttl_key1", testValue1);
 
-      client1->persistKey(
-          kTestingAreaName, "test_ttl_key1", "test_ttl_value1", kTtl);
+      client1->setKey(
+          kTestingAreaName, "test_ttl_key1", "test_ttl_value1", 1, kTtl);
 
       client2->setKey(
           kTestingAreaName, "test_ttl_key2", "test_ttl_value2", 1, kTtl);
@@ -1132,6 +711,11 @@ TEST(KvStoreClientInternal, ApiTest) {
   openrEvbThread.join();
 }
 
+/*
+ * Subscribing related API tests:
+ *  1) SubscribeApi is for per-key callback subscribing API;
+ *  2) SubscribeKeyFiler is for general regex matching callback subscribing API;
+ */
 TEST(KvStoreClientInternal, SubscribeApiTest) {
   fbzmq::Context context;
   folly::Baton waitBaton;
@@ -1159,7 +743,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         kTestingAreaName,
         "test_key1",
         [&](std::string const& k, std::optional<thrift::Value> v) {
-          // should be called when client1 call persistKey for test_key1
+          // should be called when kvStore setKey() called for test_key1
           EXPECT_EQ("test_key1", k);
           EXPECT_EQ(1, *v.value().version_ref());
           EXPECT_EQ("test_value1", v.value().value_ref());
@@ -1170,62 +754,62 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         kTestingAreaName,
         "test_key2",
         [&](std::string const& k, std::optional<thrift::Value> v) {
-          // should be called when client2 call persistKey for test_key2
+          // should be called when setKet() called for test_key2
           EXPECT_EQ("test_key2", k);
           EXPECT_LT(0, *v.value().version_ref());
           EXPECT_GE(2, *v.value().version_ref());
           switch (*v.value().version_ref()) {
           case 1:
-            EXPECT_EQ("test_value2", v.value().value_ref());
+            EXPECT_EQ("test_value2", *v.value().value_ref());
             break;
           case 2:
-            EXPECT_EQ("test_value2-client2", v.value().value_ref());
+            EXPECT_EQ("test_value2-client2", *v.value().value_ref());
             break;
           }
           key2CbCnt++;
         },
         false);
-    client1->persistKey(kTestingAreaName, "test_key1", "test_value1");
-    client1->setKey(kTestingAreaName, "test_key2", "test_value2");
-  });
-
-  int key2CbCntClient2{0};
-
-  // Schedule callback to persist key2 from client2 (this will be executed next)
-  evb.scheduleTimeout(std::chrono::milliseconds(10), [&]() noexcept {
-    client2->persistKey(kTestingAreaName, "test_key2", "test_value2-client2");
-    client2->subscribeKey(
+    store->setKey(
+        kTestingAreaName,
+        "test_key1",
+        createThriftValue(1, nodeId, "test_value1"));
+    store->setKey(
         kTestingAreaName,
         "test_key2",
-        [&](std::string const&, std::optional<thrift::Value>) {
-          // this should never be called when client2 call persistKey
-          // for test_key2 with same value
-          key2CbCntClient2++;
-        },
-        false);
-    // call persistkey with same value. should not get a callback here.
-    client2->persistKey(kTestingAreaName, "test_key2", "test_value2-client2");
+        createThriftValue(1, nodeId, "test_value2"));
   });
 
-  /* test for key callback with the option of getting key Value */
-  int keyExpKeySubCbCnt{0}; /* reply count for key regd. with fetchValue=true */
-  evb.scheduleTimeout(std::chrono::milliseconds(11), [&]() noexcept {
-    client2->setKey(
-        kTestingAreaName, "test_key_subs_cb", "test_key_subs_cb_val", 11);
+  // Schedule callback to test_key2 (this will be executed next)
+  evb.scheduleTimeout(std::chrono::milliseconds(10), [&]() noexcept {
+    store->setKey(
+        kTestingAreaName,
+        "test_key2",
+        createThriftValue(2, nodeId, "test_value2-client2"));
+    // call setKey with same value. should not get a callback here.
+    store->setKey(
+        kTestingAreaName,
+        "test_key2",
+        createThriftValue(2, nodeId, "test_value2-client2"));
+  });
 
-    std::optional<thrift::Value> keyValue;
-    keyValue = client2->subscribeKey(
+  // test for key callback with the option of getting key Value
+  evb.scheduleTimeout(std::chrono::milliseconds(11), [&]() noexcept {
+    store->setKey(
+        kTestingAreaName,
+        "test_key_subs_cb",
+        createThriftValue(11, nodeId, "test_key_subs_cb_val"));
+
+    auto keyValue = client2->subscribeKey(
         kTestingAreaName,
         "test_key_subs_cb",
         [&](std::string const&, std::optional<thrift::Value>) {},
         true);
-    if (keyValue.has_value()) {
-      EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value_ref());
-      keyExpKeySubCbCnt++;
-    }
+    ASSERT_TRUE(keyValue.has_value());
+    EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value_ref());
   });
-  /* test for expired keys update */
-  int keyExpKeyCbCnt{0}; /* expired key call back count specific to a key */
+
+  // test for expired keys update
+  int keyExpKeyCbCnt{0}; // expired key call back count specific to a key
   evb.scheduleTimeout(std::chrono::milliseconds(20), [&]() noexcept {
     auto keyExpVal =
         createThriftValue(1, nodeId, "test_key_exp_val", 1, 500, 0);
@@ -1243,7 +827,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         },
         false);
 
-    store->setKey(kTestingAreaName, "test_key_exp", keyExpVal, std::nullopt);
+    store->setKey(kTestingAreaName, "test_key_exp", keyExpVal);
   });
 
   // Start the event loop
@@ -1258,9 +842,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   EXPECT_GE(2, key2CbCnt); // This can happen when KvStore processes request
   EXPECT_LE(1, key2CbCnt); // from two clients in out of order. However values
                            // are going to be same.
-  EXPECT_EQ(0, key2CbCntClient2);
   EXPECT_EQ(1, keyExpKeyCbCnt);
-  EXPECT_EQ(1, keyExpKeySubCbCnt);
 
   // Stop server
   LOG(INFO) << "Stopping store";
@@ -1289,74 +871,65 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
   OpenrEventBase evb;
 
   // Create and initialize kvstore-clients
-  auto client1 = std::make_unique<KvStoreClientInternal>(
+  auto client = std::make_unique<KvStoreClientInternal>(
       &evb, nodeId, store->getKvStore());
-
-  std::vector<std::string> keyPrefixList;
-  keyPrefixList.emplace_back("test_");
-  std::set<std::string> originatorIds{};
-  KvStoreFilters kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
 
   int key1CbCnt = 0;
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    KvStoreFilters kvFilters = KvStoreFilters({"test_"}, {});
     // subscribe for key update for keys using kvstore filter
     // using store->setKey should trigger the callback, key1CbCnt++
-    client1->subscribeKeyFilter(
+    client->subscribeKeyFilter(
         std::move(kvFilters),
         [&](std::string const& k, std::optional<thrift::Value> v) {
-          // this should be called when client call persistKey for
-          // test_key1
+          // cb will be triggered when setKey() is called for test_key1
           EXPECT_THAT(k, testing::StartsWith("test_"));
           EXPECT_EQ(1, *v.value().version_ref());
-          EXPECT_EQ("test_key_val", v.value().value_ref());
+          EXPECT_EQ("test_key_val", *v.value().value_ref());
           key1CbCnt++;
         });
 
-    thrift::Value testValue1 = createThriftValue(
-        1,
-        nodeId,
-        std::string("test_key_val"),
-        10000, /* ttl in msec */
-        500 /* ttl version */,
-        0 /* hash */);
-    store->setKey(kTestingAreaName, "test_key1", testValue1, std::nullopt);
-  });
-
-  // subscribe for key update for keys using kvstore filter
-  // using kvstoreClient->setKey(), this shouldn't trigger update as the
-  // key will be in persistent DB. (key1CbCnt - shoudln't change)
-  evb.scheduleTimeout(std::chrono::milliseconds(25), [&]() noexcept {
-    client1->persistKey(kTestingAreaName, "test_key1", "test_value2");
+    store->setKey(
+        kTestingAreaName,
+        "test_key1",
+        createThriftValue(
+            1,
+            nodeId,
+            std::string("test_key_val"),
+            10000, /* ttl in msec */
+            500 /* ttl version */));
   });
 
   // add another key with same prefix, different key string, key1CbCnt++
   evb.scheduleTimeout(std::chrono::milliseconds(50), [&]() noexcept {
-    thrift::Value testValue1 = createThriftValue(
-        1,
-        nodeId,
-        std::string("test_key_val"),
-        10000, /* ttl in msec */
-        500 /* ttl version */,
-        0 /* hash */);
-    store->setKey(kTestingAreaName, "test_key2", testValue1, std::nullopt);
+    store->setKey(
+        kTestingAreaName,
+        "test_key2",
+        createThriftValue(
+            1,
+            nodeId,
+            std::string("test_key_val"),
+            10000, /* ttl in msec */
+            500 /* ttl version */));
   });
 
   // unsubscribe kvstore key filter and test for callback
   evb.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    client1->unsubscribeKeyFilter();
+    client->unsubscribeKeyFilter();
   });
 
   // add another key with same prefix, after unsubscribing,
   // key callback count will not increase
   evb.scheduleTimeout(std::chrono::milliseconds(150), [&]() noexcept {
-    thrift::Value testValue1 = createThriftValue(
-        1,
-        nodeId,
-        std::string("test_key_val"),
-        10000, /* ttl in msec */
-        500 /* ttl version */,
-        0 /* hash */);
-    store->setKey(kTestingAreaName, "test_key3", testValue1, std::nullopt);
+    store->setKey(
+        kTestingAreaName,
+        "test_key3",
+        createThriftValue(
+            1,
+            nodeId,
+            std::string("test_key_val"),
+            10000, /* ttl in msec */
+            500 /* ttl version */));
 
     // Synchronization primitive
     waitBaton.post();
@@ -1375,7 +948,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
   // Stop server
   LOG(INFO) << "Stopping store";
   store->stop();
-  client1.reset();
+  client.reset();
 
   evb.stop();
   evb.waitUntilStopped();
@@ -1531,8 +1104,11 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
                             1,
                             ttl)
                         .has_value());
-        client3->persistKey(
-            podArea, "test_ttl_key_pod", "test_ttl_value_pod", ttl);
+        EXPECT_TRUE(
+            client3
+                ->setKey(
+                    podArea, "test_ttl_key_pod", "test_ttl_value_pod", 1, ttl)
+                .has_value());
       });
 
   // check if key is flooding as expected by checking in node2
@@ -1598,11 +1174,11 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
  * areas are instantiated in the KvStore, with one area having emtpy
  * persistKeyDB.
  *
- * 1. add key in node2 by calling persistKey()
+ * 1. add key in node2 by calling setKey()
  * 2. use the kvstore API to delete the key in node2 be setting a short TTL
  * 3. verify key is deleted from node2 kvstore
  */
-TEST_F(MultipleAreaFixture, PersistKeyArea) {
+TEST_F(MultipleAreaFixture, SetKeyArea) {
   const std::chrono::milliseconds ttl{Constants::kTtlThreshold.count() + 100};
   auto scheduleAt = std::chrono::milliseconds{0}.count();
   folly::Baton waitBaton;
@@ -1613,8 +1189,8 @@ TEST_F(MultipleAreaFixture, PersistKeyArea) {
   // add key in plane area of node2, no keys are present in pod area
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        client2->persistKey(
-            planeArea, "test_ttl_key_plane", "test_ttl_value_plane", ttl);
+        client2->setKey(
+            planeArea, "test_ttl_key_plane", "test_ttl_value_plane", 1, ttl);
       });
 
   // verify at node1 that key is flooded in plane area
