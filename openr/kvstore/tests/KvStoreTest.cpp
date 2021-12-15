@@ -41,9 +41,6 @@ const int64_t kTtlMs = 1000;
 // wait time before checking counter
 const std::chrono::milliseconds counterUpdateWaitTime(5500);
 
-// Timeout of checking peers in all KvStores are initialized.
-const std::chrono::milliseconds kTimeoutOfAllPeersInitialized(1000);
-
 // Timeout of checking keys are propagated in all KvStores in the same area.
 const std::chrono::milliseconds kTimeoutOfKvStorePropagation(500);
 
@@ -106,10 +103,7 @@ class KvStoreTestFixture : public ::testing::Test {
   void
   waitForAllPeersInitialized() const {
     bool allInitialized = false;
-    auto const start = std::chrono::steady_clock::now();
-    while (not allInitialized &&
-           (std::chrono::steady_clock::now() - start <
-            kTimeoutOfAllPeersInitialized)) {
+    while (not allInitialized) {
       std::this_thread::yield();
       allInitialized = true;
       for (auto const& store : stores_) {
