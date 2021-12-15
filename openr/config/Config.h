@@ -225,11 +225,13 @@ class Config {
 
   void populateAreaConfig();
 
-  void checkPrependLabelConfig(openr::thrift::AreaConfig& areaConf);
+  void checkPrependLabelConfig(const openr::thrift::AreaConfig& areaConf) const;
 
-  void checkAdjacencyLabelConfig(openr::thrift::AreaConfig& areaConf);
+  void checkAdjacencyLabelConfig(
+      const openr::thrift::AreaConfig& areaConf) const;
 
-  void checkNodeSegmentLabelConfig(openr::thrift::AreaConfig& areaConf);
+  void checkNodeSegmentLabelConfig(
+      const openr::thrift::AreaConfig& areaConf) const;
 
   const std::unordered_map<std::string, AreaConfiguration>&
   getAreas() const {
@@ -484,7 +486,7 @@ class Config {
   }
 
   const std::string
-  getSSLAcceptablePeers() {
+  getSSLAcceptablePeers() const {
     // If unspecified, will use accept connection from any authenticated peer
     return getThriftServerConfig().acceptable_peers_ref().value_or("");
   }
@@ -590,34 +592,34 @@ class Config {
   void populateInternalDb();
 
   // validate KvStore confg
-  void checkKvStoreConfig();
+  void checkKvStoreConfig() const;
 
   // validate Decision module config
-  void checkDecisionConfig();
+  void checkDecisionConfig() const;
 
   // validate Spark config
-  void checkSparkConfig();
+  void checkSparkConfig() const;
 
   // validate Monitor config
-  void checkMonitorConfig();
+  void checkMonitorConfig() const;
 
   // validate Link Monitor config
-  void checkLinkMonitorConfig();
+  void checkLinkMonitorConfig() const;
 
   // validate Segment Routing config
-  void checkSegmentRoutingConfig();
+  void checkSegmentRoutingConfig() const;
 
   // validate Prefix Allocation config
   void checkPrefixAllocationConfig();
 
   // validate VipService Config
-  void checkVipServiceConfig();
+  void checkVipServiceConfig() const;
 
   // validate BGP Peering config and BGP Translation Config
   void checkBgpPeeringConfig();
 
   // validate thrift server config
-  void checkThriftServerConfig();
+  void checkThriftServerConfig() const;
 
   // thrift config
   thrift::OpenrConfig config_;

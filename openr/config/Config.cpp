@@ -115,7 +115,8 @@ Config::createPrefixAllocationParams(
 }
 
 void
-Config::checkPrependLabelConfig(openr::thrift::AreaConfig& areaConf) {
+Config::checkPrependLabelConfig(
+    const openr::thrift::AreaConfig& areaConf) const {
   // Check label range values for prepend labels
   if (areaConf.prepend_label_ranges_ref().has_value()) {
     const auto& v4LblRange = *areaConf.prepend_label_ranges_ref()->v4_ref();
@@ -139,7 +140,8 @@ Config::checkPrependLabelConfig(openr::thrift::AreaConfig& areaConf) {
 }
 
 void
-Config::checkAdjacencyLabelConfig(openr::thrift::AreaConfig& areaConf) {
+Config::checkAdjacencyLabelConfig(
+    const openr::thrift::AreaConfig& areaConf) const {
   if (areaConf.sr_adj_label_ref().has_value()) {
     // Check adj segment labels if configured or if label range is valid
     if (areaConf.sr_adj_label_ref()->sr_adj_label_type_ref() ==
@@ -163,7 +165,8 @@ Config::checkAdjacencyLabelConfig(openr::thrift::AreaConfig& areaConf) {
 }
 
 void
-Config::checkNodeSegmentLabelConfig(openr::thrift::AreaConfig& areaConf) {
+Config::checkNodeSegmentLabelConfig(
+    const openr::thrift::AreaConfig& areaConf) const {
   // Check if Node Segment Label is configured or if label range is valid
   if (areaConf.area_sr_node_label_ref().has_value()) {
     const auto& srNodeConfig = *areaConf.area_sr_node_label_ref();
@@ -256,7 +259,7 @@ Config::populateAreaConfig() {
 }
 
 void
-Config::checkKvStoreConfig() {
+Config::checkKvStoreConfig() const {
   auto& kvStoreConf = *config_.kvstore_config_ref();
   if (const auto& floodRate = kvStoreConf.flood_rate_ref()) {
     if (*floodRate->flood_msg_per_sec_ref() <= 0) {
@@ -273,7 +276,7 @@ Config::checkKvStoreConfig() {
 }
 
 void
-Config::checkDecisionConfig() {
+Config::checkDecisionConfig() const {
   auto& decisionConf = *config_.decision_config_ref();
   if (decisionConf.get_debounce_min_ms() > decisionConf.get_debounce_max_ms()) {
     throw std::invalid_argument(fmt::format(
@@ -284,7 +287,7 @@ Config::checkDecisionConfig() {
 }
 
 void
-Config::checkSparkConfig() {
+Config::checkSparkConfig() const {
   auto& sparkConfig = *config_.spark_config_ref();
   if (*sparkConfig.neighbor_discovery_port_ref() <= 0 ||
       *sparkConfig.neighbor_discovery_port_ref() > 65535) {
@@ -383,7 +386,7 @@ Config::checkSparkConfig() {
 }
 
 void
-Config::checkMonitorConfig() {
+Config::checkMonitorConfig() const {
   auto& monitorConfig = *config_.monitor_config_ref();
   if (*monitorConfig.max_event_log_ref() < 0) {
     throw std::out_of_range(fmt::format(
@@ -393,7 +396,7 @@ Config::checkMonitorConfig() {
 }
 
 void
-Config::checkLinkMonitorConfig() {
+Config::checkLinkMonitorConfig() const {
   auto& lmConf = *config_.link_monitor_config_ref();
   // backoff validation
   if (*lmConf.linkflap_initial_backoff_ms_ref() < 0) {
@@ -418,7 +421,7 @@ Config::checkLinkMonitorConfig() {
 }
 
 void
-Config::checkSegmentRoutingConfig() {
+Config::checkSegmentRoutingConfig() const {
   if (const auto& srConfig = config_.segment_routing_config_ref()) {
     // Check label range values for prepend labels
     if (srConfig->prepend_label_ranges_ref().has_value()) {
@@ -505,7 +508,7 @@ Config::checkPrefixAllocationConfig() {
 }
 
 void
-Config::checkVipServiceConfig() {
+Config::checkVipServiceConfig() const {
   if (isVipServiceEnabled()) {
     if (not config_.vip_service_config_ref()) {
       throw std::invalid_argument(
@@ -576,7 +579,7 @@ Config::checkBgpPeeringConfig() {
 }
 
 void
-Config::checkThriftServerConfig() {
+Config::checkThriftServerConfig() const {
   const auto& thriftServerConfig = getThriftServerConfig();
 
   // Checking the fields needed when we enable the secure thrift server
