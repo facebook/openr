@@ -436,15 +436,7 @@ TEST(KvStoreClientInternal, CounterReport) {
 
         // Verify the counter keys exist
         ASSERT_TRUE(counters.count(
-            fmt::format("{}.kvstore_client.persisted_keys", evbName)));
-        ASSERT_TRUE(counters.count(
-            fmt::format("{}.kvstore_client.keys_to_advertise", evbName)));
-        ASSERT_TRUE(counters.count(
-            fmt::format("{}.kvstore_client.keys_to_delete", evbName)));
-        ASSERT_TRUE(counters.count(
             fmt::format("{}.kvstore_client.key_callbacks", evbName)));
-        ASSERT_TRUE(
-            counters.count(fmt::format("{}.kvstore_client.backoffs", evbName)));
         ASSERT_TRUE(counters.count(
             fmt::format("{}.kvstore_client.key_ttl_backoffs", evbName)));
 
@@ -458,12 +450,6 @@ TEST(KvStoreClientInternal, CounterReport) {
         auto counters = fb303::fbData->getCounters();
 
         // Verify counters
-        EXPECT_GE(
-            counters.at(
-                fmt::format("{}.kvstore_client.persisted_keys", evbName)),
-            0);
-        EXPECT_GE(
-            counters.at(fmt::format("{}.kvstore_client.backoffs", evbName)), 0);
         EXPECT_GE(
             counters.at(
                 fmt::format("{}.kvstore_client.key_ttl_backoffs", evbName)),

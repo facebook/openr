@@ -61,7 +61,6 @@ KvStoreClientInternal::~KvStoreClientInternal() {
   // - Otherwise, will wait the EventBase to run;
   eventBase_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     counterUpdateTimer_.reset();
-    advertiseKeyValsTimer_.reset();
     ttlTimer_.reset();
     advertiseTtlUpdatesThrottled_.reset();
   });
@@ -79,26 +78,6 @@ KvStoreClientInternal::stop() {
 
 void
 KvStoreClientInternal::initTimers() {
-  // Create timer to advertise pending key-vals
-  advertiseKeyValsTimer_ =
-      folly::AsyncTimeout::make(*eventBase_->getEvb(), [this]() noexcept {
-        XLOG(DBG3) << "Received timeout event.";
-
-        // Advertise all pending keys
-        advertisePendingKeys();
-
-        // Clear all backoff if they are passed away
-        for (auto& [_, areaBackoffs] : backoffs_) {
-          for (auto& [key, backoff] : areaBackoffs) {
-            if (backoff.canTryNow()) {
-              XLOG(DBG2) << "Clearing off the exponential backoff for key "
-                         << key;
-              backoff.reportSuccess();
-            }
-          }
-        }
-      });
-
   // Create ttl timer
   ttlTimer_ = folly::AsyncTimeout::make(
       *eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
@@ -108,24 +87,8 @@ KvStoreClientInternal::initTimers() {
       folly::AsyncTimeout::make(*eventBase_->getEvb(), [this]() noexcept {
         fb303::fbData->setCounter(
             fmt::format(
-                "{}.kvstore_client.persisted_keys", eventBase_->getEvbName()),
-            getPersistedKeyCount());
-        fb303::fbData->setCounter(
-            fmt::format(
-                "{}.kvstore_client.keys_to_advertise",
-                eventBase_->getEvbName()),
-            getCachedKeysToAdvertiseCount());
-        fb303::fbData->setCounter(
-            fmt::format(
-                "{}.kvstore_client.keys_to_delete", eventBase_->getEvbName()),
-            getCachedKeysToDeleteCount());
-        fb303::fbData->setCounter(
-            fmt::format(
                 "{}.kvstore_client.key_callbacks", eventBase_->getEvbName()),
             getKeyCallbackCount());
-        fb303::fbData->setCounter(
-            fmt::format("{}.kvstore_client.backoffs", eventBase_->getEvbName()),
-            getBackoffCount());
         fb303::fbData->setCounter(
             fmt::format(
                 "{}.kvstore_client.key_ttl_backoffs", eventBase_->getEvbName()),
@@ -247,10 +210,7 @@ KvStoreClientInternal::unsetKey(AreaId const& area, std::string const& key) {
   XLOG(DBG3) << "KvStoreClientInternal: unsetKey called for key " << key
              << " area " << area.t;
 
-  persistedKeyVals_[area].erase(key);
-  backoffs_[area].erase(key);
   keyTtlBackoffs_[area].erase(key);
-  keysToAdvertise_[area].erase(key);
 }
 
 std::optional<thrift::Value>
@@ -369,10 +329,9 @@ KvStoreClientInternal::processPublication(
   // Go through received key-values and find out the ones which need update
   CHECK(not publication.area_ref()->empty());
   AreaId area{publication.get_area()};
+
   // NOTE: default construct empty containers if they didn't exist
-  auto& persistedKeyVals = persistedKeyVals_[area];
   auto& keyTtlBackoffs = keyTtlBackoffs_[area];
-  auto& keysToAdvertise = keysToAdvertise_[area];
   auto& callbacks = keyCallbacks_[area];
 
   for (auto const& [key, rcvdValue] : *publication.keyVals_ref()) {
@@ -382,13 +341,12 @@ KvStoreClientInternal::processPublication(
     }
 
     // Update local keyVals as per need
-    auto it = persistedKeyVals.find(key);
     auto cb = callbacks.find(key);
     // set key w/ finite TTL
     auto sk = keyTtlBackoffs.find(key);
 
     // key set but not persisted
-    if (sk != keyTtlBackoffs.end() and it == persistedKeyVals.end()) {
+    if (sk != keyTtlBackoffs.end()) {
       auto& setValue = sk->second.first;
       if (*rcvdValue.version_ref() > *setValue.version_ref() or
           (*rcvdValue.version_ref() == *setValue.version_ref() and
@@ -417,150 +375,20 @@ KvStoreClientInternal::processPublication(
       }
     }
 
-    if (it == persistedKeyVals.end()) {
-      // We need to alert callback if a key is not persisted and we
-      // received a change notification for it.
-      if (cb != callbacks.end()) {
-        (cb->second)(key, rcvdValue);
-      }
-      // callback for a given key filter
-      if (keyPrefixFilterCallback_ &&
-          keyPrefixFilter_.keyMatch(key, rcvdValue)) {
-        keyPrefixFilterCallback_(key, rcvdValue);
-      }
-      // Skip rest of the processing. We are not interested.
-      continue;
+    // We need to alert callback if a key is not persisted and we
+    // received a change notification for it.
+    if (cb != callbacks.end()) {
+      (cb->second)(key, rcvdValue);
     }
-
-    // Ignore if received version is strictly old
-    auto& currentValue = it->second;
-    if (*currentValue.version_ref() > *rcvdValue.version_ref()) {
-      continue;
-    }
-
-    // Update if our version is old
-    bool valueChange = false;
-    if (*currentValue.version_ref() < *rcvdValue.version_ref()) {
-      // Bump-up version number
-      *currentValue.originatorId_ref() = nodeId_;
-      currentValue.version_ref() = *rcvdValue.version_ref() + 1;
-      currentValue.ttlVersion_ref() = 0;
-      valueChange = true;
-    }
-
-    // version is same but originator id is different. Then we need to
-    // advertise with a higher version.
-    if (!valueChange and *rcvdValue.originatorId_ref() != nodeId_) {
-      *currentValue.originatorId_ref() = nodeId_;
-      (*currentValue.version_ref())++;
-      currentValue.ttlVersion_ref() = 0;
-      valueChange = true;
-    }
-
-    // Need to re-advertise if value doesn't matches. This can happen when our
-    // update is reflected back
-    if (!valueChange and currentValue.value_ref() != rcvdValue.value_ref()) {
-      *currentValue.originatorId_ref() = nodeId_;
-      (*currentValue.version_ref())++;
-      currentValue.ttlVersion_ref() = 0;
-      valueChange = true;
-    }
-
-    // copy ttlVersion from ttl backoff map
-    if (sk != keyTtlBackoffs.end()) {
-      currentValue.ttlVersion_ref() = *sk->second.first.ttlVersion_ref();
-    }
-
-    // update local ttlVersion if received higher ttlVersion.
-    // advertiseTtlUpdates will bump ttlVersion before advertising, so just
-    // update to latest ttlVersion works fine
-    if (*currentValue.ttlVersion_ref() < *rcvdValue.ttlVersion_ref()) {
-      currentValue.ttlVersion_ref() = *rcvdValue.ttlVersion_ref();
-      if (sk != keyTtlBackoffs.end()) {
-        sk->second.first.ttlVersion_ref() = *rcvdValue.ttlVersion_ref();
-      }
-    }
-
-    if (valueChange && cb != callbacks.end()) {
-      (cb->second)(key, currentValue);
-    }
-
-    if (valueChange) {
-      keysToAdvertise.insert(key);
+    // callback for a given key filter
+    if (keyPrefixFilterCallback_ && keyPrefixFilter_.keyMatch(key, rcvdValue)) {
+      keyPrefixFilterCallback_(key, rcvdValue);
     }
   } // for
-
-  advertisePendingKeys();
 
   if (publication.expiredKeys_ref()->size()) {
     processExpiredKeys(publication);
   }
-}
-
-void
-KvStoreClientInternal::advertisePendingKeys(
-    std::optional<std::unordered_map<AreaId, std::unordered_set<std::string>>>
-        pendingKeysToAdvertise) {
-  std::chrono::milliseconds timeout = Constants::kMaxBackoff;
-
-  // Use passed in `pendingKeysToAdvertise` if there is.
-  // Otherwise, loop through internal data-structure `keysToAdvertise_`
-  auto& keysToAdvertiseArea = pendingKeysToAdvertise.has_value()
-      ? pendingKeysToAdvertise.value()
-      : keysToAdvertise_;
-
-  // advertise pending key for each area
-  for (auto& [area, keysToAdvertise] : keysToAdvertiseArea) {
-    if (keysToAdvertise.empty()) {
-      continue;
-    }
-    auto& persistedKeyVals = persistedKeyVals_[area];
-
-    // Build set of keys to advertise
-    std::unordered_map<std::string, thrift::Value> keyVals;
-    // Build keys to be cleaned from local storage
-    std::vector<std::string> keysToClear;
-
-    for (auto const& key : keysToAdvertise) {
-      const auto& thriftValue = persistedKeyVals.at(key);
-
-      // Proceed only if backoff is active
-      auto& backoff = backoffs_[area].at(key);
-
-      if (not backoff.canTryNow()) {
-        timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
-        XLOG(DBG2) << "Skipping key: " << key << ", area: " << area.t;
-        continue;
-      }
-
-      // Apply backoff
-      backoff.reportError();
-      timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
-
-      printKeyValInArea(
-          1 /*logLevel*/,
-          "Advertising",
-          fmt::format("[Area: {}] ", area.t),
-          key,
-          thriftValue);
-      // Set in keyVals which is going to be advertise to the kvStore.
-      DCHECK(thriftValue.value_ref());
-      keyVals.emplace(key, thriftValue);
-      keysToClear.emplace_back(key);
-    }
-
-    // Advertise to KvStore
-    const auto ret = setKeysHelper(area, std::move(keyVals));
-    if (ret.has_value()) {
-      for (auto const& key : keysToClear) {
-        keysToAdvertise.erase(key);
-      }
-    }
-  }
-
-  // Schedule next-timeout for processing/clearing backoffs
-  XLOG(DBG2) << "Scheduling timer after " << timeout.count() << "ms.";
-  advertiseKeyValsTimer_->scheduleTimeout(timeout);
 }
 
 void
@@ -571,7 +399,6 @@ KvStoreClientInternal::advertiseTtlUpdates() {
   // advertise TTL updates for each area
   for (auto& [area, keyTtlBackoffs] : keyTtlBackoffs_) {
     std::unordered_map<std::string, thrift::Value> keyVals;
-    auto& persistedKeyVals = persistedKeyVals_[area];
 
     for (auto& [key, val] : keyTtlBackoffs) {
       auto& thriftValue = val.first;
@@ -586,14 +413,6 @@ KvStoreClientInternal::advertiseTtlUpdates() {
       backoff.reportError();
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
-      const auto it = persistedKeyVals.find(key);
-      if (it != persistedKeyVals.end()) {
-        // we may have got a newer vesion for persisted key
-        if (*thriftValue.version_ref() < *it->second.version_ref()) {
-          thriftValue.version_ref() = *it->second.version_ref();
-          thriftValue.ttlVersion_ref() = *it->second.ttlVersion_ref();
-        }
-      }
       // bump ttl version
       (*thriftValue.ttlVersion_ref())++;
       // Set in keyVals which is going to be advertised to the kvStore.

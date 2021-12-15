@@ -135,28 +135,8 @@ class KvStoreClientInternal {
   }
 
   int64_t
-  getPersistedKeyCount() {
-    return getCount(persistedKeyVals_);
-  }
-
-  int64_t
-  getCachedKeysToAdvertiseCount() {
-    return getCount(keysToAdvertise_);
-  }
-
-  int64_t
-  getCachedKeysToDeleteCount() {
-    return getCount(clearedKeyVals_);
-  }
-
-  int64_t
   getKeyCallbackCount() {
     return getCount(keyCallbacks_);
-  }
-
-  int64_t
-  getBackoffCount() {
-    return getCount(backoffs_);
   }
 
   int64_t
@@ -251,18 +231,6 @@ class KvStoreClientInternal {
   // Mutable state
   //
 
-  // Locally advertised authorative key-vals using `persistKey`
-  std::unordered_map<
-      AreaId,
-      std::unordered_map<std::string /* key */, thrift::Value>>
-      persistedKeyVals_;
-
-  // Locally withdrawn key-vals using `clearKey`
-  std::unordered_map<
-      AreaId,
-      std::unordered_map<std::string /* key */, thrift::Value>>
-      clearedKeyVals_;
-
   // Subscribed keys to their callback functions
   std::unordered_map<
       AreaId,
@@ -271,14 +239,6 @@ class KvStoreClientInternal {
 
   // callback for updates from keys filtered with provided filter
   KeyCallback keyPrefixFilterCallback_{nullptr};
-
-  // backoff associated with each key for re-advertisements
-  std::unordered_map<
-      AreaId,
-      std::unordered_map<
-          std::string /* key */,
-          ExponentialBackoff<std::chrono::milliseconds>>>
-      backoffs_;
 
   // backoff associated with each key for freshing TTL
   std::unordered_map<
@@ -289,10 +249,6 @@ class KvStoreClientInternal {
               thrift::Value /* value */,
               ExponentialBackoff<std::chrono::milliseconds>>>>
       keyTtlBackoffs_;
-
-  // Set of local keys to be re-advertised.
-  std::unordered_map<AreaId, std::unordered_set<std::string /* key */>>
-      keysToAdvertise_;
 
   // Timer to advertised pending key-vals
   std::unique_ptr<folly::AsyncTimeout> advertiseKeyValsTimer_;
