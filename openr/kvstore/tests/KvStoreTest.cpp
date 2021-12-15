@@ -2416,7 +2416,7 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   } while (elapsedTime1 < duration1);
 
   /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  std::this_thread::sleep_for(std::chrono::seconds(5));
   auto kv0 = store0->dumpAll(kTestingAreaName);
   auto kv1 = store1->dumpAll(kTestingAreaName);
   auto kv2 = store2->dumpAll(kTestingAreaName);
@@ -2476,7 +2476,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
 
   // sleep to get tokens replenished since store1 also floods keys it receives
   /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  std::this_thread::sleep_for(std::chrono::seconds(5));
 
   auto s0PubSent1 =
       fb303::fbData->getCounters()["kvstore.thrift.num_flood_pub.count"];
@@ -2493,7 +2493,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
    */
   auto startTime2 = steady_clock::now();
   const int duration2 = 5; // in seconds
-  const int wait = 2; // in seconds
+  const int wait = 5; // in seconds
   int i2{0};
   uint64_t elapsedTime2{0};
   fb303::fbData->resetAllData();
