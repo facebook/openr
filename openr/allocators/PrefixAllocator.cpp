@@ -656,7 +656,7 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
     LOG(ERROR)
         << "Failed to get iface addresses from NetlinkSystemHandler. Error: "
         << folly::exceptionStr(e);
-    return;
+    throw e;
   }
 
   // desired global prefixes
