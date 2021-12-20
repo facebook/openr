@@ -703,7 +703,7 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
     XLOG(ERR)
         << "Failed to get iface addresses from NetlinkProtocolSocket. Error: "
         << folly::exceptionStr(ex);
-    return;
+    throw;
   }
 
   // desired global prefixes
