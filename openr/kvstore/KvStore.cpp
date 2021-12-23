@@ -53,8 +53,7 @@ KvStore::KvStore(
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
               false),
           config->getKvStoreConfig().is_flood_root_ref().value_or(false),
-          config->getKvStoreConfig().get_enable_thrift_dual_msg(),
-          config->getConfig().get_enable_kvstore_request_queue()) {
+          config->getKvStoreConfig().get_enable_thrift_dual_msg()) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {
@@ -121,26 +120,23 @@ KvStore::KvStore(
   });
 
   // Add reader to process key-value requests from PrefixManager and LinkMonitor
-  if (kvParams_.enableKvStoreRequestQueue) {
-    addFiberTask(
-        [kvQueue = std::move(kvRequestQueue), this]() mutable noexcept {
-          XLOG(INFO) << "Starting key-value requests processing fiber";
-          while (true) {
-            auto maybeKvRequest = kvQueue.get(); // perform read
-            XLOG(DBG2) << "Received key-value request...";
-            if (maybeKvRequest.hasError()) {
-              XLOG(INFO) << "Terminating key-value request processing fiber";
-              break;
-            }
-            try {
-              processKeyValueRequest(std::move(maybeKvRequest).value());
-            } catch (const std::exception& ex) {
-              XLOG(ERR) << "Failed to process key-value request. Exception: "
-                        << ex.what();
-            }
-          }
-        });
-  }
+  addFiberTask([kvQueue = std::move(kvRequestQueue), this]() mutable noexcept {
+    XLOG(INFO) << "Starting key-value requests processing fiber";
+    while (true) {
+      auto maybeKvRequest = kvQueue.get(); // perform read
+      XLOG(DBG2) << "Received key-value request...";
+      if (maybeKvRequest.hasError()) {
+        XLOG(INFO) << "Terminating key-value request processing fiber";
+        break;
+      }
+      try {
+        processKeyValueRequest(std::move(maybeKvRequest).value());
+      } catch (const std::exception& ex) {
+        XLOG(ERR) << "Failed to process key-value request. Exception: "
+                  << ex.what();
+      }
+    }
+  });
 
   initGlobalCounters();
 
@@ -3300,9 +3296,7 @@ KvStoreDb::floodPublication(
   fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
 
   // Process potential update to self-originated key-vals
-  if (kvParams_.enableKvStoreRequestQueue) {
-    processPublicationForSelfOriginatedKey(publication);
-  }
+  processPublicationForSelfOriginatedKey(publication);
 
   // Flood keyValue ONLY updates to external neighbors
   if (publication.keyVals_ref()->empty()) {
