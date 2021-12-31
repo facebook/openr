@@ -21,7 +21,7 @@ getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
     CHECK_LT(node, 0x1 << 16);
     std::vector<thrift::Adjacency> adjs;
     std::unordered_map<int, int> numParallel;
-    for (auto const [adj, metric] : adjList) {
+    for (auto const& [adj, metric] : adjList) {
       CHECK_LT(adj, 0x1 << 16);
       auto adjNum = numParallel[adj]++;
       int bottomByte = adj & 0xFF;
