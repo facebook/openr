@@ -1762,6 +1762,8 @@ def get_routes_json(
                 "dest": dest,
                 "nexthops": [ip_nexthop_to_str(nh) for nh in label.nextHops],
             }
+            # pyre-fixme[16]: Item `int` of `Union[List[typing.Any], int, str]` has
+            #  no attribute `append`.
             data["mplsRoutes"].append(route_data)
 
     return data
