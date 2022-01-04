@@ -477,6 +477,9 @@ Decision::getRibPolicy() {
 
 void
 Decision::processPeerUpdates(PeerEvent&& event) {
+  if (not config_->getConfig().get_enable_ordered_adj_publication()) {
+    return;
+  }
   if (not initialPeersReceivedBaton_.try_wait()) {
     XLOG(INFO) << "[Initialization] Received initial PeerEvent.";
     // LinkMonitor publishes detected peers in one shot in Open/R initialization
@@ -571,6 +574,9 @@ Decision::filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb) {
 void
 Decision::updatePendingAdjacency(
     const std::string& area, const thrift::AdjacencyDatabase& newAdjacencyDb) {
+  if (not config_->getConfig().get_enable_ordered_adj_publication()) {
+    return;
+  }
   // Update pending adjacency with up peers in Open/R initialization process.
   //
   // In case of two nodes (A, B) restart simultaneously,
