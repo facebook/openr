@@ -202,7 +202,6 @@ Spark::SparkNeighbor::SparkNeighbor(
     std::string const& localIfName,
     std::string const& remoteIfName,
     bool enableFloodOptimization,
-    uint32_t label,
     uint64_t seqNum,
     const std::chrono::milliseconds& samplingPeriod,
     std::function<void(const int64_t&)> rttChangeCb,
@@ -211,7 +210,6 @@ Spark::SparkNeighbor::SparkNeighbor(
       nodeName(nodeName),
       localIfName(localIfName),
       remoteIfName(remoteIfName),
-      label(label),
       seqNum(seqNum),
       state(SparkNeighState::IDLE),
       enableFloodOptimization(enableFloodOptimization),
@@ -246,7 +244,6 @@ Spark::SparkNeighbor::toThrift() const {
 
   // populate misc info
   info.rttUs_ref() = this->rtt.count();
-  info.label_ref() = this->label;
   info.enableFloodOptimization_ref() = this->enableFloodOptimization;
   info.adjOnlyUsedByOtherNode_ref() = this->adjOnlyUsedByOtherNode;
 
@@ -1247,7 +1244,6 @@ Spark::processHeartbeatTimeout(
 
   // remove from tracked neighbor at the end
   SCOPE_EXIT {
-    allocatedLabels_.erase(neighbor.label);
     ifNeighbors.erase(neighborName);
   };
 
@@ -1301,7 +1297,6 @@ Spark::processGRTimeout(
 
   // remove from tracked neighbor at the end
   SCOPE_EXIT {
-    allocatedLabels_.erase(neighbor.label);
     ifNeighbors.erase(neighborName);
   };
 
@@ -1418,7 +1413,6 @@ Spark::processHelloMsg(
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
             enableFloodOptimization_, // DUAL supported or NOT
-            getNewLabelForIface(ifName, areaId.value()), // adj label
             remoteSeqNum, // seqNum reported by neighborNode
             keepAliveTime_, // stepDetector sample period
             std::move(rttChangeCb),
@@ -1554,7 +1548,6 @@ Spark::processHelloMsg(
       neighborDownWrapper(neighbor, ifName, neighborName);
 
       // remove from tracked neighbor at the end
-      allocatedLabels_.erase(neighbor.label);
       ifNeighbors.erase(neighborName);
     }
   } else if (neighbor.state == SparkNeighState::RESTART) {
@@ -2052,7 +2045,6 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
                << "It is down, declaring all neighbors down";
 
     for (const auto& [neighborName, neighbor] : sparkNeighbors_.at(ifName)) {
-      allocatedLabels_.erase(neighbor.label);
       XLOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                  << ifName << " down";
 
@@ -2238,53 +2230,6 @@ Spark::findInterfaceFromIfindex(int ifIndex) {
     }
   }
   return std::nullopt;
-}
-
-int32_t
-Spark::getNewLabelForIface(
-    const std::string& ifName, const std::string& areaId) {
-  int32_t label = 0;
-
-  if (not config_->isSegmentRoutingEnabled()) {
-    return label;
-  }
-
-  const auto& areaConfig = config_->getAreas().at(areaId);
-  // In absence of adj label config, we should return an invalid label (e.g.,
-  // 0).
-  if (areaConfig.getAdjSegmentLabelConfig().has_value() and
-      (*areaConfig.getAdjSegmentLabelConfig()).sr_adj_label_type_ref() !=
-          thrift::SegmentRoutingAdjLabelType::DISABLED) {
-    const auto labelStart = *((*areaConfig.getAdjSegmentLabelConfig())
-                                  .adj_label_range_ref()
-                                  ->start_label_ref());
-    const auto labelEnd = *((*areaConfig.getAdjSegmentLabelConfig())
-                                .adj_label_range_ref()
-                                ->end_label_ref());
-
-    // interface must exists. We try to first assign label based on ifIndex if
-    // not already taken.
-    label = labelStart + interfaceDb_.at(ifName).ifIndex;
-    if (allocatedLabels_.insert(label).second) { // new value inserted
-      return label;
-    }
-
-    // Label already exists let's try to find out a new one from the back
-    label = labelEnd; // last possible one
-    while (!allocatedLabels_.insert(label).second) { // value already exists
-      label--;
-    }
-
-    if (label < labelStart) {
-      throw std::runtime_error(fmt::format(
-          "Ran out of local label allocation space [{},{}] in area {}.",
-          labelStart,
-          labelEnd,
-          areaId));
-    }
-  }
-
-  return label;
 }
 
 void

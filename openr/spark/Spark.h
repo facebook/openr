@@ -223,13 +223,6 @@ class Spark final : public OpenrEventBase {
   // find an interface name in the interfaceDb given an ifIndex
   std::optional<std::string> findInterfaceFromIfindex(int ifIndex);
 
-  // TODO: deprecate adj label generation from Spark
-  // Utility function to generate a new label for neighbor on given interface.
-  // If there is only one neighbor per interface then labels are expected to be
-  // same across process-restarts
-  int32_t getNewLabelForIface(
-      std::string const& ifName, std::string const& areaId);
-
   // set flat counter/stats
   void updateGlobalCounters();
 
@@ -291,7 +284,6 @@ class Spark final : public OpenrEventBase {
         std::string const& localIfName,
         std::string const& remoteIfName,
         bool enableFloodOptimization,
-        uint32_t label,
         uint64_t seqNum,
         std::chrono::milliseconds const& samplingPeriod,
         std::function<void(const int64_t&)> rttChangeCb,
@@ -314,10 +306,6 @@ class Spark final : public OpenrEventBase {
 
     // remote interface name on neighbor side
     const std::string remoteIfName{};
-
-    // SR Label to reach Neighbor over this specific adjacency. Generated
-    // using ifIndex to this neighbor. Only local within the node.
-    const uint32_t label{0};
 
     // Last sequence number received from neighbor
     uint64_t seqNum{0};
@@ -535,9 +523,6 @@ class Spark final : public OpenrEventBase {
       std::string /* ifName */,
       std::unordered_set<std::string> /* neighbors */>
       ifNameToActiveNeighbors_{};
-
-  // ordered set to keep track of allocated labels
-  std::set<int32_t> allocatedLabels_{};
 
   // ser/deser messages over sockets
   apache::thrift::CompactSerializer serializer_;

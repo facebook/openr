@@ -1230,9 +1230,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     auto& event1 = events1.value().back();
     EXPECT_EQ(iface1, event1.info.localIfName_ref());
     EXPECT_EQ(nodeName3, event1.info.nodeName_ref());
-    // ifIndex already used for assigning label to node-2 via iface1. So next
-    // label will be assigned from the end.
-    EXPECT_EQ(MplsConstants::kSrLocalRange.second, event1.info.label_ref());
     LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName3;
 
     auto events2 = node2->waitForEvents(NB_UP);
@@ -1240,9 +1237,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     auto& event2 = events2.value().back();
     EXPECT_EQ(iface2, event2.info.localIfName_ref());
     EXPECT_EQ(nodeName3, event2.info.nodeName_ref());
-    // ifIndex already used for assigning label to node-1 via iface2. So next
-    // label will be assigned from the end.
-    EXPECT_EQ(MplsConstants::kSrLocalRange.second, event2.info.label_ref());
     LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName3;
   }
 
@@ -1255,11 +1249,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       events.emplace(*maybeEvent.info.nodeName_ref(), maybeEvent);
     }
 
-    std::set<int32_t> expectedLabels = {
-        MplsConstants::kSrLocalRange.first + ifIndex3,
-        MplsConstants::kSrLocalRange.second,
-    };
-
     ASSERT_EQ(1, events.count(nodeName1));
     ASSERT_EQ(1, events.count(nodeName2));
 
@@ -1269,7 +1258,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     EXPECT_EQ(
         std::make_pair(ip1V4.first, ip1V6.first),
         SparkWrapper::getTransportAddrs(event1));
-    ASSERT_TRUE(expectedLabels.count(*event1.info.label_ref()));
 
     auto event2 = events.at(nodeName2);
     EXPECT_EQ(iface3, *event2.info.localIfName_ref());
@@ -1277,10 +1265,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     EXPECT_EQ(
         std::make_pair(ip2V4.first, ip2V6.first),
         SparkWrapper::getTransportAddrs(event2));
-    ASSERT_TRUE(expectedLabels.count(*event2.info.label_ref()));
-
-    // Label of discovered neighbors must be different on the same interface
-    EXPECT_NE(*event1.info.label_ref(), *event2.info.label_ref());
 
     LOG(INFO) << "node-3 reported adjacencies to node-1, node-2";
   }
