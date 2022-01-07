@@ -638,6 +638,8 @@ main(int argc, char** argv) {
     t.join();
   }
 
+  vipPluginDestroy();
+
   // Close syslog connection (this is optional)
   SYSLOG(INFO) << "Stopping OpenR daemon: ppid = " << getpid();
   closelog();

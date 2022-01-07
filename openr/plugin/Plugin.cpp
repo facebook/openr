@@ -27,4 +27,9 @@ void
 vipPluginStop() {
   return;
 }
+
+void
+vipPluginDestroy() {
+  return;
+}
 } // namespace openr

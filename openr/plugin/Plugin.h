@@ -37,6 +37,11 @@ struct VipPluginArgs {
 
 void pluginStart(const PluginArgs& /* pluginArgs */);
 void pluginStop();
+/* create a vip plugin object and run */
 void vipPluginStart(const VipPluginArgs& /* PluginArgs */);
+/* stop vip lougin */
 void vipPluginStop();
+/* destroy vip plugin, call after vipRouteEvb is stopped to clean up the object.
+ */
+void vipPluginDestroy();
 } // namespace openr
