@@ -43,8 +43,8 @@ from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object, object_to_dict
-from thrift.protocol import TBinaryProtocol
-from thrift.transport import TSocket, TTransport
+from thrift.protocol import THeaderProtocol
+from thrift.transport import TSocket, THeaderTransport
 
 
 PrintAdvertisedTypes = Union[
@@ -149,8 +149,8 @@ def get_fib_agent_client(
     """
     transport = TSocket.TSocket(host, port)
     transport.setTimeout(timeout_ms)
-    transport = TTransport.TFramedTransport(transport)
-    protocol = TBinaryProtocol.TBinaryProtocol(transport)
+    transport = THeaderTransport.THeaderTransport(transport)
+    protocol = THeaderProtocol.THeaderProtocol(transport)
     client = service.Client(protocol)
     client.host = host  # Assign so that we can refer later on
     client.port = port  # Assign so that we can refer later on
