@@ -165,11 +165,12 @@ TEST(LinkStateTest, BasicOperation) {
 
   EXPECT_EQ(kTestingAreaName.t, state.getArea());
 
-  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
-  auto update = state.updateAdjacencyDatabase(adjDb2, 0, 0);
+  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                   .topologyChanged);
+  auto update = state.updateAdjacencyDatabase(adjDb2, kTestingAreaName, 0, 0);
   EXPECT_TRUE(update.topologyChanged);
   EXPECT_EQ(update.addedLinks.size(), 1);
-  update = state.updateAdjacencyDatabase(adjDb3, 0, 0);
+  update = state.updateAdjacencyDatabase(adjDb3, kTestingAreaName, 0, 0);
   EXPECT_TRUE(update.topologyChanged);
   EXPECT_EQ(update.addedLinks.size(), 2);
 
@@ -183,15 +184,19 @@ TEST(LinkStateTest, BasicOperation) {
 
   EXPECT_FALSE(state.isNodeOverloaded(n1));
   adjDb1.isOverloaded_ref() = true;
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                  .topologyChanged);
   EXPECT_TRUE(state.isNodeOverloaded(n1));
-  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
+  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                   .topologyChanged);
   adjDb1.isOverloaded_ref() = false;
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                  .topologyChanged);
   EXPECT_FALSE(state.isNodeOverloaded(n1));
 
   adjDb1 = openr::createAdjDb(n1, {adj13}, 1);
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                  .topologyChanged);
   EXPECT_THAT(state.linksFromNode(n1), UnorderedElementsAre(Pointee(l3)));
   EXPECT_THAT(state.linksFromNode(n2), UnorderedElementsAre(Pointee(l2)));
   EXPECT_THAT(

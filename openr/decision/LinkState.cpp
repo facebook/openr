@@ -589,16 +589,16 @@ LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
 LinkState::LinkStateChange
 LinkState::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb,
+    std::string area,
     LinkStateMetric holdUpTtl,
     LinkStateMetric holdDownTtl) {
   LinkStateChange change;
   auto const& nodeName = *newAdjacencyDb.thisNodeName_ref();
   XLOG(DBG1) << "Updating adjacency database for node " << nodeName << ", area "
-             << *newAdjacencyDb.area_ref();
+             << area;
 
   // Area field must be specified and match with area_
-  DCHECK_EQ(area_, *newAdjacencyDb.area_ref());
-
+  DCHECK_EQ(area_, area);
   for (auto const& adj : *newAdjacencyDb.adjacencies_ref()) {
     XLOG(DBG3) << "  neighbor: " << *adj.otherNodeName_ref()
                << ", remoteIfName: " << getRemoteIfName(adj)

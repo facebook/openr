@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
@@ -417,6 +418,7 @@ class LinkState {
   // update adjacencies for the given router
   LinkStateChange updateAdjacencyDatabase(
       thrift::AdjacencyDatabase const& adjacencyDb,
+      std::string area,
       LinkStateMetric holdUpTtl = 0,
       LinkStateMetric holdDownTtl = 0);
 

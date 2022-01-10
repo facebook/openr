@@ -734,15 +734,13 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
         auto& nodeName = adjacencyDb.get_thisNodeName();
         LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
-        // TODO: can we directly use area in AdjacencyDatabase?
+        // TODO: deprecate area_ref()
         adjacencyDb.area_ref() = area;
-
-        // TODO: Is this useful?
         fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
         pendingUpdates_.applyLinkStateChange(
             nodeName,
             areaLinkState.updateAdjacencyDatabase(
-                adjacencyDb, holdUpTtl, holdDownTtl),
+                adjacencyDb, area, holdUpTtl, holdDownTtl),
             adjacencyDb.perfEvents_ref());
       } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
         // prefixDb: update keys starting with "prefix:"
