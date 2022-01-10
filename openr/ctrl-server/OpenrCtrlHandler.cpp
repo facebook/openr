@@ -670,6 +670,14 @@ OpenrCtrlHandler::semifuture_getDecisionAdjacenciesFiltered(
   return decision_->getDecisionAdjacenciesFiltered(std::move(*filter));
 }
 
+folly::SemiFuture<std::unique_ptr<
+    std::map<std::string, std::vector<::openr::thrift::AdjacencyDatabase>>>>
+OpenrCtrlHandler::semifuture_getDecisionAreaAdjacenciesFiltered(
+    std::unique_ptr<thrift::AdjacenciesFilter> filter) {
+  CHECK(decision_);
+  return decision_->getDecisionAreaAdjacenciesFiltered(std::move(*filter));
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
 OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   auto filter = std::make_unique<thrift::ReceivedRouteFilter>();

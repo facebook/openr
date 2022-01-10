@@ -150,10 +150,19 @@ class Decision : public OpenrEventBase {
       std::string nodeName);
 
   /*
-   * Retrieve AdjacencyDatabase for all nodes in all areas
+   * Retrieve AdjacencyDatabase for all nodes in all areas.
+   * DEPRECATED. Perfer getDecisionAreaAdjacenciesFiltered to return the areas
+   * as well.
    */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   getDecisionAdjacenciesFiltered(thrift::AdjacenciesFilter filter = {});
+
+  /*
+   * Retrieve area and AdjacencyDatabase for all nodes in all areas
+   */
+  folly::SemiFuture<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+  getDecisionAreaAdjacenciesFiltered(thrift::AdjacenciesFilter filter = {});
 
   /*
    * Retrieve received routes along with best route selection output.

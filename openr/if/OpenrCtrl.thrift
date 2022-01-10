@@ -470,8 +470,19 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get adjacency databases of all nodes. NOTE: for ABRs, there can be more
    * than one AdjDb for a node (one per area)
    * (includes bi-directional check)
+   *
+   * DEPRECATED. Perfer getDecisionAreaAdjacenciesFiltered to return the areas as well.
    */
   list<Types.AdjacencyDatabase> getDecisionAdjacenciesFiltered(
+    1: AdjacenciesFilter filter,
+  ) throws (1: OpenrError error);
+
+  /**
+   * Get map<area_name, list<adjacency databases>> of all nodes.
+   * NOTE: for ABRs, there can be more than one AdjDb for a node (one per area).
+   * (includes bi-directional check)
+   */
+  map<string, list<Types.AdjacencyDatabase>> getDecisionAreaAdjacenciesFiltered(
     1: AdjacenciesFilter filter,
   ) throws (1: OpenrError error);
 

@@ -212,8 +212,15 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
   semifuture_getDecisionAdjacencyDbs() override;
 
+  // DEPRECATED. Perfer getDecisionAreaAdjacenciesFiltered to return the areas
+  // as well.
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   semifuture_getDecisionAdjacenciesFiltered(
+      std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
+
+  folly::SemiFuture<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+  semifuture_getDecisionAreaAdjacenciesFiltered(
       std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
 
   folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>

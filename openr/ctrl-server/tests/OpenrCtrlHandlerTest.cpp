@@ -396,6 +396,14 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
   }
 
   {
+    auto dbs = handler_
+                   ->semifuture_getDecisionAreaAdjacenciesFiltered(
+                       std::make_unique<thrift::AdjacenciesFilter>())
+                   .get();
+    EXPECT_EQ(0, dbs->size());
+  }
+
+  {
     auto routes = handler_->semifuture_getReceivedRoutes().get();
     EXPECT_EQ(0, routes->size());
   }

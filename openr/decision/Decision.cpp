@@ -338,6 +338,30 @@ Decision::getDecisionAdjacenciesFiltered(thrift::AdjacenciesFilter filter) {
   return sf;
 }
 
+folly::SemiFuture<std::unique_ptr<
+    std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+Decision::getDecisionAreaAdjacenciesFiltered(thrift::AdjacenciesFilter filter) {
+  folly::Promise<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+      p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [p = std::move(p), filter = std::move(filter), this]() mutable {
+        auto res = std::make_unique<
+            std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>();
+        for (auto const& [area, linkState] : areaLinkStates_) {
+          if (filter.get_selectAreas().empty() ||
+              filter.get_selectAreas().count(area)) {
+            for (auto const& [_, db] : linkState.getAdjacencyDatabases()) {
+              res->operator[](area).push_back(db);
+            }
+          }
+        }
+        p.setValue(std::move(res));
+      });
+  return sf;
+}
+
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
 Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
   auto [p, sf] = folly::makePromiseContract<
