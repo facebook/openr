@@ -719,6 +719,121 @@ Decision::readRibPolicy() {
 }
 
 void
+Decision::updateKeyInLsdb(
+    const std::string& area,
+    LinkState& areaLinkState,
+    const std::string& key,
+    const thrift::Value& rawVal) {
+  if (not rawVal.value_ref().has_value()) {
+    // skip TTL update
+    DCHECK(*rawVal.ttlVersion_ref() > 0);
+    return;
+  }
+
+  try {
+    if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+      // adjacencyDb: update keys starting with "adj:"
+      auto adjacencyDb = readThriftObjStr<thrift::AdjacencyDatabase>(
+          rawVal.value_ref().value(), serializer_);
+
+      // Process adjacency to unblock Open/R initialization.
+      updatePendingAdjacency(area, adjacencyDb);
+
+      // Filter adjacency that cannot be used by this node in route
+      // computation.
+      filterUnuseableAdjacency(adjacencyDb);
+
+      auto& nodeName = adjacencyDb.get_thisNodeName();
+      LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
+      // TODO: deprecate area_ref()
+      adjacencyDb.area_ref() = area;
+      pendingUpdates_.applyLinkStateChange(
+          nodeName,
+          areaLinkState.updateAdjacencyDatabase(
+              adjacencyDb, area, holdUpTtl, holdDownTtl),
+          adjacencyDb.perfEvents_ref());
+      return;
+    }
+
+    if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
+      // prefixDb: update keys starting with "prefix:"
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+          rawVal.value_ref().value(), serializer_);
+
+      // We expect per prefix key, ignore if publication is still in old
+      // format.
+      if (1 != prefixDb.get_prefixEntries().size()) {
+        XLOG(ERR)
+            << "Expecting exactly one entry per prefix key, publication received from "
+            << *prefixDb.thisNodeName_ref();
+        fb303::fbData->addStatValue("decision.error", 1, fb303::COUNT);
+        return;
+      }
+
+      auto const& entry = prefixDb.get_prefixEntries().front();
+      auto const& areaStack = entry.get_area_stack();
+
+      // Ignore self redistributed route reflection
+      // These routes are programmed by Decision,
+      // re-origintaed by me to areas that do not have the best prefix entry
+      if (prefixDb.get_thisNodeName() == myNodeName_ && areaStack.size() > 0 &&
+          areaLinkStates_.count(areaStack.back())) {
+        XLOG(DBG2) << "Ignore self redistributed route reflection for prefix: "
+                   << key << " area_stack: " << folly::join(",", areaStack);
+        return;
+      }
+
+      // construct new prefix key with local publication area id
+      PrefixKey prefixKey(
+          prefixDb.get_thisNodeName(), toIPNetwork(entry.get_prefix()), area);
+
+      pendingUpdates_.applyPrefixStateChange(
+          prefixDb.get_deletePrefix()
+              ? prefixState_.deletePrefix(prefixKey)
+              : prefixState_.updatePrefix(prefixKey, entry),
+          prefixDb.perfEvents_ref());
+    }
+  } catch (const std::exception& e) {
+    XLOG(ERR) << "Failed to deserialize info for key " << key
+              << ". Exception: " << folly::exceptionStr(e);
+  }
+}
+
+void
+Decision::deleteKeyFromLsdb(
+    const std::string& area, LinkState& areaLinkState, const std::string& key) {
+  // TODO: avoid decoding from string by injecting data-structures
+  // instead of raw strings into `expiredKeys` collection
+
+  std::string nodeName = getNodeNameFromKey(key);
+
+  if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+    // adjacencyDb: delete keys starting with "adj:"
+    pendingUpdates_.applyLinkStateChange(
+        nodeName,
+        areaLinkState.deleteAdjacencyDatabase(nodeName),
+        thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
+    return;
+  }
+
+  if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
+    // prefixDb: delete keys starting with "prefix:"
+    auto maybePrefixKey = PrefixKey::fromStr(key, area);
+    if (maybePrefixKey.hasError()) {
+      // this is bad format of key.
+      XLOG(ERR) << fmt::format(
+          "Unable to parse prefix key: {} with error: {}",
+          key,
+          maybePrefixKey.error());
+      return;
+    }
+    pendingUpdates_.applyPrefixStateChange(
+        prefixState_.deletePrefix(maybePrefixKey.value()),
+        thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
+  }
+}
+
+void
 Decision::processPublication(thrift::Publication&& thriftPub) {
   CHECK(not thriftPub.area_ref()->empty());
   auto const& area = *thriftPub.area_ref();
@@ -737,110 +852,12 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
   // LSDB addition/update
   for (const auto& [key, rawVal] : *thriftPub.keyVals_ref()) {
-    if (not rawVal.value_ref().has_value()) {
-      // skip TTL update
-      DCHECK(*rawVal.ttlVersion_ref() > 0);
-      continue;
-    }
-
-    try {
-      if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-        // adjacencyDb: update keys starting with "adj:"
-        auto adjacencyDb = readThriftObjStr<thrift::AdjacencyDatabase>(
-            rawVal.value_ref().value(), serializer_);
-
-        // Process adjacency to unblock Open/R initialization.
-        updatePendingAdjacency(area, adjacencyDb);
-
-        // Filter adjacency that cannot be used by this node in route
-        // computation.
-        filterUnuseableAdjacency(adjacencyDb);
-
-        auto& nodeName = adjacencyDb.get_thisNodeName();
-        LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
-        // TODO: deprecate area_ref()
-        adjacencyDb.area_ref() = area;
-        fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
-        pendingUpdates_.applyLinkStateChange(
-            nodeName,
-            areaLinkState.updateAdjacencyDatabase(
-                adjacencyDb, area, holdUpTtl, holdDownTtl),
-            adjacencyDb.perfEvents_ref());
-      } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
-        // prefixDb: update keys starting with "prefix:"
-        auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-            rawVal.value_ref().value(), serializer_);
-
-        // We expect per prefix key, ignore if publication is still in old
-        // format.
-        if (1 != prefixDb.get_prefixEntries().size()) {
-          XLOG(ERR)
-              << "Expecting exactly one entry per prefix key, publication received from "
-              << *prefixDb.thisNodeName_ref();
-          fb303::fbData->addStatValue("decision.error", 1, fb303::COUNT);
-          continue;
-        }
-
-        auto const& entry = prefixDb.get_prefixEntries().front();
-        auto const& areaStack = entry.get_area_stack();
-
-        // Ignore self redistributed route reflection
-        // These routes are programmed by Decision,
-        // re-origintaed by me to areas that do not have the best prefix entry
-        if (prefixDb.get_thisNodeName() == myNodeName_ &&
-            areaStack.size() > 0 && areaLinkStates_.count(areaStack.back())) {
-          XLOG(DBG2)
-              << "Ignore self redistributed route reflection for prefix: "
-              << key << " area_stack: " << folly::join(",", areaStack);
-          continue;
-        }
-
-        // construct new prefix key with local publication area id
-        PrefixKey prefixKey(
-            prefixDb.get_thisNodeName(), toIPNetwork(entry.get_prefix()), area);
-
-        // TODO: Is this useful?
-        fb303::fbData->addStatValue(
-            "decision.prefix_db_update", 1, fb303::COUNT);
-        pendingUpdates_.applyPrefixStateChange(
-            prefixDb.get_deletePrefix()
-                ? prefixState_.deletePrefix(prefixKey)
-                : prefixState_.updatePrefix(prefixKey, entry),
-            prefixDb.perfEvents_ref());
-      }
-    } catch (const std::exception& e) {
-      XLOG(ERR) << "Failed to deserialize info for key " << key
-                << ". Exception: " << folly::exceptionStr(e);
-    }
+    updateKeyInLsdb(area, areaLinkState, key, rawVal);
   }
 
   // LSDB deletion
-  // TODO: avoid decoding from string by injecting data-structures
-  // instead of raw strings into `expiredKeys` collection
   for (const auto& key : *thriftPub.expiredKeys_ref()) {
-    std::string nodeName = getNodeNameFromKey(key);
-
-    if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-      // adjacencyDb: delete keys starting with "adj:"
-      pendingUpdates_.applyLinkStateChange(
-          nodeName,
-          areaLinkState.deleteAdjacencyDatabase(nodeName),
-          thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
-    } else if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
-      // prefixDb: delete keys starting with "prefix:"
-      auto maybePrefixKey = PrefixKey::fromStr(key, area);
-      if (maybePrefixKey.hasError()) {
-        // this is bad format of key.
-        XLOG(ERR) << fmt::format(
-            "Unable to parse prefix key: {} with error: {}",
-            key,
-            maybePrefixKey.error());
-        continue;
-      }
-      pendingUpdates_.applyPrefixStateChange(
-          prefixState_.deletePrefix(maybePrefixKey.value()),
-          thrift::PrefixDatabase().perfEvents_ref()); // Empty perf events
-    }
+    deleteKeyFromLsdb(area, areaLinkState, key);
   }
 }
 

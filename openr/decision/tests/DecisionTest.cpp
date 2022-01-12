@@ -7020,12 +7020,8 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // Verify counters information
   //
 
-  const int64_t adjUpdateCnt = 1000 /* initial */;
-  const int64_t prefixUpdateCnt = totalSent + 1000 /* initial */ + 1 /* end */;
   auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(1, counters["decision.spf_runs.count"]);
-  EXPECT_EQ(adjUpdateCnt, counters["decision.adj_db_update.count"]);
-  EXPECT_EQ(prefixUpdateCnt, counters["decision.prefix_db_update.count"]);
 }
 
 //

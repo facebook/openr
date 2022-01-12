@@ -204,8 +204,29 @@ class Decision : public OpenrEventBase {
   // Process peer updates
   void processPeerUpdates(PeerEvent&& event);
 
-  // Process thrift publication from KvStore
+  /*
+   * [Link-State Database(LSDB) Management]
+   *
+   * Decision consumes the publication from KvStore for LSDB
+   * update(add/delete/etc.) and update its internal database of: 1)
+   * PREFIX_DATABASE 2) ADJACENCY_DATABASE
+   *
+   * It provides multiple util functions to process the updates including:
+   *    1) updateKeyInLsdb  - process key adding/updating
+   *    2) deleteKeyFromLsdb - process key deletion
+   */
   void processPublication(thrift::Publication&& thriftPub);
+
+  void updateKeyInLsdb(
+      const std::string& area,
+      LinkState& areaLinkState,
+      const std::string& key,
+      const thrift::Value& rawVal);
+
+  void deleteKeyFromLsdb(
+      const std::string& area,
+      LinkState& areaLinkState,
+      const std::string& key);
 
   // Process publication from PrefixManager
   void processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate);
