@@ -558,43 +558,13 @@ Fib::printMplsRoutesAddUpdate(
 }
 
 bool
-Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
-  SCOPE_EXIT {
-    updateRoutesSemaphore_.signal(); // Release when this function returns
-  };
-  updateRoutesSemaphore_.wait();
-
-  // Return if empty
-  if (routeUpdate.empty()) {
-    XLOG(INFO) << "No entries in route update";
-    return true;
-  }
-
-  // Backup routes in routeState_. In case update routes failed, routes will be
-  // programmed in later scheduled FIB sync.
-  routeState_.update(routeUpdate);
-
-  // Update flat counters here as they depend on routeState_ and its change
-  updateGlobalCounters();
-
-  // Skip route programming if we're in the SYNCING state. We only perform
-  // incremental route programming in AWAITING or SYNCED state. In SYNCING
-  // state we let `syncRoutes` do the work instead.
-  if (routeState_.state == RouteState::SYNCING) {
-    XLOG(INFO) << "Skip route programming in SYNCING state";
-    return true;
-  }
-
-  XLOG(INFO) << "Updating routes in FIB";
-  auto const currentTime = std::chrono::steady_clock::now();
-  auto const retryAt =
-      currentTime + retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
+Fib::updateUnicastRoutes(
+    const bool useDeleteDelay,
+    const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
+    const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
+    DecisionRouteUpdate& routeUpdate,
+    thrift::RouteDatabaseDelta& routeDbDelta) {
   bool success{true};
-
-  // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
-  // and MplsRoute with the FibService client APIs
-  auto routeDbDelta = routeUpdate.toThrift();
-
   //
   // Delete Unicast routes
   //
@@ -688,11 +658,22 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
     }
   }
 
+  return success;
+}
+
+bool
+Fib::updateMplsRoutes(
+    const bool useDeleteDelay,
+    const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
+    const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
+    DecisionRouteUpdate& routeUpdate,
+    thrift::RouteDatabaseDelta& routeDbDelta) {
+  bool success{true};
   //
   // Delete Mpls routes
   //
   auto& mplsRoutesToDelete = *routeDbDelta.mplsRoutesToDelete_ref();
-  if (enableSegmentRouting_ and useDeleteDelay and delayedDeletionEnabled()) {
+  if (useDeleteDelay and delayedDeletionEnabled()) {
     // Clear the routes to delete
     mplsRoutesToDelete.clear();
 
@@ -708,7 +689,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
     }
   }
 
-  if (enableSegmentRouting_ and mplsRoutesToDelete.size()) {
+  if (mplsRoutesToDelete.size()) {
     XLOG(INFO) << "Deleting " << mplsRoutesToDelete.size()
                << " mpls routes in FIB";
     for (auto const& topLabel : mplsRoutesToDelete) {
@@ -741,7 +722,7 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
   // Update Mpls routes
   //
   auto const& mplsRoutesToUpdate = *routeDbDelta.mplsRoutesToUpdate_ref();
-  if (enableSegmentRouting_ and mplsRoutesToUpdate.size()) {
+  if (mplsRoutesToUpdate.size()) {
     XLOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
                << " mpls routes in FIB";
     printMplsRoutesAddUpdate(mplsRoutesToUpdate);
@@ -767,8 +748,9 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
                   << folly::exceptionStr(e);
         // Mark routes we failed to update as dirty for retry. Also declare
         // these routes as deleted to client, because we failed to update them
-        // Next retry should restore, but meanwhile clients can take appropriate
-        // action because FIB state is unclear e.g. withdraw route from KvStore
+        // Next retry should restore, but meanwhile clients can take
+        // appropriate action because FIB state is unclear e.g. withdraw route
+        // from KvStore
         for (auto& [label, _] : routeUpdate.mplsRoutesToUpdate) {
           routeState_.dirtyLabels.insert_or_assign(label, retryAt);
           routeUpdate.mplsRoutesToDelete.emplace_back(label);
@@ -780,6 +762,54 @@ Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
     }
   }
 
+  return success;
+}
+
+bool
+Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
+  SCOPE_EXIT {
+    updateRoutesSemaphore_.signal(); // Release when this function returns
+  };
+  updateRoutesSemaphore_.wait();
+
+  // Return if empty
+  if (routeUpdate.empty()) {
+    XLOG(INFO) << "No entries in route update";
+    return true;
+  }
+
+  // Backup routes in routeState_. In case update routes failed, routes will be
+  // programmed in later scheduled FIB sync.
+  routeState_.update(routeUpdate);
+
+  // Update flat counters here as they depend on routeState_ and its change
+  updateGlobalCounters();
+
+  // Skip route programming if we're in the SYNCING state. We only perform
+  // incremental route programming in AWAITING or SYNCED state. In SYNCING
+  // state we let `syncRoutes` do the work instead.
+  if (routeState_.state == RouteState::SYNCING) {
+    XLOG(INFO) << "Skip route programming in SYNCING state";
+    return true;
+  }
+
+  XLOG(INFO) << "Updating routes in FIB";
+  auto const currentTime = std::chrono::steady_clock::now();
+  auto const retryAt =
+      currentTime + retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
+  bool success{true};
+
+  // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
+  // and MplsRoute with the FibService client APIs
+  auto routeDbDelta = routeUpdate.toThrift();
+
+  success &= updateUnicastRoutes(
+      useDeleteDelay, currentTime, retryAt, routeUpdate, routeDbDelta);
+
+  if (enableSegmentRouting_) {
+    success &= updateMplsRoutes(
+        useDeleteDelay, currentTime, retryAt, routeUpdate, routeDbDelta);
+  }
   // Log statistics
   const auto elapsedTime = std::chrono::ceil<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - currentTime);

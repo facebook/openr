@@ -149,15 +149,41 @@ class Fib final : public OpenrEventBase {
   void processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate);
 
   /**
-   * Incremental route programming. On route programming failure,
-   * prefixes/labels are marked dirty and retryRoutesSignal is invoked.
-   * If useDeleteDelay is false, delete routes without putting them in
-   * dirtyPrefixes/dirtyLabels (i.e., don't delay programming). Otherwise,
-   * delay deletion based on configured duration.
+   * Incremental route programming.
    * @return true if all routes are successfully programmed
    */
   bool updateRoutes(
       DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay = true);
+
+  /**
+   * The helper function of updateRoutes that programs unicast routes. On route
+   * programming failure, prefixes are marked dirty and retryRoutesSignal is
+   * invoked. If useDeleteDelay is false, delete routes without putting them in
+   * dirtyPrefixes (i.e., don't delay programming). Otherwise, delay deletion
+   * based on configured duration.
+   * @return true if all routes are successfully programmed
+   */
+  bool updateUnicastRoutes(
+      const bool useDeleteDelay,
+      const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
+      const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
+      DecisionRouteUpdate& routeUpdate,
+      thrift::RouteDatabaseDelta& routeDbDelta);
+
+  /**
+   * The helper function of updateRoutes that programs MPLS routes. On route
+   * programming failure, labels are marked dirty and retryRoutesSignal is
+   * invoked. If useDeleteDelay is false, delete routes without putting them in
+   * dirtyLabels (i.e., don't delay programming). Otherwise, delay deletion
+   * based on configured duration.
+   * @return true if all routes are successfully programmed
+   */
+  bool updateMplsRoutes(
+      const bool useDeleteDelay,
+      const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
+      const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
+      DecisionRouteUpdate& routeUpdate,
+      thrift::RouteDatabaseDelta& routeDbDelta);
 
   /**
    * Sync the current RouteState with the switch agent.
