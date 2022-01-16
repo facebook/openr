@@ -388,14 +388,14 @@ validatePopLabelRoute(
 
 void
 printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
-  for (const auto ucRoute : *routeDb.value().unicastRoutes_ref()) {
+  for (const auto& ucRoute : *routeDb.value().unicastRoutes_ref()) {
     LOG(INFO) << "dest: " << toString(*ucRoute.dest_ref());
     if (ucRoute.adminDistance_ref().has_value()) {
       LOG(INFO) << "ad_dis: "
                 << static_cast<int>(ucRoute.adminDistance_ref().value());
     }
 
-    for (const auto nh : *ucRoute.nextHops_ref()) {
+    for (const auto& nh : *ucRoute.nextHops_ref()) {
       LOG(INFO) << "nexthops: " << toString(nh);
     }
   }
