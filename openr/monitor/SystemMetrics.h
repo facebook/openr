@@ -13,6 +13,7 @@
 #include <sys/time.h>
 #include <chrono>
 #include <fstream>
+#include <optional>
 
 namespace openr {
 
