@@ -90,13 +90,69 @@ struct NeighborEvent {
   NeighborEventType eventType;
 
   /**
-   * Detailed information about neighbor from Spark
+   * Spark neighbor name
    */
-  thrift::SparkNeighbor info;
+  std::string remoteNodeName;
+
+  /**
+   * v4/v6 neighbor address
+   */
+  thrift::BinaryAddress neighborAddrV4;
+  thrift::BinaryAddress neighborAddrV6;
+
+  /**
+   * local/remote interface name
+   */
+  std::string localIfName;
+  std::string remoteIfName;
+
+  /**
+   * areaId in which this neighbor is discovered
+   */
+  std::string area;
+
+  /**
+   * port information for TCP connection establishement
+   */
+  int32_t kvStoreCmdPort;
+  int32_t ctrlThriftPort;
+
+  /**
+   * round-trip-time(RTT) for this neighbor
+   */
+  int64_t rttUs;
+
+  /**
+   * misc flags
+   */
+  bool enableFloodOptimization{false};
+  bool adjOnlyUsedByOtherNode{false};
 
   NeighborEvent(
-      const NeighborEventType& eventType, const thrift::SparkNeighbor& info)
-      : eventType(eventType), info(info) {}
+      const NeighborEventType& eventType,
+      const std::string& nodeName,
+      const thrift::BinaryAddress& v4Addr,
+      const thrift::BinaryAddress& v6Addr,
+      const std::string& localIfName,
+      const std::string& remoteIfName,
+      const std::string& area,
+      int32_t kvStoreCmdPort,
+      int32_t ctrlThriftPort,
+      int64_t rttUs,
+      bool enableFloodOptimization = false,
+      bool adjOnlyUsedByOtherNode = false)
+      : eventType(eventType),
+        remoteNodeName(nodeName),
+        neighborAddrV4(v4Addr),
+        neighborAddrV6(v6Addr),
+        localIfName(localIfName),
+        remoteIfName(remoteIfName),
+        area(area),
+        kvStoreCmdPort(kvStoreCmdPort),
+        ctrlThriftPort(ctrlThriftPort),
+        rttUs(rttUs),
+        enableFloodOptimization(enableFloodOptimization),
+        adjOnlyUsedByOtherNode(adjOnlyUsedByOtherNode) {}
 };
 
 using NeighborEvents = std::vector<NeighborEvent>;

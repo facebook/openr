@@ -244,8 +244,6 @@ Spark::SparkNeighbor::toThrift() const {
 
   // populate misc info
   info.rttUs_ref() = this->rtt.count();
-  info.enableFloodOptimization_ref() = this->enableFloodOptimization;
-  info.adjOnlyUsedByOtherNode_ref() = this->adjOnlyUsedByOtherNode;
 
   return info;
 }
@@ -367,7 +365,18 @@ Spark::Spark(
           for (auto& [neighborName, neighbor] : neighborMap) {
             if (neighbor.state == SparkNeighState::ESTABLISHED) {
               upNeighbors.emplace_back(NeighborEvent(
-                  NeighborEventType::NEIGHBOR_UP, neighbor.toThrift()));
+                  NeighborEventType::NEIGHBOR_UP,
+                  neighbor.nodeName,
+                  neighbor.transportAddressV4,
+                  neighbor.transportAddressV6,
+                  neighbor.localIfName,
+                  neighbor.remoteIfName,
+                  neighbor.area,
+                  neighbor.kvStoreCmdPort,
+                  neighbor.openrCtrlThriftPort,
+                  neighbor.rtt.count(),
+                  neighbor.enableFloodOptimization,
+                  neighbor.adjOnlyUsedByOtherNode));
             }
           } // for
         } // for
@@ -801,7 +810,7 @@ Spark::processRttChange(
                << "from " << sparkNeighbor.rtt.count() << "usecs to " << newRtt
                << "usecs over interface " << ifName;
     notifySparkNeighborEvent(
-        NeighborEventType::NEIGHBOR_RTT_CHANGE, sparkNeighbor.toThrift());
+        NeighborEventType::NEIGHBOR_RTT_CHANGE, sparkNeighbor);
   }
 }
 
@@ -1198,8 +1207,7 @@ Spark::neighborUpWrapper(
         "[Initialization] Mark neighbor: {} only used by other node in adj population",
         neighborName);
   }
-  // TODO: avoid thrift transformation between modules
-  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor.toThrift());
+  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor);
 }
 
 void
@@ -1208,8 +1216,7 @@ Spark::neighborDownWrapper(
     std::string const& ifName,
     std::string const& neighborName) {
   // notify LinkMonitor about neighbor DOWN state
-  notifySparkNeighborEvent(
-      NeighborEventType::NEIGHBOR_DOWN, neighbor.toThrift());
+  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_DOWN, neighbor);
 
   // remove neighborship on this interface
   if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
@@ -1225,14 +1232,26 @@ Spark::neighborDownWrapper(
 
 void
 Spark::notifySparkNeighborEvent(
-    NeighborEventType eventType, thrift::SparkNeighbor const& info) {
+    NeighborEventType eventType, SparkNeighbor const& neighbor) {
   // In OpenR initialization procedure, initializationHoldTimer_ publishes the
   // first batch of discovered neighbors.
   if ((not initialInterfacesReceived_) or
       initializationHoldTimer_->isScheduled()) {
     return;
   }
-  neighborUpdatesQueue_.push(NeighborEvents({NeighborEvent(eventType, info)}));
+  neighborUpdatesQueue_.push(NeighborEvents({NeighborEvent(
+      eventType,
+      neighbor.nodeName,
+      neighbor.transportAddressV4,
+      neighbor.transportAddressV6,
+      neighbor.localIfName,
+      neighbor.remoteIfName,
+      neighbor.area,
+      neighbor.kvStoreCmdPort,
+      neighbor.openrCtrlThriftPort,
+      neighbor.rtt.count(),
+      neighbor.enableFloodOptimization,
+      neighbor.adjOnlyUsedByOtherNode)}));
 }
 
 void
@@ -1323,8 +1342,7 @@ Spark::processGRMsg(
     std::string const& ifName,
     SparkNeighbor& neighbor) {
   // notify link-monitor for RESTARTING event
-  notifySparkNeighborEvent(
-      NeighborEventType::NEIGHBOR_RESTARTING, neighbor.toThrift());
+  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_RESTARTING, neighbor);
 
   // start graceful-restart timer
   neighbor.gracefulRestartHoldTimer = folly::AsyncTimeout::make(
@@ -1576,8 +1594,7 @@ Spark::processHelloMsg(
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
-    notifySparkNeighborEvent(
-        NeighborEventType::NEIGHBOR_RESTARTED, neighbor.toThrift());
+    notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_RESTARTED, neighbor);
 
     // start heartbeat timer again to make sure neighbor is alive
     neighbor.heartbeatHoldTimer = folly::AsyncTimeout::make(
@@ -1811,8 +1828,7 @@ Spark::processHeartbeatMsg(
   // Check adjOnlyUsedByOtherNode bit to report to LinkMonitor
   if (neighbor.shouldResetAdjacency(heartbeatMsg)) {
     neighbor.adjOnlyUsedByOtherNode = false;
-    notifySparkNeighborEvent(
-        NeighborEventType::NEIGHBOR_ADJ_SYNCED, neighbor.toThrift());
+    notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_ADJ_SYNCED, neighbor);
 
     LOG(INFO) << fmt::format(
         "[Initialization] Reset flag for neighbor: {} to mark adj to be used globally",

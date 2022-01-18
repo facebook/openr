@@ -178,12 +178,11 @@ class LinkMonitor final : public OpenrEventBase {
   void processNeighborEvents(NeighborEvents&& events);
 
   // individual neighbor event function
-  void neighborUpEvent(
-      const thrift::SparkNeighbor& info, bool isGracefulRestart);
-  void neighborAdjSyncedEvent(const thrift::SparkNeighbor& info);
-  void neighborRestartingEvent(const thrift::SparkNeighbor& info);
-  void neighborDownEvent(const thrift::SparkNeighbor& info);
-  void neighborRttChangeEvent(const thrift::SparkNeighbor& info);
+  void neighborUpEvent(const NeighborEvent& event, bool isGracefulRestart);
+  void neighborAdjSyncedEvent(const NeighborEvent& event);
+  void neighborRestartingEvent(const NeighborEvent& event);
+  void neighborDownEvent(const NeighborEvent& event);
+  void neighborRttChangeEvent(const NeighborEvent& event);
 
   /*
    * [KvStore] initial sync event

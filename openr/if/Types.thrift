@@ -1029,21 +1029,4 @@ struct SparkNeighbor {
    * exchanging hello packets between neighbor nodes.
    */
   10: i64 rttUs;
-
-  /**
-   * Adjacency label for segment routing. It is derived from the ifIndex and
-   * ensured to be unique for each adjacency (neighbor, interface). See
-   * Source Routing documentation for more information.
-   */
-  11: i32 label;
-
-  /**
-   * Flag to support flood optimization or not
-   */
-  12: bool enableFloodOptimization = 0;
-
-  /**
-   * Flag to mark attribute in thrift::Adjacency. See definition for details.
-   */
-  13: bool adjOnlyUsedByOtherNode = 0;
 } (cpp.minimize_padding)

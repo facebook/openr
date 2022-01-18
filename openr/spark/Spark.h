@@ -394,7 +394,7 @@ class Spark final : public OpenrEventBase {
 
   // utility call to send SparkNeighborEvent
   void notifySparkNeighborEvent(
-      NeighborEventType type, thrift::SparkNeighbor const& info);
+      NeighborEventType type, SparkNeighbor const& info);
 
   // callback function for rtt change
   void processRttChange(

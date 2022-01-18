@@ -131,9 +131,7 @@ SparkWrapper::waitForEvents(
 
 std::pair<folly::IPAddress, folly::IPAddress>
 SparkWrapper::getTransportAddrs(const NeighborEvent& event) {
-  return {
-      toIPAddress(*event.info.transportAddressV4_ref()),
-      toIPAddress(*event.info.transportAddressV6_ref())};
+  return {toIPAddress(event.neighborAddrV4), toIPAddress(event.neighborAddrV6)};
 }
 
 std::optional<SparkNeighState>

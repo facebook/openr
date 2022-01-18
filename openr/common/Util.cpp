@@ -546,34 +546,6 @@ createPeerSpec(
   return peerSpec;
 }
 
-thrift::SparkNeighbor
-createSparkNeighbor(
-    const std::string& nodeName,
-    const thrift::BinaryAddress& v4Addr,
-    const thrift::BinaryAddress& v6Addr,
-    const int64_t kvStoreCmdPort,
-    const int64_t openrCtrlThriftPort,
-    const int32_t label,
-    const int64_t rttUs,
-    const std::string& remoteIfName,
-    const std::string& localIfName,
-    const std::string& area,
-    const std::string& state) {
-  thrift::SparkNeighbor neighbor;
-  neighbor.nodeName_ref() = nodeName;
-  neighbor.transportAddressV4_ref() = v4Addr;
-  neighbor.transportAddressV6_ref() = v6Addr;
-  neighbor.kvStoreCmdPort_ref() = kvStoreCmdPort;
-  neighbor.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
-  neighbor.remoteIfName_ref() = remoteIfName;
-  neighbor.localIfName_ref() = localIfName;
-  neighbor.area_ref() = area;
-  neighbor.state_ref() = state;
-  neighbor.rttUs_ref() = rttUs;
-  neighbor.label_ref() = label;
-  return neighbor;
-}
-
 thrift::Adjacency
 createThriftAdjacency(
     const std::string& nodeName,

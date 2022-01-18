@@ -265,19 +265,6 @@ thrift::PeerSpec createPeerSpec(
     const thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE,
     const bool supportFloodOptimization = false);
 
-thrift::SparkNeighbor createSparkNeighbor(
-    const std::string& nodeName,
-    const thrift::BinaryAddress& v4Addr,
-    const thrift::BinaryAddress& v6Addr,
-    const int64_t kvStoreCmdPort,
-    const int64_t openrCtrlThriftPort,
-    const int32_t label,
-    const int64_t rttUs,
-    const std::string& remoteIfName,
-    const std::string& localIfName,
-    const std::string& area = kTestingAreaName,
-    const std::string& state = "IDLE");
-
 thrift::Adjacency createAdjacency(
     const std::string& nodeName,
     const std::string& ifName,

@@ -277,22 +277,18 @@ LinkMonitor::stop() {
 
 void
 LinkMonitor::neighborUpEvent(
-    const thrift::SparkNeighbor& info, bool isGracefulRestart) {
-  // ATTN: all the thrift field is guaranteed to be there since it is
-  // transformed from SparkNeighbor structure.
-  // TODO: instead of using thrift structure, inter-module commmunication
-  // should leverage C++ structure ONLY.
-  const auto& neighborAddrV4 = *info.transportAddressV4_ref();
-  const auto& neighborAddrV6 = *info.transportAddressV6_ref();
-  const auto& localIfName = *info.localIfName_ref();
-  const auto& remoteIfName = *info.remoteIfName_ref();
-  const auto& remoteNodeName = *info.nodeName_ref();
-  const auto& area = *info.area_ref();
-  const auto kvStoreCmdPort = *info.kvStoreCmdPort_ref();
-  const auto openrCtrlThriftPort = *info.openrCtrlThriftPort_ref();
-  const auto rttUs = *info.rttUs_ref();
-  const auto supportFloodOptimization = *info.enableFloodOptimization_ref();
-  const auto onlyUsedByOtherNode = *info.adjOnlyUsedByOtherNode_ref();
+    const NeighborEvent& event, bool isGracefulRestart) {
+  const auto& neighborAddrV4 = event.neighborAddrV4;
+  const auto& neighborAddrV6 = event.neighborAddrV6;
+  const auto& localIfName = event.localIfName;
+  const auto& remoteIfName = event.remoteIfName;
+  const auto& remoteNodeName = event.remoteNodeName;
+  const auto& area = event.area;
+  const auto kvStoreCmdPort = event.kvStoreCmdPort;
+  const auto ctrlThriftPort = event.ctrlThriftPort;
+  const auto rttUs = event.rttUs;
+  const auto supportFloodOptimization = event.enableFloodOptimization;
+  const auto onlyUsedByOtherNode = event.adjOnlyUsedByOtherNode;
 
   // current unixtime
   auto now = std::chrono::system_clock::now();
@@ -306,7 +302,7 @@ LinkMonitor::neighborUpEvent(
       toString(neighborAddrV6) /* nextHopV6 */,
       toString(neighborAddrV4) /* nextHopV4 */,
       useRttMetric_ ? getRttMetric(rttUs) : 1 /* metric */,
-      enableSegmentRouting_ ? *info.label_ref() : 0 /* adjacency-label */,
+      0 /* adjacency-label */,
       false /* overload bit */,
       useRttMetric_ ? rttUs : 0 /* rtt */,
       timestamp,
@@ -370,7 +366,7 @@ LinkMonitor::neighborUpEvent(
       createPeerSpec(
           repUrl,
           peerAddr,
-          openrCtrlThriftPort,
+          ctrlThriftPort,
           thrift::KvStorePeerState::IDLE,
           supportFloodOptimization),
       std::move(newAdj),
@@ -385,14 +381,14 @@ LinkMonitor::neighborUpEvent(
 }
 
 void
-LinkMonitor::neighborAdjSyncedEvent(const thrift::SparkNeighbor& info) {
+LinkMonitor::neighborAdjSyncedEvent(const NeighborEvent& event) {
   // DO NOT processing this event if feature is NOT activated
   if (not enableOrderedAdjPublication_) {
     return;
   }
 
-  const auto& localIfName = info.get_localIfName();
-  const auto& remoteNodeName = info.get_nodeName();
+  const auto& localIfName = event.localIfName;
+  const auto& remoteNodeName = event.remoteNodeName;
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
 
   auto adjIt = adjacencies_.find(adjId);
@@ -417,10 +413,10 @@ LinkMonitor::neighborAdjSyncedEvent(const thrift::SparkNeighbor& info) {
 }
 
 void
-LinkMonitor::neighborDownEvent(const thrift::SparkNeighbor& info) {
-  const auto& remoteNodeName = *info.nodeName_ref();
-  const auto& localIfName = *info.localIfName_ref();
-  const auto& area = *info.area_ref();
+LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
+  const auto& remoteNodeName = event.remoteNodeName;
+  const auto& localIfName = event.localIfName;
+  const auto& area = event.area;
 
   SYSLOG(INFO) << EventTag() << "Neighbor " << remoteNodeName
                << " is down on interface " << localIfName;
@@ -445,10 +441,10 @@ LinkMonitor::neighborDownEvent(const thrift::SparkNeighbor& info) {
 }
 
 void
-LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighbor& info) {
-  const auto& remoteNodeName = *info.nodeName_ref();
-  const auto& localIfName = *info.localIfName_ref();
-  const auto& area = *info.area_ref();
+LinkMonitor::neighborRestartingEvent(const NeighborEvent& event) {
+  const auto& remoteNodeName = event.remoteNodeName;
+  const auto& localIfName = event.localIfName;
+  const auto& area = event.area;
 
   SYSLOG(INFO) << EventTag() << "Neighbor " << remoteNodeName
                << " is restarting on interface " << localIfName;
@@ -471,10 +467,10 @@ LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighbor& info) {
 }
 
 void
-LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighbor& info) {
-  const auto& remoteNodeName = *info.nodeName_ref();
-  const auto& localIfName = *info.localIfName_ref();
-  const auto& rttUs = *info.rttUs_ref();
+LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
+  const auto& remoteNodeName = event.remoteNodeName;
+  const auto& localIfName = event.localIfName;
+  const auto& rttUs = event.rttUs;
   int32_t newRttMetric = getRttMetric(rttUs);
 
   XLOG(DBG1) << "Metric value changed for neighbor " << remoteNodeName
@@ -1172,13 +1168,12 @@ LinkMonitor::processAddressEvent(fbnl::IfAddress&& addr) {
 void
 LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
   for (const auto& event : events) {
-    const auto& info = event.info;
-    const auto& neighborAddrV4 = *info.transportAddressV4_ref();
-    const auto& neighborAddrV6 = *info.transportAddressV6_ref();
-    const auto& localIfName = *info.localIfName_ref();
-    const auto& remoteIfName = *info.remoteIfName_ref();
-    const auto& remoteNodeName = *info.nodeName_ref();
-    const auto& area = *info.area_ref();
+    const auto& neighborAddrV4 = event.neighborAddrV4;
+    const auto& neighborAddrV6 = event.neighborAddrV6;
+    const auto& localIfName = event.localIfName;
+    const auto& remoteIfName = event.remoteIfName;
+    const auto& remoteNodeName = event.remoteNodeName;
+    const auto& area = event.area;
 
     XLOG(DBG1) << "Received neighbor event for " << remoteNodeName << " from "
                << remoteIfName << " at " << localIfName << " with addrs "
@@ -1190,28 +1185,28 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
     switch (event.eventType) {
     case NeighborEventType::NEIGHBOR_UP:
       logNeighborEvent(event);
-      neighborUpEvent(info, false);
+      neighborUpEvent(event, false);
       break;
     case NeighborEventType::NEIGHBOR_RESTARTED: {
       logNeighborEvent(event);
-      neighborUpEvent(info, true);
+      neighborUpEvent(event, true);
       break;
     }
     case NeighborEventType::NEIGHBOR_ADJ_SYNCED: {
       logNeighborEvent(event);
-      neighborAdjSyncedEvent(info);
+      neighborAdjSyncedEvent(event);
       break;
     }
     case NeighborEventType::NEIGHBOR_RESTARTING: {
       CHECK(initialNeighborsReceived_);
       logNeighborEvent(event);
-      neighborRestartingEvent(info);
+      neighborRestartingEvent(event);
       break;
     }
     case NeighborEventType::NEIGHBOR_DOWN: {
       CHECK(initialNeighborsReceived_);
       logNeighborEvent(event);
-      neighborDownEvent(info);
+      neighborDownEvent(event);
       break;
     }
     case NeighborEventType::NEIGHBOR_RTT_CHANGE: {
@@ -1220,7 +1215,7 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
         break;
       }
       logNeighborEvent(event);
-      neighborRttChangeEvent(info);
+      neighborRttChangeEvent(event);
       break;
     }
     default:
@@ -1571,11 +1566,11 @@ void
 LinkMonitor::logNeighborEvent(NeighborEvent const& event) {
   LogSample sample{};
   sample.addString("event", toString(event.eventType));
-  sample.addString("neighbor", *event.info.nodeName_ref());
-  sample.addString("interface", *event.info.localIfName_ref());
-  sample.addString("remote_interface", *event.info.remoteIfName_ref());
-  sample.addString("area", *event.info.area_ref());
-  sample.addInt("rtt_us", *event.info.rttUs_ref());
+  sample.addString("neighbor", event.remoteNodeName);
+  sample.addString("interface", event.localIfName);
+  sample.addString("remote_interface", event.remoteIfName);
+  sample.addString("area", event.area);
+  sample.addInt("rtt_us", event.rttUs);
 
   logSampleQueue_.push(std::move(sample));
 }
