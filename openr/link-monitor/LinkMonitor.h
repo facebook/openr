@@ -154,9 +154,16 @@ class LinkMonitor final : public OpenrEventBase {
       std::optional<int32_t> overrideMetric);
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
   semifuture_getInterfaces();
+  folly::SemiFuture<InterfaceDatabase> semifuture_getAllLinks();
+  folly::SemiFuture<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+  semifuture_getAreaAdjacencies(thrift::AdjacenciesFilter filter = {});
+  /*
+   * DEPRECATED. Perfer semifuture_getAreaAdjacencies to return the
+   * areas as well.
+   */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   semifuture_getAdjacencies(thrift::AdjacenciesFilter filter = {});
-  folly::SemiFuture<InterfaceDatabase> semifuture_getAllLinks();
 
  private:
   // make no-copy

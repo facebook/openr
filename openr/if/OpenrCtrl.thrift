@@ -669,7 +669,9 @@ service OpenrCtrl extends fb303_core.BaseService {
 
   /**
    * Get the current adjacencies information, only works for nodes with one
-   * configured area. DEPRECATED, prefer
+   * configured area.
+   *
+   * DEPRECATED. Perfer getLinkMonitorAreaAdjacenciesFiltered to return the areas as well.
    */
   Types.AdjacencyDatabase getLinkMonitorAdjacencies() throws (
     1: OpenrError error,
@@ -679,10 +681,24 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get the current adjacencies information, provide set of areas to get
    * adjancecy databases for. Providing an empty set will return a DB for
    * all configured areas
+   *
+   * DEPRECATED. Perfer getLinkMonitorAreaAdjacenciesFiltered to return the areas as well.
    */
   list<Types.AdjacencyDatabase> getLinkMonitorAdjacenciesFiltered(
     1: AdjacenciesFilter filter,
   ) throws (1: OpenrError error);
+
+  /**
+   * Get the map<area, adjacencies> information, provide set of areas to get
+   * adjancecy databases for. Providing an empty set will return a DB for
+   * each of all configured areas.
+   */
+  map<
+    string,
+    list<Types.AdjacencyDatabase>
+  > getLinkMonitorAreaAdjacenciesFiltered(1: AdjacenciesFilter filter) throws (
+    1: OpenrError error,
+  );
 
   /**
    * Command to request OpenR version

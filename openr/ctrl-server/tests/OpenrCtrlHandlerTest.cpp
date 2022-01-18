@@ -1991,6 +1991,18 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
             .get();
     EXPECT_EQ(0, adjDbs->begin()->get_adjacencies().size());
   }
+
+  {
+    thrift::AdjacenciesFilter filter;
+    filter.selectAreas_ref() = {kSpineAreaId};
+    auto adjDbs =
+        handler_
+            ->semifuture_getLinkMonitorAreaAdjacenciesFiltered(
+                std::make_unique<thrift::AdjacenciesFilter>(std::move(filter)))
+            .get();
+    EXPECT_EQ(
+        0, adjDbs->operator[](kSpineAreaId).begin()->get_adjacencies().size());
+  }
 }
 
 TEST_F(OpenrCtrlFixture, PersistentStoreApis) {

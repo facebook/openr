@@ -1233,6 +1233,14 @@ OpenrCtrlHandler::semifuture_getLinkMonitorAdjacenciesFiltered(
   return linkMonitor_->semifuture_getAdjacencies(std::move(*filter));
 }
 
+folly::SemiFuture<std::unique_ptr<
+    std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+OpenrCtrlHandler::semifuture_getLinkMonitorAreaAdjacenciesFiltered(
+    std::unique_ptr<thrift::AdjacenciesFilter> filter) {
+  CHECK(linkMonitor_);
+  return linkMonitor_->semifuture_getAreaAdjacencies(std::move(*filter));
+}
+
 //
 // ConfigStore API
 //

@@ -1498,6 +1498,34 @@ LinkMonitor::semifuture_getAdjacencies(thrift::AdjacenciesFilter filter) {
   return sf;
 }
 
+folly::SemiFuture<std::unique_ptr<
+    std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+LinkMonitor::semifuture_getAreaAdjacencies(thrift::AdjacenciesFilter filter) {
+  XLOG(DBG2) << "Dump adj requested, reply with " << adjacencies_.size()
+             << " adjs";
+
+  folly::Promise<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+      p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(p), filter = std::move(filter)]() mutable {
+        auto res = std::make_unique<
+            std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>();
+        if (filter.get_selectAreas().empty()) {
+          for (auto const& [areaId, _] : areas_) {
+            res->operator[](areaId).push_back(buildAdjacencyDatabase(areaId));
+          }
+        } else {
+          for (auto const& areaId : filter.get_selectAreas()) {
+            res->operator[](areaId).push_back(buildAdjacencyDatabase(areaId));
+          }
+        }
+        p.setValue(std::move(res));
+      });
+  return sf;
+}
+
 folly::SemiFuture<InterfaceDatabase>
 LinkMonitor::semifuture_getAllLinks() {
   XLOG(DBG2) << "Querying all links and their addresses from system";

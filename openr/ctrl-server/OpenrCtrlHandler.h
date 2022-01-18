@@ -370,8 +370,15 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   semifuture_getLinkMonitorAdjacencies() override;
 
+  // DEPRECATED. Perfer getLinkMonitorAreaAdjacenciesFiltered to return the
+  // areas as well.
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   semifuture_getLinkMonitorAdjacenciesFiltered(
+      std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
+
+  folly::SemiFuture<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+  semifuture_getLinkMonitorAreaAdjacenciesFiltered(
       std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
 
   // Explicitly override blocking API call as no ASYNC needed
