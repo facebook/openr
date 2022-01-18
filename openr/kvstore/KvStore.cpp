@@ -73,7 +73,7 @@ KvStore::KvStore(
 
   // [TO BE DEPRECATED]
   if (kvParams_.enableFloodOptimization) {
-    // Prepare global command socket
+    // Prepare socket and callbacks for listening coming requests
     prepareSocket(
         kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
     addSocket(
@@ -1133,11 +1133,6 @@ KvStoreDb::KvStoreDb(
     // [TO BE DEPRECATED]
     // Attach socket callbacks/schedule events
     attachCallbacks();
-
-    // [TO BE DEPRECATED]
-    // Perform ZMQ full-sync if there are peers to sync with.
-    fullSyncTimer_ = folly::AsyncTimeout::make(
-        *evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
   }
 
   // Perform full-sync if there are peers to sync with.
@@ -2175,8 +2170,6 @@ KvStoreDb::addPeers(
                                peerSpec.get_cmdUrl(),
                                ret.error().errString);
             }
-            // Remove any pending expected response for old socket-id
-            latestSentPeerSync_.erase(it->second.second);
             it->second.second = newPeerCmdId;
           } else {
             // case2. new peer came up (previsously shut down ungracefully)
@@ -2237,9 +2230,6 @@ KvStoreDb::addPeers(
                          peerName,
                          folly::exceptionStr(e));
       }
-    }
-    if (not fullSyncTimer_->isScheduled()) {
-      fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
     }
 
     // process dual events if any
@@ -2342,12 +2332,6 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
                          peerSpec.get_cmdUrl(),
                          syncRes.error().errString);
       }
-
-      peersToSyncWith_.erase(peerName);
-      auto const& peerCmdSocketId = it->second.second;
-      if (latestSentPeerSync_.count(peerCmdSocketId)) {
-        latestSentPeerSync_.erase(peerCmdSocketId);
-      }
       peers_.erase(it);
     }
 
@@ -2356,112 +2340,6 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
       XLOG(INFO) << AreaTag() << fmt::format("[Dual] peer down: {}", peer);
       DualNode::peerDown(peer);
     }
-  }
-}
-
-// Get full KEY_DUMP from peersToSyncWith_
-void
-KvStoreDb::requestFullSyncFromPeers() {
-  // minimal timeout for next run
-  auto timeout = std::chrono::milliseconds(Constants::kMaxBackoff);
-
-  // Make requests
-  for (auto it = peersToSyncWith_.begin(); it != peersToSyncWith_.end();) {
-    auto& peerName = it->first;
-    auto& expBackoff = it->second;
-
-    if (not expBackoff.canTryNow()) {
-      timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
-      ++it;
-      continue;
-    }
-
-    // Generate and send router-socket id of peer first. If the kvstore of
-    // peer is not connected over the router socket then it will error out
-    // exception and we will retry again.
-    auto const& peerCmdSocketId = peers_.at(peerName).second;
-
-    // Build request
-    thrift::KvStoreRequest dumpRequest;
-    thrift::KeyDumpParams params;
-
-    if (kvParams_.filters.has_value()) {
-      std::string keyPrefix =
-          folly::join(",", kvParams_.filters.value().getKeyPrefixes());
-      params.prefix_ref() = keyPrefix;
-      params.originatorIds_ref() =
-          kvParams_.filters.value().getOriginatorIdList();
-    }
-    std::set<std::string> originator{};
-    std::vector<std::string> keyPrefixList{};
-    KvStoreFilters kvFilters{keyPrefixList, originator};
-    params.keyValHashes_ref() =
-        dumpHashWithFilters(area_, kvStore_, kvFilters).get_keyVals();
-
-    dumpRequest.cmd_ref() = thrift::Command::KEY_DUMP;
-    dumpRequest.keyDumpParams_ref() = params;
-    dumpRequest.area_ref() = area_;
-
-    XLOG(DBG1) << AreaTag()
-               << fmt::format(
-                      "[ZMQ] Sending full-sync request to peer {} using id {}",
-                      peerName,
-                      peerCmdSocketId);
-    auto const ret = sendMessageToPeer(peerCmdSocketId, dumpRequest);
-
-    if (ret.hasError()) {
-      // this could be pretty common on initial connection setup
-      XLOG(ERR)
-          << AreaTag()
-          << fmt::format(
-                 "[ZMQ] Failed to send full-sync request to peer {} ", peerName)
-          << fmt::format(
-                 " using id {}. Error:{}",
-                 peerCmdSocketId,
-                 ret.error().errString);
-      collectSendFailureStats(ret.error(), peerCmdSocketId);
-      expBackoff.reportError(); // Apply exponential backoff
-      timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
-      ++it;
-    } else {
-      latestSentPeerSync_[peerCmdSocketId] = std::chrono::steady_clock::now();
-
-      // Remove the iterator
-      it = peersToSyncWith_.erase(it);
-    }
-
-    // if pending response is above the limit wait until kMaxBackoff before
-    // sending next sync request
-    if (latestSentPeerSync_.size() >= parallelSyncLimit_) {
-      XLOG(INFO)
-          << AreaTag()
-          << fmt::format(
-                 "[ZMQ] {} full-sync in progress which is above limit: {}. ",
-                 latestSentPeerSync_.size(),
-                 parallelSyncLimit_)
-          << "Will send sync request after max timeout or "
-          << "on receipt of syncing response.";
-      timeout = Constants::kMaxBackoff;
-      break;
-    }
-  } // for
-
-  // schedule fullSyncTimer if there are pending peers to sync with or
-  // if maximum allowed pending sync count is reached. Adding a new peer
-  // will not initiate full sync request if it's already scheduled
-  if (not peersToSyncWith_.empty() ||
-      latestSentPeerSync_.size() >= parallelSyncLimit_) {
-    XLOG_IF(INFO, peersToSyncWith_.size())
-        << AreaTag()
-        << fmt::format(
-               "[ZMQ] {} peers still require full-sync.",
-               peersToSyncWith_.size());
-    XLOG(INFO) << AreaTag()
-               << fmt::format(
-                      "[ZMQ] Scheduling full-sync after {}ms", timeout.count());
-
-    // schedule next timeout
-    fullSyncTimer_->scheduleTimeout(timeout);
   }
 }
 
@@ -2488,6 +2366,9 @@ KvStoreDb::processRequestMsgHelper(
   std::vector<std::string> keys;
   switch (*thriftReq.cmd_ref()) {
   case thrift::Command::KEY_DUMP: {
+    // [TO BE DEPRECATED]
+    // This handling of KEY_DUMP over ZMQ will be deprecated once Dual KEY_DUMP
+    // is fully over thrift
     XLOG(DBG3) << "Dump all keys requested";
     if (not thriftReq.keyDumpParams_ref().has_value()) {
       XLOG(ERR) << "received none keyDumpParams";
@@ -2769,157 +2650,45 @@ KvStoreDb::processNexthopChange(
     // recevied NEIGHBOR-DOWN event (so does dual), but dual still think I
     // should have this neighbor as nexthop, then something is wrong with
     // DUAL
-    if (kvParams_.enableThriftDualMsg) {
-      CHECK(thriftPeers_.count(*newNh))
-          << rootId << ": trying to set new spt-parent who does not exist "
-          << *newNh;
-      CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
-      setChild(rootId, *newNh);
+    CHECK(thriftPeers_.count(*newNh))
+        << rootId << ": trying to set new spt-parent who does not exist "
+        << *newNh;
+    CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
+    setChild(rootId, *newNh);
 
-      // Enqueue new-nexthop for full-sync (insert only if entry doesn't
-      // exists) NOTE we have to perform full-sync after we do FLOOD_TOPO_SET,
-      // so that we can be sure that I won't be in a disconnected state after
-      // we got full synced. (ps: full-sync is 3-way-sync, one direction sync
-      // should be good enough)
-      //
-      // state transition to IDLE to initiate full-sync
-      auto& peerSpec = thriftPeers_.at(*newNh).peerSpec;
+    // Enqueue new-nexthop for full-sync (insert only if entry doesn't
+    // exists) NOTE we have to perform full-sync after we do FLOOD_TOPO_SET,
+    // so that we can be sure that I won't be in a disconnected state after
+    // we got full synced. (ps: full-sync is 3-way-sync, one direction sync
+    // should be good enough)
+    //
+    // state transition to IDLE to initiate full-sync
+    auto& peerSpec = thriftPeers_.at(*newNh).peerSpec;
 
-      XLOG(INFO)
-          << AreaTag()
-          << fmt::format(
-                 "[Dual] Toggle state to idle for peer: {} with dual nexthop change.",
-                 *newNh);
+    XLOG(INFO)
+        << AreaTag()
+        << fmt::format(
+               "[Dual] Toggle state to idle for peer: {} with dual nexthop change.",
+               *newNh);
 
-      logStateTransition(
-          *newNh, peerSpec.get_state(), thrift::KvStorePeerState::IDLE);
+    logStateTransition(
+        *newNh, peerSpec.get_state(), thrift::KvStorePeerState::IDLE);
 
-      peerSpec.state_ref() =
-          thrift::KvStorePeerState::IDLE; // set IDLE to trigger full-sync
+    peerSpec.state_ref() =
+        thrift::KvStorePeerState::IDLE; // set IDLE to trigger full-sync
 
-      // kick off thriftSyncTimer_ if not yet to asyc process full-sync
-      if (not thriftSyncTimer_->isScheduled()) {
-        thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-      }
-    } else {
-      CHECK(peers_.count(*newNh))
-          << rootId << ": trying to set new spt-parent who does not exist "
-          << *newNh;
-      CHECK_NE(kvParams_.nodeId, *newNh) << "new nexthop is myself";
-      setChild(rootId, *newNh);
-
-      XLOG(INFO)
-          << AreaTag()
-          << fmt::format(
-                 "[Dual] Enqueuing full-sync request for peer {}", *newNh);
-
-      peersToSyncWith_.emplace(
-          *newNh,
-          ExponentialBackoff<std::chrono::milliseconds>(
-              Constants::kInitialBackoff, Constants::kMaxBackoff));
-
-      // initial full-sync request if peersToSyncWith_ was empty
-      if (not fullSyncTimer_->isScheduled()) {
-        fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-      }
+    // kick off thriftSyncTimer_ if not yet to asyc process full-sync
+    if (not thriftSyncTimer_->isScheduled()) {
+      thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
     }
   }
 
   // unset old parent if any
-  if (oldNh.has_value()) {
-    if ((kvParams_.enableThriftDualMsg and thriftPeers_.count(*oldNh)) or
-        ((not kvParams_.enableThriftDualMsg) and peers_.count(*oldNh))) {
-      // valid old parent AND it's still my peer, unset it
-      CHECK_NE(kvParams_.nodeId, *oldNh) << "old nexthop was myself";
-      // unset it
-      unsetChild(rootId, *oldNh);
-    }
-  }
-}
-
-void
-KvStoreDb::processSyncResponse(
-    const std::string& requestId, fbzmq::Message&& syncPubMsg) noexcept {
-  fb303::fbData->addStatValue(
-      "kvstore.peers.bytes_received", syncPubMsg.size(), fb303::SUM);
-
-  // syncPubMsg can be of two types
-  // 1. ack to SET_KEY ("OK" or "ERR")
-  // 2. response of KEY_DUMP (thrift::Publication)
-  // We check for first one and then fallback to second one
-  if (syncPubMsg.size() < 3) {
-    auto syncPubStr = syncPubMsg.read<std::string>().value();
-    if (syncPubStr == Constants::kErrorResponse) {
-      XLOG(ERR) << "Got error for sent publication from " << requestId;
-      return;
-    }
-    if (syncPubStr == Constants::kSuccessResponse) {
-      XLOG(DBG2) << "Got ack for sent publication on " << requestId;
-      return;
-    }
-  }
-
-  // Perform error check
-  auto maybeSyncPub =
-      syncPubMsg.readThriftObj<thrift::Publication>(serializer_);
-  if (maybeSyncPub.hasError()) {
-    XLOG(ERR) << "Received bad response on peerSyncSock";
-    return;
-  }
-
-  const auto& syncPub = maybeSyncPub.value();
-  const size_t kvUpdateCnt = mergePublication(syncPub, requestId);
-  size_t numMissingKeys = 0;
-
-  XLOG(INFO)
-      << AreaTag()
-      << fmt::format(
-             "[ZMQ Sync]: Full-sync response received from {} with {} key-vals. ",
-             requestId,
-             syncPub.keyVals_ref()->size())
-      << fmt::format("Incurred {} key-value updates.", kvUpdateCnt);
-
-  if (syncPub.tobeUpdatedKeys_ref().has_value()) {
-    numMissingKeys = syncPub.tobeUpdatedKeys_ref()->size();
-
-    XLOG(INFO) << AreaTag()
-               << fmt::format(
-                      "[ZMQ Sync]: {} missing keys observed: {}",
-                      numMissingKeys,
-                      folly::join(",", *syncPub.tobeUpdatedKeys_ref()));
-  }
-
-  fb303::fbData->addStatValue(
-      "kvstore.zmq.num_missing_keys", numMissingKeys, fb303::SUM);
-  fb303::fbData->addStatValue(
-      "kvstore.zmq.num_keyvals_update", kvUpdateCnt, fb303::SUM);
-
-  if (latestSentPeerSync_.count(requestId)) {
-    auto syncDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - latestSentPeerSync_.at(requestId));
-    fb303::fbData->addStatValue(
-        "kvstore.full_sync_duration_ms", syncDuration.count(), fb303::AVG);
-    XLOG(DBG1) << AreaTag()
-               << fmt::format(
-                      "It took {}ms to sync with {}.",
-                      syncDuration.count(),
-                      requestId);
-    latestSentPeerSync_.erase(requestId);
-  }
-
-  // We've received a full sync response. Double the parallel sync-request
-  // limit. This is under assumption that, subsequent sync request will not
-  // incur huge changes.
-  parallelSyncLimit_ = std::min(
-      2 * parallelSyncLimit_, Constants::kMaxFullSyncPendingCountThreshold);
-
-  // Schedule timeout immediately to resume sending full sync requests. If
-  // no outstanding sync is required, then cancel the timeout. Cancelling
-  // timeout will let the subsequent sync requests to proceed immediately.
-  if (not peersToSyncWith_.empty()) {
-    fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-  } else {
-    fullSyncTimer_->cancelTimeout();
+  if (oldNh.has_value() and thriftPeers_.count(*oldNh)) {
+    // valid old parent AND it's still my peer, unset it
+    CHECK_NE(kvParams_.nodeId, *oldNh) << "old nexthop was myself";
+    // unset it
+    unsetChild(rootId, *oldNh);
   }
 }
 
@@ -2970,42 +2739,6 @@ KvStoreDb::attachCallbacks() {
                 << peerSyncTos.error();
     }
   }
-
-  evb_->addSocket(
-      fbzmq::RawZmqSocketPtr{*peerSyncSock_}, ZMQ_POLLIN, [this](int) noexcept {
-        XLOG(DBG3) << "KvStore: sync response received";
-        drainPeerSyncSock();
-      });
-}
-
-void
-KvStoreDb::drainPeerSyncSock() {
-  // Drain all available messages in loop
-  while (true) {
-    fbzmq::Message requestIdMsg, delimMsg, syncPubMsg;
-    auto ret = peerSyncSock_.recvMultiple(requestIdMsg, delimMsg, syncPubMsg);
-    if (ret.hasError() and ret.error().errNum == EAGAIN) {
-      break;
-    }
-
-    // Check for error in receiving messages
-    if (ret.hasError()) {
-      XLOG(ERR) << "failed reading messages from peerSyncSock_: "
-                << ret.error();
-      continue;
-    }
-
-    // at this point we received all three parts
-    if (not delimMsg.empty()) {
-      XLOG(ERR) << "unexpected delimiter from peerSyncSock_: "
-                << delimMsg.read<std::string>().value();
-      continue;
-    }
-
-    // process the request
-    processSyncResponse(
-        requestIdMsg.read<std::string>().value(), std::move(syncPubMsg));
-  } // while
 }
 
 void

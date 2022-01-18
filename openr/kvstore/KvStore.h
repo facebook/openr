@@ -477,19 +477,6 @@ class KvStoreDb : public DualNode {
       const fbzmq::Error& error, const std::string& dstSockId);
 
   // [TO BE DEPRECATED]
-  // Process the messages on peerSyncSock_
-  void drainPeerSyncSock();
-
-  // [TO BE DEPRECATED]
-  // request full-sync (KEY_DUMP) with peersToSyncWith_
-  void requestFullSyncFromPeers();
-
-  // [TO BE DEPRECATED]
-  // process received KV_DUMP from one of our neighbor
-  void processSyncResponse(
-      const std::string& requestId, fbzmq::Message&& syncPubMsg) noexcept;
-
-  // [TO BE DEPRECATED]
   // this will poll the sockets listening to the requests
   void attachCallbacks();
 
@@ -621,17 +608,6 @@ class KvStoreDb : public DualNode {
       peers_;
 
   // [TO BE DEPRECATED]
-  // set of peers to perform full sync from. We use exponential backoff to try
-  // repetitively untill we succeeed (without overwhelming anyone with too
-  // many requests).
-  std::unordered_map<std::string, ExponentialBackoff<std::chrono::milliseconds>>
-      peersToSyncWith_{};
-
-  // [TO BE DEPRECATED]
-  // Callback timer to get full KEY_DUMP from peersToSyncWith_
-  std::unique_ptr<folly::AsyncTimeout> fullSyncTimer_;
-
-  // [TO BE DEPRECATED]
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
@@ -647,15 +623,6 @@ class KvStoreDb : public DualNode {
 
   // TTL count down timer
   std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_;
-
-  // [TO BE DEPRECATED]
-  // Map of latest peer sync up request send to each peer
-  // this is used to measure full-dump sync time between this node and each of
-  // its peers
-  std::unordered_map<
-      std::string,
-      std::chrono::time_point<std::chrono::steady_clock>>
-      latestSentPeerSync_;
 
   // Kvstore rate limiter
   std::unique_ptr<folly::BasicTokenBucket<>> floodLimiter_{nullptr};
@@ -709,13 +676,9 @@ class KvStoreDb : public DualNode {
   // are completed.
   std::function<void()> initialKvStoreSyncedCallback_;
 
-  // [TO BE DEPRECATED]
   // max parallel syncs allowed. It's initialized with '2' and doubles
   // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
   // response received
-  size_t parallelSyncLimit_{2};
-
-  // max parallel syncs allowed
   size_t parallelSyncLimitOverThrift_{2};
 
   // Stop signal for fiber to periodically dump flood topology
