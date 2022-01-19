@@ -10,7 +10,7 @@ from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.OpenrCtrl import OpenrCtrl
 from openr.Types import ttypes as openr_types
-from openr.utils import printing
+from openr.utils import printing, serializer
 
 
 class NeighborCmd(OpenrCtrlCmd):
@@ -23,8 +23,7 @@ class NeighborCmd(OpenrCtrlCmd):
 
         # Render
         if json:
-            # TODO: Print routes in json
-            raise NotImplementedError()
+            print(serializer.serialize_json(neighbors))
         else:
             self.render(neighbors, detailed)
 

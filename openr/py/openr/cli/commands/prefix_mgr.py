@@ -17,7 +17,7 @@ from openr.Network import ttypes as network_types
 from openr.OpenrConfig.ttypes import PrefixForwardingType, PrefixForwardingAlgorithm
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
-from openr.utils import ipnetwork, printing, serializer
+from openr.utils import ipnetwork, serializer
 
 
 def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
