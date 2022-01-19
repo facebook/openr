@@ -230,13 +230,13 @@ Spark::SparkNeighbor::toThrift() const {
   // populate basic info
   info.nodeName_ref() = this->nodeName;
   info.state_ref() = apache::thrift::util::enumNameSafe(this->state);
+  info.event_ref() = apache::thrift::util::enumNameSafe(this->event);
   info.area_ref() = this->area;
 
   // populate address/port info for TCP connection
   info.transportAddressV4_ref() = this->transportAddressV4;
   info.transportAddressV6_ref() = this->transportAddressV6;
   info.openrCtrlThriftPort_ref() = this->openrCtrlThriftPort;
-  info.kvStoreCmdPort_ref() = this->kvStoreCmdPort;
 
   // populate interface info
   info.localIfName_ref() = this->localIfName;
@@ -1167,7 +1167,7 @@ Spark::getNeighbors() {
         std::make_unique<std::vector<thrift::SparkNeighbor>>(std::move(res)));
   });
   return sf;
-} // namespace openr
+}
 
 void
 Spark::neighborUpWrapper(
@@ -1268,6 +1268,7 @@ Spark::processHeartbeatTimeout(
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
       getNextState(oldState, thrift::SparkNeighEvent::HEARTBEAT_TIMER_EXPIRE);
+  neighbor.event = thrift::SparkNeighEvent::HEARTBEAT_TIMER_EXPIRE;
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring down neighborship and cleanup spark neighbor state
@@ -1292,6 +1293,7 @@ Spark::processNegotiateTimeout(
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
       getNextState(oldState, thrift::SparkNeighEvent::NEGOTIATE_TIMER_EXPIRE);
+  neighbor.event = thrift::SparkNeighEvent::NEGOTIATE_TIMER_EXPIRE;
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // stop sending out handshake msg, no longer in NEGOTIATE stage
@@ -1323,6 +1325,7 @@ Spark::processGRTimeout(
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
       getNextState(oldState, thrift::SparkNeighEvent::GR_TIMER_EXPIRE);
+  neighbor.event = thrift::SparkNeighEvent::GR_TIMER_EXPIRE;
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring down neighborship and cleanup spark neighbor state
@@ -1350,6 +1353,7 @@ Spark::processGRMsg(
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
       getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_RESTART);
+  neighbor.event = thrift::SparkNeighEvent::HELLO_RCVD_RESTART;
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // neihbor is restarting, shutdown heartbeat hold timer
@@ -1478,6 +1482,7 @@ Spark::processHelloMsg(
     thrift::SparkNeighState oldState = neighbor.state;
     neighbor.state =
         getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO);
+    neighbor.event = thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO;
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
   } else if (neighbor.state == thrift::SparkNeighState::WARM) {
     // Update local seqNum maintained for this neighbor
@@ -1533,6 +1538,7 @@ Spark::processHelloMsg(
     thrift::SparkNeighState oldState = neighbor.state;
     neighbor.state =
         getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_INFO);
+    neighbor.event = thrift::SparkNeighEvent::HELLO_RCVD_INFO;
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
   } else if (neighbor.state == thrift::SparkNeighState::ESTABLISHED) {
     // Update local seqNum maintained for this neighbor
@@ -1555,6 +1561,7 @@ Spark::processHelloMsg(
       thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
           getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO);
+      neighbor.event = thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO;
       logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // bring down neighborship and cleanup spark neighbor state
@@ -1604,6 +1611,7 @@ Spark::processHelloMsg(
     thrift::SparkNeighState oldState = neighbor.state;
     neighbor.state =
         getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_INFO);
+    neighbor.event = thrift::SparkNeighEvent::HELLO_RCVD_INFO;
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
   }
 }
@@ -1711,6 +1719,7 @@ Spark::processHandshakeMsg(
       thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
           getNextState(oldState, thrift::SparkNeighEvent::NEGOTIATION_FAILURE);
+      neighbor.event = thrift::SparkNeighEvent::NEGOTIATION_FAILURE;
       logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // stop sending out handshake msg, no longer in NEGOTIATE stage
@@ -1763,6 +1772,7 @@ Spark::processHandshakeMsg(
       thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
           getNextState(oldState, thrift::SparkNeighEvent::NEGOTIATION_FAILURE);
+      neighbor.event = thrift::SparkNeighEvent::NEGOTIATION_FAILURE;
       logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // stop sending out handshake msg, no longer in NEGOTIATE stage
@@ -1777,6 +1787,7 @@ Spark::processHandshakeMsg(
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
       getNextState(oldState, thrift::SparkNeighEvent::HANDSHAKE_RCVD);
+  neighbor.event = thrift::SparkNeighEvent::HANDSHAKE_RCVD;
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring up neighborship and set corresponding spark state

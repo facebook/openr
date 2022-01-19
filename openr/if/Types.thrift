@@ -1018,14 +1018,14 @@ struct SparkNeighbor {
   1: string nodeName;
 
   /**
-   * neighbor state
+   * latest neighbor state
    */
   2: string state;
 
   /**
-   * areaId to form adjacency
+   * latest neighbor event triggering state transition
    */
-  3: string area;
+  3: string event;
 
   /**
    * Transport addresses of local interface. Open/R exchanges link-local
@@ -1040,9 +1040,9 @@ struct SparkNeighbor {
   6: i32 openrCtrlThriftPort = 0;
 
   /**
-   * @deprecated - Neighbor's kvstore global CMD port, for ZMQ communication.
+   * areaId to form adjacency
    */
-  7: i32 kvStoreCmdPort = 0;
+  7: string area;
 
   /**
    * Remote interface name

@@ -280,6 +280,9 @@ class Spark final : public OpenrEventBase {
     // neighbor state(IDLE by default)
     thrift::SparkNeighState state{thrift::SparkNeighState::IDLE};
 
+    // neighbor event(thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO)
+    thrift::SparkNeighEvent event{thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO};
+
     // timer to periodically send out handshake pkt
     std::unique_ptr<folly::AsyncTimeout> negotiateTimer{nullptr};
 

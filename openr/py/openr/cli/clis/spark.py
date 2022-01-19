@@ -8,9 +8,10 @@ import click
 from openr.cli.commands import spark
 
 
-class SparkCli(object):
+class SparkCli:
     def __init__(self):
         self.spark.add_command(SparkGRCli().graceful_restart, name="graceful-restart")
+        self.spark.add_command(SparkNeighborCli().neighbors, name="neighbors")
 
     @click.group()
     @click.pass_context
@@ -19,7 +20,22 @@ class SparkCli(object):
         pass
 
 
-class SparkGRCli(object):
+class SparkNeighborCli:
+    @click.command()
+    @click.option(
+        "--detail/--no-detail",
+        default=False,
+        help="Show all details including timers etc.",
+    )
+    @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    @click.pass_obj
+    def neighbors(cli_opts, detail, json):  # noqa: B902
+        """Dump all detected neighbor information"""
+
+        spark.NeighborCmd(cli_opts).run(json, detail)
+
+
+class SparkGRCli:
     @click.command()
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
