@@ -104,14 +104,14 @@ toggleMcastGroup(
 
 namespace openr {
 
-const std::vector<std::vector<std::optional<SparkNeighState>>>
+const std::vector<std::vector<std::optional<thrift::SparkNeighState>>>
     Spark::stateMap_ = {
         /*
          * index 0 - IDLE
          * HELLO_RCVD_INFO => WARM; HELLO_RCVD_NO_INFO => WARM
          */
-        {SparkNeighState::WARM,
-         SparkNeighState::WARM,
+        {thrift::SparkNeighState::WARM,
+         thrift::SparkNeighState::WARM,
          std::nullopt,
          std::nullopt,
          std::nullopt,
@@ -123,7 +123,7 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          * index 1 - WARM
          * HELLO_RCVD_INFO => NEGOTIATE;
          */
-        {SparkNeighState::NEGOTIATE,
+        {thrift::SparkNeighState::NEGOTIATE,
          std::nullopt,
          std::nullopt,
          std::nullopt,
@@ -141,22 +141,22 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          std::nullopt,
          std::nullopt,
          std::nullopt,
-         SparkNeighState::ESTABLISHED,
+         thrift::SparkNeighState::ESTABLISHED,
          std::nullopt,
-         SparkNeighState::WARM,
+         thrift::SparkNeighState::WARM,
          std::nullopt,
-         SparkNeighState::WARM},
+         thrift::SparkNeighState::WARM},
         /*
          * index 3 - ESTABLISHED
          * HELLO_RCVD_NO_INFO => IDLE; HELLO_RCVD_RESTART => RESTART;
          * HEARTBEAT_RCVD => ESTABLISHED; HEARTBEAT_TIMER_EXPIRE => IDLE;
          */
         {std::nullopt,
-         SparkNeighState::IDLE,
-         SparkNeighState::RESTART,
-         SparkNeighState::ESTABLISHED,
+         thrift::SparkNeighState::IDLE,
+         thrift::SparkNeighState::RESTART,
+         thrift::SparkNeighState::ESTABLISHED,
          std::nullopt,
-         SparkNeighState::IDLE,
+         thrift::SparkNeighState::IDLE,
          std::nullopt,
          std::nullopt,
          std::nullopt},
@@ -164,23 +164,23 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          * index 4 - RESTART
          * HELLO_RCVD_INFO => ESTABLISHED; GR_TIMER_EXPIRE => IDLE
          */
-        {SparkNeighState::ESTABLISHED,
+        {thrift::SparkNeighState::ESTABLISHED,
          std::nullopt,
          std::nullopt,
          std::nullopt,
          std::nullopt,
          std::nullopt,
          std::nullopt,
-         SparkNeighState::IDLE,
+         thrift::SparkNeighState::IDLE,
          std::nullopt}};
 
-SparkNeighState
+thrift::SparkNeighState
 Spark::getNextState(
-    std::optional<SparkNeighState> const& currState,
-    SparkNeighEvent const& event) {
+    std::optional<thrift::SparkNeighState> const& currState,
+    thrift::SparkNeighEvent const& event) {
   CHECK(currState.has_value()) << "Current state is 'UNEXPECTED'";
 
-  std::optional<SparkNeighState> nextState =
+  std::optional<thrift::SparkNeighState> nextState =
       stateMap_[static_cast<uint32_t>(currState.value())]
                [static_cast<uint32_t>(event)];
 
@@ -211,7 +211,7 @@ Spark::SparkNeighbor::SparkNeighbor(
       localIfName(localIfName),
       remoteIfName(remoteIfName),
       seqNum(seqNum),
-      state(SparkNeighState::IDLE),
+      state(thrift::SparkNeighState::IDLE),
       enableFloodOptimization(enableFloodOptimization),
       stepDetector(
           stepDetectorConfig /* step detector config */,
@@ -229,7 +229,7 @@ Spark::SparkNeighbor::toThrift() const {
 
   // populate basic info
   info.nodeName_ref() = this->nodeName;
-  info.state_ref() = toStr(this->state); // translate to string
+  info.state_ref() = apache::thrift::util::enumNameSafe(this->state);
   info.area_ref() = this->area;
 
   // populate address/port info for TCP connection
@@ -363,7 +363,7 @@ Spark::Spark(
         for (auto& [ifName, neighborMap] : sparkNeighbors_) {
           totalNeighborCnt += neighborMap.size();
           for (auto& [neighborName, neighbor] : neighborMap) {
-            if (neighbor.state == SparkNeighState::ESTABLISHED) {
+            if (neighbor.state == thrift::SparkNeighState::ESTABLISHED) {
               upNeighbors.emplace_back(NeighborEvent(
                   NeighborEventType::NEIGHBOR_UP,
                   neighbor.nodeName,
@@ -447,25 +447,6 @@ Spark::Spark(
   fb303::fbData->addStatExportType(
       "slo.neighbor_discovery.time_ms", fb303::AVG);
   fb303::fbData->addStatExportType("slo.neighbor_restart.time_ms", fb303::AVG);
-}
-
-// static util function to transform state into str
-std::string
-Spark::toStr(SparkNeighState state) {
-  switch (state) {
-  case SparkNeighState::IDLE:
-    return "IDLE";
-  case SparkNeighState::WARM:
-    return "WARM";
-  case SparkNeighState::NEGOTIATE:
-    return "NEGOTIATE";
-  case SparkNeighState::ESTABLISHED:
-    return "ESTABLISHED";
-  case SparkNeighState::RESTART:
-    return "RESTART";
-  default:
-    return "UNKNOWN";
-  }
 }
 
 void
@@ -789,10 +770,13 @@ Spark::processRttChange(
   auto& sparkNeighbor = sparkNeighbors_.at(ifName).at(neighborName);
 
   // only report RTT change in ESTABLISHED state
-  if (sparkNeighbor.state != SparkNeighState::ESTABLISHED) {
-    XLOG(DBG3) << "Neighbor: " << neighborName << " over iface: " << ifName
-               << " is in state: " << toStr(sparkNeighbor.state)
-               << ". Skip RTT change notification.";
+  if (sparkNeighbor.state != thrift::SparkNeighState::ESTABLISHED) {
+    XLOG(DBG3) << fmt::format(
+        "[SparkHelloMsg] Neighbor: {} over iface: {} is in state: {}. "
+        "Skip RTT change notification",
+        neighborName,
+        ifName,
+        apache::thrift::util::enumNameSafe(sparkNeighbor.state));
     return;
   }
   // rounding rtt value to milisecond
@@ -806,9 +790,12 @@ Spark::processRttChange(
 
   // notify the rtt changes if use the rtt metric
   if (config_->getLinkMonitorConfig().get_use_rtt_metric()) {
-    XLOG(DBG1) << "RTT for sparkNeighbor " << neighborName << " has changed "
-               << "from " << sparkNeighbor.rtt.count() << "usecs to " << newRtt
-               << "usecs over interface " << ifName;
+    XLOG(DBG1) << fmt::format(
+        "[SparkHelloMsg] RTT for neighbor:{} has changed from {}us to {}us over iface: {}",
+        neighborName,
+        sparkNeighbor.rtt.count(),
+        newRtt,
+        ifName);
     notifySparkNeighborEvent(
         NeighborEventType::NEIGHBOR_RTT_CHANGE, sparkNeighbor);
   }
@@ -1052,19 +1039,23 @@ void
 Spark::logStateTransition(
     std::string const& neighborName,
     std::string const& ifName,
-    SparkNeighState const& oldState,
-    SparkNeighState const& newState) {
-  SYSLOG(INFO) << EventTag() << "State change: [" << toStr(oldState) << "] -> ["
-               << toStr(newState) << "] "
-               << "for neighbor: (" << neighborName << ") on interface: ("
-               << ifName << ").";
+    thrift::SparkNeighState const& oldState,
+    thrift::SparkNeighState const& newState) {
+  SYSLOG(INFO)
+      << EventTag()
+      << fmt::format(
+             "State change: [{}] -> [{}] for neighbor: {} on interface: {}",
+             apache::thrift::util::enumNameSafe(oldState),
+             apache::thrift::util::enumNameSafe(newState),
+             neighborName,
+             ifName);
 
   auto& ifNeighbors = sparkNeighbors_.at(ifName);
   auto& neighbor = ifNeighbors.at(neighborName);
 
   // Track neighbor discovery time
-  if (newState == SparkNeighState::ESTABLISHED and
-      oldState == SparkNeighState::NEGOTIATE) {
+  if (newState == thrift::SparkNeighState::ESTABLISHED and
+      oldState == thrift::SparkNeighState::NEGOTIATE) {
     // compute neighbor discovery time
 
     const auto elapsedTime =
@@ -1078,14 +1069,14 @@ Spark::logStateTransition(
 
     fb303::fbData->addStatValue(
         "slo.neighbor_discovery.time_ms", elapsedTime.count(), fb303::AVG);
-  } else if (newState == SparkNeighState::IDLE) {
+  } else if (newState == thrift::SparkNeighState::IDLE) {
     // reset neighbor discovery time
     neighbor.idleStateTransitionTime = std::chrono::steady_clock::now();
   }
 
   // Track how much time has elapsed from RESTART to ESTABLISHED transition.
-  if (newState == SparkNeighState::ESTABLISHED and
-      oldState == SparkNeighState::RESTART) {
+  if (newState == thrift::SparkNeighState::ESTABLISHED and
+      oldState == thrift::SparkNeighState::RESTART) {
     const auto elapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() -
@@ -1097,7 +1088,7 @@ Spark::logStateTransition(
 
     fb303::fbData->addStatValue(
         "slo.neighbor_restart.time_ms", elapsedTime.count(), fb303::AVG);
-  } else if (newState == SparkNeighState::RESTART) {
+  } else if (newState == thrift::SparkNeighState::RESTART) {
     // reset neighbor restart time
     neighbor.restartStateTransitionTime = std::chrono::steady_clock::now();
   }
@@ -1105,17 +1096,18 @@ Spark::logStateTransition(
 
 void
 Spark::checkNeighborState(
-    SparkNeighbor const& neighbor, SparkNeighState const& state) {
-  CHECK(neighbor.state == state)
-      << "Neighbor: (" << neighbor.nodeName << "), "
-      << "Expected state: [" << toStr(state) << "], "
-      << "Actual state: [" << toStr(neighbor.state) << "].";
+    SparkNeighbor const& neighbor, thrift::SparkNeighState const& state) {
+  CHECK(neighbor.state == state) << fmt::format(
+      "Neighbor: {}, exoected state: [{}], actual state: [{}]",
+      neighbor.nodeName,
+      apache::thrift::util::enumNameSafe(state),
+      apache::thrift::util::enumNameSafe(neighbor.state));
 }
 
-folly::SemiFuture<std::optional<SparkNeighState>>
+folly::SemiFuture<std::optional<thrift::SparkNeighState>>
 Spark::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
-  folly::Promise<std::optional<SparkNeighState>> promise;
+  folly::Promise<std::optional<thrift::SparkNeighState>> promise;
   auto sf = promise.getSemiFuture();
   runInEventBaseThread(
       [this, promise = std::move(promise), ifName, neighborName]() mutable {
@@ -1270,12 +1262,12 @@ Spark::processHeartbeatTimeout(
              << " on interface " << ifName;
 
   // neighbor must in 'ESTABLISHED' state
-  checkNeighborState(neighbor, SparkNeighState::ESTABLISHED);
+  checkNeighborState(neighbor, thrift::SparkNeighState::ESTABLISHED);
 
   // state transition
-  SparkNeighState oldState = neighbor.state;
+  thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
-      getNextState(oldState, SparkNeighEvent::HEARTBEAT_TIMER_EXPIRE);
+      getNextState(oldState, thrift::SparkNeighEvent::HEARTBEAT_TIMER_EXPIRE);
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring down neighborship and cleanup spark neighbor state
@@ -1294,12 +1286,12 @@ Spark::processNegotiateTimeout(
       ifName);
 
   // neighbor must in 'NEGOTIATE' state
-  checkNeighborState(neighbor, SparkNeighState::NEGOTIATE);
+  checkNeighborState(neighbor, thrift::SparkNeighState::NEGOTIATE);
 
   // state transition
-  SparkNeighState oldState = neighbor.state;
+  thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
-      getNextState(oldState, SparkNeighEvent::NEGOTIATE_TIMER_EXPIRE);
+      getNextState(oldState, thrift::SparkNeighEvent::NEGOTIATE_TIMER_EXPIRE);
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // stop sending out handshake msg, no longer in NEGOTIATE stage
@@ -1325,11 +1317,12 @@ Spark::processGRTimeout(
       ifName);
 
   // neighbor must in "RESTART" state
-  checkNeighborState(neighbor, SparkNeighState::RESTART);
+  checkNeighborState(neighbor, thrift::SparkNeighState::RESTART);
 
   // state transition
-  SparkNeighState oldState = neighbor.state;
-  neighbor.state = getNextState(oldState, SparkNeighEvent::GR_TIMER_EXPIRE);
+  thrift::SparkNeighState oldState = neighbor.state;
+  neighbor.state =
+      getNextState(oldState, thrift::SparkNeighEvent::GR_TIMER_EXPIRE);
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring down neighborship and cleanup spark neighbor state
@@ -1354,8 +1347,9 @@ Spark::processGRMsg(
       neighbor.gracefulRestartHoldTime);
 
   // state transition
-  SparkNeighState oldState = neighbor.state;
-  neighbor.state = getNextState(oldState, SparkNeighEvent::HELLO_RCVD_RESTART);
+  thrift::SparkNeighState oldState = neighbor.state;
+  neighbor.state =
+      getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_RESTART);
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // neihbor is restarting, shutdown heartbeat hold timer
@@ -1437,7 +1431,7 @@ Spark::processHelloMsg(
             areaId.value()));
 
     auto& neighbor = ifNeighbors.at(neighborName);
-    checkNeighborState(neighbor, SparkNeighState::IDLE);
+    checkNeighborState(neighbor, thrift::SparkNeighState::IDLE);
   }
 
   // Up till now, node knows about this neighbor and perform SM check
@@ -1468,7 +1462,7 @@ Spark::processHelloMsg(
   XLOG(DBG3) << fmt::format(
       "[SparkHelloMsg] Current state for neighbor: {} is: [{}]",
       neighborName,
-      toStr(neighbor.state));
+      apache::thrift::util::enumNameSafe(neighbor.state));
 
   // for neighbor in fast initial state and does not see us yet,
   // reply for quick convergence
@@ -1479,13 +1473,13 @@ Spark::processHelloMsg(
     sendHelloMsg(ifName);
   }
 
-  if (neighbor.state == SparkNeighState::IDLE) {
+  if (neighbor.state == thrift::SparkNeighState::IDLE) {
     // state transition
-    SparkNeighState oldState = neighbor.state;
+    thrift::SparkNeighState oldState = neighbor.state;
     neighbor.state =
-        getNextState(oldState, SparkNeighEvent::HELLO_RCVD_NO_INFO);
+        getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO);
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
-  } else if (neighbor.state == SparkNeighState::WARM) {
+  } else if (neighbor.state == thrift::SparkNeighState::WARM) {
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
@@ -1536,10 +1530,11 @@ Spark::processHelloMsg(
     neighbor.negotiateHoldTimer->scheduleTimeout(handshakeHoldTime_);
 
     // Neighbor is aware of us. Promote to NEGOTIATE state
-    SparkNeighState oldState = neighbor.state;
-    neighbor.state = getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
+    thrift::SparkNeighState oldState = neighbor.state;
+    neighbor.state =
+        getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_INFO);
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
-  } else if (neighbor.state == SparkNeighState::ESTABLISHED) {
+  } else if (neighbor.state == thrift::SparkNeighState::ESTABLISHED) {
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
@@ -1557,9 +1552,9 @@ Spark::processHelloMsg(
       // Did NOT find our own info in peer's hello msg. Peer doesn't want to
       // form adjacency with us. Drop neighborship.
       //
-      SparkNeighState oldState = neighbor.state;
+      thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
-          getNextState(oldState, SparkNeighEvent::HELLO_RCVD_NO_INFO);
+          getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO);
       logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // bring down neighborship and cleanup spark neighbor state
@@ -1568,7 +1563,7 @@ Spark::processHelloMsg(
       // remove from tracked neighbor at the end
       ifNeighbors.erase(neighborName);
     }
-  } else if (neighbor.state == SparkNeighState::RESTART) {
+  } else if (neighbor.state == thrift::SparkNeighState::RESTART) {
     // Neighbor is undergoing restart. Will reply immediately for hello msg for
     // quick adjacency establishment.
     if (tsIt == neighborInfos.end()) {
@@ -1606,8 +1601,9 @@ Spark::processHelloMsg(
     // stop the graceful-restart hold-timer
     neighbor.gracefulRestartHoldTimer.reset();
 
-    SparkNeighState oldState = neighbor.state;
-    neighbor.state = getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
+    thrift::SparkNeighState oldState = neighbor.state;
+    neighbor.state =
+        getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_INFO);
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
   }
 }
@@ -1660,7 +1656,7 @@ Spark::processHandshakeMsg(
         ifName,
         neighborName,
         neighbor.area,
-        neighbor.state != SparkNeighState::NEGOTIATE);
+        neighbor.state != thrift::SparkNeighState::NEGOTIATE);
     XLOG(INFO) << "[SparkHandshakeMsg] Neighbor: " << neighborName
                << " has NOT formed adj with us yet. "
                << "Reply to handshakeMsg immediately.";
@@ -1682,10 +1678,11 @@ Spark::processHandshakeMsg(
   // skip NEGOTIATE step if neighbor is NOT in state. This can happen:
   //  1). negotiate hold timer already expired;
   //  2). v4 validation failed and fall back to WARM;
-  if (neighbor.state != SparkNeighState::NEGOTIATE) {
-    XLOG(DBG1) << "[SparkHandshakeMsg] Current state of neighbor: "
-               << neighborName << " is: [" << toStr(neighbor.state)
-               << "], expected state: [NEGOTIIATE]";
+  if (neighbor.state != thrift::SparkNeighState::NEGOTIATE) {
+    XLOG(DBG1) << fmt::format(
+        "[SparkHandshakeMsg] Current state of neighbor: {} is [{}], expected state: [NEGOTIIATE]",
+        neighborName,
+        apache::thrift::util::enumNameSafe(neighbor.state));
     return;
   }
 
@@ -1711,9 +1708,9 @@ Spark::processHandshakeMsg(
         validateV4AddressSubnet(
             ifName, *handshakeMsg.transportAddressV4_ref())) {
       // state transition
-      SparkNeighState oldState = neighbor.state;
+      thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
-          getNextState(oldState, SparkNeighEvent::NEGOTIATION_FAILURE);
+          getNextState(oldState, thrift::SparkNeighEvent::NEGOTIATION_FAILURE);
       logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // stop sending out handshake msg, no longer in NEGOTIATE stage
@@ -1763,9 +1760,9 @@ Spark::processHandshakeMsg(
           myDomainName_);
 
       // state transition
-      SparkNeighState oldState = neighbor.state;
+      thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
-          getNextState(oldState, SparkNeighEvent::NEGOTIATION_FAILURE);
+          getNextState(oldState, thrift::SparkNeighEvent::NEGOTIATION_FAILURE);
       logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // stop sending out handshake msg, no longer in NEGOTIATE stage
@@ -1777,8 +1774,9 @@ Spark::processHandshakeMsg(
   }
 
   // state transition
-  SparkNeighState oldState = neighbor.state;
-  neighbor.state = getNextState(oldState, SparkNeighEvent::HANDSHAKE_RCVD);
+  thrift::SparkNeighState oldState = neighbor.state;
+  neighbor.state =
+      getNextState(oldState, thrift::SparkNeighEvent::HANDSHAKE_RCVD);
   logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring up neighborship and set corresponding spark state
@@ -1815,10 +1813,11 @@ Spark::processHeartbeatMsg(
 
   // In case receiving heartbeat msg when it is NOT in established state,
   // Just ignore it.
-  if (neighbor.state != SparkNeighState::ESTABLISHED) {
-    XLOG(DBG3) << "[SparkHeartbeatMsg] Current state of neighbor: "
-               << neighborName << " is: [" << toStr(neighbor.state)
-               << "], expected state: [ESTABLISHED]";
+  if (neighbor.state != thrift::SparkNeighState::ESTABLISHED) {
+    XLOG(DBG3) << fmt::format(
+        "[SparkHeartbeatMsg] Current state of neighbor: {} is: [{}], expected state: [ESTABLISHED]",
+        neighborName,
+        apache::thrift::util::enumNameSafe(neighbor.state));
     return;
   }
 
@@ -2256,7 +2255,8 @@ Spark::updateGlobalCounters() {
     trackedNeighborCount += ifaceNeighbors.second.size();
     for (auto const& kv : ifaceNeighbors.second) {
       auto const& neighbor = kv.second;
-      adjacentNeighborCount += neighbor.state == SparkNeighState::ESTABLISHED;
+      adjacentNeighborCount +=
+          neighbor.state == thrift::SparkNeighState::ESTABLISHED;
       fb303::fbData->setCounter(
           "spark.rtt_us." + neighbor.nodeName + "." + ifaceNeighbors.first,
           neighbor.rtt.count());

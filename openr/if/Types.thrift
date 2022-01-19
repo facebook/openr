@@ -32,6 +32,36 @@ enum InitializationEvent {
   INITIALIZED = 8,
 }
 
+/*
+ * [Spark Neighbor FSM]
+ *
+ * Define:
+ *  1) SparkNeighState
+ *  2) SparkNeighEvent
+ *
+ * This is used to define transition state for Spark neighbors.
+ * Ref: https://openr.readthedocs.io/Protocol_Guide/Spark.html#finite-state-machine
+ */
+enum SparkNeighState {
+  IDLE = 0,
+  WARM = 1,
+  NEGOTIATE = 2,
+  ESTABLISHED = 3,
+  RESTART = 4,
+}
+
+enum SparkNeighEvent {
+  HELLO_RCVD_INFO = 0,
+  HELLO_RCVD_NO_INFO = 1,
+  HELLO_RCVD_RESTART = 2,
+  HEARTBEAT_RCVD = 3,
+  HANDSHAKE_RCVD = 4,
+  HEARTBEAT_TIMER_EXPIRE = 5,
+  NEGOTIATE_TIMER_EXPIRE = 6,
+  GR_TIMER_EXPIRE = 7,
+  NEGOTIATION_FAILURE = 8,
+}
+
 /**
  * Event object to track the key attribute and timestamp used for performance
  * measurement.

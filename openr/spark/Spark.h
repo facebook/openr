@@ -37,36 +37,6 @@ enum class PacketValidationResult {
 };
 
 /*
- * [Spark Neighbor FSM]
- *
- * Define:
- *  1) SparkNeighState
- *  2) SparkNeighEvent
- *
- * This is used to define transition state for neighbors as part of the
- * Finite State Machine(FSM).
- */
-enum class SparkNeighState {
-  IDLE = 0,
-  WARM = 1,
-  NEGOTIATE = 2,
-  ESTABLISHED = 3,
-  RESTART = 4,
-};
-
-enum class SparkNeighEvent {
-  HELLO_RCVD_INFO = 0,
-  HELLO_RCVD_NO_INFO = 1,
-  HELLO_RCVD_RESTART = 2,
-  HEARTBEAT_RCVD = 3,
-  HANDSHAKE_RCVD = 4,
-  HEARTBEAT_TIMER_EXPIRE = 5,
-  NEGOTIATE_TIMER_EXPIRE = 6,
-  GR_TIMER_EXPIRE = 7,
-  NEGOTIATION_FAILURE = 8,
-};
-
-/*
  * Spark is responsible of telling our peer of our existence and also tracking
  * the neighbor liveness.  It receives commands in form of "interface", on which
  * neighbor discovery will be performed. The discovered neighbors, aka, "Local
@@ -109,11 +79,8 @@ class Spark final : public OpenrEventBase {
   folly::SemiFuture<folly::Unit> floodRestartingMsg();
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
   getNeighbors();
-  folly::SemiFuture<std::optional<SparkNeighState>> getSparkNeighState(
+  folly::SemiFuture<std::optional<thrift::SparkNeighState>> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
-
-  // Util function to convert ENUM SparlNeighborState to string
-  static std::string toStr(SparkNeighState state);
 
   // Turn on the throwing of parsing errors.
   void setThrowParserErrors(bool);
@@ -311,7 +278,7 @@ class Spark final : public OpenrEventBase {
     uint64_t seqNum{0};
 
     // neighbor state(IDLE by default)
-    SparkNeighState state{SparkNeighState::IDLE};
+    thrift::SparkNeighState state{thrift::SparkNeighState::IDLE};
 
     // timer to periodically send out handshake pkt
     std::unique_ptr<folly::AsyncTimeout> negotiateTimer{nullptr};
@@ -373,12 +340,12 @@ class Spark final : public OpenrEventBase {
   void logStateTransition(
       std::string const& neighborName,
       std::string const& ifName,
-      SparkNeighState const& oldState,
-      SparkNeighState const& newState);
+      thrift::SparkNeighState const& oldState,
+      thrift::SparkNeighState const& newState);
 
-  // util function to check SparkNeighState
+  // util function to check thrift::SparkNeighState
   void checkNeighborState(
-      SparkNeighbor const& neighbor, SparkNeighState const& state);
+      SparkNeighbor const& neighbor, thrift::SparkNeighState const& state);
 
   // wrapper call to declare neighborship down
   void neighborUpWrapper(
@@ -424,9 +391,9 @@ class Spark final : public OpenrEventBase {
       std::string const& ifName, std::string const& neighborName);
 
   // Util function for state transition
-  static SparkNeighState getNextState(
-      std::optional<SparkNeighState> const& currState,
-      SparkNeighEvent const& event);
+  static thrift::SparkNeighState getNextState(
+      std::optional<thrift::SparkNeighState> const& currState,
+      thrift::SparkNeighEvent const& event);
 
   //
   // Private state
@@ -486,7 +453,7 @@ class Spark final : public OpenrEventBase {
   int mcastFd_{-1};
 
   // state transition matrix for Finite-State-Machine
-  static const std::vector<std::vector<std::optional<SparkNeighState>>>
+  static const std::vector<std::vector<std::optional<thrift::SparkNeighState>>>
       stateMap_;
 
   // Queue to publish neighbor events

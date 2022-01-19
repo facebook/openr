@@ -134,7 +134,7 @@ SparkWrapper::getTransportAddrs(const NeighborEvent& event) {
   return {toIPAddress(event.neighborAddrV4), toIPAddress(event.neighborAddrV6)};
 }
 
-std::optional<SparkNeighState>
+std::optional<thrift::SparkNeighState>
 SparkWrapper::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
   return spark_->getSparkNeighState(ifName, neighborName).get();

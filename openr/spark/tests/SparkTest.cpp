@@ -56,10 +56,10 @@ const auto NB_RESTARTED = NeighborEventType::NEIGHBOR_RESTARTED;
 const auto NB_RTT_CHANGE = NeighborEventType::NEIGHBOR_RTT_CHANGE;
 
 // alias for neighbor state
-const auto WARM = SparkNeighState::WARM;
-const auto NEGOTIATE = SparkNeighState::NEGOTIATE;
-const auto ESTABLISHED = SparkNeighState::ESTABLISHED;
-const auto RESTART = SparkNeighState::RESTART;
+const auto WARM = thrift::SparkNeighState::WARM;
+const auto NEGOTIATE = thrift::SparkNeighState::NEGOTIATE;
+const auto ESTABLISHED = thrift::SparkNeighState::ESTABLISHED;
+const auto RESTART = thrift::SparkNeighState::RESTART;
 
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("Fire_and_Blood");
@@ -381,8 +381,10 @@ TEST_F(SimpleSparkFixture, GetNeighborsTest) {
   auto neighbor1 = db2.back();
   auto neighbor2 = db1.back();
 
-  EXPECT_EQ(*neighbor1.state_ref(), Spark::toStr(ESTABLISHED));
-  EXPECT_EQ(*neighbor2.state_ref(), Spark::toStr(ESTABLISHED));
+  EXPECT_EQ(
+      *neighbor1.state_ref(), apache::thrift::util::enumNameSafe(ESTABLISHED));
+  EXPECT_EQ(
+      *neighbor2.state_ref(), apache::thrift::util::enumNameSafe(ESTABLISHED));
   EXPECT_EQ(*neighbor1.localIfName_ref(), iface2);
   EXPECT_EQ(*neighbor1.remoteIfName_ref(), iface1);
   EXPECT_EQ(*neighbor2.localIfName_ref(), iface1);
@@ -916,12 +918,8 @@ TEST_F(SparkFixture, DomainTest) {
     EXPECT_FALSE(
         node2->waitForEvents(NB_UP, restart_time_s2, restart_time_s2 * 2)
             .has_value());
-    EXPECT_EQ(
-        node1->getSparkNeighState(iface1, nodeStark).value(),
-        SparkNeighState::WARM);
-    EXPECT_EQ(
-        node2->getSparkNeighState(iface2, nodeLannister).value(),
-        SparkNeighState::WARM);
+    EXPECT_EQ(node1->getSparkNeighState(iface1, nodeStark).value(), WARM);
+    EXPECT_EQ(node2->getSparkNeighState(iface2, nodeLannister).value(), WARM);
   }
 }
 

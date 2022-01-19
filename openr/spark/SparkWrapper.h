@@ -63,7 +63,7 @@ class SparkWrapper {
           Constants::kPlatformRoutesProcTimeout) noexcept;
 
   // utility call to check neighbor state
-  std::optional<SparkNeighState> getSparkNeighState(
+  std::optional<thrift::SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
