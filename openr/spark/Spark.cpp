@@ -201,7 +201,6 @@ Spark::SparkNeighbor::SparkNeighbor(
     std::string const& nodeName,
     std::string const& localIfName,
     std::string const& remoteIfName,
-    bool enableFloodOptimization,
     uint64_t seqNum,
     const std::chrono::milliseconds& samplingPeriod,
     std::function<void(const int64_t&)> rttChangeCb,
@@ -211,8 +210,6 @@ Spark::SparkNeighbor::SparkNeighbor(
       localIfName(localIfName),
       remoteIfName(remoteIfName),
       seqNum(seqNum),
-      state(thrift::SparkNeighState::IDLE),
-      enableFloodOptimization(enableFloodOptimization),
       stepDetector(
           stepDetectorConfig /* step detector config */,
           samplingPeriod /* sampling period */,
@@ -245,6 +242,7 @@ Spark::SparkNeighbor::toThrift() const {
   // populate misc info
   info.rttUs_ref() = this->rtt.count();
 
+  // TODO: populate timestamp related telemetry for Spark*Msg
   return info;
 }
 
@@ -949,7 +947,13 @@ Spark::sendHandshakeMsg(
     return;
   }
 
-  // update counters for number of pkts and total size of pkts sent
+  // update telemetry for SparkHandshakeMsg
+  auto& ifNeighbors = sparkNeighbors_.at(ifName);
+  auto& neighbor = ifNeighbors.at(neighborName);
+  neighbor.lastHandshakeMsgSentAt =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch());
+
   fb303::fbData->addStatValue(
       "spark.handshake.bytes_sent", packet.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.handshake.packet_sent", 1, fb303::SUM);
@@ -1025,12 +1029,18 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
     return;
   }
 
-  // update counters for number of pkts and total size of pkts sent
+  // update telemetry for SparkHeartbeatMsg
+  for (auto& [_, neighbor] : sparkNeighbors_.at(ifName)) {
+    neighbor.lastHeartbeatMsgSentAt =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch());
+  }
+
   fb303::fbData->addStatValue(
       "spark.heartbeat.bytes_sent", packet.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.heartbeat.packet_sent", 1, fb303::SUM);
 
-  XLOG(DBG2) << "[SparkHandshakeMsg] Successfully sent " << bytesSent
+  XLOG(DBG2) << "[SparkHeartbeatMsg] Successfully sent " << bytesSent
              << " bytes over intf: " << ifName
              << ", with sequenceId: " << mySeqNum_;
 }
@@ -1049,49 +1059,6 @@ Spark::logStateTransition(
              apache::thrift::util::enumNameSafe(newState),
              neighborName,
              ifName);
-
-  auto& ifNeighbors = sparkNeighbors_.at(ifName);
-  auto& neighbor = ifNeighbors.at(neighborName);
-
-  // Track neighbor discovery time
-  if (newState == thrift::SparkNeighState::ESTABLISHED and
-      oldState == thrift::SparkNeighState::NEGOTIATE) {
-    // compute neighbor discovery time
-
-    const auto elapsedTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() -
-            neighbor.idleStateTransitionTime);
-
-    XLOG(INFO) << "Neighbor discovery time for neighbor: (" << neighborName
-               << ") on interface: (" << ifName << ") " << elapsedTime.count()
-               << " ms";
-
-    fb303::fbData->addStatValue(
-        "slo.neighbor_discovery.time_ms", elapsedTime.count(), fb303::AVG);
-  } else if (newState == thrift::SparkNeighState::IDLE) {
-    // reset neighbor discovery time
-    neighbor.idleStateTransitionTime = std::chrono::steady_clock::now();
-  }
-
-  // Track how much time has elapsed from RESTART to ESTABLISHED transition.
-  if (newState == thrift::SparkNeighState::ESTABLISHED and
-      oldState == thrift::SparkNeighState::RESTART) {
-    const auto elapsedTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() -
-            neighbor.restartStateTransitionTime);
-
-    XLOG(INFO) << "Neighbor restart time for neighbor: (" << neighborName
-               << ") on interface: (" << ifName << ") " << elapsedTime.count()
-               << " ms";
-
-    fb303::fbData->addStatValue(
-        "slo.neighbor_restart.time_ms", elapsedTime.count(), fb303::AVG);
-  } else if (newState == thrift::SparkNeighState::RESTART) {
-    // reset neighbor restart time
-    neighbor.restartStateTransitionTime = std::chrono::steady_clock::now();
-  }
 }
 
 void
@@ -1428,7 +1395,6 @@ Spark::processHelloMsg(
             neighborName, // neighborNode name
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
-            enableFloodOptimization_, // DUAL supported or NOT
             remoteSeqNum, // seqNum reported by neighborNode
             keepAliveTime_, // stepDetector sample period
             std::move(rttChangeCb),
@@ -1909,15 +1875,17 @@ Spark::sendHelloMsg(
   helloMsg.sentTsInUs_ref() = getCurrentTimeInUs().count();
 
   // bake neighborInfo into helloMsg
-  for (const auto& kv : sparkNeighbors_.at(ifName)) {
-    auto const& neighborName = kv.first;
-    auto const& neighbor = kv.second;
-
+  for (auto& [neighborName, neighbor] : sparkNeighbors_.at(ifName)) {
     auto& neighborInfo = helloMsg.neighborInfos_ref()[neighborName];
     neighborInfo.seqNum_ref() = neighbor.seqNum;
     neighborInfo.lastNbrMsgSentTsInUs_ref() =
         neighbor.neighborTimestamp.count();
     neighborInfo.lastMyMsgRcvdTsInUs_ref() = neighbor.localTimestamp.count();
+
+    // update telemetry for SparkHelloMsg
+    neighbor.lastHelloMsgSentAt =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch());
   }
 
   // fill in helloMsg field
@@ -1947,7 +1915,7 @@ Spark::sendHelloMsg(
     return;
   }
 
-  // update counters for number of pkts and total size of pkts sent
+  // update telemetry for SparkHelloMsg
   fb303::fbData->addStatValue(
       "spark.hello.bytes_sent", packet.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.hello.packet_sent", 1, fb303::SUM);
@@ -2264,8 +2232,7 @@ Spark::updateGlobalCounters() {
   int64_t adjacentNeighborCount{0}, trackedNeighborCount{0};
   for (auto const& ifaceNeighbors : sparkNeighbors_) {
     trackedNeighborCount += ifaceNeighbors.second.size();
-    for (auto const& kv : ifaceNeighbors.second) {
-      auto const& neighbor = kv.second;
+    for (auto const& [_, neighbor] : ifaceNeighbors.second) {
       adjacentNeighborCount +=
           neighbor.state == thrift::SparkNeighState::ESTABLISHED;
       fb303::fbData->setCounter(

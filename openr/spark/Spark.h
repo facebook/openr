@@ -250,7 +250,6 @@ class Spark final : public OpenrEventBase {
         std::string const& nodeName,
         std::string const& localIfName,
         std::string const& remoteIfName,
-        bool enableFloodOptimization,
         uint64_t seqNum,
         std::chrono::milliseconds const& samplingPeriod,
         std::function<void(const int64_t&)> rttChangeCb,
@@ -262,17 +261,21 @@ class Spark final : public OpenrEventBase {
     // util function to unblock adjacency hold
     bool shouldResetAdjacency(const thrift::SparkHeartbeatMsg& heartbeatMsg);
 
-    // doamin name
+    /**
+     * [Immutable Variables]
+     *
+     * The vars are populated when SparkNeighbor is constructed
+     */
     const std::string domainName{};
-
-    // node name
     const std::string nodeName{};
-
-    // local interface name
     const std::string localIfName{};
-
-    // remote interface name on neighbor side
     const std::string remoteIfName{};
+
+    /**
+     * [Mutable Variables]
+     *
+     * The vars kept changing to indicate the remote neighbor state change.
+     */
 
     // Last sequence number received from neighbor
     uint64_t seqNum{0};
@@ -294,6 +297,11 @@ class Spark final : public OpenrEventBase {
 
     // graceful restart hold-timer
     std::unique_ptr<folly::AsyncTimeout> gracefulRestartHoldTimer{nullptr};
+
+    // telemetry for the Spark control pkt sent time
+    std::chrono::milliseconds lastHelloMsgSentAt{0};
+    std::chrono::milliseconds lastHandshakeMsgSentAt{0};
+    std::chrono::milliseconds lastHeartbeatMsgSentAt{0};
 
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
     int32_t kvStoreCmdPort{0};
@@ -320,14 +328,6 @@ class Spark final : public OpenrEventBase {
 
     // Lastest measured RTT on receipt of every hello packet
     std::chrono::microseconds rttLatest{0};
-
-    // Time when a neighbor state becomes IDLE
-    std::chrono::time_point<std::chrono::steady_clock> idleStateTransitionTime =
-        std::chrono::steady_clock::now();
-
-    // Time when a neighbor state becomes RESTART
-    std::chrono::time_point<std::chrono::steady_clock>
-        restartStateTransitionTime = std::chrono::steady_clock::now();
 
     // detect rtt changes
     StepDetector<int64_t, std::chrono::milliseconds> stepDetector;

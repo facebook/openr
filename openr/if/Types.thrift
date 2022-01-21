@@ -1059,4 +1059,19 @@ struct SparkNeighbor {
    * exchanging hello packets between neighbor nodes.
    */
   10: i64 rttUs;
+
+  /**
+   * timestamp of last sent SparkHelloMsg for this neighbor
+   */
+  11: i64 lastHelloMsgSentTimeDelta = 0;
+
+  /**
+   * timestamp of last sent SparkHandshakeMsg for this neighbor
+   */
+  12: i64 lastHandshakeMsgSentTimeDelta = 0;
+
+  /**
+   * timestamp of last sent SparkHandshakeMsg for this neighbor
+   */
+  13: i64 lastHeartbeatMsgSentTimeDelta = 0;
 } (cpp.minimize_padding)

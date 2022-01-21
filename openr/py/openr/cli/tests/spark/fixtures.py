@@ -56,6 +56,9 @@ SPARK_NEIGHBORS_OUTPUT_JSON = """\
   {
     "area": "0",
     "event": "HELLO_INFO_RCVD",
+    "lastHandshakeMsgSentTimeDelta": 0,
+    "lastHeartbeatMsgSentTimeDelta": 0,
+    "lastHelloMsgSentTimeDelta": 0,
     "localIfName": "if_1_2_1",
     "nodeName": "node2",
     "openrCtrlThriftPort": 2018,
@@ -74,6 +77,9 @@ SPARK_NEIGHBORS_OUTPUT_JSON = """\
   {
     "area": "0",
     "event": "HANDSHAKE_RCVD",
+    "lastHandshakeMsgSentTimeDelta": 0,
+    "lastHeartbeatMsgSentTimeDelta": 0,
+    "lastHelloMsgSentTimeDelta": 0,
     "localIfName": "if_1_5_1",
     "nodeName": "node5",
     "openrCtrlThriftPort": 2018,
