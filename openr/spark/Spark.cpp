@@ -40,17 +40,6 @@ const int kSparkHopLimit = 255;
 const int kNumRestartingPktSent = 3;
 
 //
-// Function to get current timestamp in microseconds using steady clock
-// NOTE: we use non-monotonic clock since kernel time-stamps do not support
-// monotonic timer :(
-//
-std::chrono::microseconds
-getCurrentTimeInUs() {
-  return std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::system_clock::now().time_since_epoch());
-}
-
-//
 // Subscribe/unsubscribe to a multicast group on given interface
 //
 bool
@@ -242,7 +231,15 @@ Spark::SparkNeighbor::toThrift() const {
   // populate misc info
   info.rttUs_ref() = this->rtt.count();
 
-  // TODO: populate timestamp related telemetry for Spark*Msg
+  // populate telemetry info
+  auto currentTime = getCurrentTime<std::chrono::milliseconds>();
+  info.lastHelloMsgSentTimeDelta_ref() =
+      currentTime.count() - lastHelloMsgSentAt.count();
+  info.lastHandshakeMsgSentTimeDelta_ref() =
+      currentTime.count() - lastHandshakeMsgSentAt.count();
+  info.lastHeartbeatMsgSentTimeDelta_ref() =
+      currentTime.count() - lastHeartbeatMsgSentAt.count();
+
   return info;
 }
 
@@ -950,9 +947,7 @@ Spark::sendHandshakeMsg(
   // update telemetry for SparkHandshakeMsg
   auto& ifNeighbors = sparkNeighbors_.at(ifName);
   auto& neighbor = ifNeighbors.at(neighborName);
-  neighbor.lastHandshakeMsgSentAt =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::system_clock::now().time_since_epoch());
+  neighbor.lastHandshakeMsgSentAt = getCurrentTime<std::chrono::milliseconds>();
 
   fb303::fbData->addStatValue(
       "spark.handshake.bytes_sent", packet.size(), fb303::SUM);
@@ -1032,8 +1027,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   // update telemetry for SparkHeartbeatMsg
   for (auto& [_, neighbor] : sparkNeighbors_.at(ifName)) {
     neighbor.lastHeartbeatMsgSentAt =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch());
+        getCurrentTime<std::chrono::milliseconds>();
   }
 
   fb303::fbData->addStatValue(
@@ -1872,7 +1866,8 @@ Spark::sendHelloMsg(
   helloMsg.version_ref() = openrVer;
   helloMsg.solicitResponse_ref() = inFastInitState;
   helloMsg.restarting_ref() = restarting;
-  helloMsg.sentTsInUs_ref() = getCurrentTimeInUs().count();
+  helloMsg.sentTsInUs_ref() =
+      getCurrentTime<std::chrono::microseconds>().count();
 
   // bake neighborInfo into helloMsg
   for (auto& [neighborName, neighbor] : sparkNeighbors_.at(ifName)) {
@@ -1883,9 +1878,7 @@ Spark::sendHelloMsg(
     neighborInfo.lastMyMsgRcvdTsInUs_ref() = neighbor.localTimestamp.count();
 
     // update telemetry for SparkHelloMsg
-    neighbor.lastHelloMsgSentAt =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch());
+    neighbor.lastHelloMsgSentAt = getCurrentTime<std::chrono::milliseconds>();
   }
 
   // fill in helloMsg field

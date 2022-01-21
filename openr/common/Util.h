@@ -227,6 +227,16 @@ addJitter(T base, double pct = 20.0) {
 }
 
 /**
+ * template method to return current timestamp using steady clock
+ */
+template <class T>
+T
+getCurrentTime() {
+  return std::chrono::duration_cast<T>(
+      std::chrono::system_clock::now().time_since_epoch());
+}
+
+/**
  * Utility functions for conversion between thrift objects and string/IOBuf
  */
 
