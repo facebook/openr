@@ -12,7 +12,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
 #include <openr/common/Types.h>
-#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/kvstore/KvStore.h>
 
@@ -31,29 +30,28 @@ KvStore::KvStore(
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
-    std::shared_ptr<const Config> config)
+    const std::string& nodeName,
+    std::optional<int> maybeIpTos,
+    const std::unordered_set<std::string>& areaIds,
+    const thrift::KvstoreConfig& kvStoreConfig)
     : kvParams_(
-          config->getNodeName(),
+          nodeName,
           kvStoreUpdatesQueue,
           kvStoreEventsQueue,
           logSampleQueue,
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
-              fbzmq::IdentityString{
-                  fmt::format("{}::TCP::CMD", config->getNodeName())},
+              fbzmq::IdentityString{fmt::format("{}::TCP::CMD", nodeName)},
               folly::none,
               fbzmq::NonblockingFlag{true}),
-          config->getKvStoreConfig().get_zmq_hwm(),
-          getKvStoreFilters(config),
-          config->getKvStoreConfig().flood_rate_ref().to_optional(),
-          std::chrono::milliseconds(
-              *config->getKvStoreConfig().ttl_decrement_ms_ref()),
-          std::chrono::milliseconds(
-              *config->getKvStoreConfig().key_ttl_ms_ref()),
-          config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
-              false),
-          config->getKvStoreConfig().is_flood_root_ref().value_or(false),
-          config->getKvStoreConfig().get_enable_thrift_dual_msg()) {
+          *kvStoreConfig.zmq_hwm_ref(),
+          getKvStoreFilters(nodeName, kvStoreConfig),
+          kvStoreConfig.flood_rate_ref().to_optional(),
+          std::chrono::milliseconds(*kvStoreConfig.ttl_decrement_ms_ref()),
+          std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms_ref()),
+          kvStoreConfig.enable_flood_optimization_ref().value_or(false),
+          kvStoreConfig.is_flood_root_ref().value_or(false),
+          *kvStoreConfig.enable_thrift_dual_msg_ref()) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {
@@ -64,12 +62,11 @@ KvStore::KvStore(
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 
   // Get optional ip_tos from the config
-  std::optional<int> maybeIpTos = std::nullopt;
-  auto ipTosConfig = config->getConfig().ip_tos_ref();
-  if (ipTosConfig.has_value()) {
-    maybeIpTos = ipTosConfig.value();
-  }
   kvParams_.maybeIpTos = maybeIpTos;
+  if (kvParams_.maybeIpTos.has_value()) {
+    XLOG(INFO) << fmt::format(
+        "Set IP_TOS: {} for node: {}", maybeIpTos.value(), nodeName);
+  }
 
   // [TO BE DEPRECATED]
   if (kvParams_.enableFloodOptimization) {
@@ -141,7 +138,7 @@ KvStore::KvStore(
   initGlobalCounters();
 
   // create KvStoreDb instances
-  for (auto const& area : config->getAreaIds()) {
+  for (auto const& area : areaIds) {
     kvStoreDb_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(area),
@@ -151,12 +148,12 @@ KvStore::KvStore(
             area,
             fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT>(
                 zmqContext,
-                fbzmq::IdentityString{folly::to<std::string>(
-                    config->getNodeName(), "::TCP::SYNC::", area)},
+                fbzmq::IdentityString{
+                    folly::to<std::string>(nodeName, "::TCP::SYNC::", area)},
                 folly::none,
                 fbzmq::NonblockingFlag{true}),
-            config->getKvStoreConfig().is_flood_root_ref().value_or(false),
-            config->getNodeName(),
+            kvStoreConfig.is_flood_root_ref().value_or(false),
+            nodeName,
             std::bind(&KvStore::initialKvStoreDbSynced, this)));
   }
 }

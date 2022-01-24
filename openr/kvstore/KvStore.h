@@ -19,8 +19,6 @@
 #include <openr/common/OpenrClient.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
-#include <openr/common/Util.h>
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/Dual.h>
 #include <openr/kvstore/KvStoreUtil.h>
@@ -702,7 +700,7 @@ class KvStore final : public OpenrEventBase {
       fbzmq::Context& zmqContext,
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-      // Queue for publishing kvstore peer initial sync events
+      // [TO BE DEPRECATED] Queue for publishing kvstore initial sync events
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
       // Queue for receiving peer updates
       messaging::RQueue<PeerEvent> peerUpdatesQueue,
@@ -710,10 +708,16 @@ class KvStore final : public OpenrEventBase {
       messaging::RQueue<KeyValueRequest> kvRequestQueue,
       // Queue for publishing the event log
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      // the url to receive command from peer instances
+      // [TO BE DEPRECATED] the url to receive command from peer instances
       KvStoreGlobalCmdUrl globalCmdUrl,
-      // openr config
-      std::shared_ptr<const Config> config);
+      // unique identifier for this kvStore instance
+      const std::string& nodeName,
+      // ip_tos flag
+      std::optional<int> maybeIpTos,
+      // areaId collection
+      const std::unordered_set<std::string>& areaIds,
+      // KvStoreConfig to drive the instance
+      const thrift::KvstoreConfig& kvStoreConfig);
 
   ~KvStore() override = default;
 

@@ -384,7 +384,10 @@ main(int argc, char** argv) {
               "tcp://{}:{}",
               *config->getConfig().listen_addr_ref(),
               Constants::kKvStoreRepPort)},
-          config));
+          config->getNodeName(),
+          config->getConfig().ip_tos_ref().to_optional(),
+          config->getAreaIds(),
+          config->getKvStoreConfig()));
   watchdog->addQueue(kvStoreEventsQueue, "kvStoreEventsQueue");
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
   watchdog->addQueue(logSampleQueue, "logSampleQueue");

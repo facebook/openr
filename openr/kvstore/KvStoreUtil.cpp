@@ -13,12 +13,13 @@
 namespace openr {
 
 std::optional<openr::KvStoreFilters>
-getKvStoreFilters(std::shared_ptr<const openr::Config> config) {
+getKvStoreFilters(
+    const std::string& nodeName, const thrift::KvstoreConfig& kvStoreConfig) {
   std::optional<openr::KvStoreFilters> kvFilters{std::nullopt};
   // Add key prefixes to allow if set as leaf node
-  if (config->getKvStoreConfig().set_leaf_node_ref().value_or(false)) {
+  if (kvStoreConfig.set_leaf_node_ref().value_or(false)) {
     std::vector<std::string> keyPrefixFilters;
-    if (auto v = config->getKvStoreConfig().key_prefix_filters_ref()) {
+    if (auto v = kvStoreConfig.key_prefix_filters_ref()) {
       keyPrefixFilters = *v;
     }
     keyPrefixFilters.push_back(openr::Constants::kPrefixAllocMarker.toString());
@@ -28,11 +29,10 @@ getKvStoreFilters(std::shared_ptr<const openr::Config> config) {
     // save nodeIds in the set
     std::set<std::string> originatorIdFilters{};
     for (const auto& id :
-         config->getKvStoreConfig().key_originator_id_filters_ref().value_or(
-             {})) {
+         kvStoreConfig.key_originator_id_filters_ref().value_or({})) {
       originatorIdFilters.insert(id);
     }
-    originatorIdFilters.insert(config->getNodeName());
+    originatorIdFilters.insert(nodeName);
     kvFilters = openr::KvStoreFilters(keyPrefixFilters, originatorIdFilters);
   }
   return kvFilters;

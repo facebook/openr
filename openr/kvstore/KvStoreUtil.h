@@ -173,7 +173,7 @@ std::unordered_map<std::string, thrift::Value> mergeKeyValues(
     std::optional<KvStoreFilters> const& filters = std::nullopt);
 
 std::optional<openr::KvStoreFilters> getKvStoreFilters(
-    std::shared_ptr<const openr::Config> config);
+    const std::string& nodeName, const thrift::KvstoreConfig& kvStoreConfig);
 
 /*
  * Compare two thrift::Values to figure out which value is better to

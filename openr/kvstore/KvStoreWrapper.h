@@ -9,6 +9,7 @@
 
 #include <fbzmq/zmq/Zmq.h>
 
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
