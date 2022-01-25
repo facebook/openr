@@ -11,7 +11,6 @@
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/Constants.h>
-#include <openr/common/LsdbUtil.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace {

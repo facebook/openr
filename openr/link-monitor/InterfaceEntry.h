@@ -11,7 +11,7 @@
 
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/ExponentialBackoff.h>
-#include <openr/common/Types.h>
+#include <openr/common/LsdbTypes.h>
 
 namespace openr {
 

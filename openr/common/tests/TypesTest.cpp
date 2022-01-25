@@ -8,7 +8,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <openr/common/Types.h>
+#include <openr/common/LsdbTypes.h>
 
 using namespace openr;
 

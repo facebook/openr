@@ -12,6 +12,22 @@ namespace py3 openr.thrift
 namespace lua openr.KvStore
 namespace wiki Open_Routing.Thrift_APIs.KvStore
 
+/*
+ * Events in OpenR initialization process.
+ * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html
+ */
+enum InitializationEvent {
+  INITIALIZING = 0,
+  AGENT_CONFIGURED = 1,
+  LINK_DISCOVERED = 2,
+  NEIGHBOR_DISCOVERED = 3,
+  KVSTORE_SYNCED = 4,
+  RIB_COMPUTED = 5,
+  FIB_SYNCED = 6,
+  PREFIX_DB_SYNCED = 7,
+  INITIALIZED = 8,
+}
+
 /**
  * DUAL message type
  */

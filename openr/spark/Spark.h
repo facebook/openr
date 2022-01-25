@@ -14,9 +14,9 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/LsdbTypes.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/StepDetector.h>
-#include <openr/common/Types.h>
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/messaging/ReplicateQueue.h>

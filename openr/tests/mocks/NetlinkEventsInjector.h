@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <openr/common/Types.h>
+#include <openr/common/LsdbTypes.h>
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 
 namespace openr {

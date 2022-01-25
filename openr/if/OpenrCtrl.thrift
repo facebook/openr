@@ -277,7 +277,7 @@ service OpenrCtrl extends fb303_core.BaseService {
    * Get the mapping of <initialization event, duration in millisecond since
    * OpenR starts>.
    */
-  map<Types.InitializationEvent, i64> getInitializationEvents();
+  map<KvStore.InitializationEvent, i64> getInitializationEvents();
 
   /**
    * OpenR initialization is converged or not.

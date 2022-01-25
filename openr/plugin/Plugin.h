@@ -7,12 +7,9 @@
 
 #pragma once
 
-#include <memory>
-#include <string>
-
 #include <wangle/ssl/SSLContextConfig.h>
 
-#include <openr/common/Types.h>
+#include <openr/common/LsdbTypes.h>
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/Types_types.h>

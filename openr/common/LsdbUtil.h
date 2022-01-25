@@ -9,7 +9,7 @@
 
 #include <folly/IPAddress.h>
 #include <folly/logging/xlog.h>
-#include <openr/common/Types.h>
+#include <openr/common/LsdbTypes.h>
 #include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/if/gen-cpp2/Network_types.h>

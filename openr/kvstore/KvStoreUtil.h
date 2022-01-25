@@ -10,7 +10,8 @@
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 namespace openr {
@@ -171,6 +172,7 @@ std::unordered_map<std::string, thrift::Value> mergeKeyValues(
     std::unordered_map<std::string, thrift::Value> const& keyVals,
     std::optional<KvStoreFilters> const& filters = std::nullopt);
 
+// TODO: migrate towards thrift::KvStoreConfig
 std::optional<openr::KvStoreFilters> getKvStoreFilters(
     const std::string& nodeName, const thrift::KvstoreConfig& kvStoreConfig);
 

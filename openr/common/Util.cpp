@@ -18,6 +18,8 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 
+#include <thrift/lib/cpp/util/EnumUtils.h>
+
 namespace openr {
 
 void

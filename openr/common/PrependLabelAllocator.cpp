@@ -6,8 +6,8 @@
  */
 
 #include <folly/logging/xlog.h>
+#include <openr/common/LsdbTypes.h>
 #include <openr/common/PrependLabelAllocator.h>
-#include <optional>
 
 namespace openr {
 
