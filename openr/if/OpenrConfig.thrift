@@ -337,6 +337,8 @@ struct ThriftServerConfig {
   10: optional VerifyClientType verify_client_type;
   /** Knob to enable/disable non-default VRF thrift server. */
   11: optional bool enable_non_default_vrf_thrift_server;
+  /** Timeout (2 seconds by default) of Cpp2Worker join in Thrift server */
+  12: i32 workers_join_timeout = 2;
 }
 
 struct ThriftClientConfig {
