@@ -8,6 +8,7 @@
 #pragma once
 
 #include <glog/logging.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 
 namespace openr {
 
@@ -18,6 +19,41 @@ namespace openr {
 inline bool
 isMplsLabelValid(int32_t mplsLabel) {
   return (mplsLabel & 0xfff00000) == 0 and mplsLabel != 0;
+}
+
+/**
+ * Validates mplsAction object and fatals
+ */
+inline void
+checkMplsAction(thrift::MplsAction const& mplsAction) {
+  switch (*mplsAction.action_ref()) {
+  case thrift::MplsActionCode::PUSH:
+    // Swap label shouldn't be set
+    CHECK(not mplsAction.swapLabel_ref().has_value());
+    // Push labels should be set
+    CHECK(mplsAction.pushLabels_ref().has_value());
+    // there should be atleast one push label
+    CHECK(not mplsAction.pushLabels_ref()->empty());
+    for (auto const& label : mplsAction.pushLabels_ref().value()) {
+      CHECK(isMplsLabelValid(label));
+    }
+    break;
+  case thrift::MplsActionCode::SWAP:
+    // Swap label should be set
+    CHECK(mplsAction.swapLabel_ref().has_value());
+    CHECK(isMplsLabelValid(mplsAction.swapLabel_ref().value()));
+    // Push labels shouldn't be set
+    CHECK(not mplsAction.pushLabels_ref().has_value());
+    break;
+  case thrift::MplsActionCode::PHP:
+  case thrift::MplsActionCode::POP_AND_LOOKUP:
+    // Swap label should not be set
+    CHECK(not mplsAction.swapLabel_ref().has_value());
+    CHECK(not mplsAction.pushLabels_ref().has_value());
+    break;
+  default:
+    CHECK(false) << "Unknown action code";
+  }
 }
 
 class MplsConstants {

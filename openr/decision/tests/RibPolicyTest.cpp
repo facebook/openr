@@ -5,14 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <thread>
-
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <openr/common/Util.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/decision/RibPolicy.h>
 
 using namespace openr;

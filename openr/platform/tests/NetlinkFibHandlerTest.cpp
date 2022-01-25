@@ -5,11 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <unistd.h>
-#include <algorithm>
-#include <chrono>
-#include <stdexcept>
-
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/Random.h>
@@ -20,8 +15,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>

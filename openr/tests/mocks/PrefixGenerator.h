@@ -5,8 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 
 #pragma once
 

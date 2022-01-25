@@ -10,6 +10,8 @@
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/LsdbUtil.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>

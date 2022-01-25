@@ -8,8 +8,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/decision/PrefixState.h>
 
 using namespace openr;

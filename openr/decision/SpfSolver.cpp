@@ -8,10 +8,11 @@
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
 
-#include <openr/common/Util.h>
+#include <openr/common/LsdbUtil.h>
+#include <openr/common/MplsUtil.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/SpfSolver.h>
-#include "openr/if/gen-cpp2/OpenrConfig_types.h"
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace fb303 = facebook::fb303;
 

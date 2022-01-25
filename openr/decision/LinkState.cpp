@@ -5,14 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <algorithm>
-#include <functional>
-#include <utility>
-
 #include <fb303/ServiceData.h>
-#include <folly/Format.h>
 #include <folly/logging/xlog.h>
-#include <openr/common/Util.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/decision/LinkState.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 
@@ -715,7 +710,7 @@ LinkState::updateAdjacencyDatabase(
     // Check if link weight has changed
     if (newLink.getWeightFromNode(nodeName) !=
         oldLink.getWeightFromNode(nodeName)) {
-      XLOG(DBG1) << folly::sformat(
+      XLOG(DBG1) << fmt::format(
           "[LINK UPDATE] Weight change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getWeightFromNode(nodeName),

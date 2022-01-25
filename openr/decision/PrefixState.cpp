@@ -5,10 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/decision/PrefixState.h"
-
 #include <folly/logging/xlog.h>
-#include <openr/common/Util.h>
+
+#include <openr/common/LsdbUtil.h>
+#include <openr/decision/PrefixState.h>
 
 namespace openr {
 

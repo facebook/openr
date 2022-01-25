@@ -8,7 +8,8 @@
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 
-#include <openr/common/Util.h>
+#include <openr/common/LsdbUtil.h>
+#include <openr/common/Types.h>
 
 using namespace openr;
 

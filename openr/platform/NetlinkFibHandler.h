@@ -12,6 +12,7 @@
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
 
+#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/NeighborListenerClientForFibagent.h>

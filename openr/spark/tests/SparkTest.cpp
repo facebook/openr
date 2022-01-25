@@ -13,7 +13,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/spark/SparkWrapper.h>
 #include <openr/tests/mocks/MockIoProvider.h>

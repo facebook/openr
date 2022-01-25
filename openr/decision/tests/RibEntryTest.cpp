@@ -8,7 +8,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <openr/common/Util.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/decision/RibEntry.h>
 
 namespace openr {

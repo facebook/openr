@@ -6,14 +6,8 @@
  */
 
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/FileUtil.h>
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
-#include <folly/Memory.h>
-#include <folly/gen/Base.h>
-#include <folly/gen/String.h>
 #include <folly/init/Init.h>
-#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <sodium.h>
@@ -25,8 +19,8 @@
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>

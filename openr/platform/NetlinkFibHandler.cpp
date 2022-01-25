@@ -5,12 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <folly/Format.h>
 #include <folly/gen/Base.h>
 #include <folly/logging/xlog.h>
 
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
 

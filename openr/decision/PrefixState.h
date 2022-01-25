@@ -7,10 +7,6 @@
 
 #pragma once
 
-#include <set>
-#include <unordered_map>
-#include <vector>
-
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Network_types.h>

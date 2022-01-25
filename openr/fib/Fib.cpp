@@ -11,8 +11,8 @@
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/fib/Fib.h>
 
 namespace fb303 = facebook::fb303;

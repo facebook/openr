@@ -18,8 +18,8 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Flags.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>

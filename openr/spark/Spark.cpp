@@ -14,9 +14,9 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
-#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/spark/Spark.h>
 
