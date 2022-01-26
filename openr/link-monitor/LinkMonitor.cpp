@@ -210,7 +210,10 @@ LinkMonitor::LinkMonitor(
   }
 
   // start initial dump timer
-  adjHoldTimer_->scheduleTimeout(initialAdjHoldTime);
+  // TODO: remove this after Open/R initialization is rolled out globally.
+  if (not enableOrderedAdjPublication_) {
+    adjHoldTimer_->scheduleTimeout(initialAdjHoldTime);
+  }
 
   // Add fiber to process the neighbor events
   addFiberTask([q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
@@ -651,7 +654,7 @@ LinkMonitor::updateKvStorePeerNeighborDown(
 
 void
 LinkMonitor::advertiseAdjacencies(const std::string& area) {
-  if (adjHoldTimer_->isScheduled()) {
+  if (not enableOrderedAdjPublication_ and adjHoldTimer_->isScheduled()) {
     return;
   }
 
