@@ -17,25 +17,15 @@ namespace fs = std::experimental::filesystem;
 #include <stdexcept>
 
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/FileUtil.h>
-#include <folly/Format.h>
-#include <folly/IPAddress.h>
-#include <folly/Memory.h>
-#include <folly/Optional.h>
-#include <folly/gen/Base.h>
-#include <folly/gen/String.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <sodium.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/BuildInfo.h>
-#include <openr/common/Constants.h>
 #include <openr/common/Flags.h>
 #include <openr/common/OpenrThriftCtrlServer.h>
 #include <openr/common/Util.h>
