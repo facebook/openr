@@ -58,14 +58,14 @@ class DecisionRoutesComputedCli:
     @click.command()
     @click.option(
         "--nodes",
-        default="",
+        default=(),
         help="Get routes for a list of nodes. Default will get "
         "host's routes. Get routes for all nodes if 'all' is given.",
     )
     @click.option(
         "--prefixes",
         "-p",
-        default="",
+        default=(),
         multiple=True,
         help="Get route for specific IPs or Prefixes.",
     )
@@ -90,7 +90,7 @@ class DecisionPrefixesCli:
     @click.command()
     @click.option(
         "--nodes",
-        default="",
+        default=(),
         help="Dump prefixes for a list of nodes. Default will dump host's "
         "prefixes. Dump prefixes for all nodes if 'all' is given.",
     )
@@ -126,7 +126,7 @@ class DecisionAdjCli:
     @click.command()
     @click.option(
         "--nodes",
-        default="",
+        default=(),
         help="Dump adjacencies for a list of nodes. Default will dump "
         "host's adjs. Dump adjs for all nodes if 'all' is given",
     )
