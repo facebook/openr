@@ -9,11 +9,9 @@
 
 #include <boost/functional/hash.hpp>
 #include <folly/memory/MallctlHelper.h>
-#include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/if/gen-cpp2/Types_types.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <wangle/ssl/SSLContextConfig.h>
@@ -65,30 +63,6 @@ void setupThriftServerTls(
     std::shared_ptr<wangle::SSLContextConfig> sslContext);
 
 /**
- * Add a perf event to perf event list
- */
-thrift::PerfEvent createPerfEvent(
-    std::string nodeName, std::string eventDescr, int64_t unixTs);
-
-void addPerfEvent(
-    thrift::PerfEvents& perfEvents,
-    const std::string& nodeName,
-    const std::string& eventDescr) noexcept;
-
-/**
- * Print perf event and return total convergence time
- */
-std::vector<std::string> sprintPerfEvents(
-    const thrift::PerfEvents& perfEvents) noexcept;
-std::chrono::milliseconds getTotalPerfEventsDuration(
-    const thrift::PerfEvents& perfEvents) noexcept;
-folly::Expected<std::chrono::milliseconds, std::string>
-getDurationBetweenPerfEvents(
-    const thrift::PerfEvents& perfEvents,
-    const std::string& firstName,
-    const std::string& secondName) noexcept;
-
-/**
  * Generate hash for each keyval pair
  * as a abstract of version number, originator and values
  * TODO: Remove the API in favor of other one
@@ -102,11 +76,6 @@ int64_t generateHash(
     const int64_t version,
     const std::string& originatorId,
     const apache::thrift::optional_field_ref<const std::string&> value);
-
-/**
- * Populate build info in thrift format
- */
-thrift::BuildInfo getBuildInfoThrift() noexcept;
 
 /**
  * Utility functions for creating thrift objects

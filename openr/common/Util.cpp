@@ -72,93 +72,6 @@ setupThriftServerTls(
   return;
 }
 
-// construct thrift::PerfEvent
-thrift::PerfEvent
-createPerfEvent(std::string nodeName, std::string eventDescr, int64_t unixTs) {
-  thrift::PerfEvent perfEvent;
-  perfEvent.nodeName_ref() = nodeName;
-  perfEvent.eventDescr_ref() = eventDescr;
-  perfEvent.unixTs_ref() = unixTs;
-  return perfEvent;
-}
-
-void
-addPerfEvent(
-    thrift::PerfEvents& perfEvents,
-    const std::string& nodeName,
-    const std::string& eventDescr) noexcept {
-  thrift::PerfEvent event =
-      createPerfEvent(nodeName, eventDescr, getUnixTimeStampMs());
-  perfEvents.events_ref()->emplace_back(std::move(event));
-}
-
-std::vector<std::string>
-sprintPerfEvents(const thrift::PerfEvents& perfEvents) noexcept {
-  const auto& events = *perfEvents.events_ref();
-  if (events.empty()) {
-    return {};
-  }
-
-  std::vector<std::string> eventStrs;
-  auto recentTs = *events.front().unixTs_ref();
-  for (auto const& event : events) {
-    auto durationMs = *event.unixTs_ref() - recentTs;
-    recentTs = *event.unixTs_ref();
-    eventStrs.emplace_back(fmt::format(
-        "node: {}, event: {}, duration: {}ms, unix-timestamp: {}",
-        *event.nodeName_ref(),
-        *event.eventDescr_ref(),
-        durationMs,
-        *event.unixTs_ref()));
-  }
-  return eventStrs;
-}
-
-std::chrono::milliseconds
-getTotalPerfEventsDuration(const thrift::PerfEvents& perfEvents) noexcept {
-  if (perfEvents.events_ref()->empty()) {
-    return std::chrono::milliseconds(0);
-  }
-
-  auto recentTs = *perfEvents.events_ref()->front().unixTs_ref();
-  auto latestTs = *perfEvents.events_ref()->back().unixTs_ref();
-  return std::chrono::milliseconds(latestTs - recentTs);
-}
-
-folly::Expected<std::chrono::milliseconds, std::string>
-getDurationBetweenPerfEvents(
-    const thrift::PerfEvents& perfEvents,
-    const std::string& firstName,
-    const std::string& secondName) noexcept {
-  auto search = std::find_if(
-      perfEvents.events_ref()->cbegin(),
-      perfEvents.events_ref()->cend(),
-      [&firstName](const thrift::PerfEvent& event) {
-        return *event.eventDescr_ref() == firstName;
-      });
-  if (search == perfEvents.events_ref()->cend()) {
-    return folly::makeUnexpected(
-        fmt::format("Could not find first event: {}", firstName));
-  }
-  int64_t first = *search->unixTs_ref();
-  search = std::find_if(
-      search + 1,
-      perfEvents.events_ref()->cend(),
-      [&secondName](const thrift::PerfEvent& event) {
-        return *event.eventDescr_ref() == secondName;
-      });
-  if (search == perfEvents.events_ref()->cend()) {
-    return folly::makeUnexpected(
-        fmt::format("Could not find second event: {}", secondName));
-  }
-  int64_t second = *search->unixTs_ref();
-  if (second < first) {
-    return folly::makeUnexpected(
-        std::string{"Negative duration between first and second event"});
-  }
-  return std::chrono::milliseconds(second - first);
-}
-
 template <class T>
 int64_t
 generateHashImpl(
@@ -186,32 +99,6 @@ generateHash(
     const std::string& originatorId,
     const apache::thrift::optional_field_ref<const std::string&> value) {
   return generateHashImpl(version, originatorId, value);
-}
-
-thrift::BuildInfo
-getBuildInfoThrift() noexcept {
-  thrift::BuildInfo buildInfo;
-  buildInfo.buildUser_ref() = BuildInfo::getBuildUser();
-  buildInfo.buildTime_ref() = BuildInfo::getBuildTime();
-  buildInfo.buildTimeUnix_ref() =
-      static_cast<int64_t>(BuildInfo::getBuildTimeUnix());
-  buildInfo.buildHost_ref() = BuildInfo::getBuildHost();
-  buildInfo.buildPath_ref() = BuildInfo::getBuildPath();
-  buildInfo.buildRevision_ref() = BuildInfo::getBuildRevision();
-  buildInfo.buildRevisionCommitTimeUnix_ref() =
-      static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix());
-  buildInfo.buildUpstreamRevision_ref() = BuildInfo::getBuildUpstreamRevision();
-  buildInfo.buildUpstreamRevisionCommitTimeUnix_ref() =
-      BuildInfo::getBuildUpstreamRevisionCommitTimeUnix();
-  buildInfo.buildPackageName_ref() = BuildInfo::getBuildPackageName();
-  buildInfo.buildPackageVersion_ref() = BuildInfo::getBuildPackageVersion();
-  buildInfo.buildPackageRelease_ref() = BuildInfo::getBuildPackageRelease();
-  buildInfo.buildPlatform_ref() = BuildInfo::getBuildPlatform();
-  buildInfo.buildRule_ref() = BuildInfo::getBuildRule();
-  buildInfo.buildType_ref() = BuildInfo::getBuildType();
-  buildInfo.buildTool_ref() = BuildInfo::getBuildTool();
-  buildInfo.buildMode_ref() = BuildInfo::getBuildMode();
-  return buildInfo;
 }
 
 // construct thrift::Value

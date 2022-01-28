@@ -9,14 +9,45 @@
 
 #include <folly/IPAddress.h>
 #include <folly/logging/xlog.h>
+#include <openr/common/BuildInfo.h>
 #include <openr/common/LsdbTypes.h>
 #include <openr/common/Util.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {
+
+/**
+ * Populate build info in thrift format
+ */
+thrift::BuildInfo getBuildInfoThrift() noexcept;
+
+/**
+ * [Perf Event] util functions for thrift::PerfEvent
+ */
+thrift::PerfEvent createPerfEvent(
+    std::string nodeName, std::string eventDescr, int64_t unixTs);
+
+void addPerfEvent(
+    thrift::PerfEvents& perfEvents,
+    const std::string& nodeName,
+    const std::string& eventDescr) noexcept;
+
+std::vector<std::string> sprintPerfEvents(
+    const thrift::PerfEvents& perfEvents) noexcept;
+
+std::chrono::milliseconds getTotalPerfEventsDuration(
+    const thrift::PerfEvents& perfEvents) noexcept;
+
+folly::Expected<std::chrono::milliseconds, std::string>
+getDurationBetweenPerfEvents(
+    const thrift::PerfEvents& perfEvents,
+    const std::string& firstName,
+    const std::string& secondName) noexcept;
+
 /**
  * Utility functions to convert thrift Enum value to string
  */

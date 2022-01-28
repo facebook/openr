@@ -12,7 +12,8 @@
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+
+#include <folly/ssl/SSLSessionManager.h>
 
 namespace openr {
 

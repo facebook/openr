@@ -7,7 +7,6 @@
 
 #include <folly/logging/xlog.h>
 
-#include <openr/common/Constants.h>
 #include <openr/kvstore/KvStoreUtil.h>
 
 namespace openr {

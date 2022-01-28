@@ -12,7 +12,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/kvstore/KvStore.h>
 
 using namespace std::chrono;
