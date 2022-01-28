@@ -33,10 +33,8 @@ KvStoreWrapper::KvStoreWrapper(
                                  : dummyKvRequestQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{globalCmdUrl},
-      config_->getNodeName(),
-      config_->getConfig().ip_tos_ref().to_optional(),
-      config_->getAreaIds(),
-      config_->getKvStoreConfig());
+      config->getAreaIds(),
+      config->toThriftKvStoreConfig());
 
   // we need to spin up a thrift server for KvStore clients to connect to. See
   // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update

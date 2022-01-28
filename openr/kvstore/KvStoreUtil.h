@@ -11,7 +11,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 #include <folly/ssl/SSLSessionManager.h>
 
@@ -57,6 +56,12 @@ class KvStoreFilters {
   // filter's OR/AND matching logic for attributes
   thrift::FilterOperator filterOperator_;
 };
+
+/**
+ * Util method to retrieve KvStoreFilters from config
+ */
+std::optional<openr::KvStoreFilters> getKvStoreFilters(
+    const thrift::KvStoreConfig& kvStoreConfig);
 
 // helper for deserialization
 template <typename ThriftType>
@@ -172,10 +177,6 @@ std::unordered_map<std::string, thrift::Value> mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
     std::optional<KvStoreFilters> const& filters = std::nullopt);
-
-// TODO: migrate towards thrift::KvStoreConfig
-std::optional<openr::KvStoreFilters> getKvStoreFilters(
-    const std::string& nodeName, const thrift::KvstoreConfig& kvStoreConfig);
 
 /*
  * Compare two thrift::Values to figure out which value is better to

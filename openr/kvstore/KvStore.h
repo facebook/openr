@@ -80,7 +80,7 @@ struct KvStoreParams {
   // KvStore key filters
   std::optional<KvStoreFilters> filters;
   // Kvstore flooding rate
-  std::optional<thrift::KvstoreFloodRate> floodRate;
+  std::optional<thrift::KvStoreFloodRate> floodRate;
   // TTL decrement factor
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
   // TTL for self-originated keys
@@ -99,7 +99,7 @@ struct KvStoreParams {
       int zmqhwm,
       std::optional<KvStoreFilters> filter,
       // Kvstore flooding rate
-      std::optional<thrift::KvstoreFloodRate> floodrate,
+      std::optional<thrift::KvStoreFloodRate> floodrate,
       // TTL decrement factor
       std::chrono::milliseconds ttldecr,
       // TTL for self-originated keys
@@ -710,14 +710,10 @@ class KvStore final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // [TO BE DEPRECATED] the url to receive command from peer instances
       KvStoreGlobalCmdUrl globalCmdUrl,
-      // unique identifier for this kvStore instance
-      const std::string& nodeName,
-      // ip_tos flag
-      std::optional<int> maybeIpTos,
       // areaId collection
       const std::unordered_set<std::string>& areaIds,
       // KvStoreConfig to drive the instance
-      const thrift::KvstoreConfig& kvStoreConfig);
+      const thrift::KvStoreConfig& kvStoreConfig);
 
   ~KvStore() override = default;
 

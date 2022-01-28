@@ -75,6 +75,7 @@ class KvStoreTestFixture : public ::testing::Test {
    * stopped as well as destroyed automatically when test exits.
    * Retured raw pointer of an object will be freed as well.
    */
+  // TODO: simplify KvStoreWrapper to take new thrift::KvStoreConfig
   KvStoreWrapper*
   createKvStore(
       std::string nodeId,

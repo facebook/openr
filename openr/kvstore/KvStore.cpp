@@ -29,22 +29,21 @@ KvStore::KvStore(
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
-    const std::string& nodeName,
-    std::optional<int> maybeIpTos,
     const std::unordered_set<std::string>& areaIds,
-    const thrift::KvstoreConfig& kvStoreConfig)
+    const thrift::KvStoreConfig& kvStoreConfig)
     : kvParams_(
-          nodeName,
+          *kvStoreConfig.node_name_ref(),
           kvStoreUpdatesQueue,
           kvStoreEventsQueue,
           logSampleQueue,
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
-              fbzmq::IdentityString{fmt::format("{}::TCP::CMD", nodeName)},
+              fbzmq::IdentityString{
+                  fmt::format("{}::TCP::CMD", *kvStoreConfig.node_name_ref())},
               folly::none,
               fbzmq::NonblockingFlag{true}),
           *kvStoreConfig.zmq_hwm_ref(),
-          getKvStoreFilters(nodeName, kvStoreConfig),
+          getKvStoreFilters(kvStoreConfig),
           kvStoreConfig.flood_rate_ref().to_optional(),
           std::chrono::milliseconds(*kvStoreConfig.ttl_decrement_ms_ref()),
           std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms_ref()),
@@ -61,17 +60,21 @@ KvStore::KvStore(
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 
   // Get optional ip_tos from the config
-  kvParams_.maybeIpTos = maybeIpTos;
+  kvParams_.maybeIpTos = kvStoreConfig.ip_tos_ref().to_optional();
   if (kvParams_.maybeIpTos.has_value()) {
     XLOG(INFO) << fmt::format(
-        "Set IP_TOS: {} for node: {}", maybeIpTos.value(), nodeName);
+        "Set IP_TOS: {} for node: {}",
+        kvParams_.maybeIpTos.value(),
+        *kvStoreConfig.node_name_ref());
   }
 
   // [TO BE DEPRECATED]
   if (kvParams_.enableFloodOptimization) {
     // Prepare socket and callbacks for listening coming requests
     prepareSocket(
-        kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
+        kvParams_.globalCmdSock,
+        std::string(globalCmdUrl),
+        kvParams_.maybeIpTos);
     addSocket(
         fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
         ZMQ_POLLIN,
@@ -147,12 +150,12 @@ KvStore::KvStore(
             area,
             fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT>(
                 zmqContext,
-                fbzmq::IdentityString{
-                    folly::to<std::string>(nodeName, "::TCP::SYNC::", area)},
+                fbzmq::IdentityString{folly::to<std::string>(
+                    *kvStoreConfig.node_name_ref(), "::TCP::SYNC::", area)},
                 folly::none,
                 fbzmq::NonblockingFlag{true}),
             kvStoreConfig.is_flood_root_ref().value_or(false),
-            nodeName,
+            *kvStoreConfig.node_name_ref(),
             std::bind(&KvStore::initialKvStoreDbSynced, this)));
   }
 }

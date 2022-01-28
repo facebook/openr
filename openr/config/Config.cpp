@@ -699,4 +699,54 @@ Config::populateInternalDb() {
   }
 }
 
+/**
+ * TODO: This is the util method to do a translation from:
+ *
+ * thrift::KvstoreConfig => if/OpenrConfig.thrift
+ *
+ * to:
+ *
+ * thrift::KvStoreConfig => if/KvStore.thrift
+ *
+ * to give smooth migration toward KvStore isolation.
+ */
+thrift::KvStoreConfig
+Config::toThriftKvStoreConfig() const {
+  // ATTN: oldConfig and config are defined in different thrift files
+  thrift::KvStoreConfig config;
+
+  auto oldConfig = getKvStoreConfig();
+  config.node_name_ref() = getNodeName();
+  config.key_ttl_ms_ref() = *oldConfig.key_ttl_ms_ref();
+  config.ttl_decrement_ms_ref() = *oldConfig.ttl_decrement_ms_ref();
+
+  if (auto floodRate = oldConfig.flood_rate_ref()) {
+    thrift::KvStoreFloodRate rate;
+    rate.flood_msg_per_sec_ref() = *floodRate->flood_msg_per_sec_ref();
+    rate.flood_msg_burst_size_ref() = *floodRate->flood_msg_burst_size_ref();
+
+    config.flood_rate_ref() = std::move(rate);
+  }
+  if (auto setLeafNode = oldConfig.set_leaf_node_ref()) {
+    config.set_leaf_node_ref() = *setLeafNode;
+  }
+  if (auto keyPrefixFilters = oldConfig.key_prefix_filters_ref()) {
+    config.key_prefix_filters_ref() = *keyPrefixFilters;
+  }
+  if (auto keyOriginatorIdFilters = oldConfig.key_originator_id_filters_ref()) {
+    config.key_originator_id_filters_ref() = *keyOriginatorIdFilters;
+  }
+  if (auto enableFloodOptimization =
+          oldConfig.enable_flood_optimization_ref()) {
+    config.enable_flood_optimization_ref() = *enableFloodOptimization;
+  }
+  if (auto isFloodRoot = oldConfig.is_flood_root_ref()) {
+    config.is_flood_root_ref() = *isFloodRoot;
+  }
+  if (auto maybeIpTos = getConfig().ip_tos_ref()) {
+    config.ip_tos_ref() = *maybeIpTos;
+  }
+  return config;
+}
+
 } // namespace openr

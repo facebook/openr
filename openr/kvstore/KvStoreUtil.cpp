@@ -12,8 +12,7 @@
 namespace openr {
 
 std::optional<openr::KvStoreFilters>
-getKvStoreFilters(
-    const std::string& nodeName, const thrift::KvstoreConfig& kvStoreConfig) {
+getKvStoreFilters(const thrift::KvStoreConfig& kvStoreConfig) {
   std::optional<openr::KvStoreFilters> kvFilters{std::nullopt};
   // Add key prefixes to allow if set as leaf node
   if (kvStoreConfig.set_leaf_node_ref().value_or(false)) {
@@ -31,7 +30,7 @@ getKvStoreFilters(
          kvStoreConfig.key_originator_id_filters_ref().value_or({})) {
       originatorIdFilters.insert(id);
     }
-    originatorIdFilters.insert(nodeName);
+    originatorIdFilters.insert(*kvStoreConfig.node_name_ref());
     kvFilters = openr::KvStoreFilters(keyPrefixFilters, originatorIdFilters);
   }
   return kvFilters;

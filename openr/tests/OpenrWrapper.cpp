@@ -111,10 +111,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvRequestQueue_.getReader(),
       logSampleQueue_,
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
-      config_->getNodeName(),
-      config_->getConfig().ip_tos_ref().to_optional(),
       config_->getAreaIds(),
-      config_->getKvStoreConfig());
+      config_->toThriftKvStoreConfig());
   std::thread kvStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " KvStore running.";
     kvStore_->run();

@@ -18,13 +18,13 @@ namespace fs = std::experimental::filesystem;
 #include <folly/io/async/SSLContext.h>
 #include <openr/common/FileUtil.h>
 #include <openr/common/MplsUtil.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <optional>
 
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {
@@ -247,6 +247,8 @@ class Config {
   //
   // kvstore
   //
+  thrift::KvStoreConfig toThriftKvStoreConfig() const;
+
   const thrift::KvstoreConfig&
   getKvStoreConfig() const {
     return *config_.kvstore_config_ref();
