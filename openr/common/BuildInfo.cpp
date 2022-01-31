@@ -8,7 +8,7 @@
 #include <openr/common/BuildInfo.h>
 #include <openr/common/CMakeBuildInfo.h>
 
-#include <folly/Format.h>
+#include <fmt/format.h>
 
 namespace openr {
 
@@ -99,7 +99,7 @@ BuildInfo::getBuildMode() {
 
 void
 BuildInfo::log(std::ostream& os) {
-  os << folly::format(
+  os << fmt::format(
       "\n  Built by: {}\n"
       "  Built on: {} ({})\n"
       "  Built at: {}\n"
