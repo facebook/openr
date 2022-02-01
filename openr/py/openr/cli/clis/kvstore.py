@@ -19,7 +19,6 @@ from openr.utils.consts import Consts
 class KvStoreCli(object):
     def __init__(self):
         self.kvstore.add_command(PrefixesCli().prefixes)
-        self.kvstore.add_command(AdjCli().adj)
         self.kvstore.add_command(FloodCli().flood)
         self.kvstore.add_command(NodesCli().nodes)
         self.kvstore.add_command(KeysCli().keys)
@@ -109,37 +108,6 @@ class NodesCli(object):
         """show nodes info"""
 
         kvstore.NodesCmd(cli_opts).run()
-
-
-# TODO: Remove in a month
-class AdjCli(object):
-    @click.command()
-    @click.option(
-        "--nodes",
-        default="",
-        help="Get adjacencies for specified of nodes. Default will "
-        "get localhost's adjacencies. Get adjacencies for all "
-        "nodes if 'all' is given.",
-    )
-    @click.option("--bidir/--no-bidir", default=True, help="Only bidir adjacencies")
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.pass_obj
-    @click.pass_context
-    def adj(
-        ctx: click.Context,  # noqa: B902
-        cli_opts: Bunch,
-        nodes: str,
-        bidir: bool,
-        json: bool,
-    ) -> None:
-        """dump the link-state adjacencies - Deprecated"""
-
-        click.secho(
-            "Command deprecated - Please prefer `breeze decision adj`",
-            bold=True,
-            err=True,
-        )
-        ctx.exit(1)
 
 
 class AreasCli(object):

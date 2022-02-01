@@ -17,15 +17,9 @@ class DecisionCli:
     def __init__(self):
         self.decision.add_command(PathCli().path)
         self.decision.add_command(DecisionAdjCli().adj)
-        self.decision.add_command(DecisionPrefixesCli().prefixes)
-        self.decision.add_command(
-            DecisionRoutesComputedCli().routes, name="routes-computed"
-        )
+        self.decision.add_command(DecisionRoutesComputedCli().routes, name="routes")
         self.decision.add_command(DecisionRibPolicyCli().show, name="rib-policy")
         self.decision.add_command(ReceivedRoutesCli().show)
-
-        # for TG backward compatibility. Deprecated.
-        self.decision.add_command(DecisionRoutesComputedCli().routes, name="routes")
         self.decision.add_command(DecisionValidateCli().validate)
 
     @click.group()
@@ -83,43 +77,6 @@ class DecisionRoutesComputedCli:
 
         nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, labels, json)
-
-
-# TODO: Remove in a few months completely ...
-class DecisionPrefixesCli:
-    @click.command()
-    @click.option(
-        "--nodes",
-        default=[],
-        help="Dump prefixes for a list of nodes. Default will dump host's "
-        "prefixes. Dump prefixes for all nodes if 'all' is given.",
-    )
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.option("--prefix", "-p", default="", help="Prefix filter. Exact match")
-    @click.option(
-        "--client-type",
-        "-c",
-        default="",
-        help="Client type filter. Provide name e.g. loopback, bgp",
-    )
-    @click.pass_obj
-    @click.pass_context
-    def prefixes(
-        ctx: click.Context,  # noqa: B902
-        cli_opts: Any,
-        nodes: List[str],
-        json: bool,
-        prefix: str,
-        client_type: str,
-    ) -> None:
-        """show the prefixes from Decision module - Deprecated"""
-
-        click.secho(
-            "Command deprecated - Please use `breeze decision received-routes`",
-            bold=True,
-            err=True,
-        )
-        ctx.exit(1)
 
 
 class DecisionAdjCli:
