@@ -12,6 +12,8 @@ namespace py3 openr.thrift
 namespace lua openr.KvStore
 namespace wiki Open_Routing.Thrift_APIs.KvStore
 
+include "fb303/thrift/fb303_core.thrift"
+
 /*
  * Events in OpenR initialization process.
  * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html
@@ -27,6 +29,10 @@ enum InitializationEvent {
   PREFIX_DB_SYNCED = 7,
   INITIALIZED = 8,
 }
+
+exception KvStoreError {
+  1: string message;
+} (message = "message")
 
 /**
  * DUAL message type
@@ -640,3 +646,98 @@ struct KvStoreConfig {
    */
   200: bool enable_thrift_dual_msg = false;
 } (cpp.minimize_padding)
+
+/**
+ * Thrift service - exposes RPC APIs for interaction with KvStore module.
+ */
+service KvStoreService extends fb303_core.BaseService {
+  /**
+   * Get specific key-values from KvStore. If `filterKeys` is empty then no
+   * keys will be returned
+   */
+  Publication getKvStoreKeyVals(1: list<string> filterKeys) throws (
+    1: KvStoreError error,
+  );
+
+  /**
+   * with area option
+   */
+  Publication getKvStoreKeyValsArea(
+    1: list<string> filterKeys,
+    2: string area,
+  ) throws (1: KvStoreError error);
+
+  /**
+   * Get raw key-values from KvStore with more control over filter
+   */
+  Publication getKvStoreKeyValsFiltered(1: KeyDumpParams filter) throws (
+    1: KvStoreError error,
+  );
+
+  /**
+   * Get raw key-values from KvStore with more control over filter with 'area'
+   * option
+   */
+  Publication getKvStoreKeyValsFilteredArea(
+    1: KeyDumpParams filter,
+    2: string area,
+  ) throws (1: KvStoreError error);
+
+  /**
+   * Get kvstore metadata (no values) with filter
+   */
+  Publication getKvStoreHashFiltered(1: KeyDumpParams filter) throws (
+    1: KvStoreError error,
+  );
+
+  /**
+   * with area
+   */
+  Publication getKvStoreHashFilteredArea(
+    1: KeyDumpParams filter,
+    2: string area,
+  ) throws (1: KvStoreError error);
+
+  /**
+   * Set/Update key-values in KvStore.
+   */
+  void setKvStoreKeyVals(1: KeySetParams setParams, 2: string area) throws (
+    1: KvStoreError error,
+  );
+
+  /**
+   * Send Dual message
+   */
+  void processKvStoreDualMessage(
+    1: DualMessages messages,
+    2: string area,
+  ) throws (1: KvStoreError error);
+
+  /**
+   * Set flood-topology parameters. Called by neighbors
+   */
+  void updateFloodTopologyChild(
+    1: FloodTopoSetParams params,
+    2: string area,
+  ) throws (1: KvStoreError error);
+
+  /**
+   * Get spanning tree information
+   */
+  SptInfos getSpanningTreeInfos(1: string area) throws (1: KvStoreError error);
+
+  /**
+   * Get KvStore peers
+   */
+  PeersMap getKvStorePeers() throws (1: KvStoreError error);
+
+  PeersMap getKvStorePeersArea(1: string area) throws (1: KvStoreError error);
+
+  /**
+   * Get KvStore Summary for each configured area (provided as the filter set).
+   * The resp is a list of Summary structs, one for each area
+   */
+  list<KvStoreAreaSummary> getKvStoreAreaSummary(
+    1: set<string> selectAreas,
+  ) throws (1: KvStoreError error);
+}

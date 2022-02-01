@@ -14,11 +14,10 @@ namespace php Openr
 namespace lua openr.OpenrCtrl
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
-include "fb303/thrift/fb303_core.thrift"
-include "Network.thrift"
-include "OpenrConfig.thrift"
-include "Types.thrift"
-include "KvStore.thrift"
+include "openr/if/Network.thrift"
+include "openr/if/KvStore.thrift"
+include "openr/if/OpenrConfig.thrift"
+include "openr/if/Types.thrift"
 
 exception OpenrError {
   1: string message;
@@ -244,7 +243,7 @@ struct RouteDatabaseDeltaDetail {
  * Thrift service - exposes RPC APIs for interaction with all of Open/R's
  * modules.
  */
-service OpenrCtrl extends fb303_core.BaseService {
+service OpenrCtrl extends KvStore.KvStoreService {
   //
   // Config APIs
   //
@@ -495,65 +494,6 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   Types.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error);
 
-  //
-  // KvStore APIs
-  //
-
-  /**
-   * Get specific key-values from KvStore. If `filterKeys` is empty then no
-   * keys will be returned
-   */
-  KvStore.Publication getKvStoreKeyVals(1: list<string> filterKeys) throws (
-    1: OpenrError error,
-  );
-
-  /**
-   * with area option
-   */
-  KvStore.Publication getKvStoreKeyValsArea(
-    1: list<string> filterKeys,
-    2: string area,
-  ) throws (1: OpenrError error);
-
-  /**
-   * Get raw key-values from KvStore with more control over filter
-   */
-  KvStore.Publication getKvStoreKeyValsFiltered(
-    1: KvStore.KeyDumpParams filter,
-  ) throws (1: OpenrError error);
-
-  /**
-   * Get raw key-values from KvStore with more control over filter with 'area'
-   * option
-   */
-  KvStore.Publication getKvStoreKeyValsFilteredArea(
-    1: KvStore.KeyDumpParams filter,
-    2: string area,
-  ) throws (1: OpenrError error);
-
-  /**
-   * Get kvstore metadata (no values) with filter
-   */
-  KvStore.Publication getKvStoreHashFiltered(
-    1: KvStore.KeyDumpParams filter,
-  ) throws (1: OpenrError error);
-
-  /**
-   * with area
-   */
-  KvStore.Publication getKvStoreHashFilteredArea(
-    1: KvStore.KeyDumpParams filter,
-    2: string area,
-  ) throws (1: OpenrError error);
-
-  /**
-   * Set/Update key-values in KvStore.
-   */
-  void setKvStoreKeyVals(
-    1: KvStore.KeySetParams setParams,
-    2: string area,
-  ) throws (1: OpenrError error);
-
   /**
    * Long poll API to get KvStore
    * Will return true/false with our own KeyVal snapshot provided
@@ -568,46 +508,6 @@ service OpenrCtrl extends fb303_core.BaseService {
   bool longPollKvStoreAdj(1: KvStore.KeyVals snapshot) throws (
     1: OpenrError error,
   );
-
-  /**
-   * Send Dual message
-   */
-  void processKvStoreDualMessage(
-    1: KvStore.DualMessages messages,
-    2: string area,
-  ) throws (1: OpenrError error);
-
-  /**
-   * Set flood-topology parameters. Called by neighbors
-   */
-  void updateFloodTopologyChild(
-    1: KvStore.FloodTopoSetParams params,
-    2: string area,
-  ) throws (1: OpenrError error);
-
-  /**
-   * Get spanning tree information
-   */
-  KvStore.SptInfos getSpanningTreeInfos(1: string area) throws (
-    1: OpenrError error,
-  );
-
-  /**
-   * Get KvStore peers
-   */
-  KvStore.PeersMap getKvStorePeers() throws (1: OpenrError error);
-
-  KvStore.PeersMap getKvStorePeersArea(1: string area) throws (
-    1: OpenrError error,
-  );
-
-  /**
-   * Get KvStore Summary for each configured area (provided as the filter set).
-   * The resp is a list of Summary structs, one for each area
-   */
-  list<KvStore.KvStoreAreaSummary> getKvStoreAreaSummary(
-    1: set<string> selectAreas,
-  ) throws (1: OpenrError error);
 
   //
   // LinkMonitor APIs

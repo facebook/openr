@@ -847,7 +847,7 @@ class KvStore final : public OpenrEventBase {
 
   /*
    * This is a helper function which returns a reference to the relevant
-   * KvStoreDb or throws an instance of OpenrError for backward compaytibilty.
+   * KvStoreDb or throws an instance of KvStoreError for backward compaytibilty.
    *
    * Backward compatibility:
    * It allows getting single configured area if default area is requested or

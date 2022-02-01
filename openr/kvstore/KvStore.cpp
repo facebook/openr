@@ -233,7 +233,7 @@ KvStore::getAreaDbOrThrow(
           fb303::COUNT);
       return kvStoreDb_.begin()->second;
     } else {
-      throw thrift::OpenrError(fmt::format("Invalid area: {}", areaId));
+      throw thrift::KvStoreError(fmt::format("Invalid area: {}", areaId));
     }
   }
   return search->second;
@@ -297,7 +297,7 @@ KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
       XLOG(ERR)
           << "Error processing key value request. Request type not recognized.";
     }
-  } catch (thrift::OpenrError const& e) {
+  } catch (thrift::KvStoreError const& e) {
     XLOG(ERR) << " Failed to find area " << area.t << " in kvStoreDb_.";
   }
 }
@@ -329,7 +329,7 @@ KvStore::processRequestMsg(
           "kvstore.peers.bytes_sent", response->size(), fb303::SUM);
     }
     return response;
-  } catch (thrift::OpenrError const& e) {
+  } catch (thrift::KvStoreError const& e) {
     return folly::makeUnexpected(fbzmq::Error(0, e.get_message()));
   }
   return {folly::makeUnexpected(fbzmq::Error())};
@@ -391,7 +391,7 @@ KvStore::semifuture_getKvStoreKeyVals(
           kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
 
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -413,7 +413,7 @@ KvStore::semifuture_dumpKvStoreSelfOriginatedKeys(std::string area) {
 
       auto keyVals = kvStoreDb.getSelfOriginatedKeyVals();
       p.setValue(std::make_unique<SelfOriginatedKeyVals>(keyVals));
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -494,7 +494,7 @@ KvStore::semifuture_dumpKvStoreKeys(
                      << numMissingKeys << " missing keys";
         }
         result->push_back(std::move(thriftPub));
-      } catch (thrift::OpenrError const& e) {
+      } catch (thrift::KvStoreError const& e) {
         XLOG(ERR) << " Failed to find area " << area << " in kvStoreDb_.";
       }
     }
@@ -536,7 +536,7 @@ KvStore::semifuture_dumpKvStoreHashes(
       updatePublicationTtl(
           kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -564,7 +564,7 @@ KvStore::semifuture_setKvStoreKeyVals(
       kvStoreDb.setKeyVals(std::move(keySetParams));
       // ready to return
       p.setValue();
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -581,7 +581,7 @@ KvStore::semifuture_getKvStorePeerState(
         try {
           p.setValue(getAreaDbOrThrow(area, "semifuture_getKvStorePeerState")
                          .getCurrentState(peerName));
-        } catch (thrift::OpenrError const& e) {
+        } catch (thrift::KvStoreError const& e) {
           p.setException(e);
         }
       });
@@ -598,7 +598,7 @@ KvStore::semifuture_getKvStorePeers(std::string area) {
       p.setValue(std::make_unique<thrift::PeersMap>(
           getAreaDbOrThrow(area, "semifuture_getKvStorePeers").dumpPeers()));
       fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -654,14 +654,14 @@ KvStore::semifuture_addUpdateKvStorePeers(
       auto& kvStoreDb =
           getAreaDbOrThrow(area, "semifuture_addUpdateKvStorePeers");
       if (peersToAdd.empty()) {
-        p.setException(thrift::OpenrError(
+        p.setException(thrift::KvStoreError(
             "Empty peerNames from peer-add request, ignoring"));
       } else {
         fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
         kvStoreDb.addPeers(peersToAdd);
         p.setValue();
       }
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -682,14 +682,14 @@ KvStore::semifuture_deleteKvStorePeers(
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_deleteKvStorePeers");
       if (peersToDel.empty()) {
-        p.setException(thrift::OpenrError(
+        p.setException(thrift::KvStoreError(
             "Empty peerNames from peer-del request, ignoring"));
       } else {
         fb303::fbData->addStatValue("kvstore.cmd_per_del", 1, fb303::COUNT);
         kvStoreDb.delPeers(peersToDel);
         p.setValue();
       }
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -706,7 +706,7 @@ KvStore::semifuture_getSpanningTreeInfos(std::string area) {
       p.setValue(std::make_unique<thrift::SptInfos>(
           getAreaDbOrThrow(area, "semifuture_getSpanningTreeInfos")
               .processFloodTopoGet()));
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -727,7 +727,7 @@ KvStore::semifuture_updateFloodTopologyChild(
       getAreaDbOrThrow(area, "semifuture_updateFloodTopologyChild")
           .processFloodTopoSet(std::move(floodTopoSetParams));
       p.setValue();
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
@@ -757,7 +757,7 @@ KvStore::semifuture_processKvStoreDualMessage(
         kvStoreDb.processDualMessages(std::move(dualMessages));
         p.setValue();
       }
-    } catch (thrift::OpenrError const& e) {
+    } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
   });
