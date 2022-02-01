@@ -59,7 +59,8 @@ class PrefixManagerBenchmarkTestFixture {
     config_ = std::make_shared<Config>(tConfig);
 
     // Spawn `KvStore` and `PrefixManager`
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config_);
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
+        context_, config_->getAreaIds(), config_->toThriftKvStoreConfig());
     kvStoreWrapper_->run();
 
     prefixManager_ = std::make_unique<PrefixManager>(

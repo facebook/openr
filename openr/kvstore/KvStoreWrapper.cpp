@@ -5,10 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <memory>
-
 #include <folly/logging/xlog.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -17,12 +14,14 @@ namespace openr {
 
 KvStoreWrapper::KvStoreWrapper(
     fbzmq::Context& zmqContext,
-    std::shared_ptr<const Config> config,
+    const std::unordered_set<std::string>& areaIds,
+    const thrift::KvStoreConfig& kvStoreConfig,
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
-    : nodeId(config->getNodeName()),
-      globalCmdUrl(fmt::format("inproc://{}-kvstore-global-cmd", nodeId)),
-      config_(config) {
+    : nodeId_(*kvStoreConfig.node_name_ref()),
+      globalCmdUrl_(fmt::format("inproc://{}-kvstore-global-cmd", nodeId_)),
+      areaIds_(areaIds),
+      kvStoreConfig_(kvStoreConfig) {
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
       kvStoreUpdatesQueue_,
@@ -32,15 +31,15 @@ KvStoreWrapper::KvStoreWrapper(
       kvRequestQueue.has_value() ? kvRequestQueue.value()
                                  : dummyKvRequestQueue_.getReader(),
       logSampleQueue_,
-      KvStoreGlobalCmdUrl{globalCmdUrl},
-      config->getAreaIds(),
-      config->toThriftKvStoreConfig());
+      KvStoreGlobalCmdUrl{globalCmdUrl_},
+      areaIds_,
+      kvStoreConfig_);
 
   // we need to spin up a thrift server for KvStore clients to connect to. See
   // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update
   // for info on data flow
   thriftServer_ = std::make_unique<OpenrThriftServerWrapper>(
-      nodeId,
+      nodeId_,
       nullptr, // Decision
       nullptr, // Fib
       kvStore_.get(),
@@ -49,16 +48,17 @@ KvStoreWrapper::KvStoreWrapper(
       nullptr, // PersistentStore
       nullptr, // PrefixManager
       nullptr, // Spark
-      config);
+      nullptr // Config
+  );
 }
 
 void
 KvStoreWrapper::run() noexcept {
   // Start kvstore
   kvStoreThread_ = std::thread([this]() {
-    XLOG(DBG1) << "KvStore " << nodeId << " running.";
+    XLOG(DBG1) << "KvStore " << nodeId_ << " running.";
     kvStore_->run();
-    XLOG(DBG1) << "KvStore " << nodeId << " stopped.";
+    XLOG(DBG1) << "KvStore " << nodeId_ << " stopped.";
   });
   kvStore_->waitUntilRunning();
 
@@ -184,7 +184,7 @@ KvStoreWrapper::dumpAll(
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
     params.prefix_ref() = keyPrefix;
     params.originatorIds_ref() = filters.value().getOriginatorIdList();
-    params.senderId_ref() = nodeId;
+    params.senderId_ref() = nodeId_;
     if (not keyPrefix.empty()) {
       params.keys_ref() = filters.value().getKeyPrefixes();
     }
@@ -202,7 +202,7 @@ KvStoreWrapper::dumpHashes(AreaId const& area, std::string const& prefix) {
   thrift::KeyDumpParams params;
   params.prefix_ref() = prefix;
   params.keys_ref() = {prefix};
-  params.senderId_ref() = nodeId;
+  params.senderId_ref() = nodeId_;
 
   auto pub =
       *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
@@ -222,7 +222,7 @@ KvStoreWrapper::syncKeyVals(
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
   params.keyValHashes_ref() = keyValHashes;
-  params.senderId_ref() = nodeId;
+  params.senderId_ref() = nodeId_;
 
   auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                   .get()

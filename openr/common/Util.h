@@ -80,6 +80,9 @@ int64_t generateHash(
 /**
  * Utility functions for creating thrift objects
  */
+thrift::KvStoreFloodRate createKvStoreFloodRate(
+    int32_t flood_msg_per_sec, int32_t flood_msg_burst_size);
+
 thrift::Value createThriftValue(
     int64_t version,
     std::string originatorId,

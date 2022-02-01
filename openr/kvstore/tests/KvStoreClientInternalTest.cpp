@@ -13,12 +13,10 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/utils/Utils.h>
 
 using namespace std;
 using namespace openr;
@@ -79,8 +77,12 @@ class MultipleStoreFixture : public ::testing::Test {
   initKvStores() {
     // wrapper to spin up a kvstore through KvStoreWrapper
     auto makeStoreWrapper = [this](std::string nodeId) {
-      config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-      return std::make_shared<KvStoreWrapper>(context, config);
+      // create KvStoreConfig
+      thrift::KvStoreConfig kvStoreConfig;
+      kvStoreConfig.node_name_ref() = nodeId;
+      const std::unordered_set<std::string> areaIds{kTestingAreaName};
+
+      return std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
     };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -121,7 +123,6 @@ class MultipleStoreFixture : public ::testing::Test {
   apache::thrift::CompactSerializer serializer;
   fbzmq::Context context;
 
-  std::shared_ptr<Config> config;
   std::shared_ptr<KvStoreWrapper> store1, store2, store3;
   std::shared_ptr<KvStoreClientInternal> client1, client2, client3;
 
@@ -176,20 +177,14 @@ class MultipleAreaFixture : public MultipleStoreFixture {
   void
   initKvStores() {
     // wrapper to spin up a kvstore through KvStoreWrapper
-    auto makeStoreWrapper =
-        [this](std::string nodeId, std::unordered_set<std::string> areas) {
-          std::vector<openr::thrift::AreaConfig> areaConfig;
-          for (const auto& id : areas) {
-            thrift::AreaConfig a;
-            a.area_id_ref() = id;
-            a.include_interface_regexes_ref() = {".*"};
-            a.neighbor_regexes_ref() = {".*"};
-            areaConfig.emplace_back(std::move(a));
-          }
-          auto tConfig = getBasicOpenrConfig(nodeId, "domain", areaConfig);
-          config = std::make_shared<Config>(tConfig);
-          return std::make_shared<KvStoreWrapper>(context, config);
-        };
+    auto makeStoreWrapper = [this](
+                                std::string nodeId,
+                                std::unordered_set<std::string> areas) {
+      // create KvStoreConfig
+      thrift::KvStoreConfig kvStoreConfig;
+      kvStoreConfig.node_name_ref() = nodeId;
+      return std::make_shared<KvStoreWrapper>(context, areas, kvStoreConfig);
+    };
 
     // spin up KvStore instances through KvStoreWrapper
     store1 =
@@ -419,8 +414,11 @@ TEST(KvStoreClientInternal, ApiTest) {
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with one fake peer
-  auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config);
+  thrift::KvStoreConfig kvStoreConfig;
+  kvStoreConfig.node_name_ref() = nodeId;
+  const std::unordered_set<std::string> areaIds{kTestingAreaName};
+  auto store =
+      std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
   store->run();
 
   // Define and start evb for KvStoreClientInternal usage.
@@ -641,8 +639,11 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with empty peer
-  auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config);
+  thrift::KvStoreConfig kvStoreConfig;
+  kvStoreConfig.node_name_ref() = nodeId;
+  const std::unordered_set<std::string> areaIds{kTestingAreaName};
+  auto store =
+      std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -782,8 +783,11 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with empty peer
-  auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-  auto store = std::make_shared<KvStoreWrapper>(context, config);
+  thrift::KvStoreConfig kvStoreConfig;
+  kvStoreConfig.node_name_ref() = nodeId;
+  const std::unordered_set<std::string> areaIds{kTestingAreaName};
+  auto store =
+      std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients

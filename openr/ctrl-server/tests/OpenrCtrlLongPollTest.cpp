@@ -5,15 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <thread>
-
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <openr/common/OpenrClient.h>
-#include <openr/config/Config.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -22,12 +19,14 @@ using namespace openr;
 class LongPollFixture : public ::testing::Test {
   void
   SetUp() override {
-    // create config
-    auto tConfig = getBasicOpenrConfig(nodeName_);
-    config_ = std::make_shared<Config>(tConfig);
+    // create KvStoreConfig
+    thrift::KvStoreConfig kvStoreConfig;
+    kvStoreConfig.node_name_ref() = nodeName_;
+    const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // Create KvStore module
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(context_, config_);
+    kvStoreWrapper_ =
+        std::make_unique<KvStoreWrapper>(context_, areaIds, kvStoreConfig);
     kvStoreWrapper_->run();
 
     // initialize OpenrCtrlHandler for testing usage
@@ -52,7 +51,6 @@ class LongPollFixture : public ::testing::Test {
   const std::string prefixKey_ = fmt::format("prefix:{}", nodeName_);
 
   openr::OpenrEventBase testEvb_;
-  std::shared_ptr<Config> config_{nullptr};
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
   std::shared_ptr<OpenrCtrlHandler> handler_{nullptr};
 };

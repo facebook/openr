@@ -586,16 +586,6 @@ createAllocPrefix(
   return allocPrefix;
 }
 
-// construct thrift::KvstoreFloodRate
-thrift::KvstoreFloodRate
-createKvstoreFloodRate(
-    int32_t flood_msg_per_sec, int32_t flood_msg_burst_size) {
-  thrift::KvstoreFloodRate floodRate;
-  floodRate.flood_msg_per_sec_ref() = flood_msg_per_sec;
-  floodRate.flood_msg_burst_size_ref() = flood_msg_burst_size;
-  return floodRate;
-}
-
 // construct thrift::OpenrVersions
 thrift::OpenrVersions
 createOpenrVersions(

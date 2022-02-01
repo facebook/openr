@@ -95,7 +95,11 @@ class PrefixManagerTestFixture : public testing::Test {
 
     // spin up a kvstore
     kvStoreWrapper = std::make_shared<KvStoreWrapper>(
-        context, config, std::nullopt, kvRequestQueue.getReader());
+        context, /* zmq context */
+        config->getAreaIds(), /* areaId collection */
+        config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
+        std::nullopt, /* peerUpdatesQueue */
+        kvRequestQueue.getReader() /* kvRequestQueue */);
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 

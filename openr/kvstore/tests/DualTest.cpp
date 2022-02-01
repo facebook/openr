@@ -15,8 +15,6 @@
 #include <folly/io/async/EventBase.h>
 #include <openr/kvstore/Dual.h>
 
-#include <vector>
-
 using namespace openr;
 using namespace folly;
 

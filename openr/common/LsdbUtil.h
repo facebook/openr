@@ -206,9 +206,6 @@ thrift::AllocPrefix createAllocPrefix(
     int64_t allocPrefixLen,
     int64_t allocPrefixIndex);
 
-thrift::KvstoreFloodRate createKvstoreFloodRate(
-    int32_t flood_msg_per_sec, int32_t flood_msg_burst_size);
-
 thrift::OpenrVersions createOpenrVersions(
     const thrift::OpenrVersion& version,
     const thrift::OpenrVersion& lowestSupportedVersion);

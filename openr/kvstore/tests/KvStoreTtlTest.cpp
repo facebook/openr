@@ -9,11 +9,7 @@
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 
-#include <openr/common/Util.h>
-#include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/utils/Utils.h>
 #include <range/v3/view/enumerate.hpp>
 
 using namespace openr;
@@ -49,12 +45,14 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
    */
   void
   initKvStore(std::string nodeId) {
-    // create config
-    auto tConfig = getBasicOpenrConfig(nodeId, "domain");
-    auto config = std::make_shared<Config>(tConfig);
+    // create KvStoreConfig
+    thrift::KvStoreConfig kvStoreConfig;
+    kvStoreConfig.node_name_ref() = nodeId;
+    const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // start kvstore
-    stores_.emplace_back(std::make_unique<KvStoreWrapper>(context_, config));
+    stores_.emplace_back(
+        std::make_unique<KvStoreWrapper>(context_, areaIds, kvStoreConfig));
     stores_.back()->run();
   }
 

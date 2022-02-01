@@ -10,10 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/Util.h>
-#include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/utils/Utils.h>
 
 using namespace openr;
 
@@ -48,19 +45,19 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
    */
   void
   initKvStore(std::string nodeId, uint32_t keyTtl = kLongTtl) {
-    auto tConfig = getBasicOpenrConfig(nodeId, "domain");
+    // create KvStoreConfig
+    thrift::KvStoreConfig kvStoreConfig;
+    const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
-    // override key_ttl_ms field
-    thrift::KvstoreConfig kvConf;
-    kvConf.key_ttl_ms_ref() = keyTtl;
-    tConfig.kvstore_config_ref() = kvConf;
-
-    auto config = std::make_shared<Config>(tConfig);
+    // Override ttl for kvstore self-originated keys
+    kvStoreConfig.node_name_ref() = nodeId;
+    kvStoreConfig.key_ttl_ms_ref() = keyTtl;
 
     // start kvstore
     kvStore_ = std::make_unique<KvStoreWrapper>(
         context_,
-        config,
+        areaIds,
+        kvStoreConfig,
         std::nullopt /* peerUpdatesQueue */,
         kvRequestQueue_.getReader());
     kvStore_->run();

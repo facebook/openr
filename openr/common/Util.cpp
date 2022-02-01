@@ -101,6 +101,16 @@ generateHash(
   return generateHashImpl(version, originatorId, value);
 }
 
+// construct thrift::KvStoreFloodRate
+thrift::KvStoreFloodRate
+createKvStoreFloodRate(
+    int32_t flood_msg_per_sec, int32_t flood_msg_burst_size) {
+  thrift::KvStoreFloodRate floodRate;
+  floodRate.flood_msg_per_sec_ref() = flood_msg_per_sec;
+  floodRate.flood_msg_burst_size_ref() = flood_msg_burst_size;
+  return floodRate;
+}
+
 // construct thrift::Value
 thrift::Value
 createThriftValue(

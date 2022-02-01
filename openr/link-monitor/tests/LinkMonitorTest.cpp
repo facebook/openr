@@ -393,10 +393,11 @@ class LinkMonitorTestFixture : public testing::Test {
   void
   createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context,
-        config,
-        peerUpdatesQueue.getReader(),
-        kvRequestQueue.getReader());
+        context, /* zmq context */
+        config->getAreaIds(), /* areaId collection */
+        config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
+        peerUpdatesQueue.getReader(), /* peerUpdatesQueue */
+        kvRequestQueue.getReader() /* kvRequestQueue */);
     kvStoreWrapper->run();
   }
 

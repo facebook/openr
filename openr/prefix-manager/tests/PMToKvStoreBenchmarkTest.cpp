@@ -45,7 +45,11 @@ class PMToKvStoreBMTestFixture {
 
     // spawn `KvStore` and `PrefixManager` for benchmarking
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_, config_, std::nullopt, kvRequestQueue_.getReader());
+        context_,
+        config_->getAreaIds(),
+        config_->toThriftKvStoreConfig(),
+        std::nullopt,
+        kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     prefixManager_ = std::make_unique<PrefixManager>(

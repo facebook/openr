@@ -62,10 +62,12 @@ class PrefixAllocatorFixture : public ::testing::Test {
     // Start KvStore and attach a client to it
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
         zmqContext_,
-        config_,
+        config_->getAreaIds(),
+        config_->toThriftKvStoreConfig(),
         myPeerUpdatesQueue_.getReader(),
         kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
+
     evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
       kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
           &evb_, myNodeName_, kvStoreWrapper_->getKvStore());
@@ -384,8 +386,13 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     const auto nodeId = fmt::format("test_store{}", round);
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
+
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        zmqContext, config, std::nullopt, kvRequestQueue.getReader());
+        zmqContext,
+        config->getAreaIds(),
+        config->toThriftKvStoreConfig(),
+        std::nullopt,
+        kvRequestQueue.getReader());
     kvStoreWrapper->run();
 
     // Attach a kvstore client in main event loop

@@ -7,13 +7,8 @@
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Benchmark.h>
-#include <folly/Format.h>
-#include <folly/Random.h>
 #include <folly/init/Init.h>
 
-#include <openr/common/Types.h>
-#include <openr/common/Util.h>
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreUtil.h>
@@ -66,8 +61,13 @@ class KvStoreTestFixture {
    */
   KvStoreWrapper*
   createKvStore(const std::string& nodeId) {
-    config_ = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
-    stores_.emplace_back(std::make_unique<KvStoreWrapper>(context_, config_));
+    // create KvStoreConfig
+    thrift::KvStoreConfig kvStoreConfig;
+    kvStoreConfig.node_name_ref() = nodeId;
+    const std::unordered_set<std::string> areaIds{kTestingAreaName};
+
+    stores_.emplace_back(
+        std::make_unique<KvStoreWrapper>(context_, areaIds, kvStoreConfig));
     return stores_.back().get();
   }
 
@@ -76,7 +76,6 @@ class KvStoreTestFixture {
   fbzmq::Context context_;
 
   // Internal stores
-  std::shared_ptr<Config> config_;
   std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
 };
 

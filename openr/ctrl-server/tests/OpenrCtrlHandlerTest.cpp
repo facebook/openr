@@ -71,7 +71,11 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create KvStore module
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_, config, std::nullopt, kvRequestQueue_.getReader());
+        context_,
+        config->getAreaIds(),
+        config->toThriftKvStoreConfig(),
+        std::nullopt,
+        kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     // Create Decision module

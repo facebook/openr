@@ -11,11 +11,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/utils/Utils.h>
 
 using namespace openr;
 
@@ -24,9 +22,12 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   void
   SetUp() override {
     auto makeStoreWrapper = [this](std::string nodeId) {
-      auto tConfig = getBasicOpenrConfig(nodeId);
-      config_ = std::make_shared<Config>(tConfig);
-      return std::make_shared<KvStoreWrapper>(context_, config_);
+      // create KvStoreConfig
+      thrift::KvStoreConfig kvStoreConfig;
+      kvStoreConfig.node_name_ref() = nodeId;
+      const std::unordered_set<std::string> areaIds{kTestingAreaName};
+
+      return std::make_shared<KvStoreWrapper>(context_, areaIds, kvStoreConfig);
     };
 
     // spin up kvStore through kvStoreWrapper
@@ -52,7 +53,6 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   const std::string nodeId2_{"test_2"};
 
   fbzmq::Context context_{};
-  std::shared_ptr<Config> config_;
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_, kvStoreWrapper2_;
 };
 

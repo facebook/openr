@@ -58,7 +58,8 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     for (uint32_t i = 0; i < kNumStores; i++) {
       auto config = std::make_shared<Config>(
           getBasicOpenrConfig(fmt::format("store{}", i + 1)));
-      auto store = std::make_unique<KvStoreWrapper>(zmqContext, config);
+      auto store = std::make_unique<KvStoreWrapper>(
+          zmqContext, config->getAreaIds(), config->toThriftKvStoreConfig());
       stores.emplace_back(std::move(store));
       configs.emplace_back(std::move(config));
       stores.back()->run();

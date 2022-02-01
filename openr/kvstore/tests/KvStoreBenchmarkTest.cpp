@@ -6,9 +6,7 @@
  */
 
 #include <folly/Benchmark.h>
-#include <folly/gen/Base.h>
-#include <openr/common/Types.h>
-#include <openr/kvstore/KvStore.h>
+#include <folly/init/Init.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/monitor/SystemMetrics.h>
@@ -79,13 +77,16 @@ const uint32_t kDevice{48};
 class KvStoreBenchmarkTestFixture {
  public:
   explicit KvStoreBenchmarkTestFixture() {
-    auto tConfig = getBasicOpenrConfig(nodeId_, "domain");
-    config_ = std::make_shared<Config>(tConfig);
+    // create KvStoreConfig
+    thrift::KvStoreConfig kvStoreConfig;
+    kvStoreConfig.node_name_ref() = nodeId_;
+    const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // start kvstore
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
         context_,
-        config_,
+        areaIds,
+        kvStoreConfig,
         std::nullopt /* peerUpdatesQueue */,
         kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
@@ -167,7 +168,6 @@ class KvStoreBenchmarkTestFixture {
   fbzmq::Context context_;
 
   // Internal stores
-  std::shared_ptr<Config> config_;
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 

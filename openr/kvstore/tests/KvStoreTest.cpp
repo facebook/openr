@@ -5,28 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <algorithm>
-#include <chrono>
-#include <cstdlib>
-#include <thread>
-#include <tuple>
-
 #include <fb303/ServiceData.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/Format.h>
-#include <folly/Memory.h>
-#include <folly/Random.h>
-#include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/utils/Utils.h>
 
 using namespace openr;
 using namespace std::chrono;
@@ -44,9 +31,11 @@ const std::chrono::milliseconds counterUpdateWaitTime(5500);
 // Timeout of checking keys are propagated in all KvStores in the same area.
 const std::chrono::milliseconds kTimeoutOfKvStorePropagation(500);
 
-thrift::KvstoreConfig
-getTestKvConf() {
-  thrift::KvstoreConfig kvConf;
+// [CONFIG OVERRIDE]
+thrift::KvStoreConfig
+getTestKvConf(std::string nodeId) {
+  thrift::KvStoreConfig kvConf;
+  kvConf.node_name_ref() = nodeId;
   kvConf.enable_thrift_dual_msg_ref() = false;
   return kvConf;
 }
@@ -75,20 +64,14 @@ class KvStoreTestFixture : public ::testing::Test {
    * stopped as well as destroyed automatically when test exits.
    * Retured raw pointer of an object will be freed as well.
    */
-  // TODO: simplify KvStoreWrapper to take new thrift::KvStoreConfig
   KvStoreWrapper*
   createKvStore(
-      std::string nodeId,
-      thrift::KvstoreConfig kvStoreConf = getTestKvConf(),
-      const std::vector<thrift::AreaConfig>& areas = {},
+      thrift::KvStoreConfig kvStoreConf,
+      const std::unordered_set<std::string>& areaIds = {kTestingAreaName},
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
           std::nullopt) {
-    auto tConfig = getBasicOpenrConfig(nodeId, "domain", areas);
-    tConfig.kvstore_config_ref() = kvStoreConf;
-    auto config = std::make_shared<Config>(tConfig);
-
-    stores_.emplace_back(
-        std::make_unique<KvStoreWrapper>(context_, config, peerUpdatesQueue));
+    stores_.emplace_back(std::make_unique<KvStoreWrapper>(
+        context_, areaIds, kvStoreConf, peerUpdatesQueue));
     return stores_.back().get();
   }
 
@@ -151,7 +134,7 @@ class KvStoreTestFixture : public ::testing::Test {
 TEST_F(KvStoreTestFixture, BasicGetKey) {
   // Create and start KvStore.
   const std::string nodeId = "node-for-retrieval";
-  auto kvStore_ = createKvStore(nodeId);
+  auto kvStore_ = createKvStore(getTestKvConf(nodeId));
   kvStore_->run();
 
   const std::string key = "get-key-key";
@@ -203,7 +186,7 @@ TEST_F(KvStoreTestFixture, BasicGetKey) {
 TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   // Create and start KvStore.
   const std::string nodeId = "node-for-dump";
-  auto kvStore_ = createKvStore(nodeId);
+  auto kvStore_ = createKvStore(getTestKvConf(nodeId));
   kvStore_->run();
 
   const std::string prefixRegex = "10\\.0\\.0\\.";
@@ -281,7 +264,9 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
 TEST_F(KvStoreTestFixture, PublishKvStoreSyncedForEmptyPeerEvent) {
   messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue;
   auto myStore = createKvStore(
-      "node1", getTestKvConf(), {} /*areas*/, myPeerUpdatesQueue.getReader());
+      getTestKvConf("node1"),
+      {kTestingAreaName} /* areas */,
+      myPeerUpdatesQueue.getReader());
   myStore->run();
   // Publish empty peers.
   myPeerUpdatesQueue.push(PeerEvent());
@@ -294,23 +279,14 @@ TEST_F(KvStoreTestFixture, PublishKvStoreSyncedForEmptyPeerEvent) {
  * configured areas but not others.
  */
 TEST_F(KvStoreTestFixture, PublishKvStoreSyncedIfNoPeersInSomeAreas) {
-  thrift::AreaConfig area1Config, area2Config;
-  area1Config.area_id_ref() = "area1";
-  area2Config.area_id_ref() = "area2";
-  AreaId area1Id{area1Config.get_area_id()};
-
   messaging::ReplicateQueue<PeerEvent> storeAPeerUpdatesQueue;
   messaging::ReplicateQueue<PeerEvent> storeBPeerUpdatesQueue;
   auto* storeA = createKvStore(
-      "storeA",
-      getTestKvConf(),
-      {area1Config},
-      storeAPeerUpdatesQueue.getReader());
+      getTestKvConf("storeA"), {"area1"}, storeAPeerUpdatesQueue.getReader());
   // storeB is configured with two areas.
   auto* storeB = createKvStore(
-      "storeB",
-      getTestKvConf(),
-      {area1Config, area2Config},
+      getTestKvConf("storeB"),
+      {"area1", "area2"},
       storeBPeerUpdatesQueue.getReader());
   storeA->run();
   storeB->run();
@@ -341,7 +317,7 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
   const std::string& key{"key1"};
   fb303::fbData->resetAllData();
 
-  auto kvStore = createKvStore("node1");
+  auto kvStore = createKvStore(getTestKvConf("node1"));
   kvStore->run();
 
   // Set a key in KvStore
@@ -408,7 +384,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   const std::string& area = kTestingAreaName;
   fb303::fbData->resetAllData();
 
-  auto kvStore = createKvStore("node1");
+  auto kvStore = createKvStore(getTestKvConf("node1"));
   kvStore->run();
 
   /** Verify redundant publications **/
@@ -552,7 +528,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
       5 /* ttl version */,
       0 /* hash */);
 
-  auto kvStore = createKvStore("test");
+  auto kvStore = createKvStore(getTestKvConf("test"));
   kvStore->run();
 
   //
@@ -745,13 +721,13 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
 }
 
 TEST_F(KvStoreTestFixture, LeafNode) {
-  auto store0Conf = getTestKvConf();
+  auto store0Conf = getTestKvConf("store0");
   store0Conf.set_leaf_node_ref() = true;
   store0Conf.key_prefix_filters_ref() = {"e2e"};
   store0Conf.key_originator_id_filters_ref() = {"store0"};
 
-  auto store0 = createKvStore("store0", store0Conf);
-  auto store1 = createKvStore("store1");
+  auto store0 = createKvStore(store0Conf);
+  auto store1 = createKvStore(getTestKvConf("store1"));
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   std::unordered_map<std::string, thrift::Value> expectedOrignatorVals;
 
@@ -940,8 +916,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
  * 7. Check TTL for existing key in store1 does not get updated
  */
 TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
-  auto store0 = createKvStore("store0");
-  auto store1 = createKvStore("store1");
+  auto store0 = createKvStore(getTestKvConf("store0"));
+  auto store1 = createKvStore(getTestKvConf("store1"));
   store0->run();
   store1->run();
 
@@ -1044,9 +1020,9 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
  */
 TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   // Start stores in their respective threads.
-  auto store0 = createKvStore("store0");
-  auto store1 = createKvStore("store1");
-  auto store2 = createKvStore("store2");
+  auto store0 = createKvStore(getTestKvConf("store0"));
+  auto store1 = createKvStore(getTestKvConf("store1"));
+  auto store2 = createKvStore(getTestKvConf("store2"));
   const std::string key{"key"};
 
   store0->run();
@@ -1184,23 +1160,27 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
  */
 TEST_F(KvStoreTestFixture, FloodOptimizationWithBackwardCompatibility) {
   // Disable DUAL for fsw001
-  auto fsw001Conf = getTestKvConf();
+  auto fsw001Conf = getTestKvConf("fsw001");
   fsw001Conf.enable_flood_optimization_ref() = false;
 
   // Enable DUAL and set flood root for fsw002
-  auto fsw002Conf = getTestKvConf();
+  auto fsw002Conf = getTestKvConf("fsw002");
   fsw002Conf.enable_flood_optimization_ref() = true;
   fsw002Conf.is_flood_root_ref() = true;
 
   // Enable DUAL and set non-root for rsw*
-  auto rswConf = getTestKvConf();
-  rswConf.enable_flood_optimization_ref() = true;
-  rswConf.is_flood_root_ref() = false;
+  auto rsw001Conf = getTestKvConf("rsw001");
+  rsw001Conf.enable_flood_optimization_ref() = true;
+  rsw001Conf.is_flood_root_ref() = false;
 
-  auto fsw001 = createKvStore("fsw001", fsw001Conf);
-  auto fsw002 = createKvStore("fsw002", fsw002Conf);
-  auto rsw001 = createKvStore("rsw001", rswConf);
-  auto rsw002 = createKvStore("rsw002", rswConf);
+  auto rsw002Conf = getTestKvConf("rsw002");
+  rsw002Conf.enable_flood_optimization_ref() = true;
+  rsw002Conf.is_flood_root_ref() = false;
+
+  auto fsw001 = createKvStore(fsw001Conf);
+  auto fsw002 = createKvStore(fsw002Conf);
+  auto rsw001 = createKvStore(rsw001Conf);
+  auto rsw002 = createKvStore(rsw002Conf);
 
   // Start stores in their respective threads.
   fsw001->run();
@@ -1264,18 +1244,26 @@ TEST_F(KvStoreTestFixture, FloodOptimizationWithBackwardCompatibility) {
  * verify flooding-topology information on each node (parent, children, cost)
  */
 TEST_F(KvStoreTestFixture, DualTest) {
-  auto floodRootConf = getTestKvConf();
-  floodRootConf.enable_flood_optimization_ref() = true;
-  floodRootConf.is_flood_root_ref() = true;
+  auto r0Conf = getTestKvConf("r0");
+  r0Conf.enable_flood_optimization_ref() = true;
+  r0Conf.is_flood_root_ref() = true;
 
-  auto nonFloodRootConf = getTestKvConf();
-  nonFloodRootConf.enable_flood_optimization_ref() = true;
-  nonFloodRootConf.is_flood_root_ref() = false;
+  auto r1Conf = getTestKvConf("r1");
+  r1Conf.enable_flood_optimization_ref() = true;
+  r1Conf.is_flood_root_ref() = true;
 
-  auto r0 = createKvStore("r0", floodRootConf);
-  auto r1 = createKvStore("r1", floodRootConf);
-  auto n0 = createKvStore("n0", nonFloodRootConf);
-  auto n1 = createKvStore("n1", nonFloodRootConf);
+  auto n0Conf = getTestKvConf("n0");
+  n0Conf.enable_flood_optimization_ref() = true;
+  n0Conf.is_flood_root_ref() = false;
+
+  auto n1Conf = getTestKvConf("n1");
+  n1Conf.enable_flood_optimization_ref() = true;
+  n1Conf.is_flood_root_ref() = false;
+
+  auto r0 = createKvStore(r0Conf);
+  auto r1 = createKvStore(r1Conf);
+  auto n0 = createKvStore(n0Conf);
+  auto n1 = createKvStore(n1Conf);
 
   // Start stores in their respective threads.
   r0->run();
@@ -1763,7 +1751,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   std::vector<KvStoreWrapper*> peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
     auto nodeId = getNodeId(kOriginBase, j);
-    auto store = createKvStore(nodeId);
+    auto store = createKvStore(getTestKvConf(nodeId));
     store->run();
     peerStores.push_back(store);
   }
@@ -1797,9 +1785,10 @@ TEST_F(KvStoreTestFixture, BasicSync) {
 
   // set up the store that we'll be testing
   messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue;
-  auto myNodeId = getNodeId(kOriginBase, kNumStores);
   auto myStore = createKvStore(
-      myNodeId, getTestKvConf(), {} /*areas*/, myPeerUpdatesQueue.getReader());
+      getTestKvConf(getNodeId(kOriginBase, kNumStores)),
+      {kTestingAreaName} /* areas */,
+      myPeerUpdatesQueue.getReader());
   myStore->run();
 
   // NOTE: It is important to add peers after starting our store to avoid
@@ -1973,7 +1962,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   std::vector<std::string> nodeIdsSeq;
   for (unsigned int i = 0; i < kNumStores; ++i) {
     auto nodeId = getNodeId(kOriginBase, i);
-    auto store = createKvStore(nodeId);
+    auto store = createKvStore(getTestKvConf(nodeId));
     LOG(INFO) << "Preparing store " << nodeId;
     store->run();
     stores.push_back(store);
@@ -2104,8 +2093,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   // Create and start peer-stores
   std::vector<KvStoreWrapper*> peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
-    auto nodeId = getNodeId(kOriginBase, j);
-    auto store = createKvStore(nodeId);
+    auto store = createKvStore(getTestKvConf(getNodeId(kOriginBase, j)));
     store->run();
     peerStores.emplace_back(store);
   }
@@ -2142,8 +2130,8 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   LOG(INFO) << "Starting store under test";
 
   // set up the extra KvStore that we'll be testing
-  auto myNodeId = getNodeId(kOriginBase, kNumStores);
-  auto myStore = createKvStore(myNodeId);
+  auto myStore =
+      createKvStore(getTestKvConf(getNodeId(kOriginBase, kNumStores)));
   myStore->run();
 
   // NOTE: It is important to add peers after starting our store to avoid
@@ -2187,11 +2175,8 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
  * present in provided keyValHashes or hash differs.
  */
 TEST_F(KvStoreTestFixture, DumpDifference) {
-  LOG(INFO) << "Starting store under test";
-
   // set up the store that we'll be testing
-  auto myNodeId = "test-node";
-  auto myStore = createKvStore(myNodeId);
+  auto myStore = createKvStore(getTestKvConf("test-node"));
   myStore->run();
 
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
@@ -2287,10 +2272,11 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
  * and is not synced if remaining TTL is < TTL decrement value provided
  */
 TEST_F(KvStoreTestFixture, TtlDecrementValue) {
-  auto store0 = createKvStore("store0");
-  auto store1Conf = getTestKvConf();
+  auto store1Conf = getTestKvConf("store1");
   store1Conf.ttl_decrement_ms_ref() = 300;
-  auto store1 = createKvStore("store1", store1Conf);
+
+  auto store0 = createKvStore(getTestKvConf("store0"));
+  auto store1 = createKvStore(store1Conf);
   store0->run();
   store1->run();
 
@@ -2362,16 +2348,15 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
  * Make sure all stores have same amount of keys at the end
  */
 TEST_F(KvStoreTestFixture, RateLimiterFlood) {
-  // use prod syncInterval 60s
-  thrift::KvstoreConfig prodConf, rateLimitConf;
+  auto rateLimitConf = getTestKvConf("store1");
   const size_t messageRate{10}, burstSize{50};
-  auto floodRate = createKvstoreFloodRate(
+  auto floodRate = createKvStoreFloodRate(
       messageRate /*flood_msg_per_sec*/, burstSize /*flood_msg_burst_size*/);
   rateLimitConf.flood_rate_ref() = floodRate;
 
-  auto store0 = createKvStore("store0", prodConf);
-  auto store1 = createKvStore("store1", rateLimitConf);
-  auto store2 = createKvStore("store2", prodConf);
+  auto store0 = createKvStore(getTestKvConf("store0"));
+  auto store1 = createKvStore(rateLimitConf);
+  auto store2 = createKvStore(getTestKvConf("store2"));
 
   store0->run();
   store1->run();
@@ -2434,13 +2419,13 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   fb303::fbData->resetAllData();
 
   const size_t messageRate{10}, burstSize{50};
-  auto rateLimitConf = getTestKvConf();
-  auto floodRate = createKvstoreFloodRate(
+  auto rateLimitConf = getTestKvConf("store1");
+  auto floodRate = createKvStoreFloodRate(
       messageRate /*flood_msg_per_sec*/, burstSize /*flood_msg_burst_size*/);
   rateLimitConf.flood_rate_ref() = floodRate;
 
-  auto store0 = createKvStore("store0");
-  auto store1 = createKvStore("store1", rateLimitConf);
+  auto store0 = createKvStore(getTestKvConf("store0"));
+  auto store1 = createKvStore(rateLimitConf);
   store0->run();
   store1->run();
 
@@ -2630,8 +2615,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
  *           (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
  */
 TEST_F(KvStoreTestFixture, FullSync) {
-  auto storeA = createKvStore("storeA");
-  auto storeB = createKvStore("storeB");
+  auto storeA = createKvStore(getTestKvConf("storeA"));
+  auto storeB = createKvStore(getTestKvConf("storeB"));
   storeA->run();
   storeB->run();
 
@@ -2755,9 +2740,10 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   AreaId podAreaId{pod.get_area_id()};
   AreaId planeAreaId{plane.get_area_id()};
 
-  auto storeA = createKvStore("storeA", getTestKvConf(), {pod});
-  auto storeB = createKvStore("storeB", getTestKvConf(), {pod, plane});
-  auto storeC = createKvStore("storeC", getTestKvConf(), {plane});
+  auto storeA = createKvStore(getTestKvConf("storeA"), {*pod.area_id_ref()});
+  auto storeB = createKvStore(
+      getTestKvConf("storeB"), {*pod.area_id_ref(), *plane.area_id_ref()});
+  auto storeC = createKvStore(getTestKvConf("storeC"), {*plane.area_id_ref()});
 
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
@@ -2981,16 +2967,11 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
  *           (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
  */
 TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
-  thrift::AreaConfig defaultAreaConfig, nonDefaultAreaConfig;
-  defaultAreaConfig.area_id_ref() = Constants::kDefaultArea.toString();
-  defaultAreaConfig.neighbor_regexes_ref()->emplace_back(".*");
-  nonDefaultAreaConfig.area_id_ref() = kTestingAreaName;
-  nonDefaultAreaConfig.neighbor_regexes_ref()->emplace_back(".*");
-  AreaId defaultAreaId{defaultAreaConfig.get_area_id()};
+  AreaId defaultAreaId{Constants::kDefaultArea.toString()};
 
-  auto storeA = createKvStore("storeA", getTestKvConf(), {defaultAreaConfig});
-  auto storeB =
-      createKvStore("storeB", getTestKvConf(), {nonDefaultAreaConfig});
+  auto storeA = createKvStore(
+      getTestKvConf("storeA"), {Constants::kDefaultArea.toString()});
+  auto storeB = createKvStore(getTestKvConf("storeB"), {kTestingAreaName});
   storeA->run();
   storeB->run();
 

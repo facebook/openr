@@ -10,9 +10,7 @@
 #include <fbzmq/zmq/Zmq.h>
 
 #include <openr/common/LsdbUtil.h>
-#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
@@ -30,10 +28,16 @@ namespace openr {
 class KvStoreWrapper {
  public:
   KvStoreWrapper(
+      // [TO_BE_DEPRECATED]
       fbzmq::Context& zmqContext,
-      std::shared_ptr<const Config> config,
+      // areaId collection
+      const std::unordered_set<std::string>& areaIds,
+      // KvStoreConfig to drive the instance
+      const thrift::KvStoreConfig& kvStoreConfig,
+      // Queue for receiving peer updates
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
           std::nullopt,
+      // Queue for receiving key-value update requests
       std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue =
           std::nullopt);
 
@@ -188,12 +192,11 @@ class KvStoreWrapper {
   thrift::PeerSpec
   getPeerSpec(thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE) {
     return createPeerSpec(
-        globalCmdUrl, /* cmdUrl for ZMQ */
+        globalCmdUrl_, /* cmdUrl for ZMQ */
         Constants::kPlatformHost.toString(), /* peerAddr for thrift */
         getThriftPort(),
         state,
-        config_->getKvStoreConfig().enable_flood_optimization_ref().value_or(
-            false));
+        kvStoreConfig_.enable_flood_optimization_ref().value_or(false));
   }
 
   /**
@@ -221,25 +224,25 @@ class KvStoreWrapper {
 
   const std::string
   getNodeId() {
-    return this->nodeId;
+    return this->nodeId_;
   }
 
   std::unordered_set<std::string>
   getAreaIds() {
-    return config_->getAreaIds();
+    return areaIds_;
   }
 
  private:
-  const std::string nodeId;
+  const std::string nodeId_;
 
   // Global URLs could be created outside of kvstore, mainly for testing
-  const std::string globalCmdUrl;
+  const std::string globalCmdUrl_;
 
-  std::shared_ptr<const Config> config_;
+  // AreaId collection to indicate # of KvStoreDb spawn for different areas
+  const std::unordered_set<std::string> areaIds_;
 
-  // Thrift serializer object for serializing/deserializing of thrift objects
-  // to/from bytes
-  apache::thrift::CompactSerializer serializer_;
+  // thrift::KvStoreConfig to feed to the KvStore instance
+  const thrift::KvStoreConfig kvStoreConfig_;
 
   // Queue for streaming KvStore updates
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;

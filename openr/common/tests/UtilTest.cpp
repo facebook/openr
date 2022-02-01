@@ -1234,8 +1234,8 @@ TEST(UtilTest, PerfEventConstruction) {
 TEST(UtilTest, KvStoreFloodRateConstruction) {
   const int32_t flood_msg_per_sec = 3;
   const int32_t flood_msg_burst_size = 4;
-  thrift::KvstoreFloodRate floodRate =
-      createKvstoreFloodRate(flood_msg_per_sec, flood_msg_burst_size);
+  thrift::KvStoreFloodRate floodRate =
+      createKvStoreFloodRate(flood_msg_per_sec, flood_msg_burst_size);
   EXPECT_EQ(floodRate.flood_msg_per_sec_ref().value(), flood_msg_per_sec);
   EXPECT_EQ(floodRate.flood_msg_burst_size_ref().value(), flood_msg_burst_size);
 }
