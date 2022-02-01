@@ -11,7 +11,7 @@ namespace py openr.OpenrConfig
 namespace py3 openr.thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
 
-include "BgpConfig.thrift"
+include "openr/if/BgpConfig.thrift"
 include "configerator/structs/neteng/config/routing_policy.thrift"
 include "configerator/structs/neteng/config/vip_service_config.thrift"
 

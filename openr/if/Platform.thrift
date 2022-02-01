@@ -14,7 +14,7 @@ namespace lua openr.Platform
 namespace wiki Open_Routing.Thrift_APIs.Platform
 
 include "fb303/thrift/fb303_core.thrift"
-include "Network.thrift"
+include "openr/if/Network.thrift"
 
 /**
  * Enum to keep track of Client name to Client-ID mapping. Indicates which

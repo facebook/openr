@@ -13,8 +13,8 @@ namespace py3 openr.thrift
 namespace lua openr.Types
 namespace wiki Open_Routing.Thrift_APIs.Types
 
-include "Network.thrift"
-include "OpenrConfig.thrift"
+include "openr/if/Network.thrift"
+include "openr/if/OpenrConfig.thrift"
 
 /*
  * [Spark Neighbor FSM]
