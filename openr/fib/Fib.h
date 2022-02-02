@@ -39,7 +39,6 @@ class Fib final : public OpenrEventBase {
       std::shared_ptr<const Config> config,
       // consumer queue
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-      messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       // producer queue
       messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue);
@@ -142,11 +141,6 @@ class Fib final : public OpenrEventBase {
    * Process new route updates received from Decision module
    */
   void processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate);
-
-  /**
-   * Process new route updates received from StaticRoute update queue
-   */
-  void processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate);
 
   /**
    * Incremental route programming.

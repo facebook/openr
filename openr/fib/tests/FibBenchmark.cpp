@@ -97,7 +97,6 @@ class FibWrapper {
     fib = std::make_shared<Fib>(
         config,
         routeUpdatesQueue.getReader(),
-        staticRouteUpdatesQueue.getReader(),
         fibRouteUpdatesQueue,
         logSampleQueue);
 
@@ -113,7 +112,6 @@ class FibWrapper {
     LOG(INFO) << "Closing queues";
     fibRouteUpdatesQueue.close();
     routeUpdatesQueue.close();
-    staticRouteUpdatesQueue.close();
     logSampleQueue.close();
 
     // This will be invoked before Fib's d-tor
@@ -152,7 +150,6 @@ class FibWrapper {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader{
       fibRouteUpdatesQueue.getReader()};

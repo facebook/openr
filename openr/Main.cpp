@@ -245,8 +245,6 @@ main(int argc, char** argv) {
       staticRouteUpdatesQueue.getReader("decision");
   auto decisionKvStoreUpdatesQueueReader =
       kvStoreUpdatesQueue.getReader("decision");
-  auto fibStaticRouteUpdatesQueueReader =
-      staticRouteUpdatesQueue.getReader("fib");
   auto fibDecisionRouteUpdatesQueueReader =
       routeUpdatesQueue.getReader("fibDecision");
   auto linkMonitorNeighborUpdatesQueueReader =
@@ -537,7 +535,6 @@ main(int argc, char** argv) {
       std::make_unique<Fib>(
           config,
           std::move(fibDecisionRouteUpdatesQueueReader),
-          std::move(fibStaticRouteUpdatesQueueReader),
           fibRouteUpdatesQueue,
           logSampleQueue));
   watchdog->addQueue(fibRouteUpdatesQueue, "fibRouteUpdatesQueue");

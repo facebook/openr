@@ -217,7 +217,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   fib_ = std::make_unique<Fib>(
       config_,
       routeUpdatesQueue_.getReader(),
-      staticRoutesQueue_.getReader(),
       fibRouteUpdatesQueue_,
       logSampleQueue_);
 

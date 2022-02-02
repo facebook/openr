@@ -49,7 +49,6 @@ logFibUpdateError(thrift::PlatformFibUpdateError const& error) {
 Fib::Fib(
     std::shared_ptr<const Config> config,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-    messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : myNodeName_(config->getConfig().get_node_name()),
@@ -95,27 +94,6 @@ Fib::Fib(
       processDecisionRouteUpdate(std::move(maybeThriftObj).value());
     }
   });
-
-  // Fiber to process and program static route updates.
-  // - The routes are only programmed and updated but not deleted
-  // - Updates arriving before first Decision RIB update will be processed. The
-  //   fiber will terminate after FIB transition out of AWAITING state
-  addFiberTask(
-      [q = std::move(staticRouteUpdatesQueue), this]() mutable noexcept {
-        XLOG(INFO) << "Starting static routes update processing fiber";
-        while (true) {
-          auto maybeThriftPub = q.get(); // perform read
-
-          // Terminate if queue is closed or we've received RIB from Decision
-          if (maybeThriftPub.hasError() or
-              routeState_.state != RouteState::AWAITING) {
-            XLOG(INFO) << "Terminating static routes update processing fiber";
-            break;
-          }
-          fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
-          processStaticRouteUpdate(std::move(maybeThriftPub).value());
-        }
-      });
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("fib.convergence_time_ms", fb303::AVG);
@@ -492,25 +470,6 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   updateRoutes(std::move(routeUpdate));
   if (routeState_.needsRetry()) {
     // Trigger initial Fib sync, or schedule retry routes timer if needed.
-    retryRoutesSignal_.signal();
-  }
-}
-
-void
-Fib::processStaticRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
-  // NOTE: We only process the static MPLS routes to add or update
-  XLOG(INFO) << "Received static routes update";
-  routeUpdate.unicastRoutesToUpdate.clear();
-  routeUpdate.unicastRoutesToDelete.clear();
-  routeUpdate.mplsRoutesToDelete.clear();
-
-  // Static route can only be received in AWAITING state
-  CHECK_EQ(routeState_.state, RouteState::AWAITING);
-
-  // Program received static route updates
-  updateRoutes(std::move(routeUpdate));
-  if (routeState_.needsRetry()) {
-    // Schedule retry routes timer if need be
     retryRoutesSignal_.signal();
   }
 }

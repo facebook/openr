@@ -345,7 +345,6 @@ class FibTestFixture : public ::testing::Test {
     fib_ = std::make_shared<Fib>(
         config_,
         routeUpdatesQueue.getReader(),
-        staticRouteUpdatesQueue.getReader(),
         fibRouteUpdatesQueue,
         logSampleQueue);
 
@@ -384,7 +383,6 @@ class FibTestFixture : public ::testing::Test {
     LOG(INFO) << "Closing queues";
     fibRouteUpdatesQueue.close();
     routeUpdatesQueue.close();
-    staticRouteUpdatesQueue.close();
     logSampleQueue.close();
 
     LOG(INFO) << "Stopping openr ctrl handler";
@@ -528,7 +526,6 @@ class FibTestFixture : public ::testing::Test {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
   messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader =
@@ -1314,162 +1311,6 @@ TEST_F(FibTestFixture, doNotInstall) {
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   // now 2 routes are installable
   EXPECT_EQ(routes.size(), 2);
-}
-
-/**
- * Ensure FIB processes static routes with following in-variant
- * - Only MPLS route Add/Update are processed. All others are ignored
- * - Static routes are only processed before first RIB instance
- * - Fiber terminates after receipt of first RIB instance
- */
-TEST_F(FibTestFixture, StaticRouteUpdates) {
-  // Make sure fib starts with clean route database
-  std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 0);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
-
-  // Send the static route update (with all types of updates)
-  DecisionRouteUpdate routeUpdate;
-  routeUpdate.addRouteToUpdate(
-      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-  routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix2));
-  auto mplsEntry = RibMplsEntry(label1, {mpls_path1_2_1});
-  routeUpdate.addMplsRouteToUpdate(mplsEntry);
-  routeUpdate.mplsRoutesToDelete.emplace_back(label2);
-  staticRouteUpdatesQueue.push(routeUpdate);
-
-  // Wait for MPLS route updates
-  mockFibHandler_->waitForUpdateMplsRoutes();
-  DecisionRouteUpdate syncedUpdate;
-  syncedUpdate.type = DecisionRouteUpdate::INCREMENTAL;
-  // Only updated MPLS routes are synced.
-  syncedUpdate.addMplsRouteToUpdate(mplsEntry);
-  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
-      syncedUpdate, fibRouteUpdatesQueueReader.get().value()));
-
-  // Verify counters
-  EXPECT_EQ(mockFibHandler_->getFibSyncCount(), 0);
-  EXPECT_EQ(mockFibHandler_->getAddRoutesCount(), 0);
-  EXPECT_EQ(mockFibHandler_->getDelRoutesCount(), 0);
-  EXPECT_EQ(mockFibHandler_->getFibMplsSyncCount(), 0);
-  EXPECT_EQ(mockFibHandler_->getAddMplsRoutesCount(), 1);
-  EXPECT_EQ(mockFibHandler_->getDelMplsRoutesCount(), 0);
-
-  // Verify routes
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 0);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 1);
-
-  // Verify that MPLS route exists in cache
-  EXPECT_EQ(0, fib_->getUnicastRoutes({}).get()->size());
-  EXPECT_EQ(1, fib_->getMplsRoutes({}).get()->size());
-
-  // Mimic decision pub sock publishing RouteDatabaseDelta (empty DB)
-  DecisionRouteUpdate routeUpdateEmpty;
-  routeUpdatesQueue.push(std::move(routeUpdateEmpty));
-
-  // Expect FIB sync for unicast & mpls routes
-  mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
-
-  // ensure no other calls occured
-  EXPECT_EQ(mockFibHandler_->getFibSyncCount(), 1);
-  EXPECT_EQ(mockFibHandler_->getAddRoutesCount(), 0);
-  EXPECT_EQ(mockFibHandler_->getDelRoutesCount(), 0);
-  EXPECT_EQ(mockFibHandler_->getFibMplsSyncCount(), 1);
-  EXPECT_EQ(mockFibHandler_->getAddMplsRoutesCount(), 1);
-  EXPECT_EQ(mockFibHandler_->getDelMplsRoutesCount(), 0);
-
-  // Verify routes
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 0);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  // MPLS route cached in routeState_ is overridden by Decision update
-  EXPECT_EQ(mplsRoutes.size(), 0);
-
-  // Expect fiber for processing static route to be active
-  EXPECT_EQ(1, staticRouteUpdatesQueue.getNumReaders());
-
-  // Publish same event and we can expect it to terminate
-  staticRouteUpdatesQueue.push(routeUpdate);
-  while (staticRouteUpdatesQueue.getNumReaders()) {
-    std::this_thread::yield();
-  }
-}
-
-/**
- * Validates static MPLS routes programming is retried till successful in case
- * of Fib socket failures.
- * 1. There are initially 1 unicast and 1 MPLS routes in FIB client;
- * 2. FIB socket turns unhealthy;
- * 3. Static MPLS routes program failed but backed up;
- * 4. FIB socket flips to healthy;
- * 5. Backed MPLS routes are programmed successfully, while existing routes are
- *    still kept.
- */
-TEST_F(FibTestFixture, StaticMplsRoutesUpdateRetryTillSuccessful) {
-  // 1. Initially there are 1 unicast and 1 MPLS routes in FIB agent.
-  DecisionRouteUpdate initialRoutes;
-  initialRoutes.addRouteToUpdate(
-      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-  initialRoutes.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
-  auto initialRouteDb = initialRoutes.toThrift();
-  mockFibHandler_->addUnicastRoutes(
-      kFibId_,
-      std::make_unique<std::vector<::openr::thrift::UnicastRoute>>(
-          std::move(*initialRouteDb.unicastRoutesToUpdate_ref())));
-  mockFibHandler_->addMplsRoutes(
-      kFibId_,
-      std::make_unique<std::vector<::openr::thrift::MplsRoute>>(
-          std::move(*initialRouteDb.mplsRoutesToUpdate_ref())));
-  mockFibHandler_->waitForUpdateUnicastRoutes();
-  mockFibHandler_->waitForUpdateMplsRoutes();
-
-  std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 1);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 1);
-
-  // 2. FIB client is set as unhealthy.
-  mockFibHandler_->setHandlerHealthyState(false /*isHealthy*/);
-
-  // 3. Add static MPLS routes into the queue.
-  DecisionRouteUpdate staticRouteUpdate;
-  staticRouteUpdate.addMplsRouteToUpdate(
-      RibMplsEntry(label2, {mpls_path1_2_2}));
-  staticRouteUpdate.mplsRoutesToDelete.emplace_back(label3);
-  staticRouteUpdatesQueue.push(staticRouteUpdate);
-
-  // Static routes are not programmed.
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 1);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 1);
-
-  // 4. FIB client flips to healthy.
-  mockFibHandler_->setHandlerHealthyState(true /*isHealthy*/);
-
-  // 5. Expect static routes to be prorammed successfully.
-  mockFibHandler_->waitForUpdateMplsRoutes();
-  DecisionRouteUpdate syncedUpdate;
-  // Synced routes are sent to fibRouteUpdatesQueue_.
-  staticRouteUpdate.type = DecisionRouteUpdate::INCREMENTAL;
-  staticRouteUpdate.mplsRoutesToDelete.clear();
-  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
-      staticRouteUpdate, fibRouteUpdatesQueueReader.get().value()));
-
-  // Above backlogged static routes are programmed.
-  // Existing routes in FIB client still exist.
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
-  EXPECT_EQ(routes.size(), 1);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 2);
 }
 
 /**

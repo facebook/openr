@@ -91,7 +91,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     fib = std::make_shared<Fib>(
         config,
         routeUpdatesQueue_.getReader(),
-        staticRoutesUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_,
         logSampleQueue_);
     fibThread_ = std::thread([&]() { fib->run(); });
