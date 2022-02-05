@@ -406,7 +406,7 @@ OpenrCtrlHandler::getInitializationEvents(
 
     // The fb303 counter is set in function logInitializationEvent().
     auto counterKey = fmt::format(
-        Constants::kInitEventCounterFormat.toString(),
+        Constants::kInitEventCounterFormat,
         apache::thrift::util::enumNameSafe(event));
     if (fb303::fbData->hasCounter(counterKey)) {
       _return[event] = fb303::fbData->getCounter(counterKey);
@@ -418,7 +418,7 @@ bool
 OpenrCtrlHandler::initializationConverged() {
   // The fb303 counter is set in function logInitializationEvent().
   auto convergenceKey = fmt::format(
-      Constants::kInitEventCounterFormat.toString(),
+      Constants::kInitEventCounterFormat,
       apache::thrift::util::enumNameSafe(
           thrift::InitializationEvent::INITIALIZED));
   return fb303::fbData->hasCounter(convergenceKey);
@@ -428,7 +428,7 @@ int64_t
 OpenrCtrlHandler::getInitializationDurationMs() {
   // The fb303 counter is set in function logInitializationEvent().
   auto convergenceKey = fmt::format(
-      Constants::kInitEventCounterFormat.toString(),
+      Constants::kInitEventCounterFormat,
       apache::thrift::util::enumNameSafe(
           thrift::InitializationEvent::INITIALIZED));
   // Throw std::invalid_argument exception if convergenceKey does not exist.

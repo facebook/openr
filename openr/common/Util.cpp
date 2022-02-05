@@ -51,7 +51,7 @@ logInitializationEvent(
   // Log OpenR initialization event to fb303::fbData.
   facebook::fb303::fbData->setCounter(
       fmt::format(
-          Constants::kInitEventCounterFormat.toString(),
+          Constants::kInitEventCounterFormat,
           apache::thrift::util::enumNameSafe(event)),
       durationSinceStart);
 }

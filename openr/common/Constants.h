@@ -39,8 +39,8 @@ class Constants {
   // to be "fast" since we talk to directly adjacent nodes
   static constexpr std::chrono::milliseconds kReadTimeout{1000};
 
-  static constexpr folly::StringPiece kInitEventCounterFormat{
-      "initialization.{}.duration_ms"};
+  static constexpr auto kInitEventCounterFormat =
+      "initialization.{}.duration_ms";
 
   // Default keepAlive values
   static constexpr int kKeepAliveEnable{1};
