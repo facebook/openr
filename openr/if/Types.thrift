@@ -478,11 +478,6 @@ struct PrefixDatabase {
    * Flag to indicate prefix(s) must be deleted
    */
   5: bool deletePrefix;
-
-  /**
-   * Openr area in which prefix is advertised
-   */
-  7: string area;
 } (cpp.minimize_padding)
 
 /**

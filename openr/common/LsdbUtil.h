@@ -175,7 +175,6 @@ thrift::AdjacencyDatabase createAdjDb(
 thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,
     const std::vector<thrift::PrefixEntry>& prefixEntries = {},
-    const std::string& area = kTestingAreaName,
     bool withdraw = false);
 
 thrift::PrefixEntry createPrefixEntry(

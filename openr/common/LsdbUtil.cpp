@@ -504,12 +504,10 @@ thrift::PrefixDatabase
 createPrefixDb(
     const std::string& nodeName,
     const std::vector<thrift::PrefixEntry>& prefixEntries,
-    const std::string& area,
     bool withdraw) {
   thrift::PrefixDatabase prefixDb;
   prefixDb.thisNodeName_ref() = nodeName;
   prefixDb.prefixEntries_ref() = prefixEntries;
-  prefixDb.area_ref() = area;
   prefixDb.deletePrefix_ref() = withdraw;
   return prefixDb;
 }
@@ -615,7 +613,7 @@ createPrefixKeyAndDb(
     bool withdraw) {
   return {
       PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix_ref()), area),
-      createPrefixDb(nodeName, {prefixEntry}, area, withdraw)};
+      createPrefixDb(nodeName, {prefixEntry}, withdraw)};
 }
 
 std::pair<std::string, thrift::Value>

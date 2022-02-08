@@ -533,7 +533,7 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
 
     const auto prefixKeyStr =
         PrefixKey(nodeId_, entry.network, toArea).getPrefixKeyV2();
-    auto prefixDb = createPrefixDb(nodeId_, {*postPolicyTPrefixEntry}, toArea);
+    auto prefixDb = createPrefixDb(nodeId_, {*postPolicyTPrefixEntry});
     auto prefixDbStr = writeThriftObjStr(std::move(prefixDb), serializer_);
 
     // advertise key to `KvStore`
@@ -586,7 +586,6 @@ PrefixManager::deleteKvStoreKeyHelper(
     thrift::PrefixEntry entry;
     entry.prefix_ref() = toIpPrefix(prefix);
     deletedPrefixDb.prefixEntries_ref() = {entry};
-    deletedPrefixDb.area_ref() = area;
 
     // Remove prefix from KvStore and flood deletion by setting deleted value.
     auto unsetPrefixRequest = ClearKeyValueRequest(

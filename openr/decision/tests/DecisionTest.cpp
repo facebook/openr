@@ -426,7 +426,6 @@ getPrefixDbForNode(
     std::string const& area = kTestingAreaName) {
   thrift::PrefixDatabase prefixDb;
   prefixDb.thisNodeName_ref() = name;
-  prefixDb.area_ref() = area;
   thrift::ReceivedRouteFilter filter;
   filter.nodeName_ref() = name;
   filter.areaName_ref() = area;
@@ -439,13 +438,13 @@ getPrefixDbForNode(
 
 std::unordered_set<folly::CIDRNetwork>
 updatePrefixDatabase(
-    PrefixState& state, thrift::PrefixDatabase const& prefixDb) {
+    PrefixState& state,
+    thrift::PrefixDatabase const& prefixDb,
+    std::string const& area = kTestingAreaName) {
   auto const& nodeName = prefixDb.get_thisNodeName();
-  auto const& area = prefixDb.get_area();
 
   std::unordered_set<PrefixKey> oldKeys, newKeys;
-  auto oldDb = getPrefixDbForNode(
-      state, prefixDb.get_thisNodeName(), prefixDb.get_area());
+  auto oldDb = getPrefixDbForNode(state, prefixDb.get_thisNodeName(), area);
   for (auto const& entry : oldDb.get_prefixEntries()) {
     oldKeys.emplace(nodeName, toIPNetwork(entry.get_prefix()), area);
   }
@@ -4953,7 +4952,7 @@ class DecisionTestFixture : public ::testing::Test {
       prefixEntries.emplace_back(createPrefixEntry(prefix));
     }
     return createPrefixValue(
-        node, version, createPrefixDb(node, prefixEntries, area));
+        node, version, createPrefixDb(node, prefixEntries));
   }
 
   /**
