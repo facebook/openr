@@ -316,8 +316,7 @@ Spark::Spark(
           config->getSparkConfig().get_graceful_restart_time_s())),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
-      enableFloodOptimization_(
-          config->getKvStoreConfig().get_enable_flood_optimization()),
+      enableFloodOptimization_(config->isFloodOptimizationEnabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kOpenrCtrlThriftPort_(
           config->getThriftServerConfig().get_openr_ctrl_port()),
@@ -953,11 +952,16 @@ Spark::sendHandshakeMsg(
       "spark.handshake.bytes_sent", packet.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.handshake.packet_sent", 1, fb303::SUM);
 
-  XLOG(DBG2) << "[SparkHandshakeMsg] Successfully sent " << bytesSent
-             << " bytes over intf: " << ifName
-             << ", neighbor name: " << neighborName
-             << ", neighbor areaId: " << neighborAreaId
-             << ", isAdjEstablished: " << isAdjEstablished;
+  XLOG(DBG2) << fmt::format(
+      "[SparkHandshakeMsg] Successfully sent {} bytes "
+      "over intf: {}, neighbor name: {}, neighbor areaId: {}, "
+      "isAdjEstablished: {}, support flood-optimization: {}",
+      bytesSent,
+      ifName,
+      neighborName,
+      neighborAreaId,
+      isAdjEstablished,
+      enableFloodOptimization_);
 }
 
 void
@@ -1744,6 +1748,14 @@ Spark::processHandshakeMsg(
   }
 
   // state transition
+  XLOG(DBG1) << fmt::format(
+      "[SparkHandshakeMsg] Successfully negotiated with peer: {} with "
+      "kvStoreCmdPort: {}, TCP port: {}, support-flood-optimization: {}",
+      neighborName,
+      neighbor.kvStoreCmdPort,
+      neighbor.openrCtrlThriftPort,
+      neighbor.enableFloodOptimization);
+
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =
       getNextState(oldState, thrift::SparkNeighEvent::HANDSHAKE_RCVD);
