@@ -142,6 +142,11 @@ class Decision : public OpenrEventBase {
 
   virtual ~Decision() = default;
 
+  /**
+   * Override stop method of OpenrEventBase
+   */
+  void stop() override;
+
   /*
    * Retrieve routeDb from specified node.
    * If empty nodename specified, will return routeDb of its own

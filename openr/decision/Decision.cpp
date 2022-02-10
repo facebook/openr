@@ -296,6 +296,16 @@ Decision::Decision(
       "decision.rib_policy_processing.time_ms", fb303::AVG);
 }
 
+void
+Decision::stop() {
+  // Post initialPeersReceivedBaton_ to unblock internal fiber from stopping.
+  initialPeersReceivedBaton_.post();
+
+  // Invoke stop method of super class
+  OpenrEventBase::stop();
+  XLOG(DBG1) << "Stopped Decision event base";
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 Decision::getDecisionRouteDb(std::string nodeName) {
   folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
@@ -504,7 +514,7 @@ Decision::processPeerUpdates(PeerEvent&& event) {
   if (not config_->getConfig().get_enable_ordered_adj_publication()) {
     return;
   }
-  if (not initialPeersReceivedBaton_.try_wait()) {
+  if (not initialPeersReceivedBaton_.ready()) {
     XLOG(INFO) << "[Initialization] Received initial PeerEvent.";
     // LinkMonitor publishes detected peers in one shot in Open/R initialization
     // process. Initial route computation will blocked until adjacence with all
@@ -992,8 +1002,8 @@ Decision::unblockInitialRoutesBuild() {
   if (config_->getConfig().get_enable_ordered_adj_publication()) {
     // Wait till receiving initial peers and dual directional adjacencies with
     // initial peers.
-    adjReceivedForPeers = initialPeersReceivedBaton_.try_wait() and
-        areaToPendingAdjacency_.empty();
+    adjReceivedForPeers =
+        initialPeersReceivedBaton_.ready() and areaToPendingAdjacency_.empty();
   }
   // Initial routes build will be unblocked if all following conditions are
   // fulfilled,

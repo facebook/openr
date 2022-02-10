@@ -4766,6 +4766,9 @@ class DecisionTestFixture : public ::testing::Test {
     FLAGS_rib_policy_file = fmt::format(
         "/dev/shm/rib_policy.txt.{}",
         std::hash<std::thread::id>{}(std::this_thread::get_id()));
+
+    // Publish initial peers.
+    publishInitialPeers();
   }
 
   void
@@ -4802,9 +4805,19 @@ class DecisionTestFixture : public ::testing::Test {
     tConfig.decision_config_ref()->debounce_max_ms_ref() =
         debounceTimeoutMax.count();
     tConfig.enable_initialization_process_ref() = true;
+    tConfig.enable_ordered_adj_publication_ref() = true;
     tConfig.decision_config_ref()->save_rib_policy_min_ms_ref() = 500;
     tConfig.decision_config_ref()->save_rib_policy_max_ms_ref() = 2000;
     return tConfig;
+  }
+
+  virtual void
+  publishInitialPeers() {
+    thrift::PeersMap peers;
+    peers.emplace("2", thrift::PeerSpec());
+    PeerEvent peerEvent{
+        {kTestingAreaName, AreaPeerEvent(peers, {} /*peersToDel*/)}};
+    peerUpdatesQueue.push(std::move(peerEvent));
   }
 
   //
@@ -5006,6 +5019,18 @@ class DecisionTestFixture : public ::testing::Test {
   // Initial KvStore synced signal is sent.
   bool kvStoreSyncEventSent{false};
 };
+
+TEST_F(DecisionTestFixture, StopDecisionWithoutInitialPeers) {
+  // Close all queues.
+  routeUpdatesQueue.close();
+  kvStoreUpdatesQueue.close();
+  staticRouteUpdatesQueue.close();
+  // Initial peers are not received yet.
+  peerUpdatesQueue.close();
+
+  // decision module could stop.
+  decision->stop();
+}
 
 // The following topology is used:
 //
@@ -5686,13 +5711,13 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
        {"adj:2", createAdjValue("2", 1, {adj21, adj24}, false, 2)},
        {"adj:4", createAdjValue("4", 1, {adj42}, false, 4)},
-       createPrefixKeyValue("1", 1, addr1, "A"),
-       createPrefixKeyValue("2", 1, addr2, "A")},
+       createPrefixKeyValue("1", 1, addr1, kTestingAreaName),
+       createPrefixKeyValue("2", 1, addr2, kTestingAreaName)},
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
       std::string(""), /*floodRootId */
-      "A");
+      kTestingAreaName);
 
   sendKvPublication(publication);
   recvRouteUpdates();
@@ -5724,7 +5749,9 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   // routeDb1 from node "1"
   {
     auto routeToAddr2 = createUnicastRoute(
-        addr2, {createNextHopFromAdj(adj12, false, 10, std::nullopt, "A")});
+        addr2,
+        {createNextHopFromAdj(
+            adj12, false, 10, std::nullopt, kTestingAreaName)});
     auto routeToAddr3 = createUnicastRoute(
         addr3, {createNextHopFromAdj(adj13, false, 10, std::nullopt, "B")});
     // addr4 is only originated in area B
@@ -5740,7 +5767,9 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   // routeDb2 from node "2" will only see addr1 in area A
   {
     auto routeToAddr1 = createUnicastRoute(
-        addr1, {createNextHopFromAdj(adj21, false, 10, std::nullopt, "A")});
+        addr1,
+        {createNextHopFromAdj(
+            adj21, false, 10, std::nullopt, kTestingAreaName)});
     EXPECT_THAT(*routeDb2.unicastRoutes_ref(), testing::SizeIs(1));
     EXPECT_THAT(
         *routeDb2.unicastRoutes_ref(),
@@ -5760,12 +5789,16 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   // routeDb4
   {
     auto routeToAddr2 = createUnicastRoute(
-        addr2, {createNextHopFromAdj(adj42, false, 10, std::nullopt, "A")});
+        addr2,
+        {createNextHopFromAdj(
+            adj42, false, 10, std::nullopt, kTestingAreaName)});
     auto routeToAddr3 = createUnicastRoute(
         addr3, {createNextHopFromAdj(adj43, false, 10, std::nullopt, "B")});
     // addr1 is only originated in area A
     auto routeToAddr1 = createUnicastRoute(
-        addr1, {createNextHopFromAdj(adj42, false, 20, std::nullopt, "A")});
+        addr1,
+        {createNextHopFromAdj(
+            adj42, false, 20, std::nullopt, kTestingAreaName)});
     EXPECT_THAT(*routeDb4.unicastRoutes_ref(), testing::SizeIs(3));
     EXPECT_THAT(
         *routeDb4.unicastRoutes_ref(),
@@ -5801,7 +5834,8 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
     auto routeToAddr1 = createUnicastRoute(
         addr1,
         {createNextHopFromAdj(adj43, false, 20, std::nullopt, "B"),
-         createNextHopFromAdj(adj42, false, 20, std::nullopt, "A")});
+         createNextHopFromAdj(
+             adj42, false, 20, std::nullopt, kTestingAreaName)});
     EXPECT_THAT(*routeDb4.unicastRoutes_ref(), testing::Contains(routeToAddr1));
   }
 }
@@ -5820,11 +5854,12 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   // publish area A adj and prefix
   // "2" originate addr2 into A
   //
-  auto originKeyStr = PrefixKey("2", toIPNetwork(addr2), "A").getPrefixKeyV2();
+  auto originKeyStr =
+      PrefixKey("2", toIPNetwork(addr2), kTestingAreaName).getPrefixKeyV2();
   auto originPfx = createPrefixEntry(addr2);
   originPfx.area_stack_ref() = {"65000"};
   auto originPfxVal =
-      createPrefixValue("2", 1, createPrefixDb("2", {originPfx}, "A"));
+      createPrefixValue("2", 1, createPrefixDb("2", {originPfx}));
 
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
@@ -5834,7 +5869,7 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
       {}, /* nodeIds */
       {}, /* keysToUpdate */
       std::string(""), /*floodRootId */
-      "A");
+      kTestingAreaName);
 
   sendKvPublication(publication);
   recvRouteUpdates();
@@ -5861,7 +5896,7 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   auto redistributeKeyStr =
       PrefixKey("1", toIPNetwork(addr2), "B").getPrefixKeyV2();
   auto redistributePfx = createPrefixEntry(addr2, thrift::PrefixType::RIB);
-  redistributePfx.area_stack_ref() = {"65000", "A"};
+  redistributePfx.area_stack_ref() = {"65000", kTestingAreaName};
   auto redistributePfxVal =
       createPrefixValue("1", 1, createPrefixDb("1", {redistributePfx}, "B"));
 
@@ -6221,6 +6256,13 @@ TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
             std::make_unique<std::thread>([&]() { decision->run(); });
         decision->waitUntilRunning();
 
+        // Publish initial batch of detected peers.
+        thrift::PeersMap peers;
+        peers.emplace("2", thrift::PeerSpec());
+        PeerEvent peerEvent{
+            {kTestingAreaName, AreaPeerEvent(peers, {} /*peersToDel*/)}};
+        peerUpdatesQueue.push(std::move(peerEvent));
+
         // Setup topology and prefixes. 1 unicast route will be computed
         auto publication = createThriftPublication(
             {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
@@ -6230,7 +6272,7 @@ TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
             {},
             {},
             {},
-            std::string(""));
+            kTestingAreaName);
         kvStoreUpdatesQueue.push(publication);
         kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
 
@@ -6327,6 +6369,13 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
           LOG(INFO) << "Decision thread finishing";
         });
         decision->waitUntilRunning();
+
+        // Publish initial batch of detected peers.
+        thrift::PeersMap peers;
+        peers.emplace("2", thrift::PeerSpec());
+        PeerEvent peerEvent{
+            {kTestingAreaName, AreaPeerEvent(peers, {} /*peersToDel*/)}};
+        peerUpdatesQueue.push(std::move(peerEvent));
 
         // Setup topology and prefixes. 1 unicast route will be computed
         auto publication = createThriftPublication(
@@ -7285,12 +7334,18 @@ class InitialRibBuildTestFixture
     }
     return tConfig;
   }
+
+  void
+  publishInitialPeers() override {
+    // Do not publish peers information. Test case below will handle that.
+  }
 };
 
 INSTANTIATE_TEST_CASE_P(
     InitialRibBuildTestInstance,
     InitialRibBuildTestFixture,
     ::testing::Values(thrift::PrefixType::BGP, thrift::PrefixType::VIP));
+
 /*
  * Verify OpenR initialzation could succeed at current node (1),
  * - Receives adjacencies 1->2 (only used by 2) and 2->1 (only used by 1)
