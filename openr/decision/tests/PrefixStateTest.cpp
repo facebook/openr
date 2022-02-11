@@ -79,10 +79,10 @@ class PrefixStateTestFixture : public ::testing::Test {
   }
 };
 
-TEST_F(PrefixStateTestFixture, basicOperation) {
+TEST_F(PrefixStateTestFixture, BasicOperation) {
   auto& [nodeArea, entry] = *(initialEntries_.begin()->second.begin());
   const PrefixKey key(
-      nodeArea.first, toIPNetwork(entry->get_prefix()), nodeArea.second);
+      nodeArea.first, toIPNetwork(*entry->prefix_ref()), nodeArea.second);
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
 
   entry->type_ref() = thrift::PrefixType::BREEZE;
@@ -91,7 +91,7 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
       testing::UnorderedElementsAre(key.getCIDRNetwork()));
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
-      *state_.prefixes().at(toIPNetwork(entry->get_prefix())).at(nodeArea),
+      *state_.prefixes().at(toIPNetwork(*entry->prefix_ref())).at(nodeArea),
       *entry);
 
   entry->forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
@@ -100,7 +100,7 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
       testing::UnorderedElementsAre(key.getCIDRNetwork()));
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
-      *state_.prefixes().at(toIPNetwork(entry->get_prefix())).at(nodeArea),
+      *state_.prefixes().at(toIPNetwork(*entry->prefix_ref())).at(nodeArea),
       *entry);
 }
 
@@ -115,11 +115,11 @@ TEST(PrefixState, GetReceivedRoutes) {
   // prefix1 -> (node0, area0), (node0, area1), (node1, area1)
   //
   const auto prefixEntry = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
-  PrefixKey k1("node0", toIPNetwork(prefixEntry.get_prefix()), "area0");
+  PrefixKey k1("node0", toIPNetwork(*prefixEntry.prefix_ref()), "area0");
   state.updatePrefix(k1, prefixEntry);
-  PrefixKey k2("node0", toIPNetwork(prefixEntry.get_prefix()), "area1");
+  PrefixKey k2("node0", toIPNetwork(*prefixEntry.prefix_ref()), "area1");
   state.updatePrefix(k2, prefixEntry);
-  PrefixKey k3("node1", toIPNetwork(prefixEntry.get_prefix()), "area1");
+  PrefixKey k3("node1", toIPNetwork(*prefixEntry.prefix_ref()), "area1");
   state.updatePrefix(k3, prefixEntry);
 
   thrift::NodeAndArea bestKey;

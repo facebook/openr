@@ -284,7 +284,7 @@ Spark::SparkNeighbor::shouldResetAdjacency(
   }
 
   // Honor the `holdAdjacency` flag from `SparkHeartbeatMsg`
-  return not heartbeatMsg.get_holdAdjacency();
+  return not *heartbeatMsg.holdAdjacency_ref();
 }
 
 Spark::Spark(
@@ -295,35 +295,35 @@ Spark::Spark(
     std::shared_ptr<const Config> config,
     std::pair<uint32_t, uint32_t> version,
     std::optional<uint32_t> maybeMaxAllowedPps)
-    : myDomainName_(config->getConfig().get_domain()),
+    : myDomainName_(*config->getConfig().domain_ref()),
       myNodeName_(config->getNodeName()),
       neighborDiscoveryPort_(static_cast<uint16_t>(
-          config->getSparkConfig().get_neighbor_discovery_port())),
+          *config->getSparkConfig().neighbor_discovery_port_ref())),
       helloTime_(
-          std::chrono::seconds(config->getSparkConfig().get_hello_time_s())),
+          std::chrono::seconds(*config->getSparkConfig().hello_time_s_ref())),
       fastInitHelloTime_(std::chrono::milliseconds(
-          config->getSparkConfig().get_fastinit_hello_time_ms())),
+          *config->getSparkConfig().fastinit_hello_time_ms_ref())),
       handshakeTime_(std::chrono::milliseconds(
-          config->getSparkConfig().get_fastinit_hello_time_ms())),
+          *config->getSparkConfig().fastinit_hello_time_ms_ref())),
       initializationHoldTime_(3 * fastInitHelloTime_ + handshakeTime_),
       keepAliveTime_(std::chrono::seconds(
-          config->getSparkConfig().get_keepalive_time_s())),
+          *config->getSparkConfig().keepalive_time_s_ref())),
       handshakeHoldTime_(std::chrono::seconds(
-          config->getSparkConfig().get_keepalive_time_s())),
+          *config->getSparkConfig().keepalive_time_s_ref())),
       holdTime_(
-          std::chrono::seconds(config->getSparkConfig().get_hold_time_s())),
+          std::chrono::seconds(*config->getSparkConfig().hold_time_s_ref())),
       gracefulRestartTime_(std::chrono::seconds(
-          config->getSparkConfig().get_graceful_restart_time_s())),
+          *config->getSparkConfig().graceful_restart_time_s_ref())),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       enableFloodOptimization_(config->isFloodOptimizationEnabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kOpenrCtrlThriftPort_(
-          config->getThriftServerConfig().get_openr_ctrl_port()),
+          *config->getThriftServerConfig().openr_ctrl_port_ref()),
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
       enableOrderedAdjPublication_(
-          config->getConfig().get_enable_ordered_adj_publication()),
+          *config->getConfig().enable_ordered_adj_publication_ref()),
       config_(std::move(config)) {
   CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
       << "Keep-alive-time must be less than hold-time.";
@@ -783,7 +783,7 @@ Spark::processRttChange(
   sparkNeighbor.rtt = roundedNewRtt;
 
   // notify the rtt changes if use the rtt metric
-  if (config_->getLinkMonitorConfig().get_use_rtt_metric()) {
+  if (*config_->getLinkMonitorConfig().use_rtt_metric_ref()) {
     XLOG(DBG1) << fmt::format(
         "[SparkHelloMsg] RTT for neighbor:{} has changed from {}us to {}us over iface: {}",
         neighborName,
@@ -1704,7 +1704,7 @@ Spark::processHandshakeMsg(
   if (neighbor.area != *handshakeMsg.area_ref() ||
       myDomainName_ != neighbor.domainName) {
     bool mismatch = true;
-    if (handshakeMsg.get_area() == Constants::kDefaultArea.toString() ||
+    if (*handshakeMsg.area_ref() == Constants::kDefaultArea.toString() ||
         neighbor.area == Constants::kDefaultArea.toString()) {
       fb303::fbData->addStatValue(
           "spark.hello.default_area_rcvd", 1, fb303::SUM);
@@ -1719,7 +1719,7 @@ Spark::processHandshakeMsg(
             "[SparkHandshakeMsg] Neighbor: {} is under migration from area {} to {}.",
             neighbor.nodeName,
             neighbor.area,
-            handshakeMsg.get_area());
+            *handshakeMsg.area_ref());
       }
     }
     if (mismatch) {
@@ -1727,7 +1727,7 @@ Spark::processHandshakeMsg(
           "[SparkHandshakeMsg] Inconsistent areaId deduced. "
           "Neighbor's areaId is {} and my areaId from remote is {}. Neighbor's "
           "domainName is {} and mine is {}.",
-          handshakeMsg.get_area(),
+          *handshakeMsg.area_ref(),
           neighbor.area,
           neighbor.domainName,
           myDomainName_);
@@ -1775,7 +1775,7 @@ Spark::processHeartbeatMsg(
              << ifName << ", remote sequenceId: " << remoteSeqNum;
 
   // sanity check for SparkHandshakeMsg
-  auto const& neighborName = heartbeatMsg.get_nodeName();
+  auto const& neighborName = *heartbeatMsg.nodeName_ref();
   auto sanityCheckResult = sanityCheckMsg(neighborName, ifName);
   if (PacketValidationResult::SUCCESS != sanityCheckResult) {
     return;

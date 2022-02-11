@@ -602,8 +602,8 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
   LOG(INFO) << fmt::format("Kill and restart {}", nodeName2_);
 
   auto startTime = std::chrono::steady_clock::now();
-  auto holdTime = config1_->getSparkConfig().get_hold_time_s();
-  auto grTime = config1_->getSparkConfig().get_graceful_restart_time_s();
+  auto holdTime = *config1_->getSparkConfig().hold_time_s_ref();
+  auto grTime = *config1_->getSparkConfig().graceful_restart_time_s_ref();
   node2_.reset();
 
   // Since node2 doesn't come back, will lose adj and declare DOWN
@@ -635,7 +635,7 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
   // record time for future comparison
   auto startTime = std::chrono::steady_clock::now();
 
-  auto fastInitTime = config1_->getSparkConfig().get_fastinit_hello_time_ms();
+  auto fastInitTime = *config1_->getSparkConfig().fastinit_hello_time_ms_ref();
   auto initialNbrHandlingTime =
       (3 * std::chrono::milliseconds(fastInitTime) +
        std::chrono::milliseconds(fastInitTime));
@@ -682,7 +682,7 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
   // since the removal of intf happens instantly. down event should
   // be reported ASAP.
   auto waitTime = std::chrono::seconds(
-      config1_->getSparkConfig().get_graceful_restart_time_s());
+      *config1_->getSparkConfig().graceful_restart_time_s_ref());
 
   EXPECT_FALSE(
       node1_->waitForEvents(NB_DOWN, waitTime, waitTime * 2).has_value());
@@ -700,11 +700,11 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
 
   auto startTime = std::chrono::steady_clock::now();
   auto waitTime = std::chrono::seconds(
-      config1_->getSparkConfig().get_graceful_restart_time_s());
+      *config1_->getSparkConfig().graceful_restart_time_s_ref());
   auto holdTime =
-      std::chrono::seconds(config1_->getSparkConfig().get_hold_time_s());
+      std::chrono::seconds(*config1_->getSparkConfig().hold_time_s_ref());
   auto keepAliveTime =
-      std::chrono::seconds(config1_->getSparkConfig().get_keepalive_time_s());
+      std::chrono::seconds(*config1_->getSparkConfig().keepalive_time_s_ref());
 
   // tell node1 to remove interface to mimick request from linkMonitor
   node1_->updateInterfaceDb({});
@@ -1099,7 +1099,7 @@ TEST_F(SparkFixture, FastInitTest) {
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
     EXPECT_GE(
-        6 * config1->getSparkConfig().get_fastinit_hello_time_ms(),
+        6 * *config1->getSparkConfig().fastinit_hello_time_ms_ref(),
         duration.count());
   }
 
@@ -1126,7 +1126,7 @@ TEST_F(SparkFixture, FastInitTest) {
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
     EXPECT_GE(
-        6 * config2->getSparkConfig().get_fastinit_hello_time_ms(),
+        6 * *config2->getSparkConfig().fastinit_hello_time_ms_ref(),
         duration.count());
   }
 }

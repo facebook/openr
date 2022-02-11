@@ -5,15 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "PersistentStore.h"
-
-#include <chrono>
-
 #include <folly/FileUtil.h>
 #include <folly/io/IOBuf.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Util.h>
+#include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
 
 using std::exception;
@@ -30,7 +27,7 @@ PersistentStore::PersistentStore(
     std::shared_ptr<const Config> config,
     bool dryrun,
     bool periodicallySaveToDisk)
-    : storageFilePath_(config->getConfig().get_persistent_config_store_path()),
+    : storageFilePath_(*config->getConfig().persistent_config_store_path_ref()),
       dryrun_(dryrun) {
   if (periodicallySaveToDisk) {
     // Create timer and backoff mechanism only if backoff is requested

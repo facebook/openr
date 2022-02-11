@@ -127,13 +127,13 @@ class PMToKvStoreBMTestFixture {
 
       if (auto* pub = std::get_if<thrift::Publication>(&thriftPub.value())) {
         if (not checkDeletion) {
-          total += pub->get_keyVals().size();
+          total += pub->keyVals_ref()->size();
         } else {
-          for (const auto& [key, tVal] : pub->get_keyVals()) {
+          for (const auto& [key, tVal] : *pub->keyVals_ref()) {
             if (auto value = tVal.value_ref()) {
               const auto prefixDb =
                   readThriftObjStr<thrift::PrefixDatabase>(*value, serializer_);
-              total += (prefixDb.get_deletePrefix() ? 1 : 0);
+              total += (*prefixDb.deletePrefix_ref() ? 1 : 0);
             }
           }
         }

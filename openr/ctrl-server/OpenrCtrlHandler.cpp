@@ -199,7 +199,7 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
 
   // check if any of KeyVal has 'adj' update
   bool isAdjChanged = false;
-  for (auto& [key, val] : pub.get_keyVals()) {
+  for (auto& [key, val] : *pub.keyVals_ref()) {
     // check if we have any value update.
     // Ttl refreshing won't update any value.
     if (!val.value_ref().has_value()) {
@@ -218,7 +218,7 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
     // thrift::Publication contains "adj:*" key change.
     // Clean ALL pending promises
     longPollReqs_.withWLock([&](auto& longPollReqs) {
-      for (auto& [_, req] : longPollReqs[pub.get_area()]) {
+      for (auto& [_, req] : longPollReqs[*pub.area_ref()]) {
         auto& p = req.first; // get the promise
         p.setValue(true);
       }
@@ -228,7 +228,7 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
     longPollReqs_.withWLock([&](auto& longPollReqs) {
       auto now = getUnixTimeStampMs();
       std::vector<int64_t> reqsToClean;
-      for (auto& [clientId, req] : longPollReqs[pub.get_area()]) {
+      for (auto& [clientId, req] : longPollReqs[*pub.area_ref()]) {
         auto& p = req.first;
         auto& timeStamp = req.second;
         if (now - timeStamp >= Constants::kLongPollReqHoldTime.count()) {
@@ -242,7 +242,7 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
 
       // cleanup expired requests since no ADJ change observed
       for (auto& clientId : reqsToClean) {
-        longPollReqs[pub.get_area()].erase(clientId);
+        longPollReqs[*pub.area_ref()].erase(clientId);
       }
     });
   }
@@ -643,7 +643,7 @@ OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
                          adjDbs) mutable {
         auto res = std::make_unique<thrift::AdjDbs>();
         for (auto& db : *adjDbs) {
-          auto name = db.get_thisNodeName();
+          auto name = *db.thisNodeName_ref();
           res->emplace(std::move(name), std::move(db));
         }
         return res;
@@ -674,9 +674,9 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
                          routes) mutable {
         auto res = std::make_unique<thrift::PrefixDbs>();
         for (auto const& routeDetail : *routes) {
-          for (auto const& route : routeDetail.get_routes()) {
-            (*res)[route.get_key().get_node()].prefixEntries_ref()->push_back(
-                route.get_route());
+          for (auto const& route : *routeDetail.routes_ref()) {
+            (*res)[*route.key_ref()->node_ref()].prefixEntries_ref()->push_back(
+                *route.route_ref());
           }
         }
         for (auto& [name, db] : *res) {

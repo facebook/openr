@@ -51,8 +51,8 @@ Fib::Fib(
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
-    : myNodeName_(config->getConfig().get_node_name()),
-      thriftPort_(config->getConfig().get_fib_port()),
+    : myNodeName_(*config->getConfig().node_name_ref()),
+      thriftPort_(*config->getConfig().fib_port_ref()),
       dryrun_(config->getConfig().dryrun_ref().value_or(false)),
       enableSegmentRouting_(
           config->getConfig().enable_segment_routing_ref().value_or(false)),

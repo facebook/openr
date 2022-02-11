@@ -321,7 +321,7 @@ KvStore::processRequestMsg(
 
   try {
     auto& kvStoreDb =
-        getAreaDbOrThrow(thriftRequest.get_area(), "processRequestMsg");
+        getAreaDbOrThrow(*thriftRequest.area_ref(), "processRequestMsg");
     XLOG(DBG2) << "Request received for area " << kvStoreDb.getAreaId();
     auto response = kvStoreDb.processRequestMsgHelper(requestId, thriftRequest);
     if (response.hasValue()) {
@@ -330,7 +330,7 @@ KvStore::processRequestMsg(
     }
     return response;
   } catch (thrift::KvStoreError const& e) {
-    return folly::makeUnexpected(fbzmq::Error(0, e.get_message()));
+    return folly::makeUnexpected(fbzmq::Error(0, *e.message_ref()));
   }
   return {folly::makeUnexpected(fbzmq::Error())};
 }
@@ -466,7 +466,7 @@ KvStore::semifuture_dumpKvStoreKeys(
             area,
             kvStoreDb.getKeyValueMap(),
             keyPrefixMatch,
-            keyDumpParams.get_doNotPublishValue());
+            *keyDumpParams.doNotPublishValue_ref());
         if (keyDumpParams.keyValHashes_ref().has_value()) {
           thriftPub = dumpDifference(
               area,
@@ -897,7 +897,7 @@ std::vector<std::string>
 KvStoreDb::getPeersByState(thrift::KvStorePeerState state) {
   std::vector<std::string> res;
   for (auto const& [_, peer] : thriftPeers_) {
-    if (peer.peerSpec.get_state() == state) {
+    if (*peer.peerSpec.state_ref() == state) {
       res.emplace_back(peer.nodeName);
     }
   }
@@ -926,7 +926,7 @@ std::optional<thrift::KvStorePeerState>
 KvStoreDb::getCurrentState(std::string const& peerName) {
   auto thriftPeerIt = thriftPeers_.find(peerName);
   if (thriftPeerIt != thriftPeers_.end()) {
-    return thriftPeerIt->second.peerSpec.get_state();
+    return *thriftPeerIt->second.peerSpec.state_ref();
   }
   return std::nullopt;
 }
@@ -1017,15 +1017,15 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
     XLOG(INFO) << fmt::format(
         "{} [Thrift Sync] Creating thrift client with addr: {}, port: {}, peerName: {}",
         areaTag,
-        peerSpec.get_peerAddr(),
-        peerSpec.get_ctrlPort(),
+        *peerSpec.peerAddr_ref(),
+        *peerSpec.ctrlPort_ref(),
         nodeName);
 
     // TODO: migrate to secure thrift connection
     auto thriftClient = getOpenrCtrlPlainTextClient(
         *(evb->getEvb()),
-        folly::IPAddress(peerSpec.get_peerAddr()), /* v6LinkLocal */
-        peerSpec.get_ctrlPort(), /* port to establish TCP connection */
+        folly::IPAddress(*peerSpec.peerAddr_ref()), /* v6LinkLocal */
+        *peerSpec.ctrlPort_ref(), /* port to establish TCP connection */
         Constants::kServiceConnTimeout, /* client connection timeout */
         Constants::kServiceProcTimeout, /* request processing timeout */
         folly::AsyncSocket::anyAddress(), /* bindAddress */
@@ -1040,8 +1040,8 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
     XLOG(ERR) << fmt::format(
         "{} [Thrift Sync] Failed creating thrift client with addr: {}, port: {}, peerName: {}. Exception: {}",
         areaTag,
-        peerSpec.get_peerAddr(),
-        peerSpec.get_ctrlPort(),
+        *peerSpec.peerAddr_ref(),
+        *peerSpec.ctrlPort_ref(),
         nodeName,
         folly::exceptionStr(e));
 
@@ -1273,7 +1273,7 @@ KvStoreDb::setSelfOriginatedKey(
   if (not version) {
     auto it = kvStore_.find(key);
     if (it != kvStore_.end()) {
-      thriftValue.version_ref() = it->second.get_version() + 1;
+      thriftValue.version_ref() = *it->second.version_ref() + 1;
     } else {
       thriftValue.version_ref() = 1;
     }
@@ -1366,7 +1366,7 @@ KvStoreDb::persistSelfOriginatedKey(
   // ATTN: When ttl changes but value doesn't, we should advertise ttl
   // immediately so that new ttl is in effect.
   const bool hasTtlChanged =
-      (kvParams_.keyTtl.count() != thriftValue.get_ttl()) ? true : false;
+      (kvParams_.keyTtl.count() != *thriftValue.ttl_ref()) ? true : false;
   thriftValue.ttl_ref() = kvParams_.keyTtl.count();
 
   // Cache it in selfOriginatedKeyVals. Override the existing one.
@@ -1727,7 +1727,7 @@ KvStoreDb::requestThriftPeerSync() {
     auto& peerSpec = thriftPeer.peerSpec; // thrift::PeerSpec
 
     // ignore peers in state other than IDLE
-    if (thriftPeer.peerSpec.get_state() != thrift::KvStorePeerState::IDLE) {
+    if (*thriftPeer.peerSpec.state_ref() != thrift::KvStorePeerState::IDLE) {
       continue;
     }
 
@@ -1746,10 +1746,10 @@ KvStoreDb::requestThriftPeerSync() {
     }
 
     // state transition
-    auto oldState = thriftPeer.peerSpec.get_state();
+    auto oldState = *thriftPeer.peerSpec.state_ref();
     thriftPeer.peerSpec.state_ref() =
         getNextState(oldState, KvStorePeerEvent::PEER_ADD);
-    logStateTransition(peerName, oldState, thriftPeer.peerSpec.get_state());
+    logStateTransition(peerName, oldState, *thriftPeer.peerSpec.state_ref());
 
     // mark peer from IDLE -> SYNCING
     numThriftPeersInSync += 1;
@@ -1770,8 +1770,9 @@ KvStoreDb::requestThriftPeerSync() {
     KvStoreFilters kvFilters(
         std::vector<std::string>{}, /* keyPrefixList */
         std::set<std::string>{} /* originator */);
-    params.keyValHashes_ref() =
-        dumpHashWithFilters(area_, kvStore_, kvFilters).get_keyVals();
+    // ATTN: dump hashes instead of full key-val pairs with values
+    auto thriftPub = dumpHashWithFilters(area_, kvStore_, kvFilters);
+    params.keyValHashes_ref() = *thriftPub.keyVals_ref();
     params.senderId_ref() = nodeId;
 
     // record telemetry for initial full-sync
@@ -1872,7 +1873,7 @@ KvStoreDb::processThriftSuccess(
   //       response and will rely on the new full-sync response to
   //       promote the state.
   auto& peer = thriftPeers_.at(peerName);
-  if (peer.peerSpec.get_state() == thrift::KvStorePeerState::IDLE) {
+  if (*peer.peerSpec.state_ref() == thrift::KvStorePeerState::IDLE) {
     XLOG(WARNING)
         << AreaTag()
         << fmt::format(
@@ -1913,10 +1914,10 @@ KvStoreDb::processThriftSuccess(
              timeDelta.count());
 
   // State transition
-  auto oldState = peer.peerSpec.get_state();
+  auto oldState = *peer.peerSpec.state_ref();
   peer.peerSpec.state_ref() =
       getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
-  logStateTransition(peerName, oldState, peer.peerSpec.get_state());
+  logStateTransition(peerName, oldState, *peer.peerSpec.state_ref());
 
   // Notify subscribers of KVSTORE_SYNC event
   kvParams_.kvStoreEventsQueue.push(KvStoreSyncEvent(peerName, area_));
@@ -1953,7 +1954,7 @@ KvStoreDb::processInitializationEvent() {
   int initialSyncSuccessCnt = 0;
   int initialSyncFailureCnt = 0;
   for (const auto& [peerName, peerStore] : thriftPeers_) {
-    if (peerStore.peerSpec.get_state() ==
+    if (*peerStore.peerSpec.state_ref() ==
         thrift::KvStorePeerState::INITIALIZED) {
       // Achieved INITIALIZED state.
       ++initialSyncSuccessCnt;
@@ -2008,11 +2009,11 @@ KvStoreDb::processThriftFailure(
   peer.client.reset();
 
   // state transition
-  auto oldState = peer.peerSpec.get_state();
+  auto oldState = *peer.peerSpec.state_ref();
   peer.peerSpec.state_ref() =
       getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR);
   ++peer.numThriftApiErrors;
-  logStateTransition(peerName, oldState, peer.peerSpec.get_state());
+  logStateTransition(peerName, oldState, *peer.peerSpec.state_ref());
 
   // Thrift error is treated as a completion signal of syncing with peer. Check
   // whether initial sync is completed.
@@ -2033,8 +2034,8 @@ KvStoreDb::addThriftPeers(
   // kvstore external sync over thrift port of knob enabled
   for (auto const& [peerName, newPeerSpec] : peers) {
     auto const& supportFloodOptimization =
-        newPeerSpec.get_supportFloodOptimization();
-    auto const& peerAddr = newPeerSpec.get_peerAddr();
+        *newPeerSpec.supportFloodOptimization_ref();
+    auto const& peerAddr = *newPeerSpec.peerAddr_ref();
 
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
@@ -2054,7 +2055,7 @@ KvStoreDb::addThriftPeers(
         XLOG(INFO) << AreaTag()
                    << fmt::format(
                           "[Peer Update] peerAddr is updated from: {} to: {}",
-                          oldPeerSpec.get_peerAddr(),
+                          *oldPeerSpec.peerAddr_ref(),
                           peerAddr);
       } else {
         // case2. new peer came up (previsously shut down ungracefully)
@@ -2066,7 +2067,7 @@ KvStoreDb::addThriftPeers(
       }
       logStateTransition(
           peerName,
-          peerIter->second.peerSpec.get_state(),
+          *peerIter->second.peerSpec.state_ref(),
           thrift::KvStorePeerState::IDLE);
 
       peerIter->second.peerSpec = newPeerSpec; // update peerSpec
@@ -2133,7 +2134,7 @@ KvStoreDb::addPeers(
           peerName,
           peerAddCounter_);
       const auto& supportFloodOptimization =
-          newPeerSpec.get_supportFloodOptimization();
+          *newPeerSpec.supportFloodOptimization_ref();
 
       try {
         auto it = peers_.find(peerName);
@@ -2158,7 +2159,7 @@ KvStoreDb::addPeers(
             XLOG(INFO) << AreaTag()
                        << fmt::format(
                               "[ZMQ] Disconnecting from {} with id {}",
-                              peerSpec.get_cmdUrl(),
+                              *peerSpec.cmdUrl_ref(),
                               it->second.second);
             const auto ret = peerSyncSock_.disconnect(
                 fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
@@ -2166,7 +2167,7 @@ KvStoreDb::addPeers(
               XLOG(ERR) << AreaTag()
                         << fmt::format(
                                "[ZMQ] Error Disconnecting to URL {}. Error: {}",
-                               peerSpec.get_cmdUrl(),
+                               *peerSpec.cmdUrl_ref(),
                                ret.error().errString);
             }
             it->second.second = newPeerCmdId;
@@ -2196,7 +2197,7 @@ KvStoreDb::addPeers(
           XLOG(INFO) << AreaTag()
                      << fmt::format(
                             "[ZMQ] Connecting sync channel to {} with id: {}",
-                            newPeerSpec.get_cmdUrl(),
+                            *newPeerSpec.cmdUrl_ref(),
                             newPeerCmdId);
           auto const optStatus = peerSyncSock_.setSockOpt(
               ZMQ_CONNECT_RID, newPeerCmdId.data(), newPeerCmdId.size());
@@ -2212,7 +2213,7 @@ KvStoreDb::addPeers(
             XLOG(ERR) << AreaTag()
                       << fmt::format(
                              "[ZMQ] Error connecting to URL {}",
-                             newPeerSpec.get_cmdUrl());
+                             *newPeerSpec.cmdUrl_ref());
           }
         }
 
@@ -2280,8 +2281,8 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
         << fmt::format(
                "[Peer Delete] {} is detached from peerAddr: {}, supportFloodOptimization: {}",
                peerName,
-               peerSpec.get_peerAddr(),
-               peerSpec.get_supportFloodOptimization());
+               *peerSpec.peerAddr_ref(),
+               *peerSpec.supportFloodOptimization_ref());
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
@@ -2312,7 +2313,7 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
       }
 
       const auto& peerSpec = it->second.first;
-      if (peerSpec.get_supportFloodOptimization()) {
+      if (*peerSpec.supportFloodOptimization_ref()) {
         dualPeersToRemove.emplace_back(peerName);
       }
 
@@ -2320,15 +2321,15 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
           << AreaTag()
           << fmt::format(
                  "[ZMQ] Detaching from: {}, support-flood-optimization: {}",
-                 peerSpec.get_cmdUrl(),
-                 peerSpec.get_supportFloodOptimization());
+                 *peerSpec.cmdUrl_ref(),
+                 *peerSpec.supportFloodOptimization_ref());
       auto syncRes =
           peerSyncSock_.disconnect(fbzmq::SocketUrl{*peerSpec.cmdUrl_ref()});
       if (syncRes.hasError()) {
         XLOG(ERR) << AreaTag()
                   << fmt::format(
                          "[ZMQ] Failed to detach from {}. Error: {}",
-                         peerSpec.get_cmdUrl(),
+                         *peerSpec.cmdUrl_ref(),
                          syncRes.error().errString);
       }
       peers_.erase(it);
@@ -2671,7 +2672,7 @@ KvStoreDb::processNexthopChange(
                *newNh);
 
     logStateTransition(
-        *newNh, peerSpec.get_state(), thrift::KvStorePeerState::IDLE);
+        *newNh, *peerSpec.state_ref(), thrift::KvStorePeerState::IDLE);
 
     peerSpec.state_ref() =
         thrift::KvStorePeerState::IDLE; // set IDLE to trigger full-sync
@@ -2894,7 +2895,7 @@ KvStoreDb::finalizeFullSync(
   }
 
   auto& thriftPeer = peerIt->second;
-  if (thriftPeer.peerSpec.get_state() == thrift::KvStorePeerState::IDLE or
+  if (*thriftPeer.peerSpec.state_ref() == thrift::KvStorePeerState::IDLE or
       (not thriftPeer.client)) {
     // peer in thriftPeers collection can still be in IDLE state.
     // Skip final full-sync with those peers.
@@ -2969,7 +2970,7 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
   std::unordered_set<std::string> floodPeers;
   for (const auto& [peerName, peer] : thriftPeers_) {
     if (floodToAll or sptPeers.count(peerName) != 0 or
-        (not peer.peerSpec.get_supportFloodOptimization())) {
+        (not *peer.peerSpec.supportFloodOptimization_ref())) {
       floodPeers.emplace(peerName);
     }
   }
@@ -3036,7 +3037,7 @@ KvStoreDb::floodPublication(
   }
 
   // Key collection to be flooded
-  auto keysToUpdate = folly::gen::from(publication.get_keyVals()) |
+  auto keysToUpdate = folly::gen::from(*publication.keyVals_ref()) |
       folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
 
   XLOG(DBG2) << AreaTag()
@@ -3080,13 +3081,13 @@ KvStoreDb::floodPublication(
     }
 
     auto& thriftPeer = peerIt->second;
-    if (thriftPeer.peerSpec.get_state() !=
+    if (*thriftPeer.peerSpec.state_ref() !=
             thrift::KvStorePeerState::INITIALIZED or
         (not thriftPeer.client)) {
       // Skip flooding to those peers if peer has NOT finished
       // initial sync(i.e. promoted to `INITIALIZED`)
       // store key for flooding after intialized
-      for (auto const& [key, _] : params.get_keyVals()) {
+      for (auto const& [key, _] : *params.keyVals_ref()) {
         thriftPeer.pendingKeysDuringInitialization.insert(key);
       }
       continue;
@@ -3149,7 +3150,7 @@ KvStoreDb::processPublicationForSelfOriginatedKey(
 
   // go through received publications to refresh self-originated key-vals if
   // necessary
-  for (auto const& [key, rcvdValue] : publication.get_keyVals()) {
+  for (auto const& [key, rcvdValue] : *publication.keyVals_ref()) {
     if (not rcvdValue.value_ref().has_value()) {
       // ignore TTL update
       continue;
@@ -3168,8 +3169,8 @@ KvStoreDb::processPublicationForSelfOriginatedKey(
     // case-2: currValue < rcvdValue
     // case-3: currValue == rcvdValue
     auto& currValue = it->second.value;
-    const auto& currVersion = currValue.get_version();
-    const auto& rcvdVersion = rcvdValue.get_version();
+    const auto& currVersion = *currValue.version_ref();
+    const auto& rcvdVersion = *rcvdValue.version_ref();
     bool shouldOverride{false};
 
     if (currVersion > rcvdVersion) {
@@ -3197,7 +3198,7 @@ KvStoreDb::processPublicationForSelfOriginatedKey(
     //  - honor the ttl from local value;
     if (shouldOverride) {
       currValue.ttlVersion_ref() = 0;
-      currValue.version_ref() = rcvdValue.get_version() + 1;
+      currValue.version_ref() = *rcvdValue.version_ref() + 1;
       keysToAdvertise_.insert(key);
 
       XLOG(INFO)
@@ -3205,14 +3206,14 @@ KvStoreDb::processPublicationForSelfOriginatedKey(
           << fmt::format(
                  "Override version for [key: {}, v: {}, originatorId: {}]",
                  key,
-                 rcvdValue.get_version(),
-                 currValue.get_originatorId());
+                 *rcvdValue.version_ref(),
+                 *currValue.originatorId_ref());
     } else {
       // update local ttlVersion if received higher ttlVersion.
       // NOTE: ttlVersion will be bumped up before ttl update.
       // It works fine to just update to latest ttlVersion, instead of +1.
-      if (currValue.get_ttlVersion() < rcvdValue.get_ttlVersion()) {
-        currValue.ttlVersion_ref() = rcvdValue.get_ttlVersion();
+      if (*currValue.ttlVersion_ref() < *rcvdValue.ttlVersion_ref()) {
+        currValue.ttlVersion_ref() = *rcvdValue.ttlVersion_ref();
       }
     }
   }

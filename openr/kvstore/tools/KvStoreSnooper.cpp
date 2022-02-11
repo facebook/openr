@@ -43,9 +43,9 @@ main(int argc, char** argv) {
       areaKeyVals;
   XLOG(INFO) << "Stream is connected, updates will follow";
   for (auto const& pub : response.response) {
-    XLOG(INFO) << "Received " << pub.get_keyVals().size()
-               << " entries in initial dump for area: " << pub.get_area();
-    areaKeyVals[pub.get_area()] = pub.get_keyVals();
+    XLOG(INFO) << "Received " << pub.keyVals_ref()->size()
+               << " entries in initial dump for area: " << *pub.area_ref();
+    areaKeyVals[*pub.area_ref()] = *pub.keyVals_ref();
   }
   XLOG(INFO) << "";
 
@@ -68,7 +68,7 @@ main(int argc, char** argv) {
 
                 // Print updates
                 auto updatedKeyVals = openr::mergeKeyValues(
-                    areaKeyVals.at(pub.get_area()), *pub.keyVals_ref());
+                    areaKeyVals.at(*pub.area_ref()), *pub.keyVals_ref());
                 for (auto& [key, val] : updatedKeyVals) {
                   std::cout
                       << (val.value_ref().has_value() ? "Updated" : "Refreshed")

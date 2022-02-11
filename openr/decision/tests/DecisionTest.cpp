@@ -431,7 +431,7 @@ getPrefixDbForNode(
   filter.areaName_ref() = area;
   for (auto const& routeDetail : state.getReceivedRoutesFiltered(filter)) {
     prefixDb.prefixEntries_ref()->push_back(
-        routeDetail.get_routes().at(0).get_route());
+        *routeDetail.routes_ref()->at(0).route_ref());
   }
   return prefixDb;
 }
@@ -441,17 +441,17 @@ updatePrefixDatabase(
     PrefixState& state,
     thrift::PrefixDatabase const& prefixDb,
     std::string const& area = kTestingAreaName) {
-  auto const& nodeName = prefixDb.get_thisNodeName();
+  auto const& nodeName = *prefixDb.thisNodeName_ref();
 
   std::unordered_set<PrefixKey> oldKeys, newKeys;
   auto oldDb = getPrefixDbForNode(state, prefixDb.get_thisNodeName(), area);
-  for (auto const& entry : oldDb.get_prefixEntries()) {
-    oldKeys.emplace(nodeName, toIPNetwork(entry.get_prefix()), area);
+  for (auto const& entry : *oldDb.prefixEntries_ref()) {
+    oldKeys.emplace(nodeName, toIPNetwork(*entry.prefix_ref()), area);
   }
   std::unordered_set<folly::CIDRNetwork> changed;
 
-  for (auto const& entry : prefixDb.get_prefixEntries()) {
-    PrefixKey key(nodeName, toIPNetwork(entry.get_prefix()), area);
+  for (auto const& entry : *prefixDb.prefixEntries_ref()) {
+    PrefixKey key(nodeName, toIPNetwork(*entry.prefix_ref()), area);
     changed.merge(state.updatePrefix(key, entry));
     newKeys.insert(std::move(key));
   }
@@ -2782,8 +2782,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   auto& entriesVec = *prefixDBOne.prefixEntries_ref();
   for (auto entryIter = entriesVec.begin(); entryIter != entriesVec.end();
        ++entryIter) {
-    if ((!v4Enabled && entryIter->get_prefix() == bgpAddr1) ||
-        (v4Enabled && entryIter->get_prefix() == bgpAddr1V4)) {
+    if ((!v4Enabled && *entryIter->prefix_ref() == bgpAddr1) ||
+        (v4Enabled && *entryIter->prefix_ref() == bgpAddr1V4)) {
       entryIter->mv_ref() = mv1;
       prefixDBTwo.prefixEntries_ref()->push_back(*entryIter);
       entriesVec.erase(entryIter);
@@ -2972,8 +2972,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
   auto& entriesVec = *prefixDBOne.prefixEntries_ref();
   for (auto entryIter = entriesVec.begin(); entryIter != entriesVec.end();
        ++entryIter) {
-    if ((!v4Enabled && entryIter->get_prefix() == bgpAddr1) ||
-        (v4Enabled && entryIter->get_prefix() == bgpAddr1V4)) {
+    if ((!v4Enabled and *entryIter->prefix_ref() == bgpAddr1) ||
+        (v4Enabled and *entryIter->prefix_ref() == bgpAddr1V4)) {
       entryIter->mv_ref() = mv1;
       prefixDBTwo.prefixEntries_ref()->push_back(*entryIter);
       entriesVec.erase(entryIter);
@@ -4126,7 +4126,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   auto& entriesVec = *prefixDBOne.prefixEntries_ref();
   for (auto entryIter = entriesVec.begin(); entryIter != entriesVec.end();
        ++entryIter) {
-    if (entryIter->get_prefix() == addr1) {
+    if (*entryIter->prefix_ref() == addr1) {
       entryIter->mv_ref() = mv1;
       prefixDBTwo.prefixEntries_ref()->push_back(*entryIter);
       entriesVec.erase(entryIter);
@@ -6205,7 +6205,7 @@ TEST(Decision, RibPolicyFeatureKnob) {
  */
 TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
   auto saveRibPolicyMaxMs =
-      config->getConfig().get_decision_config().get_save_rib_policy_max_ms();
+      *config->getConfig().decision_config_ref()->save_rib_policy_max_ms_ref();
 
   // Get policy test. Expect failure
   EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
@@ -6319,7 +6319,7 @@ TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
  */
 TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
   auto saveRibPolicyMaxMs =
-      config->getConfig().get_decision_config().get_save_rib_policy_max_ms();
+      *config->getConfig().decision_config_ref()->save_rib_policy_max_ms_ref();
 
   // Get policy test. Expect failure
   EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);

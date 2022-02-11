@@ -373,15 +373,15 @@ class LinkMonitorTestFixture : public testing::Test {
 
         if (it->second.node_segment_label_range_ref().has_value()) {
           labelRange.start_label_ref() =
-              *it->second.get_node_segment_label_range()->start_label_ref();
+              *it->second.node_segment_label_range_ref()->start_label_ref();
           labelRange.end_label_ref() =
-              *it->second.get_node_segment_label_range()->end_label_ref();
+              *it->second.node_segment_label_range_ref()->end_label_ref();
           srNodeLabel.node_segment_label_range_ref() = labelRange;
         }
 
         if (it->second.node_segment_label_ref().has_value()) {
           srNodeLabel.node_segment_label_ref() =
-              *it->second.get_node_segment_label();
+              *it->second.node_segment_label_ref();
         }
         cfg.area_sr_node_label_ref() = srNodeLabel;
       }
@@ -680,7 +680,7 @@ TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
   // Check that key was correctly persisted.
   auto maybeValue = getPublicationValueForKey(nodeKey);
   EXPECT_TRUE(maybeValue.has_value());
-  EXPECT_EQ(maybeValue.value().get_version(), 1);
+  EXPECT_EQ(*maybeValue.value().version_ref(), 1);
   EXPECT_EQ(*maybeValue.value().value_ref(), adjacencies);
 }
 
@@ -1109,7 +1109,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
     // honor flag.
     auto thriftAdjDbs = linkMonitor->semifuture_getAdjacencies().get();
     EXPECT_EQ(1, thriftAdjDbs->size());
-    EXPECT_EQ(0, thriftAdjDbs->at(0).get_nodeLabel());
+    EXPECT_EQ(0, *thriftAdjDbs->at(0).nodeLabel_ref());
   }
 }
 
@@ -2150,13 +2150,13 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
 
       auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
           val.value_ref().value(), serializer);
-      if (pub.get_area() == static_cast<std::string>(kTestingAreaName)) {
+      if (*pub.area_ref() == static_cast<std::string>(kTestingAreaName)) {
         // kTestingAreaName node segment label
-        label2NodeMap1[adjDb.get_nodeLabel()] = adjDb.get_thisNodeName();
+        label2NodeMap1[*adjDb.nodeLabel_ref()] = *adjDb.thisNodeName_ref();
       } else if (
-          pub.get_area() == static_cast<std::string>(kTestingSpineAreaName)) {
+          pub.area_ref() == static_cast<std::string>(kTestingSpineAreaName)) {
         // kTestingSpineAreaName node segment label
-        label2NodeMap2[adjDb.get_nodeLabel()] = adjDb.get_thisNodeName();
+        label2NodeMap2[*adjDb.nodeLabel_ref()] = *adjDb.thisNodeName_ref();
       } else {
         unknownAreaPublications++;
       }
@@ -2429,7 +2429,7 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore received peer event
-    checkPeerDump(adj_2_1.get_otherNodeName(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
   }
 }
 

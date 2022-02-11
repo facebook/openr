@@ -64,7 +64,7 @@ sendRecvInitialUpdate(
         key,
         createThriftValue(
             1,
-            adjDb.get_thisNodeName(),
+            *adjDb.thisNodeName_ref(),
             writeThriftObjStr(std::move(adjDb), serializer)));
   }
   for (auto& [key, prefixDb] : prefixDbs) {
@@ -73,7 +73,7 @@ sendRecvInitialUpdate(
         key,
         createThriftValue(
             1,
-            prefixDb.get_thisNodeName(),
+            *prefixDb.thisNodeName_ref(),
             writeThriftObjStr(std::move(prefixDb), serializer)));
   }
 

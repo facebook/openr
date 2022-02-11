@@ -35,7 +35,7 @@ PrefixAllocator::PrefixAllocator(
     : myNodeName_(config->getNodeName()),
       syncInterval_(syncInterval),
       enableKvRequestQueue_(
-          config->getConfig().get_enable_kvstore_request_queue()),
+          *config->getConfig().enable_kvstore_request_queue_ref()),
       setLoopbackAddress_(
           *config->getPrefixAllocationConfig().set_loopback_addr_ref()),
       overrideGlobalAddress_(

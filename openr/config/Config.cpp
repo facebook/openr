@@ -125,7 +125,7 @@ Config::checkPrependLabelConfig(
           "v4: prepend label range [{}, {}] is invalid for area id {}",
           *v4LblRange.start_label_ref(),
           *v4LblRange.end_label_ref(),
-          areaConf.get_area_id()));
+          *areaConf.area_id_ref()));
     }
 
     const auto& v6LblRange = *areaConf.prepend_label_ranges_ref()->v6_ref();
@@ -134,7 +134,7 @@ Config::checkPrependLabelConfig(
           "v6: prepend label range [{}, {}] is invalid for area id {}",
           *v6LblRange.start_label_ref(),
           *v6LblRange.end_label_ref(),
-          areaConf.get_area_id()));
+          *areaConf.area_id_ref()));
     }
   }
 }
@@ -149,7 +149,7 @@ Config::checkAdjacencyLabelConfig(
       if (not areaConf.sr_adj_label_ref()->adj_label_range_ref().has_value()) {
         throw std::invalid_argument(fmt::format(
             "label range for adjacency labels is not configured for area id {}",
-            areaConf.get_area_id()));
+            *areaConf.area_id_ref()));
       } else if (not isLabelRangeValid(
                      *areaConf.sr_adj_label_ref()->adj_label_range_ref())) {
         const auto& label_range =
@@ -158,7 +158,7 @@ Config::checkAdjacencyLabelConfig(
             "label range [{}, {}] for adjacency labels is invalid for area id {}",
             *label_range.start_label_ref(),
             *label_range.end_label_ref(),
-            areaConf.get_area_id()));
+            *areaConf.area_id_ref()));
       }
     }
   }
@@ -176,7 +176,7 @@ Config::checkNodeSegmentLabelConfig(
       if (not srNodeConfig.node_segment_label_range_ref().has_value()) {
         throw std::invalid_argument(fmt::format(
             "node segment label range is not configured for area id: {}",
-            areaConf.get_area_id()));
+            *areaConf.area_id_ref()));
       } else if (not isLabelRangeValid(
                      *srNodeConfig.node_segment_label_range_ref())) {
         const auto& label_range = *srNodeConfig.node_segment_label_range_ref();
@@ -184,24 +184,24 @@ Config::checkNodeSegmentLabelConfig(
             "node segment label range [{}, {}] is invalid for area config id: {}",
             *label_range.start_label_ref(),
             *label_range.end_label_ref(),
-            areaConf.get_area_id()));
+            *areaConf.area_id_ref()));
       }
     } else if (not srNodeConfig.node_segment_label_ref().has_value()) {
       throw std::invalid_argument(fmt::format(
           "static node segment label is not configured for area config id: {}",
-          areaConf.get_area_id()));
+          *areaConf.area_id_ref()));
     } else if (not isMplsLabelValid(*srNodeConfig.node_segment_label_ref())) {
       throw std::invalid_argument(fmt::format(
           "node segment label {} is invalid for area config id: {}",
           *srNodeConfig.node_segment_label_ref(),
-          areaConf.get_area_id()));
+          *areaConf.area_id_ref()));
     }
   }
 }
 
 void
 Config::populateAreaConfig() {
-  if (config_.get_areas().empty()) {
+  if (config_.areas_ref()->empty()) {
     // TODO remove once transition to areas is complete
     thrift::AreaConfig defaultArea;
     defaultArea.area_id_ref() = Constants::kDefaultArea.toString();
@@ -222,20 +222,20 @@ Config::populateAreaConfig() {
   for (auto& areaConf : *config_.areas_ref()) {
     // Fill these values from linkMonitor config if not provided
     // TODO remove once transition to areas is complete
-    auto const& lmConf = config_.get_link_monitor_config();
-    if (areaConf.get_redistribute_interface_regexes().empty()) {
+    auto const& lmConf = *config_.link_monitor_config_ref();
+    if (areaConf.redistribute_interface_regexes_ref()->empty()) {
       areaConf.redistribute_interface_regexes_ref() =
-          lmConf.get_redistribute_interface_regexes();
+          *lmConf.redistribute_interface_regexes_ref();
     }
-    if (areaConf.get_include_interface_regexes().empty()) {
+    if (areaConf.include_interface_regexes_ref()->empty()) {
       areaConf.include_interface_regexes_ref() =
-          lmConf.get_include_interface_regexes();
+          *lmConf.include_interface_regexes_ref();
     }
-    if (areaConf.get_exclude_interface_regexes().empty()) {
+    if (areaConf.exclude_interface_regexes_ref()->empty()) {
       areaConf.exclude_interface_regexes_ref() =
-          lmConf.get_exclude_interface_regexes();
+          *lmConf.exclude_interface_regexes_ref();
     }
-    if (areaConf.get_neighbor_regexes().empty()) {
+    if (areaConf.neighbor_regexes_ref()->empty()) {
       areaConf.neighbor_regexes_ref() = {".*"};
     }
 
@@ -247,9 +247,9 @@ Config::populateAreaConfig() {
       }
     }
 
-    if (!areaConfigs_.emplace(areaConf.get_area_id(), areaConf).second) {
+    if (!areaConfigs_.emplace(*areaConf.area_id_ref(), areaConf).second) {
       throw std::invalid_argument(
-          fmt::format("Duplicate area config id: {}", areaConf.get_area_id()));
+          fmt::format("Duplicate area config id: {}", *areaConf.area_id_ref()));
     }
 
     checkNodeSegmentLabelConfig(areaConf);
@@ -278,11 +278,12 @@ Config::checkKvStoreConfig() const {
 void
 Config::checkDecisionConfig() const {
   auto& decisionConf = *config_.decision_config_ref();
-  if (decisionConf.get_debounce_min_ms() > decisionConf.get_debounce_max_ms()) {
+  if (*decisionConf.debounce_min_ms_ref() >
+      *decisionConf.debounce_max_ms_ref()) {
     throw std::invalid_argument(fmt::format(
         "decision_config.debounce_min_ms ({}) should be <= decision_config.debounce_max_ms ({})",
-        decisionConf.get_debounce_min_ms(),
-        decisionConf.get_debounce_max_ms()));
+        *decisionConf.debounce_min_ms_ref(),
+        *decisionConf.debounce_max_ms_ref()));
   }
 }
 
@@ -695,7 +696,7 @@ Config::populateInternalDb() {
   // is completely implemented & rolled out.
   //
   if (not config_.eor_time_s_ref()) {
-    config_.eor_time_s_ref() = 3 * getSparkConfig().get_keepalive_time_s();
+    config_.eor_time_s_ref() = 3 * (*getSparkConfig().keepalive_time_s_ref());
   }
 }
 

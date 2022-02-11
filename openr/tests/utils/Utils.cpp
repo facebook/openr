@@ -207,7 +207,7 @@ generateDecisionRouteUpdateFromPrefixEntries(
     prefixEntry.prependLabel_ref() = 70000;
 
     auto unicastRoute = RibUnicastEntry(
-        toIPNetwork(prefixEntry.get_prefix()),
+        toIPNetwork(*prefixEntry.prefix_ref()),
         {path1},
         prefixEntry,
         std::to_string(areaId),

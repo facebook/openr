@@ -122,11 +122,11 @@ class KvStoreBenchmarkTestFixture {
 
       TtlCountdownQueueEntry queueEntry;
       queueEntry.expiryTime = std::chrono::steady_clock::now() +
-          std::chrono::milliseconds(keyValPair.second.get_ttl());
+          std::chrono::milliseconds(*keyValPair.second.ttl_ref());
       queueEntry.key = keyValPair.first;
-      queueEntry.version = (keyValPair.second).get_version();
-      queueEntry.ttlVersion = (keyValPair.second).get_ttlVersion();
-      queueEntry.originatorId = (keyValPair.second).get_originatorId();
+      queueEntry.version = *keyValPair.second.version_ref();
+      queueEntry.ttlVersion = *keyValPair.second.ttlVersion_ref();
+      queueEntry.originatorId = *keyValPair.second.originatorId_ref();
       ttlCountdownQueue.push(std::move(queueEntry));
     }
     return keyValsForReturn;
@@ -577,7 +577,7 @@ BM_KvStoreDumpAllWithFilters(
     }
 
     const auto keyPrefixMatch =
-        KvStoreFilters(keyPrefixList, keyDumpParams.get_originatorIds());
+        KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -651,7 +651,7 @@ BM_KvStoreDumpHashWithFilters(
     }
 
     const auto keyPrefixMatch =
-        KvStoreFilters(keyPrefixList, keyDumpParams.get_originatorIds());
+        KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();

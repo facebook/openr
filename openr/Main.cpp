@@ -382,7 +382,7 @@ main(int argc, char** argv) {
   // after programming has completed; Otherwise, Decision publishes routes to
   // PrefixManager.
   auto routeUpdatesQueueReader =
-      (config->getConfig().get_enable_fib_ack()
+      (*config->getConfig().enable_fib_ack_ref()
            ? fibRouteUpdatesQueue.getReader("routeUpdates")
            : routeUpdatesQueue.getReader("routeUpdates"));
   auto prefixManager = startEventBase(

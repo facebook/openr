@@ -278,7 +278,7 @@ KvStoreClientInternal::processExpiredKeys(
   auto const& expiredKeys = *publication.expiredKeys_ref();
 
   // NOTE: default construct empty map if it didn't exist
-  auto& callbacks = keyCallbacks_[AreaId{publication.get_area()}];
+  auto& callbacks = keyCallbacks_[AreaId{*publication.area_ref()}];
   for (auto const& key : expiredKeys) {
     /* key specific registered callback */
     auto cb = callbacks.find(key);
@@ -293,7 +293,7 @@ KvStoreClientInternal::processPublication(
     thrift::Publication const& publication) {
   // Go through received key-values and find out the ones which need update
   CHECK(not publication.area_ref()->empty());
-  AreaId area{publication.get_area()};
+  AreaId area{*publication.area_ref()};
 
   // NOTE: default construct empty containers if they didn't exist
   auto& keyTtlBackoffs = keyTtlBackoffs_[area];

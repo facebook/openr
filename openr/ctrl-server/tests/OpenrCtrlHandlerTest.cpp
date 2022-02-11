@@ -5,9 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <cstdio>
-#include <thread>
-
 #include <folly/init/Init.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -331,9 +328,9 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
 TEST_F(OpenrCtrlFixture, RouteApis) {
   {
     auto db = handler_->semifuture_getRouteDb().get();
-    EXPECT_EQ(nodeName_, db->get_thisNodeName());
-    EXPECT_EQ(0, db->get_unicastRoutes().size());
-    EXPECT_EQ(0, db->get_mplsRoutes().size());
+    EXPECT_EQ(nodeName_, *db->thisNodeName_ref());
+    EXPECT_EQ(0, db->unicastRoutes_ref()->size());
+    EXPECT_EQ(0, db->mplsRoutes_ref()->size());
   }
 
   {
@@ -341,9 +338,9 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
                   ->semifuture_getRouteDbComputed(
                       std::make_unique<std::string>(nodeName_))
                   .get();
-    EXPECT_EQ(nodeName_, db->get_thisNodeName());
-    EXPECT_EQ(0, db->get_unicastRoutes().size());
-    EXPECT_EQ(0, db->get_mplsRoutes().size());
+    EXPECT_EQ(nodeName_, *db->thisNodeName_ref());
+    EXPECT_EQ(0, db->unicastRoutes_ref()->size());
+    EXPECT_EQ(0, db->mplsRoutes_ref()->size());
   }
 
   {
@@ -352,9 +349,9 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
                   ->semifuture_getRouteDbComputed(
                       std::make_unique<std::string>(testNode))
                   .get();
-    EXPECT_EQ(testNode, db->get_thisNodeName());
-    EXPECT_EQ(0, db->get_unicastRoutes().size());
-    EXPECT_EQ(0, db->get_mplsRoutes().size());
+    EXPECT_EQ(testNode, *db->thisNodeName_ref());
+    EXPECT_EQ(0, db->unicastRoutes_ref()->size());
+    EXPECT_EQ(0, db->mplsRoutes_ref()->size());
   }
 
   {
@@ -386,7 +383,7 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
 
 TEST_F(OpenrCtrlFixture, PerfApis) {
   auto db = handler_->semifuture_getPerfDb().get();
-  EXPECT_EQ(nodeName_, db->get_thisNodeName());
+  EXPECT_EQ(nodeName_, *db->thisNodeName_ref());
 }
 
 TEST_F(OpenrCtrlFixture, DecisionApis) {
@@ -477,8 +474,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   {
     auto config = handler_->semifuture_getRunningConfigThrift().get();
     std::unordered_set<std::string> areas;
-    for (auto const& area : config->get_areas()) {
-      areas.insert(area.get_area_id());
+    for (auto const& area : *config->areas_ref()) {
+      areas.insert(*area.area_id_ref());
     }
     EXPECT_THAT(areas, testing::SizeIs(3));
     EXPECT_THAT(
@@ -501,7 +498,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kSpineAreaId))
                    .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
     EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
@@ -516,7 +513,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kPodAreaId))
                    .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
   }
@@ -533,7 +530,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(3, keyVals.size());
     EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
@@ -553,7 +550,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kPlaneAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
@@ -571,7 +568,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(3, keyVals.size());
     auto value3 = kvs.at("key3");
     value3.value_ref().reset();
@@ -602,12 +599,12 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_THAT(*summary, testing::SizeIs(3));
 
     // map each area to the # of keyVals in each area
-    areaKVCountMap[summary->at(0).get_area()] =
-        summary->at(0).get_keyValsCount();
-    areaKVCountMap[summary->at(1).get_area()] =
-        summary->at(1).get_keyValsCount();
-    areaKVCountMap[summary->at(2).get_area()] =
-        summary->at(2).get_keyValsCount();
+    areaKVCountMap[*summary->at(0).area_ref()] =
+        *summary->at(0).keyValsCount_ref();
+    areaKVCountMap[*summary->at(1).area_ref()] =
+        *summary->at(1).keyValsCount_ref();
+    areaKVCountMap[*summary->at(2).area_ref()] =
+        *summary->at(2).keyValsCount_ref();
     // test # of keyVals for each area, as per config above.
     // area names are being implicitly tested as well
     EXPECT_EQ(9, areaKVCountMap[kSpineAreaId]);
@@ -641,8 +638,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                    ->semifuture_getSpanningTreeInfos(
                        std::make_unique<std::string>(kSpineAreaId))
                    .get();
-    auto sptInfos = ret->get_infos();
-    auto counters = ret->get_counters();
+    auto sptInfos = *ret->infos_ref();
+    auto counters = *ret->counters_ref();
     EXPECT_EQ(1, sptInfos.size());
     ASSERT_NE(sptInfos.end(), sptInfos.find(nodeName_));
     EXPECT_EQ(0, counters.neighborCounters_ref()->size());
@@ -651,7 +648,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(0, ret->floodPeers_ref()->size());
 
     thrift::SptInfo sptInfo = sptInfos.at(nodeName_);
-    EXPECT_EQ(0, sptInfo.get_cost());
+    EXPECT_EQ(0, *sptInfo.cost_ref());
     ASSERT_TRUE(sptInfo.parent_ref().has_value());
     EXPECT_EQ(nodeName_, sptInfo.parent_ref().value());
     EXPECT_EQ(0, sptInfo.children_ref()->size());
@@ -748,7 +745,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(3, keyVals.size());
     EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
@@ -766,7 +763,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
     EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
@@ -784,7 +781,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
     EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
@@ -803,7 +800,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kPlaneAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
@@ -822,7 +819,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(3, keyVals.size());
     auto value3 = kvs.at("key3");
     value3.value_ref().reset();
@@ -888,7 +885,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kSpineAreaId))
                    .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(3, *(keyVals.at(key).version_ref()));
     EXPECT_EQ("value1", keyVals.at(key).value_ref().value());
@@ -1809,7 +1806,7 @@ TEST_F(
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kSpineAreaId))
                    .get();
-    auto keyVals = pub->get_keyVals();
+    auto keyVals = *pub->keyVals_ref();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(1, *(keyVals.at(key).version_ref()));
     EXPECT_EQ(true, keyVals.at(key).value_ref().has_value());
@@ -1969,7 +1966,7 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
 
   {
     auto reply = handler_->semifuture_getInterfaces().get();
-    EXPECT_EQ(nodeName_, reply->get_thisNodeName());
+    EXPECT_EQ(nodeName_, *reply->thisNodeName_ref());
     EXPECT_FALSE(*reply->isOverloaded_ref());
     EXPECT_EQ(1, reply->interfaceDetails_ref()->size());
   }
@@ -1992,7 +1989,7 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
             ->semifuture_getLinkMonitorAdjacenciesFiltered(
                 std::make_unique<thrift::AdjacenciesFilter>(std::move(filter)))
             .get();
-    EXPECT_EQ(0, adjDbs->begin()->get_adjacencies().size());
+    EXPECT_EQ(0, adjDbs->begin()->adjacencies_ref()->size());
   }
 
   {
@@ -2004,7 +2001,7 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
                 std::make_unique<thrift::AdjacenciesFilter>(std::move(filter)))
             .get();
     EXPECT_EQ(
-        0, adjDbs->operator[](kSpineAreaId).begin()->get_adjacencies().size());
+        0, adjDbs->operator[](kSpineAreaId).begin()->adjacencies_ref()->size());
   }
 }
 

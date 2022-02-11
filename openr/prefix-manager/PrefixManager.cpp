@@ -45,14 +45,14 @@ PrefixManager::PrefixManager(
       initializationEventQueue_(initializationEventQueue),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       preferOpenrOriginatedRoutes_(
-          config->getConfig().get_prefer_openr_originated_routes()) {
+          *config->getConfig().prefer_openr_originated_routes_ref()) {
   CHECK(config);
 
   // Always add RIB type prefixes, since Fib routes updates are always expected
   // in OpenR initialization procedure.
   uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
   XLOG(INFO) << "[Initialization] PrefixManager should wait for RIB updates.";
-  if (config->getConfig().get_enable_bgp_peering()) {
+  if (config->isBgpPeeringEnabled()) {
     XLOG(INFO)
         << "[Initialization] PrefixManager should wait for BGP prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::BGP);
@@ -279,10 +279,10 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
       continue;
     }
 
-    auto const& area = thriftPub.get_area();
+    auto const& area = *thriftPub.area_ref();
     try {
       const auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          *val.get_value(), serializer_);
+          *val.value_ref(), serializer_);
       if (prefixDb.prefixEntries()->size() != 1) {
         LOG(WARNING) << "Skip processing unexpected number of prefix entries";
         continue;
@@ -290,9 +290,9 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
 
       if (not *prefixDb.deletePrefix_ref()) {
         // get the key prefix and area from the thrift::PrefixDatabase
-        auto const& tPrefixEntry = prefixDb.get_prefixEntries().front();
-        auto const& thisNodeName = prefixDb.get_thisNodeName();
-        auto const& network = toIPNetwork(tPrefixEntry.get_prefix());
+        auto const& tPrefixEntry = prefixDb.prefixEntries_ref()->front();
+        auto const& thisNodeName = *prefixDb.thisNodeName_ref();
+        auto const& network = toIPNetwork(*tPrefixEntry.prefix_ref());
 
         // Skip none-self advertised prefixes or already persisted keys.
         if (thisNodeName != nodeId_ or advertiseStatus_.count(network) > 0) {
@@ -441,7 +441,7 @@ PrefixManager::populateRouteUpdates(
     // ATTN: This does not support GR with install_to_fib = false and min
     // supporting routes > 0
     // Do not reflect back the prefixes just learned from BGP Rib
-    if (thrift::PrefixType::BGP != prefixEntry.tPrefixEntry->get_type()) {
+    if (thrift::PrefixType::BGP != *prefixEntry.tPrefixEntry->type_ref()) {
       RibUnicastEntry unicastEntry = RibUnicastEntry(prefix, {});
       unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
       routeUpdatesForBgp.addRouteToUpdate(std::move(unicastEntry));
@@ -630,7 +630,7 @@ PrefixManager::triggerInitialPrefixDbSync() {
 bool
 PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   // Skip the check if FIB-ACK feature is disabled.
-  if (not config_->getConfig().get_enable_fib_ack()) {
+  if (not *config_->getConfig().enable_fib_ack_ref()) {
     return true;
   }
   // If prepend label is set, the associated label route should have been
@@ -1007,7 +1007,7 @@ PrefixManager::filterAndAddOriginatedRoute(
     // prefilter advertised route
     if (routeFilterType == thrift::RouteFilterType::PREFILTER_ADVERTISED) {
       thrift::AdvertisedRoute route;
-      route.key_ref() = prePolicyTPrefixEntry->get_type();
+      route.key_ref() = *prePolicyTPrefixEntry->type_ref();
       route.route_ref() = *prePolicyTPrefixEntry;
       routes.emplace_back(std::move(route));
       continue;
@@ -1022,7 +1022,7 @@ PrefixManager::filterAndAddOriginatedRoute(
         postPolicyTPrefixEntry) {
       // add post filter advertised route
       thrift::AdvertisedRoute route;
-      route.key_ref() = prePolicyTPrefixEntry->get_type();
+      route.key_ref() = *prePolicyTPrefixEntry->type_ref();
       route.route_ref() = *postPolicyTPrefixEntry;
       if (not hitPolicyName.empty()) {
         route.hitPolicy_ref() = hitPolicyName;
@@ -1035,7 +1035,7 @@ PrefixManager::filterAndAddOriginatedRoute(
         not postPolicyTPrefixEntry) {
       // add post filter rejected route
       thrift::AdvertisedRoute route;
-      route.key_ref() = prePolicyTPrefixEntry->get_type();
+      route.key_ref() = *prePolicyTPrefixEntry->type_ref();
       route.route_ref() = *prePolicyTPrefixEntry;
       route.hitPolicy_ref() = hitPolicyName;
       routes.emplace_back(std::move(route));
@@ -1586,7 +1586,7 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   }
   prefixMgrRouteUpdatesQueue_.push(std::move(fibRouteUpdateCp));
 
-  if (config_->getConfig().get_enable_fib_ack()) {
+  if (*config_->getConfig().enable_fib_ack_ref()) {
     // Store programmed label/unicast routes info if FIB-ACK feature is enabled.
     storeProgrammedRoutes(fibRouteUpdate);
   }

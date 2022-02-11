@@ -137,7 +137,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
   // Key is new to KvStore. Value version should be 1.
   auto pubFirst = kvStore_->recvPublication();
   EXPECT_EQ(1, pubFirst.keyVals_ref()->size());
-  EXPECT_EQ(1, pubFirst.keyVals_ref()->at(key).get_version());
+  EXPECT_EQ(1, *pubFirst.keyVals_ref()->at(key).version_ref());
   EXPECT_EQ(valueFirst, *pubFirst.keyVals_ref()->at(key).value_ref());
 
   // Create request to set same key, different value.
@@ -149,13 +149,13 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
   // Check value is updated and version is bumped.
   auto pubSecond = kvStore_->recvPublication();
   EXPECT_EQ(1, pubSecond.keyVals_ref()->size());
-  EXPECT_EQ(2, pubSecond.keyVals_ref()->at(key).get_version());
+  EXPECT_EQ(2, *pubSecond.keyVals_ref()->at(key).version_ref());
   EXPECT_EQ(valueSecond, *pubSecond.keyVals_ref()->at(key).value_ref());
 
   // Validate that advertised self-originated key-value matches KvStore cache.
   auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
   EXPECT_EQ(1, kvStoreCache.size());
-  EXPECT_EQ(2, kvStoreCache.at(key).value.get_version());
+  EXPECT_EQ(2, *kvStoreCache.at(key).value.version_ref());
   EXPECT_EQ(valueSecond, *kvStoreCache.at(key).value.value_ref());
 }
 
@@ -177,12 +177,12 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
   // Key is new to KvStore. Value version should be 1.
   auto pubFirst = kvStore_->recvPublication();
   EXPECT_EQ(1, pubFirst.keyVals_ref()->size());
-  EXPECT_EQ(version, pubFirst.keyVals_ref()->at(key).get_version());
+  EXPECT_EQ(version, *pubFirst.keyVals_ref()->at(key).version_ref());
 
   // Validate that advertised self-originated key-value matches KvStore cache.
   auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
   EXPECT_EQ(1, kvStoreCache.size());
-  EXPECT_EQ(version, kvStoreCache.at(key).value.get_version());
+  EXPECT_EQ(version, *kvStoreCache.at(key).value.version_ref());
 }
 
 /**
@@ -312,8 +312,8 @@ TEST_F(
 
     // validate version = 1
     const auto tVal1 = pub1.keyVals_ref()->at(key);
-    EXPECT_EQ(1, tVal1.get_version());
-    EXPECT_EQ(nodeId, tVal1.get_originatorId());
+    EXPECT_EQ(1, *tVal1.version_ref());
+    EXPECT_EQ(nodeId, *tVal1.originatorId_ref());
 
     //
     // Step2: - manually set key X with existing version + 1 to mimick receiving
@@ -324,7 +324,7 @@ TEST_F(
         kTestingAreaName,
         key,
         createThriftValue(
-            tVal1.get_version() + 1 /* version */,
+            *tVal1.version_ref() + 1 /* version */,
             nodeId /* originatorId */,
             val /* value */,
             Constants::kTtlInfinity /* ttl */));
@@ -332,14 +332,14 @@ TEST_F(
     // validate setKey() takes effect
     auto pub2 = kvStore_->recvPublication();
     const auto tVal2 = pub2.keyVals_ref()->at(key);
-    EXPECT_EQ(tVal1.get_version() + 1, tVal2.get_version());
-    EXPECT_EQ(nodeId, tVal2.get_originatorId());
+    EXPECT_EQ(*tVal1.version_ref() + 1, *tVal2.version_ref());
+    EXPECT_EQ(nodeId, *tVal2.originatorId_ref());
 
     // validate version is overridden
     auto pub3 = kvStore_->recvPublication();
     const auto tVal3 = pub3.keyVals_ref()->at(key);
-    EXPECT_EQ(tVal1.get_version() + 2, tVal3.get_version());
-    EXPECT_EQ(nodeId, tVal3.get_originatorId());
+    EXPECT_EQ(*tVal1.version_ref() + 2, *tVal3.version_ref());
+    EXPECT_EQ(nodeId, *tVal3.originatorId_ref());
   }
 
   //
@@ -373,7 +373,7 @@ TEST_F(
     //
     auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
     ASSERT_TRUE(maybeVal.has_value());
-    const auto version = maybeVal->get_version();
+    const auto version = *maybeVal->version_ref();
     kvStore_->setKey(
         kTestingAreaName,
         key,
@@ -386,16 +386,16 @@ TEST_F(
     // validate setKey() takes effect
     auto pub1 = kvStore_->recvPublication();
     const auto tVal1 = pub1.keyVals_ref()->at(key);
-    EXPECT_EQ(version, tVal1.get_version());
+    EXPECT_EQ(version, *tVal1.version_ref());
     EXPECT_EQ(diffVal, *tVal1.value_ref());
-    EXPECT_EQ(nodeId, tVal1.get_originatorId());
+    EXPECT_EQ(nodeId, *tVal1.originatorId_ref());
 
     // validate version is overridden
     auto pub2 = kvStore_->recvPublication();
     const auto tVal2 = pub2.keyVals_ref()->at(key);
-    EXPECT_EQ(version + 1, tVal2.get_version());
+    EXPECT_EQ(version + 1, *tVal2.version_ref());
     EXPECT_EQ(val, *tVal2.value_ref());
-    EXPECT_EQ(nodeId, tVal2.get_originatorId());
+    EXPECT_EQ(nodeId, *tVal2.originatorId_ref());
 
     //
     // Step2: - manually set key X with SAME version to mimick receiving
@@ -415,16 +415,16 @@ TEST_F(
     // validate setKey() takes effect
     auto pub3 = kvStore_->recvPublication();
     const auto tVal3 = pub3.keyVals_ref()->at(key);
-    EXPECT_EQ(version + 1, tVal3.get_version());
+    EXPECT_EQ(version + 1, *tVal3.version_ref());
     EXPECT_EQ(val, *tVal3.value_ref());
-    EXPECT_EQ(diffNodeId, tVal3.get_originatorId());
+    EXPECT_EQ(diffNodeId, *tVal3.originatorId_ref());
 
     // validate version is overridden
     auto pub4 = kvStore_->recvPublication();
     const auto tVal4 = pub4.keyVals_ref()->at(key);
-    EXPECT_EQ(version + 2, tVal4.get_version());
+    EXPECT_EQ(version + 2, *tVal4.version_ref());
     EXPECT_EQ(val, *tVal4.value_ref());
-    EXPECT_EQ(nodeId, tVal4.get_originatorId());
+    EXPECT_EQ(nodeId, *tVal4.originatorId_ref());
   }
 }
 
@@ -682,8 +682,8 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
     // bumped up and ttl version should be reset.
     auto pubUnsetKey = kvStore_->recvPublication();
     EXPECT_EQ(1, pubUnsetKey.keyVals_ref()->count(unsetKey));
-    EXPECT_EQ(2, pubUnsetKey.keyVals_ref()->at(unsetKey).get_version());
-    EXPECT_EQ(0, pubUnsetKey.keyVals_ref()->at(unsetKey).get_ttlVersion());
+    EXPECT_EQ(2, *pubUnsetKey.keyVals_ref()->at(unsetKey).version_ref());
+    EXPECT_EQ(0, *pubUnsetKey.keyVals_ref()->at(unsetKey).ttlVersion_ref());
     EXPECT_EQ(
         valueAfterUnset, *pubUnsetKey.keyVals_ref()->at(unsetKey).value_ref());
 

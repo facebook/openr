@@ -343,7 +343,7 @@ SpfSolver::createRouteForPrefix(
 
   // Avoid duplicated efforts with selectBestRoutes() in case of
   // SHORTEST_DISTANCE route selection algorithm.
-  auto routeSelectionAlgo = routeComputationRules.get_routeSelectionAlgo();
+  auto routeSelectionAlgo = *routeComputationRules.routeSelectionAlgo_ref();
   if (routeSelectionAlgo !=
       thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE) {
     extendRoutes(
@@ -924,9 +924,9 @@ SpfSolver::selectBestPathsKsp2(
       cost += link->getMetricFromNode(nextNodeName);
       nextNodeName = link->getOtherNodeName(nextNodeName);
       auto& adjDb = linkState.getAdjacencyDatabases().at(nextNodeName);
-      labels.push_front(adjDb.get_nodeLabel());
-      if (not isMplsLabelValid(adjDb.get_nodeLabel())) {
-        invalidNodes.emplace_back(adjDb.get_thisNodeName());
+      labels.push_front(*adjDb.nodeLabel_ref());
+      if (not isMplsLabelValid(*adjDb.nodeLabel_ref())) {
+        invalidNodes.emplace_back(*adjDb.thisNodeName_ref());
       }
     }
     // Ignore paths including nodes with invalid node labels.

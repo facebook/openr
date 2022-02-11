@@ -94,7 +94,7 @@ class KvStoreTestFixture : public ::testing::Test {
         for (auto const& area : store->getAreaIds()) {
           for (auto const& [_, spec] : store->getPeers(AreaId{area})) {
             allInitialized &=
-                ((spec.get_state() == thrift::KvStorePeerState::INITIALIZED)
+                ((*spec.state_ref() == thrift::KvStorePeerState::INITIALIZED)
                      ? 1
                      : 0);
           }
@@ -174,8 +174,8 @@ TEST_F(KvStoreTestFixture, BasicGetKey) {
   EXPECT_NE(itAfter, pubAfter.keyVals_ref()->end());
   auto& valueFromStore = itAfter->second;
   EXPECT_EQ(valueFromStore.value_ref(), value);
-  EXPECT_EQ(valueFromStore.get_version(), 1);
-  EXPECT_EQ(valueFromStore.get_ttlVersion(), 0);
+  EXPECT_EQ(*valueFromStore.version_ref(), 1);
+  EXPECT_EQ(*valueFromStore.ttlVersion_ref(), 0);
 
   kvStore_->stop();
 }
@@ -1212,22 +1212,22 @@ TEST_F(KvStoreTestFixture, FloodOptimizationWithBackwardCompatibility) {
   const auto& rsw002SptInfos = rsw002->getFloodTopo(kTestingAreaName);
 
   // Verify fsw001 -> [rsw001, rsw002]
-  auto& fsw001Peers = fsw001SptInfos.get_floodPeers();
+  auto& fsw001Peers = *fsw001SptInfos.floodPeers_ref();
   EXPECT_TRUE(fsw001Peers.count("rsw001"));
   EXPECT_TRUE(fsw001Peers.count("rsw002"));
 
   // Verify fsw002 -> [rsw001, rsw002]
-  auto& fsw002Peers = fsw002SptInfos.get_floodPeers();
+  auto& fsw002Peers = *fsw002SptInfos.floodPeers_ref();
   EXPECT_TRUE(fsw002Peers.count("rsw001"));
   EXPECT_TRUE(fsw002Peers.count("rsw002"));
 
   // Verify rsw001 -> [fsw001, fsw002]
-  auto& rsw001Peers = rsw001SptInfos.get_floodPeers();
+  auto& rsw001Peers = *rsw001SptInfos.floodPeers_ref();
   EXPECT_TRUE(rsw001Peers.count("fsw001"));
   EXPECT_TRUE(rsw001Peers.count("fsw002"));
 
   // Verify rsw002 -> [fsw001, fsw002]
-  auto& rsw002Peers = rsw002SptInfos.get_floodPeers();
+  auto& rsw002Peers = *rsw002SptInfos.floodPeers_ref();
   EXPECT_TRUE(rsw002Peers.count("fsw001"));
   EXPECT_TRUE(rsw002Peers.count("fsw002"));
 }
@@ -2737,8 +2737,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   pod.neighbor_regexes_ref()->emplace_back(".*");
   plane.area_id_ref() = "plane-area";
   plane.neighbor_regexes_ref()->emplace_back(".*");
-  AreaId podAreaId{pod.get_area_id()};
-  AreaId planeAreaId{plane.get_area_id()};
+  AreaId podAreaId{*pod.area_id_ref()};
+  AreaId planeAreaId{*plane.area_id_ref()};
 
   auto storeA = createKvStore(getTestKvConf("storeA"), {*pod.area_id_ref()});
   auto storeB = createKvStore(
@@ -2908,51 +2908,51 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     // entries. each entry in the areaSummary vector will have 2 keys (per
     // above)
     std::set<std::string> areaSetAll{
-        pod.get_area_id(), plane.get_area_id(), kTestingAreaName};
+        *pod.area_id_ref(), *plane.area_id_ref(), kTestingAreaName};
     std::set<std::string> areaSetEmpty{};
     std::map<std::string, int> storeBTest{};
 
     auto summary = storeA->getSummary(areaSetAll);
     EXPECT_EQ(1, summary.size());
-    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-    EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
-    EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
+    EXPECT_EQ(2, *summary.at(0).keyValsCount_ref());
+    EXPECT_EQ(*summary.at(0).area_ref(), *pod.area_id_ref());
+    EXPECT_EQ(keyVal0Size + keyVal1Size, *summary.at(0).keyValsBytes_ref());
 
     summary = storeA->getSummary(areaSetEmpty);
     EXPECT_EQ(1, summary.size());
-    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-    EXPECT_EQ(summary.at(0).get_area(), pod.get_area_id());
-    EXPECT_EQ(keyVal0Size + keyVal1Size, summary.at(0).get_keyValsBytes());
+    EXPECT_EQ(2, *summary.at(0).keyValsCount_ref());
+    EXPECT_EQ(*summary.at(0).area_ref(), *pod.area_id_ref());
+    EXPECT_EQ(keyVal0Size + keyVal1Size, *summary.at(0).keyValsBytes_ref());
 
     summary = storeB->getSummary(areaSetAll);
     EXPECT_EQ(2, summary.size());
-    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-    EXPECT_EQ(2, summary.at(1).get_keyValsCount());
+    EXPECT_EQ(2, *summary.at(0).keyValsCount_ref());
+    EXPECT_EQ(2, *summary.at(1).keyValsCount_ref());
     // for storeB, spanning 2 areas, check that kv count for all areas add
     // up individually
-    storeBTest[summary.at(0).get_area()] = summary.at(0).get_keyValsBytes();
-    storeBTest[summary.at(1).get_area()] = summary.at(1).get_keyValsBytes();
-    EXPECT_EQ(1, storeBTest.count(plane.get_area_id()));
-    EXPECT_EQ(keyVal2Size + keyVal3Size, storeBTest[plane.get_area_id()]);
-    EXPECT_EQ(1, storeBTest.count(pod.get_area_id()));
-    EXPECT_EQ(keyVal0Size + keyVal1Size, storeBTest[pod.get_area_id()]);
+    storeBTest[*summary.at(0).area_ref()] = *summary.at(0).keyValsBytes_ref();
+    storeBTest[*summary.at(1).area_ref()] = *summary.at(1).keyValsBytes_ref();
+    EXPECT_EQ(1, storeBTest.count(*plane.area_id_ref()));
+    EXPECT_EQ(keyVal2Size + keyVal3Size, storeBTest[*plane.area_id_ref()]);
+    EXPECT_EQ(1, storeBTest.count(*pod.area_id_ref()));
+    EXPECT_EQ(keyVal0Size + keyVal1Size, storeBTest[*pod.area_id_ref()]);
 
     summary = storeB->getSummary(areaSetEmpty);
     EXPECT_EQ(2, summary.size());
-    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-    EXPECT_EQ(2, summary.at(1).get_keyValsCount());
+    EXPECT_EQ(2, *summary.at(0).keyValsCount_ref());
+    EXPECT_EQ(2, *summary.at(1).keyValsCount_ref());
 
     summary = storeC->getSummary(areaSetAll);
     EXPECT_EQ(1, summary.size());
-    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-    EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
-    EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
+    EXPECT_EQ(2, *summary.at(0).keyValsCount_ref());
+    EXPECT_EQ(*summary.at(0).area_ref(), *plane.area_id_ref());
+    EXPECT_EQ(keyVal2Size + keyVal3Size, *summary.at(0).keyValsBytes_ref());
 
     summary = storeC->getSummary(areaSetEmpty);
     EXPECT_EQ(1, summary.size());
-    EXPECT_EQ(2, summary.at(0).get_keyValsCount());
-    EXPECT_EQ(summary.at(0).get_area(), plane.get_area_id());
-    EXPECT_EQ(keyVal2Size + keyVal3Size, summary.at(0).get_keyValsBytes());
+    EXPECT_EQ(2, *summary.at(0).keyValsCount_ref());
+    EXPECT_EQ(*summary.at(0).area_ref(), *plane.area_id_ref());
+    EXPECT_EQ(keyVal2Size + keyVal3Size, *summary.at(0).keyValsBytes_ref());
   }
 }
 

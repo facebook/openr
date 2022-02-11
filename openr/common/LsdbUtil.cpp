@@ -779,7 +779,7 @@ selectShortestDistance(
     if (prefixEntries.count(nodeArea) == 0) {
       continue;
     }
-    int32_t dist = prefixEntries.at(nodeArea)->get_metrics().get_distance();
+    int32_t dist = *prefixEntries.at(nodeArea)->metrics_ref()->distance_ref();
     if (dist > shortestDist) {
       continue;
     }
@@ -849,10 +849,10 @@ selectRoutes(
       std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::min()};
   std::set<NodeAndArea> nodeAreaSet;
   for (auto& [key, metricsWrapper] : prefixEntries) {
-    auto& metrics = metricsWrapper->get_metrics();
+    auto& metrics = *metricsWrapper->metrics_ref();
     std::tuple<int32_t, int32_t> metricsTuple{
-        metrics.get_path_preference(), /* prefer-higher */
-        metrics.get_source_preference() /* prefer-higher */};
+        *metrics.path_preference_ref(), /* prefer-higher */
+        *metrics.source_preference_ref() /* prefer-higher */};
 
     if (metricsTuple < bestMetricsTuple) {
       continue;

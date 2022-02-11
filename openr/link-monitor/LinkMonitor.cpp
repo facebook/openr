@@ -100,7 +100,7 @@ LinkMonitor::LinkMonitor(
     bool overrideDrainState)
     : nodeId_(config->getNodeName()),
       enablePerfMeasurement_(
-          config->getLinkMonitorConfig().get_enable_perf_measurement()),
+          *config->getLinkMonitorConfig().enable_perf_measurement_ref()),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
       enableNewGRBehavior_(config->isNewGRBehaviorEnabled()),
@@ -114,7 +114,7 @@ LinkMonitor::LinkMonitor(
           *config->getLinkMonitorConfig().linkflap_max_backoff_ms_ref())),
       areas_(config->getAreas()),
       enableOrderedAdjPublication_(
-          config->getConfig().get_enable_ordered_adj_publication()),
+          *config->getConfig().enable_ordered_adj_publication_ref()),
       interfaceUpdatesQueue_(interfaceUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
@@ -131,7 +131,7 @@ LinkMonitor::LinkMonitor(
   // adjacencies to be fully established within hold time after Open/R starts.
   // TODO: remove this with strict Open/R initialization sequence
   const std::chrono::seconds initialAdjHoldTime{
-      config->getConfig().get_adj_hold_time_s()};
+      *config->getConfig().adj_hold_time_s_ref()};
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -194,7 +194,7 @@ LinkMonitor::LinkMonitor(
       }
 
       CHECK(
-          srNodeLabelCfg->get_sr_node_label_type() ==
+          *srNodeLabelCfg->sr_node_label_type_ref() ==
           thrift::SegmentRoutingNodeLabelType::STATIC)
           << "Unknown segment routing node label allocation type";
       // Use statically configured node segment label as node label
@@ -665,7 +665,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
 
   XLOG(INFO) << fmt::format(
       "Updating adjacency database in KvStore with {} entries in area: {}",
-      adjDb.get_adjacencies().size(),
+      adjDb.adjacencies_ref()->size(),
       area);
 
   // Persist `adj:node_Id` key into KvStore
@@ -949,10 +949,10 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
 
     // override metric with adj metric if it exists
     thrift::AdjKey tAdjKey;
-    tAdjKey.nodeName_ref() = adj.get_otherNodeName();
-    tAdjKey.ifName_ref() = adj.get_ifName();
+    tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
+    tAdjKey.ifName_ref() = *adj.ifName_ref();
     adj.metric_ref() = folly::get_default(
-        state_.get_adjMetricOverrides(), tAdjKey, adj.get_metric());
+        *state_.adjMetricOverrides_ref(), tAdjKey, *adj.metric_ref());
 
     // set flag to indicate if adjacency will ONLY be used by other node
     adj.adjOnlyUsedByOtherNode_ref() = adjValue.onlyUsedByOtherNode;
@@ -1479,12 +1479,12 @@ LinkMonitor::semifuture_getAdjacencies(thrift::AdjacenciesFilter filter) {
   runInEventBaseThread(
       [this, p = std::move(p), filter = std::move(filter)]() mutable {
         auto res = std::make_unique<std::vector<thrift::AdjacencyDatabase>>();
-        if (filter.get_selectAreas().empty()) {
+        if (filter.selectAreas_ref()->empty()) {
           for (auto const& [areaId, _] : areas_) {
             res->push_back(buildAdjacencyDatabase(areaId));
           }
         } else {
-          for (auto const& areaId : filter.get_selectAreas()) {
+          for (auto const& areaId : *filter.selectAreas_ref()) {
             res->push_back(buildAdjacencyDatabase(areaId));
           }
         }
@@ -1507,12 +1507,12 @@ LinkMonitor::semifuture_getAreaAdjacencies(thrift::AdjacenciesFilter filter) {
       [this, p = std::move(p), filter = std::move(filter)]() mutable {
         auto res = std::make_unique<
             std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>();
-        if (filter.get_selectAreas().empty()) {
+        if (filter.selectAreas_ref()->empty()) {
           for (auto const& [areaId, _] : areas_) {
             res->operator[](areaId).push_back(buildAdjacencyDatabase(areaId));
           }
         } else {
-          for (auto const& areaId : filter.get_selectAreas()) {
+          for (auto const& areaId : *filter.selectAreas_ref()) {
             res->operator[](areaId).push_back(buildAdjacencyDatabase(areaId));
           }
         }
@@ -1643,10 +1643,10 @@ LinkMonitor::getNodeSegmentLabelRange(
   CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
   std::pair<int32_t, int32_t> labelRange{
       *areaConfig.getNodeSegmentLabelConfig()
-           ->get_node_segment_label_range()
+           ->node_segment_label_range_ref()
            ->start_label_ref(),
       *areaConfig.getNodeSegmentLabelConfig()
-           ->get_node_segment_label_range()
+           ->node_segment_label_range_ref()
            ->end_label_ref()};
   return labelRange;
 }
