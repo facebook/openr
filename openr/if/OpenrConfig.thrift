@@ -897,12 +897,12 @@ struct OpenrConfig {
   57: bool enable_new_prefix_format = 0;
 
   /**
-   * Temporary var to enable route program ordering, aka, to-add routes should
+   * Bool to enable route program ordering, aka, to-add routes should
    * be programmed at originator ahead of being advertised to peers; Reverse
    * order applies to to-withdraw routes. Name the flag as enable_fib_ack since
    * FIB-ACK is required to signal the completion of local programming.
   */
-  58: bool enable_fib_ack = false;
+  58: bool enable_fib_ack = true;
 
   /**
    * Flag to indicate if KvStore will consume requests from local modules
