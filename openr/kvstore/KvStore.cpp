@@ -198,14 +198,15 @@ KvStore::prepareSocket(
   for (const auto& [opt, val] : socketOptions) {
     auto rc = socket.setSockOpt(opt, &val, sizeof(val));
     if (rc.hasError()) {
-      XLOG(ERR) << "Error setting zmq opt: " << opt << "to " << val
-                << ". Error: " << rc.error();
+      XLOG(FATAL) << "Error setting zmq opt: " << opt << "to " << val
+                  << ". Error: " << rc.error();
     }
   }
 
   auto rc = socket.bind(fbzmq::SocketUrl{url});
   if (rc.hasError()) {
-    XLOG(ERR) << "Error binding to URL '" << url << "'. Error: " << rc.error();
+    XLOG(FATAL) << "Error binding to URL '" << url
+                << "'. Error: " << rc.error();
   }
 }
 
