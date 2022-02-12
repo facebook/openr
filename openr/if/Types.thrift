@@ -716,6 +716,12 @@ struct LinkMonitorState {
    * Node label allocated to node in each area. `0` indicates null value.
    */
   6: map<string, i32> nodeLabelMap;
+
+  /**
+   * Custom static metric increment value for all links for the node.
+   * Open/R will add a this value to the existing metric on all links.
+   */
+  7: i32 nodeMetricIncrementVal = 0;
 } (cpp.minimize_padding)
 
 /**

@@ -356,6 +356,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceMetric(
       std::unique_ptr<std::string> interfaceName) override;
 
+  folly::SemiFuture<folly::Unit> semifuture_setNodeInterfaceMetricIncrement(
+      int32_t metricIncrementVal) override;
+  folly::SemiFuture<folly::Unit> semifuture_unsetNodeInterfaceMetricIncrement()
+      override;
+
   folly::SemiFuture<folly::Unit> semifuture_setAdjacencyMetric(
       std::unique_ptr<std::string> interfaceName,
       std::unique_ptr<std::string> adjNodeName,

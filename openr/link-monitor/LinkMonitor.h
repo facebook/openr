@@ -31,10 +31,21 @@ using AdjacencyKey = std::
     pair<std::string /* remoteNodeName */, std::string /* localInterfaceName*/>;
 
 struct AdjacencyValue {
+  // areaId of the adjacency
   std::string area;
+  // peer's publication and command socket URLs information
   thrift::PeerSpec peerSpec;
+  // detailed adjacency information
   thrift::Adjacency adjacency;
+  // metric that is calculated from Spark without any addiditonal increment
+  int32_t baseMetric;
+  // It is restarting or not.
+  // TODO: remove `isRestarting` flag once enable_ordered_adj_publication is
+  // fully rolled out to PROD.
   bool isRestarting{false};
+  // If set to true, node->neighbor adj could only be used by neighbor but not
+  // other nodes in the area. Otherwise, all nodes in the area could use the
+  // adj for route computation.
   bool onlyUsedByOtherNode{false};
 
   AdjacencyValue() {}
@@ -42,11 +53,13 @@ struct AdjacencyValue {
       std::string areaId,
       thrift::PeerSpec spec,
       thrift::Adjacency adj,
+      int32_t baseMetric,
       bool restarting = false,
       bool onlyUsedByOtherNode = false)
       : area(areaId),
         peerSpec(spec),
         adjacency(adj),
+        baseMetric(baseMetric),
         isRestarting(restarting),
         onlyUsedByOtherNode(onlyUsedByOtherNode) {}
 };
@@ -139,6 +152,7 @@ class LinkMonitor final : public OpenrEventBase {
    * - Set/unset interface overload
    * - Set/unset interface metric
    * - Set/unset node adj metric
+   * - Set/unset node-level metric increment
    * - Dump interface/link information
    * - Dump adjacency database information
    * - Dump links information from netlinkProtocolSocket
@@ -164,6 +178,11 @@ class LinkMonitor final : public OpenrEventBase {
    */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   semifuture_getAdjacencies(thrift::AdjacenciesFilter filter = {});
+
+  // Set/unset node-level metric increment
+  folly::SemiFuture<folly::Unit> semifuture_setNodeInterfaceMetricIncrement(
+      int32_t metricIncrementVal);
+  folly::SemiFuture<folly::Unit> semifuture_unsetNodeInterfaceMetricIncrement();
 
  private:
   // make no-copy

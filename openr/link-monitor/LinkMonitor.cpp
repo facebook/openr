@@ -370,6 +370,7 @@ LinkMonitor::neighborUpEvent(
           thrift::KvStorePeerState::IDLE,
           supportFloodOptimization),
       std::move(newAdj),
+      useRttMetric_ ? getRttMetric(rttUs) : 1, // baseMetric
       isRestarting,
       isGracefulRestart ? false : onlyUsedByOtherNode);
 
@@ -941,18 +942,32 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
     adj.isOverloaded_ref() =
         state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
 
+    // Calculation the adj metric, there are three types of metric, which can be
+    // potentially combined:
+    // 1. base metric derived from RTT or default hop-count metric.
+    //    ATTN: link-metirc/adj-metric override can ONLY override base metric,
+    //          and adj-metric override can overrice link-metric override.
+    // 2. node-level incremental metric;
+    // 3. link-level incremental metric.
+    int32_t metric = adjValue.baseMetric;
+
     // override metric with link metric if it exists
-    adj.metric_ref() = folly::get_default(
+    metric = folly::get_default(
         *state_.linkMetricOverrides_ref(),
         *adj.ifName_ref(),
-        *adj.metric_ref());
+        adjValue.baseMetric);
 
     // override metric with adj metric if it exists
     thrift::AdjKey tAdjKey;
     tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
     tAdjKey.ifName_ref() = *adj.ifName_ref();
-    adj.metric_ref() = folly::get_default(
-        *state_.adjMetricOverrides_ref(), tAdjKey, *adj.metric_ref());
+    metric =
+        folly::get_default(*state_.adjMetricOverrides_ref(), tAdjKey, metric);
+
+    // increment the node-level metric
+    metric = metric + *state_.nodeMetricIncrementVal_ref();
+
+    adj.metric_ref() = metric;
 
     // set flag to indicate if adjacency will ONLY be used by other node
     adj.adjOnlyUsedByOtherNode_ref() = adjValue.onlyUsedByOtherNode;
@@ -1420,6 +1435,65 @@ LinkMonitor::semifuture_setAdjacencyMetric(
       SYSLOG(INFO) << "Removing metric override for adjacency: [" << adjNodeName
                    << ":" << interfaceName << "]";
     }
+    advertiseAdjacenciesThrottled_->operator()();
+    p.setValue();
+  });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+LinkMonitor::semifuture_unsetNodeInterfaceMetricIncrement() {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p)]() mutable {
+    if (0 == state_.nodeMetricIncrementVal()) {
+      // the increment value already applied
+      XLOG(INFO) << "Skip cmd: unsetNodeInterfaceMetricIncrement."
+                 << "\n  Already set this node-level metric increment to 0";
+      p.setValue();
+      return;
+    }
+    // reset the increment to 0
+    state_.nodeMetricIncrementVal() = 0;
+
+    advertiseAdjacenciesThrottled_->operator()();
+    p.setValue();
+  });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+LinkMonitor::semifuture_setNodeInterfaceMetricIncrement(
+    int32_t metricIncrementVal) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), metricIncrementVal]() mutable {
+    // invalid increment input
+    if (metricIncrementVal <= 0) {
+      XLOG(ERR)
+          << "Skip cmd: setNodeInterfaceMetricIncrement."
+          << "\n  Parameter `metricIncrementVal` should be a positive integer.";
+      p.setValue();
+      return;
+    }
+
+    if (metricIncrementVal == *state_.nodeMetricIncrementVal_ref()) {
+      // the increment value already applied
+      XLOG(INFO) << "Skip cmd: setNodeInterfaceMetricIncrement"
+                 << "\n  Already set this node-level metric increment value: "
+                 << metricIncrementVal;
+      p.setValue();
+      return;
+    }
+
+    XLOG(INFO)
+        << "Set the node-level static metric increment value:"
+        << "\n  Old increment value: " << *state_.nodeMetricIncrementVal_ref()
+        << "\n  Setting new increment value: " << metricIncrementVal;
+
+    // set the state
+    state_.nodeMetricIncrementVal_ref() = metricIncrementVal;
+
     advertiseAdjacenciesThrottled_->operator()();
     p.setValue();
   });

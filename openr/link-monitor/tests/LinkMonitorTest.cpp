@@ -752,6 +752,8 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 TEST_F(LinkMonitorTestFixture, BasicOperation) {
   const int linkMetric = 123;
   const int adjMetric = 100;
+  const int nodeMetric = 200;
+  const int changeNodeMetric = 300;
 
   {
     InSequence dummy;
@@ -859,6 +861,37 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
+      // expect node-level metric increment value set on the link override
+      // metric
+      auto adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric_ref() = nodeMetric + linkMetric;
+
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded_ref() = true;
+      expectedAdjDbs.push(std::move(adjDb));
+
+      // change node-level metric
+      // it will add the new metric to the previous the link override metric
+      adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric_ref() = changeNodeMetric + linkMetric;
+
+      adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded_ref() = true;
+      expectedAdjDbs.push(std::move(adjDb));
+    }
+
+    {
+      // expect node-level metric increment value unset, only keeping metric
+      // override
+      auto adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric_ref() = linkMetric;
+
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded_ref() = true;
+      expectedAdjDbs.push(std::move(adjDb));
+    }
+
+    {
       // expect neighbor down
       auto adjDb = createAdjDb("node-1", {}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
@@ -916,11 +949,14 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // 8: custom metric on link
   // 9. Set overload bit and link metric value
   // 10. set and unset adjacency metric
+  // 11. set node-level metric increment
+  // 12. unset node-level metric increment
+  // 13. neighbor down
   {
     const std::string interfaceName = "iface_2_1";
     const std::string nodeName = "node-2";
 
-    LOG(INFO) << "Testing set node overload command!";
+    LOG(INFO) << "1. Testing set node overload command!";
     auto ret = linkMonitor->semifuture_setNodeOverload(true).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
@@ -936,13 +972,13 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
                      .metricOverride_ref()
                      .has_value());
 
-    LOG(INFO) << "Testing set link metric command!";
+    LOG(INFO) << "2. Testing set link metric command!";
     ret =
         linkMonitor->semifuture_setLinkMetric(interfaceName, linkMetric).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    LOG(INFO) << "Testing set link overload command!";
+    LOG(INFO) << "3. Testing set link overload command!";
     ret =
         linkMonitor->semifuture_setInterfaceOverload(interfaceName, true).get();
     EXPECT_TRUE(folly::Unit() == ret);
@@ -959,7 +995,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
             .metricOverride_ref()
             .value());
 
-    LOG(INFO) << "Testing unset node overload command!";
+    LOG(INFO) << "4. Testing unset node overload command!";
     ret = linkMonitor->semifuture_setNodeOverload(false).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
@@ -974,13 +1010,13 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
             .metricOverride_ref()
             .value());
 
-    LOG(INFO) << "Testing unset link overload command!";
+    LOG(INFO) << "5. Testing unset link overload command!";
     ret = linkMonitor->semifuture_setInterfaceOverload(interfaceName, false)
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    LOG(INFO) << "Testing unset link metric command!";
+    LOG(INFO) << "6. Testing unset link metric command!";
     ret = linkMonitor->semifuture_setLinkMetric(interfaceName, std::nullopt)
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
@@ -995,18 +1031,18 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
                      .metricOverride_ref()
                      .has_value());
 
-    LOG(INFO) << "Testing set node overload command( AGAIN )!";
+    LOG(INFO) << "7. Testing set node overload command( AGAIN )!";
     ret = linkMonitor->semifuture_setNodeOverload(true).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    LOG(INFO) << "Testing set link metric command( AGAIN )!";
+    LOG(INFO) << "8. Testing set link metric command( AGAIN )!";
     ret =
         linkMonitor->semifuture_setLinkMetric(interfaceName, linkMetric).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    LOG(INFO) << "Testing set adj metric command!";
+    LOG(INFO) << "9. Testing set adj metric command!";
     ret =
         linkMonitor
             ->semifuture_setAdjacencyMetric(interfaceName, nodeName, adjMetric)
@@ -1014,20 +1050,46 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    LOG(INFO) << "Testing unset adj metric command!";
+    LOG(INFO) << "10. Testing unset adj metric command!";
     ret = linkMonitor
               ->semifuture_setAdjacencyMetric(
                   interfaceName, nodeName, std::nullopt)
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
+
+    LOG(INFO) << "11.1 Testing node-level metric increment";
+    ret = linkMonitor->semifuture_setNodeInterfaceMetricIncrement(nodeMetric)
+              .get();
+    EXPECT_TRUE(folly::Unit() == ret);
+    checkNextAdjPub("adj:node-1");
+    // Setting the same metric again will skip advertising adjacencies again
+    ret = linkMonitor->semifuture_setNodeInterfaceMetricIncrement(nodeMetric)
+              .get();
+    // Setting an invalid metric will skip
+    ret = linkMonitor->semifuture_setNodeInterfaceMetricIncrement(-1).get();
+
+    LOG(INFO) << "11.2 Change node-level metric increment";
+    ret = linkMonitor
+              ->semifuture_setNodeInterfaceMetricIncrement(changeNodeMetric)
+              .get();
+    EXPECT_TRUE(folly::Unit() == ret);
+    checkNextAdjPub("adj:node-1");
+
+    LOG(INFO) << "12. Testing unset node-level metric increment";
+    ret = linkMonitor->semifuture_unsetNodeInterfaceMetricIncrement().get();
+    EXPECT_TRUE(folly::Unit() == ret);
+    checkNextAdjPub("adj:node-1");
+    // trigger the unset again will just skip
+    ret = linkMonitor->semifuture_unsetNodeInterfaceMetricIncrement().get();
+    EXPECT_TRUE(folly::Unit() == ret);
   }
 
-  // 11. neighbor down
+  // 13. neighbor down
   {
     auto neighborEvent = nb2_down_event;
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
-    LOG(INFO) << "Testing neighbor down event!";
+    LOG(INFO) << "13. Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
   }
 
@@ -1055,23 +1117,23 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // mock "restarting" link monitor with existing config store
   createLinkMonitor(config);
 
-  // 12. neighbor up
+  // 14. neighbor up
   {
     auto neighborEvent = nb2_up_event;
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
     kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
-    LOG(INFO) << "Testing adj up event!";
+    LOG(INFO) << "14. Testing adj up event!";
     checkNextAdjPub("adj:node-1");
   }
 
-  // 13. neighbor down with empty address
+  // 15. neighbor down with empty address
   {
     thrift::BinaryAddress empty;
     auto neighborEvent = nb2_down_event;
     neighborEvent.neighborAddrV4 = empty;
     neighborEvent.neighborAddrV6 = empty;
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
-    LOG(INFO) << "Testing neighbor down event with empty address!";
+    LOG(INFO) << "15. Testing neighbor down event with empty address!";
     checkNextAdjPub("adj:node-1");
   }
 }
