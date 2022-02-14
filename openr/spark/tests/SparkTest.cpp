@@ -773,6 +773,66 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
   }
 }
 
+TEST_F(SparkFixture, ReadConfigTest) {
+  // Define interface names for the test
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider_->setConnectedPairs(connectedPairs);
+
+  // start 2 spark instances within different domain
+  const std::string nodeLannister{"Lannister"};
+  const std::string nodeStark{"Stark"};
+
+  auto tConfig1 = getBasicOpenrConfig(nodeLannister, kDomainName);
+  tConfig1.kvstore_config_ref()->enable_flood_optimization_ref() = true;
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeStark, kDomainName);
+  tConfig2.kvstore_config_ref()->enable_flood_optimization_ref() = false;
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(nodeLannister, config1);
+  auto node2 = createSpark(nodeStark, config2);
+
+  // start tracking iface1 and iface2
+  node1->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6} /* networks */)});
+  node2->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
+
+  // Validate the config content of `supportFloodOptimization` from peer
+  {
+    auto events = node1->waitForEvents(NB_UP);
+    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    auto& event = events.value().back();
+    EXPECT_EQ(iface1, event.localIfName);
+    EXPECT_EQ(nodeStark, event.remoteNodeName);
+    // ATTN: node2 does NOT support flood-optimization
+    EXPECT_EQ(false, event.enableFloodOptimization);
+  }
+
+  {
+    auto events = node2->waitForEvents(NB_UP);
+    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    auto& event = events.value().back();
+    EXPECT_EQ(iface2, event.localIfName);
+    EXPECT_EQ(nodeLannister, event.remoteNodeName);
+    // ATTN: node1 supports flood-optimization
+    EXPECT_EQ(true, event.enableFloodOptimization);
+  }
+}
+
 //
 // Start 2 Spark instances for different versions but within supported
 // range. Make sure they will form adjacency. Then add node3 with out-of-range
