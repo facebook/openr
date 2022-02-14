@@ -160,6 +160,26 @@ static void printKeyValInArea(
     const thrift::Value& val);
 
 /*
+ * The struct contains the counts/lists of reasons why the incoming kvs are not
+ * merged
+ */
+struct KvStoreNoMergeReasonCounts {
+  KvStoreNoMergeReasonCounts() : noMatchedKey(0), noNeedToUpdate(0) {
+    listInvalidTtls.clear();
+    listOldVersions.clear();
+  }
+
+  // the incoming key does not match the filtered keys
+  uint32_t noMatchedKey;
+  // the ttl of the incoming kv is invalid
+  std::vector<int64_t> listInvalidTtls;
+  // the incoming kv has an older version
+  std::vector<int64_t> listOldVersions;
+  // the kv does not need to be merged
+  uint32_t noNeedToUpdate;
+};
+
+/*
  * Static method to precess the key-values publication, attempt to merge it
  in
  * the existing map, and return a publication made out of the updated values.
@@ -169,11 +189,15 @@ static void printKeyValInArea(
  * @param filters - optional filters, matching keys in keyVals will be
                     merged in
  *
- * @return
+ * @return: a tuple of
  *  - key-value map obtained by merging data; publication made out of
  *    the updated values
+ *  - the statistics
  */
-std::unordered_map<std::string, thrift::Value> mergeKeyValues(
+std::pair<
+    std::unordered_map<std::string, thrift::Value>,
+    KvStoreNoMergeReasonCounts>
+mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
     std::optional<KvStoreFilters> const& filters = std::nullopt);

@@ -3278,8 +3278,10 @@ KvStoreDb::mergePublication(
 
   // Generate delta with local KvStore
   thrift::Publication deltaPublication;
-  deltaPublication.keyVals_ref() = mergeKeyValues(
-      kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters);
+  deltaPublication.keyVals_ref() =
+      mergeKeyValues(
+          kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters)
+          .first;
   deltaPublication.floodRootId_ref().copy_from(
       rcvdPublication.floodRootId_ref());
   deltaPublication.area_ref() = area_;

@@ -94,7 +94,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     (*newKvIt->second.version_ref())++;
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -104,7 +104,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     (*newKvIt->second.version_ref())--;
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -114,7 +114,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     *newKvIt->second.originatorId_ref() = "node55";
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -124,7 +124,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     *newKvIt->second.originatorId_ref() = "node3";
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -134,7 +134,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref() = "dummyValueTest";
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -144,7 +144,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref() = "dummy";
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -156,7 +156,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     newKvIt->second.value_ref().reset();
     newKvIt->second.ttl_ref() = 123;
     (*newKvIt->second.ttlVersion_ref())++;
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     auto deltaKvIt = keyVals.find(key);
     // new ttl, ttlversion
     EXPECT_EQ(
@@ -178,7 +178,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     newKvIt->second = thriftValue;
     newKvIt->second.ttl_ref() = 123;
     (*newKvIt->second.ttlVersion_ref())++;
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -189,7 +189,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref() = "dummy";
     (*newKvIt->second.ttlVersion_ref())++;
-    auto keyVals = mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -199,7 +199,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     std::unordered_map<std::string, thrift::Value> emptyStore;
     newKvIt->second = thriftValue;
     newKvIt->second.ttl_ref() = -100;
-    auto keyVals = mergeKeyValues(emptyStore, newStore);
+    auto keyVals = mergeKeyValues(emptyStore, newStore).first;
     EXPECT_EQ(keyVals.size(), 0);
     EXPECT_EQ(emptyStore.size(), 0);
   }

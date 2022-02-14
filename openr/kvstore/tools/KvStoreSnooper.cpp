@@ -67,8 +67,10 @@ main(int argc, char** argv) {
                 }
 
                 // Print updates
-                auto updatedKeyVals = openr::mergeKeyValues(
-                    areaKeyVals.at(*pub.area_ref()), *pub.keyVals_ref());
+                auto updatedKeyVals =
+                    openr::mergeKeyValues(
+                        areaKeyVals.at(pub.get_area()), *pub.keyVals_ref())
+                        .first;
                 for (auto& [key, val] : updatedKeyVals) {
                   std::cout
                       << (val.value_ref().has_value() ? "Updated" : "Refreshed")

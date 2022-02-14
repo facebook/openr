@@ -198,7 +198,7 @@ dumpAllWithThriftClientFromMultiple(
                        << folly::exceptionStr(result.exception());
           } else if (result.hasValue()) {
             auto keyVals = *result.value().keyVals_ref();
-            const auto deltaPub = mergeKeyValues(merged, keyVals);
+            const auto deltaPub = mergeKeyValues(merged, keyVals).first;
 
             VLOG(3) << "Received kvstore publication with: " << keyVals.size()
                     << " key-vals. Incurred " << deltaPub.size()
