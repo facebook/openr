@@ -184,6 +184,12 @@ class LinkMonitor final : public OpenrEventBase {
       int32_t metricIncrementVal);
   folly::SemiFuture<folly::Unit> semifuture_unsetNodeInterfaceMetricIncrement();
 
+  // Set/unset interface-level metric increment
+  folly::SemiFuture<folly::Unit> semifuture_setInterfaceMetricIncrement(
+      std::string interfaceName, int32_t metricIncrementVal);
+  folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceMetricIncrement(
+      std::string interfaceName);
+
  private:
   // make no-copy
   LinkMonitor(const LinkMonitor&) = delete;

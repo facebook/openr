@@ -1965,6 +1965,22 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   }
 
   {
+    handler_->semifuture_setNodeInterfaceMetricIncrement(10).get();
+    handler_->semifuture_unsetNodeInterfaceMetricIncrement().get();
+  }
+
+  {
+    handler_
+        ->semifuture_setInterfaceMetricIncrement(
+            std::make_unique<std::string>(ifName), 10)
+        .get();
+    handler_
+        ->semifuture_unsetInterfaceMetricIncrement(
+            std::make_unique<std::string>(ifName))
+        .get();
+  }
+
+  {
     auto reply = handler_->semifuture_getInterfaces().get();
     EXPECT_EQ(nodeName_, *reply->thisNodeName_ref());
     EXPECT_FALSE(*reply->isOverloaded_ref());

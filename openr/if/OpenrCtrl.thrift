@@ -560,6 +560,21 @@ service OpenrCtrl extends KvStore.KvStoreService {
   void unsetNodeInterfaceMetricIncrement() throws (1: OpenrError error);
 
   /**
+   * Command to enable/disable static metric increment for an interface.
+   * It will add a static value `metricIncrementVal` to the existing metric on that interface.
+   *
+   *  Request must have a valid increment metric value.
+   */
+  void setInterfaceMetricIncrement(
+    string interfaceName,
+    i32 metricIncrementVal,
+  ) throws (1: OpenrError error);
+
+  void unsetInterfaceMetricIncrement(string interfaceName) throws (
+    1: OpenrError error,
+  );
+
+  /**
    * Command to override metric for specific adjacencies. Request must have
    * valid interface name, adjacency-node name and override metric value.
    */

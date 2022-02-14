@@ -722,6 +722,11 @@ struct LinkMonitorState {
    * Open/R will add a this value to the existing metric on all links.
    */
   7: i32 nodeMetricIncrementVal = 0;
+
+  /**
+   * Custom metric increment for links.
+   */
+  8: map<string, i32> linkMetiricIncrementMap;
 } (cpp.minimize_padding)
 
 /**

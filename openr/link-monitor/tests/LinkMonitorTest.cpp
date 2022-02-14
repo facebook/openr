@@ -754,6 +754,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   const int adjMetric = 100;
   const int nodeMetric = 200;
   const int changeNodeMetric = 300;
+  const int linkIncMetric = 1000;
+  const int changelinkIncMetric = 1500;
 
   {
     InSequence dummy;
@@ -881,12 +883,40 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect node-level metric increment value unset, only keeping metric
-      // override
+      // add interface-level metric
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.metric_ref() =
+          changeNodeMetric + linkMetric + linkIncMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded_ref() = true;
+      expectedAdjDbs.push(std::move(adjDb));
+
+      // change interface-level metric
+      adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric_ref() =
+          changeNodeMetric + linkMetric + changelinkIncMetric;
+
+      adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded_ref() = true;
+      expectedAdjDbs.push(std::move(adjDb));
+    }
+
+    {
+      // expect node-level metric increment value unset, only keeping metric
+      // override + interface-level metric increment
+      auto adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric_ref() = linkMetric + changelinkIncMetric;
+
+      auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded_ref() = true;
+      expectedAdjDbs.push(std::move(adjDb));
+      // expect interface-level metric increment value unset, only keeping
+      // metric override
+      adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric_ref() = linkMetric;
+
+      adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded_ref() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
@@ -949,8 +979,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // 8: custom metric on link
   // 9. Set overload bit and link metric value
   // 10. set and unset adjacency metric
-  // 11. set node-level metric increment
-  // 12. unset node-level metric increment
+  // 11. set node-level/interface-level metric increment
+  // 12. unset node-level/interface-level metric increment
   // 13. neighbor down
   {
     const std::string interfaceName = "iface_2_1";
@@ -1076,8 +1106,41 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    LOG(INFO) << "12. Testing unset node-level metric increment";
+    LOG(INFO) << "11.3 Add interface-level metric increment";
+    ret = linkMonitor
+              ->semifuture_setInterfaceMetricIncrement(
+                  interfaceName, linkIncMetric)
+              .get();
+    EXPECT_TRUE(folly::Unit() == ret);
+    checkNextAdjPub("adj:node-1");
+
+    LOG(INFO) << "11.4 change interface-level metric increment";
+    ret = linkMonitor
+              ->semifuture_setInterfaceMetricIncrement(
+                  interfaceName, changelinkIncMetric)
+              .get();
+    EXPECT_TRUE(folly::Unit() == ret);
+    checkNextAdjPub("adj:node-1");
+    // Setting the same metric again will skip advertising adjacencies again
+    ret = linkMonitor
+              ->semifuture_setInterfaceMetricIncrement(
+                  interfaceName, changelinkIncMetric)
+              .get();
+    // Setting an invalid metric will skip
+    ret = linkMonitor->semifuture_setInterfaceMetricIncrement(interfaceName, -1)
+              .get();
+
+    LOG(INFO) << "12.1 Testing unset node-level metric increment";
     ret = linkMonitor->semifuture_unsetNodeInterfaceMetricIncrement().get();
+    EXPECT_TRUE(folly::Unit() == ret);
+    checkNextAdjPub("adj:node-1");
+    // trigger the unset again will just skip
+    ret = linkMonitor->semifuture_unsetNodeInterfaceMetricIncrement().get();
+    EXPECT_TRUE(folly::Unit() == ret);
+
+    LOG(INFO) << "12.2 Testing unset interface-level metric increment";
+    ret = linkMonitor->semifuture_unsetInterfaceMetricIncrement(interfaceName)
+              .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
     // trigger the unset again will just skip

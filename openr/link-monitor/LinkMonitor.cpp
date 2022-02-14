@@ -965,7 +965,12 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
         folly::get_default(*state_.adjMetricOverrides_ref(), tAdjKey, metric);
 
     // increment the node-level metric
-    metric = metric + *state_.nodeMetricIncrementVal_ref();
+    metric += *state_.nodeMetricIncrementVal_ref();
+
+    // increment the link-level metric
+    if (state_.linkMetiricIncrementMap_ref()->count(*adj.ifName_ref())) {
+      metric += state_.linkMetiricIncrementMap_ref()[*adj.ifName_ref()];
+    }
 
     adj.metric_ref() = metric;
 
@@ -1493,6 +1498,87 @@ LinkMonitor::semifuture_setNodeInterfaceMetricIncrement(
 
     // set the state
     state_.nodeMetricIncrementVal_ref() = metricIncrementVal;
+
+    advertiseAdjacenciesThrottled_->operator()();
+    p.setValue();
+  });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+LinkMonitor::semifuture_setInterfaceMetricIncrement(
+    std::string interfaceName, int32_t metricIncrementVal) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        interfaceName,
+                        metricIncrementVal]() mutable {
+    // invalid increment input
+    if (metricIncrementVal <= 0) {
+      XLOG(ERR)
+          << "Skip cmd: setInterfaceMetricIncrement."
+          << "\n   Parameter `metricIncrementVal` should be a positive integer.";
+      p.setValue();
+      return;
+    }
+
+    if (0 == interfaces_.count(interfaceName)) {
+      XLOG(ERR) << "Skip cmd: setInterfaceMetricIncrement."
+                << "due to unknown interface: " << interfaceName;
+      p.setValue();
+      return;
+    }
+
+    if (state_.linkMetiricIncrementMap_ref()->count(interfaceName) &&
+        state_.linkMetiricIncrementMap_ref()[interfaceName] ==
+            metricIncrementVal) {
+      XLOG(INFO) << "Skip cmd: setInterfaceMetricIncrement."
+                 << "\n  Increment metric: " << metricIncrementVal
+                 << " already set for interface: " << interfaceName;
+      p.setValue();
+      return;
+    }
+
+    // set the link-level metric increment
+    auto oldMetric = folly::get_default(
+        *state_.linkMetiricIncrementMap_ref(), interfaceName, 0);
+    SYSLOG(INFO) << "Increment metric for interface " << interfaceName
+                 << "\n  Old increment value: " << oldMetric
+                 << "\n  Setting new increment value: " << metricIncrementVal;
+
+    state_.linkMetiricIncrementMap_ref()[interfaceName] = metricIncrementVal;
+
+    advertiseAdjacenciesThrottled_->operator()();
+    p.setValue();
+  });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
+    std::string interfaceName) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), interfaceName]() mutable {
+    if (0 == interfaces_.count(interfaceName)) {
+      XLOG(ERR) << "Skip cmd: [unsetInterfaceMetricIncrement]."
+                << "due to unknown interface: " << interfaceName;
+      p.setValue();
+      return;
+    }
+
+    if (not state_.linkMetiricIncrementMap_ref()->count(interfaceName)) {
+      XLOG(INFO) << "Skip cmd: [unsetInterfaceMetricIncrement]."
+                 << "due the interface " << interfaceName
+                 << "didn't set the link-level metric increment before.";
+      p.setValue();
+      return;
+    }
+
+    SYSLOG(INFO) << "Removing link-level metric increment for interface: "
+                 << interfaceName;
+    state_.linkMetiricIncrementMap_ref()->erase(interfaceName);
 
     advertiseAdjacenciesThrottled_->operator()();
     p.setValue();
