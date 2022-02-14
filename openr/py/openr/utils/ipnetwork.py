@@ -195,13 +195,13 @@ def sprint_prefix_forwarding_algorithm(
     )
 
 
-def ip_version(addr):
+def ip_version(addr: object):
     """return ip addr version"""
 
     return ipaddress.ip_address(addr).version
 
 
-def is_same_subnet(addr1, addr2, subnet):
+def is_same_subnet(addr1, addr2, subnet) -> bool:
     """
     Check whether two given addresses belong to the same subnet
     """
@@ -214,7 +214,7 @@ def is_same_subnet(addr1, addr2, subnet):
     return False
 
 
-def is_link_local(addr):
+def is_link_local(addr: object):
     """
     Check whether given addr is link local or not
     """

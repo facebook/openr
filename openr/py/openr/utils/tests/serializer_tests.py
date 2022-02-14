@@ -16,7 +16,7 @@ from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
 
 
 class TestSerialization(unittest.TestCase):
-    def test_reverse_equality(self):
+    def test_reverse_equality(self) -> None:
         for _ in range(100):
             thrift_obj = openr_types.PrefixDatabase()
             random_string = "".join(random.choice(string.digits) for _ in range(10))
@@ -39,7 +39,7 @@ class TestSerialization(unittest.TestCase):
             )
             self.assertEqual(thrift_obj, recovered_obj)
 
-    def test_thrifttype_sensitivity(self):
+    def test_thrifttype_sensitivity(self) -> None:
         thrift_obj = openr_types.PrefixDatabase()
         thrift_obj.thisNodeName = "some node"
         raw_msg = serializer.serialize_thrift_object(thrift_obj)
@@ -48,7 +48,7 @@ class TestSerialization(unittest.TestCase):
         )
         self.assertTrue(thrift_obj != recovered_obj)
 
-    def test_exception_handling(self):
+    def test_exception_handling(self) -> None:
         thrift_obj = openr_types.PrefixDatabase()
         thrift_obj.thisNodeName = "some node"
         raw_msg = serializer.serialize_thrift_object(thrift_obj)

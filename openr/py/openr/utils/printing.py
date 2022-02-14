@@ -12,7 +12,7 @@ from typing import Iterable, List, Optional, Sequence, Union
 import tabulate
 
 
-def caption_fmt(caption):
+def caption_fmt(caption) -> str:
     """Format a caption"""
 
     if caption:
@@ -43,7 +43,9 @@ def sprint_bytes(bytes: Union[int, float]) -> str:
     return f"{bytes:.2f} GB"
 
 
-def render_horizontal_table(data, column_labels=(), caption="", tablefmt="simple"):
+def render_horizontal_table(
+    data, column_labels=(), caption: str = "", tablefmt="simple"
+) -> str:
     """Render tabular data with one item per line
 
     :param data:  An iterable (e.g. a tuple() or list) containing the rows
@@ -72,7 +74,7 @@ def render_vertical_table(
     element_prefix: str = ">",
     element_suffix: str = "",
     timestamp: bool = False,
-):
+) -> str:
     """Render tabular data with one column per line
 
     :param data:  An iterable (e.g. a tuple() or list) containing the rows

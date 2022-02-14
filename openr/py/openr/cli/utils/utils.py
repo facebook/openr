@@ -56,7 +56,7 @@ PrintAdvertisedTypes = Union[
 ]
 
 
-def yesno(question, skip_confirm=False):
+def yesno(question, skip_confirm: bool = False) -> bool:
     """
     Ask a yes/no question. No default, we want to avoid mistakes as
     much as possible. Repeat the question until we receive a valid
@@ -80,7 +80,7 @@ def yesno(question, skip_confirm=False):
             return False
 
 
-def json_dumps(data):
+def json_dumps(data) -> str:
     """
     Gives consistent formatting for JSON dumps for our CLI
 
@@ -106,7 +106,7 @@ def json_dumps(data):
     )
 
 
-def time_since(timestamp):
+def time_since(timestamp) -> str:
     """
     :param timestamp: in seconds since unix time
 
@@ -173,7 +173,7 @@ def parse_nodes(cli_opts, nodes):
     return nodes
 
 
-def sprint_prefixes_db_full(prefix_db, loopback_only=False):
+def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False):
     """given serialized prefixes output an array of lines
         representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
 
@@ -215,7 +215,7 @@ def sprint_prefixes_db_full(prefix_db, loopback_only=False):
     )
 
 
-def alloc_prefix_to_loopback_ip_str(prefix):
+def alloc_prefix_to_loopback_ip_str(prefix) -> str:
     """
     :param prefix: IpPrefix representing an allocation prefix (CIDR network)
 
@@ -236,7 +236,7 @@ def parse_prefix_database(
     client_type_filter: Optional[Union[network_types.PrefixType, str]],
     prefix_dbs: Dict[str, openr_types.PrefixDatabase],
     prefix_db: Any,
-):
+) -> None:
     """
     Utility function to prase `prefix_db` with filter and populate prefix_dbs
     accordingly
@@ -277,7 +277,7 @@ def parse_prefix_database(
         prefix_dbs[prefix_db.thisNodeName].prefixEntries.append(prefix_entry)
 
 
-def print_prefixes_table(resp, nodes, prefix, client_type, iter_func):
+def print_prefixes_table(resp, nodes, prefix, client_type, iter_func) -> None:
     """print prefixes"""
 
     rows = []
@@ -384,7 +384,7 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
     return thrift_to_dict(prefix_db, _update)
 
 
-def print_prefixes_json(resp, nodes, prefix, client_type, iter_func):
+def print_prefixes_json(resp, nodes, prefix, client_type, iter_func) -> None:
     """print prefixes in json"""
 
     prefixes_map = {}
@@ -396,7 +396,7 @@ def print_prefixes_json(resp, nodes, prefix, client_type, iter_func):
     print(json_dumps(prefixes_map))
 
 
-def update_global_adj_db(global_adj_db, adj_db):
+def update_global_adj_db(global_adj_db, adj_db) -> None:
     """update the global adj map based on publication from single node
 
     :param global_adj_map map(node, AdjacencyDatabase)
@@ -489,7 +489,7 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
     return (adj_db.nodeLabel, adj_db.isOverloaded, adjacencies, area)
 
 
-def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
+def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version) -> None:
     """convert adj db to dict"""
 
     node_label, is_overloaded, adjacencies, area = dump_adj_db_full(
@@ -612,7 +612,7 @@ def print_json(map: Dict, file: Optional[TextIOBase] = None) -> None:
     print(json_dumps(map), file=file)
 
 
-def print_adjs_table(adjs_map, neigh=None, interface=None):
+def print_adjs_table(adjs_map, neigh=None, interface=None) -> None:
     """print adjacencies
 
     :param adjacencies as list of dict
@@ -1056,7 +1056,7 @@ def update_global_prefix_db(
     global_prefix_db: Dict,
     prefix_db: openr_types.PrefixDatabase,
     key: Optional[str] = None,
-):
+) -> None:
     """update the global prefix map with a single publication
 
     :param global_prefix_map map(node, set([str])): map of all prefixes
@@ -1201,7 +1201,7 @@ def dump_node_kvs(
     return pub
 
 
-def print_allocations_table(alloc_str):
+def print_allocations_table(alloc_str) -> None:
     """print static allocations"""
 
     rows = []
@@ -1469,7 +1469,7 @@ def compare_route_db(
     return False, error_msg
 
 
-def validate_route_nexthops(routes, interfaces, sources, quiet=False):
+def validate_route_nexthops(routes, interfaces, sources, quiet: bool = False):
     """
     Validate between fib routes and lm interfaces
 
@@ -1995,7 +1995,7 @@ def print_advertised_routes(
     print("\n".join(rows))
 
 
-def print_route_header(rows: List[str], detailed: bool):
+def print_route_header(rows: List[str], detailed: bool) -> None:
     """
     Helper function to construct print lines of header for advertised and received rooutes.
     """

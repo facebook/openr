@@ -65,7 +65,7 @@ except ImportError:
     "name we deem acceptable to connect to.",
 )
 @click.pass_context
-def cli(ctx, *args, **kwargs):
+def cli(ctx, *args, **kwargs) -> None:
     """Command line tools for Open/R."""
 
     # Default config options
@@ -91,7 +91,7 @@ def get_breeze_cli():
     return cli
 
 
-def main():
+def main() -> None:
     """entry point for breeze"""
 
     # let the magic begin

@@ -1400,12 +1400,12 @@ class SummaryCmd(KvStoreCmdBase):
         print()
 
 
-def ip_key(ip):
+def ip_key(ip: object):
     net = ipaddress.ip_network(ip)
     return (net.version, net.network_address, net.prefixlen)
 
 
-def convertTime(intTime):
+def convertTime(intTime) -> str:
     formatted_time = datetime.datetime.fromtimestamp(intTime / 1000)
     timezone = pytz.timezone("US/Pacific")
     formatted_time = timezone.localize(formatted_time)

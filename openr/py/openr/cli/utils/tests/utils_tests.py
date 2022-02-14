@@ -20,13 +20,13 @@ class UtilsTests(unittest.TestCase):
     def create_adjacency(
         otherNodeName,  # : str
         ifName,  # : str
-        metric=1,  # : int
-        adjLabel=0,  # : int
-        isOverloaded=False,  # : bool
-        rtt=1,  # : int
-        timestamp=0,  # : int
-        weight=1,  # : int
-        otherIfName="",  # : str
+        metric: int = 1,  # : int
+        adjLabel: int = 0,  # : int
+        isOverloaded: bool = False,  # : bool
+        rtt: int = 1,  # : int
+        timestamp: int = 0,  # : int
+        weight: int = 1,  # : int
+        otherIfName: str = "",  # : str
     ):  # -> openr_types.Adjacency
         adj = openr_types.Adjacency(
             otherNodeName=otherNodeName,
@@ -45,7 +45,7 @@ class UtilsTests(unittest.TestCase):
         )
         return adj
 
-    def test_find_adj_list_deltas(self):
+    def test_find_adj_list_deltas(self) -> None:
         adjs_old = [
             self.create_adjacency("nodeA", "ifaceX", metric=10),
             self.create_adjacency("nodeA", "ifaceY", metric=10),
@@ -68,7 +68,7 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(("NEIGHBOR_UP", None, adjs_new[2]), d3)
         self.assertEqual(("NEIGHBOR_UPDATE", adjs_old[2], adjs_new[1]), d4)
 
-    def test_adjacency_to_json(self):
+    def test_adjacency_to_json(self) -> None:
         adj = self.create_adjacency("nodeA", "ifaceX", metric=10)
         adj_dict = {
             "adjLabel": 0,
@@ -86,7 +86,7 @@ class UtilsTests(unittest.TestCase):
         }
         self.assertEqual(adj_dict, object_to_dict(adj))
 
-    def test_parse_prefix_database(self):
+    def test_parse_prefix_database(self) -> None:
         bgp1 = openr_types.PrefixEntry(
             prefix=ipnetwork.ip_str_to_prefix("1.0.0.0/8"),
             type=network_types.PrefixType.BGP,
