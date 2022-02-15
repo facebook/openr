@@ -445,6 +445,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(counters.count("kvstore.received_key_vals." + area + ".sum"));
   ASSERT_TRUE(
       counters.count("kvstore.received_publications." + area + ".count"));
+  ASSERT_TRUE(counters.count("kvstore.num_flood_peers." + area + ".count"));
 
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));

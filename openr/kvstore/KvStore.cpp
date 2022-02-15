@@ -1193,6 +1193,8 @@ KvStoreDb::KvStoreDb(
       "kvstore.received_key_vals." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
       "kvstore.received_publications." + area, fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.num_flood_peers." + area, fb303::COUNT);
 }
 
 void
@@ -1252,6 +1254,10 @@ KvStoreDb::floodTopoDump() noexcept {
              kvParams_.nodeId,
              floodRootId.has_value() ? floodRootId.value() : "NA",
              folly::join(",", floodPeers));
+
+  // Expose number of flood peers into ODS counter
+  fb303::fbData->addStatValue(
+      "kvstore.num_flood_peers", floodPeers.size(), fb303::COUNT);
 }
 
 void
