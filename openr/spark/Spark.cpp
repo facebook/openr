@@ -151,9 +151,9 @@ const std::vector<std::vector<std::optional<thrift::SparkNeighState>>>
          std::nullopt},
         /*
          * index 4 - RESTART
-         * HELLO_RCVD_INFO => ESTABLISHED; GR_TIMER_EXPIRE => IDLE
+         * HELLO_RCVD_INFO => NEGOTIATE; GR_TIMER_EXPIRE => IDLE
          */
-        {thrift::SparkNeighState::ESTABLISHED,
+        {thrift::SparkNeighState::NEGOTIATE,
          std::nullopt,
          std::nullopt,
          std::nullopt,
@@ -1164,7 +1164,18 @@ Spark::neighborUpWrapper(
         "[Initialization] Mark neighbor: {} only used by other node in adj population",
         neighborName);
   }
-  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor);
+
+  // ATTN: both WARM_BOOT(GR) and COLD_BOOT shared the SAME:
+  //  negotiation -> established
+  // state transiion. Differentiate them by reporting different types of events.
+  if (neighbor.gracefulRestartHoldTimer) {
+    // stop the graceful-restart hold-timer
+    neighbor.gracefulRestartHoldTimer.reset();
+
+    notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_RESTARTED, neighbor);
+  } else {
+    notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor);
+  }
 }
 
 void
@@ -1238,6 +1249,36 @@ Spark::processHeartbeatTimeout(
 
   // bring down neighborship and cleanup spark neighbor state
   neighborDownWrapper(neighbor, ifName, neighborName);
+}
+
+void
+Spark::processNegotiation(
+    std::string const& ifName,
+    std::string const& neighborName,
+    SparkNeighbor& neighbor) {
+  // Starts timer to periodically send hankshake msg
+  const std::string neighborAreaId = neighbor.area;
+  neighbor.negotiateTimer = folly::AsyncTimeout::make(
+      *getEvb(), [this, ifName, neighborName, neighborAreaId]() noexcept {
+        sendHandshakeMsg(ifName, neighborName, neighborAreaId, false);
+        // send out handshake msg periodically to this neighbor
+        CHECK(sparkNeighbors_.count(ifName) > 0)
+            << fmt::format("Key NOT found for: {}", ifName);
+        CHECK(sparkNeighbors_.at(ifName).count(neighborName) > 0)
+            << fmt::format("Key NOT found: {} under: {}", neighborName, ifName);
+        sparkNeighbors_.at(ifName)
+            .at(neighborName)
+            .negotiateTimer->scheduleTimeout(handshakeTime_);
+      });
+  neighbor.negotiateTimer->scheduleTimeout(handshakeTime_);
+
+  // Starts negotiate hold-timer
+  neighbor.negotiateHoldTimer = folly::AsyncTimeout::make(
+      *getEvb(), [this, ifName, neighborName]() noexcept {
+        // prevent to stucking in NEGOTIATE forever
+        processNegotiateTimeout(ifName, neighborName);
+      });
+  neighbor.negotiateHoldTimer->scheduleTimeout(handshakeHoldTime_);
 }
 
 void
@@ -1473,30 +1514,8 @@ Spark::processHelloMsg(
       return;
     }
 
-    // Starts timer to periodically send hankshake msg
-    const std::string neighborAreaId = neighbor.area;
-    neighbor.negotiateTimer = folly::AsyncTimeout::make(
-        *getEvb(), [this, ifName, neighborName, neighborAreaId]() noexcept {
-          sendHandshakeMsg(ifName, neighborName, neighborAreaId, false);
-          // send out handshake msg periodically to this neighbor
-          CHECK(sparkNeighbors_.count(ifName) > 0)
-              << fmt::format("Key NOT found for: {}", ifName);
-          CHECK(sparkNeighbors_.at(ifName).count(neighborName) > 0)
-              << fmt::format(
-                     "Key NOT found: {} under: {}", neighborName, ifName);
-          sparkNeighbors_.at(ifName)
-              .at(neighborName)
-              .negotiateTimer->scheduleTimeout(handshakeTime_);
-        });
-    neighbor.negotiateTimer->scheduleTimeout(handshakeTime_);
-
-    // Starts negotiate hold-timer
-    neighbor.negotiateHoldTimer = folly::AsyncTimeout::make(
-        *getEvb(), [this, ifName, neighborName]() noexcept {
-          // prevent to stucking in NEGOTIATE forever
-          processNegotiateTimeout(ifName, neighborName);
-        });
-    neighbor.negotiateHoldTimer->scheduleTimeout(handshakeHoldTime_);
+    // Start the negotiation process to exchange attributes with neighbor
+    processNegotiation(ifName, neighborName, neighbor);
 
     // Neighbor is aware of us. Promote to NEGOTIATE state
     thrift::SparkNeighState oldState = neighbor.state;
@@ -1560,17 +1579,8 @@ Spark::processHelloMsg(
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
-    notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_RESTARTED, neighbor);
-
-    // start heartbeat timer again to make sure neighbor is alive
-    neighbor.heartbeatHoldTimer = folly::AsyncTimeout::make(
-        *getEvb(), [this, ifName, neighborName]() noexcept {
-          processHeartbeatTimeout(ifName, neighborName);
-        });
-    neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
-
-    // stop the graceful-restart hold-timer
-    neighbor.gracefulRestartHoldTimer.reset();
+    // Start the negotiation process to exchange attributes with neighbor
+    processNegotiation(ifName, neighborName, neighbor);
 
     thrift::SparkNeighState oldState = neighbor.state;
     neighbor.state =
@@ -1632,19 +1642,6 @@ Spark::processHandshakeMsg(
     XLOG(INFO) << "[SparkHandshakeMsg] Neighbor: " << neighborName
                << " has NOT formed adj with us yet. "
                << "Reply to handshakeMsg immediately.";
-  }
-
-  // After GR from peerNode, peerNode will go through:
-  //
-  // IDLE => WARM => NEGOTIATE => ESTABLISHED
-  //
-  // Node can receive handshakeMsg from peerNode although it has already
-  // marked peer in ESTABLISHED state. Avoid unnecessary adj drop when
-  // handshake is happening by extending heartbeat hold timer.
-  if (neighbor.heartbeatHoldTimer) {
-    // Reset the hold-timer for neighbor as we have received a keep-alive msg
-    XLOG(DBG2) << "Extend heartbeat timer for neighbor: " << neighborName;
-    neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
   }
 
   // skip NEGOTIATE step if neighbor is NOT in state. This can happen:

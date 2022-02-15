@@ -114,6 +114,8 @@ class SimpleSparkFixture : public SparkFixture {
   createConfig() {
     auto tConfig1 = getBasicOpenrConfig(nodeName1_, kDomainName);
     auto tConfig2 = getBasicOpenrConfig(nodeName2_, kDomainName);
+    tConfig1.kvstore_config_ref()->enable_flood_optimization_ref() = true;
+    tConfig2.kvstore_config_ref()->enable_flood_optimization_ref() = true;
 
     config1_ = std::make_shared<Config>(tConfig1);
     config2_ = std::make_shared<Config>(tConfig2);
@@ -170,6 +172,7 @@ class SimpleSparkFixture : public SparkFixture {
       EXPECT_EQ(
           std::make_pair(ip2V4.first, ip2V6.first),
           SparkWrapper::getTransportAddrs(event));
+      EXPECT_EQ(true, event.enableFloodOptimization);
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName1_, nodeName2_);
     }
@@ -183,6 +186,7 @@ class SimpleSparkFixture : public SparkFixture {
       EXPECT_EQ(
           std::make_pair(ip1V4.first, ip1V6.first),
           SparkWrapper::getTransportAddrs(event));
+      EXPECT_EQ(true, event.enableFloodOptimization);
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
     }
@@ -620,6 +624,61 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
     ASSERT_TRUE(
         endTime - startTime <=
         std::chrono::seconds(grTime) + std::chrono::seconds(holdTime));
+  }
+}
+
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// restart one of them within GR window, make sure we get neighbor
+// "RESTARTED" event and validate attribute change.
+//
+TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
+
+  // kill node2
+  LOG(INFO) << fmt::format("Kill and restart {}", nodeName2_);
+
+  node2_.reset();
+
+  // Recreate Spark instance with a different attribute value of
+  // `supportFloodOptimization=false`
+  auto tConfigTmp = getBasicOpenrConfig(nodeName2_, kDomainName);
+  tConfigTmp.kvstore_config_ref()->enable_flood_optimization_ref() = false;
+
+  node2_ = createSpark(nodeName2_, std::make_shared<Config>(tConfigTmp));
+
+  node2_->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
+
+  // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
+  // with wrapped seqNum
+  {
+    auto events = node1_->waitForEvents(NB_RESTARTED);
+    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    auto& event = events.value().back();
+    EXPECT_EQ(iface1, event.localIfName);
+    EXPECT_EQ(nodeName2_, event.remoteNodeName);
+    // ATTN: node2 does NOT support flood-optimization
+    EXPECT_EQ(false, event.enableFloodOptimization);
+    LOG(INFO)
+        << fmt::format("{} reported {} as 'RESTARTED'", nodeName1_, nodeName2_);
+  }
+
+  // node-2 should ultimately report node-1 as 'UP'
+  {
+    auto events = node2_->waitForEvents(NB_UP);
+    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    auto& event = events.value().back();
+    EXPECT_EQ(iface2, event.localIfName);
+    EXPECT_EQ(nodeName1_, event.remoteNodeName);
+    // ATTN: node1 still supports flood-optimization
+    EXPECT_EQ(true, event.enableFloodOptimization);
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
   }
 }
 

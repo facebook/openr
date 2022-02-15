@@ -380,16 +380,22 @@ class Spark final : public OpenrEventBase {
       std::string const& ifName,
       SparkNeighbor& neighbor);
 
+  // process timeout for graceful restart
+  void processGRTimeout(
+      std::string const& ifName, std::string const& neighborName);
+
   // process timeout for heartbeat
   void processHeartbeatTimeout(
       std::string const& ifName, std::string const& neighborName);
 
+  // util function to start negotiate timer/negotiate hold timer
+  void processNegotiation(
+      std::string const& ifName,
+      std::string const& neighborName,
+      SparkNeighbor& neighbor);
+
   // process timeout for negotiate stage
   void processNegotiateTimeout(
-      std::string const& ifName, std::string const& neighborName);
-
-  // process timeout for graceful restart
-  void processGRTimeout(
       std::string const& ifName, std::string const& neighborName);
 
   // Util function for state transition
