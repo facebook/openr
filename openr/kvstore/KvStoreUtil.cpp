@@ -38,14 +38,14 @@ getKvStoreFilters(const thrift::KvStoreConfig& kvStoreConfig) {
 
 std::pair<
     std::unordered_map<std::string, thrift::Value>,
-    KvStoreNoMergeReasonCounts>
+    KvStoreNoMergeReasonStats>
 mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
     std::optional<KvStoreFilters> const& filters) {
   // the publication to build if we update our KV store
   std::unordered_map<std::string, thrift::Value> kvUpdates;
-  struct KvStoreNoMergeReasonCounts counts;
+  KvStoreNoMergeReasonStats stats;
 
   // Counters for logging
   uint32_t ttlUpdateCnt{0}, valUpdateCnt{0};
@@ -54,7 +54,8 @@ mergeKeyValues(
     if (filters.has_value() && not filters->keyMatch(key, value)) {
       XLOG(DBG4) << "key: " << key << " not adding from "
                  << *value.originatorId_ref();
-      ++counts.noMatchedKey;
+      stats.noMergeReasons.emplace(key, KvStoreNoMergeReason::NO_MATCHED_KEY);
+      ++stats.numberOfNoMatchedKeys;
       continue;
     }
 
@@ -66,7 +67,8 @@ mergeKeyValues(
     // Check if TTL is valid. It must be infinite or positive number
     // Skip if invalid!
     if (*value.ttl_ref() != Constants::kTtlInfinity && *value.ttl_ref() <= 0) {
-      counts.listInvalidTtls.push_back(*value.ttl_ref());
+      stats.noMergeReasons.emplace(key, KvStoreNoMergeReason::INVALID_TTL);
+      stats.listInvalidTtls.push_back(*value.ttl_ref());
       continue;
     }
 
@@ -81,7 +83,8 @@ mergeKeyValues(
 
     // If we get an old value just skip it
     if (newVersion < myVersion) {
-      counts.listOldVersions.push_back(newVersion);
+      stats.noMergeReasons.emplace(key, KvStoreNoMergeReason::OLD_VERSION);
+      stats.listOldVersions.push_back(newVersion);
       continue;
     }
 
@@ -135,7 +138,9 @@ mergeKeyValues(
     if (!updateAllNeeded and !updateTtlNeeded) {
       XLOG(DBG3) << "(mergeKeyValues) no need to update anything for key: '"
                  << key << "'";
-      ++counts.noNeedToUpdate;
+      stats.noMergeReasons.emplace(
+          key, KvStoreNoMergeReason::NO_NEED_TO_UPDATE);
+      ++stats.numberOfNoNeedToUpdates;
       continue;
     }
 
@@ -200,7 +205,7 @@ mergeKeyValues(
   XLOG(DBG4) << "(mergeKeyValues) updating " << kvUpdates.size()
              << " keyvals. ValueUpdates: " << valUpdateCnt
              << ", TtlUpdates: " << ttlUpdateCnt;
-  return std::make_pair(std::move(kvUpdates), std::move(counts));
+  return std::make_pair(std::move(kvUpdates), std::move(stats));
 }
 
 /**

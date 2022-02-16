@@ -160,23 +160,30 @@ static void printKeyValInArea(
     const thrift::Value& val);
 
 /*
- * The struct contains the counts/lists of reasons why the incoming kvs are not
- * merged
+ * The struct KvStoreNoMergeReasonStats contains the statistics of reasons why
+ * the incoming kvs are not merged
  */
-struct KvStoreNoMergeReasonCounts {
-  KvStoreNoMergeReasonCounts() : noMatchedKey(0), noNeedToUpdate(0) {
-    listInvalidTtls.clear();
-    listOldVersions.clear();
-  }
 
+enum KvStoreNoMergeReason {
+  NO_MATCHED_KEY,
+  INVALID_TTL,
+  OLD_VERSION,
+  NO_NEED_TO_UPDATE
+};
+
+struct KvStoreNoMergeReasonStats {
+  // per-key reasons
+  std::unordered_map<std::string, KvStoreNoMergeReason> noMergeReasons{};
+
+  // per-reason stats
   // the incoming key does not match the filtered keys
-  uint32_t noMatchedKey;
+  uint32_t numberOfNoMatchedKeys{0};
   // the ttl of the incoming kv is invalid
-  std::vector<int64_t> listInvalidTtls;
+  std::vector<int64_t> listInvalidTtls{};
   // the incoming kv has an older version
-  std::vector<int64_t> listOldVersions;
+  std::vector<int64_t> listOldVersions{};
   // the kv does not need to be merged
-  uint32_t noNeedToUpdate;
+  uint32_t numberOfNoNeedToUpdates{0};
 };
 
 /*
@@ -196,7 +203,7 @@ struct KvStoreNoMergeReasonCounts {
  */
 std::pair<
     std::unordered_map<std::string, thrift::Value>,
-    KvStoreNoMergeReasonCounts>
+    KvStoreNoMergeReasonStats>
 mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
