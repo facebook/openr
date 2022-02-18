@@ -173,7 +173,7 @@ def parse_nodes(cli_opts, nodes):
     return nodes
 
 
-def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False):
+def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False) -> str:
     """given serialized prefixes output an array of lines
         representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
 
@@ -700,7 +700,7 @@ def print_adjs_table(adjs_map, neigh=None, interface=None) -> None:
     print(printing.render_vertical_table(output))
 
 
-def sprint_adj_db_full(global_adj_db, adj_db, bidir):
+def sprint_adj_db_full(global_adj_db, adj_db, bidir) -> str:
     """given serialized adjacency database, print neighbors. Use the
         global adj database to validate bi-dir adjacencies
 
@@ -1001,7 +1001,7 @@ def adj_list_deltas_json(adj_deltas_list, tags=None):
     return deltas_json, return_code
 
 
-def sprint_adj_delta(old_adj, new_adj):
+def sprint_adj_delta(old_adj, new_adj) -> str:
     """given old and new adjacency, create a list of strings that summarize
     changes. If oldAdj is None, this function prints all attridutes of
     newAdj
@@ -1025,7 +1025,7 @@ def sprint_adj_delta(old_adj, new_adj):
     return printing.render_horizontal_table(rows)
 
 
-def sprint_pub_update(global_publication_db, key, value):
+def sprint_pub_update(global_publication_db, key, value) -> str:
     """
     store new version and originatorId for a key in the global_publication_db
     return a string summarizing any changes in a publication from kv store

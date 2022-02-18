@@ -1050,6 +1050,7 @@ class SnoopCmd(KvStoreCmdBase):
             print("Traversal List: {}".format(msg.nodeIds))
             self.print_publication_delta(
                 "Key: {} update".format(key),
+                # pyre-fixme[6]: For 2nd param expected `List[str]` but got `str`.
                 utils.sprint_pub_update(global_dbs["publications"], key, value),
                 timestamp=True,
             )
@@ -1076,6 +1077,7 @@ class SnoopCmd(KvStoreCmdBase):
         if lines:
             self.print_publication_delta(
                 "{}'s prefixes".format(prefix_db.thisNodeName),
+                # pyre-fixme[6]: For 2nd param expected `List[str]` but got `str`.
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
                 timestamp=True,
@@ -1109,6 +1111,7 @@ class SnoopCmd(KvStoreCmdBase):
         if lines:
             self.print_publication_delta(
                 "{}'s adjacencies".format(new_adj_db.thisNodeName),
+                # pyre-fixme[6]: For 2nd param expected `List[str]` but got `str`.
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
                 timestamp=True,
