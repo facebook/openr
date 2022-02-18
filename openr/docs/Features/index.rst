@@ -9,5 +9,6 @@ Here we explain in detail all the features of Open/R.
 
    Area
    BgpSpeaker
+   FIB-ACK
    RibPolicy
    SourceRouting
