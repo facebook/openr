@@ -95,7 +95,7 @@ SparkWrapper::recvNeighborEvent(
     std::this_thread::yield();
   }
 
-  return neighborUpdatesReader_.get().value();
+  return std::get<NeighborEvents>(neighborUpdatesReader_.get().value());
 }
 
 std::optional<NeighborEvents>

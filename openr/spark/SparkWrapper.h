@@ -87,8 +87,8 @@ class SparkWrapper {
   std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor
-  messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
-  messaging::RQueue<NeighborEvents> neighborUpdatesReader_{
+  messaging::ReplicateQueue<NeighborInitEvent> neighborUpdatesQueue_;
+  messaging::RQueue<NeighborInitEvent> neighborUpdatesReader_{
       neighborUpdatesQueue_.getReader()};
 
   // Queue to receive interface update from LinkMonitor

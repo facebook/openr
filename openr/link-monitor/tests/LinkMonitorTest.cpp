@@ -630,7 +630,7 @@ class LinkMonitorTestFixture : public testing::Test {
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
-  messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
+  messaging::ReplicateQueue<NeighborInitEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreEventsQueue;
   messaging::ReplicateQueue<thrift::InitializationEvent>
       initializationEventQueue;
@@ -950,7 +950,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // neighbor up
   {
     auto neighborEvent = nb2_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Sent neighbor UP event.";
 
     // Makes sure peerUpdatesQueue gets PeerEvent.
@@ -1151,7 +1152,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // 13. neighbor down
   {
     auto neighborEvent = nb2_down_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "13. Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -1166,7 +1168,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // Create new
   // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
-  neighborUpdatesQueue = messaging::ReplicateQueue<NeighborEvents>();
+  neighborUpdatesQueue = messaging::ReplicateQueue<NeighborInitEvent>();
   kvStoreEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
   initializationEventQueue =
       messaging::ReplicateQueue<thrift::InitializationEvent>(),
@@ -1195,7 +1197,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto neighborEvent = nb2_down_event;
     neighborEvent.neighborAddrV4 = empty;
     neighborEvent.neighborAddrV6 = empty;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "15. Testing neighbor down event with empty address!";
     checkNextAdjPub("adj:node-1");
   }
@@ -1252,11 +1255,13 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
   // neighbor up on nb2 and nb3
   {
     auto neighborEvent = nb2_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   {
     auto neighborEvent = nb3_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
 
   // initial sync event on nb2, kick advertiseAdjacenciesThrottled_
@@ -1269,7 +1274,8 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
   // neighbor 3 down immediately
   {
     auto neighborEvent = nb3_down_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1326,7 +1332,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     LOG(INFO) << "Sent neighbor UP event.";
 
@@ -1344,7 +1351,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   // neighbor 2 up on iface_2_1
   {
     auto neighborEvent = nb2_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // KvStore Peer has reached to the initial sync state,
     // publish Adj UP immediately
@@ -1358,7 +1366,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   {
     auto neighborEvent = nb2_down_event;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // only iface_2_1 in adj pub
     checkNextAdjPub("adj:node-1");
@@ -1370,7 +1379,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   // neighbor 2 down on iface_2_1
   {
     auto neighborEvent = nb2_down_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // check node-1 adj is empty
     checkNextAdjPub("adj:node-1");
@@ -1383,7 +1393,8 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     LOG(INFO) << "Sent neighbor UP event.";
 
@@ -1401,12 +1412,14 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   // neighbor 3: both adj up
   {
     auto neighborEvent = nb3_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   {
     auto neighborEvent = nb3_up_event;
     neighborEvent.localIfName = if_3_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   {
     // no adj up before KvStore Peer finish initial sync
@@ -1448,7 +1461,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   // neighbor 2 up on adj_2_1
   {
     auto neighborEvent = nb2_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
@@ -1470,7 +1484,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // check adj_2_2 is published
     auto adjDb = createAdjDb("node-1", {adj_2_2, adj_2_1}, kNodeLabel);
@@ -1486,14 +1501,16 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTING;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   // neighbor restarting iface_2_2 (GR)
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTING;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   {
     // wait for this peer change to propogate
@@ -1510,14 +1527,16 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTED;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   // neighbor restarted on iface_2_2 (GR Success)
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTED;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   {
     // wait for this peer change to propogate
@@ -1532,7 +1551,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   // send neighbor 3 up
   {
     auto neighborEvent = nb3_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
 
@@ -1551,7 +1571,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RTT_CHANGE;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // wait for this rtt change to propogate
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1598,7 +1619,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   // neighbor 2 up on adj_2_1
   {
     auto neighborEvent = nb2_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
@@ -1620,7 +1642,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // check adj_2_2 is published
     auto adjDb = createAdjDb("node-1", {adj_2_2, adj_2_1}, kNodeLabel);
@@ -1636,14 +1659,16 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTING;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   // neighbor restarting iface_2_2 (GR)
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTING;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
   {
     // wait for this peer change to propogate
@@ -1661,7 +1686,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   // send neighbor 3 up
   {
     auto neighborEvent = nb3_up_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
 
@@ -1678,7 +1704,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   // neighbor down on iface_2_1 (GR Failure)
   {
     auto neighborEvent = nb2_down_event;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // adj_2_1 removed
     auto adjDb = createAdjDb("node-1", {adj_3_1, adj_2_2}, kNodeLabel);
@@ -1691,7 +1718,8 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   {
     auto neighborEvent = nb2_down_event;
     neighborEvent.localIfName = if_2_2;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // adj_2_2 removed
     auto adjDb = createAdjDb("node-1", {adj_3_1}, kNodeLabel);
@@ -2512,7 +2540,8 @@ TEST_F(InitializationTestFixture, AdjacencyUpWithGracefulRestartTest) {
   auto neighborEvent = nb2_up_event;
   neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTED;
   neighborEvent.adjOnlyUsedByOtherNode = true;
-  neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
   // NOTE: adjacency db will contain adj_2_1 with
   // `adjOnlyUsedByOtherNode=false` as special flag will be ignored under
@@ -2528,7 +2557,8 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
     // with `adjOnlyUsedByOtherNode` set to true.
     auto neighborEvent = nb2_up_event;
     neighborEvent.adjOnlyUsedByOtherNode = true;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // kvstore peer initial sync
     kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
@@ -2546,7 +2576,8 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
     // push NB_UP_ADJ_SYNCED event to indicate adj is unblcoked
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_ADJ_SYNCED;
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // check adjacency will be published as `adjOnlyUsedByOtherNode` is reset
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
@@ -2599,7 +2630,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     expectedAdjDbs.push(std::move(adjDb));
     {
       auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
-      neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+      neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
       kvStoreEventsQueue.push(
           KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
       LOG(INFO) << "Testing neighbor UP event in default area!";
@@ -2617,7 +2648,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
       auto cp = nb3;
       cp.area_ref() = planeArea_;
       auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
-      neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+      neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
       kvStoreEventsQueue.push(
           KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
@@ -2630,7 +2661,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     kvStoreEventsQueue.push(
         KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
     LOG(INFO) << "Testing neighbor UP event!";
@@ -2646,7 +2677,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     auto cp = nb3;
     cp.area_ref() = planeArea_;
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     kvStoreEventsQueue.push(
         KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
     LOG(INFO) << "Testing neighbor UP event!";
@@ -2662,7 +2693,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     auto cp = nb3;
     cp.area_ref() = planeArea_;
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, cp);
-    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1", planeArea_);
   }

@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <variant>
+
 #include <boost/serialization/strong_typedef.hpp>
 
 #include <openr/common/Constants.h>
@@ -143,7 +145,22 @@ struct NeighborEvent {
         adjOnlyUsedByOtherNode(adjOnlyUsedByOtherNode) {}
 };
 
+/**
+ * TODO: Deprecate NeighborEvents and use NeighborEvent in NeighborInitEvent
+ * directly.
+ * Dependency: Complete the migration from batching neighbor update events to
+ * incremental neighbor update events.
+ */
 using NeighborEvents = std::vector<NeighborEvent>;
+
+/**
+ * Structure representing:
+ *  1) KvStoreSyncEvent;
+ *  2) Open/R Initialization event;
+ */
+using NeighborInitEvent = std::variant<
+    NeighborEvents /* Neighbor sync event */,
+    thrift::InitializationEvent /* KVSTORE_SYNCED or KVSTORE_SYNC_ERROR */>;
 
 /**
  * Enum indicating type of request to PrefixManager. Only used for inter

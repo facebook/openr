@@ -225,7 +225,7 @@ main(int argc, char** argv) {
   ReplicateQueue<thrift::InitializationEvent>
       prefixMgrInitializationEventsQueue;
   ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
-  ReplicateQueue<NeighborEvents> neighborUpdatesQueue;
+  ReplicateQueue<NeighborInitEvent> neighborUpdatesQueue;
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   ReplicateQueue<PeerEvent> peerUpdatesQueue;

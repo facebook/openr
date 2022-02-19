@@ -52,7 +52,7 @@ class Spark final : public OpenrEventBase {
       messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
       messaging::RQueue<thrift::InitializationEvent> initializationEventQueue,
       // producer Queue
-      messaging::ReplicateQueue<NeighborEvents>& nbrUpdatesQueue,
+      messaging::ReplicateQueue<NeighborInitEvent>& nbrUpdatesQueue,
       // raw ptr of modules
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<const Config> config,
@@ -465,7 +465,7 @@ class Spark final : public OpenrEventBase {
       stateMap_;
 
   // Queue to publish neighbor events
-  messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue_;
+  messaging::ReplicateQueue<NeighborInitEvent>& neighborUpdatesQueue_;
 
   // this is used to inform peers about my kvstore tcp ports
   const uint16_t kOpenrCtrlThriftPort_{0};

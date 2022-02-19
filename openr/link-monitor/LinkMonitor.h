@@ -119,7 +119,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
-      messaging::RQueue<NeighborEvents> neighborUpdatesQueue,
+      messaging::RQueue<NeighborInitEvent> neighborUpdatesQueue,
       messaging::RQueue<KvStoreSyncEvent> kvStoreEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will override drain state from persistent store with

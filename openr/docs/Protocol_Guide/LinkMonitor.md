@@ -36,9 +36,10 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
 - `[Producer] ReplicateQueue<KeyValueRequest>`: send requests to set key-value
   storing node's adjacency database in `KvStore`.
 
-- `[Consumer] RQueue<NeighborEvents>`: receive neighbor update sent from `Spark`
-  for adjacency updates. Events include neighbor UP/DOWN/RESTART/RTT-CHANGE.
-  This info will finally lead to **PEER SPEC** propagation towards `KvStore`.
+- `[Consumer] RQueue<NeighborInitEvent>`: receive neighbor update sent from
+  `Spark` or InitializationEvent NEIGHBOR_DISCOVERED / NEIGHBOR_DISCOVERY_ERROR.
+  Neighbor update events include neighbor UP/DOWN/RESTART/RTT-CHANGE. This info
+  will finally lead to **PEER SPEC** propagation towards `KvStore`.
 
 - `[Consumer] RQueue<fbnl::NetlinkEvent>`: receive `Netlink` event from
   underneath platform to add/delete/update interface information, which further

@@ -94,7 +94,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
-    messaging::RQueue<NeighborEvents> neighborUpdatesQueue,
+    messaging::RQueue<NeighborInitEvent> neighborUpdatesQueue,
     messaging::RQueue<KvStoreSyncEvent> kvStoreEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool overrideDrainState)
@@ -220,7 +220,22 @@ LinkMonitor::LinkMonitor(
         XLOG(INFO) << "Terminating neighbor update processing fiber";
         break;
       }
-      processNeighborEvents(std::move(maybeEvent).value());
+
+      folly::variant_match(
+          std::move(maybeEvent).value(),
+          [this](NeighborEvents&& event) {
+            // process different types of event
+            processNeighborEvents(std::move(event));
+          },
+          [](thrift::InitializationEvent&& event) {
+            CHECK(
+                event == thrift::InitializationEvent::NEIGHBOR_DISCOVERED ||
+                event == thrift::InitializationEvent::NEIGHBOR_DISCOVERY_ERROR)
+                << fmt::format(
+                       "Unexpected initialization event: {}",
+                       apache::thrift::util::enumNameSafe(event));
+            // TODO: Handle InitializationEvent
+          });
     }
   });
 

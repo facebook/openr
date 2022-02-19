@@ -290,7 +290,7 @@ Spark::SparkNeighbor::shouldResetAdjacency(
 Spark::Spark(
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
     messaging::RQueue<thrift::InitializationEvent> initializationEventQueue,
-    messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue,
+    messaging::ReplicateQueue<NeighborInitEvent>& neighborUpdatesQueue,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
     std::pair<uint32_t, uint32_t> version,
