@@ -19,15 +19,60 @@ include "fb303/thrift/fb303_core.thrift"
  * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html
  */
 enum InitializationEvent {
+  /**
+   * Open/R initialization process starts.
+   */
   INITIALIZING = 0,
+  /**
+   * Platform agent is ready to accept FIB route programming.
+   */
   AGENT_CONFIGURED = 1,
+  /**
+   * All links configured locally has been discovered via Netllink.
+   */
   LINK_DISCOVERED = 2,
+  /**
+   * All neighbor has been discovered.
+   */
   NEIGHBOR_DISCOVERED = 3,
+  /**
+   * KvStore has completed initial full sync with initial peer set.
+   */
   KVSTORE_SYNCED = 4,
+  /**
+   * Initial RIB computation based on link-state database has completed.
+   */
   RIB_COMPUTED = 5,
+  /**
+   * Initial FIB programming based on the RIB computation has completed.
+   */
   FIB_SYNCED = 6,
+  /**
+   * Initial prefix advertisement and redistribution has completed.
+   */
   PREFIX_DB_SYNCED = 7,
+  /**
+   * Open/R initialization process has completed.
+   */
   INITIALIZED = 8,
+  /**
+   * All peers(not necessarily neighbors) has been discovered and reported.
+   * ATTN: multiple neighbors can lead to single peer, aka, parallel
+   * adjacencies. PEER_DISCOVERED happens after NEIGHBOR_DISCOVERED.
+   */
+  PEERS_DISCOVERED = 9,
+  /**
+   * ErrorCode: failures happen during the neighbor discovery process.
+   */
+  NEIGHBOR_DISCOVERY_ERROR = 10,
+  /**
+   * ErrorCode: failures happen during the peer discovery process.
+   */
+  PEER_DISCOVERY_ERROR = 11,
+  /**
+   * ErrorCode: failures happen during initial KvStore sync process.
+   */
+  KVSTORE_SYNC_ERROR = 12,
 }
 
 exception KvStoreError {
