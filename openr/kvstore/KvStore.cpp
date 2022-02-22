@@ -801,14 +801,11 @@ KvStore::getGlobalCounters() const {
   for (auto& [_, kvDb] : kvStoreDb_) {
     auto kvDbCounters = kvDb.getCounters();
     // add up counters for same key from all kvStoreDb instances
-    flatCounters = std::accumulate(
+    std::for_each(
         kvDbCounters.begin(),
         kvDbCounters.end(),
-        flatCounters,
-        [](std::map<std::string, int64_t>& flatCounters,
-           const std::pair<const std::string, int64_t>& kvDbCounter) {
+        [&](const std::pair<const std::string, int64_t>& kvDbCounter) {
           flatCounters[kvDbCounter.first] += kvDbCounter.second;
-          return flatCounters;
         });
   }
   return flatCounters;
@@ -2136,10 +2133,8 @@ KvStoreDb::addPeers(
     ++peerAddCounter_;
     std::vector<std::string> dualPeersToAdd;
     for (auto const& [peerName, newPeerSpec] : peers) {
-      auto const& newPeerCmdId = fmt::format(
-          Constants::kGlobalCmdLocalIdTemplate.toString(),
-          peerName,
-          peerAddCounter_);
+      auto const& newPeerCmdId =
+          fmt::format("{}::{}::TCP::CMD::LOCAL", peerName, peerAddCounter_);
       const auto& supportFloodOptimization =
           *newPeerSpec.supportFloodOptimization_ref();
 

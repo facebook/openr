@@ -456,7 +456,7 @@ class LinkMonitorTestFixture : public testing::Test {
   }
 
   // collate Interfaces into a map so UT can run some checks
-  using CollatedIfData = struct {
+  struct CollatedIfData {
     int isUpCount{0};
     int isDownCount{0};
     int v4AddrsMaxCount{0};
@@ -558,6 +558,10 @@ class LinkMonitorTestFixture : public testing::Test {
 
       LOG(INFO) << "[RECEIVED ADJ]";
       printAdjDb(adjDb);
+      LOG(INFO) << "[EXPECTED ADJ]";
+      printAdjDb(expectedAdjDbs.front());
+      sortAdjacencyDbByNodeNameAndInterface(adjDb);
+      sortAdjacencyDbByNodeNameAndInterface(expectedAdjDbs.front());
       auto adjDbstr = writeThriftObjStr(adjDb, serializer);
       auto expectedAdjDbstr =
           writeThriftObjStr(expectedAdjDbs.front(), serializer);
@@ -566,6 +570,18 @@ class LinkMonitorTestFixture : public testing::Test {
         return;
       }
     }
+  }
+
+  void
+  sortAdjacencyDbByNodeNameAndInterface(thrift::AdjacencyDatabase& adjDb) {
+    auto adjs = adjDb.adjacencies();
+    std::stable_sort(
+        adjs->begin(),
+        adjs->end(),
+        [&](::openr::thrift::Adjacency left, ::openr::thrift::Adjacency right) {
+          return (*left.otherNodeName() + *left.ifName()) <
+              (*right.otherNodeName() + *right.ifName());
+        });
   }
 
   // kvstore shall reveive cmd to add/del peers

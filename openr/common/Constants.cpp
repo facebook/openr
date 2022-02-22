@@ -14,7 +14,6 @@ constexpr folly::StringPiece Constants::kAdjDbMarker;
 constexpr folly::StringPiece Constants::kDefaultArea;
 constexpr folly::StringPiece Constants::kErrorResponse;
 constexpr folly::StringPiece Constants::kEventLogCategory;
-constexpr folly::StringPiece Constants::kGlobalCmdLocalIdTemplate;
 constexpr folly::StringPiece Constants::kNodeLabelRangePrefix;
 constexpr folly::StringPiece Constants::kOpenrCtrlSessionContext;
 constexpr folly::StringPiece Constants::kPlatformHost;

@@ -219,9 +219,6 @@ class Constants {
   static constexpr folly::StringPiece kPrefixAllocMarker{"allocprefix:"};
   static constexpr folly::StringPiece kNodeLabelRangePrefix{"nodeLabel:"};
 
-  static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{
-      "{}::{}::TCP::CMD::LOCAL"};
-
   static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
   static constexpr folly::StringPiece kPluginSessionContext{"OpenrPlugin"};
 

@@ -25,10 +25,6 @@ using namespace openr;
 
 namespace {
 
-std::string_view kPrefixV4 = "192.168.{}.{}/32";
-std::string_view kPrefixV6 = "fc00:cafe:{}::{}/128";
-std::string_view kNextHopV4 = "169.254.0.{}";
-std::string_view kNextHopV6 = "fe80::{}";
 const std::vector<std::string> kInterfaces{"eth0", "eth1", "eth2", "eth4"};
 
 thrift::NextHopThrift
@@ -38,8 +34,12 @@ createNextHop(
     std::optional<thrift::MplsAction> mplsAction = std::nullopt) {
   CHECK(kInterfaces.size());
   thrift::NextHopThrift nh;
-  const auto& nhFormat = isV4 ? kNextHopV4 : kNextHopV6;
-  nh.address_ref() = toBinaryAddress(fmt::format(nhFormat, 1 + index));
+  if (isV4) {
+    nh.address_ref() = toBinaryAddress(fmt::format("169.254.0.{}", 1 + index));
+  } else {
+    nh.address_ref() = toBinaryAddress(fmt::format("fe80::{}", 1 + index));
+  }
+
   nh.address_ref()->ifName_ref() =
       kInterfaces.at(folly::Random::rand32() % kInterfaces.size());
   nh.weight_ref() = 0;
@@ -67,9 +67,13 @@ thrift::UnicastRoute
 createUnicastRoute(size_t index, size_t numNhs, bool isV4) {
   CHECK_LT(0, numNhs); // Number of nexthops must be non-zero
   thrift::UnicastRoute route;
-  const auto& format = isV4 ? kPrefixV4 : kPrefixV6;
-  route.dest_ref() =
-      toIpPrefix(fmt::format(format, index / 255, 1 + index % 255));
+  if (isV4) {
+    route.dest_ref() = toIpPrefix(
+        fmt::format("192.168.{}.{}/32", index / 255, 1 + index % 255));
+  } else {
+    route.dest_ref() = toIpPrefix(
+        fmt::format("fc00:cafe:{}::{}/128", index / 255, 1 + index % 255));
+  }
   route.nextHops_ref() = createNextHops(numNhs, isV4);
   return route;
 }
