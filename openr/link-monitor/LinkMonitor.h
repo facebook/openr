@@ -406,17 +406,24 @@ class LinkMonitor final : public OpenrEventBase {
   // ser/deser binary data for transmission
   apache::thrift::CompactSerializer serializer_;
 
-  // currently active adjacencies
-  // an adjacency is uniquely identified by interface and remote node
-  // there can be multiple interfaces to a remote node, but at most 1 interface
-  // (we use the "min" interface) for tcp connection
-  std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies_;
+  // Currently active adjacencies.
+  // An adjacency is uniquely identified by interface and remote node within an
+  // area.
+  // There can be multiple interfaces to a remote node, but at most 1 interface
+  // (we use the "min" interface) for tcp connection.
+  std::unordered_map<
+      std::string /* area */, // Compiler doesn't allow names here.
+      std::unordered_map<AdjacencyKey, AdjacencyValue>>
+      adjacencies_;
 
   // Previously announced KvStore peers
   std::unordered_map<
       std::string /* area */,
       std::unordered_map<std::string /* node name */, KvStorePeerValue>>
       peers_;
+
+  // Total # of adjacencies stored.
+  size_t getTotalAdjacencies();
 
   // all interfaces states, including DOWN one
   // Keyed by interface Name

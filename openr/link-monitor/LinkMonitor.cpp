@@ -358,8 +358,6 @@ LinkMonitor::neighborUpEvent(
   CHECK(not peerAddr.empty()) << "Got empty peerAddr";
 
   const auto adjId = std::make_pair(remoteNodeName, localIfName);
-  const auto& oldAdj = adjacencies_.find(adjId);
-
   // If enableNewGRBehavior_, GR = neighbor restart -> kvstore initial sync.
   // We record GR status of old adj, KvStore Sync event will reset this field.
   // Else: GR = neighbor restart -> spark neighbor establishment.
@@ -368,15 +366,21 @@ LinkMonitor::neighborUpEvent(
   // TODO: remove `isRestarting` flag once enable_ordered_adj_publication is
   // fully rolled out to PROD.
   bool isRestarting{false};
-  if (enableNewGRBehavior_ and oldAdj != adjacencies_.end() and
-      oldAdj->second.isRestarting) {
-    isRestarting = true;
+  if (enableNewGRBehavior_) {
+    const auto& areaAdjacencies = adjacencies_.find(area);
+    if (areaAdjacencies != adjacencies_.end()) {
+      const auto& oldAdj = areaAdjacencies->second.find(adjId);
+      if (oldAdj != areaAdjacencies->second.end() and
+          oldAdj->second.isRestarting) {
+        isRestarting = true;
+      }
+    }
   }
 
   // NOTE: for Graceful Restart(GR) case, we don't expect any adjacency
   // information change. Ignore the `onlyUsedByOtherNode` flag for adjacency
   // advertisement.
-  adjacencies_[adjId] = AdjacencyValue(
+  adjacencies_[area][adjId] = AdjacencyValue(
       area,
       createPeerSpec(
           repUrl,
@@ -390,7 +394,7 @@ LinkMonitor::neighborUpEvent(
       isGracefulRestart ? false : onlyUsedByOtherNode);
 
   // update kvstore peer
-  updateKvStorePeerNeighborUp(area, adjId, adjacencies_[adjId]);
+  updateKvStorePeerNeighborUp(area, adjId, adjacencies_[area][adjId]);
 
   // Advertise new adjancies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -403,12 +407,21 @@ LinkMonitor::neighborAdjSyncedEvent(const NeighborEvent& event) {
     return;
   }
 
+  const auto& area = event.area;
   const auto& localIfName = event.localIfName;
   const auto& remoteNodeName = event.remoteNodeName;
-  const auto adjId = std::make_pair(remoteNodeName, localIfName);
 
-  auto adjIt = adjacencies_.find(adjId);
-  if (adjIt == adjacencies_.end()) {
+  auto areaAdjIt = adjacencies_.find(area);
+  if (areaAdjIt == adjacencies_.end()) {
+    LOG(WARNING) << fmt::format(
+        "Skip processing neighbor event due to no known adjacencies for area {}",
+        area);
+    return;
+  }
+
+  const auto adjId = std::make_pair(remoteNodeName, localIfName);
+  auto adjIt = areaAdjIt->second.find(adjId);
+  if (adjIt == areaAdjIt->second.end()) {
     LOG(WARNING) << fmt::format(
         "Skip processing neighbor event due to adjKey: [{}, {}] not found",
         remoteNodeName,
@@ -438,11 +451,16 @@ LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
                << " is down on interface " << localIfName;
   fb303::fbData->addStatValue("link_monitor.neighbor_down", 1, fb303::SUM);
 
-  const auto adjId = std::make_pair(remoteNodeName, localIfName);
-  auto adjValueIt = adjacencies_.find(adjId);
+  auto areaAdjIt = adjacencies_.find(area);
+  // No corresponding adj, ignore.
+  if (areaAdjIt == adjacencies_.end()) {
+    return;
+  }
 
+  const auto adjId = std::make_pair(remoteNodeName, localIfName);
+  auto adjValueIt = areaAdjIt->second.find(adjId);
   // invalid adj, ignore
-  if (adjValueIt == adjacencies_.end()) {
+  if (adjValueIt == areaAdjIt->second.end()) {
     return;
   }
 
@@ -450,7 +468,7 @@ LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
   updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second);
 
   // remove such adjacencies
-  adjacencies_.erase(adjValueIt);
+  adjacencies_[area].erase(adjValueIt);
 
   // advertise adjacencies
   advertiseAdjacencies(area);
@@ -467,11 +485,16 @@ LinkMonitor::neighborRestartingEvent(const NeighborEvent& event) {
   fb303::fbData->addStatValue(
       "link_monitor.neighbor_restarting", 1, fb303::SUM);
 
-  const auto adjId = std::make_pair(remoteNodeName, localIfName);
-  auto adjValueIt = adjacencies_.find(adjId);
-
+  auto areaAdjIt = adjacencies_.find(area);
   // invalid adj, ignore
-  if (adjValueIt == adjacencies_.end()) {
+  if (areaAdjIt == adjacencies_.end()) {
+    return;
+  }
+
+  const auto adjId = std::make_pair(remoteNodeName, localIfName);
+  auto adjValueIt = areaAdjIt->second.find(adjId);
+  // invalid adj, ignore
+  if (adjValueIt == areaAdjIt->second.end()) {
     return;
   }
 
@@ -488,16 +511,20 @@ LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
   const auto& localIfName = event.localIfName;
   const auto& rttUs = event.rttUs;
   int32_t newRttMetric = getRttMetric(rttUs);
+  const auto& area = event.area;
 
   XLOG(DBG1) << "Metric value changed for neighbor " << remoteNodeName
              << " on interface: " << localIfName << " to " << newRttMetric;
 
-  auto it = adjacencies_.find({remoteNodeName, localIfName});
-  if (it != adjacencies_.end()) {
-    auto& adj = it->second.adjacency;
-    adj.metric_ref() = newRttMetric;
-    adj.rtt_ref() = rttUs;
-    advertiseAdjacenciesThrottled_->operator()();
+  auto areaAdjIt = adjacencies_.find(area);
+  if (areaAdjIt != adjacencies_.end()) {
+    auto it = areaAdjIt->second.find({remoteNodeName, localIfName});
+    if (it != areaAdjIt->second.end()) {
+      auto& adj = it->second.adjacency;
+      adj.metric_ref() = newRttMetric;
+      adj.rtt_ref() = rttUs;
+      advertiseAdjacenciesThrottled_->operator()();
+    }
   }
 }
 
@@ -532,13 +559,16 @@ LinkMonitor::processKvStoreSyncEvent(KvStoreSyncEvent&& event) {
 
   // update adjacency status
   for (const auto& adjId : peerVal->second.establishedSparkNeighbors) {
-    auto it = adjacencies_.find(adjId);
-    if (it != adjacencies_.end()) {
-      // kvstore sync is done, exit GR mode
-      if (it->second.isRestarting) {
-        XLOG(INFO) << "Neighbor " << adjId.first << " on interface "
-                   << adjId.second << " exiting GR successfully";
-        it->second.isRestarting = false;
+    auto areaAdjIt = adjacencies_.find(area);
+    if (areaAdjIt != adjacencies_.end()) {
+      auto it = areaAdjIt->second.find(adjId);
+      if (it != areaAdjIt->second.end()) {
+        // kvstore sync is done, exit GR mode
+        if (it->second.isRestarting) {
+          XLOG(INFO) << "Neighbor " << adjId.first << " on interface "
+                     << adjId.second << " exiting GR successfully";
+          it->second.isRestarting = false;
+        }
       }
     }
   }
@@ -652,8 +682,9 @@ LinkMonitor::updateKvStorePeerNeighborDown(
   // e.g. adj_1 up -> adj_1 peer spec is used in KvStore Peer
   //      adj_2 up -> peer spec does not change
   //      adj_1 down -> Now adj_2 will be the peer-spec being used to establish
-  peer.tPeerSpec =
-      adjacencies_.at(*peer.establishedSparkNeighbors.begin()).peerSpec;
+  peer.tPeerSpec = adjacencies_.at(area)
+                       .at(*peer.establishedSparkNeighbors.begin())
+                       .peerSpec;
 
   // peer spec change, send peer add event
   logPeerEvent("ADD_PEER", remoteNodeName, peer.tPeerSpec);
@@ -697,11 +728,13 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   // Update some flat counters
   fb303::fbData->addStatValue(
       "link_monitor.advertise_adjacencies", 1, fb303::SUM);
-  fb303::fbData->setCounter("link_monitor.adjacencies", adjacencies_.size());
-  for (const auto& [_, adjValue] : adjacencies_) {
-    auto& adj = adjValue.adjacency;
-    fb303::fbData->setCounter(
-        "link_monitor.metric." + *adj.otherNodeName_ref(), *adj.metric_ref());
+  fb303::fbData->setCounter("link_monitor.adjacencies", getTotalAdjacencies());
+  for (const auto& [_, areaAdjacencies] : adjacencies_) {
+    for (const auto& [_, adjValue] : areaAdjacencies) {
+      auto& adj = adjValue.adjacency;
+      fb303::fbData->setCounter(
+          "link_monitor.metric." + *adj.otherNodeName_ref(), *adj.metric_ref());
+    }
   }
 }
 void
@@ -934,65 +967,61 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
 
   // populate thrift::AdjacencyDatabase.adjacencies based on
   // various condition.
-  for (auto& [adjKey, adjValue] : adjacencies_) {
-    // TODO: enhance the data-structure to store adjacencies_ to avoid
-    // duplicate cycle to go through. Multiple areas can lead to multiple
-    // rounds of traversing inside `adjacencies_`.
-    if (adjValue.area != area) {
-      continue;
+  auto areaAdjIt = adjacencies_.find(area);
+  if (areaAdjIt != adjacencies_.end()) {
+    for (auto& [adjKey, adjValue] : areaAdjIt->second) {
+      if (shouldSkipAdjAnnouncement(adjKey, adjValue)) {
+        LOG(INFO) << fmt::format(
+            "Skip announcement of adjKey: [{}, {}] without initial sync.",
+            adjKey.first,
+            adjKey.second);
+        continue;
+      }
+
+      // NOTE: copy on purpose
+      auto adj = folly::copy(adjValue.adjacency);
+
+      // set link overload bit
+      adj.isOverloaded_ref() =
+          state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
+
+      // Calculate the adj metric - there are three types of metric, which can
+      // be potentially combined:
+      // 1. base metric derived from RTT or default hop-count metric.
+      //    ATTN: link-metirc/adj-metric override can ONLY override base metric,
+      //          and adj-metric override can overrice link-metric override.
+      // 2. node-level incremental metric;
+      // 3. link-level incremental metric.
+      int32_t metric = adjValue.baseMetric;
+
+      // override metric with link metric if it exists
+      metric = folly::get_default(
+          *state_.linkMetricOverrides_ref(),
+          *adj.ifName_ref(),
+          adjValue.baseMetric);
+
+      // override metric with adj metric if it exists
+      thrift::AdjKey tAdjKey;
+      tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
+      tAdjKey.ifName_ref() = *adj.ifName_ref();
+      metric =
+          folly::get_default(*state_.adjMetricOverrides_ref(), tAdjKey, metric);
+
+      // increment the node-level metric
+      metric += *state_.nodeMetricIncrementVal_ref();
+
+      // increment the link-level metric
+      if (state_.linkMetiricIncrementMap_ref()->count(*adj.ifName_ref())) {
+        metric += state_.linkMetiricIncrementMap_ref()[*adj.ifName_ref()];
+      }
+
+      adj.metric_ref() = metric;
+
+      // set flag to indicate if adjacency will ONLY be used by other node
+      adj.adjOnlyUsedByOtherNode_ref() = adjValue.onlyUsedByOtherNode;
+
+      adjDb.adjacencies_ref()->emplace_back(std::move(adj));
     }
-
-    if (shouldSkipAdjAnnouncement(adjKey, adjValue)) {
-      LOG(INFO) << fmt::format(
-          "Skip announcement of adjKey: [{}, {}] without initial sync.",
-          adjKey.first,
-          adjKey.second);
-      continue;
-    }
-
-    // NOTE: copy on purpose
-    auto adj = folly::copy(adjValue.adjacency);
-
-    // set link overload bit
-    adj.isOverloaded_ref() =
-        state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
-
-    // Calculation the adj metric, there are three types of metric, which can be
-    // potentially combined:
-    // 1. base metric derived from RTT or default hop-count metric.
-    //    ATTN: link-metirc/adj-metric override can ONLY override base metric,
-    //          and adj-metric override can overrice link-metric override.
-    // 2. node-level incremental metric;
-    // 3. link-level incremental metric.
-    int32_t metric = adjValue.baseMetric;
-
-    // override metric with link metric if it exists
-    metric = folly::get_default(
-        *state_.linkMetricOverrides_ref(),
-        *adj.ifName_ref(),
-        adjValue.baseMetric);
-
-    // override metric with adj metric if it exists
-    thrift::AdjKey tAdjKey;
-    tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
-    tAdjKey.ifName_ref() = *adj.ifName_ref();
-    metric =
-        folly::get_default(*state_.adjMetricOverrides_ref(), tAdjKey, metric);
-
-    // increment the node-level metric
-    metric += *state_.nodeMetricIncrementVal_ref();
-
-    // increment the link-level metric
-    if (state_.linkMetiricIncrementMap_ref()->count(*adj.ifName_ref())) {
-      metric += state_.linkMetiricIncrementMap_ref()[*adj.ifName_ref()];
-    }
-
-    adj.metric_ref() = metric;
-
-    // set flag to indicate if adjacency will ONLY be used by other node
-    adj.adjOnlyUsedByOtherNode_ref() = adjValue.onlyUsedByOtherNode;
-
-    adjDb.adjacencies_ref()->emplace_back(std::move(adj));
   }
 
   // Add perf information if enabled
@@ -1419,8 +1448,17 @@ LinkMonitor::semifuture_setAdjacencyMetric(
     *adjKey.ifName_ref() = interfaceName;
     *adjKey.nodeName_ref() = adjNodeName;
 
-    // Invalid adj encountered. Ignore
-    if (!adjacencies_.count(std::make_pair(adjNodeName, interfaceName))) {
+    auto adjacencyKey = std::make_pair(adjNodeName, interfaceName);
+    bool unknownAdj{true};
+    for (const auto& [_, areaAdjacencies] : adjacencies_) {
+      if (areaAdjacencies.count(adjacencyKey)) {
+        unknownAdj = false;
+        // Found it.
+        break;
+      }
+    }
+    // Invalid adj encountered, ignoring.
+    if (unknownAdj) {
       XLOG(ERR) << "Skip cmd: [" << cmd << "] due to unknown adj: ["
                 << adjNodeName << ":" << interfaceName << "]";
       p.setValue();
@@ -1646,7 +1684,7 @@ LinkMonitor::semifuture_getInterfaces() {
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
 LinkMonitor::semifuture_getAdjacencies(thrift::AdjacenciesFilter filter) {
-  XLOG(DBG2) << "Dump adj requested, reply with " << adjacencies_.size()
+  XLOG(DBG2) << "Dump adj requested, reply with " << getTotalAdjacencies()
              << " adjs";
 
   folly::Promise<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>> p;
@@ -1671,7 +1709,7 @@ LinkMonitor::semifuture_getAdjacencies(thrift::AdjacenciesFilter filter) {
 folly::SemiFuture<std::unique_ptr<
     std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
 LinkMonitor::semifuture_getAreaAdjacencies(thrift::AdjacenciesFilter filter) {
-  XLOG(DBG2) << "Dump adj requested, reply with " << adjacencies_.size()
+  XLOG(DBG2) << "Dump adj requested, reply with " << getTotalAdjacencies()
              << " adjs";
 
   folly::Promise<std::unique_ptr<
@@ -1837,4 +1875,15 @@ LinkMonitor::getStaticNodeSegmentLabel(
   }
   return 0;
 }
+
+/// Total # of adjacencies stored across all areas.
+size_t
+LinkMonitor::getTotalAdjacencies() {
+  size_t numAdjacencies{0};
+  for (const auto& [_, areaAdjacencies] : adjacencies_) {
+    numAdjacencies += areaAdjacencies.size();
+  }
+  return numAdjacencies;
+}
+
 } // namespace openr
