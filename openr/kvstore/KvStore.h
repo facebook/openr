@@ -27,10 +27,9 @@
 
 namespace openr {
 
-//
-// Define KvStorePeerEvent which triggers the peer state
-// transition.
-//
+/*
+ * [FSM] KvStore peer event ENUM which triggers the peer state transition
+ */
 enum class KvStorePeerEvent {
   PEER_ADD = 0,
   PEER_DEL = 1,
@@ -38,7 +37,14 @@ enum class KvStorePeerEvent {
   THRIFT_API_ERROR = 3,
 };
 
-// Structure for values and their backoffs for self-originated key-vals
+/*
+ * [Self Originated Key Management]
+ *
+ * This is the structure wrapper containing the:
+ *  1) self-originated value;
+ *  2) key backoff;
+ *  3) ttl backoffs;
+ */
 struct SelfOriginatedValue {
   // Value associated with the self-originated key
   thrift::Value value;
@@ -54,7 +60,13 @@ struct SelfOriginatedValue {
 using SelfOriginatedKeyVals =
     std::unordered_map<std::string, SelfOriginatedValue>;
 
-// structure for common params across all instances of KvStoreDb
+/*
+ * [KvStore Params]
+ *
+ * This is the structure used to convey all of the necessary information from
+ * KvStore to individual KvStoreDbs(per area). This includes commonly shared
+ * data structures like queues and config knobs shared across KvStoreDbs.
+ */
 struct KvStoreParams {
   // the name of this node (unique in domain)
   std::string nodeId;
@@ -125,10 +137,13 @@ struct KvStoreParams {
         enableThriftDualMsg(enableThriftDualMsg) {}
 };
 
-// The class represents a KV Store DB and stores KV pairs in internal map.
-// KV store DB instance is created for each area.
-// This class processes messages received from KvStore server. The configuration
-// is passed via constructor arguments.
+/*
+ * The KvStoreDb class represents a KV Store database and stores KV pairs in
+ * an internal map. KV store DB instance is created for each area.
+ *
+ * This class processes messages received from KvStore peer. The configuration
+ * is passed via KvStoreParams from constructor.
+ */
 template <class ClientType>
 class KvStoreDb : public DualNode {
  public:

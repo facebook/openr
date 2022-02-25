@@ -1091,36 +1091,34 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
   return true;
 }
 
-//
-// KvStoreDb is the class instance that maintains the KV pairs with internal
-// map per AREA. KvStoreDb will sync with peers to maintain eventual
-// consistency. It supports external message exchanging through Thrift channel.
-//
-// NOTE Monitoring:
-// This module exposes fb303 counters that can be leveraged for monitoring
-// KvStoreDb's correctness and performance behevior in production
-//
-//  kvstore.thrift.num_client_connection_failure: # of client creation
-//  failures kvstore.thrift.num_full_sync: # of full-sync performed;
-//  kvstore.thrift.num_missing_keys: # of missing keys from syncing with
-//  peer; kvstore.thrift.num_full_sync_success: # of successful full-sync
-//  performed; kvstore.thrift.num_full_sync_failure: # of failed full-sync
-//  performed; kvstore.thrift.full_sync_duration_ms: avg time elapsed for a
-//  full-sync req;
-//
-//  kvstore.thrift.num_flood_pub: # of flooding req issued;
-//  kvstore.thrift.num_flood_key_vals: # of keyVals one flooding req
-//  contains; kvstore.thrift.num_flood_pub_success: # of successful flooding
-//  req performed; kvstore.thrift.num_flood_pub_failure: # of failed
-//  flooding req performed; kvstore.thrift.flood_pub_duration_ms: avg time
-//  elapsed for a flooding req;
-//
-//  kvstore.thrift.num_finalized_sync: # of finalized full-sync performed;
-//  kvstore.thrift.num_finalized_sync_success: # of successful finalized
-//  sync performed; kvstore.thrift.num_finalized_sync_failure: # of failed
-//  finalized sync performed; kvstore.thrift.finalized_sync_duration_ms: avg
-//  time elapsed for a finalized sync req;
-//
+/*
+ * KvStoreDb is the class instance that maintains the KV pairs with internal
+ * map per AREA. KvStoreDb will sync with peers to maintain eventual
+ * consistency. It supports external message exchanging through Thrift channel.
+ *
+ * NOTE Monitoring:
+ * This module exposes fb303 counters that can be leveraged for monitoring
+ * KvStoreDb's correctness and performance behevior in production
+ *
+ * kvstore.thrift.num_client_connection_failure: # of client creation failures;
+ * kvstore.thrift.num_full_sync: # of full-sync performed;
+ * kvstore.thrift.num_missing_keys: # of missing keys from syncing with peer;
+ * kvstore.thrift.num_full_sync_success: # of successful full-sync performed;
+ * kvstore.thrift.num_full_sync_failure: # of failed full-sync performed;
+ * kvstore.thrift.full_sync_duration_ms: avg time elapsed for a full-sync req;
+ *
+ * kvstore.thrift.num_flood_pub: # of flooding req issued;
+ * kvstore.thrift.num_flood_key_vals: # of keyVals one flooding req contains;
+ * kvstore.thrift.num_flood_pub_success: # of successful flooding req performed;
+ * kvstore.thrift.num_flood_pub_failure: # of failed flooding req performed;
+ * kvstore.thrift.flood_pub_duration_ms: avg time elapsed for a flooding req;
+ * kvstore.num_flood_peers: # of flooding peers;
+ *
+ * kvstore.thrift.num_finalized_sync: # of finalized finalized-sync performed;
+ * kvstore.thrift.num_finalized_sync_success: # of successful finalized-sync;
+ * kvstore.thrift.num_finalized_sync_failure: # of failed finalized-sync;
+ * kvstore.thrift.finalized_sync_duration_ms: avg time elapsed for a req;
+ */
 template <class ClientType>
 KvStoreDb<ClientType>::KvStoreDb(
     OpenrEventBase* evb,
