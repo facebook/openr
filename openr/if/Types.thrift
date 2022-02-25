@@ -820,13 +820,6 @@ struct OpenrVersions {
  */
 struct SparkHelloMsg {
   /**
-   * [TO BE DEPRECATED]
-   * Name of the domain this Open/R belongs to.
-   * ATTN: adapt to area concept and usage to replace this.
-   */
-  1: string domainName;
-
-  /**
    * Name of the node originating this hello message.
    */
   2: string nodeName;

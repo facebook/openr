@@ -215,10 +215,6 @@ Config::populateAreaConfig() {
         areaPolicies->filters_ref()->routePropagationPolicy_ref().to_optional();
   }
 
-  if (getDomainName().empty()) {
-    throw std::invalid_argument("domain name must be non-empty");
-  }
-
   for (auto& areaConf : *config_.areas_ref()) {
     // Fill these values from linkMonitor config if not provided
     // TODO remove once transition to areas is complete

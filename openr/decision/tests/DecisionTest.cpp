@@ -4790,7 +4790,6 @@ class DecisionTestFixture : public ::testing::Test {
   createConfig() {
     auto tConfig = getBasicOpenrConfig(
         "1",
-        "default",
         {},
         true /* enable v4 */,
         true /* enableSegmentRouting */,
@@ -7537,7 +7536,6 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
   createConfig() override {
     tConfig_ = getBasicOpenrConfig(
         "1", // nodeName
-        "domain", // domainName
         {}, // areaCfg
         true, // enableV4
         true, // enableSegmentRouting (so that adj segment label is enabled)
@@ -7656,7 +7654,6 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
   createConfig() override {
     tConfig_ = getBasicOpenrConfig(
         "1", // nodeName
-        "domain", // domainName
         {}, // areaCfg
         false, // enableV4
         true, // enableSegmentRouting

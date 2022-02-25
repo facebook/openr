@@ -74,7 +74,6 @@ createAreaConfig(
 openr::thrift::OpenrConfig
 getBasicOpenrConfig(
     const std::string& nodeName,
-    const std::string& domainName,
     const std::vector<openr::thrift::AreaConfig>& areaCfg,
     bool enableV4,
     bool enableSegmentRouting,
@@ -91,7 +90,6 @@ getBasicOpenrConfig(
    * [OVERRIDE] config knob toggling
    */
   config.node_name_ref() = nodeName;
-  config.domain_ref() = domainName;
   config.enable_v4_ref() = enableV4;
   config.v4_over_v6_nexthop_ref() = enableV4OverV6Nexthop;
   config.enable_segment_routing_ref() = enableSegmentRouting;

@@ -50,7 +50,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     }
     auto tConfig = getBasicOpenrConfig(
         nodeName_,
-        "domain",
         areaConfig,
         true /* enableV4 */,
         true /* enableSegmentRouting */);

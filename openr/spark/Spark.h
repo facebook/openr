@@ -245,7 +245,6 @@ class Spark final : public OpenrEventBase {
   struct SparkNeighbor {
     SparkNeighbor(
         const thrift::StepDetectorConfig&,
-        std::string const& domainName,
         std::string const& nodeName,
         std::string const& localIfName,
         std::string const& remoteIfName,
@@ -265,7 +264,6 @@ class Spark final : public OpenrEventBase {
      *
      * The vars are populated when SparkNeighbor is constructed
      */
-    const std::string domainName{};
     const std::string nodeName{};
     const std::string localIfName{};
     const std::string remoteIfName{};
@@ -406,9 +404,6 @@ class Spark final : public OpenrEventBase {
   //
   // Private state
   //
-
-  // This node's domain name
-  const std::string myDomainName_{};
 
   // This node's name
   const std::string myNodeName_{};

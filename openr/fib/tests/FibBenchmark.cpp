@@ -84,7 +84,6 @@ class FibWrapper {
 
     auto tConfig = getBasicOpenrConfig(
         "node-1",
-        "domain",
         {}, /* area config */
         true, /* enableV4 */
         enableSegmentRouting /*enableSegmentRouting*/,

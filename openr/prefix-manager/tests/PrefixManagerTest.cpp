@@ -1498,7 +1498,7 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
     auto B = createAreaConfig("B", {"FSW.*"}, {".*"});
     auto C = createAreaConfig("C", {"SSW.*"}, {".*"});
 
-    auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A, B, C});
+    auto tConfig = getBasicOpenrConfig(nodeId_, {A, B, C});
     return tConfig;
   }
 
@@ -2907,7 +2907,7 @@ class RouteOriginationSingleAreaFixture : public RouteOriginationFixture {
 
     // create a single area config
     auto A = createAreaConfig("A", {"RSW.*"}, {".*"});
-    auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A});
+    auto tConfig = getBasicOpenrConfig(nodeId_, {A});
     tConfig.originated_prefixes_ref() = {
         originatedPrefixV4, originatedPrefixV6};
     return tConfig;

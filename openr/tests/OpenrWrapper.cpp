@@ -34,7 +34,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
-      "terragraph",
       {}, /* area config */
       v4Enabled,
       true /*enableSegmentRouting*/,

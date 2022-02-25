@@ -186,7 +186,6 @@ Spark::getNextState(
  */
 Spark::SparkNeighbor::SparkNeighbor(
     const thrift::StepDetectorConfig& stepDetectorConfig,
-    std::string const& domainName,
     std::string const& nodeName,
     std::string const& localIfName,
     std::string const& remoteIfName,
@@ -194,8 +193,7 @@ Spark::SparkNeighbor::SparkNeighbor(
     const std::chrono::milliseconds& samplingPeriod,
     std::function<void(const int64_t&)> rttChangeCb,
     const std::string& adjArea)
-    : domainName(domainName),
-      nodeName(nodeName),
+    : nodeName(nodeName),
       localIfName(localIfName),
       remoteIfName(remoteIfName),
       seqNum(seqNum),
@@ -295,8 +293,7 @@ Spark::Spark(
     std::shared_ptr<const Config> config,
     std::pair<uint32_t, uint32_t> version,
     std::optional<uint32_t> maybeMaxAllowedPps)
-    : myDomainName_(*config->getConfig().domain_ref()),
-      myNodeName_(config->getNodeName()),
+    : myNodeName_(config->getNodeName()),
       neighborDiscoveryPort_(static_cast<uint16_t>(
           *config->getSparkConfig().neighbor_discovery_port_ref())),
       helloTime_(
@@ -428,8 +425,6 @@ Spark::Spark(
   prepareSocket();
 
   // Initialize some stat keys
-  fb303::fbData->addStatExportType(
-      "spark.invalid_keepalive.different_domain", fb303::SUM);
   fb303::fbData->addStatExportType(
       "spark.invalid_keepalive.invalid_version", fb303::SUM);
   fb303::fbData->addStatExportType(
@@ -1372,7 +1367,6 @@ Spark::processHelloMsg(
     std::string const& ifName,
     std::chrono::microseconds const& myRecvTimeInUs) {
   auto const& neighborName = *helloMsg.nodeName_ref();
-  auto const& domainName = *helloMsg.domainName_ref();
   auto const& remoteIfName = *helloMsg.ifName_ref();
   auto const& neighborInfos = *helloMsg.neighborInfos_ref();
   auto const& remoteVersion = static_cast<uint32_t>(*helloMsg.version_ref());
@@ -1430,7 +1424,6 @@ Spark::processHelloMsg(
         std::forward_as_tuple(neighborName),
         std::forward_as_tuple(
             *config_->getSparkConfig().step_detector_conf_ref(),
-            domainName, // neighborNode domain
             neighborName, // neighborNode name
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
@@ -1698,36 +1691,19 @@ Spark::processHandshakeMsg(
   //  2) neighbor.area: areaId that I think neighbor node should be in;
   //
   //  ONLY promote to NEGOTIATE state if areaId matches
-  if (neighbor.area != *handshakeMsg.area_ref() ||
-      myDomainName_ != neighbor.domainName) {
-    bool mismatch = true;
+  if (neighbor.area != *handshakeMsg.area_ref()) {
     if (*handshakeMsg.area_ref() == Constants::kDefaultArea.toString() ||
         neighbor.area == Constants::kDefaultArea.toString()) {
+      // for backward compatibility: if the peer is still advertising
+      // default area (0), it would be considered a match
       fb303::fbData->addStatValue(
           "spark.hello.default_area_rcvd", 1, fb303::SUM);
-      // for backward compatibility: if the peer is still advertising
-      // default area, we can check that domains match
-      // TODO remove when trasition to areas is complete
-      mismatch =
-          ((myDomainName_ != neighbor.domainName) or
-           (myDomainName_ == "" and neighbor.domainName == ""));
-      if (not mismatch) {
-        XLOG(INFO) << fmt::format(
-            "[SparkHandshakeMsg] Neighbor: {} is under migration from area {} to {}.",
-            neighbor.nodeName,
-            neighbor.area,
-            *handshakeMsg.area_ref());
-      }
-    }
-    if (mismatch) {
+    } else {
       XLOG(ERR) << fmt::format(
           "[SparkHandshakeMsg] Inconsistent areaId deduced. "
-          "Neighbor's areaId is {} and my areaId from remote is {}. Neighbor's "
-          "domainName is {} and mine is {}.",
+          "Neighbor's areaId is {} and my areaId from remote is {}.",
           *handshakeMsg.area_ref(),
-          neighbor.area,
-          neighbor.domainName,
-          myDomainName_);
+          neighbor.area);
 
       // state transition
       thrift::SparkNeighState oldState = neighbor.state;
@@ -1866,7 +1842,6 @@ Spark::sendHelloMsg(
 
   // build the helloMsg from scratch
   thrift::SparkHelloMsg helloMsg;
-  helloMsg.domainName_ref() = myDomainName_;
   helloMsg.nodeName_ref() = myNodeName_;
   helloMsg.ifName_ref() = ifName;
   helloMsg.seqNum_ref() = mySeqNum_;

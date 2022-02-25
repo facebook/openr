@@ -54,7 +54,7 @@ class PrefixManagerBenchmarkTestFixture {
       areaConfig.emplace_back(
           createAreaConfig(std::to_string(i), {".*"}, {".*"}));
     }
-    auto tConfig = getBasicOpenrConfig(nodeId, "doamin", areaConfig);
+    auto tConfig = getBasicOpenrConfig(nodeId, areaConfig);
     tConfig.enable_kvstore_request_queue_ref() = true;
     config_ = std::make_shared<Config>(tConfig);
 

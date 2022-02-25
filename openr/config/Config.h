@@ -133,11 +133,6 @@ class Config {
     return *config_.node_name_ref();
   }
 
-  const std::string&
-  getDomainName() const {
-    return *config_.domain_ref();
-  }
-
   //
   // feature knobs
   //

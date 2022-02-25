@@ -331,7 +331,6 @@ class FibTestFixture : public ::testing::Test {
 
     auto tConfig = getBasicOpenrConfig(
         "node-1",
-        "domain",
         {}, /* area config */
         true, /* enableV4 */
         true /*enableSegmentRouting*/,

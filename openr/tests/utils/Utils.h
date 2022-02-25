@@ -41,7 +41,6 @@ openr::thrift::AreaConfig createAreaConfig(
  */
 openr::thrift::OpenrConfig getBasicOpenrConfig(
     const std::string& nodeName = "",
-    const std::string& domainName = "domain",
     const std::vector<openr::thrift::AreaConfig>& areaCfg = {},
     bool enableV4 = true,
     bool enableSegmentRouting = false,

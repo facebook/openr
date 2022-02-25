@@ -31,7 +31,6 @@ class PrependLabelAllocatorTestFixture : public ::testing::Test {
     // generate a config for testing
     auto tConfig = getBasicOpenrConfig(
         "1",
-        "domain",
         {},
         false, /* enableV4 */
         true, /* enableSegmentRouting */

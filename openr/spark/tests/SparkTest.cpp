@@ -112,8 +112,8 @@ class SimpleSparkFixture : public SparkFixture {
  protected:
   virtual void
   createConfig() {
-    auto tConfig1 = getBasicOpenrConfig(nodeName1_, kDomainName);
-    auto tConfig2 = getBasicOpenrConfig(nodeName2_, kDomainName);
+    auto tConfig1 = getBasicOpenrConfig(nodeName1_);
+    auto tConfig2 = getBasicOpenrConfig(nodeName2_);
     tConfig1.kvstore_config_ref()->enable_flood_optimization_ref() = true;
     tConfig2.kvstore_config_ref()->enable_flood_optimization_ref() = true;
 
@@ -234,8 +234,8 @@ class InitializationTestFixture : public SimpleSparkFixture {
  protected:
   void
   createConfig() override {
-    auto tConfig1 = getBasicOpenrConfig(nodeName1_, kDomainName);
-    auto tConfig2 = getBasicOpenrConfig(nodeName2_, kDomainName);
+    auto tConfig1 = getBasicOpenrConfig(nodeName1_);
+    auto tConfig2 = getBasicOpenrConfig(nodeName2_);
     tConfig1.enable_ordered_adj_publication_ref() = true;
     tConfig2.enable_ordered_adj_publication_ref() = true;
 
@@ -316,8 +316,8 @@ class InitializationBackwardCompatibilityTestFixture
  protected:
   void
   createConfig() override {
-    auto tConfig1 = getBasicOpenrConfig(nodeName1_, kDomainName);
-    auto tConfig2 = getBasicOpenrConfig(nodeName2_, kDomainName);
+    auto tConfig1 = getBasicOpenrConfig(nodeName1_);
+    auto tConfig2 = getBasicOpenrConfig(nodeName2_);
     tConfig1.enable_ordered_adj_publication_ref() = true;
     tConfig2.enable_ordered_adj_publication_ref() = false;
 
@@ -643,7 +643,7 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
 
   // Recreate Spark instance with a different attribute value of
   // `supportFloodOptimization=false`
-  auto tConfigTmp = getBasicOpenrConfig(nodeName2_, kDomainName);
+  auto tConfigTmp = getBasicOpenrConfig(nodeName2_);
   tConfigTmp.kvstore_config_ref()->enable_flood_optimization_ref() = false;
 
   node2_ = createSpark(nodeName2_, std::make_shared<Config>(tConfigTmp));
@@ -847,11 +847,11 @@ TEST_F(SparkFixture, ReadConfigTest) {
   const std::string nodeLannister{"Lannister"};
   const std::string nodeStark{"Stark"};
 
-  auto tConfig1 = getBasicOpenrConfig(nodeLannister, kDomainName);
+  auto tConfig1 = getBasicOpenrConfig(nodeLannister);
   tConfig1.kvstore_config_ref()->enable_flood_optimization_ref() = true;
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig(nodeStark, kDomainName);
+  auto tConfig2 = getBasicOpenrConfig(nodeStark);
   tConfig2.kvstore_config_ref()->enable_flood_optimization_ref() = false;
   auto config2 = std::make_shared<Config>(tConfig2);
 
@@ -916,13 +916,13 @@ TEST_F(SparkFixture, VersionTest) {
   const std::string nodeName2 = "node-2";
   const std::string nodeName3 = "node-3";
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
+  auto tConfig3 = getBasicOpenrConfig(nodeName3);
   auto config3 = std::make_shared<Config>(tConfig3);
 
   auto node1 = createSpark(nodeName1, config1);
@@ -983,65 +983,6 @@ TEST_F(SparkFixture, VersionTest) {
 }
 
 //
-// Start 2 Spark instances within different domains. Then
-// make sure they can't form adj as helloMsg being ignored.
-//
-TEST_F(SparkFixture, DomainTest) {
-  // Define interface names for the test
-  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
-
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface2, {{iface1, 10}}},
-      {iface1, {{iface2, 10}}},
-  };
-  mockIoProvider_->setConnectedPairs(connectedPairs);
-
-  // start 2 spark instances within different domain
-  std::string domainLannister = "A_Lannister_Always_Pays_His_Debts";
-  std::string domainStark = "Winter_Is_Coming";
-  std::string nodeLannister = "Lannister";
-  std::string nodeStark = "Stark";
-
-  auto tConfig1 = getBasicOpenrConfig(nodeLannister, domainLannister);
-  auto config1 = std::make_shared<Config>(tConfig1);
-
-  auto tConfig2 = getBasicOpenrConfig(nodeStark, domainStark);
-  auto config2 = std::make_shared<Config>(tConfig2);
-
-  auto node1 = createSpark(nodeLannister, config1);
-  auto node2 = createSpark(nodeStark, config2);
-
-  // start tracking iface1 and iface2
-  node1->updateInterfaceDb({InterfaceInfo(
-      iface1 /* ifName */,
-      true /* isUp */,
-      ifIndex1 /* ifIndex */,
-      {ip1V4, ip1V6} /* networks */)});
-  node2->updateInterfaceDb({InterfaceInfo(
-      iface2 /* ifName */,
-      true /* isUp */,
-      ifIndex2 /* ifIndex */,
-      {ip2V4, ip2V6} /* networks */)});
-
-  {
-    const auto& restart_time_s1 = std::chrono::seconds(
-        *config1->getSparkConfig().graceful_restart_time_s_ref());
-    const auto& restart_time_s2 = std::chrono::seconds(
-        *config2->getSparkConfig().graceful_restart_time_s_ref());
-
-    EXPECT_FALSE(
-        node1->waitForEvents(NB_UP, restart_time_s1, restart_time_s1 * 2)
-            .has_value());
-    EXPECT_FALSE(
-        node2->waitForEvents(NB_UP, restart_time_s2, restart_time_s2 * 2)
-            .has_value());
-    EXPECT_EQ(node1->getSparkNeighState(iface1, nodeStark).value(), WARM);
-    EXPECT_EQ(node2->getSparkNeighState(iface2, nodeLannister).value(), WARM);
-  }
-}
-
-//
 // Start 3 Spark instances in "hub-and-spoke" topology. We prohibit
 // node-2 and node-3 to talk to each other. We make node-1
 // use two different interfaces for communications.
@@ -1082,13 +1023,13 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   const std::string nodeName2 = "node-2";
   const std::string nodeName3 = "node-3";
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
   auto config2 = std::make_shared<Config>(tConfig2);
 
-  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName);
+  auto tConfig3 = getBasicOpenrConfig(nodeName3);
   auto config3 = std::make_shared<Config>(tConfig3);
 
   auto node1 = createSpark(nodeName1, config1);
@@ -1186,10 +1127,10 @@ TEST_F(SparkFixture, FastInitTest) {
   const std::string nodeName1 = "node-1";
   const std::string nodeName2 = "node-2";
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark(nodeName1, config1);
@@ -1277,7 +1218,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
 
   auto tConfig1 = getBasicOpenrConfig(
       nodeName1,
-      kDomainName,
       {},
       true /* enable v4 */,
       true /* enable segment routing */,
@@ -1288,7 +1228,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
 
   auto tConfig2 = getBasicOpenrConfig(
       nodeName2,
-      kDomainName,
       {},
       true /* enable v4 */,
       true /* enable segment routing */,
@@ -1322,7 +1261,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
 
   auto tConfig3 = getBasicOpenrConfig(
       nodeName3,
-      kDomainName,
       {},
       true /* enable v4 */,
       true /* enable segment routing */,
@@ -1428,10 +1366,10 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
-  auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
+  auto tConfig1 = getBasicOpenrConfig("node-1");
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
+  auto tConfig2 = getBasicOpenrConfig("node-2");
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark("node-1", config1);
@@ -1490,7 +1428,7 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
 
   // start one spark2 instance
 
-  auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
+  auto tConfig1 = getBasicOpenrConfig("node-1");
   auto config1 = std::make_shared<Config>(tConfig1);
   auto node1 = createSpark("node-1", config1);
 
@@ -1533,10 +1471,10 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   mockIoProvider_->setConnectedPairs(connectedPairs);
 
   // start spark2 instances
-  auto tConfig1 = getBasicOpenrConfig("node-1", kDomainName);
+  auto tConfig1 = getBasicOpenrConfig("node-1");
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig("node-2", kDomainName);
+  auto tConfig2 = getBasicOpenrConfig("node-2");
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark("node-1", config1);
@@ -1630,10 +1568,10 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
   std::string nodeName1 = "node-1";
   std::string nodeName2 = "node-2";
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
   auto config1 = std::make_shared<Config>(tConfig1);
 
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark(nodeName1, config1);
@@ -1716,8 +1654,8 @@ TEST_F(SparkFixture, AreaMatch) {
   std::vector<openr::thrift::AreaConfig> vec2 = {
       areaConfig21, areaConfig22, areaConfig23};
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1790,8 +1728,8 @@ TEST_F(SparkFixture, NoAreaMatch) {
   std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig1};
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1869,8 +1807,8 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig1};
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1951,9 +1889,8 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
 
   auto tConfig1 = getBasicOpenrConfig(
       nodeName1,
-      kDomainName,
       {createAreaConfig(Constants::kDefaultArea.toString(), {".*"}, {".*"})});
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, vec2);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -2030,10 +1967,10 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   std::vector<openr::thrift::AreaConfig> vec2 = {areaConfig2};
   std::vector<openr::thrift::AreaConfig> vec3 = {areaConfig31, areaConfig32};
 
-  auto tConfig1 = getBasicOpenrConfig(nodeName1, kDomainName, vec1);
-  auto tConfig2 = getBasicOpenrConfig(nodeName2, kDomainName, vec2);
+  auto tConfig1 = getBasicOpenrConfig(nodeName1, vec1);
+  auto tConfig2 = getBasicOpenrConfig(nodeName2, vec2);
 
-  auto tConfig3 = getBasicOpenrConfig(nodeName3, kDomainName, vec3);
+  auto tConfig3 = getBasicOpenrConfig(nodeName3, vec3);
 
   auto config1 = std::make_shared<Config>(tConfig1);
   auto config2 = std::make_shared<Config>(tConfig2);

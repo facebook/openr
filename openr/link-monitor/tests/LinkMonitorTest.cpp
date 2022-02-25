@@ -308,8 +308,7 @@ class LinkMonitorTestFixture : public testing::Test {
     auto areaCfgs = createAreaConfigs();
 
     // create basic openr config
-    auto tConfig =
-        getBasicOpenrConfig("node-1", "domain", areaCfgs, true, true);
+    auto tConfig = getBasicOpenrConfig("node-1", areaCfgs, true, true);
     tConfig.persistent_config_store_path_ref() = kConfigStorePath;
 
     // override LM config
@@ -2269,8 +2268,7 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
         populateAreaConfigs({kTestingAreaName, kTestingSpineAreaName}, mp);
 
     // create thrift::OpenrConfig
-    auto tConfig =
-        getBasicOpenrConfig("node-1", "domain", areaCfgs, true, true);
+    auto tConfig = getBasicOpenrConfig("node-1", areaCfgs, true, true);
 
     // override LM config
     tConfig.node_name_ref() = fmt::format("lm{}", i + 1);

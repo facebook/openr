@@ -204,17 +204,14 @@ TEST(ConfigTest, PopulateAreaConfig) {
     EXPECT_THROW((Config(confInvalidAreaPolicy)), std::invalid_argument);
   }
 
-  // non-empty interface regex and non-empty domain name
+  // non-empty interface regex
   {
     openr::thrift::AreaConfig areaConfig;
     areaConfig.area_id_ref() = myArea;
     areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
+    auto confValidArea = getBasicOpenrConfig("node-1", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
-
-    confValidArea.domain_ref() = "";
-    EXPECT_THROW((Config(confValidArea)), std::invalid_argument);
   }
 
   // non-empty neighbor regexes
@@ -223,7 +220,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.area_id_ref() = myArea;
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
+    auto confValidArea = getBasicOpenrConfig("node-1", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
   }
 
@@ -234,7 +231,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
+    auto confValidArea = getBasicOpenrConfig("node-1", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
   }
 
@@ -244,7 +241,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
     areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto confValidArea = getBasicOpenrConfig("node-1", "domain", vec);
+    auto confValidArea = getBasicOpenrConfig("node-1", vec);
     Config cfg = Config(confValidArea);
     // default area and domain area
     EXPECT_EQ(cfg.getAreas().size(), 1);
@@ -258,7 +255,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.area_id_ref() = myArea;
     areaConfig.include_interface_regexes_ref()->emplace_back("[0-9]++");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto conf = getBasicOpenrConfig("node-1", "domain", vec);
+    auto conf = getBasicOpenrConfig("node-1", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
   }
   //  invalid exclude_interface_regexes
@@ -267,7 +264,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     *areaConfig.area_id_ref() = myArea;
     areaConfig.exclude_interface_regexes_ref()->emplace_back("boom\\");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto conf = getBasicOpenrConfig("node-1", "domain", vec);
+    auto conf = getBasicOpenrConfig("node-1", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
   }
   //  invalid redistribute_interface_regexes
@@ -276,7 +273,7 @@ TEST(ConfigTest, PopulateAreaConfig) {
     areaConfig.area_id_ref() = myArea;
     areaConfig.redistribute_interface_regexes_ref()->emplace_back("*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
-    auto conf = getBasicOpenrConfig("node-1", "domain", vec);
+    auto conf = getBasicOpenrConfig("node-1", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
   }
 
@@ -408,7 +405,7 @@ TEST(ConfigTest, AreaConfiguration) {
   areaConfig.exclude_interface_regexes_ref()->emplace_back(".*450.*");
   areaConfig.redistribute_interface_regexes_ref()->emplace_back("loopback1");
   areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
-  Config cfg{getBasicOpenrConfig("node-1", "domain", {areaConfig})};
+  Config cfg{getBasicOpenrConfig("node-1", {areaConfig})};
 
   auto const& areaConf = cfg.getAreas().at("myArea");
   EXPECT_TRUE(areaConf.shouldPeerWithNeighbor("fsw001"));
@@ -786,7 +783,6 @@ TEST(ConfigTest, GeneralGetter) {
   {
     auto tConfig = getBasicOpenrConfig(
         "node-1",
-        "domain",
         {}, /* area config */
         true /* enableV4 */,
         false /* enableSegmentRouting */,
@@ -795,9 +791,6 @@ TEST(ConfigTest, GeneralGetter) {
 
     // getNodeName
     EXPECT_EQ("node-1", config.getNodeName());
-
-    // getDomainName
-    EXPECT_EQ("domain", config.getDomainName());
 
     // getAreaIds
     EXPECT_EQ(1, config.getAreas().size());
@@ -826,7 +819,6 @@ TEST(ConfigTest, GeneralGetter) {
   {
     auto tConfig = getBasicOpenrConfig(
         "node-1",
-        "domain",
         {} /* area config */,
         true /* enable v4 */,
         false /* enableSegmentRouting */,
