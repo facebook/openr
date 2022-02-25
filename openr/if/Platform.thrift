@@ -154,32 +154,6 @@ service FibService extends fb303_core.BaseService {
   void sendNeighborDownInfo(1: list<string> neighborIp) throws (
     1: PlatformError error,
   );
-
-  //
-  // FBOSS Agent API (for emulation only)
-  //
-
-  list<Network.LinkNeighborThrift> getLldpNeighbors() throws (
-    1: PlatformError error,
-  );
-
-  Network.PortInfoThrift getPortInfo(1: i32 portId) throws (
-    1: PlatformError error,
-  );
-
-  map<i32, Network.PortInfoThrift> getAllPortInfo() throws (
-    1: PlatformError error,
-  );
-
-  // Dummy API - Returns empty result
-  map<i32, Network.PortStatus> getPortStatus(1: list<i32> ports) throws (
-    1: PlatformError error,
-  );
-
-  // Dummy API - Returns empty result
-  list<Network.AggregatePortThrift> getAggregatePortTable() throws (
-    1: PlatformError error,
-  );
 }
 
 service NeighborListenerClientForFibagent {

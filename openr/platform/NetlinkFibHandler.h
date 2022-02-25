@@ -29,7 +29,7 @@ namespace openr {
  * - All APIs exposed are asynchronous. Sync API retries the existing routing
  *   state in synchronous way and program changes asynchrnously.
  */
-class NetlinkFibHandler : public thrift::FibServiceSvIf,
+class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
                           public facebook::fb303::BaseService {
  public:
   explicit NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock);

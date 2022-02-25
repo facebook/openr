@@ -33,18 +33,6 @@ enum MplsActionCode {
   NOOP = 4,
 }
 
-// For mimicing FBOSS agent thrift interfaces
-enum PortAdminState {
-  DISABLED = 0,
-  ENABLED = 1,
-}
-
-// For mimicing FBOSS agent thrift interfaces
-enum PortOperState {
-  DOWN = 0,
-  UP = 1,
-}
-
 struct MplsAction {
   1: MplsActionCode action;
   2: optional i32 swapLabel; // Required if action == SWAP
@@ -144,42 +132,3 @@ struct UnicastRoute {
   4: list<NextHopThrift> nextHops;
   7: optional RouteCounterID counterID;
 } (cpp.minimize_padding)
-
-// For mimicing FBOSS agent thrift interfaces
-struct LinkNeighborThrift {
-  1: i32 localPort;
-  2: i32 localVlan;
-  11: string printablePortId;
-  12: optional string systemName;
-} (cpp.minimize_padding)
-
-struct PortCounters {
-  // avoid typechecker error here as bytes is a py3 reserved keyword
-  1: i64 bytes (py3.name = "bytes_");
-  2: i64 ucastPkts;
-}
-
-// For mimicing FBOSS agent thrift interfaces
-struct PortInfoThrift {
-  1: i32 portId;
-  2: i64 speedMbps;
-  3: PortAdminState adminState;
-  4: PortOperState operState;
-  10: PortCounters output;
-  11: PortCounters input;
-  12: string name;
-} (cpp.minimize_padding)
-
-// For mimicing FBOSS agent thrift interface
-struct PortStatus {
-  1: bool enabled;
-  2: bool up;
-  5: i64 speedMbps;
-// NOTE: Some fields are omitted intentionally as it is not supported
-// in Emulation!
-} (cpp.minimize_padding)
-
-// For mimicing FBOSS agent thrift interface
-struct AggregatePortThrift {
-// NOTE: Left empty as we're not exposing any data
-}
