@@ -234,58 +234,116 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>
   semifuture_getSubscriberInfo(int64_t type) override;
 
-  //
-  // KvStore APIs
-  //
+  /*
+   * KvStore APIs
+   */
 
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyVals(
-      std::unique_ptr<std::vector<std::string>> filterKeys) override;
-
+  /*
+   * API to return key-val pairs by given:
+   *  - a set of string "keys"; (ATTN: this is NOT regex matching)
+   *  - a specific area;
+   */
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreKeyValsArea(
       std::unique_ptr<std::vector<std::string>> filterKeys,
       std::unique_ptr<std::string> area) override;
 
+  /*
+   * [Backward Compatibility] Same as above, but use local KvStoreDb's area
+   */
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyValsFiltered(
-      std::unique_ptr<thrift::KeyDumpParams> filter) override;
+  semifuture_getKvStoreKeyVals(
+      std::unique_ptr<std::vector<std::string>> filterKeys) override;
 
+  /*
+   * API to return key-val pairs by given:
+   *  - thrift::KeyDumpParams;
+   *  - a specific area;
+   *
+   * ATTN: thrift::KeyDumpParams is an advanced version of matching with:
+   *  - keyPrefixList; (ATTN: this is regex matching)
+   *  - originatorIds; (ATTN: this is NOT regex matching)
+   *  - operator to support AND/OR condition matching;
+   */
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreKeyValsFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
 
+  /*
+   * [Backward Compatibility] Same as above, but use local KvStoreDb's area
+   */
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreHashFiltered(
+  semifuture_getKvStoreKeyValsFiltered(
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
+  /*
+   * API to return key-val HASHes(NO binary value included) only by given:
+   *  - thrift::KeyDumpParams;
+   *  - a specific area;
+   *
+   * ATTN: same as above usage of thrift::KeyDumpParams
+   */
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreHashFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
 
+  /*
+   * [Backward Compatibility] Same as above, but use local KvStoreDb's area
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreHashFiltered(
+      std::unique_ptr<thrift::KeyDumpParams> filter) override;
+
+  /*
+   * API to set key-val pairs by given:
+   *  - thrift::KeySetParams;
+   *  - a specifc area;
+   *
+   * ATTN: set key will automatically trigger (K, V) merge operation to:
+   *  1. update local kvStoreDb;
+   *  2. flood the delta update to peers if any;
+   */
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 
+  // [TO BE DEPRECATED]
   folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
       std::unique_ptr<thrift::DualMessages> messages,
       std::unique_ptr<std::string> area) override;
 
+  // [TO BE DEPRECATED]
   folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
       std::unique_ptr<thrift::FloodTopoSetParams> params,
       std::unique_ptr<std::string> area) override;
 
+  // [TO BE DEPRECATED]
   folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
   semifuture_getSpanningTreeInfos(std::unique_ptr<std::string> area) override;
 
-  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-  semifuture_getKvStorePeers() override;
-
+  /*
+   * API to dump existing peers in a specified area
+   */
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeersArea(std::unique_ptr<std::string> area) override;
 
+  /*
+   * [Backward Compatibility] Same as above, but use local KvStoreDb's area
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
+  semifuture_getKvStorePeers() override;
+
+  /*
+   * API to return structured thrift::KvStoreAreaSummary to include:
+   *  - selected area names;
+   *  - number of key-val pairs;
+   *  - total of key-val bytes;
+   *  - peers in each area;
+   *  - counters in each area;
+   *  - etc;
+   */
   folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
   semifuture_getKvStoreAreaSummary(
       std::unique_ptr<std::set<std::string>> selectAreas) override;
