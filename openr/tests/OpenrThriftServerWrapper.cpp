@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/tests/OpenrThriftServerWrapper.h"
+#include <openr/tests/OpenrThriftServerWrapper.h>
 
 namespace openr {
 
@@ -13,7 +13,7 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
     std::string const& nodeName,
     Decision* decision,
     Fib* fib,
-    KvStore* kvStore,
+    KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore,
     LinkMonitor* linkMonitor,
     Monitor* monitor,
     PersistentStore* configStore,

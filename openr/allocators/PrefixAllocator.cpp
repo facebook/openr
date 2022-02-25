@@ -26,7 +26,7 @@ PrefixAllocator::PrefixAllocator(
     AreaId const& area,
     std::shared_ptr<const Config> config,
     fbnl::NetlinkProtocolSocket* nlSock,
-    KvStore* kvStore,
+    KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore,
     PersistentStore* configStore,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,

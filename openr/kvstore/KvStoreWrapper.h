@@ -11,6 +11,7 @@
 
 #include <openr/common/LsdbUtil.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
@@ -207,7 +208,7 @@ class KvStoreWrapper {
     return kvStore_->semifuture_getCounters().get();
   }
 
-  KvStore*
+  KvStore<thrift::OpenrCtrlCppAsyncClient>*
   getKvStore() {
     return kvStore_.get();
   }
@@ -263,7 +264,7 @@ class KvStoreWrapper {
   messaging::ReplicateQueue<KeyValueRequest> dummyKvRequestQueue_;
 
   // KvStore owned by this wrapper.
-  std::unique_ptr<KvStore> kvStore_;
+  std::unique_ptr<KvStore<thrift::OpenrCtrlCppAsyncClient>> kvStore_;
 
   // Thrift Server owned by this warpper;
   std::unique_ptr<OpenrThriftServerWrapper> thriftServer_;

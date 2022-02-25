@@ -13,6 +13,7 @@
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 
 namespace openr {
@@ -43,7 +44,7 @@ class RangeAllocator {
       AreaId const& area,
       const std::string& nodeName,
       const std::string& keyPrefix,
-      KvStore* const kvStore,
+      KvStore<thrift::OpenrCtrlCppAsyncClient>* const kvStore,
       KvStoreClientInternal* const kvStoreClient,
       std::function<void(std::optional<T>)> callback,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
@@ -127,8 +128,9 @@ class RangeAllocator {
   const std::string nodeName_;
   const std::string keyPrefix_;
 
+  // TODO: remove the raw ptr usage of KvStore.
   // raw ptr to KvStore for retreiving key-vals and subscribing keys
-  KvStore* const kvStore_{nullptr};
+  KvStore<thrift::OpenrCtrlCppAsyncClient>* const kvStore_{nullptr};
 
   // KvStoreClientInternal instance used for communicating with KvStore
   KvStoreClientInternal* const kvStoreClient_{nullptr};

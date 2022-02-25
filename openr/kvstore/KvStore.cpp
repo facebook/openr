@@ -14,13 +14,12 @@
 #include <openr/common/Types.h>
 #include <openr/kvstore/KvStore.h>
 
-using namespace std::chrono;
-
 namespace fb303 = facebook::fb303;
 
 namespace openr {
 
-KvStore::KvStore(
+template <class ClientType>
+KvStore<ClientType>::KvStore(
     // initializers for immutable state
     fbzmq::Context& zmqContext,
     messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
@@ -160,8 +159,9 @@ KvStore::KvStore(
   }
 }
 
+template <class ClientType>
 void
-KvStore::stop() {
+KvStore<ClientType>::stop() {
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // NOTE: destructor of every instance inside `kvStoreDb_` will gracefully
     //       exit and wait for all pending thrift requests to be processed
@@ -176,8 +176,9 @@ KvStore::stop() {
   XLOG(DBG1) << "KvStore event base stopped";
 }
 
+template <class ClientType>
 void
-KvStore::prepareSocket(
+KvStore<ClientType>::prepareSocket(
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
     std::string const& url,
     std::optional<int> maybeIpTos) {
@@ -210,8 +211,9 @@ KvStore::prepareSocket(
   }
 }
 
-KvStoreDb&
-KvStore::getAreaDbOrThrow(
+template <class ClientType>
+KvStoreDb<ClientType>&
+KvStore<ClientType>::getAreaDbOrThrow(
     std::string const& areaId, std::string const& caller) {
   auto search = kvStoreDb_.find(areaId);
   if (kvStoreDb_.end() == search) {
@@ -240,8 +242,10 @@ KvStore::getAreaDbOrThrow(
   return search->second;
 }
 
+template <class ClientType>
 void
-KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
+KvStore<ClientType>::processCmdSocketRequest(
+    std::vector<fbzmq::Message>&& req) noexcept {
   if (req.empty()) {
     XLOG(ERR) << "Empty request received";
     return;
@@ -268,8 +272,9 @@ KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
   return;
 }
 
+template <class ClientType>
 void
-KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
+KvStore<ClientType>::processKeyValueRequest(KeyValueRequest&& kvRequest) {
   // get area across different variants of KeyValueRequest
   const auto& area = std::visit(
       [](auto&& request) -> AreaId { return request.getArea(); }, kvRequest);
@@ -303,8 +308,9 @@ KvStore::processKeyValueRequest(KeyValueRequest&& kvRequest) {
   }
 }
 
+template <class ClientType>
 folly::Expected<fbzmq::Message, fbzmq::Error>
-KvStore::processRequestMsg(
+KvStore<ClientType>::processRequestMsg(
     const std::string& requestId, fbzmq::Message&& request) {
   fb303::fbData->addStatValue(
       "kvstore.peers.bytes_received", request.size(), fb303::SUM);
@@ -336,13 +342,15 @@ KvStore::processRequestMsg(
   return {folly::makeUnexpected(fbzmq::Error())};
 }
 
+template <class ClientType>
 messaging::RQueue<KvStorePublication>
-KvStore::getKvStoreUpdatesReader() {
+KvStore<ClientType>::getKvStoreUpdatesReader() {
   return kvParams_.kvStoreUpdatesQueue.getReader();
 }
 
+template <class ClientType>
 void
-KvStore::processPeerUpdates(PeerEvent&& event) {
+KvStore<ClientType>::processPeerUpdates(PeerEvent&& event) {
   for (const auto& [area, areaPeerEvent] : event) {
     // Event can contain peerAdd/peerDel simultaneously
     if (not areaPeerEvent.peersToAdd.empty()) {
@@ -374,8 +382,9 @@ KvStore::processPeerUpdates(PeerEvent&& event) {
   }
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStore::semifuture_getKvStoreKeyVals(
+KvStore<ClientType>::semifuture_getKvStoreKeyVals(
     std::string area, thrift::KeyGetParams keyGetParams) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
   auto sf = p.getSemiFuture();
@@ -399,8 +408,10 @@ KvStore::semifuture_getKvStoreKeyVals(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
-KvStore::semifuture_dumpKvStoreSelfOriginatedKeys(std::string area) {
+KvStore<ClientType>::semifuture_dumpKvStoreSelfOriginatedKeys(
+    std::string area) {
   folly::Promise<std::unique_ptr<SelfOriginatedKeyVals>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
@@ -421,8 +432,9 @@ KvStore::semifuture_dumpKvStoreSelfOriginatedKeys(std::string area) {
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
-KvStore::semifuture_dumpKvStoreKeys(
+KvStore<ClientType>::semifuture_dumpKvStoreKeys(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
   folly::Promise<std::unique_ptr<std::vector<thrift::Publication>>> p;
   auto sf = p.getSemiFuture();
@@ -504,8 +516,9 @@ KvStore::semifuture_dumpKvStoreKeys(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStore::semifuture_dumpKvStoreHashes(
+KvStore<ClientType>::semifuture_dumpKvStoreHashes(
     std::string area, thrift::KeyDumpParams keyDumpParams) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
   auto sf = p.getSemiFuture();
@@ -544,8 +557,9 @@ KvStore::semifuture_dumpKvStoreHashes(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<folly::Unit>
-KvStore::semifuture_setKvStoreKeyVals(
+KvStore<ClientType>::semifuture_setKvStoreKeyVals(
     std::string area, thrift::KeySetParams keySetParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -572,8 +586,9 @@ KvStore::semifuture_setKvStoreKeyVals(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
-KvStore::semifuture_getKvStorePeerState(
+KvStore<ClientType>::semifuture_getKvStorePeerState(
     std::string const& area, std::string const& peerName) {
   folly::Promise<std::optional<thrift::KvStorePeerState>> promise;
   auto sf = promise.getSemiFuture();
@@ -589,8 +604,9 @@ KvStore::semifuture_getKvStorePeerState(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-KvStore::semifuture_getKvStorePeers(std::string area) {
+KvStore<ClientType>::semifuture_getKvStorePeers(std::string area) {
   folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
@@ -606,8 +622,9 @@ KvStore::semifuture_getKvStorePeers(std::string area) {
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
-KvStore::semifuture_getKvStoreAreaSummaryInternal(
+KvStore<ClientType>::semifuture_getKvStoreAreaSummaryInternal(
     std::set<std::string> selectAreas) {
   folly::Promise<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>> p;
   auto sf = p.getSemiFuture();
@@ -637,8 +654,9 @@ KvStore::semifuture_getKvStoreAreaSummaryInternal(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<folly::Unit>
-KvStore::semifuture_addUpdateKvStorePeers(
+KvStore<ClientType>::semifuture_addUpdateKvStorePeers(
     std::string area, thrift::PeersMap peersToAdd) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -669,8 +687,9 @@ KvStore::semifuture_addUpdateKvStorePeers(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<folly::Unit>
-KvStore::semifuture_deleteKvStorePeers(
+KvStore<ClientType>::semifuture_deleteKvStorePeers(
     std::string area, std::vector<std::string> peersToDel) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -697,8 +716,9 @@ KvStore::semifuture_deleteKvStorePeers(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
-KvStore::semifuture_getSpanningTreeInfos(std::string area) {
+KvStore<ClientType>::semifuture_getSpanningTreeInfos(std::string area) {
   folly::Promise<std::unique_ptr<thrift::SptInfos>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
@@ -714,8 +734,9 @@ KvStore::semifuture_getSpanningTreeInfos(std::string area) {
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<folly::Unit>
-KvStore::semifuture_updateFloodTopologyChild(
+KvStore<ClientType>::semifuture_updateFloodTopologyChild(
     std::string area, thrift::FloodTopoSetParams floodTopoSetParams) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -735,8 +756,9 @@ KvStore::semifuture_updateFloodTopologyChild(
   return sf;
 }
 
+template <class ClientType>
 folly::SemiFuture<folly::Unit>
-KvStore::semifuture_processKvStoreDualMessage(
+KvStore<ClientType>::semifuture_processKvStoreDualMessage(
     std::string area, thrift::DualMessages dualMessages) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
@@ -765,8 +787,9 @@ KvStore::semifuture_processKvStoreDualMessage(
   return sf;
 }
 
+template <class ClientType>
 void
-KvStore::initialKvStoreDbSynced() {
+KvStore<ClientType>::initialKvStoreDbSynced() {
   for (auto& [_, kvStoreDb] : kvStoreDb_) {
     if (not kvStoreDb.getInitialSyncedWithPeers()) {
       return;
@@ -786,8 +809,9 @@ KvStore::initialKvStoreDbSynced() {
   }
 }
 
+template <class ClientType>
 folly::SemiFuture<std::map<std::string, int64_t>>
-KvStore::semifuture_getCounters() {
+KvStore<ClientType>::semifuture_getCounters() {
   auto pf = folly::makePromiseContract<std::map<std::string, int64_t>>();
   runInEventBaseThread([this, p = std::move(pf.first)]() mutable {
     p.setValue(getGlobalCounters());
@@ -795,8 +819,9 @@ KvStore::semifuture_getCounters() {
   return std::move(pf.second);
 }
 
+template <class ClientType>
 std::map<std::string, int64_t>
-KvStore::getGlobalCounters() const {
+KvStore<ClientType>::getGlobalCounters() const {
   std::map<std::string, int64_t> flatCounters;
   for (auto& [_, kvDb] : kvStoreDb_) {
     auto kvDbCounters = kvDb.getCounters();
@@ -811,8 +836,9 @@ KvStore::getGlobalCounters() const {
   return flatCounters;
 }
 
+template <class ClientType>
 void
-KvStore::initGlobalCounters() {
+KvStore<ClientType>::initGlobalCounters() {
   // Initialize fb303 counter keys for thrift
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
@@ -891,8 +917,9 @@ KvStore::initGlobalCounters() {
 }
 
 // static util function to fetch peers by state
+template <class ClientType>
 std::vector<std::string>
-KvStoreDb::getPeersByState(thrift::KvStorePeerState state) {
+KvStoreDb<ClientType>::getPeersByState(thrift::KvStorePeerState state) {
   std::vector<std::string> res;
   for (auto const& [_, peer] : thriftPeers_) {
     if (*peer.peerSpec.state_ref() == state) {
@@ -903,8 +930,9 @@ KvStoreDb::getPeersByState(thrift::KvStorePeerState state) {
 }
 
 // static util function to log state transition
+template <class ClientType>
 void
-KvStoreDb::logStateTransition(
+KvStoreDb<ClientType>::logStateTransition(
     std::string const& peerName,
     thrift::KvStorePeerState oldState,
     thrift::KvStorePeerState newState) {
@@ -920,8 +948,9 @@ KvStoreDb::logStateTransition(
 }
 
 // static util function to fetch current peer state
+template <class ClientType>
 std::optional<thrift::KvStorePeerState>
-KvStoreDb::getCurrentState(std::string const& peerName) {
+KvStoreDb<ClientType>::getCurrentState(std::string const& peerName) {
   auto thriftPeerIt = thriftPeers_.find(peerName);
   if (thriftPeerIt != thriftPeers_.end()) {
     return *thriftPeerIt->second.peerSpec.state_ref();
@@ -930,8 +959,9 @@ KvStoreDb::getCurrentState(std::string const& peerName) {
 }
 
 // static util function for state transition
+template <class ClientType>
 thrift::KvStorePeerState
-KvStoreDb::getNextState(
+KvStoreDb<ClientType>::getNextState(
     std::optional<thrift::KvStorePeerState> const& currState,
     KvStorePeerEvent const& event) {
   //
@@ -986,7 +1016,8 @@ KvStoreDb::getNextState(
 //  - backoff;
 //  - etc.
 //
-KvStoreDb::KvStorePeer::KvStorePeer(
+template <class ClientType>
+KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
     const std::string& nodeName,
     const std::string& areaTag,
     const thrift::PeerSpec& ps,
@@ -1003,8 +1034,9 @@ KvStoreDb::KvStorePeer::KvStorePeer(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
 }
 
+template <class ClientType>
 bool
-KvStoreDb::KvStorePeer::getOrCreateThriftClient(
+KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
     OpenrEventBase* evb, std::optional<int> maybeIpTos) {
   // use the existing thrift client if any
   if (client) {
@@ -1020,7 +1052,9 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
         nodeName);
 
     // TODO: migrate to secure thrift connection
-    auto thriftClient = getOpenrCtrlPlainTextClient(
+    client = getOpenrCtrlPlainTextClient<
+        ClientType,
+        apache::thrift::HeaderClientChannel>(
         *(evb->getEvb()),
         folly::IPAddress(*peerSpec.peerAddr_ref()), /* v6LinkLocal */
         *peerSpec.ctrlPort_ref(), /* port to establish TCP connection */
@@ -1028,8 +1062,9 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
         Constants::kServiceProcTimeout, /* request processing timeout */
         folly::AsyncSocket::anyAddress(), /* bindAddress */
         maybeIpTos /* IP_TOS value for control plane */);
-    client = std::move(thriftClient);
 
+    // TODO: leverage folly::Socket's KEEP_ALIVE option to manage this
+    // instead of manipulating getStatus() call on our own.
     // schedule periodic keepAlive time with 20% jitter variance
     auto period = addJitter<std::chrono::seconds>(
         Constants::kThriftClientKeepAliveInterval, 20.0);
@@ -1086,7 +1121,8 @@ KvStoreDb::KvStorePeer::getOrCreateThriftClient(
 //  finalized sync performed; kvstore.thrift.finalized_sync_duration_ms: avg
 //  time elapsed for a finalized sync req;
 //
-KvStoreDb::KvStoreDb(
+template <class ClientType>
+KvStoreDb<ClientType>::KvStoreDb(
     OpenrEventBase* evb,
     KvStoreParams& kvParams,
     const std::string& area,
@@ -1194,8 +1230,9 @@ KvStoreDb::KvStoreDb(
       "kvstore.num_flood_peers." + area, fb303::COUNT);
 }
 
+template <class ClientType>
 void
-KvStoreDb::stop() {
+KvStoreDb<ClientType>::stop() {
   XLOG(INFO) << AreaTag() << "Terminating KvStoreDb.";
 
   // Send stop signal for internal fibers
@@ -1221,8 +1258,9 @@ KvStoreDb::stop() {
   XLOG(INFO) << AreaTag() << "Successfully stopped KvStoreDb.";
 }
 
+template <class ClientType>
 void
-KvStoreDb::floodTopoDumpTask() noexcept {
+KvStoreDb<ClientType>::floodTopoDumpTask() noexcept {
   XLOG(INFO) << AreaTag() << "Starting flood-topo dump fiber task";
 
   while (true) { // Break when stop signal is ready
@@ -1239,8 +1277,9 @@ KvStoreDb::floodTopoDumpTask() noexcept {
   XLOG(INFO) << AreaTag() << "Flood-topo dump fiber task got stopped.";
 }
 
+template <class ClientType>
 void
-KvStoreDb::floodTopoDump() noexcept {
+KvStoreDb<ClientType>::floodTopoDump() noexcept {
   const auto floodRootId = DualNode::getSptRootId();
   const auto& floodPeers = getFloodPeers(floodRootId);
 
@@ -1257,8 +1296,9 @@ KvStoreDb::floodTopoDump() noexcept {
       "kvstore.num_flood_peers", floodPeers.size(), fb303::COUNT);
 }
 
+template <class ClientType>
 void
-KvStoreDb::setSelfOriginatedKey(
+KvStoreDb<ClientType>::setSelfOriginatedKey(
     std::string const& key, std::string const& value, uint32_t version) {
   XLOG(DBG3) << AreaTag()
              << fmt::format("{} called for key: {}", __FUNCTION__, key);
@@ -1298,8 +1338,9 @@ KvStoreDb::setSelfOriginatedKey(
   scheduleTtlUpdates(key, false /* advertiseImmediately */);
 }
 
+template <class ClientType>
 void
-KvStoreDb::persistSelfOriginatedKey(
+KvStoreDb<ClientType>::persistSelfOriginatedKey(
     std::string const& key, std::string const& value) {
   XLOG(DBG3) << AreaTag()
              << fmt::format("{} called for key: {}", __FUNCTION__, key);
@@ -1398,8 +1439,9 @@ KvStoreDb::persistSelfOriginatedKey(
   scheduleTtlUpdates(key, hasTtlChanged /* advertiseImmediately */);
 }
 
+template <class ClientType>
 void
-KvStoreDb::advertiseSelfOriginatedKeys() {
+KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
   XLOG(DBG3) << "Advertising Self Originated Keys. Num keys to advertise: "
              << keysToAdvertise_.size();
 
@@ -1457,8 +1499,9 @@ KvStoreDb::advertiseSelfOriginatedKeys() {
   advertiseKeyValsTimer_->scheduleTimeout(timeout);
 }
 
+template <class ClientType>
 void
-KvStoreDb::unsetSelfOriginatedKey(
+KvStoreDb<ClientType>::unsetSelfOriginatedKey(
     std::string const& key, std::string const& value) {
   XLOG(DBG3) << AreaTag()
              << fmt::format("{} called for key: {}", __FUNCTION__, key);
@@ -1485,16 +1528,18 @@ KvStoreDb::unsetSelfOriginatedKey(
   unsetSelfOriginatedKeysThrottled_->operator()();
 }
 
+template <class ClientType>
 void
-KvStoreDb::eraseSelfOriginatedKey(std::string const& key) {
+KvStoreDb<ClientType>::eraseSelfOriginatedKey(std::string const& key) {
   XLOG(DBG3) << AreaTag()
              << fmt::format("{} called for key: {}", __FUNCTION__, key);
   selfOriginatedKeyVals_.erase(key);
   keysToAdvertise_.erase(key);
 }
 
+template <class ClientType>
 void
-KvStoreDb::unsetPendingSelfOriginatedKeys() {
+KvStoreDb<ClientType>::unsetPendingSelfOriginatedKeys() {
   if (keysToUnset_.empty()) {
     return;
   }
@@ -1539,8 +1584,9 @@ KvStoreDb::unsetPendingSelfOriginatedKeys() {
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::scheduleTtlUpdates(
+KvStoreDb<ClientType>::scheduleTtlUpdates(
     std::string const& key, bool advertiseImmediately) {
   int64_t ttl = kvParams_.keyTtl.count();
 
@@ -1562,8 +1608,9 @@ KvStoreDb::scheduleTtlUpdates(
   selfOriginatedTtlUpdatesThrottled_->operator()();
 }
 
+template <class ClientType>
 void
-KvStoreDb::advertiseTtlUpdates() {
+KvStoreDb<ClientType>::advertiseTtlUpdates() {
   // Build set of keys to advertise ttl updates
   auto timeout = Constants::kMaxTtlUpdateInterval;
 
@@ -1622,8 +1669,9 @@ KvStoreDb::advertiseTtlUpdates() {
   selfOriginatedKeyTtlTimer_->scheduleTimeout(timeout);
 }
 
+template <class ClientType>
 void
-KvStoreDb::setKeyVals(thrift::KeySetParams&& setParams) {
+KvStoreDb<ClientType>::setKeyVals(thrift::KeySetParams&& setParams) {
   // Update statistics
   fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
   if (setParams.timestamp_ms_ref().has_value()) {
@@ -1650,8 +1698,10 @@ KvStoreDb::setKeyVals(thrift::KeySetParams&& setParams) {
   mergePublication(rcvdPublication);
 }
 
+template <class ClientType>
 void
-KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
+KvStoreDb<ClientType>::updateTtlCountdownQueue(
+    const thrift::Publication& publication) {
   for (const auto& [key, value] : *publication.keyVals_ref()) {
     if (*value.ttl_ref() != Constants::kTtlInfinity) {
       TtlCountdownQueueEntry queueEntry;
@@ -1676,8 +1726,9 @@ KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
 }
 
 // loop through all key/vals and count the size of KvStoreDB (per area)
+template <class ClientType>
 size_t
-KvStoreDb::getKeyValsSize() const {
+KvStoreDb<ClientType>::getKeyValsSize() const {
   size_t size = 0;
   if (kvStore_.empty()) {
     return size;
@@ -1698,8 +1749,9 @@ KvStoreDb::getKeyValsSize() const {
 
 // build publication out of the requested keys (per request)
 // if not keys provided, will return publication with empty keyVals
+template <class ClientType>
 thrift::Publication
-KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
+KvStoreDb<ClientType>::getKeyVals(std::vector<std::string> const& keys) {
   thrift::Publication thriftPub;
   thriftPub.area_ref() = area_;
 
@@ -1717,8 +1769,9 @@ KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
 // This function serves the purpose of periodically scanning peers in
 // IDLE state and promote them to SYNCING state. The initial dump will
 // happen in async nature to unblock KvStore to process other requests.
+template <class ClientType>
 void
-KvStoreDb::requestThriftPeerSync() {
+KvStoreDb<ClientType>::requestThriftPeerSync() {
   // minimal timeout for next run
   auto timeout = std::chrono::milliseconds(Constants::kMaxBackoff);
 
@@ -1729,31 +1782,29 @@ KvStoreDb::requestThriftPeerSync() {
   // Scan over thriftPeers to promote IDLE peers to SYNCING
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     auto& peerSpec = thriftPeer.peerSpec; // thrift::PeerSpec
+    const auto& expBackoff = thriftPeer.expBackoff;
 
     // ignore peers in state other than IDLE
-    if (*thriftPeer.peerSpec.state_ref() != thrift::KvStorePeerState::IDLE) {
+    if (*peerSpec.state_ref() != thrift::KvStorePeerState::IDLE) {
       continue;
     }
 
     // update the global minimum timeout value for next try
     if (not thriftPeer.expBackoff.canTryNow()) {
-      timeout =
-          std::min(timeout, thriftPeer.expBackoff.getTimeRemainingUntilRetry());
+      timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       continue;
     }
 
     // create thrift client and do backoff if can't go through
     if (not thriftPeer.getOrCreateThriftClient(evb_, kvParams_.maybeIpTos)) {
-      timeout =
-          std::min(timeout, thriftPeer.expBackoff.getTimeRemainingUntilRetry());
+      timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       continue;
     }
 
     // state transition
-    auto oldState = *thriftPeer.peerSpec.state_ref();
-    thriftPeer.peerSpec.state_ref() =
-        getNextState(oldState, KvStorePeerEvent::PEER_ADD);
-    logStateTransition(peerName, oldState, *thriftPeer.peerSpec.state_ref());
+    auto oldState = *peerSpec.state_ref();
+    peerSpec.state_ref() = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
+    logStateTransition(peerName, oldState, *peerSpec.state_ref());
 
     // mark peer from IDLE -> SYNCING
     numThriftPeersInSync += 1;
@@ -1790,8 +1841,6 @@ KvStoreDb::requestThriftPeerSync() {
 
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
-    // TODO: switch to getKvStoreKeyValsFiltered() when all nodes have
-    // version with area param
     auto sf = thriftPeer.client->semifuture_getKvStoreKeyValsFilteredArea(
         params, area_);
     std::move(sf)
@@ -1856,8 +1905,9 @@ KvStoreDb::requestThriftPeerSync() {
 //  2) Send a finalized full-sync to peer for missing keys;
 //  3) Exponetially update number of peers to SYNC in parallel;
 //  4) Promote KvStorePeerState from SYNCING -> INITIALIZED;
+template <class ClientType>
 void
-KvStoreDb::processThriftSuccess(
+KvStoreDb<ClientType>::processThriftSuccess(
     std::string const& peerName,
     thrift::Publication&& pub,
     std::chrono::milliseconds timeDelta) {
@@ -1953,8 +2003,9 @@ KvStoreDb::processThriftSuccess(
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::processInitializationEvent() {
+KvStoreDb<ClientType>::processInitializationEvent() {
   int initialSyncSuccessCnt = 0;
   int initialSyncFailureCnt = 0;
   for (const auto& [peerName, peerStore] : thriftPeers_) {
@@ -1989,8 +2040,9 @@ KvStoreDb::processInitializationEvent() {
 // This function will process the exception hit during full-dump:
 //  1) Change peer state from current state to IDLE due to exception;
 //  2) Schedule syncTimer to pick IDLE peer up if NOT scheduled;
+template <class ClientType>
 void
-KvStoreDb::processThriftFailure(
+KvStoreDb<ClientType>::processThriftFailure(
     std::string const& peerName,
     folly::fbstring const& exceptionStr,
     std::chrono::milliseconds timeDelta) {
@@ -2032,8 +2084,9 @@ KvStoreDb::processThriftFailure(
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::addThriftPeers(
+KvStoreDb<ClientType>::addThriftPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
   for (auto const& [peerName, newPeerSpec] : peers) {
@@ -2095,6 +2148,8 @@ KvStoreDb::addThriftPeers(
           newPeerSpec,
           ExponentialBackoff<std::chrono::milliseconds>(
               Constants::kInitialBackoff, Constants::kMaxBackoff));
+
+      // TODO: remove this client call to use folly::Socket option to keep-alive
       // initialize keepAlive timer to make sure thrift client connection
       // will NOT be closed by thrift server due to inactivity
       const auto name = peerName;
@@ -2121,8 +2176,9 @@ KvStoreDb::addThriftPeers(
 }
 
 // TODO: replace addPeers with addThriftPeers call
+template <class ClientType>
 void
-KvStoreDb::addPeers(
+KvStoreDb<ClientType>::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // thrift peer addition
   addThriftPeers(peers);
@@ -2243,8 +2299,9 @@ KvStoreDb::addPeers(
 }
 
 // Send message via socket
+template <class ClientType>
 folly::Expected<size_t, fbzmq::Error>
-KvStoreDb::sendMessageToPeer(
+KvStoreDb<ClientType>::sendMessageToPeer(
     const std::string& peerSocketId, const thrift::KvStoreRequest& request) {
   auto msg = fbzmq::Message::fromThriftObj(request, serializer_).value();
   fb303::fbData->addStatValue(
@@ -2253,8 +2310,9 @@ KvStoreDb::sendMessageToPeer(
       fbzmq::Message::from(peerSocketId).value(), fbzmq::Message(), msg);
 }
 
+template <class ClientType>
 std::map<std::string, int64_t>
-KvStoreDb::getCounters() const {
+KvStoreDb<ClientType>::getCounters() const {
   std::map<std::string, int64_t> counters;
 
   // Add some more flat counters
@@ -2264,8 +2322,9 @@ KvStoreDb::getCounters() const {
   return counters;
 }
 
+template <class ClientType>
 void
-KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
+KvStoreDb<ClientType>::delThriftPeers(std::vector<std::string> const& peers) {
   for (auto const& peerName : peers) {
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter == thriftPeers_.end()) {
@@ -2294,8 +2353,9 @@ KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
 }
 
 // TODO: replace delPeers with delThriftPeers call
+template <class ClientType>
 void
-KvStoreDb::delPeers(std::vector<std::string> const& peers) {
+KvStoreDb<ClientType>::delPeers(std::vector<std::string> const& peers) {
   // thrift peer deletion
   delThriftPeers(peers);
 
@@ -2346,8 +2406,9 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
 }
 
 // dump all peers we are subscribed to
+template <class ClientType>
 thrift::PeersMap
-KvStoreDb::dumpPeers() {
+KvStoreDb<ClientType>::dumpPeers() {
   thrift::PeersMap peers;
   for (auto const& [peerName, thriftPeer] : thriftPeers_) {
     peers.emplace(peerName, thriftPeer.peerSpec);
@@ -2356,8 +2417,9 @@ KvStoreDb::dumpPeers() {
 }
 
 // process a request
+template <class ClientType>
 folly::Expected<fbzmq::Message, fbzmq::Error>
-KvStoreDb::processRequestMsgHelper(
+KvStoreDb<ClientType>::processRequestMsgHelper(
     const std::string& requestId, thrift::KvStoreRequest& thriftReq) {
   XLOG(DBG3) << AreaTag()
              << fmt::format(
@@ -2452,8 +2514,9 @@ KvStoreDb::processRequestMsgHelper(
   }
 }
 
+template <class ClientType>
 thrift::SptInfos
-KvStoreDb::processFloodTopoGet() noexcept {
+KvStoreDb<ClientType>::processFloodTopoGet() noexcept {
   thrift::SptInfos sptInfos;
   const auto& duals = DualNode::getDuals();
 
@@ -2486,8 +2549,9 @@ KvStoreDb::processFloodTopoGet() noexcept {
   return sptInfos;
 }
 
+template <class ClientType>
 void
-KvStoreDb::processFloodTopoSet(
+KvStoreDb<ClientType>::processFloodTopoSet(
     const thrift::FloodTopoSetParams& setParams) noexcept {
   if (setParams.allRoots_ref().has_value() and *setParams.allRoots_ref() and
       not(*setParams.setChild_ref())) {
@@ -2527,8 +2591,9 @@ KvStoreDb::processFloodTopoSet(
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::sendTopoSetCmd(
+KvStoreDb<ClientType>::sendTopoSetCmd(
     const std::string& rootId,
     const std::string& peerName,
     bool setChild,
@@ -2607,25 +2672,29 @@ KvStoreDb::sendTopoSetCmd(
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::setChild(
+KvStoreDb<ClientType>::setChild(
     const std::string& rootId, const std::string& peerName) noexcept {
   sendTopoSetCmd(rootId, peerName, true, false);
 }
 
+template <class ClientType>
 void
-KvStoreDb::unsetChild(
+KvStoreDb<ClientType>::unsetChild(
     const std::string& rootId, const std::string& peerName) noexcept {
   sendTopoSetCmd(rootId, peerName, false, false);
 }
 
+template <class ClientType>
 void
-KvStoreDb::unsetChildAll(const std::string& peerName) noexcept {
+KvStoreDb<ClientType>::unsetChildAll(const std::string& peerName) noexcept {
   sendTopoSetCmd("" /* root-id is ignored */, peerName, false, true);
 }
 
+template <class ClientType>
 void
-KvStoreDb::processNexthopChange(
+KvStoreDb<ClientType>::processNexthopChange(
     const std::string& rootId,
     const std::optional<std::string>& oldNh,
     const std::optional<std::string>& newNh) noexcept {
@@ -2696,8 +2765,9 @@ KvStoreDb::processNexthopChange(
 
 // [TO BE DEPRECATED]
 // this will poll the sockets listening to the requests
+template <class ClientType>
 void
-KvStoreDb::attachCallbacks() {
+KvStoreDb<ClientType>::attachCallbacks() {
   XLOG(DBG2) << "KvStore: Registering events callbacks ...";
 
   const auto peersSyncSndHwm = peerSyncSock_.setSockOpt(
@@ -2743,8 +2813,9 @@ KvStoreDb::attachCallbacks() {
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::cleanupTtlCountdownQueue() {
+KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
   // record all expired keys
   std::vector<std::string> expiredKeys;
   auto now = std::chrono::steady_clock::now();
@@ -2802,8 +2873,9 @@ KvStoreDb::cleanupTtlCountdownQueue() {
   floodPublication(std::move(expiredKeysPub));
 }
 
+template <class ClientType>
 void
-KvStoreDb::bufferPublication(thrift::Publication&& publication) {
+KvStoreDb<ClientType>::bufferPublication(thrift::Publication&& publication) {
   fb303::fbData->addStatValue("kvstore.rate_limit_suppress", 1, fb303::COUNT);
   fb303::fbData->addStatValue(
       "kvstore.rate_limit_keys", publication.keyVals_ref()->size(), fb303::AVG);
@@ -2820,8 +2892,9 @@ KvStoreDb::bufferPublication(thrift::Publication&& publication) {
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::floodBufferedUpdates() {
+KvStoreDb<ClientType>::floodBufferedUpdates() {
   if (!publicationBuffer_.size()) {
     return;
   }
@@ -2859,8 +2932,9 @@ KvStoreDb::floodBufferedUpdates() {
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::finalizeFullSync(
+KvStoreDb<ClientType>::finalizeFullSync(
     const std::unordered_set<std::string>& keys, const std::string& senderId) {
   // build keyval to be sent
   thrift::Publication updates;
@@ -2899,6 +2973,7 @@ KvStoreDb::finalizeFullSync(
   auto& thriftPeer = peerIt->second;
   if (*thriftPeer.peerSpec.state_ref() == thrift::KvStorePeerState::IDLE or
       (not thriftPeer.client)) {
+    // TODO: evaluate the condition later to add to pending collection
     // peer in thriftPeers collection can still be in IDLE state.
     // Skip final full-sync with those peers.
     return;
@@ -2956,8 +3031,9 @@ KvStoreDb::finalizeFullSync(
       });
 }
 
+template <class ClientType>
 std::unordered_set<std::string>
-KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
+KvStoreDb<ClientType>::getFloodPeers(const std::optional<std::string>& rootId) {
   auto sptPeers = DualNode::getSptPeers(rootId);
   bool floodToAll = false;
   if (not kvParams_.enableFloodOptimization or sptPeers.empty()) {
@@ -2979,8 +3055,9 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
   return floodPeers;
 }
 
+template <class ClientType>
 void
-KvStoreDb::collectSendFailureStats(
+KvStoreDb<ClientType>::collectSendFailureStats(
     const fbzmq::Error& error, const std::string& dstSockId) {
   fb303::fbData->addStatValue(
       fmt::format("kvstore.send_failure.{}.{}", dstSockId, error.errNum),
@@ -2988,8 +3065,9 @@ KvStoreDb::collectSendFailureStats(
       fb303::COUNT);
 }
 
+template <class ClientType>
 void
-KvStoreDb::floodPublication(
+KvStoreDb<ClientType>::floodPublication(
     thrift::Publication&& publication, bool rateLimit, bool setFloodRoot) {
   // rate limit if configured
   if (floodLimiter_ && rateLimit && !floodLimiter_->consume(1)) {
@@ -3084,8 +3162,7 @@ KvStoreDb::floodPublication(
 
     auto& thriftPeer = peerIt->second;
     if (*thriftPeer.peerSpec.state_ref() !=
-            thrift::KvStorePeerState::INITIALIZED or
-        (not thriftPeer.client)) {
+        thrift::KvStorePeerState::INITIALIZED) {
       // Skip flooding to those peers if peer has NOT finished
       // initial sync(i.e. promoted to `INITIALIZED`)
       // store key for flooding after intialized
@@ -3142,8 +3219,9 @@ KvStoreDb::floodPublication(
   }
 }
 
+template <class ClientType>
 void
-KvStoreDb::processPublicationForSelfOriginatedKey(
+KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
     thrift::Publication const& publication) {
   // direct return to avoid performance issue
   if (selfOriginatedKeyVals_.empty()) {
@@ -3226,8 +3304,9 @@ KvStoreDb::processPublicationForSelfOriginatedKey(
   // TODO: when native key subscription is supported. Handle callback here.
 }
 
+template <class ClientType>
 size_t
-KvStoreDb::mergePublication(
+KvStoreDb<ClientType>::mergePublication(
     const thrift::Publication& rcvdPublication,
     std::optional<std::string> senderId) {
   // Add counters
@@ -3319,8 +3398,9 @@ KvStoreDb::mergePublication(
   return kvUpdateCnt;
 }
 
+template <class ClientType>
 void
-KvStoreDb::logSyncEvent(
+KvStoreDb<ClientType>::logSyncEvent(
     const std::string& peerNodeName,
     const std::chrono::milliseconds syncDuration) {
   LogSample sample{};
@@ -3334,8 +3414,10 @@ KvStoreDb::logSyncEvent(
   kvParams_.logSampleQueue.push(std::move(sample));
 }
 
+template <class ClientType>
 void
-KvStoreDb::logKvEvent(const std::string& event, const std::string& key) {
+KvStoreDb<ClientType>::logKvEvent(
+    const std::string& event, const std::string& key) {
   LogSample sample{};
 
   sample.addString("area", AreaTag());
@@ -3346,8 +3428,9 @@ KvStoreDb::logKvEvent(const std::string& event, const std::string& key) {
   kvParams_.logSampleQueue.push(std::move(sample));
 }
 
+template <class ClientType>
 bool
-KvStoreDb::sendDualMessages(
+KvStoreDb<ClientType>::sendDualMessages(
     const std::string& neighbor, const thrift::DualMessages& msgs) noexcept {
   if (kvParams_.enableThriftDualMsg) {
     auto peerIt = thriftPeers_.find(neighbor);
@@ -3429,5 +3512,15 @@ KvStoreDb::sendDualMessages(
   }
   return true;
 }
+
+/*
+ * ATTN: DO NOT REMOVE THIS.
+ * This is explicitly instantiate all the possible template instances.
+ *
+ * TODO: Ideally, make KvStore.h depend on KvStore-inl.h, which includes
+ * all of the template implementation.
+ */
+template class KvStore<thrift::OpenrCtrlCppAsyncClient>;
+template class KvStore<thrift::KvStoreServiceAsyncClient>;
 
 } // namespace openr

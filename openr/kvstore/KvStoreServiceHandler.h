@@ -9,6 +9,7 @@
 
 #include <fb303/BaseService.h>
 #include <openr/if/gen-cpp2/KvStoreService.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 
@@ -17,7 +18,9 @@ namespace openr {
 class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
                                     public facebook::fb303::BaseService {
  public:
-  KvStoreServiceHandler(const std::string& nodeName, KvStore* kvStore);
+  KvStoreServiceHandler(
+      const std::string& nodeName,
+      KvStore<thrift::KvStoreServiceAsyncClient>* kvStore);
 
   /*
    * util function to return node name
@@ -98,7 +101,7 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
 
  private:
   const std::string nodeName_;
-  KvStore* kvStore_{nullptr};
+  KvStore<thrift::KvStoreServiceAsyncClient>* kvStore_{nullptr};
 
 }; // class KvStoreServiceHandler
 

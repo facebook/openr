@@ -677,7 +677,7 @@ struct KvStoreConfig {
   10: optional i32 ip_tos;
 
   /**
-  * TODO: remove this after ZMQ is removed from openr
+  * [TO BE DEPRECATED]
   * Set buffering size for KvStore socket communication. Updates to neighbor node during
   * flooding can be buffered upto this number. For larger networks where burst of updates
   * can be high having high value makes sense. For smaller networks where burst of updates
@@ -686,7 +686,7 @@ struct KvStoreConfig {
   101: i32 zmq_hwm = 65536;
 
   /**
-   * TODO: remove this after dual msg is transmitted via thrift by default
+   * [TO BE DEPRECATED]
    * Temp var to enable dual msg exchange over thrift channel.
    */
   200: bool enable_thrift_dual_msg = false;

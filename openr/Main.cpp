@@ -361,7 +361,7 @@ main(int argc, char** argv) {
       orderedEvbs,
       watchdog,
       "kvstore",
-      std::make_unique<KvStore>(
+      std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
           context,
           kvStoreUpdatesQueue,
           kvStoreEventsQueue,

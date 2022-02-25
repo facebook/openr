@@ -22,7 +22,7 @@ KvStoreWrapper::KvStoreWrapper(
       globalCmdUrl_(fmt::format("inproc://{}-kvstore-global-cmd", nodeId_)),
       areaIds_(areaIds),
       kvStoreConfig_(kvStoreConfig) {
-  kvStore_ = std::make_unique<KvStore>(
+  kvStore_ = std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
       zmqContext,
       kvStoreUpdatesQueue_,
       kvStoreSyncEventsQueue_,

@@ -12,7 +12,8 @@ namespace fb303 = facebook::fb303;
 namespace openr {
 
 KvStoreServiceHandler::KvStoreServiceHandler(
-    const std::string& nodeName, KvStore* kvStore)
+    const std::string& nodeName,
+    KvStore<thrift::KvStoreServiceAsyncClient>* kvStore)
     : fb303::BaseService("kvstore"), nodeName_(nodeName), kvStore_(kvStore) {
   CHECK_NOTNULL(kvStore_);
 }

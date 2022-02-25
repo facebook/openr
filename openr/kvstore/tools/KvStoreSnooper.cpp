@@ -29,13 +29,14 @@ main(int argc, char** argv) {
   std::thread evbThread([&evb]() { evb.loopForever(); });
 
   // Create Open/R client
-  auto client =
-      openr::getOpenrCtrlPlainTextClient<apache::thrift::RocketClientChannel>(
-          evb,
-          folly::IPAddress(FLAGS_host),
-          FLAGS_port,
-          std::chrono::milliseconds(FLAGS_connect_timeout_ms),
-          std::chrono::milliseconds(FLAGS_processing_timeout_ms));
+  auto client = openr::getOpenrCtrlPlainTextClient<
+      openr::thrift::OpenrCtrlCppAsyncClient,
+      apache::thrift::RocketClientChannel>(
+      evb,
+      folly::IPAddress(FLAGS_host),
+      FLAGS_port,
+      std::chrono::milliseconds(FLAGS_connect_timeout_ms),
+      std::chrono::milliseconds(FLAGS_processing_timeout_ms));
   auto response = client->semifuture_subscribeAndGetAreaKvStores({}, {}).get();
   std::unordered_map<
       std::string /* area */,

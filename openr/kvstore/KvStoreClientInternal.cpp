@@ -15,7 +15,9 @@ namespace fb303 = facebook::fb303;
 namespace openr {
 
 KvStoreClientInternal::KvStoreClientInternal(
-    OpenrEventBase* eventBase, std::string const& nodeId, KvStore* kvStore)
+    OpenrEventBase* eventBase,
+    std::string const& nodeId,
+    KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore)
     : nodeId_(nodeId), eventBase_(eventBase), kvStore_(kvStore) {
   // sanity check
   CHECK_NE(eventBase_, static_cast<void*>(nullptr));

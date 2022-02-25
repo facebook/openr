@@ -85,6 +85,8 @@ struct KvStoreParams {
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
   // TTL for self-originated keys
   std::chrono::milliseconds keyTtl{0};
+
+  // [TO BE DEPRECATED]
   // DUAL related config knob
   bool enableFloodOptimization{false};
   bool isFloodRoot{false};
@@ -127,7 +129,7 @@ struct KvStoreParams {
 // KV store DB instance is created for each area.
 // This class processes messages received from KvStore server. The configuration
 // is passed via constructor arguments.
-
+template <class ClientType>
 class KvStoreDb : public DualNode {
  public:
   KvStoreDb(
@@ -558,7 +560,7 @@ class KvStoreDb : public DualNode {
         const thrift::PeerSpec& ps,
         const ExponentialBackoff<std::chrono::milliseconds>& expBackoff);
 
-    // util function to create thrift client
+    // util function to create new or get existing thrift client
     bool getOrCreateThriftClient(
         OpenrEventBase* evb, std::optional<int> maybeIpTos);
 
@@ -574,9 +576,12 @@ class KvStoreDb : public DualNode {
     // exponetial backoff in case of retry after sync failure
     ExponentialBackoff<std::chrono::milliseconds> expBackoff;
 
-    // thrift client for this peer
-    std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+    // KvStorePeer now supports 2 types of clients:
+    // 1. thrift::OpenrCtrlCppAsyncClient -> KvStore runs with Open/R;
+    // 2. thrift::KvStoreServiceAsyncClient -> KvStore runs independently;
+    std::unique_ptr<ClientType> client{nullptr};
 
+    // [TO BE DEPRECATED]
     // timer to periodically send keep-alive status
     // ATTN: this mechanism serves the purpose of avoiding channel being
     //       closed from thrift server due to IDLE timeout(i.e. 60s by
@@ -593,7 +598,8 @@ class KvStoreDb : public DualNode {
     int64_t numThriftApiErrors{0};
   };
 
-  // Set of peers with all info over thrift channel
+  // ATTN: this collection stores the std::variant<> of different type of
+  // templated KvStorePeer<T> with all info over thrift channel.
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
   // [TO BE DEPRECATED]
@@ -692,7 +698,7 @@ class KvStoreDb : public DualNode {
  * This class instantiates individual KvStoreDb per area. Area config is
  * passed in the constructor.
  */
-
+template <class ClientType>
 class KvStore final : public OpenrEventBase {
  public:
   KvStore(
@@ -853,7 +859,7 @@ class KvStore final : public OpenrEventBase {
    * It allows getting single configured area if default area is requested or
    * is the only one configured areaId for areaId migration purpose.
    */
-  KvStoreDb& getAreaDbOrThrow(
+  KvStoreDb<ClientType>& getAreaDbOrThrow(
       std::string const& areaId, std::string const& caller);
 
   /*
@@ -867,7 +873,8 @@ class KvStore final : public OpenrEventBase {
   KvStoreParams kvParams_;
 
   // map of area IDs and instance of KvStoreDb
-  std::unordered_map<std::string /* area ID */, KvStoreDb> kvStoreDb_{};
+  std::unordered_map<std::string /* area ID */, KvStoreDb<ClientType>>
+      kvStoreDb_{};
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;

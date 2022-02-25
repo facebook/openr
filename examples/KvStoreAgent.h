@@ -8,18 +8,20 @@
 #pragma once
 
 #include <openr/common/OpenrEventBase.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 
 namespace openr {
 
 class KvStoreAgent : public OpenrEventBase {
  public:
-  KvStoreAgent(std::string nodeId, KvStore* kvStore);
+  KvStoreAgent(
+      std::string nodeId, KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore);
 
   const std::string agentKeyPrefix{"prefixForDataThisAgentDisseminates:"};
 
  private:
-  KvStore* kvStore_{nullptr};
+  KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore_{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<folly::AsyncTimeout> periodicValueChanger_;
 

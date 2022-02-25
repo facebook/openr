@@ -40,7 +40,7 @@ RangeAllocator<T>::RangeAllocator(
     AreaId const& area,
     const std::string& nodeName,
     const std::string& keyPrefix,
-    KvStore* kvStore,
+    KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore,
     KvStoreClientInternal* const kvStoreClient,
     std::function<void(std::optional<T>)> callback,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,

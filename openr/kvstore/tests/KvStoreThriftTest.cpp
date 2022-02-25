@@ -618,7 +618,8 @@ TEST(KvStore, StateTransitionTest) {
     // IDLE => SYNCING
     auto oldState = thrift::KvStorePeerState::IDLE;
     auto event = KvStorePeerEvent::PEER_ADD;
-    auto newState = KvStoreDb::getNextState(oldState, event);
+    auto newState = KvStoreDb<thrift::KvStoreServiceAsyncClient>::getNextState(
+        oldState, event);
 
     EXPECT_EQ(newState, thrift::KvStorePeerState::SYNCING);
   }
@@ -627,7 +628,8 @@ TEST(KvStore, StateTransitionTest) {
     // SYNCING => INITIALIZED
     auto oldState = thrift::KvStorePeerState::SYNCING;
     auto event = KvStorePeerEvent::SYNC_RESP_RCVD;
-    auto newState = KvStoreDb::getNextState(oldState, event);
+    auto newState = KvStoreDb<thrift::KvStoreServiceAsyncClient>::getNextState(
+        oldState, event);
 
     EXPECT_EQ(newState, thrift::KvStorePeerState::INITIALIZED);
   }
@@ -636,7 +638,8 @@ TEST(KvStore, StateTransitionTest) {
     // SYNCING => IDLE
     auto oldState = thrift::KvStorePeerState::SYNCING;
     auto event = KvStorePeerEvent::THRIFT_API_ERROR;
-    auto newState = KvStoreDb::getNextState(oldState, event);
+    auto newState = KvStoreDb<thrift::KvStoreServiceAsyncClient>::getNextState(
+        oldState, event);
 
     EXPECT_EQ(newState, thrift::KvStorePeerState::IDLE);
   }
@@ -646,9 +649,11 @@ TEST(KvStore, StateTransitionTest) {
     // INITIALIZED => INITIIALIZED
     auto oldState = thrift::KvStorePeerState::INITIALIZED;
     auto event1 = KvStorePeerEvent::SYNC_RESP_RCVD;
-    auto newState1 = KvStoreDb::getNextState(oldState, event1);
+    auto newState1 = KvStoreDb<thrift::KvStoreServiceAsyncClient>::getNextState(
+        oldState, event1);
     auto event2 = KvStorePeerEvent::THRIFT_API_ERROR;
-    auto newState2 = KvStoreDb::getNextState(newState1, event2);
+    auto newState2 = KvStoreDb<thrift::KvStoreServiceAsyncClient>::getNextState(
+        newState1, event2);
 
     EXPECT_EQ(newState1, thrift::KvStorePeerState::INITIALIZED);
     EXPECT_EQ(newState2, thrift::KvStorePeerState::IDLE);

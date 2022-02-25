@@ -8,9 +8,9 @@
 #pragma once
 
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
-#include <thread>
 
 namespace openr {
 
@@ -27,7 +27,7 @@ class OpenrThriftServerWrapper {
       std::string const& nodeName,
       Decision* decision,
       Fib* fib,
-      KvStore* kvStore,
+      KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore,
       LinkMonitor* linkMonitor,
       Monitor* monitor,
       PersistentStore* configStore,
@@ -54,7 +54,7 @@ class OpenrThriftServerWrapper {
   // Pointers to Open/R modules
   Decision* decision_{nullptr};
   Fib* fib_{nullptr};
-  KvStore* kvStore_{nullptr};
+  KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore_{nullptr};
   LinkMonitor* linkMonitor_{nullptr};
   Monitor* monitor_{nullptr};
   PersistentStore* configStore_{nullptr};

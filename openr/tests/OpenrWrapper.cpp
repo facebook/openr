@@ -102,7 +102,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   allThreads_.emplace_back(std::move(configStoreThread));
 
   // create and start kvstore thread
-  kvStore_ = std::make_unique<KvStore>(
+  kvStore_ = std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
       context_,
       kvStoreUpdatesQueue_,
       kvStoreEventsQueue_,

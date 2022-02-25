@@ -43,22 +43,28 @@ getSocketOptionMap(std::optional<int> maybeIpTos) {
 } // namespace detail
 
 /*
- * Create client for OpenrCtrlCpp service over plain-text communication channel.
+ * This is templated method to create client for thrift service over plain-text
+ * communication channel. Different clients for different services can be used.
+ *
+ * For example,
+ *  - thrift::OpenrCtrlCppAsyncClient -> OpenrCtrlCpp service
+ *  - thrift::KvStoreServicAsyncClient -> KvStoreService
  *
  * Underneath client support multiple channel. Here we recommend to use two
  * channels based on your need.
  *
- * apache::thrift::HeaderClientChannel => This is default and widely used
+ *  - apache::thrift::HeaderClientChannel => This is default and widely used
  * channel. It doesn't support streaming APIs. However it support transparent
  * compression for data exchanges. This can be efficient for retrieving large
  * amount, of data like routes, topology, KvStore key/vals etc.
  *
- * apache::thrift::RocketClientChannel => This is new channel. It supports
+ *  - apache::thrift::RocketClientChannel => This is new channel. It supports
  * streaming APIs. Use this if you need stream APIs.
- *
  */
-template <typename ClientChannel = apache::thrift::HeaderClientChannel>
-static std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
+template <
+    typename ClientType = thrift::OpenrCtrlCppAsyncClient,
+    typename ClientChannel = apache::thrift::HeaderClientChannel>
+static std::unique_ptr<ClientType>
 getOpenrCtrlPlainTextClient(
     folly::EventBase& evb,
     const folly::IPAddress& addr,
@@ -70,7 +76,7 @@ getOpenrCtrlPlainTextClient(
     std::optional<int> maybeIpTos = std::nullopt) {
   // NOTE: It is possible to have caching for socket. We're not doing it as
   // we expect clients to be persistent/sticky.
-  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+  std::unique_ptr<ClientType> client{nullptr};
 
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
     // Create a new UNCONNECTED AsyncSocket
@@ -97,8 +103,7 @@ getOpenrCtrlPlainTextClient(
     }
 
     // Create client
-    client =
-        std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
+    client = std::make_unique<ClientType>(std::move(channel));
   });
 
   return client;
@@ -107,8 +112,10 @@ getOpenrCtrlPlainTextClient(
 /*
  * Create secured client for OpenrCtrlCpp service over AsyncSSLSocket.
  */
-template <typename ClientChannel = apache::thrift::HeaderClientChannel>
-static std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
+template <
+    typename ClientType = thrift::OpenrCtrlCppAsyncClient,
+    typename ClientChannel = apache::thrift::HeaderClientChannel>
+static std::unique_ptr<ClientType>
 getOpenrCtrlSecureClient(
     folly::EventBase& evb,
     const std::shared_ptr<folly::SSLContext> sslContext,
@@ -122,7 +129,7 @@ getOpenrCtrlSecureClient(
     std::optional<int> maybeIpTos = std::nullopt) {
   // NOTE: It is possible to have caching for socket. We're not doing it as
   // we expect clients to be persistent/sticky.
-  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+  std::unique_ptr<ClientType> client{nullptr};
 
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
     // Create a new UNCONNECTED AsyncSocket
@@ -148,8 +155,7 @@ getOpenrCtrlSecureClient(
     detail::setCompressionTransform(channel.get());
 
     // Create client
-    client =
-        std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
+    client = std::make_unique<ClientType>(std::move(channel));
   });
 
   return client;

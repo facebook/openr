@@ -19,6 +19,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/ReplicateQueue.h>
@@ -38,7 +39,7 @@ class PrefixAllocator : public OpenrEventBase {
       std::shared_ptr<const Config> config,
       // raw ptr for modules
       fbnl::NetlinkProtocolSocket* nlSock,
-      KvStore* kvStore,
+      KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore,
       PersistentStore* configStore,
       // producer queue
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQ,
@@ -188,8 +189,9 @@ class PrefixAllocator : public OpenrEventBase {
   // raw ptr for netlinkProtocolSocket for addr add/del
   fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 
+  // TODO: remove raw ptr usage of KvStore
   // raw ptr to KvStore for retrieving key-vals and subscribe keys
-  KvStore* const kvStore_{nullptr};
+  KvStore<thrift::OpenrCtrlCppAsyncClient>* const kvStore_{nullptr};
 
   // module ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};

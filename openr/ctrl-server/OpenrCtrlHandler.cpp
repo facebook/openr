@@ -33,7 +33,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     OpenrEventBase* ctrlEvb,
     Decision* decision,
     Fib* fib,
-    KvStore* kvStore,
+    KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore,
     LinkMonitor* linkMonitor,
     Monitor* monitor,
     PersistentStore* configStore,

@@ -12,7 +12,8 @@
 
 namespace openr {
 
-KvStoreAgent::KvStoreAgent(std::string nodeId, KvStore* kvStore)
+KvStoreAgent::KvStoreAgent(
+    std::string nodeId, KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore)
     : kvStore_(kvStore) {
   CHECK(kvStore_);
 

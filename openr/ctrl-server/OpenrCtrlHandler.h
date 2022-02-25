@@ -53,7 +53,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       OpenrEventBase* ctrlEvb,
       Decision* decision,
       Fib* fib,
-      KvStore* kvStore,
+      KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore,
       LinkMonitor* linkMonitor,
       Monitor* Monitor,
       PersistentStore* configStore,
@@ -471,7 +471,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   OpenrEventBase* ctrlEvb_{nullptr};
   Decision* decision_{nullptr};
   Fib* fib_{nullptr};
-  KvStore* kvStore_{nullptr};
+  KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore_{nullptr};
   LinkMonitor* linkMonitor_{nullptr};
   Monitor* monitor_{nullptr};
   PersistentStore* configStore_{nullptr};

@@ -13,6 +13,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {
@@ -30,7 +31,9 @@ class KvStoreClientInternal {
       std::string const&, std::optional<thrift::Value>) noexcept>;
 
   KvStoreClientInternal(
-      OpenrEventBase* eventBase, std::string const& nodeId, KvStore* kvStore);
+      OpenrEventBase* eventBase,
+      std::string const& nodeId,
+      KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore);
 
   ~KvStoreClientInternal();
 
@@ -158,7 +161,7 @@ class KvStoreClientInternal {
   OpenrEventBase* const eventBase_{nullptr};
 
   // Pointers to KvStore module
-  KvStore* kvStore_{nullptr};
+  KvStore<thrift::OpenrCtrlCppAsyncClient>* kvStore_{nullptr};
 
   /**
    * Mutable state
