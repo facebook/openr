@@ -5,15 +5,17 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/kvstore/KvStoreServiceHandler.h>
+#ifndef KVSTORE_SERVICE_HANDLER_H_
+#error This file may only be included from KvStoreServiceHandler.h
+#endif
 
 namespace fb303 = facebook::fb303;
 
 namespace openr {
 
-KvStoreServiceHandler::KvStoreServiceHandler(
-    const std::string& nodeName,
-    KvStore<thrift::KvStoreServiceAsyncClient>* kvStore)
+template <class ClientType>
+KvStoreServiceHandler<ClientType>::KvStoreServiceHandler(
+    const std::string& nodeName, KvStore<ClientType>* kvStore)
     : fb303::BaseService("kvstore"), nodeName_(nodeName), kvStore_(kvStore) {
   CHECK_NOTNULL(kvStore_);
 }
@@ -22,8 +24,9 @@ KvStoreServiceHandler::KvStoreServiceHandler(
 // KvStore APIs
 //
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStoreServiceHandler::semifuture_getKvStoreKeyValsArea(
+KvStoreServiceHandler<ClientType>::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
   thrift::KeyGetParams params;
@@ -33,8 +36,9 @@ KvStoreServiceHandler::semifuture_getKvStoreKeyValsArea(
       std::move(*area), std::move(params));
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStoreServiceHandler::semifuture_getKvStoreKeyValsFilteredArea(
+KvStoreServiceHandler<ClientType>::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
   return kvStore_->semifuture_dumpKvStoreKeys(std::move(*filter), {*area})
@@ -46,33 +50,29 @@ KvStoreServiceHandler::semifuture_getKvStoreKeyValsFilteredArea(
           });
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStoreServiceHandler::semifuture_getKvStoreHashFilteredArea(
+KvStoreServiceHandler<ClientType>::semifuture_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
   return kvStore_->semifuture_dumpKvStoreHashes(
       std::move(*area), std::move(*filter));
 }
 
+template <class ClientType>
 folly::SemiFuture<folly::Unit>
-KvStoreServiceHandler::semifuture_setKvStoreKeyVals(
+KvStoreServiceHandler<ClientType>::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
   return kvStore_->semifuture_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
 }
 
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-KvStoreServiceHandler::semifuture_getKvStorePeersArea(
+KvStoreServiceHandler<ClientType>::semifuture_getKvStorePeersArea(
     std::unique_ptr<std::string> area) {
   return kvStore_->semifuture_getKvStorePeers(std::move(*area));
-}
-
-folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
-KvStoreServiceHandler::semifuture_getKvStoreAreaSummary(
-    std::unique_ptr<std::set<std::string>> selectAreas) {
-  return kvStore_->semifuture_getKvStoreAreaSummaryInternal(
-      std::move(*selectAreas));
 }
 
 } // namespace openr

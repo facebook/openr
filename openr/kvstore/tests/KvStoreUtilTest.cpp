@@ -7,10 +7,9 @@
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
-#include <glog/logging.h>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -27,7 +26,9 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
       kvStoreConfig.node_name_ref() = nodeId;
       const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
-      return std::make_shared<KvStoreWrapper>(context_, areaIds, kvStoreConfig);
+      return std::make_shared<
+          KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+          context_, areaIds, kvStoreConfig);
     };
 
     // spin up kvStore through kvStoreWrapper
@@ -53,7 +54,8 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   const std::string nodeId2_{"test_2"};
 
   fbzmq::Context context_{};
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_, kvStoreWrapper2_;
+  std::shared_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
+      kvStoreWrapper1_, kvStoreWrapper2_;
 };
 
 //

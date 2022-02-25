@@ -9,6 +9,7 @@
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <range/v3/view/enumerate.hpp>
 
@@ -52,7 +53,8 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
 
     // start kvstore
     stores_.emplace_back(
-        std::make_unique<KvStoreWrapper>(context_, areaIds, kvStoreConfig));
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_, areaIds, kvStoreConfig));
     stores_.back()->run();
   }
 
@@ -255,7 +257,9 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
   fbzmq::Context context_;
 
   // Internal stores
-  std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
+  std::vector<
+      std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
+      stores_{};
 
   // enable TTL check or not
   const bool checkTtl = GetParam();

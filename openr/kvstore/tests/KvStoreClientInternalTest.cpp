@@ -14,6 +14,7 @@
 
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -82,7 +83,8 @@ class MultipleStoreFixture : public ::testing::Test {
       kvStoreConfig.node_name_ref() = nodeId;
       const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
-      return std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
+      return std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+          context, areaIds, kvStoreConfig);
     };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -123,7 +125,8 @@ class MultipleStoreFixture : public ::testing::Test {
   apache::thrift::CompactSerializer serializer;
   fbzmq::Context context;
 
-  std::shared_ptr<KvStoreWrapper> store1, store2, store3;
+  std::shared_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>> store1,
+      store2, store3;
   std::shared_ptr<KvStoreClientInternal> client1, client2, client3;
 
   const std::string node1{"node1"}, node2{"node2"}, node3{"node3"};
@@ -183,7 +186,8 @@ class MultipleAreaFixture : public MultipleStoreFixture {
       // create KvStoreConfig
       thrift::KvStoreConfig kvStoreConfig;
       kvStoreConfig.node_name_ref() = nodeId;
-      return std::make_shared<KvStoreWrapper>(context, areas, kvStoreConfig);
+      return std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+          context, areas, kvStoreConfig);
     };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -418,7 +422,8 @@ TEST(KvStoreClientInternal, ApiTest) {
   kvStoreConfig.node_name_ref() = nodeId;
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
-      std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
+      std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+          context, areaIds, kvStoreConfig);
   store->run();
 
   // Define and start evb for KvStoreClientInternal usage.
@@ -643,7 +648,8 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   kvStoreConfig.node_name_ref() = nodeId;
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
-      std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
+      std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+          context, areaIds, kvStoreConfig);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -787,7 +793,8 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
   kvStoreConfig.node_name_ref() = nodeId;
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
-      std::make_shared<KvStoreWrapper>(context, areaIds, kvStoreConfig);
+      std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+          context, areaIds, kvStoreConfig);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients

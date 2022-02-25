@@ -7,6 +7,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/monitor/SystemMetrics.h>
@@ -83,12 +84,13 @@ class KvStoreBenchmarkTestFixture {
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // start kvstore
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_,
-        areaIds,
-        kvStoreConfig,
-        std::nullopt /* peerUpdatesQueue */,
-        kvRequestQueue_.getReader());
+    kvStoreWrapper_ =
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_,
+            areaIds,
+            kvStoreConfig,
+            std::nullopt /* peerUpdatesQueue */,
+            kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
   }
 
@@ -168,7 +170,8 @@ class KvStoreBenchmarkTestFixture {
   fbzmq::Context context_;
 
   // Internal stores
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
+  std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
+      kvStoreWrapper_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 
  private:

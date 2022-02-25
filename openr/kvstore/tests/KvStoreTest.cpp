@@ -12,6 +12,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
@@ -64,14 +65,15 @@ class KvStoreTestFixture : public ::testing::Test {
    * stopped as well as destroyed automatically when test exits.
    * Retured raw pointer of an object will be freed as well.
    */
-  KvStoreWrapper*
+  KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*
   createKvStore(
       thrift::KvStoreConfig kvStoreConf,
       const std::unordered_set<std::string>& areaIds = {kTestingAreaName},
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
           std::nullopt) {
-    stores_.emplace_back(std::make_unique<KvStoreWrapper>(
-        context_, areaIds, kvStoreConf, peerUpdatesQueue));
+    stores_.emplace_back(
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_, areaIds, kvStoreConf, peerUpdatesQueue));
     return stores_.back().get();
   }
 
@@ -107,7 +109,7 @@ class KvStoreTestFixture : public ::testing::Test {
 
   void
   waitForKeyInStoreWithTimeout(
-      KvStoreWrapper* store,
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* store,
       AreaId const& areaId,
       std::string const& key) const {
     auto const start = std::chrono::steady_clock::now();
@@ -123,7 +125,9 @@ class KvStoreTestFixture : public ::testing::Test {
   fbzmq::Context context_;
 
   // Internal stores
-  std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
+  std::vector<
+      std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
+      stores_{};
 };
 
 } // namespace
@@ -1749,7 +1753,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   const unsigned int kNumStores = 16;
 
   // Create and start peer-stores
-  std::vector<KvStoreWrapper*> peerStores;
+  std::vector<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*> peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
     auto nodeId = getNodeId(kOriginBase, j);
     auto store = createKvStore(getTestKvConf(nodeId));
@@ -1959,7 +1963,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   // Start the intermediate stores in string topology
   //
   LOG(INFO) << "Preparing and starting stores.";
-  std::vector<KvStoreWrapper*> stores;
+  std::vector<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*> stores;
   std::vector<std::string> nodeIdsSeq;
   for (unsigned int i = 0; i < kNumStores; ++i) {
     auto nodeId = getNodeId(kOriginBase, i);
@@ -2092,7 +2096,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   const unsigned int kNumStores = 16;
 
   // Create and start peer-stores
-  std::vector<KvStoreWrapper*> peerStores;
+  std::vector<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*> peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
     auto store = createKvStore(getTestKvConf(getNodeId(kOriginBase, j)));
     store->run();

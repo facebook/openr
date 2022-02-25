@@ -20,6 +20,7 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -391,12 +392,13 @@ class LinkMonitorTestFixture : public testing::Test {
 
   void
   createKvStore(std::shared_ptr<Config> config) {
-    kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context, /* zmq context */
-        config->getAreaIds(), /* areaId collection */
-        config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
-        peerUpdatesQueue.getReader(), /* peerUpdatesQueue */
-        kvRequestQueue.getReader() /* kvRequestQueue */);
+    kvStoreWrapper =
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context, /* zmq context */
+            config->getAreaIds(), /* areaId collection */
+            config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
+            peerUpdatesQueue.getReader(), /* peerUpdatesQueue */
+            kvRequestQueue.getReader() /* kvRequestQueue */);
     kvStoreWrapper->run();
   }
 
@@ -671,7 +673,8 @@ class LinkMonitorTestFixture : public testing::Test {
   std::unique_ptr<PrefixManager> prefixManager;
   std::unique_ptr<std::thread> prefixManagerThread;
 
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
+  std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
+      kvStoreWrapper;
   std::shared_ptr<NetlinkEventsInjector> nlEventsInjector;
 
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;

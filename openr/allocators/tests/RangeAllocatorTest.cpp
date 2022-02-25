@@ -15,10 +15,10 @@
 #include <folly/gen/String.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
-#include <sodium.h>
 
 #include <openr/allocators/RangeAllocator.h>
 #include <openr/config/Config.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -58,8 +58,11 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     for (uint32_t i = 0; i < kNumStores; i++) {
       auto config = std::make_shared<Config>(
           getBasicOpenrConfig(fmt::format("store{}", i + 1)));
-      auto store = std::make_unique<KvStoreWrapper>(
-          zmqContext, config->getAreaIds(), config->toThriftKvStoreConfig());
+      auto store =
+          std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+              zmqContext,
+              config->getAreaIds(),
+              config->toThriftKvStoreConfig());
       stores.emplace_back(std::move(store));
       configs.emplace_back(std::move(config));
       stores.back()->run();
@@ -158,7 +161,8 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 
   // Linear topology of stores. i <--> i+1 <--> i+2 ......
-  std::vector<std::unique_ptr<KvStoreWrapper>> stores;
+  std::vector<std::unique_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>>
+      stores;
   std::vector<std::shared_ptr<Config>> configs;
 
   // Client `i` connects to store `i % stores.size()`
@@ -433,12 +437,6 @@ main(int argc, char** argv) {
   folly::init(&argc, &argv);
   google::InstallFailureSignalHandler();
   FLAGS_logtostderr = true;
-
-  // init sodium security library
-  if (::sodium_init() == -1) {
-    LOG(ERROR) << "Failed initializing sodium";
-    return -1;
-  }
 
   return RUN_ALL_TESTS();
 }

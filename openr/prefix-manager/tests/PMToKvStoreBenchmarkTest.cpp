@@ -7,6 +7,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/monitor/SystemMetrics.h>
 #include <openr/prefix-manager/PrefixManager.h>
@@ -44,12 +45,13 @@ class PMToKvStoreBMTestFixture {
     config_ = std::make_shared<Config>(tConfig);
 
     // spawn `KvStore` and `PrefixManager` for benchmarking
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_,
-        config_->getAreaIds(),
-        config_->toThriftKvStoreConfig(),
-        std::nullopt,
-        kvRequestQueue_.getReader());
+    kvStoreWrapper_ =
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_,
+            config_->getAreaIds(),
+            config_->toThriftKvStoreConfig(),
+            std::nullopt,
+            kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     prefixManager_ = std::make_unique<PrefixManager>(
@@ -163,7 +165,8 @@ class PMToKvStoreBMTestFixture {
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 
   std::shared_ptr<Config> config_;
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
+  std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
+      kvStoreWrapper_;
   std::unique_ptr<PrefixManager> prefixManager_;
   std::unique_ptr<std::thread> prefixManagerThread_;
   PrefixGenerator prefixGenerator_; // for prefixes generation usage

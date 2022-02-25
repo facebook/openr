@@ -20,6 +20,7 @@
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/messaging/ReplicateQueue.h>
@@ -94,12 +95,13 @@ class PrefixManagerTestFixture : public testing::Test {
     config = std::make_shared<Config>(createConfig());
 
     // spin up a kvstore
-    kvStoreWrapper = std::make_shared<KvStoreWrapper>(
-        context, /* zmq context */
-        config->getAreaIds(), /* areaId collection */
-        config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
-        std::nullopt, /* peerUpdatesQueue */
-        kvRequestQueue.getReader() /* kvRequestQueue */);
+    kvStoreWrapper =
+        std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+            context, /* zmq context */
+            config->getAreaIds(), /* areaId collection */
+            config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
+            std::nullopt, /* peerUpdatesQueue */
+            kvRequestQueue.getReader() /* kvRequestQueue */);
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
@@ -253,7 +255,8 @@ class PrefixManagerTestFixture : public testing::Test {
   std::shared_ptr<Config> config{nullptr};
   std::unique_ptr<PrefixManager> prefixManager{nullptr};
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
+  std::shared_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>
+      kvStoreWrapper{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient{nullptr};
 
  private:

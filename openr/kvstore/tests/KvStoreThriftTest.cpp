@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -49,13 +50,14 @@ class KvStoreThriftTestFixture : public ::testing::Test {
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     stores_.emplace_back(
-        std::make_shared<KvStoreWrapper>(context_, areaIds, kvStoreConfig));
+        std::make_shared<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_, areaIds, kvStoreConfig));
     stores_.back()->run();
   }
 
   bool
   verifyKvStoreKeyVal(
-      KvStoreWrapper* kvStore,
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* kvStore,
       const std::string& key,
       const thrift::Value& thriftVal,
       const AreaId& area,
@@ -83,7 +85,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
 
   bool
   verifyKvStorePeerState(
-      KvStoreWrapper* kvStore,
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* kvStore,
       const std::string& peerName,
       thrift::KvStorePeerState expPeerState,
       const AreaId& area,
@@ -119,7 +121,9 @@ class KvStoreThriftTestFixture : public ::testing::Test {
   const std::chrono::milliseconds waitTime_{1000};
 
   // vector of KvStores created
-  std::vector<std::shared_ptr<KvStoreWrapper>> stores_{};
+  std::vector<
+      std::shared_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
+      stores_{};
 };
 
 //

@@ -10,12 +10,14 @@
 #include <fbzmq/zmq/Zmq.h>
 
 #include <openr/common/LsdbUtil.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStoreServiceHandler.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 namespace openr {
 
@@ -26,6 +28,7 @@ namespace openr {
  *
  * Not thread-safe, use from the same thread only.
  */
+template <class ClientType>
 class KvStoreWrapper {
  public:
   KvStoreWrapper(
@@ -86,8 +89,14 @@ class KvStoreWrapper {
 
   void
   stopThriftServer() {
-    thriftServer_->stop();
-    thriftServer_.reset();
+    // ATTN: it is user's responsibility to close the queue passed
+    //       to thrift server before calling stop()
+    thriftServerThread_.stop();
+    thriftServerThread_.join();
+
+    CHECK(kvStoreServiceHandler_.unique())
+        << "Unexpected ownership of kvStoreServiceHandler";
+    kvStoreServiceHandler_.reset();
   }
 
   /**
@@ -208,19 +217,16 @@ class KvStoreWrapper {
     return kvStore_->semifuture_getCounters().get();
   }
 
-  KvStore<thrift::OpenrCtrlCppAsyncClient>*
+  KvStore<ClientType>*
   getKvStore() {
     return kvStore_.get();
   }
 
-  inline std::shared_ptr<OpenrCtrlHandler>&
-  getThriftServerCtrlHandler() {
-    return thriftServer_->getOpenrCtrlHandler();
-  }
-
   inline uint16_t
   getThriftPort() {
-    return thriftServer_->getOpenrCtrlThriftPort();
+    CHECK(kvStoreServiceHandler_)
+        << "thrift server must be initialized in advance";
+    return thriftServerThread_.getAddress()->getPort();
   }
 
   const std::string
@@ -263,14 +269,17 @@ class KvStoreWrapper {
   // KvStore Will be removed once KvStoreClientInternal is deprecated
   messaging::ReplicateQueue<KeyValueRequest> dummyKvRequestQueue_;
 
-  // KvStore owned by this wrapper.
-  std::unique_ptr<KvStore<thrift::OpenrCtrlCppAsyncClient>> kvStore_;
+  // KvStore instance owned by this wrapper
+  std::unique_ptr<KvStore<ClientType>> kvStore_;
 
-  // Thrift Server owned by this warpper;
-  std::unique_ptr<OpenrThriftServerWrapper> thriftServer_;
+  // KvStoreServiceHandler instance used for thrift server usage
+  std::shared_ptr<KvStoreServiceHandler<ClientType>> kvStoreServiceHandler_;
 
-  // Thread in which KvStore will be running.
+  // Thread in which KvStore will be running
   std::thread kvStoreThread_;
+
+  // Thread in which thrift server will be running
+  apache::thrift::util::ScopedServerThread thriftServerThread_;
 };
 
 } // namespace openr

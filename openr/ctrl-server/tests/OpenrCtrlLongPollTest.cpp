@@ -7,10 +7,10 @@
 
 #include <folly/init/Init.h>
 #include <glog/logging.h>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <openr/common/OpenrClient.h>
+#include <openr/ctrl-server/OpenrCtrlHandler.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -26,24 +26,49 @@ class LongPollFixture : public ::testing::Test {
 
     // Create KvStore module
     kvStoreWrapper_ =
-        std::make_unique<KvStoreWrapper>(context_, areaIds, kvStoreConfig);
+        std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+            context_, areaIds, kvStoreConfig);
     kvStoreWrapper_->run();
 
     // initialize OpenrCtrlHandler for testing usage
-    handler_ = kvStoreWrapper_->getThriftServerCtrlHandler();
+    handler_ = std::make_shared<OpenrCtrlHandler>(
+        nodeName_,
+        std::unordered_set<std::string>{},
+        &ctrlEvb_,
+        nullptr, /* decision raw ptr */
+        nullptr, /* fib raw ptr */
+        kvStoreWrapper_->getKvStore(), /* kvstore raw ptr */
+        nullptr, /* link-monitor raw ptr */
+        nullptr, /* monitor raw ptr */
+        nullptr, /* persistent-store raw ptr */
+        nullptr, /* prefix-mgr raw ptr */
+        nullptr, /* spark raw ptr */
+        nullptr /* config shared-ptr */);
+
+    // ATTN: ctrlEvb must running in separate thread to mimick receiving
+    // adj update for long-poll
+    ctrlEvbThread_ = std::thread([&]() { ctrlEvb_.run(); });
+    ctrlEvb_.waitUntilRunning();
   }
 
   void
   TearDown() override {
     kvStoreWrapper_->closeQueue();
     handler_.reset();
+
+    ctrlEvb_.stop();
+    ctrlEvb_.waitUntilStopped();
+    ctrlEvbThread_.join();
+
     kvStoreWrapper_->stop();
     kvStoreWrapper_.reset();
   }
 
  private:
+  // [TO BE DEPRECATED]
   fbzmq::Context context_;
-  folly::EventBase evb_;
+  OpenrEventBase ctrlEvb_;
+  std::thread ctrlEvbThread_;
 
  public:
   const std::string nodeName_{"Valar-Morghulis"};
@@ -51,7 +76,8 @@ class LongPollFixture : public ::testing::Test {
   const std::string prefixKey_ = fmt::format("prefix:{}", nodeName_);
 
   openr::OpenrEventBase testEvb_;
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
+  std::unique_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>
+      kvStoreWrapper_;
   std::shared_ptr<OpenrCtrlHandler> handler_{nullptr};
 };
 

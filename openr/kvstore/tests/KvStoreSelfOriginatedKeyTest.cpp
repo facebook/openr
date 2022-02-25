@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/Util.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
@@ -54,18 +55,19 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
     kvStoreConfig.key_ttl_ms_ref() = keyTtl;
 
     // start kvstore
-    kvStore_ = std::make_unique<KvStoreWrapper>(
-        context_,
-        areaIds,
-        kvStoreConfig,
-        std::nullopt /* peerUpdatesQueue */,
-        kvRequestQueue_.getReader());
+    kvStore_ =
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_,
+            areaIds,
+            kvStoreConfig,
+            std::nullopt /* peerUpdatesQueue */,
+            kvRequestQueue_.getReader());
     kvStore_->run();
   }
 
  protected:
   fbzmq::Context context_{};
-  std::unique_ptr<KvStoreWrapper> kvStore_;
+  std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>> kvStore_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 };
 } // namespace

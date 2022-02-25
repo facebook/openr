@@ -9,18 +9,26 @@
 
 #include <fb303/BaseService.h>
 #include <openr/if/gen-cpp2/KvStoreService.h>
-#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {
 
+/*
+ * This is the template class to handle synchronization between multiple
+ * KvStore instances. KvStore does initial FULL_SYNC and INCREMENTAL_FLOOD
+ * via thrift channel I/O. Sample ClientType can be:
+ *
+ *  1) thrift::KvStoreServiceAsyncClient - this is the general ClientType
+ *  2) thrift::OpenrCtrlCppAsyncClient - this is the routing-protocol specific
+ *     ClientType
+ */
+template <class ClientType>
 class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
                                     public facebook::fb303::BaseService {
  public:
   KvStoreServiceHandler(
-      const std::string& nodeName,
-      KvStore<thrift::KvStoreServiceAsyncClient>* kvStore);
+      const std::string& nodeName, KvStore<ClientType>* kvStore);
 
   /*
    * util function to return node name
@@ -86,23 +94,14 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeersArea(std::unique_ptr<std::string> area) override;
 
-  /*
-   * API to return structured thrift::KvStoreAreaSummary to include:
-   *  - selected area names;
-   *  - number of key-val pairs;
-   *  - total of key-val bytes;
-   *  - peers in each area;
-   *  - counters in each area;
-   *  - etc;
-   */
-  folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
-  semifuture_getKvStoreAreaSummary(
-      std::unique_ptr<std::set<std::string>> selectAreas) override;
-
  private:
   const std::string nodeName_;
-  KvStore<thrift::KvStoreServiceAsyncClient>* kvStore_{nullptr};
+  KvStore<ClientType>* kvStore_{nullptr};
 
 }; // class KvStoreServiceHandler
 
 } // namespace openr
+
+#define KVSTORE_SERVICE_HANDLER_H_
+#include <openr/kvstore/KvStoreServiceHandler-inl.h>
+#undef KVSTORE_SERVICE_HANDLER_H_

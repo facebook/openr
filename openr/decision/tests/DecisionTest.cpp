@@ -29,7 +29,6 @@
 #include <openr/decision/Decision.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <openr/tests/utils/Utils.h>
 
 DEFINE_bool(stress_test, false, "pass this to run the stress test");

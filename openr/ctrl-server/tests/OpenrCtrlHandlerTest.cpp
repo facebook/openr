@@ -10,10 +10,10 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/Constants.h>
-#include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
+#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/Types_types.h>
@@ -21,7 +21,6 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -66,12 +65,13 @@ class OpenrCtrlFixture : public ::testing::Test {
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_,
-        config->getAreaIds(),
-        config->toThriftKvStoreConfig(),
-        std::nullopt,
-        kvRequestQueue_.getReader());
+    kvStoreWrapper_ =
+        std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+            context_,
+            config->getAreaIds(),
+            config->toThriftKvStoreConfig(),
+            std::nullopt,
+            kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     // Create Decision module
@@ -122,22 +122,22 @@ class OpenrCtrlFixture : public ::testing::Test {
         false /* overrideDrainState */);
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
 
-    // spin up an openrThriftServer
-    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
-        nodeName_,
-        decision.get() /* decision */,
-        fib.get() /* fib */,
-        kvStoreWrapper_->getKvStore() /* kvStore */,
-        linkMonitor.get() /* linkMonitor */,
-        monitor.get() /* monitor */,
-        persistentStore.get() /* configStore */,
-        prefixManager.get() /* prefixManager */,
-        nullptr /* spark */,
-        config);
-    openrThriftServerWrapper_->run();
-
     // initialize OpenrCtrlHandler for testing usage
-    handler_ = openrThriftServerWrapper_->getOpenrCtrlHandler();
+    handler_ = std::make_shared<OpenrCtrlHandler>(
+        nodeName_,
+        std::unordered_set<std::string>{},
+        &ctrlEvb_,
+        decision.get(),
+        fib.get(),
+        kvStoreWrapper_->getKvStore(),
+        linkMonitor.get(),
+        monitor.get(),
+        persistentStore.get(),
+        prefixManager.get(),
+        nullptr,
+        config);
+    ctrlEvbThread_ = std::thread([&]() { ctrlEvb_.run(); });
+    ctrlEvb_.waitUntilRunning();
   }
 
   void
@@ -156,7 +156,11 @@ class OpenrCtrlFixture : public ::testing::Test {
     nlSock_->closeQueue();
     kvStoreWrapper_->closeQueue();
 
+    // ATTN: stop handler first as it holds all ptrs
     handler_.reset();
+    ctrlEvb_.stop();
+    ctrlEvb_.waitUntilStopped();
+    ctrlEvbThread_.join();
 
     linkMonitor->stop();
     linkMonitorThread_.join();
@@ -177,9 +181,6 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     kvStoreWrapper_->stop();
     kvStoreWrapper_.reset();
-
-    openrThriftServerWrapper_->stop();
-    openrThriftServerWrapper_.reset();
   }
 
   thrift::PrefixEntry
@@ -218,12 +219,14 @@ class OpenrCtrlFixture : public ::testing::Test {
 
   fbzmq::Context context_{};
   folly::EventBase evb_;
+  OpenrEventBase ctrlEvb_;
 
   std::thread decisionThread_;
   std::thread fibThread_;
   std::thread prefixManagerThread_;
   std::thread persistentStoreThread_;
   std::thread linkMonitorThread_;
+  std::thread ctrlEvbThread_;
 
   std::shared_ptr<Config> config;
   std::shared_ptr<Decision> decision;
@@ -236,8 +239,8 @@ class OpenrCtrlFixture : public ::testing::Test {
  public:
   const std::string nodeName_{"thanos@universe"};
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_{nullptr};
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
+  std::unique_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>
+      kvStoreWrapper_{nullptr};
   std::shared_ptr<OpenrCtrlHandler> handler_{nullptr};
 };
 
@@ -983,12 +986,11 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     thrift::KeyDumpParams filter;
     filter.keys_ref() = keys;
     filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
-
     filter.oper_ref() = thrift::FilterOperator::AND;
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
-    auto handler_other = openrThriftServerWrapper_->getOpenrCtrlHandler();
+
+    auto handler_other = handler_;
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1052,7 +1054,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 });
 
     /* There are two clients */
-    EXPECT_EQ(2, handler->getNumKvStorePublishers());
+    EXPECT_EQ(2, handler_->getNumKvStorePublishers());
     EXPECT_EQ(2, handler_other->getNumKvStorePublishers());
 
     /* key4 and random_prefix keys are getting added for the first time */
@@ -1078,7 +1080,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription_other).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1095,9 +1097,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
     filter.oper_ref() = thrift::FilterOperator::AND;
 
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1132,7 +1133,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
               received++;
             });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
         key,
@@ -1148,7 +1149,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1164,15 +1165,14 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     thrift::KeyDumpParams filter;
     filter.keys_ref() = keys;
     filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
+    filter.oper_ref() = thrift::FilterOperator::OR;
+
     std::unordered_map<std::string, std::string> keyvals;
     keyvals["key33"] = "value33";
     keyvals["key333"] = "value333";
 
-    filter.oper_ref() = thrift::FilterOperator::OR;
-
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1212,7 +1212,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
                 });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
         "key333",
@@ -1232,7 +1232,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1254,9 +1254,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
     filter.oper_ref() = thrift::FilterOperator::AND;
 
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1306,7 +1305,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
                 });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
         key,
@@ -1330,7 +1329,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1353,9 +1352,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     keyvals[key] = "value1";
     keyvals["random-prefix"] = "value1";
 
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1405,7 +1403,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
                 });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
         key,
@@ -1433,7 +1431,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1449,9 +1447,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     filter.originatorIds_ref()->insert("node10");
     filter.oper_ref() = thrift::FilterOperator::AND;
 
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1476,7 +1473,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
               received++;
             });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
         key,
@@ -1492,7 +1489,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1506,6 +1503,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     thrift::KeyDumpParams filter;
     filter.keys_ref() = {"key1", "key2", "key3", key};
     filter.originatorIds_ref()->insert("node10");
+    filter.oper_ref() = thrift::FilterOperator::OR;
+
     std::unordered_map<std::string, std::string> keyvals;
     keyvals["key1"] = "value1";
     keyvals["key2"] = "value2";
@@ -1513,11 +1512,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     keyvals[key] = "value1";
     keyvals["random-prefix-2"] = "value1";
 
-    filter.oper_ref() = thrift::FilterOperator::OR;
-
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1549,7 +1545,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
                 });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
         "key1",
@@ -1581,7 +1577,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1632,10 +1628,9 @@ TEST_F(
     auto thriftValue = value;
     thriftValue.value_ref().reset();
     kvStoreWrapper_->setKey(kSpineAreaId, "key1", thriftValue);
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
 
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(filter),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1689,7 +1684,7 @@ TEST_F(
                   }
                 });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
 
     // TTL update
     auto thriftValue2 = value;
@@ -1708,7 +1703,7 @@ TEST_F(
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1737,9 +1732,8 @@ TEST_F(
     auto thriftValue = value;
     thriftValue.value_ref().reset();
     kvStoreWrapper_->setKey(kSpineAreaId, "key3", thriftValue);
-    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
-        handler
+        handler_
             ->semifuture_subscribeAndGetAreaKvStores(
                 std::make_unique<thrift::KeyDumpParams>(filter),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1787,7 +1781,7 @@ TEST_F(
               }
             });
 
-    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    EXPECT_EQ(1, handler_->getNumKvStorePublishers());
 
     // TTL update
     auto thriftValue2 = value;
@@ -1819,7 +1813,7 @@ TEST_F(
     std::move(subscription).detach();
 
     // Wait until publisher is destroyed
-    while (handler->getNumKvStorePublishers() != 0) {
+    while (handler_->getNumKvStorePublishers() != 0) {
       std::this_thread::yield();
     }
   }
@@ -1846,9 +1840,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
   filter.ignoreTtl_ref() = false;
   filter.doNotPublishValue_ref() = true;
 
-  auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
   auto responseAndSubscription =
-      handler
+      handler_
           ->semifuture_subscribeAndGetAreaKvStores(
               std::make_unique<thrift::KeyDumpParams>(filter),
               std::make_unique<std::set<std::string>>(kSpineOnlySet))
@@ -1891,7 +1884,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
                 EXPECT_TRUE(pub.timestamp_ms_ref().has_value());
               });
 
-  EXPECT_EQ(1, handler->getNumKvStorePublishers());
+  EXPECT_EQ(1, handler_->getNumKvStorePublishers());
 
   // Update value and publish to verify incremental update also filters value
   auto thriftValue2 = keyVals[test_key];
@@ -1910,7 +1903,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
   std::move(subscription).detach();
 
   // Wait until publisher is destroyed
-  while (handler->getNumKvStorePublishers() != 0) {
+  while (handler_->getNumKvStorePublishers() != 0) {
     std::this_thread::yield();
   }
 }

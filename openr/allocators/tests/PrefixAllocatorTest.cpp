@@ -17,6 +17,7 @@
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
@@ -60,12 +61,13 @@ class PrefixAllocatorFixture : public ::testing::Test {
     config_ = std::make_shared<Config>(tConfig);
 
     // Start KvStore and attach a client to it
-    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        zmqContext_,
-        config_->getAreaIds(),
-        config_->toThriftKvStoreConfig(),
-        myPeerUpdatesQueue_.getReader(),
-        kvRequestQueue_.getReader());
+    kvStoreWrapper_ =
+        std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+            zmqContext_,
+            config_->getAreaIds(),
+            config_->toThriftKvStoreConfig(),
+            myPeerUpdatesQueue_.getReader(),
+            kvRequestQueue_.getReader());
     kvStoreWrapper_->run();
 
     evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
@@ -189,7 +191,8 @@ class PrefixAllocatorFixture : public ::testing::Test {
   std::string tempFileName_;
 
   std::shared_ptr<Config> config_;
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
+  std::unique_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>
+      kvStoreWrapper_;
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<PersistentStore> configStore_;
   std::unique_ptr<PrefixManager> prefixManager_;
@@ -290,7 +293,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     std::atomic<bool> usingNewSeedPrefix{false};
 
     std::vector<std::shared_ptr<Config>> configs;
-    std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
+    std::unique_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>
+        kvStoreWrapper;
     std::unique_ptr<KvStoreClientInternal> kvStoreClient;
     std::vector<std::unique_ptr<PersistentStore>> configStores;
     std::vector<std::unique_ptr<PrefixManager>> prefixManagers;
@@ -387,12 +391,13 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     auto tConfig = getBasicOpenrConfig(nodeId);
     auto config = std::make_shared<Config>(tConfig);
 
-    kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        zmqContext,
-        config->getAreaIds(),
-        config->toThriftKvStoreConfig(),
-        std::nullopt,
-        kvRequestQueue.getReader());
+    kvStoreWrapper =
+        std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+            zmqContext,
+            config->getAreaIds(),
+            config->toThriftKvStoreConfig(),
+            std::nullopt,
+            kvRequestQueue.getReader());
     kvStoreWrapper->run();
 
     // Attach a kvstore client in main event loop

@@ -12,7 +12,8 @@
 
 namespace openr {
 
-KvStoreWrapper::KvStoreWrapper(
+template <class ClientType>
+KvStoreWrapper<ClientType>::KvStoreWrapper(
     fbzmq::Context& zmqContext,
     const std::unordered_set<std::string>& areaIds,
     const thrift::KvStoreConfig& kvStoreConfig,
@@ -22,7 +23,8 @@ KvStoreWrapper::KvStoreWrapper(
       globalCmdUrl_(fmt::format("inproc://{}-kvstore-global-cmd", nodeId_)),
       areaIds_(areaIds),
       kvStoreConfig_(kvStoreConfig) {
-  kvStore_ = std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
+  // create kvStore instance
+  kvStore_ = std::make_unique<KvStore<ClientType>>(
       zmqContext,
       kvStoreUpdatesQueue_,
       kvStoreSyncEventsQueue_,
@@ -37,23 +39,13 @@ KvStoreWrapper::KvStoreWrapper(
 
   // we need to spin up a thrift server for KvStore clients to connect to. See
   // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update
-  // for info on data flow
-  thriftServer_ = std::make_unique<OpenrThriftServerWrapper>(
-      nodeId_,
-      nullptr, // Decision
-      nullptr, // Fib
-      kvStore_.get(),
-      nullptr, // LinkMonitor
-      nullptr, // Monitor
-      nullptr, // PersistentStore
-      nullptr, // PrefixManager
-      nullptr, // Spark
-      nullptr // Config
-  );
+  kvStoreServiceHandler_ = std::make_shared<KvStoreServiceHandler<ClientType>>(
+      nodeId_, kvStore_.get());
 }
 
+template <class ClientType>
 void
-KvStoreWrapper::run() noexcept {
+KvStoreWrapper<ClientType>::run() noexcept {
   // Start kvstore
   kvStoreThread_ = std::thread([this]() {
     XLOG(DBG1) << "KvStore " << nodeId_ << " running.";
@@ -62,11 +54,19 @@ KvStoreWrapper::run() noexcept {
   });
   kvStore_->waitUntilRunning();
 
-  thriftServer_->run();
+  // Setup thrift server for client to connect to
+  std::shared_ptr<apache::thrift::ThriftServer> server =
+      std::make_shared<apache::thrift::ThriftServer>();
+  server->setNumIOWorkerThreads(1);
+  server->setNumAcceptThreads(1);
+  server->setPort(0);
+  server->setInterface(kvStoreServiceHandler_);
+  thriftServerThread_.start(std::move(server));
 }
 
+template <class ClientType>
 void
-KvStoreWrapper::stop() {
+KvStoreWrapper<ClientType>::stop() {
   XLOG(DBG1) << "Stopping KvStoreWrapper";
   // Return immediately if not running
   if (!kvStore_->isRunning()) {
@@ -80,9 +80,8 @@ KvStoreWrapper::stop() {
   dummyKvRequestQueue_.close();
   logSampleQueue_.close();
 
-  if (thriftServer_) {
-    thriftServer_->stop();
-    thriftServer_.reset();
+  if (kvStoreServiceHandler_) {
+    stopThriftServer();
   }
 
   // Stop kvstore
@@ -91,8 +90,9 @@ KvStoreWrapper::stop() {
   XLOG(DBG1) << "KvStoreWrapper stopped.";
 }
 
+template <class ClientType>
 bool
-KvStoreWrapper::setKey(
+KvStoreWrapper<ClientType>::setKey(
     AreaId const& area,
     std::string key,
     thrift::Value value,
@@ -111,8 +111,9 @@ KvStoreWrapper::setKey(
   return true;
 }
 
+template <class ClientType>
 bool
-KvStoreWrapper::setKeys(
+KvStoreWrapper<ClientType>::setKeys(
     AreaId const& area,
     const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
     std::optional<std::vector<std::string>> nodeIds) {
@@ -132,8 +133,9 @@ KvStoreWrapper::setKeys(
   return true;
 }
 
+template <class ClientType>
 void
-KvStoreWrapper::pushToKvStoreUpdatesQueue(
+KvStoreWrapper<ClientType>::pushToKvStoreUpdatesQueue(
     const AreaId& area,
     const std::unordered_map<std::string /* key */, thrift::Value>& keyVals) {
   thrift::Publication pub;
@@ -142,8 +144,9 @@ KvStoreWrapper::pushToKvStoreUpdatesQueue(
   kvStoreUpdatesQueue_.push(std::move(pub));
 }
 
+template <class ClientType>
 std::optional<thrift::Value>
-KvStoreWrapper::getKey(AreaId const& area, std::string key) {
+KvStoreWrapper<ClientType>::getKey(AreaId const& area, std::string key) {
   // Prepare KeyGetParams
   thrift::KeyGetParams params;
   params.keys_ref()->push_back(key);
@@ -175,8 +178,9 @@ KvStoreWrapper::getKey(AreaId const& area, std::string key) {
   return it->second;
 }
 
+template <class ClientType>
 std::unordered_map<std::string /* key */, thrift::Value>
-KvStoreWrapper::dumpAll(
+KvStoreWrapper<ClientType>::dumpAll(
     AreaId const& area, std::optional<KvStoreFilters> filters) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
@@ -196,8 +200,10 @@ KvStoreWrapper::dumpAll(
   return *pub.keyVals_ref();
 }
 
+template <class ClientType>
 std::unordered_map<std::string /* key */, thrift::Value>
-KvStoreWrapper::dumpHashes(AreaId const& area, std::string const& prefix) {
+KvStoreWrapper<ClientType>::dumpHashes(
+    AreaId const& area, std::string const& prefix) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
   params.prefix_ref() = prefix;
@@ -209,15 +215,17 @@ KvStoreWrapper::dumpHashes(AreaId const& area, std::string const& prefix) {
   return *pub.keyVals_ref();
 }
 
+template <class ClientType>
 SelfOriginatedKeyVals
-KvStoreWrapper::dumpAllSelfOriginated(AreaId const& area) {
+KvStoreWrapper<ClientType>::dumpAllSelfOriginated(AreaId const& area) {
   auto keyVals =
       *(kvStore_->semifuture_dumpKvStoreSelfOriginatedKeys(area).get());
   return keyVals;
 }
 
+template <class ClientType>
 std::unordered_map<std::string /* key */, thrift::Value>
-KvStoreWrapper::syncKeyVals(
+KvStoreWrapper<ClientType>::syncKeyVals(
     AreaId const& area, thrift::KeyVals const& keyValHashes) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
@@ -230,8 +238,9 @@ KvStoreWrapper::syncKeyVals(
   return *pub.keyVals_ref();
 }
 
+template <class ClientType>
 thrift::Publication
-KvStoreWrapper::recvPublication() {
+KvStoreWrapper<ClientType>::recvPublication() {
   while (true) {
     auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
     if (maybePublication.hasError()) {
@@ -247,8 +256,9 @@ KvStoreWrapper::recvPublication() {
   throw std::runtime_error(std::string("timeout receiving publication"));
 }
 
+template <class ClientType>
 void
-KvStoreWrapper::recvKvStoreSyncedSignal() {
+KvStoreWrapper<ClientType>::recvKvStoreSyncedSignal() {
   while (true) {
     auto maybeEvent = kvStoreUpdatesQueueReader_.get(); // perform read
     if (maybeEvent.hasError()) {
@@ -265,21 +275,25 @@ KvStoreWrapper::recvKvStoreSyncedSignal() {
   throw std::runtime_error(std::string("timeout receiving publication"));
 }
 
+template <class ClientType>
 thrift::SptInfos
-KvStoreWrapper::getFloodTopo(AreaId const& area) {
+KvStoreWrapper<ClientType>::getFloodTopo(AreaId const& area) {
   auto sptInfos = *(kvStore_->semifuture_getSpanningTreeInfos(area).get());
   return sptInfos;
 }
 
+template <class ClientType>
 bool
-KvStoreWrapper::addPeer(
+KvStoreWrapper<ClientType>::addPeer(
     AreaId const& area, std::string peerName, thrift::PeerSpec spec) {
   thrift::PeersMap peers{{peerName, spec}};
   return addPeers(area, peers);
 }
 
+template <class ClientType>
 bool
-KvStoreWrapper::addPeers(AreaId const& area, thrift::PeersMap& peers) {
+KvStoreWrapper<ClientType>::addPeers(
+    AreaId const& area, thrift::PeersMap& peers) {
   try {
     kvStore_->semifuture_addUpdateKvStorePeers(area, peers).get();
   } catch (std::exception const& e) {
@@ -289,8 +303,9 @@ KvStoreWrapper::addPeers(AreaId const& area, thrift::PeersMap& peers) {
   return true;
 }
 
+template <class ClientType>
 bool
-KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
+KvStoreWrapper<ClientType>::delPeer(AreaId const& area, std::string peerName) {
   try {
     kvStore_->semifuture_deleteKvStorePeers(area, {peerName}).get();
   } catch (std::exception const& e) {
@@ -300,21 +315,32 @@ KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
   return true;
 }
 
+template <class ClientType>
 std::optional<thrift::KvStorePeerState>
-KvStoreWrapper::getPeerState(AreaId const& area, std::string const& peerName) {
+KvStoreWrapper<ClientType>::getPeerState(
+    AreaId const& area, std::string const& peerName) {
   return kvStore_->semifuture_getKvStorePeerState(area, peerName).get();
 }
 
+template <class ClientType>
 std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
-KvStoreWrapper::getPeers(AreaId const& area) {
+KvStoreWrapper<ClientType>::getPeers(AreaId const& area) {
   auto peers = *(kvStore_->semifuture_getKvStorePeers(area).get());
   return peers;
 }
 
+template <class ClientType>
 std::vector<thrift::KvStoreAreaSummary>
-KvStoreWrapper::getSummary(std::set<std::string> selectAreas) {
+KvStoreWrapper<ClientType>::getSummary(std::set<std::string> selectAreas) {
   return *(
       kvStore_->semifuture_getKvStoreAreaSummaryInternal(selectAreas).get());
 }
+
+/*
+ * ATTN: DO NOT REMOVE THIS.
+ * This is explicitly instantiate all the possible template instances.
+ */
+template class KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>;
+template class KvStoreWrapper<thrift::KvStoreServiceAsyncClient>;
 
 } // namespace openr

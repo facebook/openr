@@ -233,19 +233,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvRequestQueue_,
       Constants::kPrefixAllocatorSyncInterval);
 
-  // create thrift-server for this openr node
-  thriftServer_ = std::make_unique<OpenrThriftServerWrapper>(
-      nodeId_,
-      decision_.get(),
-      fib_.get(),
-      kvStore_.get(),
-      linkMonitor_.get(),
-      monitor_.get(),
-      configStore_.get(),
-      prefixManager_.get(),
-      spark_.get(),
-      config_);
-
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(config_);
 }
@@ -336,9 +323,6 @@ OpenrWrapper<Serializer>::run() {
   watchdog->waitUntilRunning();
   allThreads_.emplace_back(std::move(watchdogThread));
 
-  // start thriftServer
-  thriftServer_->run();
-
   // start eventBase_
   allThreads_.emplace_back([&]() {
     VLOG(1) << nodeId_ << " Starting eventBase_";
@@ -369,7 +353,6 @@ OpenrWrapper<Serializer>::stop() {
   // stop all modules in reverse order
   eventBase_.stop();
   eventBase_.waitUntilStopped();
-  thriftServer_->stop();
   watchdog->stop();
   watchdog->waitUntilStopped();
   fib_->stop();

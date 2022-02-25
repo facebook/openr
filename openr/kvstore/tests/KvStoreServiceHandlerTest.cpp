@@ -10,6 +10,7 @@
 
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreServiceHandler.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -26,10 +27,12 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
 
     // Spawn kvStore instance with wrapper
     kvStoreWrapper_ =
-        std::make_unique<KvStoreWrapper>(context_, areaIds, kvStoreConfig);
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_, areaIds, kvStoreConfig);
     kvStoreWrapper_->run();
 
-    handler_ = std::make_unique<KvStoreServiceHandler>(
+    handler_ = std::make_unique<
+        KvStoreServiceHandler<thrift::KvStoreServiceAsyncClient>>(
         nodeName_, kvStoreWrapper_->getKvStore());
   }
 
@@ -44,8 +47,10 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
   fbzmq::Context context_{};
 
   const std::string nodeName_{"node"};
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
-  std::shared_ptr<KvStoreServiceHandler> handler_;
+  std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
+      kvStoreWrapper_;
+  std::shared_ptr<KvStoreServiceHandler<thrift::KvStoreServiceAsyncClient>>
+      handler_;
 };
 
 TEST_F(KvStoreServiceHandlerTestFixture, GetNodeName) {

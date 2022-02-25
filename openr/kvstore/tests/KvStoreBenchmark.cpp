@@ -9,6 +9,7 @@
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreUtil.h>
@@ -59,7 +60,7 @@ class KvStoreTestFixture {
    * stopped as well as destroyed automatically when test exits.
    * Retured raw pointer of an object will be freed as well.
    */
-  KvStoreWrapper*
+  KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*
   createKvStore(const std::string& nodeId) {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
@@ -67,7 +68,8 @@ class KvStoreTestFixture {
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     stores_.emplace_back(
-        std::make_unique<KvStoreWrapper>(context_, areaIds, kvStoreConfig));
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            context_, areaIds, kvStoreConfig));
     return stores_.back().get();
   }
 
@@ -76,7 +78,9 @@ class KvStoreTestFixture {
   fbzmq::Context context_;
 
   // Internal stores
-  std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
+  std::vector<
+      std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
+      stores_{};
 };
 
 /**
@@ -87,7 +91,7 @@ floodingUpdate(
     const uint32_t numOfUpdateKeys,
     uint64_t& version,
     const std::vector<std::string>& keys,
-    KvStoreWrapper* kvStore) {
+    KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* kvStore) {
   auto suspender = folly::BenchmarkSuspender();
   // Set keys into kvStore
   std::vector<std::pair<std::string, thrift::Value>> keyVals;
