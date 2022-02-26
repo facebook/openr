@@ -293,7 +293,8 @@ Spark::Spark(
     std::shared_ptr<const Config> config,
     std::pair<uint32_t, uint32_t> version,
     std::optional<uint32_t> maybeMaxAllowedPps)
-    : myNodeName_(config->getNodeName()),
+    : myDomainName_(*config->getConfig().domain_ref()),
+      myNodeName_(config->getNodeName()),
       neighborDiscoveryPort_(static_cast<uint16_t>(
           *config->getSparkConfig().neighbor_discovery_port_ref())),
       helloTime_(
@@ -1842,6 +1843,7 @@ Spark::sendHelloMsg(
 
   // build the helloMsg from scratch
   thrift::SparkHelloMsg helloMsg;
+  helloMsg.domainName_ref() = myDomainName_;
   helloMsg.nodeName_ref() = myNodeName_;
   helloMsg.ifName_ref() = ifName;
   helloMsg.seqNum_ref() = mySeqNum_;
