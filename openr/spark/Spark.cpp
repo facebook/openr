@@ -589,6 +589,13 @@ Spark::sanityCheckMsg(
     return PacketValidationResult::SKIP;
   }
 
+  if (neighborName.empty()) {
+    XLOG(DBG3) << "[Sanity Check] Ignore packet from node with no name";
+    fb303::fbData->addStatValue(
+        "spark.invalid_keepalive.empty_neighbor_name", 1, fb303::SUM);
+    return PacketValidationResult::SKIP;
+  }
+
   // interface name check
   if (sparkNeighbors_.find(ifName) == sparkNeighbors_.end()) {
     XLOG(DBG3) << fmt::format(
