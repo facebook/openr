@@ -1868,7 +1868,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
       std::move(responseAndSubscription.stream)
           .toClientStreamUnsafeDoNotUse()
           .subscribeExTry(
-              folly::getEventBase(), [&test_key, &newUpdateSeen](auto&& t) {
+              folly::getUnsafeMutableGlobalEventBase(),
+              [&test_key, &newUpdateSeen](
+                  folly::Try<openr::thrift::Publication>&& t) mutable {
                 if (not t.hasValue()) {
                   return;
                 }
@@ -1876,10 +1878,18 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
                 auto& pub = *t;
                 ASSERT_EQ(1, (*pub.keyVals_ref()).count(test_key));
                 const auto& val = (*pub.keyVals_ref())[test_key];
+                if (*val.ttlVersion_ref() < 2) {
+                  // Ignore this version since it is NOT the update
+                  // the subscriber interested in
+                  return;
+                }
+
                 newUpdateSeen = true;
                 // Verify no value seen in update
                 ASSERT_EQ(false, val.value_ref().has_value());
-                EXPECT_EQ(2, *val.ttlVersion_ref());
+                // Verify ttl timestamp
+                EXPECT_LE(30000, *val.ttl_ref());
+                EXPECT_GE(50000, *val.ttl_ref());
                 // Verify timestamp is set
                 EXPECT_TRUE(pub.timestamp_ms_ref().has_value());
               });
