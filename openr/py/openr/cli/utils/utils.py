@@ -6,7 +6,7 @@
 
 
 import copy
-import curses
+#import curses
 import datetime
 import ipaddress
 import json
@@ -1895,6 +1895,7 @@ def is_color_output_supported() -> bool:
     """
     Check if stdout is a terminal and supports colors
     """
+    return False
     is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
     has_color = False
 
