@@ -25,7 +25,7 @@ def sprint_addr(addr: bytes) -> str:
 
 
 def sprint_prefix(
-    prefix: Union[network_types_py3.IpPrefix, network_types.IpPrefix]
+    prefix
 ) -> str:
     return ""
     """
