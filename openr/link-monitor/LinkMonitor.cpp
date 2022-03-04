@@ -817,8 +817,6 @@ LinkMonitor::advertiseRedistAddrs() {
 
     // Do not advertise interface addresses if no destination area qualifies
     if (dstAreas.empty()) {
-      XLOG(DBG1) << "No qualified area found for interface: "
-                 << interface.getIfName() << ". Skip advertising.";
       continue;
     }
 
@@ -850,9 +848,6 @@ LinkMonitor::advertiseRedistAddrs() {
       }
 
       prefixMap.emplace(prefix, std::move(prefixEntry));
-
-      XLOG(DBG1) << "Advertise LOOPBACK prefix: "
-                 << folly::IPAddress::networkToString(prefix);
     }
   }
 
@@ -861,11 +856,16 @@ LinkMonitor::advertiseRedistAddrs() {
       toAdvertise;
   for (auto const& [prefix, areas] : prefixesToAdvertise) {
     toAdvertise[areas].emplace_back(std::move(prefixMap.at(prefix)));
+
+    XLOG(DBG1) << fmt::format(
+        "Advertise LOOPBACK prefix: {} within areas: [{}]",
+        folly::IPAddress::networkToString(prefix),
+        folly::join(",", areas));
   }
 
   // Find prefixes to withdraw
   std::vector<thrift::PrefixEntry> toWithdraw;
-  for (auto const& [prefix, _] : advertisedPrefixes_) {
+  for (auto const& [prefix, areas] : advertisedPrefixes_) {
     if (prefixesToAdvertise.count(prefix)) {
       continue; // Do not mark for withdraw
     }
@@ -874,8 +874,10 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.type_ref() = thrift::PrefixType::LOOPBACK;
     toWithdraw.emplace_back(std::move(prefixEntry));
 
-    XLOG(DBG1) << "Withdraw LOOPBACK prefix: "
-               << folly::IPAddress::networkToString(prefix);
+    XLOG(DBG1) << fmt::format(
+        "Withdraw LOOPBACK prefix: {} within areas: [{}]",
+        folly::IPAddress::networkToString(prefix),
+        folly::join(",", areas));
   }
 
   // Advertise prefixes (one for each area)
