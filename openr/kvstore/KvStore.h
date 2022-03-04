@@ -389,19 +389,6 @@ class KvStoreDb : public DualNode {
   /*
    * [Incremental flooding]
    *
-   * fiber task and util function to periodically dump flooding topology.
-   *
-   * Signaling part consists of:
-   *  - Promise retained in state variable of KvStoreDb. Fiber awaits on it.
-   *    The promise is fulfilled in destructor of KvStoreDb.
-   *  - SemiFuture is passed to fiber for awaiting.
-   */
-  void floodTopoDump() noexcept;
-  void floodTopoDumpTask() noexcept;
-
-  /*
-   * [Incremental flooding]
-   *
    * buffer publications blocked by the rate limiter
    * flood pending update blocked by rate limiter
    */
@@ -551,6 +538,32 @@ class KvStoreDb : public DualNode {
       thrift::Publication const& publication);
 
   /*
+   * [Monitoring]
+   *
+   * fiber task and util function to periodically dump flooding topology.
+   *
+   * Signaling part consists of:
+   *  - Promise retained in state variable of KvStoreDb. Fiber awaits on it.
+   *    The promise is fulfilled in destructor of KvStoreDb.
+   *  - SemiFuture is passed to fiber for awaiting.
+   */
+  void floodTopoDump() noexcept;
+  void floodTopoDumpTask() noexcept;
+
+  /*
+   * [Monitoring]
+   *
+   * fiber task and util function to periodically check key ttl
+   *
+   * ATTN:
+   *  - Adjacency key can be very important for LSDB protocol to run;
+   *  - Adjacency key should NEVER be under certain threshold if KvStore
+   *    has the adj key originator in its peer collection.
+   */
+  void checkKeyTtl() noexcept;
+  void checkKeyTtlTask() noexcept;
+
+  /*
    * Private variables
    */
 
@@ -613,8 +626,7 @@ class KvStoreDb : public DualNode {
     int64_t numThriftApiErrors{0};
   };
 
-  // ATTN: this collection stores the std::variant<> of different type of
-  // templated KvStorePeer<T> with all info over thrift channel.
+  // Set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
 
   // [TO BE DEPRECATED]
@@ -702,6 +714,9 @@ class KvStoreDb : public DualNode {
 
   // Stop signal for fiber to periodically dump flood topology
   folly::fibers::Baton floodTopoStopSignal_;
+
+  // Stop signal for fiber to periodically check adj key ttl
+  folly::fibers::Baton ttlCheckStopSignal_;
 
   // event loop
   OpenrEventBase* evb_{nullptr};

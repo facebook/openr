@@ -450,6 +450,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(
       counters.count("kvstore.received_publications." + area + ".count"));
   ASSERT_TRUE(counters.count("kvstore.num_flood_peers." + area + ".count"));
+  ASSERT_TRUE(counters.count("kvstore.num_expiring_keys." + area + ".count"));
 
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));
@@ -472,6 +473,8 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(0, counters.at("kvstore.sent_publications.count"));
   EXPECT_EQ(0, counters.at("kvstore.sent_key_vals." + area + ".sum"));
   EXPECT_EQ(0, counters.at("kvstore.sent_publications." + area + ".count"));
+  EXPECT_EQ(0, counters.at("kvstore.num_flood_peers." + area + ".count"));
+  EXPECT_EQ(0, counters.at("kvstore.num_expiring_keys." + area + ".count"));
 
   // Verify four keys were set
   ASSERT_EQ(1, counters.count("kvstore.cmd_key_set.count"));

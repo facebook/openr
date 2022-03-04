@@ -1154,11 +1154,11 @@ KvStoreDb<ClientType>::KvStoreDb(
       << AreaTag()
       << fmt::format("Starting kvstore DB instance for node: {}", nodeId);
 
-  //
-  // Create flood topo task within its own fiber to periodically dump
-  // flooding topology.
-  //
+  // Create a fiber task to periodically dump flooding topology.
   evb_->addFiberTask([this]() mutable noexcept { floodTopoDumpTask(); });
+
+  // Create a fiber task to periodically check adj key ttl.
+  evb_->addFiberTask([this]() mutable noexcept { checkKeyTtlTask(); });
 
   if (kvParams_.enableFloodOptimization) {
     // [TO BE DEPRECATED]
@@ -1226,6 +1226,8 @@ KvStoreDb<ClientType>::KvStoreDb(
       "kvstore.received_publications." + area, fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.num_flood_peers." + area, fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.num_expiring_keys." + area, fb303::COUNT);
 }
 
 template <class ClientType>
@@ -1235,6 +1237,7 @@ KvStoreDb<ClientType>::stop() {
 
   // Send stop signal for internal fibers
   floodTopoStopSignal_.post();
+  ttlCheckStopSignal_.post();
 
   evb_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // Destroy thrift clients associated with peers, which will
@@ -1291,7 +1294,64 @@ KvStoreDb<ClientType>::floodTopoDump() noexcept {
 
   // Expose number of flood peers into ODS counter
   fb303::fbData->addStatValue(
-      "kvstore.num_flood_peers", floodPeers.size(), fb303::COUNT);
+      "kvstore.num_flood_peers." + area_, floodPeers.size(), fb303::COUNT);
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::checkKeyTtlTask() noexcept {
+  XLOG(INFO) << AreaTag() << "Starting adj key ttl-check fiber task";
+
+  while (true) { // Break when stop signal is ready
+    // Sleep before next check
+    // ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
+    if (ttlCheckStopSignal_.try_wait_for(
+            5 * Constants::kFloodTopoDumpInterval)) {
+      break; // Baton was posted
+    } else {
+      ttlCheckStopSignal_.reset(); // Baton experienced timeout
+    }
+    checkKeyTtl();
+  } // while
+
+  XLOG(INFO) << AreaTag() << "Adj key ttl-check fiber task got stopped.";
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::checkKeyTtl() noexcept {
+  // total number of unexpected keys below ttl alert threshold
+  auto cnt{0};
+
+  // TODO: now the key regex is hardcoded to match `adj:` key ONLY
+  // and can be extended to serve ANY key matching from config
+  KvStoreFilters filter{
+      {Constants::kAdjDbMarker.toString()}, /* key regex match */
+      {}, /* originator match */
+      thrift::FilterOperator::OR /* matching type */};
+
+  for (auto const& [k, v] : kvStore_) {
+    if (not filter.keyMatch(k, v)) {
+      continue;
+    }
+    // ATTN: ttl is refreshed every keyTtl.count() / 4 by default.
+    // Increment the counter if the following condition fulfilled:
+    //
+    // 1. If keyTtl.count() is below the threshold of 1/2 keyTtl, this
+    // indicates that the ttl-refreshing sent from peer on timstamp of
+    // {3/4, 1/2} keyTtl are NOT received;
+    //
+    // 2. If the originator of this adj key is still connected to KvStore,
+    // this is a strong signal that flooding topo is in bad state;
+    if (*v.ttl_ref() < kvParams_.keyTtl.count() / 2 and
+        thriftPeers_.count(*v.originatorId_ref())) {
+      cnt += 1;
+    }
+  }
+
+  // Expose number of about-to-expire adj keys into ODS counter
+  fb303::fbData->addStatValue(
+      "kvstore.num_expiring_keys." + area_, cnt, fb303::COUNT);
 }
 
 template <class ClientType>
