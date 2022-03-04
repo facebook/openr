@@ -1,5 +1,6 @@
 # OpenR: Open Routing
 
+[![Support Ukraine](https://img.shields.io/badge/Support-Ukraine-FFD500?style=flat&labelColor=005BBB)](https://opensource.fb.com/support-ukraine)
 [![Build Status](https://github.com/facebook/openr/workflows/linux/badge.svg)](https://github.com/facebook/openr/actions?workflow=linux)
 [![Documentation Status](https://readthedocs.org/projects/openr/badge/?version=latest)](https://openr.readthedocs.io/en/latest/?badge=latest)
 
