@@ -839,7 +839,14 @@ KvStore<ClientType>::getGlobalCounters() const {
 template <class ClientType>
 void
 KvStore<ClientType>::initGlobalCounters() {
-  // Initialize fb303 counter keys for thrift
+  /*
+   * [KvStore Thrift Sync]
+   *
+   * Initialize counters for KvStore thrift I/P monitoring, which includes:
+   *  1) success/failure stats for different types of messages;
+   *  2) time elapsed for different types of messages;
+   *  3) etc.
+   */
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
   fb303::fbData->addStatExportType(
@@ -860,10 +867,6 @@ KvStore<ClientType>::initGlobalCounters() {
       "kvstore.thrift.num_finalized_sync_success", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_finalized_sync_failure", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_dual_msg_success", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_dual_msg_failure", fb303::COUNT);
 
   fb303::fbData->addStatExportType(
       "kvstore.thrift.full_sync_duration_ms", fb303::AVG);
@@ -871,8 +874,6 @@ KvStore<ClientType>::initGlobalCounters() {
       "kvstore.thrift.flood_pub_duration_ms", fb303::AVG);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.finalized_sync_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.dual_msg_duration_ms", fb303::AVG);
 
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_missing_keys", fb303::SUM);
@@ -881,12 +882,40 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_keyvals_update", fb303::SUM);
 
-  // TODO: remove `kvstore.zmq.*` counters once ZMQ socket is deprecated
+  // [TO BE DEPRECATED]
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_dual_msg_success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.num_dual_msg_failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.dual_msg_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_dual_messages", fb303::COUNT);
+
+  // [TO BE DEPRECATED]
   fb303::fbData->addStatExportType("kvstore.zmq.num_missing_keys", fb303::SUM);
   fb303::fbData->addStatExportType(
       "kvstore.zmq.num_keyvals_update", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
 
   // Initialize stats keys
+  // TODO: evaluate if expired_key_vals num is in use
+  fb303::fbData->addStatExportType("kvstore.expired_key_vals", fb303::SUM);
+
+  fb303::fbData->addStatExportType("kvstore.rate_limit_keys", fb303::AVG);
+  fb303::fbData->addStatExportType("kvstore.rate_limit_suppress", fb303::COUNT);
+
+  // TODO: evaludate if both keys are needed
+  fb303::fbData->addStatExportType("kvstore.looped_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_redundant_publications", fb303::COUNT);
+
+  /*
+   * [KvStore Monitoring]
+   */
+
+  // Cmd statistics monitoring
   fb303::fbData->addStatExportType("kvstore.cmd_hash_dump", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.cmd_self_originated_key_dump", fb303::COUNT);
@@ -896,23 +925,11 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType("kvstore.cmd_peer_add", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.cmd_peer_dump", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.cmd_per_del", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.expired_key_vals", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.flood_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType("kvstore.full_sync_duration_ms", fb303::AVG);
-  fb303::fbData->addStatExportType("kvstore.looped_publications", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.rate_limit_keys", fb303::AVG);
-  fb303::fbData->addStatExportType("kvstore.rate_limit_suppress", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.received_dual_messages", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.received_key_vals", fb303::SUM);
+
+  // KvStore publications monitoring
   fb303::fbData->addStatExportType(
       "kvstore.received_publications", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.received_redundant_publications", fb303::COUNT);
-  fb303::fbData->addStatExportType("kvstore.sent_key_vals", fb303::SUM);
-  fb303::fbData->addStatExportType("kvstore.sent_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.received_key_vals", fb303::SUM);
   fb303::fbData->addStatExportType("kvstore.updated_key_vals", fb303::SUM);
 }
 
@@ -1112,7 +1129,6 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
  * kvstore.thrift.num_flood_pub_success: # of successful flooding req performed;
  * kvstore.thrift.num_flood_pub_failure: # of failed flooding req performed;
  * kvstore.thrift.flood_pub_duration_ms: avg time elapsed for a flooding req;
- * kvstore.num_flood_peers: # of flooding peers;
  *
  * kvstore.thrift.num_finalized_sync: # of finalized finalized-sync performed;
  * kvstore.thrift.num_finalized_sync_success: # of successful finalized-sync;
@@ -1215,9 +1231,6 @@ KvStoreDb<ClientType>::KvStoreDb(
       [this]() noexcept { unsetPendingSelfOriginatedKeys(); });
 
   // initialize KvStore per-area counters
-  fb303::fbData->addStatExportType("kvstore.sent_key_vals." + area, fb303::SUM);
-  fb303::fbData->addStatExportType(
-      "kvstore.sent_publications." + area, fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.updated_key_vals." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
@@ -1225,9 +1238,9 @@ KvStoreDb<ClientType>::KvStoreDb(
   fb303::fbData->addStatExportType(
       "kvstore.received_publications." + area, fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.num_flood_peers." + area, fb303::COUNT);
+      "kvstore.num_expiring_keys." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
-      "kvstore.num_expiring_keys." + area, fb303::COUNT);
+      "kvstore.num_flood_peers." + area, fb303::SUM);
 }
 
 template <class ClientType>
@@ -1294,7 +1307,7 @@ KvStoreDb<ClientType>::floodTopoDump() noexcept {
 
   // Expose number of flood peers into ODS counter
   fb303::fbData->addStatValue(
-      "kvstore.num_flood_peers." + area_, floodPeers.size(), fb303::COUNT);
+      "kvstore.num_flood_peers." + area_, floodPeers.size(), fb303::SUM);
 }
 
 template <class ClientType>
@@ -1351,7 +1364,7 @@ KvStoreDb<ClientType>::checkKeyTtl() noexcept {
 
   // Expose number of about-to-expire adj keys into ODS counter
   fb303::fbData->addStatValue(
-      "kvstore.num_expiring_keys." + area_, cnt, fb303::COUNT);
+      "kvstore.num_expiring_keys." + area_, cnt, fb303::SUM);
 }
 
 template <class ClientType>
@@ -1732,13 +1745,6 @@ void
 KvStoreDb<ClientType>::setKeyVals(thrift::KeySetParams&& setParams) {
   // Update statistics
   fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
-  if (setParams.timestamp_ms_ref().has_value()) {
-    auto floodMs = getUnixTimeStampMs() - setParams.timestamp_ms_ref().value();
-    if (floodMs > 0) {
-      fb303::fbData->addStatValue(
-          "kvstore.flood_duration_ms", floodMs, fb303::AVG);
-    }
-  }
 
   // Update hash for key-values
   for (auto& [_, value] : *setParams.keyVals_ref()) {
@@ -2376,7 +2382,28 @@ KvStoreDb<ClientType>::getCounters() const {
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
   counters["kvstore.num_peers"] = thriftPeers_.size();
+  // [TO BE DEPRECATED]
   counters["kvstore.num_zmq_peers"] = peers_.size();
+
+  /*
+   * ATTN: counter with [Area] tag has two layers of counters. For instance,
+   *
+   *  1) kvstore.num_expiring_keys
+   *  2) kvstore.num_expiring_keys.<areaId>
+   *
+   * item 1) will be used for general monitoring for overall KvStore instance,
+   * aka, alerting threshold setting;
+   * item 2) will be used to peek into specific module for debugging purpose;
+   */
+  auto maybeNumFloodPeers =
+      fb303::fbData->getCounterIfExists("kvstore.num_flood_peers." + area_);
+  auto maybeNumExpiringKeys =
+      fb303::fbData->getCounterIfExists("kvstore.num_expiring_keys." + area_);
+  counters["kvstore.num_flood_peers"] =
+      maybeNumFloodPeers.hasValue() ? maybeNumFloodPeers.value() : 0;
+  counters["kvstore.num_expiring_keys"] =
+      maybeNumExpiringKeys.hasValue() ? maybeNumExpiringKeys.value() : 0;
+
   return counters;
 }
 

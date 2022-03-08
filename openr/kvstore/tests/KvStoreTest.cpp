@@ -430,8 +430,9 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(counters.count("kvstore.cmd_peer_add.count"));
   ASSERT_TRUE(counters.count("kvstore.cmd_per_del.count"));
   ASSERT_TRUE(counters.count("kvstore.expired_key_vals.sum"));
-  ASSERT_TRUE(counters.count("kvstore.flood_duration_ms.avg"));
-  ASSERT_TRUE(counters.count("kvstore.full_sync_duration_ms.avg"));
+  ASSERT_TRUE(counters.count("kvstore.thrift.flood_pub_duration_ms.avg"));
+  ASSERT_TRUE(counters.count("kvstore.thrift.full_sync_duration_ms.avg"));
+  ASSERT_TRUE(counters.count("kvstore.thrift.finalized_sync_duration_ms.avg"));
   ASSERT_TRUE(counters.count("kvstore.peers.bytes_received.sum"));
   ASSERT_TRUE(counters.count("kvstore.peers.bytes_sent.sum"));
   ASSERT_TRUE(counters.count("kvstore.rate_limit_keys.avg"));
@@ -441,16 +442,14 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(counters.count("kvstore.cmd_self_originated_key_dump.count"));
   ASSERT_TRUE(counters.count("kvstore.cmd_key_dump.count"));
   ASSERT_TRUE(counters.count("kvstore.cmd_key_get.count"));
-  ASSERT_TRUE(counters.count("kvstore.sent_key_vals.sum"));
-  ASSERT_TRUE(counters.count("kvstore.sent_publications.count"));
-  ASSERT_TRUE(counters.count("kvstore.sent_key_vals." + area + ".sum"));
-  ASSERT_TRUE(counters.count("kvstore.sent_publications." + area + ".count"));
   ASSERT_TRUE(counters.count("kvstore.updated_key_vals." + area + ".sum"));
   ASSERT_TRUE(counters.count("kvstore.received_key_vals." + area + ".sum"));
   ASSERT_TRUE(
       counters.count("kvstore.received_publications." + area + ".count"));
-  ASSERT_TRUE(counters.count("kvstore.num_flood_peers." + area + ".count"));
-  ASSERT_TRUE(counters.count("kvstore.num_expiring_keys." + area + ".count"));
+  ASSERT_TRUE(counters.count("kvstore.num_flood_peers"));
+  ASSERT_TRUE(counters.count("kvstore.num_flood_peers." + area + ".sum"));
+  ASSERT_TRUE(counters.count("kvstore.num_expiring_keys"));
+  ASSERT_TRUE(counters.count("kvstore.num_expiring_keys." + area + ".sum"));
 
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));
@@ -458,8 +457,9 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(0, counters.at("kvstore.cmd_peer_add.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_per_del.count"));
   EXPECT_EQ(0, counters.at("kvstore.expired_key_vals.sum"));
-  EXPECT_EQ(0, counters.at("kvstore.flood_duration_ms.avg"));
-  EXPECT_EQ(0, counters.at("kvstore.full_sync_duration_ms.avg"));
+  EXPECT_EQ(0, counters.at("kvstore.thrift.flood_pub_duration_ms.avg"));
+  EXPECT_EQ(0, counters.at("kvstore.thrift.full_sync_duration_ms.avg"));
+  EXPECT_EQ(0, counters.at("kvstore.thrift.finalized_sync_duration_ms.avg"));
   EXPECT_EQ(0, counters.at("kvstore.peers.bytes_received.sum"));
   EXPECT_EQ(0, counters.at("kvstore.peers.bytes_sent.sum"));
   EXPECT_EQ(0, counters.at("kvstore.rate_limit_keys.avg"));
@@ -469,12 +469,10 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(0, counters.at("kvstore.cmd_self_originated_key_dump.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_key_dump.count"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_key_get.count"));
-  EXPECT_EQ(0, counters.at("kvstore.sent_key_vals.sum"));
-  EXPECT_EQ(0, counters.at("kvstore.sent_publications.count"));
-  EXPECT_EQ(0, counters.at("kvstore.sent_key_vals." + area + ".sum"));
-  EXPECT_EQ(0, counters.at("kvstore.sent_publications." + area + ".count"));
-  EXPECT_EQ(0, counters.at("kvstore.num_flood_peers." + area + ".count"));
-  EXPECT_EQ(0, counters.at("kvstore.num_expiring_keys." + area + ".count"));
+  EXPECT_EQ(0, counters.at("kvstore.num_flood_peers"));
+  EXPECT_EQ(0, counters.at("kvstore.num_flood_peers." + area + ".sum"));
+  EXPECT_EQ(0, counters.at("kvstore.num_expiring_keys"));
+  EXPECT_EQ(0, counters.at("kvstore.num_expiring_keys." + area + ".sum"));
 
   // Verify four keys were set
   ASSERT_EQ(1, counters.count("kvstore.cmd_key_set.count"));
