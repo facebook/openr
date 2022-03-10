@@ -70,28 +70,39 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   }
 
   thrift::Publication publication_filtered;
-  if (pub.expiredKeys_ref().is_set()) {
-    publication_filtered.expiredKeys_ref() = *pub.expiredKeys_ref();
-  }
+  publication_filtered.expiredKeys_ref() = *pub.expiredKeys_ref();
 
-  if (pub.nodeIds_ref().has_value()) {
+  if (pub.nodeIds_ref()) {
     publication_filtered.nodeIds_ref() = *pub.nodeIds_ref();
   }
 
-  if (pub.tobeUpdatedKeys_ref().has_value()) {
+  if (pub.tobeUpdatedKeys_ref()) {
     publication_filtered.tobeUpdatedKeys_ref() = *pub.tobeUpdatedKeys_ref();
   }
 
-  if (pub.floodRootId_ref().has_value()) {
+  if (pub.floodRootId_ref()) {
     publication_filtered.floodRootId_ref() = *pub.floodRootId_ref();
   }
 
-  if (pub.area_ref().is_set()) {
-    publication_filtered.area_ref() = *pub.area_ref();
-  }
+  publication_filtered.area_ref() = *pub.area_ref();
 
+  publication_filtered.keyVals_ref() = getFilteredKeyVals(*pub.keyVals_ref());
+
+  if (publication_filtered.keyVals_ref()->size() or
+      publication_filtered.expiredKeys_ref()->size()) {
+    // There is at least one key value in the publication for the client
+    // or there are some expiredKeys
+    publication_filtered.timestamp_ms_ref() = getUnixTimeStampMs();
+    publisher_.next(std::move(publication_filtered));
+  }
+}
+
+thrift::KeyVals
+KvStorePublisher::getFilteredKeyVals(const thrift::KeyVals& origKeyVals) {
+  // The value field may be explicitly excluded/ignored by the doNotPublishValue
+  // flag
   thrift::KeyVals keyvals;
-  for (auto& [key, val] : *pub.keyVals_ref()) {
+  for (auto& [key, val] : origKeyVals) {
     if (*filter_.ignoreTtl_ref() and not val.value_ref().has_value()) {
       // ignore TTL updates
       continue;
@@ -110,11 +121,7 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
     }
   }
 
-  if (keyvals.size()) {
-    // There is at least one key value in the publication for the client
-    publication_filtered.keyVals_ref() = keyvals;
-    publication_filtered.timestamp_ms_ref() = getUnixTimeStampMs();
-    publisher_.next(std::move(publication_filtered));
-  }
+  return keyvals;
 }
+
 } // namespace openr

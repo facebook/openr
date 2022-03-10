@@ -34,6 +34,8 @@ class KvStorePublisher {
   }
 
  private:
+  thrift::KeyVals getFilteredKeyVals(const thrift::KeyVals& origKeyVals);
+
   // set of areas whose updates should be published. If empty, publish all
   std::set<std::string> selectAreas_;
   thrift::KeyDumpParams filter_;
