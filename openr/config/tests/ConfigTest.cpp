@@ -27,15 +27,6 @@ const auto& testSeedPrefix =
     folly::IPAddress::createNetwork("fc00:cafe:babe::/64");
 const uint8_t testAllocationPfxLen = 128;
 
-openr::thrift::LinkMonitorConfig
-getTestLinkMonitorConfig() {
-  openr::thrift::LinkMonitorConfig lmConf;
-  lmConf.include_interface_regexes_ref()->emplace_back("fboss.*");
-  lmConf.exclude_interface_regexes_ref()->emplace_back("eth.*");
-  lmConf.redistribute_interface_regexes_ref()->emplace_back("lo");
-  return lmConf;
-}
-
 openr::thrift::KvstoreFloodRate
 getFloodRate() {
   openr::thrift::KvstoreFloodRate floodrate;
@@ -858,23 +849,16 @@ TEST(ConfigTest, KvstoreGetter) {
 
 TEST(ConfigTest, LinkMonitorGetter) {
   auto tConfig = getBasicOpenrConfig();
-  const auto& lmConf = getTestLinkMonitorConfig();
-  tConfig.link_monitor_config_ref() = lmConf;
   // set empty area list to see doamin get converted to area
   tConfig.areas_ref().emplace();
   auto config = Config(tConfig);
-
-  // getLinkMonitorConfig
-  EXPECT_EQ(lmConf, config.getLinkMonitorConfig());
 
   // check to see the link monitor options got converted to an area config with
   // domainName
   auto const& domainNameArea =
       config.getAreas().at(Constants::kDefaultArea.toString());
-  EXPECT_TRUE(domainNameArea.shouldDiscoverOnIface("fboss10"));
   EXPECT_FALSE(domainNameArea.shouldDiscoverOnIface("eth0"));
 
-  EXPECT_TRUE(domainNameArea.shouldRedistributeIface("lo"));
   EXPECT_FALSE(domainNameArea.shouldRedistributeIface("eth0"));
 }
 

@@ -216,21 +216,6 @@ Config::populateAreaConfig() {
   }
 
   for (auto& areaConf : *config_.areas_ref()) {
-    // Fill these values from linkMonitor config if not provided
-    // TODO remove once transition to areas is complete
-    auto const& lmConf = *config_.link_monitor_config_ref();
-    if (areaConf.redistribute_interface_regexes_ref()->empty()) {
-      areaConf.redistribute_interface_regexes_ref() =
-          *lmConf.redistribute_interface_regexes_ref();
-    }
-    if (areaConf.include_interface_regexes_ref()->empty()) {
-      areaConf.include_interface_regexes_ref() =
-          *lmConf.include_interface_regexes_ref();
-    }
-    if (areaConf.exclude_interface_regexes_ref()->empty()) {
-      areaConf.exclude_interface_regexes_ref() =
-          *lmConf.exclude_interface_regexes_ref();
-    }
     if (areaConf.neighbor_regexes_ref()->empty()) {
       areaConf.neighbor_regexes_ref() = {".*"};
     }

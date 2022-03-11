@@ -196,6 +196,7 @@ struct LinkMonitorConfig {
    * will wait for the link to come up.
    */
   1: i32 linkflap_initial_backoff_ms = 60000;
+
   /**
    * This serves two purposes. This is the maximum backoff a link gets penalized
    * with by consecutive flaps. When the first backoff time has passed and the
@@ -206,18 +207,12 @@ struct LinkMonitorConfig {
    * it goes down.
    */
   2: i32 linkflap_max_backoff_ms = 300000;
+
   /**
    * Compute and use RTT of a link as a metric value. If set to false, cost of
    * a link is 1 and cost of a path is hop count.
    */
   3: bool use_rtt_metric = true;
-
-  /** Deprecated. Use area config. */
-  4: list<string> include_interface_regexes = [] (deprecated);
-  /** Deprecated. Use area config. */
-  5: list<string> exclude_interface_regexes = [] (deprecated);
-  /** Deprecated. Use area config. */
-  6: list<string> redistribute_interface_regexes = [] (deprecated);
 
   /**
   * Enable convergence performance measurement for adjacency updates.

@@ -45,7 +45,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   lmConf.linkflap_initial_backoff_ms_ref() = linkFlapInitialBackoff.count();
   lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
   lmConf.use_rtt_metric_ref() = false;
-  lmConf.include_interface_regexes_ref() = {".*"};
   lmConf.enable_perf_measurement_ref() = false;
   tConfig.assume_drained_ref() = false;
 

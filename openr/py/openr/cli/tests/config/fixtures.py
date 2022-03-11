@@ -74,11 +74,8 @@ OPENR_CONFIG_STR = r"""
   },
   "link_monitor_config": {
     "enable_perf_measurement": true,
-    "exclude_interface_regexes": [],
-    "include_interface_regexes": [],
     "linkflap_initial_backoff_ms": 60000,
     "linkflap_max_backoff_ms": 300000,
-    "redistribute_interface_regexes": [],
     "use_rtt_metric": false
   },
   "listen_addr": "::",
