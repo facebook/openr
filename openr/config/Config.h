@@ -34,24 +34,25 @@ using PrefixAllocationParams = std::pair<folly::CIDRNetwork, uint8_t>;
 class AreaConfiguration {
  public:
   explicit AreaConfiguration(thrift::AreaConfig const& area)
-      : areaId_(area.get_area_id()) {
+      : areaId_(*area.area_id_ref()) {
+    // parse non-optional fields
+    neighborRegexSet_ = compileRegexSet(*area.neighbor_regexes_ref());
+    interfaceIncludeRegexSet_ =
+        compileRegexSet(*area.include_interface_regexes_ref());
+    interfaceExcludeRegexSet_ =
+        compileRegexSet(*area.exclude_interface_regexes_ref());
+    interfaceRedistRegexSet_ =
+        compileRegexSet(*area.redistribute_interface_regexes_ref());
+
+    // parse optional fields
     if (auto nodeLabel = area.area_sr_node_label_ref()) {
       srNodeLabel_ = *nodeLabel;
     }
-
     if (auto prependLabel = area.prepend_label_ranges_ref()) {
       srPrependLLabelRanges_ = *prependLabel;
     }
-
-    neighborRegexSet_ = compileRegexSet(area.get_neighbor_regexes());
-    interfaceIncludeRegexSet_ =
-        compileRegexSet(area.get_include_interface_regexes());
-    interfaceExcludeRegexSet_ =
-        compileRegexSet(area.get_exclude_interface_regexes());
-    interfaceRedistRegexSet_ =
-        compileRegexSet(area.get_redistribute_interface_regexes());
-    if (area.get_import_policy_name()) {
-      importPolicyName_ = *area.import_policy_name_ref();
+    if (auto policyName = area.import_policy_name_ref()) {
+      importPolicyName_ = *policyName;
     }
   }
 
@@ -265,7 +266,7 @@ class Config {
   //
   bool
   isBgpRouteProgrammingEnabled() const {
-    return config_.get_decision_config().get_enable_bgp_route_programming();
+    return *config_.decision_config_ref()->enable_bgp_route_programming_ref();
   }
 
   //
@@ -403,11 +404,11 @@ class Config {
   //
   const thrift::ThriftServerConfig
   getThriftServerConfig() const {
-    return config_.get_thrift_server();
+    return *config_.thrift_server_ref();
   }
   bool
   isSecureThriftServerEnabled() const {
-    return getThriftServerConfig().get_enable_secure_thrift_server();
+    return *getThriftServerConfig().enable_secure_thrift_server_ref();
   }
 
   bool
@@ -567,7 +568,7 @@ class Config {
   getMemoryProfilingInterval() const {
     if (isMemoryProfilingEnabled()) {
       return std::chrono::seconds(
-          config_.memory_profiling_config_ref()->get_heap_dump_interval_s());
+          *config_.memory_profiling_config_ref()->heap_dump_interval_s_ref());
     } else {
       throw std::invalid_argument(
           "Trying to set memory profile timer with heap_dump_interval_s, but enable_memory_profiling = false");
