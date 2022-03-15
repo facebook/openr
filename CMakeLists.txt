@@ -146,6 +146,10 @@ add_fbthrift_cpp_library(
   openr/if/KvStore.thrift
   OPTIONS
     json
+  DEPENDS
+    fb303::fb303_thrift_cpp
+  SERVICES
+    KvStoreService
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} kv_store_cpp2)
 
@@ -207,6 +211,8 @@ add_library(openrlib
   openr/common/ExponentialBackoff.cpp
   openr/common/Flags.cpp
   openr/common/FileUtil.cpp
+  openr/common/LsdbTypes.cpp
+  openr/common/LsdbUtil.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
   openr/common/OpenrThriftCtrlServer.cpp
@@ -264,6 +270,7 @@ endif()
 
 target_link_libraries(openrlib
   build_info
+  ${BENCHMARK}
   ${OPENR_THRIFT_LIBS}
   fbzmq::fbzmq
   ${DOUBLE-CONVERSION}
@@ -293,7 +300,6 @@ install(TARGETS
 
 add_executable(openr_bin
   openr/Main.cpp
-  openr/common/Flags.cpp
 )
 
 target_link_libraries(openr_bin
