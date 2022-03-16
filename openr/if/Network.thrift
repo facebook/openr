@@ -114,6 +114,7 @@ enum PrefixType {
   SLO_PREFIX_ALLOCATOR = 7,
   CONFIG = 8, // Route Origination
   VIP = 9, // VIP injected by vip service
+  CPE = 10, // Customer-Premises Equipment
 
   // Placeholder Types
   TYPE_1 = 21,
