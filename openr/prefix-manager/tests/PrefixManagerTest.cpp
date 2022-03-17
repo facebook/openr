@@ -181,7 +181,6 @@ class PrefixManagerTestFixture : public testing::Test {
   virtual thrift::OpenrConfig
   createConfig() {
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.enable_fib_ack_ref() = true;
     return tConfig;
   }
 
@@ -3439,7 +3438,6 @@ class PrefixManagerInitialKvStoreSyncTestFixture
   thrift::OpenrConfig
   createConfig() override {
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.enable_fib_ack_ref() = true;
     tConfig.enable_initialization_process_ref() = true;
     return tConfig;
   }

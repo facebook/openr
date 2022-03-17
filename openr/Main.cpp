@@ -378,13 +378,7 @@ main(int argc, char** argv) {
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
   watchdog->addQueue(logSampleQueue, "logSampleQueue");
 
-  // If FIB-ACK feature is enabled, Fib publishes routes to PrefixManager
-  // after programming has completed; Otherwise, Decision publishes routes to
-  // PrefixManager.
-  auto routeUpdatesQueueReader =
-      (*config->getConfig().enable_fib_ack_ref()
-           ? fibRouteUpdatesQueue.getReader("routeUpdates")
-           : routeUpdatesQueue.getReader("routeUpdates"));
+  // PrefixManager will wait for Fib programming and publishing updates
   auto prefixManager = startEventBase(
       allThreads,
       orderedEvbs,
@@ -397,7 +391,7 @@ main(int argc, char** argv) {
           prefixMgrInitializationEventsQueue,
           prefixMgrKvStoreUpdatesReader,
           prefixUpdatesQueue.getReader("prefixManager"),
-          std::move(routeUpdatesQueueReader),
+          fibRouteUpdatesQueue.getReader("routeUpdates"),
           config));
   watchdog->addQueue(kvRequestQueue, "kvRequestQueue");
   watchdog->addQueue(staticRouteUpdatesQueue, "staticRouteUpdatesQueue");

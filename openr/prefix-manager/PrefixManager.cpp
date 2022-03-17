@@ -629,10 +629,6 @@ PrefixManager::triggerInitialPrefixDbSync() {
 
 bool
 PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
-  // Skip the check if FIB-ACK feature is disabled.
-  if (not *config_->getConfig().enable_fib_ack_ref()) {
-    return true;
-  }
   // If prepend label is set, the associated label route should have been
   // programmed.
   auto labelRef = prefixEntry.tPrefixEntry->prependLabel_ref();
@@ -1586,10 +1582,8 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   }
   prefixMgrRouteUpdatesQueue_.push(std::move(fibRouteUpdateCp));
 
-  if (*config_->getConfig().enable_fib_ack_ref()) {
-    // Store programmed label/unicast routes info if FIB-ACK feature is enabled.
-    storeProgrammedRoutes(fibRouteUpdate);
-  }
+  // Store programmed label/unicast routes info.
+  storeProgrammedRoutes(fibRouteUpdate);
 
   // Re-advertise prefixes received from one area to other areas.
   redistributePrefixesAcrossAreas(std::move(fibRouteUpdate));
