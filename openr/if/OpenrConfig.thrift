@@ -888,22 +888,14 @@ struct OpenrConfig {
    */
   56: optional SegmentRoutingConfig segment_routing_config;
 
-  # TODO: Temporary var to migrate new prefix key format
-  57: bool enable_new_prefix_format = 0;
-
   /**
+   * [TO BE DEPRECATED]
    * Bool to enable route program ordering, aka, to-add routes should
    * be programmed at originator ahead of being advertised to peers; Reverse
    * order applies to to-withdraw routes. Name the flag as enable_fib_ack since
    * FIB-ACK is required to signal the completion of local programming.
   */
   58: bool enable_fib_ack = true;
-
-  /**
-   * Flag to indicate if KvStore will consume requests from local modules
-   * (e.g. PrefixManager, LinkMonitor) via queue.
-   */
-  59: bool enable_kvstore_request_queue = false;
 
   /**
    * Delay in milliseconds for route deletion. Route withdrawal would not get

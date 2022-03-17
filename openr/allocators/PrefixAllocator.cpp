@@ -30,12 +30,9 @@ PrefixAllocator::PrefixAllocator(
     PersistentStore* configStore,
     messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
-    messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     std::chrono::milliseconds syncInterval)
     : myNodeName_(config->getNodeName()),
       syncInterval_(syncInterval),
-      enableKvRequestQueue_(
-          *config->getConfig().enable_kvstore_request_queue_ref()),
       setLoopbackAddress_(
           *config->getPrefixAllocationConfig().set_loopback_addr_ref()),
       overrideGlobalAddress_(
@@ -50,8 +47,7 @@ PrefixAllocator::PrefixAllocator(
       kvStore_(kvStore),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
-      logSampleQueue_(logSampleQueue),
-      kvRequestQueue_(kvRequestQueue) {
+      logSampleQueue_(logSampleQueue) {
   // check non-empty module ptr
   CHECK(nlSock_);
   CHECK(configStore_);
@@ -571,8 +567,6 @@ PrefixAllocator::startAllocation(
       [this](std::optional<uint32_t> newPrefixIndex) noexcept {
         applyMyPrefixIndex(newPrefixIndex);
       },
-      kvRequestQueue_,
-      enableKvRequestQueue_,
       syncInterval_,
       // no need for randomness since "collision" is harmless
       syncInterval_ + 1ms,

@@ -44,7 +44,6 @@ class PrefixAllocator : public OpenrEventBase {
       // producer queue
       messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQ,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       std::chrono::milliseconds syncInterval);
 
   PrefixAllocator(PrefixAllocator const&) = delete;
@@ -157,9 +156,6 @@ class PrefixAllocator : public OpenrEventBase {
   // hash node ID into prefix space
   const std::hash<std::string> hasher{};
 
-  // config knob for enabling key-val request queue for range allocator
-  const bool enableKvRequestQueue_;
-
   //
   // Non-const private variables
   //
@@ -189,7 +185,6 @@ class PrefixAllocator : public OpenrEventBase {
   // raw ptr for netlinkProtocolSocket for addr add/del
   fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 
-  // TODO: remove raw ptr usage of KvStore
   // raw ptr to KvStore for retrieving key-vals and subscribe keys
   KvStore<thrift::OpenrCtrlCppAsyncClient>* const kvStore_{nullptr};
 
@@ -204,9 +199,6 @@ class PrefixAllocator : public OpenrEventBase {
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;
-
-  // Queue to send key-value update requests to KvStore
-  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
   // AsyncTimeout for initialization
   std::unique_ptr<folly::AsyncTimeout> initTimer_;

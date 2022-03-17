@@ -107,7 +107,6 @@ class PrefixAllocatorFixture : public ::testing::Test {
         configStore_.get(),
         prefixUpdatesQueue_,
         logSampleQueue_,
-        kvRequestQueue_,
         kSyncInterval);
     prefixAllocatorThread_ = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "PrefixAllocator started. TID: "
@@ -501,7 +500,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           configStore.get(),
           prefixQueues.at(i),
           logSampleQueue,
-          kvRequestQueue,
           kSyncInterval);
       prefixAllocatorThreads.emplace_back(
           [&allocator]() noexcept { allocator->run(); });

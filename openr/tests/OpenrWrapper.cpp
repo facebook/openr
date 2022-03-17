@@ -229,7 +229,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       configStore_.get(),
       prefixUpdatesQueue_,
       logSampleQueue_,
-      kvRequestQueue_,
       Constants::kPrefixAllocatorSyncInterval);
 
   // Watchdog thread to monitor thread aliveness
