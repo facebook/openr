@@ -2101,25 +2101,14 @@ Spark::addInterface(
             sendHeartbeatMsg(ifName);
             // schedule heartbeatTimers periodically as soon as intf is UP
             ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
-                keepAliveTime_);
+                addJitter<std::chrono::milliseconds>(keepAliveTime_));
           });
 
       ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
-      ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(keepAliveTime_);
+      ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
+          addJitter<std::chrono::milliseconds>(keepAliveTime_));
     }
 
-    auto rollHelper = [](std::chrono::milliseconds timeDuration) {
-      auto base = timeDuration.count();
-      std::uniform_int_distribution<int> distribution(-0.2 * base, 0.2 * base);
-      std::default_random_engine generator;
-      return [timeDuration, distribution, generator]() mutable {
-        return timeDuration +
-            std::chrono::milliseconds(distribution(generator));
-      };
-    };
-
-    auto roll = rollHelper(helloTime_);
-    auto rollFast = rollHelper(fastInitHelloTime_);
     auto timePoint = std::chrono::steady_clock::now();
 
     // NOTE: We do not send hello packet immediately after adding new interface
@@ -2127,8 +2116,7 @@ Spark::addInterface(
     // address. The hello packet will be sent later and will have good chances
     // of making it out if small delay is introduced.
     auto helloTimer = folly::AsyncTimeout::make(
-        *getEvb(),
-        [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
+        *getEvb(), [this, ifName, timePoint]() mutable noexcept {
           bool inFastInitState = false;
           // Under Spark context, hello pkt will be sent in relatively low
           // frequency. However, when node comes up initially or restarting,
@@ -2144,13 +2132,15 @@ Spark::addInterface(
           // Schedule next run (add 20% variance)
           // overriding timeoutPeriod if I am in fast initial state
           std::chrono::milliseconds timeoutPeriod =
-              inFastInitState ? rollFast() : roll();
+              inFastInitState ? fastInitHelloTime_ : helloTime_;
 
-          ifNameToHelloTimers_.at(ifName)->scheduleTimeout(timeoutPeriod);
+          ifNameToHelloTimers_.at(ifName)->scheduleTimeout(
+              addJitter<std::chrono::milliseconds>(timeoutPeriod));
         });
 
     // should be in fast init state when the node just starts
-    helloTimer->scheduleTimeout(rollFast());
+    helloTimer->scheduleTimeout(
+        addJitter<std::chrono::milliseconds>(fastInitHelloTime_));
     ifNameToHelloTimers_[ifName] = std::move(helloTimer);
   }
 }
