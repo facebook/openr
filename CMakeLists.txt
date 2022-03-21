@@ -259,7 +259,6 @@ add_library(openrlib
   openr/spark/Spark.cpp
   openr/tests/mocks/MockNetlinkProtocolSocket.cpp
   openr/tests/mocks/PrefixGenerator.cpp
-  openr/tests/OpenrThriftServerWrapper.cpp
   openr/tests/utils/Utils.cpp
   openr/watchdog/Watchdog.cpp
 )

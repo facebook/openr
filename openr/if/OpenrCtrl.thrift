@@ -566,11 +566,11 @@ service OpenrCtrl extends KvStore.KvStoreService {
    *  Request must have a valid increment metric value.
    */
   void setInterfaceMetricIncrement(
-    string interfaceName,
-    i32 metricIncrementVal,
+    1: string interfaceName,
+    2: i32 metricIncrementVal,
   ) throws (1: OpenrError error);
 
-  void unsetInterfaceMetricIncrement(string interfaceName) throws (
+  void unsetInterfaceMetricIncrement(1: string interfaceName) throws (
     1: OpenrError error,
   );
 
