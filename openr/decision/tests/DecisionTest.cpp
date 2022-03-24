@@ -4802,7 +4802,6 @@ class DecisionTestFixture : public ::testing::Test {
         debounceTimeoutMin.count();
     tConfig.decision_config_ref()->debounce_max_ms_ref() =
         debounceTimeoutMax.count();
-    tConfig.enable_initialization_process_ref() = true;
     tConfig.enable_ordered_adj_publication_ref() = true;
     tConfig.decision_config_ref()->save_rib_policy_min_ms_ref() = 500;
     tConfig.decision_config_ref()->save_rib_policy_max_ms_ref() = 2000;

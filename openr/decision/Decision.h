@@ -272,10 +272,6 @@ class Decision : public OpenrEventBase {
   // Openr config
   std::shared_ptr<const Config> config_;
 
-  // Callback timer used on startup to publish routes after
-  // gracefulRestartDuration
-  std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
-
   // Save received Rib policy to file
   void saveRibPolicy();
 

@@ -116,7 +116,6 @@ class DecisionWrapper {
     tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
     tConfig.decision_config_ref()->debounce_max_ms_ref() = 500;
     tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
-    tConfig.enable_initialization_process_ref() = true;
     config = std::make_shared<Config>(tConfig);
 
     decision = std::make_shared<Decision>(

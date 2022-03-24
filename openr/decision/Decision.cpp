@@ -163,20 +163,6 @@ Decision::Decision(
     unreceivedRouteTypes_.emplace(thrift::PrefixType::CONFIG);
   }
 
-  // TODO: Remove coldStartTimer_ and eor_time_s_ref from config after OpenR
-  // initialization procedure.
-  coldStartTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    pendingUpdates_.setNeedsFullRebuild();
-    rebuildRoutes("COLD_START_UPDATE");
-  });
-
-  // Do not activate coldStartTimer_ if new OpenR initialization is enabled.
-  if (not config_->isInitializationProcessEnabled()) {
-    auto eorTimeRef = config->getConfig().eor_time_s_ref();
-    CHECK(eorTimeRef.has_value());
-    coldStartTimer_->scheduleTimeout(std::chrono::seconds(*eorTimeRef));
-  }
-
   // Schedule periodic timer for counter submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     updateGlobalCounters();
@@ -645,11 +631,6 @@ Decision::updatePendingAdjacency(
 
 void
 Decision::saveRibPolicy() {
-  // Only save rib policy when Open/R initialization is enabled.
-  if (not config_->isInitializationProcessEnabled()) {
-    return;
-  }
-
   std::ofstream ribPolicyFile;
   ribPolicyFile.open(FLAGS_rib_policy_file, std::ios::out | std::ios::trunc);
   if (not ribPolicyFile.is_open()) {
@@ -676,8 +657,7 @@ Decision::saveRibPolicy() {
 void
 Decision::readRibPolicy() {
   // Only save rib policy when Open/R initialization is enabled.
-  if (not config_->isInitializationProcessEnabled() or
-      not config_->isRibPolicyEnabled()) {
+  if (not config_->isRibPolicyEnabled()) {
     return;
   }
 
@@ -917,14 +897,8 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
 
 void
 Decision::rebuildRoutes(std::string const& event) {
-  // If OpenR initialization procedure is enable, do not trigger initial route
-  // computation until all conditions are fulfilled.
-  // Otherwise, wait for coldStartTimer_ before initial route computation.
-  if (config_->isInitializationProcessEnabled()) {
-    if (not unblockInitialRoutesBuild()) {
-      return;
-    }
-  } else if (coldStartTimer_->isScheduled()) {
+  // Do NOT trigger initial route computation until all conditions are met.
+  if (not unblockInitialRoutesBuild()) {
     return;
   }
 
@@ -1017,10 +991,6 @@ Decision::unblockInitialRoutesBuild() {
 
 void
 Decision::triggerInitialBuildRoutes() {
-  if (not config_->isInitializationProcessEnabled()) {
-    return;
-  }
-
   if (not unblockInitialRoutesBuild()) {
     return;
   }
