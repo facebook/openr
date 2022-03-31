@@ -575,7 +575,11 @@ class KvStoreDb : public DualNode {
     ExponentialBackoff<std::chrono::milliseconds> expBackoff;
 
     // thrift client for this peer
+#ifndef OPENR_TG_OPTIMIZED_BUILD
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+#else
+    std::unique_ptr<thrift::OpenrCtrlAsyncClient> client{nullptr};
+#endif
 
     // timer to periodically send keep-alive status
     // ATTN: this mechanism serves the purpose of avoiding channel being

@@ -14,7 +14,9 @@
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/OpenrCtrl.h>
+#ifndef OPENR_TG_OPTIMIZED_BUILD
 #include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
+#endif
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStorePublisher.h>
@@ -40,8 +42,14 @@ struct FibStreamSubscriber {
   std::chrono::system_clock::time_point last_message_time;
 };
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
 class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
                                public facebook::fb303::BaseService {
+#else
+class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
+                               public facebook::fb303::BaseService {
+#endif
+
  public:
   /**
    * NOTE: If acceptablePeerCommonNames is empty then check for peerName is
@@ -290,6 +298,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   semifuture_getKvStoreAreaSummary(
       std::unique_ptr<std::set<std::string>> selectAreas) override;
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   // Stream API's
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler
@@ -329,6 +338,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       thrift::RouteDatabaseDetail,
       thrift::RouteDatabaseDeltaDetail>>
   semifuture_subscribeAndGetFibDetail() override;
+#endif
 
   // Long poll support
   folly::SemiFuture<bool> semifuture_longPollKvStoreAdj(

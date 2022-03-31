@@ -57,20 +57,24 @@ PrefixManager::PrefixManager(
         << "[Initialization] PrefixManager should wait for BGP prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::BGP);
   }
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   if (config->isVipServiceEnabled()) {
     XLOG(INFO)
         << "[Initialization] PrefixManager should wait for VIP prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::VIP);
   }
+#endif
   if (config->getConfig().originated_prefixes_ref()) {
     XLOG(INFO)
         << "[Initialization] PrefixManager should wait for CONFIG prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::CONFIG);
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   if (auto policyConf = config->getAreaPolicies()) {
     policyManager_ = std::make_unique<PolicyManager>(*policyConf);
   }
+#endif
 
   for (const auto& [areaId, areaConf] : config->getAreas()) {
     areaToPolicy_.emplace(areaId, areaConf.getImportPolicyName());

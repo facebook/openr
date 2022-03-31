@@ -41,7 +41,9 @@ namespace fs = std::experimental::filesystem;
 #include <openr/monitor/Monitor.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
-#include <openr/plugin/Plugin.h>
+#ifndef OPENR_TG_OPTIMIZED_BUILD
+  #include <openr/plugin/Plugin.h>
+#endif
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/IoProvider.h>
 #include <openr/spark/Spark.h>
@@ -259,11 +261,13 @@ main(int argc, char** argv) {
       interfaceUpdatesQueue.getReader("spark");
   auto prefixMgrKvStoreUpdatesReader =
       kvStoreUpdatesQueue.getReader("prefixManager");
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   if (config->isBgpPeeringEnabled()) {
     pluginRouteReaderPtr =
         std::make_unique<messaging::RQueue<DecisionRouteUpdate>>(
             prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates"));
   }
+#endif
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -481,6 +485,7 @@ main(int argc, char** argv) {
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   // Create bgp speaker module
   if (config->isBgpPeeringEnabled()) {
     assert(pluginRouteReaderPtr);
@@ -507,6 +512,7 @@ main(int argc, char** argv) {
         std::move(vipRouteEvb));
     vipPluginStart(vipPluginArgs);
   }
+#endif
 
   // Wait for the above three modules to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module
@@ -598,6 +604,7 @@ main(int argc, char** argv) {
     XLOG(INFO) << "Finally stopped " << (*riter)->getEvbName();
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   // stop bgp speaker
   if (config->isBgpPeeringEnabled()) {
     pluginStop();
@@ -606,6 +613,7 @@ main(int argc, char** argv) {
   if (config->isVipServiceEnabled()) {
     vipPluginStop();
   }
+#endif
 
   if (netlinkFibServer) {
     CHECK(netlinkFibServerThread);
@@ -626,7 +634,9 @@ main(int argc, char** argv) {
     t.join();
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   vipPluginDestroy();
+#endif
 
   // Close syslog connection (this is optional)
   SYSLOG(INFO) << "Stopping OpenR daemon: ppid = " << getpid();

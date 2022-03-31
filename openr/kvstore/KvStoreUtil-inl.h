@@ -125,7 +125,11 @@ dumpAllWithThriftClientFromMultiple(
 
   auto startTime = std::chrono::steady_clock::now();
   for (auto const& sockAddr : sockAddrs) {
+#ifndef OPENR_TG_OPTIMIZED_BUILD
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+#else
+    std::unique_ptr<thrift::OpenrCtrlAsyncClient> client{nullptr};
+#endif
     if (sslContext) {
       VLOG(3) << "Try to connect Open/R SSL secure client.";
       try {

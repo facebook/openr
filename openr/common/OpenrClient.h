@@ -13,7 +13,13 @@
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 #include <openr/common/Constants.h>
+#ifndef OPENR_TG_OPTIMIZED_BUILD
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
+#define OpenrAsyncClientType thrift::OpenrCtrlCppAsyncClient
+#else
+#include <openr/if/gen-cpp2/OpenrCtrlAsyncClient.h>
+#define OpenrAsyncClientType thrift::OpenrCtrlAsyncClient
+#endif
 
 namespace openr {
 
@@ -58,7 +64,7 @@ getSocketOptionMap(std::optional<int> maybeIpTos) {
  *
  */
 template <typename ClientChannel = apache::thrift::HeaderClientChannel>
-static std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
+static std::unique_ptr<OpenrAsyncClientType>
 getOpenrCtrlPlainTextClient(
     folly::EventBase& evb,
     const folly::IPAddress& addr,
@@ -70,7 +76,7 @@ getOpenrCtrlPlainTextClient(
     std::optional<int> maybeIpTos = std::nullopt) {
   // NOTE: It is possible to have caching for socket. We're not doing it as
   // we expect clients to be persistent/sticky.
-  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+  std::unique_ptr<OpenrAsyncClientType> client{nullptr};
 
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
     // Create a new UNCONNECTED AsyncSocket
@@ -98,7 +104,7 @@ getOpenrCtrlPlainTextClient(
 
     // Create client
     client =
-        std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
+        std::make_unique<OpenrAsyncClientType>(std::move(channel));
   });
 
   return client;
@@ -108,7 +114,7 @@ getOpenrCtrlPlainTextClient(
  * Create secured client for OpenrCtrlCpp service over AsyncSSLSocket.
  */
 template <typename ClientChannel = apache::thrift::HeaderClientChannel>
-static std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
+static std::unique_ptr<OpenrAsyncClientType>
 getOpenrCtrlSecureClient(
     folly::EventBase& evb,
     const std::shared_ptr<folly::SSLContext> sslContext,
@@ -122,7 +128,7 @@ getOpenrCtrlSecureClient(
     std::optional<int> maybeIpTos = std::nullopt) {
   // NOTE: It is possible to have caching for socket. We're not doing it as
   // we expect clients to be persistent/sticky.
-  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+  std::unique_ptr<OpenrAsyncClientType> client{nullptr};
 
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
     // Create a new UNCONNECTED AsyncSocket
@@ -149,7 +155,7 @@ getOpenrCtrlSecureClient(
 
     // Create client
     client =
-        std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
+        std::make_unique<OpenrAsyncClientType>(std::move(channel));
   });
 
   return client;

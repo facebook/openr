@@ -35,6 +35,12 @@ include(FBGenCMakeBuildInfo)
 
 set(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system thread context filesystem program_options regex)
 
+# Compile Open/R and omit modules not used by Terragraph
+option(OPENR_TG_OPTIMIZED_BUILD "OPENR_TG_OPTIMIZED_BUILD" OFF)
+if(OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DOPENR_TG_OPTIMIZED_BUILD")
+endif()
+
 find_library(ASYNC async PATHS)
 find_package(Boost REQUIRED COMPONENTS ${REQ_BOOST_COMPONENTS})
 find_library(CONCURRENCY concurrency PATHS)
@@ -82,6 +88,8 @@ include_directories(
 
 SET(OPENR_THRIFT_LIBS)
 
+if(NOT OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
+
 add_fbthrift_cpp_library(
   bgp_config_cpp2
   openr/if/BgpConfig.thrift
@@ -105,6 +113,8 @@ add_fbthrift_cpp_library(
     json
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} vip_service_config_cpp2)
+
+endif()
 
 add_fbthrift_cpp_library(
   openr_config_cpp2
@@ -180,6 +190,8 @@ add_fbthrift_cpp_library(
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp2)
 
+if(NOT OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
+
 add_fbthrift_cpp_library(
   openr_ctrl_cpp_cpp2
   openr/if/OpenrCtrlCpp.thrift
@@ -195,6 +207,8 @@ add_fbthrift_cpp_library(
     types_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp_cpp2)
+
+endif()
 
 add_build_info(build_info)
 
@@ -220,22 +234,22 @@ add_library(openrlib SHARED
   openr/common/LsdbUtil.cpp
   openr/config/Config.cpp
   openr/config-store/PersistentStore.cpp
-  openr/config-store/PersistentStoreWrapper.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/config-store/PersistentStoreWrapper.cpp>
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp
   openr/decision/LinkState.cpp
   openr/decision/PrefixState.cpp
   openr/decision/RibPolicy.cpp
   openr/decision/SpfSolver.cpp
-  openr/decision/tests/DecisionTestUtils.cpp
-  openr/decision/tests/RoutingBenchmarkUtils.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/decision/tests/DecisionTestUtils.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/decision/tests/RoutingBenchmarkUtils.cpp>
   openr/kvstore/Dual.cpp
   openr/fib/Fib.cpp
   openr/kvstore/KvStoreClientInternal.cpp
   openr/kvstore/KvStore.cpp
   openr/kvstore/KvStorePublisher.cpp
   openr/kvstore/KvStoreUtil.cpp
-  openr/kvstore/KvStoreWrapper.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/kvstore/KvStoreWrapper.cpp>
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
   openr/nl/NetlinkAddrMessage.cpp
@@ -251,16 +265,16 @@ add_library(openrlib SHARED
   openr/monitor/MonitorBase.cpp
   openr/monitor/SystemMetrics.cpp
   openr/platform/NetlinkFibHandler.cpp
-  openr/plugin/Plugin.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/plugin/Plugin.cpp>
   openr/policy/PolicyManager.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
-  openr/tests/mocks/MockNetlinkProtocolSocket.cpp
-  openr/tests/mocks/PrefixGenerator.cpp
-  openr/tests/OpenrThriftServerWrapper.cpp
-  openr/tests/utils/Utils.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/mocks/MockNetlinkProtocolSocket.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/mocks/PrefixGenerator.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/OpenrThriftServerWrapper.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/utils/Utils.cpp>
   openr/watchdog/Watchdog.cpp
 )
 

@@ -23,7 +23,9 @@ namespace fs = std::experimental::filesystem;
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <optional>
 
-#include <openr/if/gen-cpp2/BgpConfig_types.h>
+#ifndef OPENR_TG_OPTIMIZED_BUILD
+  #include <openr/if/gen-cpp2/BgpConfig_types.h>
+#endif
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
@@ -340,6 +342,7 @@ class Config {
     return true;
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   //
   // bgp peering
   //
@@ -372,6 +375,7 @@ class Config {
     CHECK(isBgpPeeringEnabled());
     return *config_.bgp_translation_config_ref();
   }
+#endif
 
   //
   // watch dog
@@ -395,6 +399,7 @@ class Config {
     return *config_.monitor_config_ref();
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   //
   // policy
   //
@@ -402,6 +407,7 @@ class Config {
   getAreaPolicies() const {
     return config_.area_policies_ref().to_optional();
   }
+#endif
 
   //
   // thrift server
@@ -528,6 +534,7 @@ class Config {
     return config_.thrift_client_ref().to_optional();
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   //
   // VIP thrift injection service
   //
@@ -544,6 +551,7 @@ class Config {
     CHECK(isVipServiceEnabled());
     return *config_.vip_service_config_ref();
   }
+#endif
 
   //
   // Drain state

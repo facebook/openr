@@ -930,6 +930,7 @@ OpenrCtrlHandler::semifuture_getSubscriberInfo(int64_t type) {
   return sf;
 }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
 apache::thrift::ServerStream<thrift::Publication>
 OpenrCtrlHandler::subscribeKvStoreFilter(
     std::unique_ptr<thrift::KeyDumpParams> filter,
@@ -1123,6 +1124,7 @@ OpenrCtrlHandler::semifuture_subscribeAndGetFibDetail() {
             std::move(*db.value()), std::move(stream)};
       });
 }
+#endif
 
 //
 // LinkMonitor APIs

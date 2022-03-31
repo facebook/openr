@@ -7,7 +7,9 @@
 
 #pragma once
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
 #include <configerator/structs/neteng/config/gen-cpp2/routing_policy_types.h>
+#endif
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/policy/PolicyStructs.h>
 
@@ -20,8 +22,12 @@ class PolicyManagerImpl;
  */
 class PolicyManager {
  public:
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   explicit PolicyManager(
       const neteng::config::routing_policy::PolicyConfig& config);
+#else
+  explicit PolicyManager();
+#endif
   ~PolicyManager();
 
   std::pair<std::shared_ptr<thrift::PrefixEntry>, std::string /*policy name*/>

@@ -208,12 +208,14 @@ Config::populateAreaConfig() {
     config_.areas_ref() = {defaultArea};
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   std::optional<neteng::config::routing_policy::Filters> propagationPolicy{
       std::nullopt};
   if (auto areaPolicies = getAreaPolicies()) {
     propagationPolicy =
         areaPolicies->filters_ref()->routePropagationPolicy_ref().to_optional();
   }
+#endif
 
   if (getDomainName().empty()) {
     throw std::invalid_argument("domain name must be non-empty");
@@ -239,6 +241,7 @@ Config::populateAreaConfig() {
       areaConf.neighbor_regexes_ref() = {".*"};
     }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
     if (auto importPolicyName = areaConf.import_policy_name_ref()) {
       if (not propagationPolicy or
           propagationPolicy->objects_ref()->count(*importPolicyName) == 0) {
@@ -246,6 +249,7 @@ Config::populateAreaConfig() {
             "No area policy definition found for {}", *importPolicyName));
       }
     }
+#endif
 
     if (!areaConfigs_.emplace(areaConf.get_area_id(), areaConf).second) {
       throw std::invalid_argument(
@@ -509,6 +513,7 @@ Config::checkPrefixAllocationConfig() {
 
 void
 Config::checkVipServiceConfig() const {
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   if (isVipServiceEnabled()) {
     if (not config_.vip_service_config_ref()) {
       throw std::invalid_argument(
@@ -532,10 +537,12 @@ Config::checkVipServiceConfig() const {
       }
     }
   }
+#endif
 }
 
 void
 Config::checkBgpPeeringConfig() {
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   if (isBgpPeeringEnabled() and not config_.bgp_config_ref()) {
     throw std::invalid_argument(
         "enable_bgp_peering = true, but bgp_config is empty");
@@ -576,6 +583,7 @@ Config::checkBgpPeeringConfig() {
           "enabled");
     }
   }
+#endif
 }
 
 void
@@ -631,12 +639,14 @@ Config::populateInternalDb() {
     }
   }
 
+#ifndef OPENR_TG_OPTIMIZED_BUILD
   // To avoid bgp and vip service advertise the same prefixes,
   // bgp speaker and vip service shouldn't co-exist
   if (isBgpPeeringEnabled() && isVipServiceEnabled()) {
     throw std::invalid_argument(
         "Bgp Peering and Vip Service can not be both enabled");
   }
+#endif
 
   // check watchdog has config if enabled
   if (isWatchdogEnabled() and not config_.watchdog_config_ref()) {
