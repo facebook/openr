@@ -624,10 +624,9 @@ struct InterfaceDetails {
   2: bool isOverloaded;
 
   /**
+   * [TO_BE_DEPRECATED]
    * All adjacencies over this interface will inherit this override metric if
    * specified. Metric override is often used for soft draining of links.
-   * NOTE: This metric is directional. Override should ideally be also set on
-   * the other end of the interface.
    */
   3: optional i32 metricOverride;
 
@@ -637,6 +636,14 @@ struct InterfaceDetails {
    * functionality in LinkMonitor documentation.
    */
   4: optional i64 linkFlapBackOffMs;
+
+  /**
+   * Link level metric increment
+   *
+   * NOTE: This metric is directional. Override should ideally be also set on
+   * the other end of the interface.
+   */
+  5: i32 linkMetricIncrementVal;
 } (cpp.minimize_padding)
 
 /**
@@ -647,6 +654,11 @@ struct DumpLinksReply {
    * @deprecated - Name of the node. This is no longer of any relevance.
    */
   1: string thisNodeName;
+
+  /**
+   * Node level metric increment
+   */
+  2: i32 nodeMetricIncrementVal = 0;
 
   /**
    * Overload or drain status of the node.
@@ -697,12 +709,14 @@ struct LinkMonitorState {
   2: set<string> overloadedLinks;
 
   /**
+   * [TO_BE_DEPRECATED]
    * Custom metric override for links. Can be leveraged to soft-drain interfaces
    * with higher metric value.
    */
   3: map<string, i32> linkMetricOverrides;
 
   /**
+   * [TO_BE_DEPRECATED]
    * Label allocated to node (via RangeAllocator). `0` indicates null value
    */
   4: i32 nodeLabel = 0 (deprecated);
@@ -713,6 +727,7 @@ struct LinkMonitorState {
   5: map<AdjKey, i32> adjMetricOverrides;
 
   /**
+   * [TO_BE_DEPRECATED]
    * Node label allocated to node in each area. `0` indicates null value.
    */
   6: map<string, i32> nodeLabelMap;

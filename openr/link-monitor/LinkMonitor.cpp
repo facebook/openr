@@ -1380,6 +1380,11 @@ LinkMonitor::semifuture_setInterfaceOverload(
   return sf;
 }
 
+// [TO_BE_DEPRECATED]
+//
+// ATTN: this achieves the SAME functionality of:
+//
+// semifuture_setInterfaceMetricIncrement
 folly::SemiFuture<folly::Unit>
 LinkMonitor::semifuture_setLinkMetric(
     std::string interfaceName, std::optional<int32_t> overrideMetric) {
@@ -1643,16 +1648,22 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
 
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
 LinkMonitor::semifuture_getInterfaces() {
-  XLOG(DBG2) << "Dump Links requested, replying withV " << interfaces_.size()
-             << " links";
+  XLOG(DBG2)
+      << fmt::format("Dump links requested with {} links", interfaces_.size());
 
   folly::Promise<std::unique_ptr<thrift::DumpLinksReply>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p)]() mutable {
-    // reply with the dump of known interfaces and their states
     thrift::DumpLinksReply reply;
-    *reply.thisNodeName_ref() = nodeId_;
+
+    // Populate nodeId
+    reply.thisNodeName_ref() = nodeId_;
+
+    // Populate node-level overload state(hard-drain)
     reply.isOverloaded_ref() = *state_.isOverloaded_ref();
+
+    // Populate node-level metric override(soft-drain)
+    reply.nodeMetricIncrementVal_ref() = *state_.nodeMetricIncrementVal_ref();
 
     // Fill interface details
     for (auto& [_, interface] : interfaces_) {
@@ -1660,13 +1671,21 @@ LinkMonitor::semifuture_getInterfaces() {
 
       thrift::InterfaceDetails ifDetails;
       ifDetails.info_ref() = interface.getInterfaceInfo().toThrift();
+
+      // Populate link-level overload state
       ifDetails.isOverloaded_ref() =
           state_.overloadedLinks_ref()->count(ifName) > 0;
 
-      // Add metric override if any
+      // [TO_BE_DEPRECATED] Add metric override if any
       if (state_.linkMetricOverrides_ref()->count(ifName) > 0) {
         ifDetails.metricOverride_ref() =
             state_.linkMetricOverrides_ref()->at(ifName);
+      }
+
+      // Populate link-level metric override if any
+      if (state_.linkMetiricIncrementMap_ref()->count(ifName) > 0) {
+        ifDetails.linkMetricIncrementVal_ref() =
+            state_.linkMetiricIncrementMap_ref()->at(ifName);
       }
 
       // Add link-backoff
