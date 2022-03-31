@@ -228,9 +228,7 @@ LinkMonitor::LinkMonitor(
             processNeighborEvents(std::move(event));
           },
           [](thrift::InitializationEvent&& event) {
-            CHECK(
-                event == thrift::InitializationEvent::NEIGHBOR_DISCOVERED ||
-                event == thrift::InitializationEvent::NEIGHBOR_DISCOVERY_ERROR)
+            CHECK(event == thrift::InitializationEvent::NEIGHBOR_DISCOVERED)
                 << fmt::format(
                        "Unexpected initialization event: {}",
                        apache::thrift::util::enumNameSafe(event));

@@ -18,7 +18,7 @@ fed into the system for KvStore database synchronization, and SPF Computation.
 - `[Producer] ReplicateQueue<NeighborInitEvent>`: sends out neighbor events via
   `NeighborUpdatesQueue` to `LinkMonitor`, which includes:
   `UP`/`DOWN`/`RESTART`/`RTT-CHANGE` events or InitializationEvent
-  NEIGHBOR_DISCOVERED / NEIGHBOR_DISCOVERY_ERROR.
+  `NEIGHBOR_DISCOVERED`.
 
 - `[Consumer] RQueue<thrift::InterfaceDatabase>`: receives interface database
   update via `InterfaceUpdatesQueue` from `LinkMonitor`. Neighbor discovery will

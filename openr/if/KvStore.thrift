@@ -62,10 +62,6 @@ enum InitializationEvent {
    */
   PEERS_DISCOVERED = 9,
   /**
-   * ErrorCode: failures happen during the neighbor discovery process.
-   */
-  NEIGHBOR_DISCOVERY_ERROR = 10,
-  /**
    * ErrorCode: failures happen during the peer discovery process.
    */
   PEER_DISCOVERY_ERROR = 11,
