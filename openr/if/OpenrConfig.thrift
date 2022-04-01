@@ -416,6 +416,9 @@ struct OriginatedPrefix {
   /** To interact with BGP, area prepending is needed. */
   9: optional list<string> area_stack;
 
+  /** Describe the route of this prefix. **/
+  10: optional string origination_policy;
+
   /**
    * If the number of nexthops for this prefix is below a certain threshold,
    * Decision will not program/announce the routes. If this parameter is not
