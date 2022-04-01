@@ -116,6 +116,8 @@ SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} vip_service_config_cpp2)
 
 endif()
 
+if(NOT OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
+
 add_fbthrift_cpp_library(
   openr_config_cpp2
   openr/if/OpenrConfig.thrift
@@ -126,6 +128,19 @@ add_fbthrift_cpp_library(
     routing_policy_cpp2
     vip_service_config_cpp2
 )
+
+else()
+
+add_fbthrift_cpp_library(
+  openr_config_cpp2
+  openr/if/tg/OpenrConfig.thrift
+  INCLUDE_PREFIX "openr/if"
+  OUTPUT_DIR "${CMAKE_BINARY_DIR}/openr/if"
+  OPTIONS
+    json
+)
+
+endif()
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_config_cpp2)
 
 add_fbthrift_cpp_library(

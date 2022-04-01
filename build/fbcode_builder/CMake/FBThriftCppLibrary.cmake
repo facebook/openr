@@ -15,6 +15,10 @@ include(FBCMakeParseArgs)
 #   The sub-directory where generated headers will be installed.
 #   Defaults to "include" if not specified.  The caller must still call
 #   install() to install the thrift library if desired.
+# - INCLUDE_PREFIX <path>
+#   Override the default include prefix.
+# - OUTPUT_DIR <path>
+#   Override the default output directory.
 # - THRIFT_INCLUDE_DIR <path>
 #   The sub-directory where generated headers will be installed.
 #   Defaults to "${INCLUDE_DIR}/thrift-files" if not specified.
@@ -22,7 +26,7 @@ include(FBCMakeParseArgs)
 #   desired.
 function(add_fbthrift_cpp_library LIB_NAME THRIFT_FILE)
   # Parse the arguments
-  set(one_value_args INCLUDE_DIR THRIFT_INCLUDE_DIR)
+  set(one_value_args INCLUDE_DIR INCLUDE_PREFIX OUTPUT_DIR THRIFT_INCLUDE_DIR)
   set(multi_value_args SERVICES DEPENDS OPTIONS)
   fb_cmake_parse_args(
     ARG "" "${one_value_args}" "${multi_value_args}" "${ARGN}"
@@ -35,19 +39,28 @@ function(add_fbthrift_cpp_library LIB_NAME THRIFT_FILE)
   endif()
 
   get_filename_component(base ${THRIFT_FILE} NAME_WE)
-  get_filename_component(
-    output_dir
-    ${CMAKE_CURRENT_BINARY_DIR}/${THRIFT_FILE}
-    DIRECTORY
-  )
 
-  # Generate relative paths in #includes
-  file(
-    RELATIVE_PATH include_prefix
-    "${CMAKE_SOURCE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/${THRIFT_FILE}"
-  )
-  get_filename_component(include_prefix ${include_prefix} DIRECTORY)
+  if(NOT DEFINED ARG_OUTPUT_DIR)
+    get_filename_component(
+      output_dir
+      ${CMAKE_CURRENT_BINARY_DIR}/${THRIFT_FILE}
+      DIRECTORY
+    )
+  else()
+    set(output_dir "${ARG_OUTPUT_DIR}")
+  endif()
+
+  if(NOT DEFINED ARG_INCLUDE_PREFIX)
+    # Generate relative paths in #includes
+    file(
+      RELATIVE_PATH include_prefix
+      "${CMAKE_SOURCE_DIR}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/${THRIFT_FILE}"
+    )
+    get_filename_component(include_prefix ${include_prefix} DIRECTORY)
+  else()
+    set(include_prefix "${ARG_INCLUDE_PREFIX}")
+  endif()
 
   if (NOT "${include_prefix}" STREQUAL "")
     list(APPEND ARG_OPTIONS "include_prefix=${include_prefix}")
@@ -57,6 +70,7 @@ function(add_fbthrift_cpp_library LIB_NAME THRIFT_FILE)
   string(REPLACE ";" "," GEN_ARG_STR "${ARG_OPTIONS}")
 
   # Compute the list of generated files
+  message("ODIR: ${output_dir}")
   list(APPEND generated_headers
     "${output_dir}/gen-cpp2/${base}_constants.h"
     "${output_dir}/gen-cpp2/${base}_types.h"
