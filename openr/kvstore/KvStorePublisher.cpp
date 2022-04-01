@@ -70,7 +70,8 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   }
 
   thrift::Publication publication_filtered;
-  publication_filtered.expiredKeys_ref() = *pub.expiredKeys_ref();
+  publication_filtered.expiredKeys_ref() =
+      getFilteredExpiredKeys(*pub.expiredKeys_ref());
 
   if (pub.nodeIds_ref()) {
     publication_filtered.nodeIds_ref() = *pub.nodeIds_ref();
@@ -112,16 +113,29 @@ KvStorePublisher::getFilteredKeyVals(const thrift::KeyVals& origKeyVals) {
       continue;
     }
 
-    if ((not *filter_.doNotPublishValue_ref()) or
-        (not val.value_ref().has_value())) {
-      keyvals.emplace(key, val);
-    } else {
+    if (*filter_.doNotPublishValue_ref() and val.value_ref().has_value()) {
       // Exclude Value.value if it's filtered
       keyvals.emplace(key, createThriftValueWithoutBinaryValue(val));
+    } else {
+      keyvals.emplace(key, val);
     }
   }
 
   return keyvals;
+}
+
+std::vector<std::string>
+KvStorePublisher::getFilteredExpiredKeys(
+    const std::vector<std::string>& origExpiredKeys) {
+  std::vector<std::string> expiredKeys;
+  for (auto& key : origExpiredKeys) {
+    if (not keyPrefixFilter_.keyMatch(key)) {
+      continue;
+    }
+
+    expiredKeys.emplace_back(key);
+  }
+  return expiredKeys;
 }
 
 } // namespace openr

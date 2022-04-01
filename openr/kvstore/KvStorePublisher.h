@@ -35,6 +35,8 @@ class KvStorePublisher {
 
  private:
   thrift::KeyVals getFilteredKeyVals(const thrift::KeyVals& origKeyVals);
+  std::vector<std::string> getFilteredExpiredKeys(
+      const std::vector<std::string>& origExpiredKeys);
 
   // set of areas whose updates should be published. If empty, publish all
   std::set<std::string> selectAreas_;

@@ -34,6 +34,9 @@ class KvStoreFilters {
 
   bool keyMatch(std::string const& key, thrift::Value const& value) const;
 
+  // overload the function for key only match
+  bool keyMatch(std::string const& key) const;
+
   // return comma separeated string prefix
   std::vector<std::string> getKeyPrefixes() const;
 

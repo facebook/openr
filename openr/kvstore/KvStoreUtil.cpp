@@ -306,6 +306,15 @@ KvStoreFilters::keyMatch(
   return keyMatchAll(key, value);
 }
 
+// The function return true if there is a key match
+bool
+KvStoreFilters::keyMatch(std::string const& key) const {
+  if (keyPrefixList_.empty()) {
+    return true;
+  }
+  return keyRegexSet_.match(key);
+}
+
 std::vector<std::string>
 KvStoreFilters::getKeyPrefixes() const {
   return keyPrefixList_;
