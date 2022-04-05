@@ -392,7 +392,7 @@ LinkMonitor::neighborUpEvent(
       isGracefulRestart ? false : onlyUsedByOtherNode);
 
   // update kvstore peer
-  updateKvStorePeerNeighborUp(area, adjId, adjacencies_[area][adjId]);
+  updateKvStorePeerNeighborUp(area, adjId, adjacencies_.at(area).at(adjId));
 
   // Advertise new adjancies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -465,10 +465,17 @@ LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
   // update KvStore Peer
   updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second);
 
-  // remove such adjacencies
+  // Remove such adjacencies.
   adjacencies_[area].erase(adjValueIt);
+  if (adjacencies_[area].empty()) {
+    adjacencies_.erase(areaAdjIt);
+  }
 
-  // advertise adjacencies
+  // Advertise adjacencies. Note - If all adjacencies in the area are gone,
+  // the below function will persist an empty list of adjacencies to the
+  // kvstore. Thus, correctly synchornizing kvstore with current state of
+  // adjacencies. As an improvement, we could consider erasing this key
+  // altogether.
   advertiseAdjacencies(area);
 }
 

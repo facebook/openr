@@ -318,6 +318,9 @@ class LinkMonitor final : public OpenrEventBase {
   // returns any(a.anyAreaShouldRedistributeIface(iface) for a in areas_)
   bool anyAreaShouldRedistributeIface(std::string const& iface) const;
 
+  // Total # of adjacencies stored.
+  size_t getTotalAdjacencies();
+
   /*
    * [Logging]
    *
@@ -421,9 +424,6 @@ class LinkMonitor final : public OpenrEventBase {
       std::string /* area */,
       std::unordered_map<std::string /* node name */, KvStorePeerValue>>
       peers_;
-
-  // Total # of adjacencies stored.
-  size_t getTotalAdjacencies();
 
   // all interfaces states, including DOWN one
   // Keyed by interface Name
