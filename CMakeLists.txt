@@ -320,6 +320,7 @@ target_link_libraries(openr_bin
   ${Boost_LIBRARIES}
   -lpthread
   -lcrypto
+  -ljemalloc
 )
 
 install(TARGETS
