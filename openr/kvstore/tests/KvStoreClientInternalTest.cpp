@@ -920,22 +920,22 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // test addPeers
         for (auto& [_, spec] : peers1) {
-          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store1->getPeers(planeArea), peers1);
 
         for (auto& [_, spec] : peers2PlaneArea) {
-          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store2->getPeers(planeArea), peers2PlaneArea);
 
         for (auto& [_, spec] : peers2PodArea) {
-          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store2->getPeers(podArea), peers2PodArea);
 
         for (auto& [_, spec] : peers3) {
-          spec.set_state(openr::thrift::KvStorePeerState::INITIALIZED);
+          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store3->getPeers(podArea), peers3);
       });

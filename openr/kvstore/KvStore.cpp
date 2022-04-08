@@ -3043,7 +3043,7 @@ KvStoreDb<ClientType>::finalizeFullSync(
   // I'm the initiator, set flood-root-id
   params.floodRootId_ref().from_optional(DualNode::getSptRootId());
   params.timestamp_ms_ref() = getUnixTimeStampMs();
-  params.set_nodeIds({kvParams_.nodeId});
+  params.nodeIds_ref() = {kvParams_.nodeId};
 
   auto peerIt = thriftPeers_.find(senderId);
   if (peerIt == thriftPeers_.end()) {

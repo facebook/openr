@@ -29,11 +29,11 @@ class WatchdogTestFixture : public ::testing::Test {
   SetUp() override {
     // create config
     thrift::WatchdogConfig watchdogConf;
-    watchdogConf.set_interval_s(kWatchdogInterval.count());
+    watchdogConf.interval_s_ref() = kWatchdogInterval.count();
 
     auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.set_watchdog_config(watchdogConf);
-    tConfig.set_enable_watchdog(true);
+    tConfig.watchdog_config_ref() = watchdogConf;
+    tConfig.enable_watchdog_ref() = true;
     config_ = std::make_shared<Config>(tConfig);
 
     // spawn watchdog thread

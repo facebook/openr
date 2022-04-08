@@ -1180,7 +1180,7 @@ PrefixManager::filterAndAddAreaRoute(
 
   // prefilter advertised route
   if (routeFilterType == thrift::RouteFilterType::PREFILTER_ADVERTISED) {
-    route.set_route(*prePolicyTPrefixEntry);
+    route.route_ref() = *prePolicyTPrefixEntry;
     routes.emplace_back(std::move(route));
     return;
   }
@@ -1204,9 +1204,9 @@ PrefixManager::filterAndAddAreaRoute(
   if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED and
       postPolicyTPrefixEntry) {
     // add post filter advertised route
-    route.set_route(*postPolicyTPrefixEntry);
+    route.route_ref() = *postPolicyTPrefixEntry;
     if (not hitPolicyName.empty()) {
-      route.set_hitPolicy(hitPolicyName);
+      route.hitPolicy_ref() = hitPolicyName;
     }
     routes.emplace_back(std::move(route));
     return;
@@ -1215,8 +1215,8 @@ PrefixManager::filterAndAddAreaRoute(
   if (routeFilterType == thrift::RouteFilterType::REJECTED_ON_ADVERTISE and
       not postPolicyTPrefixEntry) {
     // add post filter rejected route
-    route.set_route(*prePolicyTPrefixEntry);
-    route.set_hitPolicy(hitPolicyName);
+    route.route_ref() = *prePolicyTPrefixEntry;
+    route.hitPolicy_ref() = hitPolicyName;
     routes.emplace_back(std::move(route));
   }
 }
