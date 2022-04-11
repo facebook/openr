@@ -2395,10 +2395,10 @@ KvStoreDb<ClientType>::getCounters() const {
    * aka, alerting threshold setting;
    * item 2) will be used to peek into specific module for debugging purpose;
    */
-  auto maybeNumFloodPeers =
-      fb303::fbData->getCounterIfExists("kvstore.num_flood_peers." + area_);
-  auto maybeNumExpiringKeys =
-      fb303::fbData->getCounterIfExists("kvstore.num_expiring_keys." + area_);
+  auto maybeNumFloodPeers = fb303::fbData->getCounterIfExists(
+      fmt::format("kvstore.num_flood_peers.{}.sum.60", area_));
+  auto maybeNumExpiringKeys = fb303::fbData->getCounterIfExists(
+      fmt::format("kvstore.num_expiring_keys.{}.sum.60", area_));
   counters["kvstore.num_flood_peers"] =
       maybeNumFloodPeers.hasValue() ? maybeNumFloodPeers.value() : 0;
   counters["kvstore.num_expiring_keys"] =
