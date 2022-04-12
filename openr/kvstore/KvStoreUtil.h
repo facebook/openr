@@ -114,6 +114,13 @@ dumpAllWithPrefixMultipleAndParse(
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
+template <typename ThriftType, typename ClientType>
+static std::unordered_map<std::string /* key */, ThriftType>
+dumpAllWithPrefixMultipleAndParse(
+    const AreaId& area,
+    const std::vector<std::unique_ptr<ClientType>>& clients,
+    const std::string& prefix);
+
 /*
  * This will be a static method to do a full-dump of KvStore key-val to
  * multiple KvStore instances. It will fetch values from different KvStore
@@ -145,6 +152,13 @@ dumpAllWithThriftClientFromMultiple(
     const std::shared_ptr<folly::SSLContext> sslContext = nullptr,
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
+
+template <typename ClientType>
+static std::unordered_map<std::string, thrift::Value>
+dumpAllWithThriftClientFromMultiple(
+    const AreaId& area,
+    const std::vector<std::unique_ptr<ClientType>>& clients,
+    const std::string& prefix);
 
 /*
  * Static method to retrieve loggable key-value information.

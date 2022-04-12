@@ -68,6 +68,17 @@ dumpAllWithPrefixMultipleAndParse(
   return std::make_pair(parseThriftValues<ThriftType>(*res), unreachableAddrs);
 }
 
+// static
+template <typename ThriftType, typename ClientType>
+std::unordered_map<std::string /* key */, ThriftType>
+dumpAllWithPrefixMultipleAndParse(
+    const AreaId& area,
+    const std::vector<std::unique_ptr<ClientType>>& clients,
+    const std::string& keyPrefix) {
+  return parseThriftValues<ThriftType>(
+      dumpAllWithThriftClientFromMultiple(area, clients, keyPrefix));
+}
+
 void
 printKeyValInArea(
     int logLevel,
@@ -220,6 +231,53 @@ dumpAllWithThriftClientFromMultiple(
   VLOG(1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
 
   return std::make_pair(merged, unreachableAddrs);
+}
+
+// static method to dump KvStore key-val over multiple instances
+template <typename ClientType>
+std::unordered_map<std::string /* key */, thrift::Value>
+dumpAllWithThriftClientFromMultiple(
+    const AreaId& area,
+    const std::vector<std::unique_ptr<ClientType>>& clients,
+    const std::string& keyPrefix) {
+  std::vector<folly::SemiFuture<thrift::Publication>> calls;
+  std::unordered_map<std::string, thrift::Value> merged;
+
+  thrift::KeyDumpParams params;
+  if (not keyPrefix.empty()) {
+    params.keys_ref() = {keyPrefix};
+  }
+
+  auto startTime = std::chrono::steady_clock::now();
+  for (const auto& client : clients) {
+    calls.emplace_back(
+        client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
+  }
+
+  // loop semifuture collection to merge all values
+  for (const auto& result : folly::collectAll(calls).get()) {
+    // folly::Try will contain either value or exception
+    if (result.hasException()) {
+      LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
+    } else if (result.hasValue()) {
+      auto keyVals = *result.value().keyVals_ref();
+      const auto deltaPub = mergeKeyValues(merged, keyVals).first;
+
+      VLOG(3) << "Received kvstore publication with: " << keyVals.size()
+              << " key-vals. Incurred " << deltaPub.size()
+              << " key-val updates.";
+    }
+  }
+
+  // record time used to fetch from all Open/R instances
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - startTime)
+          .count();
+
+  VLOG(1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
+
+  return merged;
 }
 
 } // namespace openr

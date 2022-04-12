@@ -6,9 +6,12 @@
  */
 
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/ScopeGuard.h>
 #include <folly/init/Init.h>
+#include <folly/io/async/ScopedEventBaseThread.h>
 #include <gtest/gtest.h>
 
+#include <openr/common/OpenrClient.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
@@ -338,6 +341,69 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
         dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, "");
     ASSERT_TRUE(db.has_value());
     ASSERT_TRUE(db.value().empty());
+  }
+}
+
+//
+// Test dumpAllWithThriftClient API overloaded for clients instead of addresses
+//
+TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
+  const std::string key1{"test_key1"};
+  const std::string key2{"test_key2"};
+  const std::string val1{"test_value1"};
+  const std::string val2{"test_value2"};
+  const uint16_t port1 = kvStoreWrapper1_->getThriftPort();
+  const uint16_t port2 = kvStoreWrapper2_->getThriftPort();
+
+  folly::ScopedEventBaseThread evb;
+  std::vector<std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>> clients;
+  clients.emplace_back(getOpenrCtrlPlainTextClient(
+      *evb.getEventBase(),
+      folly::IPAddress(Constants::kPlatformHost.toString()),
+      port1));
+  clients.emplace_back(getOpenrCtrlPlainTextClient(
+      *evb.getEventBase(),
+      folly::IPAddress(Constants::kPlatformHost.toString()),
+      port2));
+
+  // Clients should be destroyed in a thread from EventBase with which they were
+  // created, so destroy them properly at the end of the test.
+  SCOPE_EXIT {
+    evb.getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
+        [&clients]() { clients.clear(); });
+  };
+
+  // Step1: insert (k1, v1) and (k2, v2) to different KvStore instances
+  {
+    thrift::Value tVal1 = createThriftValue(1, nodeId1_, val1);
+    EXPECT_TRUE(kvStoreWrapper1_->setKey(kTestingAreaName, key1, tVal1));
+
+    thrift::Value tVal2 = createThriftValue(1, nodeId2_, val2);
+    EXPECT_TRUE(kvStoreWrapper2_->setKey(kTestingAreaName, key2, tVal2));
+  }
+
+  // Step2: verify fetch + aggregate 2 keys from different kvStores with prefix
+  {
+    const auto& pub =
+        dumpAllWithThriftClientFromMultiple(kTestingAreaName, clients, "");
+    EXPECT_TRUE(pub.size() == 2);
+    EXPECT_TRUE(pub.count(key1));
+    EXPECT_TRUE(pub.count(key2));
+  }
+
+  // Step3: shutdown thriftSevers and verify
+  // dumpAllWithThriftClientFromMultiple() will get nothing.
+  {
+    // ATTN: kvStoreUpdatesQueue must be closed before destructing
+    //       KvStoreClientInternal as fiber future is depending on RQueue
+    kvStoreWrapper1_->closeQueue();
+    kvStoreWrapper2_->closeQueue();
+    kvStoreWrapper1_->stopThriftServer();
+    kvStoreWrapper2_->stopThriftServer();
+
+    const auto& pub =
+        dumpAllWithThriftClientFromMultiple(kTestingAreaName, clients, "");
+    ASSERT_TRUE(pub.empty());
   }
 }
 
