@@ -16,35 +16,29 @@ namespace wiki Open_Routing.Thrift_APIs.Types
 include "openr/if/Network.thrift"
 include "openr/if/OpenrConfig.thrift"
 
-/*
- * [Spark Neighbor FSM]
- *
- * Define:
- *  1) SparkNeighState
- *  2) SparkNeighEvent
- *
- * This is used to define transition state for Spark neighbors.
- * Ref: https://openr.readthedocs.io/Protocol_Guide/Spark.html#finite-state-machine
- */
-enum SparkNeighState {
-  IDLE = 0,
-  WARM = 1,
-  NEGOTIATE = 2,
-  ESTABLISHED = 3,
-  RESTART = 4,
+enum SparkNeighborEventType {
+  NEIGHBOR_UP         = 1,
+  NEIGHBOR_DOWN       = 2,
+  NEIGHBOR_RESTARTED  = 3,
+  NEIGHBOR_RTT_CHANGE = 4,
+  NEIGHBOR_RESTARTING = 5,
 }
 
-enum SparkNeighEvent {
-  HELLO_RCVD_INFO = 0,
-  HELLO_RCVD_NO_INFO = 1,
-  HELLO_RCVD_RESTART = 2,
-  HEARTBEAT_RCVD = 3,
-  HANDSHAKE_RCVD = 4,
-  HEARTBEAT_TIMER_EXPIRE = 5,
-  NEGOTIATE_TIMER_EXPIRE = 6,
-  GR_TIMER_EXPIRE = 7,
-  NEGOTIATION_FAILURE = 8,
+//
+// This is used to inform clients of new neighbor
+//
+struct SparkNeighborEvent {
+  1: required SparkNeighborEventType eventType
+  2: required string ifName
+  3: required SparkNeighbor neighbor
+  4: required i64 rttUs
+  5: required i32 label   // Derived based off of ifIndex (local per node)
+  // support flood optimization or not
+  6: bool supportFloodOptimization = 0
+  // area ID
+  7: string area = "0"
 }
+
 
 /**
  * Event object to track the key attribute and timestamp used for performance
@@ -804,191 +798,98 @@ struct OpenrVersions {
   2: OpenrVersion lowestSupportedVersion;
 }
 
-/**
- * SparkHelloMsg;
- *    - Functionality:
- *      1) To advertise its own existence and basic neighbor information;
- *      2) To ask for immediate response for quick adjacency establishment;
- *      3) To notify for its own "RESTART" to neighbors;
- *    - SparkHelloMsg will be sent per interface;
- */
+//
+// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
+// 1. SparkHelloMsg;
+//    - Functionality:
+//      1) To advertise its own existence and basic neighbor information;
+//      2) To ask for immediate response for quick adjacency establishment;
+//      3) To notify for its own "RESTART" to neighbors;
+//    - SparkHelloMsg will be sent per interface;
+// 2. SparkHeartbeatMsg;
+//    - Functionality:
+//      To notify its own aliveness by advertising msg periodically;
+//    - SparkHeartbeatMsg will be sent per interface;
+// 3. SparkHandshakeMsg;
+//    - Functionality:
+//      To exchange param information to establish adjacency;
+//    - SparkHandshakeMsg will be sent per (interface, neighbor)
+//
 struct SparkHelloMsg {
-  /**
-   * [TO BE DEPRECATED]
-   * Name of the domain this Open/R belongs to.
-   * ATTN: adapt to area concept and usage to replace this.
-   */
-  1: string domainName;
-
-  /**
-   * Name of the node originating this hello message.
-   */
-  2: string nodeName;
-
-  /**
-   * Local interface name from where this SparkHelloMsg is sent.
-   */
-  3: string ifName;
-
-  /**
-   * Sequence number growing monotonically.
-   * ATTN: this is used to differentiate restarting of neighbors
-   * with unexpected sequence number.
-   */
-  4: i64 seqNum;
-
-  /**
-   * Mapping from:
-   *  nodeName -> neighbor info
-   *
-   * ATTN: Neighbor Discovery Process is bi-directional and will
-   * promote to ESTABLISHED state ONLY when I see the fact that
-   * neighbor is aware of myself.
-   */
-  5: map<string, ReflectedNeighborInfo> neighborInfos;
-
-  /**
-   * Version contains current version and lowest version of messages
-   * supported.
-   *
-   * See Versioning for more details.
-   *
-   * https://openr.readthedocs.io/Operator_Guide/Versions.html
-   */
-  6: OpenrVersion version;
-
-  /**
-   * Flag to ask for immediate response for Fast-Neighbor-Discovery
-   *
-   * https://openr.readthedocs.io/Protocol_Guide/Spark.html#fast-neighbor-discovery
-   */
-  7: bool solicitResponse = 0;
-
-  /**
-   * Flag to indicating the node is going Graceful Restart(GR)
-   */
-  8: bool restarting = 0;
-
-  /**
-   * Timestamp to indicate when this helloMsg is sent for RTT calculation
-   */
+  1: string domainName
+  2: string nodeName
+  3: string ifName
+  4: i64 seqNum
+  5: map<string, ReflectedNeighborInfo> neighborInfos
+  6: OpenrVersion version
+  7: bool solicitResponse = 0
+  8: bool restarting = 0
   9: i64 sentTsInUs;
-} (cpp.minimize_padding)
-
-/**
- * SparkHeartbeatMsg
- *    - Functionality:
- *      To notify its own aliveness by advertising msg periodically;
- *    - SparkHeartbeatMsg will be sent per interface;
- */
-struct SparkHeartbeatMsg {
-  /**
-   * Name of the node originating this heartbeat message
-   */
-  1: string nodeName;
-
-  /**
-   * Sequence number growing monotonically
-   */
-  2: i64 seqNum;
-
-  /**
-   * Flag to notify neighbor to unblock adjacency hold
-   *
-   * For details of Open/R Initialization Process, please refer to:
-   *
-   * https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html
-   */
-  3: bool holdAdjacency = false;
 }
 
-/**
- * SparkHandshakeMsg;
- *    - Functionality:
- *      To exchange param information to establish adjacency;
- *    - SparkHandshakeMsg will be sent per (interface, neighbor)
- */
+struct SparkHeartbeatMsg {
+  1: string nodeName
+  2: i64 seqNum
+}
+
 struct SparkHandshakeMsg {
-  /**
-   * Name of the node originating this handshake message
-   */
-  1: string nodeName;
+  // name of the node originating this handshake message
+  1: string nodeName
 
-  /**
-   * Used as signal to keep/stop sending handshake msg
-   */
-  2: bool isAdjEstablished;
+  // used as signal to keep/stop sending handshake msg
+  2: bool isAdjEstablished
 
-  /**
-   * Heartbeat expiration time
-   */
-  3: i64 holdTime;
+  // heartbeat expiration time
+  3: i64 holdTime
 
-  /**
-   * Graceful-restart expiration time
-   */
-  4: i64 gracefulRestartTime;
+  // graceful-restart expiration time
+  4: i64 gracefulRestartTime
 
-  /**
-   * Transport addresses of local interface. Open/R exchanges link-local
-   * addresses only for V6.
-   */
-  5: Network.BinaryAddress transportAddressV6;
-  6: Network.BinaryAddress transportAddressV4;
+  // our transport addresses (right now - link local)
+  5: Network.BinaryAddress transportAddressV6
+  6: Network.BinaryAddress transportAddressV4
 
-  /**
-   * Neighbor's thrift server port
-   */
-  7: i32 openrCtrlThriftPort;
+  // neighbor's kvstore global pub/cmd ports
+  7: i32 openrCtrlThriftPort
+  9: i32 kvStoreCmdPort
 
-  /**
-   * @deprecated - Neighbor's kvstore global CMD port, for ZMQ communication.
-   */
-  9: i32 kvStoreCmdPort;
+  // area identifier
+  10: string area
 
-  /**
-   * Area identifier for establishing adjacency with neighbor.
-   */
-  10: string area;
+  // Recipient neighbor node for this handshake message.
+  // Other nodes will ignore. If not set, then this will
+  // be treated as a multicast and all nodes will process it.
+  //
+  // TODO: Remove optional qualifier after AREA negotiation
+  //       is fully in use
+  11: optional string neighborNodeName
+}
 
-  /**
-   * Recipient neighbor node for this handshake message.
-   * Other nodes will ignore. If not set, then this will
-   * be treated as a multicast and all nodes will process it.
-   */
-  11: optional string neighborNodeName;
-
-  12: optional bool enableFloodOptimization;
-} (cpp.minimize_padding)
-
-/**
- * SparkHelloPacket will define 3 types of messages inside thrift structure:
- *  - SparkHelloMsg;
- *  - SparkHeartbeatMsg;
- *  - SparkHandshakeMsg;
- */
+//
+// This is used to create a new timer
+//
 struct SparkHelloPacket {
-  /**
-   * - Msg to announce node's presence on link with its
-   *   own params;
-   * - Send out periodically and on receipt of hello msg
-   *   with solicitation flag set;
-   */
-  3: optional SparkHelloMsg helloMsg;
+  // Will be DEPRECATED after Spark2
+  1: SparkPayload payload
 
-  /**
-   * - Msg to announce nodes's aliveness.
-   * - Send out periodically on intf where there is at
-   *   least one neighbor in ESTABLISHED state;
-   */
-  4: optional SparkHeartbeatMsg heartbeatMsg;
+  // Will be DEPRECATED after Spark2
+  2: binary signature
 
-  /**
-   * - Msg to exchange params to establish adjacency
-   *   with neighbors;
-   * - Send out periodically and on receipt of handshake msg;
-   */
-  5: optional SparkHandshakeMsg handshakeMsg;
+  // - Msg to announce node's presence on link with its
+  //   own params;
+  // - Send out periodically and on receipt of hello msg
+  //   with solicitation flag set;
+  3: optional SparkHelloMsg helloMsg
+
+  // - Msg to announce nodes's aliveness.
+  // - Send out periodically on intf where there is at
+  //   least one neighbor in ESTABLISHED state;
+  4: optional SparkHeartbeatMsg heartbeatMsg
+
+  // - Msg to exchange params to establish adjacency
+  //   with neighbors;
+  // - Send out periodically and on receipt of handshake msg;
+  5: optional SparkHandshakeMsg handshakeMsg
 }
 
 /**
@@ -996,66 +897,52 @@ struct SparkHelloPacket {
  * info for a single unique neighbor for upper module usage
  */
 struct SparkNeighbor {
-  /**
-   * Name of the node sending hello packets
-   */
-  1: string nodeName;
+  // the name of the domain to which this neighbor belongs to
+  6: string domainName
 
-  /**
-   * latest neighbor state
-   */
-  2: string state;
+  // the name of the node sending hello packets
+  1: string nodeName
 
-  /**
-   * latest neighbor event triggering state transition
-   */
-  3: string event;
+  // how long to retain our data for in milliseconds
+  2: i32 holdTime
 
-  /**
-   * Transport addresses of local interface. Open/R exchanges link-local
-   * addresses only for V6.
-   */
-  4: Network.BinaryAddress transportAddressV6;
-  5: Network.BinaryAddress transportAddressV4;
+  // our transport addresses (right now - link local)
+  4: Network.BinaryAddress transportAddressV6
+  5: Network.BinaryAddress transportAddressV4
 
-  /**
-   * Neighbor's thrift server port
-   */
-  6: i32 openrCtrlThriftPort = 0;
+  // neighbor's kvstore global pub/cmd ports
+  7: i32 openrCtrlThriftPort = 0
+  8: i32 kvStoreCmdPort = 0
 
-  /**
-   * areaId to form adjacency
-   */
-  7: string area;
+  // the interface name of the node sending hello packets over
+  9: string ifName = ""
+}
 
-  /**
-   * Remote interface name
-   */
-  8: string remoteIfName;
+struct SparkPayload {
+  7: OpenrVersion version = 20180307
 
-  /**
-   * Local interface name
-   */
-  9: string localIfName;
+  1: required SparkNeighbor originator
 
-  /**
-   * Round-trip-time of a packet over the physical link. It is deduced by
-   * exchanging hello packets between neighbor nodes.
-   */
-  10: i64 rttUs;
+  // the senders sequence number, incremented on each hello
+  3: required i64 seqNum
 
-  /**
-   * timestamp of last sent SparkHelloMsg for this neighbor
-   */
-  11: i64 lastHelloMsgSentTimeDelta = 0;
+  // neighbor to hello packet timestamp information
+  4: required map<string, ReflectedNeighborInfo> neighborInfos;
 
-  /**
-   * timestamp of last sent SparkHandshakeMsg for this neighbor
-   */
-  12: i64 lastHandshakeMsgSentTimeDelta = 0;
+  // current timestamp of this packet. This will be reflected back to neighbor
+  // in next hello packet just like sequence number in neighborInfos
+  5: i64 timestamp;
 
-  /**
-   * timestamp of last sent SparkHandshakeMsg for this neighbor
-   */
-  13: i64 lastHeartbeatMsgSentTimeDelta = 0;
-} (cpp.minimize_padding)
+  // solicit for an immediate hello packet back cause I am in fast initial state
+  6: bool solicitResponse = 0;
+
+  // support flood optimization or not
+  8: bool supportFloodOptimization = 0;
+
+  // indicating I'm going to restart gracefully
+  9: optional bool restarting = 0;
+
+  // list of areas that the advertising node belong to
+  10: optional set<string>  (cpp.template = "std::unordered_set") areas
+}
+

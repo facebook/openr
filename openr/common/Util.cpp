@@ -19,6 +19,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/Util.h>
 
 #include <thrift/lib/cpp/util/EnumUtils.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 
@@ -166,6 +167,17 @@ createThriftPublication(
   pub.floodRootId_ref().from_optional(floodRootId);
   *pub.area_ref() = area;
   return pub;
+}
+
+bool
+matchRegexSet(
+    const std::string& name, std::shared_ptr<const re2::RE2::Set> regexSet) {
+  if (not regexSet) {
+    return false;
+  }
+
+  std::vector<int> matches;
+  return regexSet->Match(name, &matches);
 }
 
 namespace memory {

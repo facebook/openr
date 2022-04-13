@@ -145,6 +145,14 @@ class Constants {
   // fixed size list of BucketedTimeSeries
   static constexpr uint32_t kMaxAllowedPps{50};
 
+  // Segment Routing namespace constants. Local and Global ranges are exclusive
+  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
+      kSrGlobalRange{101, 49999};
+  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
+      kSrLocalRange{50000, 59999};
+  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
+      kSrStaticMplsRouteRange{60000, 69999};
+
   // Number of BucketedTimeSeries to spread potential neighbors across
   // for the purpose of limiting the number of packets per second processed
   static constexpr size_t kNumTimeSeries{1024};
@@ -222,6 +230,13 @@ class Constants {
 
   static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{
       "{}::{}::TCP::CMD::LOCAL"};
+
+  // ID for Spark report server
+  static constexpr folly::StringPiece kSparkReportServerId{
+      "SPARK::ROUTER::SERVER"};
+  // ID for Spark report client
+  static constexpr folly::StringPiece kSparkReportClientId{
+      "SPARK::ROUTER::CLIENT"};
 
   static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
   static constexpr folly::StringPiece kPluginSessionContext{"OpenrPlugin"};

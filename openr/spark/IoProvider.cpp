@@ -1,16 +1,18 @@
-/*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <glog/logging.h>
+#include "IoProvider.h"
+
 #include <net/if.h>
 
+#include <glog/logging.h>
+
+#include <folly/Format.h>
 #include <folly/SocketAddress.h>
-#include <folly/logging/xlog.h>
-#include <openr/spark/IoProvider.h>
 
 namespace openr {
 
@@ -120,7 +122,7 @@ IoProvider::recvMessage(
   ssize_t bytesRead = ioProvider->recvmsg(fd, &msg, MSG_DONTWAIT);
 
   if (bytesRead < 0) {
-    throw std::runtime_error(fmt::format(
+    throw std::runtime_error(folly::sformat(
         "Failed reading message on fd {}: {}", fd, folly::errnoStr(errno)));
   }
 
@@ -168,9 +170,9 @@ IoProvider::recvMessage(
 
       // sanity check
       DCHECK(recvTs >= kernelRecvTs) << "Time anomaly";
-      XLOG(DBG4) << "Got kernel-timestamp. It took "
-                 << (recvTs - kernelRecvTs).count()
-                 << " us for the packet to get from kernel to user space";
+      VLOG(4) << "Got kernel-timestamp. It took "
+              << (recvTs - kernelRecvTs).count()
+              << " us for the packet to get from kernel to user space";
       recvTs = kernelRecvTs;
     }
   } // for

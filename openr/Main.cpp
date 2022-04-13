@@ -428,17 +428,49 @@ main(int argc, char** argv) {
   watchdog->addQueue(netlinkEventsQueue, "netlinkEventsQueue");
 
   // Create Spark instance for neighbor discovery
+  auto sparkConf = config->getSparkConfig();
+  auto kvstoreConf = config->getKvStoreConfig();
   auto spark = startEventBase(
       allThreads,
       orderedEvbs,
       watchdog,
       "spark",
       std::make_unique<Spark>(
+          config->getDomainName(),
+          config->getNodeName(),
+          static_cast<uint16_t>(
+              sparkConf.neighbor_discovery_port_ref().value()),
+          std::chrono::seconds(
+              sparkConf.graceful_restart_time_s_ref().value()),
+          std::chrono::seconds(sparkConf.keepalive_time_s_ref().value()),
+          std::chrono::milliseconds(
+              sparkConf.fastinit_hello_time_ms_ref().value()),
+          std::chrono::seconds(sparkConf.hello_time_s_ref().value()),
+          std::chrono::milliseconds(
+              sparkConf.fastinit_hello_time_ms_ref().value()),
+          std::chrono::milliseconds(
+              sparkConf.fastinit_hello_time_ms_ref().value()), // spark2_handshake_time_ms
+          // spark2_heartbeat_time_s
+          std::chrono::seconds(
+              sparkConf.keepalive_time_s_ref().value()),
+          // spark2_negotiate_hold_time_s
+          std::chrono::seconds(
+              sparkConf.keepalive_time_s_ref().value()),
+          // spark2_heartbeat_hold_time_s
+          std::chrono::seconds(
+              sparkConf.hold_time_s_ref().value()),
+          config->getConfig().ip_tos_ref().value_or(0),
+          false, //config->isV4Enabled(),
           std::move(sparkInterfaceUpdatesQueueReader),
-          std::move(sparkInitializationEventsQueueReader),
           neighborUpdatesQueue,
+          static_cast<uint16_t>(Constants::kKvStoreRepPort),
+          static_cast<uint16_t>(Constants::kOpenrCtrlPort),
+          std::make_pair(
+              Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
           std::make_shared<IoProvider>(),
-          config));
+          kvstoreConf.enable_flood_optimization_ref().value_or(false),
+          sparkConf.enable_spark2_ref().value_or(false)));
+
   watchdog->addQueue(neighborUpdatesQueue, "neighborUpdatesQueue");
 
   // Create link monitor instance.

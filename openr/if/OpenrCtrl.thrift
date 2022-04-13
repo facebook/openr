@@ -635,21 +635,6 @@ service OpenrCtrl extends KvStore.KvStoreService {
   binary getConfigKey(1: string key) throws (1: OpenrError error);
 
   //
-  // Spark APIs
-  //
-
-  /*
-   * Send out SparkHelloMsg with `restarting` flag
-   * indicating graceful restart usage
-   */
-  void floodRestartingMsg() throws (1: OpenrError error);
-
-  /*
-   * Get info for Spark neighors
-   */
-  list<Types.SparkNeighbor> getNeighbors() throws (1: OpenrError error);
-
-  //
   //  Monitor APIs (get log events)
   //
 

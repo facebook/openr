@@ -261,6 +261,8 @@ struct SparkConfig {
   6: i32 graceful_restart_time_s = 30;
 
   7: StepDetectorConfig step_detector_conf;
+
+  8: optional bool enable_spark2;
 }
 
 struct WatchdogConfig {

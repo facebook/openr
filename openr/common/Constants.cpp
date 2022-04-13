@@ -25,6 +25,8 @@ constexpr folly::StringPiece Constants::kPrefixNameSeparator;
 constexpr folly::StringPiece Constants::kSeedPrefixAllocLenSeparator;
 constexpr folly::StringPiece Constants::kSeedPrefixAllocParamKey;
 constexpr folly::StringPiece Constants::kSparkMcastAddr;
+constexpr folly::StringPiece Constants::kSparkReportClientId;
+constexpr folly::StringPiece Constants::kSparkReportServerId;
 constexpr folly::StringPiece Constants::kStaticPrefixAllocParamKey;
 constexpr folly::StringPiece Constants::kSuccessResponse;
 constexpr int Constants::kHighWaterMark;
@@ -86,6 +88,7 @@ constexpr std::chrono::seconds Constants::kStoreSyncInterval;
 constexpr std::chrono::seconds Constants::kThriftClientKeepAliveInterval;
 constexpr uint16_t Constants::kPerfBufferSize;
 constexpr uint32_t Constants::kMaxAllowedPps;
+constexpr std::pair<int32_t, int32_t> Constants::kSrLocalRange;
 constexpr uint64_t Constants::kOverloadNodeMetric;
 constexpr uint8_t Constants::kAqRouteProtoId;
 

@@ -34,3 +34,7 @@ DECLARE_string(tls_acceptable_peers);
 
 // file storing thrift::RibPolicy
 DECLARE_string(rib_policy_file);
+
+DECLARE_string(spark_report_url);
+DECLARE_string(spark_cmd_url);
+

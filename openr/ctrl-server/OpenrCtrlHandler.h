@@ -191,15 +191,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   semifuture_getMplsRoutes() override;
 
   //
-  // Spark APIs
-  //
-
-  folly::SemiFuture<folly::Unit> semifuture_floodRestartingMsg() override;
-
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
-  semifuture_getNeighbors() override;
-
-  //
   // Performance stats APIs
   //
 

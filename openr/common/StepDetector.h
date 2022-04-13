@@ -1,5 +1,5 @@
-/*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,8 +7,11 @@
 
 #pragma once
 
+#include <cmath>
+#include <functional>
+#include <stdexcept>
+
 #include <folly/stats/BucketedTimeSeries.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {
 
@@ -34,22 +37,29 @@ template <typename ValueType, typename TimeType>
 class StepDetector {
  public:
   StepDetector(
-      // step detector config from openr config
-      const thrift::StepDetectorConfig& stepConfig,
       // interval time series is sampled
       TimeType samplePeriod,
+      // fast sliding window size
+      size_t fastWndSize,
+      // slow sliding window size
+      size_t slowWndSize,
+      // relative lower threshold, in percentage
+      uint8_t loThreshold,
+      // relative upper threshold, in percertage
+      uint8_t hiThreshold,
+      // absolute step threshold
+      ValueType absThreshold,
       // callback when step is detected
       std::function<void(const ValueType&)> stepCb)
-      : fastWndSize_(*stepConfig.fast_window_size_ref()),
-        slowWndSize_(*stepConfig.slow_window_size_ref()),
-        loThreshold_(*stepConfig.lower_threshold_ref()),
-        hiThreshold_(*stepConfig.upper_threshold_ref()),
-        absThreshold_(*stepConfig.ads_threshold_ref()),
-        fastSlideWindow_(fastWndSize_, samplePeriod * fastWndSize_),
-        slowSlideWindow_(slowWndSize_, samplePeriod * slowWndSize_),
+      : slowWndSize_(slowWndSize),
+        fastSlideWindow_(fastWndSize, samplePeriod * fastWndSize),
+        slowSlideWindow_(slowWndSize, samplePeriod * slowWndSize),
+        loThreshold_(loThreshold),
+        hiThreshold_(hiThreshold),
+        absThreshold_(absThreshold),
         stepCb_(std::move(stepCb)) {
-    CHECK_LT(loThreshold_, hiThreshold_);
-    CHECK_LT(fastWndSize_, slowWndSize_);
+    CHECK_LT(loThreshold, hiThreshold);
+    CHECK_LT(fastWndSize, slowWndSize);
   }
 
   // add the value 'val' at time 'now' to both fast and slow sliding window
@@ -115,20 +125,8 @@ class StepDetector {
   StepDetector(StepDetector const&) = delete;
   StepDetector& operator=(StepDetector const&) = delete;
 
-  // fast sliding window size
-  const uint64_t fastWndSize_{0};
-
   // slow sliding window size
-  const uint64_t slowWndSize_{0};
-
-  // lower threshold, in percentage
-  const uint32_t loThreshold_{0};
-
-  // upper threshold, in percentage
-  const uint32_t hiThreshold_{0};
-
-  // absolute step threshold to detect gradual change
-  const ValueType absThreshold_{0};
+  size_t slowWndSize_{0};
 
   // fast sliding window
   folly::BucketedTimeSeries<ValueType, folly::LegacyStatsClock<TimeType>>
@@ -137,6 +135,15 @@ class StepDetector {
   // slow sliding window size
   folly::BucketedTimeSeries<ValueType, folly::LegacyStatsClock<TimeType>>
       slowSlideWindow_;
+
+  // lower threshold, in percentage
+  const uint8_t loThreshold_{0};
+
+  // upper threshold, in percentage
+  const uint8_t hiThreshold_{0};
+
+  // absolute step threshold to detect gradual change
+  const ValueType absThreshold_{0};
 
   // callback when step is detected
   const std::function<void(const ValueType&)> stepCb_{nullptr};

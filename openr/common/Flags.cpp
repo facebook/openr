@@ -63,3 +63,6 @@ DEFINE_string(
     rib_policy_file,
     "/dev/shm/rib_policy.txt",
     "File in which thrift::RibPolicy is stored across Open/R restarts");
+DEFINE_string(
+    spark_report_url, "inproc://spark_server_report", "Spark Report URL");
+DEFINE_string(spark_cmd_url, "inproc://spark_server_cmd", "Spark Cmd URL");

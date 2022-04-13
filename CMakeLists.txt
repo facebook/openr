@@ -284,7 +284,6 @@ add_library(openrlib SHARED
   openr/policy/PolicyManager.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
-  openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
   $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/mocks/MockNetlinkProtocolSocket.cpp>
   $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/mocks/PrefixGenerator.cpp>
@@ -689,14 +688,6 @@ if(BUILD_TESTS)
     SOURCES
       openr/prefix-manager/tests/PrefixManagerTest.cpp
     DESTINATION sbin/tests/openr/prefix-manager
-  )
-
-  add_openr_test(SparkTest spark_test
-    SOURCES
-      openr/spark/tests/SparkTest.cpp
-      openr/tests/mocks/MockIoProvider.cpp
-      openr/tests/mocks/MockIoProviderUtils.cpp
-    DESTINATION sbin/tests/openr/spark
   )
 
   add_openr_test(MockIoProviderTest mock_io_provider_test

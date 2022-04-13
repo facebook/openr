@@ -586,21 +586,6 @@ OpenrCtrlHandler::semifuture_getMplsRoutesFiltered(
 }
 
 //
-// Spark APIs
-//
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_floodRestartingMsg() {
-  CHECK(spark_);
-  return spark_->floodRestartingMsg();
-}
-
-folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
-OpenrCtrlHandler::semifuture_getNeighbors() {
-  CHECK(spark_);
-  return spark_->getNeighbors();
-}
-
-//
 // Performance stats APIs
 //
 folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>

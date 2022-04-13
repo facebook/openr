@@ -15,6 +15,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <wangle/ssl/SSLContextConfig.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 /**
  * Helper macro function to log execution time of function.
@@ -165,6 +166,9 @@ readThriftObjStr(const std::string& buf, Serializer& serializer) {
   serializer.deserialize(buf, obj);
   return obj;
 }
+
+bool matchRegexSet(
+    const std::string& name, std::shared_ptr<const re2::RE2::Set> regexSet);
 
 namespace memory {
 uint64_t getThreadBytesImpl(bool isAllocated);
