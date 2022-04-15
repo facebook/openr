@@ -558,7 +558,7 @@ Spark::prepareSocket() noexcept {
   }
 
   // Listen for incoming messages on multicast FD
-  addSocketFd(mcastFd_, ZMQ_POLLIN, [this](uint16_t) noexcept {
+  addSocketFd(mcastFd_, folly::EventHandler::READ, [this](uint16_t) noexcept {
     try {
       processPacket();
     } catch (std::exception const& err) {

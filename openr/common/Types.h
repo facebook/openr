@@ -19,9 +19,6 @@
 
 namespace openr {
 
-// TODO: remove KvStore URLs
-BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);
-
 BOOST_STRONG_TYPEDEF(std::string, AreaId);
 
 struct TtlCountdownQueueEntry {

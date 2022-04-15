@@ -511,9 +511,6 @@ class KvStoreDb {
   // timer to send pending kvstore publication
   std::unique_ptr<folly::AsyncTimeout> pendingPublicationTimer_{nullptr};
 
-  // timer for requesting full-sync
-  std::unique_ptr<folly::AsyncTimeout> requestSyncTimer_{nullptr};
-
   // timer to promote idle peers for initial syncing
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
 
