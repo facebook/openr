@@ -61,7 +61,7 @@ class PrefixManagerBenchmarkTestFixture {
     // Spawn `KvStore` and `PrefixManager`
     kvStoreWrapper_ =
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_, config_->getAreaIds(), config_->toThriftKvStoreConfig());
+            config_->getAreaIds(), config_->toThriftKvStoreConfig());
     kvStoreWrapper_->run();
 
     prefixManager_ = std::make_unique<PrefixManager>(
@@ -139,8 +139,6 @@ class PrefixManagerBenchmarkTestFixture {
       std::this_thread::yield();
     }
   }
-
-  fbzmq::Context context_;
 
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;

@@ -16,7 +16,6 @@ namespace fs = std::experimental::filesystem;
 #include <fstream>
 #include <stdexcept>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
@@ -213,9 +212,6 @@ main(int argc, char** argv) {
 
   SYSLOG(INFO) << config->getRunningConfig();
 
-  // Set up the zmq context for this process.
-  fbzmq::Context context;
-
   // Set main thread name
   folly::setThreadName("openr");
 
@@ -362,16 +358,11 @@ main(int argc, char** argv) {
       watchdog,
       "kvstore",
       std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
-          context,
           kvStoreUpdatesQueue,
           kvStoreEventsQueue,
           peerUpdatesQueue.getReader("kvStore"),
           kvRequestQueue.getReader("kvStore"),
           logSampleQueue,
-          KvStoreGlobalCmdUrl{fmt::format(
-              "tcp://{}:{}",
-              *config->getConfig().listen_addr_ref(),
-              Constants::kKvStoreRepPort)},
           config->getAreaIds(),
           config->toThriftKvStoreConfig()));
   watchdog->addQueue(kvStoreEventsQueue, "kvStoreEventsQueue");

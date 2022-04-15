@@ -566,19 +566,6 @@ class Areas(KvStoreCmdBase):
             print(f"Areas configured: {self.areas}")
 
 
-class FloodCmd(KvStoreCmdBase):
-    def _run(
-        self,
-        client: OpenrCtrl.Client,
-        roots: List[str],
-        *args,
-        **kwargs,
-    ) -> None:
-        for area in self.areas:
-            spt_infos = client.getSpanningTreeInfos(area)
-            utils.print_spt_infos(spt_infos, roots, area)
-
-
 class KvShowAdjNodeCmd(KvStoreCmdBase):
     def _run(
         self,

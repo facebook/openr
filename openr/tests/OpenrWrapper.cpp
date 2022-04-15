@@ -12,7 +12,6 @@ namespace openr {
 
 template <class Serializer>
 OpenrWrapper<Serializer>::OpenrWrapper(
-    fbzmq::Context& context,
     std::string nodeId,
     bool v4Enabled,
     std::chrono::milliseconds spark2HelloTime,
@@ -26,11 +25,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds linkFlapMaxBackoff,
     std::shared_ptr<IoProvider> ioProvider,
     uint32_t memLimit)
-    : context_(context),
-      nodeId_(nodeId),
-      ioProvider_(std::move(ioProvider)),
-      kvStoreGlobalCmdUrl_(
-          fmt::format("inproc://{}-kvstore-cmd-global", nodeId_)) {
+    : nodeId_(nodeId), ioProvider_(std::move(ioProvider)) {
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
@@ -102,13 +97,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // create and start kvstore thread
   kvStore_ = std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
-      context_,
       kvStoreUpdatesQueue_,
       kvStoreEventsQueue_,
       peerUpdatesQueue_.getReader(),
       kvRequestQueue_.getReader(),
       logSampleQueue_,
-      KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       config_->getAreaIds(),
       config_->toThriftKvStoreConfig());
   std::thread kvStoreThread([this]() noexcept {

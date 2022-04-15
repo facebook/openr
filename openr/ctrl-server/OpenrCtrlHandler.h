@@ -309,20 +309,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 
-  // [TO BE DEPRECATED]
-  folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
-      std::unique_ptr<thrift::DualMessages> messages,
-      std::unique_ptr<std::string> area) override;
-
-  // [TO BE DEPRECATED]
-  folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
-      std::unique_ptr<thrift::FloodTopoSetParams> params,
-      std::unique_ptr<std::string> area) override;
-
-  // [TO BE DEPRECATED]
-  folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
-  semifuture_getSpanningTreeInfos(std::unique_ptr<std::string> area) override;
-
   /*
    * API to dump existing peers in a specified area
    */

@@ -47,7 +47,6 @@ class PMToKvStoreBMTestFixture {
     // spawn `KvStore` and `PrefixManager` for benchmarking
     kvStoreWrapper_ =
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_,
             config_->getAreaIds(),
             config_->toThriftKvStoreConfig(),
             std::nullopt,
@@ -153,8 +152,6 @@ class PMToKvStoreBMTestFixture {
   }
 
  private:
-  fbzmq::Context context_;
-
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;

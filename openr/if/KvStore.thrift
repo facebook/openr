@@ -747,27 +747,6 @@ service KvStoreService extends fb303_core.BaseService {
   );
 
   /**
-   * Send Dual message
-   */
-  void processKvStoreDualMessage(
-    1: DualMessages messages,
-    2: string area,
-  ) throws (1: KvStoreError error);
-
-  /**
-   * Set flood-topology parameters. Called by neighbors
-   */
-  void updateFloodTopologyChild(
-    1: FloodTopoSetParams params,
-    2: string area,
-  ) throws (1: KvStoreError error);
-
-  /**
-   * Get spanning tree information
-   */
-  SptInfos getSpanningTreeInfos(1: string area) throws (1: KvStoreError error);
-
-  /**
    * Get KvStore peers
    */
   PeersMap getKvStorePeers() throws (1: KvStoreError error);

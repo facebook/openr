@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 
@@ -54,7 +53,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
     // start kvstore
     stores_.emplace_back(
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_, areaIds, kvStoreConfig));
+            areaIds, kvStoreConfig));
     stores_.back()->run();
   }
 
@@ -252,9 +251,6 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
       }
     } // for `i < kNumIter`
   }
-
-  // Public member variables
-  fbzmq::Context context_;
 
   // Internal stores
   std::vector<

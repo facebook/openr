@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
-#include <folly/ScopeGuard.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/ScopedEventBaseThread.h>
 #include <gtest/gtest.h>
@@ -31,7 +29,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 
       return std::make_shared<
           KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-          context_, areaIds, kvStoreConfig);
+          areaIds, kvStoreConfig);
     };
 
     // spin up kvStore through kvStoreWrapper
@@ -56,7 +54,6 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   const std::string nodeId1_{"test_1"};
   const std::string nodeId2_{"test_2"};
 
-  fbzmq::Context context_{};
   std::shared_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
       kvStoreWrapper1_, kvStoreWrapper2_;
 };

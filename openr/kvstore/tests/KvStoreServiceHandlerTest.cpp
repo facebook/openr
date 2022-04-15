@@ -28,7 +28,7 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
     // Spawn kvStore instance with wrapper
     kvStoreWrapper_ =
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_, areaIds, kvStoreConfig);
+            areaIds, kvStoreConfig);
     kvStoreWrapper_->run();
 
     handler_ = std::make_unique<
@@ -43,9 +43,6 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
   }
 
  protected:
-  // [TO BE DEPRECATED]
-  fbzmq::Context context_{};
-
   const std::string nodeName_{"node"};
   std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
       kvStoreWrapper_;

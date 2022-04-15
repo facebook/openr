@@ -97,7 +97,6 @@ class PrefixManagerTestFixture : public testing::Test {
     // spin up a kvstore
     kvStoreWrapper =
         std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-            context, /* zmq context */
             config->getAreaIds(), /* areaId collection */
             config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
             std::nullopt, /* peerUpdatesQueue */
@@ -236,7 +235,6 @@ class PrefixManagerTestFixture : public testing::Test {
   // NodeId to initialize
   const std::string nodeId_{"node-1"};
 
-  fbzmq::Context context;
   OpenrEventBase evb;
   std::thread evbThread;
 

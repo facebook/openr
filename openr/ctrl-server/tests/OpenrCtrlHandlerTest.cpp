@@ -67,7 +67,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create KvStore module
     kvStoreWrapper_ =
         std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-            context_,
             config->getAreaIds(),
             config->toThriftKvStoreConfig(),
             std::nullopt,
@@ -217,7 +216,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
 
-  fbzmq::Context context_{};
   folly::EventBase evb_;
   OpenrEventBase ctrlEvb_;
 
@@ -612,48 +610,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(9, areaKVCountMap[kSpineAreaId]);
     EXPECT_EQ(2, areaKVCountMap[kPodAreaId]);
     EXPECT_EQ(2, areaKVCountMap[kPlaneAreaId]);
-  }
-
-  //
-  // Dual and Flooding APIs
-  //
-  {
-    handler_
-        ->semifuture_processKvStoreDualMessage(
-            std::make_unique<thrift::DualMessages>(),
-            std::make_unique<std::string>(kSpineAreaId))
-        .get();
-  }
-
-  {
-    thrift::FloodTopoSetParams params;
-    params.rootId_ref() = nodeName_;
-    handler_
-        ->semifuture_updateFloodTopologyChild(
-            std::make_unique<thrift::FloodTopoSetParams>(std::move(params)),
-            std::make_unique<std::string>(kSpineAreaId))
-        .get();
-  }
-
-  {
-    auto ret = handler_
-                   ->semifuture_getSpanningTreeInfos(
-                       std::make_unique<std::string>(kSpineAreaId))
-                   .get();
-    auto sptInfos = *ret->infos_ref();
-    auto counters = *ret->counters_ref();
-    EXPECT_EQ(1, sptInfos.size());
-    ASSERT_NE(sptInfos.end(), sptInfos.find(nodeName_));
-    EXPECT_EQ(0, counters.neighborCounters_ref()->size());
-    EXPECT_EQ(1, counters.rootCounters_ref()->size());
-    EXPECT_EQ(nodeName_, *(ret->floodRootId_ref()));
-    EXPECT_EQ(0, ret->floodPeers_ref()->size());
-
-    thrift::SptInfo sptInfo = sptInfos.at(nodeName_);
-    EXPECT_EQ(0, *sptInfo.cost_ref());
-    ASSERT_TRUE(sptInfo.parent_ref().has_value());
-    EXPECT_EQ(nodeName_, sptInfo.parent_ref().value());
-    EXPECT_EQ(0, sptInfo.children_ref()->size());
   }
 
   //

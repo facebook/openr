@@ -19,7 +19,6 @@ from openr.utils.consts import Consts
 class KvStoreCli(object):
     def __init__(self):
         self.kvstore.add_command(PrefixesCli().prefixes)
-        self.kvstore.add_command(FloodCli().flood)
         self.kvstore.add_command(NodesCli().nodes)
         self.kvstore.add_command(KeysCli().keys)
         self.kvstore.add_command(KeyValsCli().keyvals)
@@ -117,25 +116,6 @@ class AreasCli(object):
     def areas(cli_opts: Bunch, json) -> None:  # noqa: B902
         """get list of 'areas' configured"""
         kvstore.Areas(cli_opts).run(json)
-
-
-class FloodCli(object):
-    @click.command()
-    @click.option(
-        "--roots",
-        default=None,
-        help="Get flooding topology information for given comma separated "
-        "root-id(s), get information for all roots if no root specified",
-    )
-    @click.pass_obj
-    def flood(cli_opts: Bunch, roots: str) -> None:  # noqa: B902
-        """dump the flooding-topology information"""
-
-        if roots is not None:
-            roots_split = roots.split(",")
-        else:
-            roots_split = []
-        kvstore.FloodCmd(cli_opts).run(roots_split)
 
 
 class KvCompareCli(object):

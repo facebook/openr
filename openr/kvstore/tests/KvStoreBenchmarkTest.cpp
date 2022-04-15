@@ -86,7 +86,6 @@ class KvStoreBenchmarkTestFixture {
     // start kvstore
     kvStoreWrapper_ =
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_,
             areaIds,
             kvStoreConfig,
             std::nullopt /* peerUpdatesQueue */,
@@ -165,9 +164,6 @@ class KvStoreBenchmarkTestFixture {
       std::this_thread::yield();
     }
   }
-
-  // Public member variables
-  fbzmq::Context context_;
 
   // Internal stores
   std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>

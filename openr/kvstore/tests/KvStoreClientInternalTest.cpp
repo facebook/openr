@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/init/Init.h>
 #include <gmock/gmock.h>
@@ -84,7 +83,7 @@ class MultipleStoreFixture : public ::testing::Test {
       const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
       return std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-          context, areaIds, kvStoreConfig);
+          areaIds, kvStoreConfig);
     };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -123,7 +122,6 @@ class MultipleStoreFixture : public ::testing::Test {
   OpenrEventBase evb;
   std::thread evbThread;
   apache::thrift::CompactSerializer serializer;
-  fbzmq::Context context;
 
   std::shared_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>> store1,
       store2, store3;
@@ -187,7 +185,7 @@ class MultipleAreaFixture : public MultipleStoreFixture {
       thrift::KvStoreConfig kvStoreConfig;
       kvStoreConfig.node_name_ref() = nodeId;
       return std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-          context, areas, kvStoreConfig);
+          areas, kvStoreConfig);
     };
 
     // spin up KvStore instances through KvStoreWrapper
@@ -414,7 +412,6 @@ TEST_F(
  * KvStore. Further key-2 from client-2 should win over key from client-1
  */
 TEST(KvStoreClientInternal, ApiTest) {
-  fbzmq::Context context;
   const std::string nodeId{"test_store"};
 
   // Initialize and start KvStore with one fake peer
@@ -423,7 +420,7 @@ TEST(KvStoreClientInternal, ApiTest) {
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
       std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-          context, areaIds, kvStoreConfig);
+          areaIds, kvStoreConfig);
   store->run();
 
   // Define and start evb for KvStoreClientInternal usage.
@@ -639,7 +636,6 @@ TEST(KvStoreClientInternal, ApiTest) {
  *  2) SubscribeKeyFiler is for general regex matching callback subscribing API;
  */
 TEST(KvStoreClientInternal, SubscribeApiTest) {
-  fbzmq::Context context;
   folly::Baton waitBaton;
   const std::string nodeId{"test_store"};
 
@@ -649,7 +645,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
       std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-          context, areaIds, kvStoreConfig);
+          areaIds, kvStoreConfig);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients
@@ -784,7 +780,6 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
 }
 
 TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
-  fbzmq::Context context;
   folly::Baton waitBaton;
   const std::string nodeId{"test_store"};
 
@@ -794,7 +789,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
       std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-          context, areaIds, kvStoreConfig);
+          areaIds, kvStoreConfig);
   store->run();
 
   // Create another OpenrEventBase instance for looping clients

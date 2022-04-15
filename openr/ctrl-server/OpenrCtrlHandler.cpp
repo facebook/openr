@@ -821,31 +821,6 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
   return sf;
 }
 
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_processKvStoreDualMessage(
-    std::unique_ptr<thrift::DualMessages> messages,
-    std::unique_ptr<std::string> area) {
-  CHECK(kvStore_);
-  return kvStore_->semifuture_processKvStoreDualMessage(
-      std::move(*area), std::move(*messages));
-}
-
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_updateFloodTopologyChild(
-    std::unique_ptr<thrift::FloodTopoSetParams> params,
-    std::unique_ptr<std::string> area) {
-  CHECK(kvStore_);
-  return kvStore_->semifuture_updateFloodTopologyChild(
-      std::move(*area), std::move(*params));
-}
-
-folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
-OpenrCtrlHandler::semifuture_getSpanningTreeInfos(
-    std::unique_ptr<std::string> area) {
-  CHECK(kvStore_);
-  return kvStore_->semifuture_getSpanningTreeInfos(std::move(*area));
-}
-
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeers() {
   return semifuture_getKvStorePeersArea(

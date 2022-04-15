@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 
@@ -57,7 +56,6 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
     // start kvstore
     kvStore_ =
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_,
             areaIds,
             kvStoreConfig,
             std::nullopt /* peerUpdatesQueue */,
@@ -66,7 +64,6 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
   }
 
  protected:
-  fbzmq::Context context_{};
   std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>> kvStore_;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 };

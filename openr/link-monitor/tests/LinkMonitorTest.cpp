@@ -14,7 +14,6 @@
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
@@ -394,7 +393,6 @@ class LinkMonitorTestFixture : public testing::Test {
   createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper =
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context, /* zmq context */
             config->getAreaIds(), /* areaId collection */
             config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
             peerUpdatesQueue.getReader(), /* peerUpdatesQueue */
@@ -640,7 +638,6 @@ class LinkMonitorTestFixture : public testing::Test {
     linkMonitor.reset();
   }
 
-  fbzmq::Context context{};
   folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock{nullptr};
 

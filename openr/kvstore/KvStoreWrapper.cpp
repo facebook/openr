@@ -14,18 +14,15 @@ namespace openr {
 
 template <class ClientType>
 KvStoreWrapper<ClientType>::KvStoreWrapper(
-    fbzmq::Context& zmqContext,
     const std::unordered_set<std::string>& areaIds,
     const thrift::KvStoreConfig& kvStoreConfig,
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
     : nodeId_(*kvStoreConfig.node_name_ref()),
-      globalCmdUrl_(fmt::format("inproc://{}-kvstore-global-cmd", nodeId_)),
       areaIds_(areaIds),
       kvStoreConfig_(kvStoreConfig) {
   // create kvStore instance
   kvStore_ = std::make_unique<KvStore<ClientType>>(
-      zmqContext,
       kvStoreUpdatesQueue_,
       kvStoreSyncEventsQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
@@ -33,7 +30,6 @@ KvStoreWrapper<ClientType>::KvStoreWrapper(
       kvRequestQueue.has_value() ? kvRequestQueue.value()
                                  : dummyKvRequestQueue_.getReader(),
       logSampleQueue_,
-      KvStoreGlobalCmdUrl{globalCmdUrl_},
       areaIds_,
       kvStoreConfig_);
 
@@ -273,13 +269,6 @@ KvStoreWrapper<ClientType>::recvKvStoreSyncedSignal() {
     }
   }
   throw std::runtime_error(std::string("timeout receiving publication"));
-}
-
-template <class ClientType>
-thrift::SptInfos
-KvStoreWrapper<ClientType>::getFloodTopo(AreaId const& area) {
-  auto sptInfos = *(kvStore_->semifuture_getSpanningTreeInfos(area).get());
-  return sptInfos;
 }
 
 template <class ClientType>

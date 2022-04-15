@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/TokenBucket.h>
 #include <folly/gen/Base.h>
 #include <folly/io/async/AsyncTimeout.h>
@@ -20,7 +19,6 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/kvstore/Dual.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
@@ -80,13 +78,6 @@ struct KvStoreParams {
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue;
 
-  // [TO BE DEPRECATED]
-  // socket for remote & local commands
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock;
-
-  // [TO BE DEPRECATED]
-  // ZMQ high water
-  int zmqHwm;
   // IP ToS
   std::optional<int> maybeIpTos;
   // KvStore key filters
@@ -98,43 +89,26 @@ struct KvStoreParams {
   // TTL for self-originated keys
   std::chrono::milliseconds keyTtl{0};
 
-  // [TO BE DEPRECATED]
-  // DUAL related config knob
-  bool enableFloodOptimization{false};
-  bool isFloodRoot{false};
-  bool enableThriftDualMsg{false};
-
   KvStoreParams(
       std::string nodeId,
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
-      int zmqhwm,
       std::optional<KvStoreFilters> filter,
       // Kvstore flooding rate
       std::optional<thrift::KvStoreFloodRate> floodrate,
       // TTL decrement factor
       std::chrono::milliseconds ttldecr,
       // TTL for self-originated keys
-      std::chrono::milliseconds keyTtl,
-      // DUAL related config knob
-      bool enableFloodOptimization,
-      bool isFloodRoot,
-      bool enableThriftDualMsg)
+      std::chrono::milliseconds keyTtl)
       : nodeId(nodeId),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         kvStoreEventsQueue(kvStoreEventsQueue),
         logSampleQueue(logSampleQueue),
-        globalCmdSock(std::move(globalCmdSock)),
-        zmqHwm(zmqhwm),
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
-        keyTtl(keyTtl),
-        enableFloodOptimization(enableFloodOptimization),
-        isFloodRoot(isFloodRoot),
-        enableThriftDualMsg(enableThriftDualMsg) {}
+        keyTtl(keyTtl) {}
 };
 
 /*
@@ -145,18 +119,16 @@ struct KvStoreParams {
  * is passed via KvStoreParams from constructor.
  */
 template <class ClientType>
-class KvStoreDb : public DualNode {
+class KvStoreDb {
  public:
   KvStoreDb(
       OpenrEventBase* evb,
       KvStoreParams& kvParams,
       const std::string& area,
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
-      bool isFloodRoot,
       const std::string& nodeId,
       std::function<void()> initialKvStoreSyncedCallback);
 
-  ~KvStoreDb() override = default;
+  ~KvStoreDb() = default;
 
   // shutdown fiber/timer/etc.
   void stop();
@@ -196,10 +168,6 @@ class KvStoreDb : public DualNode {
     return ttlCountdownQueue_;
   }
 
-  // [TO BE DEPRECATED]
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
-      const std::string& requestId, thrift::KvStoreRequest& thriftReq);
-
   // Extracts the counters
   std::map<std::string, int64_t> getCounters() const;
 
@@ -226,31 +194,14 @@ class KvStoreDb : public DualNode {
    * KvStoreDb keeps synchronizing with peers via TCP session through thrift
    * client connection. It provides multiple util functions to interact with
    * peers including:
-   *    1) addPeers(ZMQ) + addThriftPeers(Thrift)
-   *    2) delPeers(ZMQ) + delThriftPeers(Thrift)
-   *    3) dumpPeers(ZMQ + Thrift)
+   *    1) addThriftPeers(Thrift)
+   *    2) delThriftPeers(Thrift)
+   *    3) dumpPeers(Thrift)
    */
-  void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
-  void delPeers(std::vector<std::string> const& peers);
-
-  thrift::PeersMap dumpPeers();
-
   void addThriftPeers(
       std::unordered_map<std::string, thrift::PeerSpec> const& peers);
   void delThriftPeers(std::vector<std::string> const& peers);
-
-  /*
-   * [Dual]
-   *
-   * util function to interact with upper dual library for flood topo
-   */
-
-  // process spanning-tree-set command to set/unset a child for a given root
-  void processFloodTopoSet(
-      const thrift::FloodTopoSetParams& setParams) noexcept;
-
-  // get current snapshot of SPT(s) information
-  thrift::SptInfos processFloodTopoGet() noexcept;
+  thrift::PeersMap dumpPeers();
 
   /*
    * [KvStore Peer State]
@@ -368,23 +319,16 @@ class KvStoreDb : public DualNode {
    *
    * @param: publication => data element to flood
    * @param: rateLimit => if 'false', publication will not be rate limited
-   * @param: setFloodRoot => if 'false', floodRootId will not be set
    */
   void floodPublication(
-      thrift::Publication&& publication,
-      bool rateLimit = true,
-      bool setFloodRoot = true);
+      thrift::Publication&& publication, bool rateLimit = true);
 
   /*
    * [Incremental flooding]
    *
    * util method to get flooding peers for a given spt-root-id.
-   * @param: rootId =>
-   *    std::nullopt: flood to all physical peers
-   *    not std::nullopt: only flood to formed SPT-peers for rootId
    */
-  std::unordered_set<std::string> getFloodPeers(
-      const std::optional<std::string>& rootId);
+  std::unordered_set<std::string> getFloodPeers();
 
   /*
    * [Incremental flooding]
@@ -394,66 +338,6 @@ class KvStoreDb : public DualNode {
    */
   void bufferPublication(thrift::Publication&& publication);
   void floodBufferedUpdates();
-
-  /*
-   * [Dual]
-   *
-   * Dual is the flood optimization mechanism KvStoreDb leverages to
-   * form SPTs to optimize flooding toplogy.
-   *
-   * ATTN: this is an overriding method for DUAL I/O usage to send
-   * DUAL-specific messages.
-   */
-  bool sendDualMessages(
-      const std::string& neighbor,
-      const thrift::DualMessages& msgs) noexcept override;
-
-  /*
-   * [Dual]
-   *
-   * Dual is the flood optimization mechanism KvStoreDb leverages to
-   * form SPTs to optimize flooding toplogy.
-   *
-   * ATTN: this is an overriding method for DUAL I/O usage.
-   * It serves as the callbacks when nexthop changed for a given root-id.
-   */
-  void processNexthopChange(
-      const std::string& rootId,
-      const std::optional<std::string>& oldNh,
-      const std::optional<std::string>& newNh) noexcept override;
-
-  /*
-   * [Dual]
-   *
-   * KvStoreDb util method to send topology-set command to peer.
-   * Peer will set/unset me as child
-   *
-   * @param: rootId => action will applied on given rootId
-   * @param: peerName => peer name
-   * @param: setChild => true if set, false if unset
-   * @param: allRoots => if set to true, rootId will be ignored,
-   *                     action will be applied to all roots.
-   *                     (currently used for initial unsetChildAll() cmd)
-   */
-  void sendTopoSetCmd(
-      const std::string& rootId,
-      const std::string& peerName,
-      bool setChild,
-      bool allRoots) noexcept;
-
-  /*
-   * [Dual]
-   *
-   * util methods called from sendTopoSetCmd():
-   *    1) set child on given rootId
-   *    2) unset child on given rootId
-   *    3) unset child on all rootIds
-   */
-  void setChild(
-      const std::string& rootId, const std::string& peerName) noexcept;
-  void unsetChild(
-      const std::string& rootId, const std::string& peerName) noexcept;
-  void unsetChildAll(const std::string& peerName) noexcept;
 
   /*
    * [Ttl Management]
@@ -469,23 +353,6 @@ class KvStoreDb : public DualNode {
    * periodically count down and purge expired keys from CountdownQueue
    */
   void cleanupTtlCountdownQueue();
-
-  // [TO BE DEPRECATED]
-  // collect router-client send failure statistics in following form
-  // "kvstore.send_failure.dst-peer-id.error-code"
-  // error: fbzmq-Error
-  // dstSockId: destination socket identity
-  void collectSendFailureStats(
-      const fbzmq::Error& error, const std::string& dstSockId);
-
-  // [TO BE DEPRECATED]
-  // this will poll the sockets listening to the requests
-  void attachCallbacks();
-
-  // [TO BE DEPRECATED]
-  // Send message via socket
-  folly::Expected<size_t, fbzmq::Error> sendMessageToPeer(
-      const std::string& peerSocketId, const thrift::KvStoreRequest& request);
 
   /*
    * [Logging]
@@ -576,10 +443,6 @@ class KvStoreDb : public DualNode {
   // area id tag for logging purpose
   const std::string areaTag_;
 
-  // [TO BE DEPRECATED]
-  // zmq ROUTER socket for requesting full dumps from peers
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
-
   // KvStore peer struct to convey peer information
   struct KvStorePeer {
     KvStorePeer(
@@ -628,19 +491,6 @@ class KvStoreDb : public DualNode {
 
   // Set of peers with all info over thrift channel
   std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
-
-  // [TO BE DEPRECATED]
-  // The peers we will be talking to: both PUB and CMD URLs for each. We use
-  // peerAddCounter_ to uniquely identify a peering session's socket-id.
-  uint64_t peerAddCounter_{0};
-  std::unordered_map<
-      std::string /* node-name */,
-      std::pair<thrift::PeerSpec, std::string /* socket-id */>>
-      peers_;
-
-  // [TO BE DEPRECATED]
-  // the serializer/deserializer helper we'll be using
-  apache::thrift::CompactSerializer serializer_;
 
   // Boolean flag indicating whether initial KvStoreDb sync with all peers
   // completed in OpenR initialization procedure.
@@ -723,8 +573,8 @@ class KvStoreDb : public DualNode {
 };
 
 /*
- * The class represents a server on which the requests are listened via thrift
- * or ZMQ channel. The configuration is passed via constructor arguments.
+ * The class represents a server on which the requests are listened via
+ * thrift channel. The configuration is passed via constructor arguments.
  * This class instantiates individual KvStoreDb per area. Area config is
  * passed in the constructor.
  */
@@ -732,8 +582,6 @@ template <class ClientType>
 class KvStore final : public OpenrEventBase {
  public:
   KvStore(
-      // the zmq context to use for IO
-      fbzmq::Context& zmqContext,
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
       // [TO BE DEPRECATED] Queue for publishing kvstore initial sync events
@@ -744,8 +592,6 @@ class KvStore final : public OpenrEventBase {
       messaging::RQueue<KeyValueRequest> kvRequestQueue,
       // Queue for publishing the event log
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      // [TO BE DEPRECATED] the url to receive command from peer instances
-      KvStoreGlobalCmdUrl globalCmdUrl,
       // areaId collection
       const std::unordered_set<std::string>& areaIds,
       // KvStoreConfig to drive the instance
@@ -807,21 +653,6 @@ class KvStore final : public OpenrEventBase {
   /*
    * [Public APIs]
    *
-   * Set of APIs to interact with DUAL(flooding-optimization) related
-   * structure.
-   */
-  folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
-  semifuture_getSpanningTreeInfos(std::string area);
-
-  folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
-      std::string area, thrift::FloodTopoSetParams floodTopoSetParams);
-
-  folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
-      std::string area, thrift::DualMessages dualMessages);
-
-  /*
-   * [Public APIs]
-   *
    * Set of APIs to retrieve internal state including:
    * state/counter/reader/etc.
    */
@@ -847,21 +678,6 @@ class KvStore final : public OpenrEventBase {
   /*
    * Private methods
    */
-
-  // [TO BE DEPRECATED]
-  void prepareSocket(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
-      std::string const& url,
-      std::optional<int> maybeIpTos = std::nullopt);
-
-  // [TO BE DEPRECATED]
-  void processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept;
-
-  // [TO BE DEPRECATED]
-  // This function wraps `processRequestMsgHelper` and updates send/received
-  // bytes counters.
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      const std::string& requestId, fbzmq::Message&& msg);
 
   // util function to process peer updates
   void processPeerUpdates(PeerEvent&& event);
@@ -905,9 +721,6 @@ class KvStore final : public OpenrEventBase {
   // map of area IDs and instance of KvStoreDb
   std::unordered_map<std::string /* area ID */, KvStoreDb<ClientType>>
       kvStoreDb_{};
-
-  // the serializer/deserializer helper we'll be using
-  apache::thrift::CompactSerializer serializer_;
 
   // Boolean flag to indicate if kvStoreSynced signal is published in OpenR
   // initialization process.

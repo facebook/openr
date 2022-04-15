@@ -27,7 +27,7 @@ class LongPollFixture : public ::testing::Test {
     // Create KvStore module
     kvStoreWrapper_ =
         std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-            context_, areaIds, kvStoreConfig);
+            areaIds, kvStoreConfig);
     kvStoreWrapper_->run();
 
     // initialize OpenrCtrlHandler for testing usage
@@ -65,8 +65,6 @@ class LongPollFixture : public ::testing::Test {
   }
 
  private:
-  // [TO BE DEPRECATED]
-  fbzmq::Context context_;
   OpenrEventBase ctrlEvb_;
   std::thread ctrlEvbThread_;
 

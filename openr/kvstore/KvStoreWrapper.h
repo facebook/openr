@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <fbzmq/zmq/Zmq.h>
-
 #include <openr/common/LsdbUtil.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -32,8 +30,6 @@ template <class ClientType>
 class KvStoreWrapper {
  public:
   KvStoreWrapper(
-      // [TO_BE_DEPRECATED]
-      fbzmq::Context& zmqContext,
       // areaId collection
       const std::unordered_set<std::string>& areaIds,
       // KvStoreConfig to drive the instance
@@ -168,11 +164,6 @@ class KvStoreWrapper {
    */
   void recvKvStoreSyncedSignal();
 
-  /*
-   * Get flooding topology information
-   */
-  thrift::SptInfos getFloodTopo(AreaId const& area);
-
   /**
    * APIs to manage (add/remove) KvStore peers. Returns true on success else
    * returns false.
@@ -202,7 +193,7 @@ class KvStoreWrapper {
   thrift::PeerSpec
   getPeerSpec(thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE) {
     return createPeerSpec(
-        globalCmdUrl_, /* cmdUrl for ZMQ */
+        "", /* dummy ZMQ url - TO BE DEPRECATED */
         Constants::kPlatformHost.toString(), /* peerAddr for thrift */
         getThriftPort(),
         state,
@@ -241,9 +232,6 @@ class KvStoreWrapper {
 
  private:
   const std::string nodeId_;
-
-  // Global URLs could be created outside of kvstore, mainly for testing
-  const std::string globalCmdUrl_;
 
   // AreaId collection to indicate # of KvStoreDb spawn for different areas
   const std::unordered_set<std::string> areaIds_;

@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -51,7 +50,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
 
     stores_.emplace_back(
         std::make_shared<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_, areaIds, kvStoreConfig));
+            areaIds, kvStoreConfig));
     stores_.back()->run();
   }
 
@@ -113,9 +112,6 @@ class KvStoreThriftTestFixture : public ::testing::Test {
     }
     return false;
   }
-
-  // zmqContext
-  fbzmq::Context context_;
 
   // initialize maximum waiting time to check key-val:
   const std::chrono::milliseconds waitTime_{1000};

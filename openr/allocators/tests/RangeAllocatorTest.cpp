@@ -60,9 +60,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
           getBasicOpenrConfig(fmt::format("store{}", i + 1)));
       auto store =
           std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-              zmqContext,
-              config->getAreaIds(),
-              config->toThriftKvStoreConfig());
+              config->getAreaIds(), config->toThriftKvStoreConfig());
       stores.emplace_back(std::move(store));
       configs.emplace_back(std::move(config));
       stores.back()->run();
@@ -151,9 +149,6 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     return std::move(allocators);
   }
-
-  // ZMQ Context for IO processing
-  fbzmq::Context zmqContext;
 
   // Linear topology of stores. i <--> i+1 <--> i+2 ......
   std::vector<std::unique_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>>

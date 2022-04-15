@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 
@@ -69,14 +68,11 @@ class KvStoreTestFixture {
 
     stores_.emplace_back(
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            context_, areaIds, kvStoreConfig));
+            areaIds, kvStoreConfig));
     return stores_.back().get();
   }
 
  private:
-  // Public member variables
-  fbzmq::Context context_;
-
   // Internal stores
   std::vector<
       std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>

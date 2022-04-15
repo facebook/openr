@@ -131,31 +131,6 @@ folly::SemiFuture<folly::Unit> semifuture_deleteKvStorePeers(
   std::string area, std::vector<std::string> peersToDel);
 
 /*
- * @params: area => area to dump flood topology
- * @return: thrift::SptInfos => Spanning Tree Infos for given area
- */
-folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
-  semifuture_getSpanningTreeInfos(std::string area);
-
-/*
- * @params: area => area to update flood topology process
- *          thrift::FloodTopoSetParams => params to set/unset a child for a
- *                                        given root
- * @return: folly::Unit
- */
-folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
-  std::string area, thrift::FloodTopoSetParams floodTopoSetParams);
-
-/*
- * @params: area => area to send dual messages to
- *          thrift::DualMessages => Dual messages for DualNode (KvStoreDb) to
- *                                  process
- * @return: folly::Unit
- */
-folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
-  std::string area, thrift::DualMessages dualMessages);
-
-/*
  * @params: selectAreas => set of areas to retrieve area summary
  * @return: thrift::KvStoreAreaSummary => counters, key-vals, peers, etc.
  */
