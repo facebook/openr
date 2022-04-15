@@ -364,7 +364,6 @@ Spark::Spark(
                   neighbor.localIfName,
                   neighbor.remoteIfName,
                   neighbor.area,
-                  neighbor.kvStoreCmdPort,
                   neighbor.openrCtrlThriftPort,
                   neighbor.rtt.count(),
                   neighbor.enableFloodOptimization,
@@ -912,7 +911,6 @@ Spark::sendHandshakeMsg(
   handshakeMsg.transportAddressV6_ref() = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort_ref() = kOpenrCtrlThriftPort_;
-  handshakeMsg.kvStoreCmdPort_ref() = Constants::kKvStoreRepPort;
   // ATTN: send neighborAreaId deduced locally
   handshakeMsg.area_ref() = neighborAreaId;
   handshakeMsg.neighborNodeName_ref() = neighborName;
@@ -1218,7 +1216,6 @@ Spark::notifySparkNeighborEvent(
       neighbor.localIfName,
       neighbor.remoteIfName,
       neighbor.area,
-      neighbor.kvStoreCmdPort,
       neighbor.openrCtrlThriftPort,
       neighbor.rtt.count(),
       neighbor.enableFloodOptimization,
@@ -1657,7 +1654,6 @@ Spark::processHandshakeMsg(
   }
 
   // update Spark neighborState
-  neighbor.kvStoreCmdPort = *handshakeMsg.kvStoreCmdPort_ref();
   neighbor.openrCtrlThriftPort = *handshakeMsg.openrCtrlThriftPort_ref();
   neighbor.transportAddressV4 = *handshakeMsg.transportAddressV4_ref();
   neighbor.transportAddressV6 = *handshakeMsg.transportAddressV6_ref();
@@ -1731,9 +1727,8 @@ Spark::processHandshakeMsg(
   // state transition
   XLOG(DBG1) << fmt::format(
       "[SparkHandshakeMsg] Successfully negotiated with peer: {} with "
-      "kvStoreCmdPort: {}, TCP port: {}, support-flood-optimization: {}",
+      "TCP port: {}, support-flood-optimization: {}",
       neighborName,
-      neighbor.kvStoreCmdPort,
       neighbor.openrCtrlThriftPort,
       neighbor.enableFloodOptimization);
 

@@ -414,13 +414,11 @@ getPrefixForwardingTypeAndAlgorithm(
 
 thrift::PeerSpec
 createPeerSpec(
-    const std::string& cmdUrl,
     const std::string& peerAddr,
     const int32_t port,
     const thrift::KvStorePeerState state,
     const bool supportFloodOptimization) {
   thrift::PeerSpec peerSpec;
-  peerSpec.cmdUrl_ref() = cmdUrl;
   peerSpec.peerAddr_ref() = peerAddr;
   peerSpec.ctrlPort_ref() = port;
   peerSpec.state_ref() = state;

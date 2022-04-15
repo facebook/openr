@@ -49,23 +49,14 @@ const auto if_2_2 = "iface_2_2";
 const auto if_3_1 = "iface_3_1";
 const auto if_3_2 = "iface_3_2";
 
-const auto peerSpec_2_1 = createPeerSpec(
-    fmt::format(
-        "tcp://[{}%{}]:{}", nb2_v6_addr, if_2_1, Constants::kKvStoreRepPort),
-    fmt::format("{}%{}", nb2_v6_addr, if_2_1),
-    1);
+const auto peerSpec_2_1 =
+    createPeerSpec(fmt::format("{}%{}", nb2_v6_addr, if_2_1), 1);
 
-const auto peerSpec_2_2 = createPeerSpec(
-    fmt::format(
-        "tcp://[{}%{}]:{}", nb2_v6_addr, if_2_2, Constants::kKvStoreRepPort),
-    fmt::format("{}%{}", nb2_v6_addr, if_2_2),
-    1);
+const auto peerSpec_2_2 =
+    createPeerSpec(fmt::format("{}%{}", nb2_v6_addr, if_2_2), 1);
 
-const auto peerSpec_3_1 = createPeerSpec(
-    fmt::format(
-        "tcp://[{}%{}]:{}", nb3_v6_addr, if_3_1, Constants::kKvStoreRepPort),
-    fmt::format("{}%{}", nb3_v6_addr, if_3_1),
-    2);
+const auto peerSpec_3_1 =
+    createPeerSpec(fmt::format("{}%{}", nb3_v6_addr, if_3_1), 2);
 
 const auto nb2_up_event = NeighborEvent(
     NeighborEventType::NEIGHBOR_UP,
@@ -75,7 +66,6 @@ const auto nb2_up_event = NeighborEvent(
     if_2_1, /* local interface name */
     "", /* remote interface name */
     kTestingAreaName, /* area */
-    Constants::kKvStoreRepPort, /* ZMQ kvstore port */
     1, /* openrCtrlThriftPort */
     100 /* rtt */);
 
@@ -87,7 +77,6 @@ const auto nb2_down_event = NeighborEvent(
     if_2_1, /* local interface name */
     "", /* remote interface name */
     kTestingAreaName, /* area */
-    Constants::kKvStoreRepPort, /* ZMQ kvstore port */
     1, /* openrCtrlThriftPort */
     100 /* rtt */);
 
@@ -99,7 +88,6 @@ const auto nb3_up_event = NeighborEvent(
     if_3_1, /* local interface name */
     "", /* remote interface name */
     kTestingAreaName, /* area */
-    Constants::kKvStoreRepPort, /* ZMQ kvstore port */
     2, /* openrCtrlThriftPort */
     100 /* rtt */);
 
@@ -111,7 +99,6 @@ const auto nb3_down_event = NeighborEvent(
     if_3_1, /* local interface name */
     "", /* remote interface name */
     kTestingAreaName, /* area */
-    Constants::kKvStoreRepPort, /* ZMQ kvstore port */
     2, /* openrCtrlThriftPort */
     100 /* rtt */);
 
@@ -594,7 +581,6 @@ class LinkMonitorTestFixture : public testing::Test {
     if (!peers.count(nodeName)) {
       return;
     }
-    EXPECT_EQ(*peers.at(nodeName).cmdUrl_ref(), *peerSpec.cmdUrl_ref());
     EXPECT_EQ(*peers.at(nodeName).peerAddr_ref(), *peerSpec.peerAddr_ref());
     EXPECT_EQ(*peers.at(nodeName).ctrlPort_ref(), *peerSpec.ctrlPort_ref());
   }

@@ -104,7 +104,6 @@ struct NeighborEvent {
   /**
    * port information for TCP connection establishement
    */
-  int32_t kvStoreCmdPort;
   int32_t ctrlThriftPort;
 
   /**
@@ -126,7 +125,6 @@ struct NeighborEvent {
       const std::string& localIfName,
       const std::string& remoteIfName,
       const std::string& area,
-      int32_t kvStoreCmdPort,
       int32_t ctrlThriftPort,
       int64_t rttUs,
       bool enableFloodOptimization = false,
@@ -138,7 +136,6 @@ struct NeighborEvent {
         localIfName(localIfName),
         remoteIfName(remoteIfName),
         area(area),
-        kvStoreCmdPort(kvStoreCmdPort),
         ctrlThriftPort(ctrlThriftPort),
         rttUs(rttUs),
         enableFloodOptimization(enableFloodOptimization),

@@ -193,7 +193,6 @@ class KvStoreWrapper {
   thrift::PeerSpec
   getPeerSpec(thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE) {
     return createPeerSpec(
-        "", /* dummy ZMQ url - TO BE DEPRECATED */
         Constants::kPlatformHost.toString(), /* peerAddr for thrift */
         getThriftPort(),
         state,
