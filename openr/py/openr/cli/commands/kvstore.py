@@ -1391,6 +1391,9 @@ class SummaryCmd(KvStoreCmdBase):
 
 
 def ip_key(ip: object):
+    # pyre-fixme[6]: For 1st param expected `Union[bytes, int, IPv4Address,
+    #  IPv4Interface, IPv4Network, IPv6Address, IPv6Interface, IPv6Network, str]` but
+    #  got `object`.
     net = ipaddress.ip_network(ip)
     return (net.version, net.network_address, net.prefixlen)
 
