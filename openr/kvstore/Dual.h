@@ -10,7 +10,7 @@
 #include <folly/Format.h>
 #include <stack>
 
-#include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/Dual_types.h>
 
 namespace openr {
 

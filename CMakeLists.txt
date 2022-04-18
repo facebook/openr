@@ -138,6 +138,14 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} platform_cpp2)
 
 add_fbthrift_cpp_library(
+  dual_cpp2
+  openr/if/Dual.thrift
+  OPTIONS
+    json
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} dual_cpp2)
+
+add_fbthrift_cpp_library(
   kv_store_cpp2
   openr/if/KvStore.thrift
   OPTIONS
