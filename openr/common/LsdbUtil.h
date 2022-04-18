@@ -136,8 +136,7 @@ getPrefixForwardingTypeAndAlgorithm(
 thrift::PeerSpec createPeerSpec(
     const std::string& thriftPeerAddr = "",
     const int32_t port = 0,
-    const thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE,
-    const bool supportFloodOptimization = false);
+    const thrift::KvStorePeerState state = thrift::KvStorePeerState::IDLE);
 
 thrift::Adjacency createAdjacency(
     const std::string& nodeName,

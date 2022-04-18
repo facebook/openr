@@ -416,13 +416,11 @@ thrift::PeerSpec
 createPeerSpec(
     const std::string& peerAddr,
     const int32_t port,
-    const thrift::KvStorePeerState state,
-    const bool supportFloodOptimization) {
+    const thrift::KvStorePeerState state) {
   thrift::PeerSpec peerSpec;
   peerSpec.peerAddr_ref() = peerAddr;
   peerSpec.ctrlPort_ref() = port;
   peerSpec.state_ref() = state;
-  peerSpec.supportFloodOptimization_ref() = supportFloodOptimization;
   return peerSpec;
 }
 

@@ -256,11 +256,6 @@ class Config {
         *config_.kvstore_config_ref()->key_ttl_ms_ref());
   }
 
-  bool
-  isFloodOptimizationEnabled() const {
-    return getKvStoreConfig().enable_flood_optimization_ref().value_or(false);
-  }
-
   //
   // decision
   //

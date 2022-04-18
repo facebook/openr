@@ -793,8 +793,6 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isSegmentRoutingEnabled());
     // isBgpPeeringEnabled
     EXPECT_FALSE(config.isBgpPeeringEnabled());
-    // enable_flood_optimization
-    EXPECT_FALSE(config.isFloodOptimizationEnabled());
     // enable_best_route_selection
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
     // enable_v4_over_v6_nexthop

@@ -581,7 +581,7 @@ class KvStore final : public OpenrEventBase {
   KvStore(
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-      // [TO BE DEPRECATED] Queue for publishing kvstore initial sync events
+      // Queue for publishing kvstore initial sync events
       messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
       // Queue for receiving peer updates
       messaging::RQueue<PeerEvent> peerUpdatesQueue,
@@ -589,7 +589,7 @@ class KvStore final : public OpenrEventBase {
       messaging::RQueue<KeyValueRequest> kvRequestQueue,
       // Queue for publishing the event log
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      // areaId collection
+      // AreaId collection
       const std::unordered_set<std::string>& areaIds,
       // KvStoreConfig to drive the instance
       const thrift::KvStoreConfig& kvStoreConfig);

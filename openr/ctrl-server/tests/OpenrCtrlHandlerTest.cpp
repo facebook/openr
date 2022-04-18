@@ -53,10 +53,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* enableV4 */,
         true /* enableSegmentRouting */);
 
-    // override kvstore config
-    tConfig.kvstore_config_ref()->enable_flood_optimization_ref() = true;
-    tConfig.kvstore_config_ref()->is_flood_root_ref() = true;
-
     config = std::make_shared<Config>(tConfig);
 
     // Create the PersistentStore and start fresh

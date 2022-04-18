@@ -299,7 +299,6 @@ LinkMonitor::neighborUpEvent(
   const auto& area = event.area;
   const auto ctrlThriftPort = event.ctrlThriftPort;
   const auto rttUs = event.rttUs;
-  const auto supportFloodOptimization = event.enableFloodOptimization;
   const auto onlyUsedByOtherNode = event.adjOnlyUsedByOtherNode;
 
   // current unixtime
@@ -327,9 +326,7 @@ LinkMonitor::neighborUpEvent(
       << ", metric: " << *newAdj.metric_ref() << ", rttUs: " << rttUs
       << ", addrV4: " << toString(neighborAddrV4)
       << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area
-      << ", supportFloodOptimization: " << std::boolalpha
-      << supportFloodOptimization << ", onlyUsedByOtherNode: " << std::boolalpha
-      << onlyUsedByOtherNode;
+      << ", onlyUsedByOtherNode: " << std::boolalpha << onlyUsedByOtherNode;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
   std::string peerAddr{""};
@@ -368,11 +365,7 @@ LinkMonitor::neighborUpEvent(
   // advertisement.
   adjacencies_[area][adjId] = AdjacencyValue(
       area,
-      createPeerSpec(
-          peerAddr,
-          ctrlThriftPort,
-          thrift::KvStorePeerState::IDLE,
-          supportFloodOptimization),
+      createPeerSpec(peerAddr, ctrlThriftPort, thrift::KvStorePeerState::IDLE),
       std::move(newAdj),
       useRttMetric_ ? getRttMetric(rttUs) : 1, // baseMetric
       isRestarting,

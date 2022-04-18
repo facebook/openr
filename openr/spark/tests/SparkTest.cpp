@@ -114,8 +114,8 @@ class SimpleSparkFixture : public SparkFixture {
   createConfig() {
     auto tConfig1 = getBasicOpenrConfig(nodeName1_);
     auto tConfig2 = getBasicOpenrConfig(nodeName2_);
-    tConfig1.kvstore_config_ref()->enable_flood_optimization_ref() = true;
-    tConfig2.kvstore_config_ref()->enable_flood_optimization_ref() = true;
+    tConfig1.thrift_server_ref()->openr_ctrl_port_ref() = 1;
+    tConfig2.thrift_server_ref()->openr_ctrl_port_ref() = 1;
 
     config1_ = std::make_shared<Config>(tConfig1);
     config2_ = std::make_shared<Config>(tConfig2);
@@ -172,7 +172,6 @@ class SimpleSparkFixture : public SparkFixture {
       EXPECT_EQ(
           std::make_pair(ip2V4.first, ip2V6.first),
           SparkWrapper::getTransportAddrs(event));
-      EXPECT_EQ(true, event.enableFloodOptimization);
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName1_, nodeName2_);
     }
@@ -186,7 +185,6 @@ class SimpleSparkFixture : public SparkFixture {
       EXPECT_EQ(
           std::make_pair(ip1V4.first, ip1V6.first),
           SparkWrapper::getTransportAddrs(event));
-      EXPECT_EQ(true, event.enableFloodOptimization);
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
     }
@@ -642,9 +640,9 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
   node2_.reset();
 
   // Recreate Spark instance with a different attribute value of
-  // `supportFloodOptimization=false`
+  // `openr_ctrl_port`
   auto tConfigTmp = getBasicOpenrConfig(nodeName2_);
-  tConfigTmp.kvstore_config_ref()->enable_flood_optimization_ref() = false;
+  tConfigTmp.thrift_server_ref()->openr_ctrl_port_ref() = 2;
 
   node2_ = createSpark(nodeName2_, std::make_shared<Config>(tConfigTmp));
 
@@ -662,8 +660,8 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
     auto& event = events.value().back();
     EXPECT_EQ(iface1, event.localIfName);
     EXPECT_EQ(nodeName2_, event.remoteNodeName);
-    // ATTN: node2 does NOT support flood-optimization
-    EXPECT_EQ(false, event.enableFloodOptimization);
+    // ATTN: node2 changed the port info
+    EXPECT_EQ(2, event.ctrlThriftPort);
     LOG(INFO)
         << fmt::format("{} reported {} as 'RESTARTED'", nodeName1_, nodeName2_);
   }
@@ -675,8 +673,8 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
     auto& event = events.value().back();
     EXPECT_EQ(iface2, event.localIfName);
     EXPECT_EQ(nodeName1_, event.remoteNodeName);
-    // ATTN: node1 still supports flood-optimization
-    EXPECT_EQ(true, event.enableFloodOptimization);
+    // ATTN: node1 still has the SAME TCP port
+    EXPECT_EQ(1, event.ctrlThriftPort);
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
   }
@@ -848,11 +846,13 @@ TEST_F(SparkFixture, ReadConfigTest) {
   const std::string nodeStark{"Stark"};
 
   auto tConfig1 = getBasicOpenrConfig(nodeLannister);
-  tConfig1.kvstore_config_ref()->enable_flood_optimization_ref() = true;
+  tConfig1.thrift_server_ref()->openr_ctrl_port_ref() =
+      Constants::kOpenrCtrlPort;
   auto config1 = std::make_shared<Config>(tConfig1);
 
   auto tConfig2 = getBasicOpenrConfig(nodeStark);
-  tConfig2.kvstore_config_ref()->enable_flood_optimization_ref() = false;
+  // ATTN: explicitly give a different port
+  tConfig2.thrift_server_ref()->openr_ctrl_port_ref() = 0;
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark(nodeLannister, config1);
@@ -877,8 +877,7 @@ TEST_F(SparkFixture, ReadConfigTest) {
     auto& event = events.value().back();
     EXPECT_EQ(iface1, event.localIfName);
     EXPECT_EQ(nodeStark, event.remoteNodeName);
-    // ATTN: node2 does NOT support flood-optimization
-    EXPECT_EQ(false, event.enableFloodOptimization);
+    EXPECT_EQ(0, event.ctrlThriftPort);
   }
 
   {
@@ -887,8 +886,7 @@ TEST_F(SparkFixture, ReadConfigTest) {
     auto& event = events.value().back();
     EXPECT_EQ(iface2, event.localIfName);
     EXPECT_EQ(nodeLannister, event.remoteNodeName);
-    // ATTN: node1 supports flood-optimization
-    EXPECT_EQ(true, event.enableFloodOptimization);
+    EXPECT_EQ(Constants::kOpenrCtrlPort, event.ctrlThriftPort);
   }
 }
 

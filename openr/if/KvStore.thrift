@@ -231,28 +231,6 @@ typedef map<string, Value> (
 ) KeyVals
 
 /**
- * @deprecated - Enum describing KvStore command type. This becomes obsolete
- * with the removal of dual functionality.
- */
-enum Command {
-  /**
-   * Operations on keys in the store
-   */
-  KEY_SET = 1,
-  KEY_DUMP = 3,
-
-  /**
-   * Dual message
-   */
-  DUAL = 10,
-
-  /**
-   * Set or uunset flooding-topology child
-   */
-  FLOOD_TOPO_SET = 11,
-}
-
-/**
  * Logical operator enum for querying
  */
 enum FilterOperator {
@@ -269,12 +247,6 @@ struct KeySetParams {
    * KvStore instance.
    */
   2: KeyVals keyVals;
-
-  /**
-   * Solicit for an ack. If set to false will make request one-way. There won't
-   * be any response set. This is obsolete with KvStore thrift migration.
-   */
-  3: bool solicitResponse = 1 (deprecated);
 
   /**
    * Optional attributes. List of nodes through which this publication has
@@ -391,6 +363,7 @@ struct PeerSpec {
   2: string cmdUrl (deprecated);
 
   /**
+   * [TO BE DEPRECATED]
    * support flood optimization or not
    */
   3: bool supportFloodOptimization = 0;
@@ -412,32 +385,6 @@ struct PeerSpec {
 typedef map<string, PeerSpec> (
   cpp.type = "std::unordered_map<std::string, openr::thrift::PeerSpec>",
 ) PeersMap
-
-/**
- * set/unset flood-topo child
- */
-struct FloodTopoSetParams {
-  /**
-   * spanning tree root-id
-   */
-  1: string rootId;
-
-  /**
-   * from node-id
-   */
-  2: string srcId;
-
-  /**
-   * set/unset a spanning tree child
-   */
-  3: bool setChild;
-
-  /**
-   * action apply to all-roots or not
-   * if true, rootId will be ignored and action will be applied to all roots
-   */
-  4: optional bool allRoots;
-} (cpp.minimize_padding)
 
 /**
  * @deprecated
@@ -470,14 +417,14 @@ struct SptInfo {
 }
 
 /**
- * map<root-id: SPT-info>
+ * @deprecated - map<root-id: SPT-info>
  */
 typedef map<string, SptInfo> (
   cpp.type = "std::unordered_map<std::string, openr::thrift::SptInfo>",
 ) SptInfoMap
 
 /**
- * All spanning tree(s) information
+ * @deprecated - All spanning tree(s) information
  */
 struct SptInfos {
   /**
@@ -499,27 +446,6 @@ struct SptInfos {
    * current flooding peers
    */
   4: PeerNames floodPeers;
-}
-
-/**
- * KvStore Request specification. A request to the server (tagged union)
- */
-struct KvStoreRequest {
-  /**
-   * Command type. Set one of the optional parameter based on command
-   */
-  1: Command cmd;
-
-  /**
-   * area identifier to identify the KvStoreDb instance (mandatory)
-   */
-  11: string area;
-
-  2: optional KeySetParams keySetParams;
-  3: optional KeyGetParams keyGetParams;
-  6: optional KeyDumpParams keyDumpParams;
-  9: optional DualMessages dualMessages;
-  10: optional FloodTopoSetParams floodTopoSetParams;
 }
 
 /**
@@ -645,6 +571,7 @@ struct KvStoreConfig {
   7: optional list<string> key_originator_id_filters;
 
   /**
+   * [TO BE DEPRECATED]
    * Set this true to enable flooding-optimization, Open/R will start forming
    * spanning tree and flood updates on formed SPT instead of physical topology.
    * This will greatly reduce kvstore updates traffic, however, based on which
@@ -657,6 +584,7 @@ struct KvStoreConfig {
   8: optional bool enable_flood_optimization;
 
   /**
+   * [TO BE DEPRECATED]
    * Set this true to let this node declare itself as a flood-root. You can set
    * multiple nodes as flood-roots in a network, in steady state, Open/R will
    * pick optimal (smallest node-name) one as the SPT for flooding. If optimal

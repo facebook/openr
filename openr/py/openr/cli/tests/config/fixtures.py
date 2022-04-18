@@ -62,12 +62,8 @@ OPENR_CONFIG_STR = r"""
   "fib_port": 5909,
   "ip_tos": 192,
   "kvstore_config": {
-    "enable_flood_optimization": true,
-    "enable_thrift_dual_msg": false,
-    "is_flood_root": true,
     "key_ttl_ms": 3600000,
-    "ttl_decrement_ms": 1,
-    "zmq_hwm": 65536
+    "ttl_decrement_ms": 1
   },
   "link_monitor_config": {
     "enable_perf_measurement": true,

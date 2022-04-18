@@ -314,7 +314,6 @@ Spark::Spark(
           *config->getSparkConfig().graceful_restart_time_s_ref())),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
-      enableFloodOptimization_(config->isFloodOptimizationEnabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kOpenrCtrlThriftPort_(
           *config->getThriftServerConfig().openr_ctrl_port_ref()),
@@ -366,7 +365,6 @@ Spark::Spark(
                   neighbor.area,
                   neighbor.openrCtrlThriftPort,
                   neighbor.rtt.count(),
-                  neighbor.enableFloodOptimization,
                   neighbor.adjOnlyUsedByOtherNode));
             }
           } // for
@@ -914,8 +912,6 @@ Spark::sendHandshakeMsg(
   // ATTN: send neighborAreaId deduced locally
   handshakeMsg.area_ref() = neighborAreaId;
   handshakeMsg.neighborNodeName_ref() = neighborName;
-  // ATTN: notify peer if I can support DUAL or not
-  handshakeMsg.enableFloodOptimization_ref() = enableFloodOptimization_;
 
   thrift::SparkHelloPacket pkt;
   pkt.handshakeMsg_ref() = std::move(handshakeMsg);
@@ -956,13 +952,12 @@ Spark::sendHandshakeMsg(
   XLOG(DBG2) << fmt::format(
       "[SparkHandshakeMsg] Successfully sent {} bytes "
       "over intf: {}, neighbor name: {}, neighbor areaId: {}, "
-      "isAdjEstablished: {}, support flood-optimization: {}",
+      "isAdjEstablished: {}",
       bytesSent,
       ifName,
       neighborName,
       neighborAreaId,
-      isAdjEstablished,
-      enableFloodOptimization_);
+      isAdjEstablished);
 }
 
 void
@@ -1218,7 +1213,6 @@ Spark::notifySparkNeighborEvent(
       neighbor.area,
       neighbor.openrCtrlThriftPort,
       neighbor.rtt.count(),
-      neighbor.enableFloodOptimization,
       neighbor.adjOnlyUsedByOtherNode)}));
 }
 
@@ -1657,8 +1651,6 @@ Spark::processHandshakeMsg(
   neighbor.openrCtrlThriftPort = *handshakeMsg.openrCtrlThriftPort_ref();
   neighbor.transportAddressV4 = *handshakeMsg.transportAddressV4_ref();
   neighbor.transportAddressV6 = *handshakeMsg.transportAddressV6_ref();
-  neighbor.enableFloodOptimization =
-      handshakeMsg.enableFloodOptimization_ref().value_or(false);
 
   // update neighbor holdTime as "NEGOTIATING" process
   neighbor.heartbeatHoldTime = std::max(
@@ -1727,10 +1719,9 @@ Spark::processHandshakeMsg(
   // state transition
   XLOG(DBG1) << fmt::format(
       "[SparkHandshakeMsg] Successfully negotiated with peer: {} with "
-      "TCP port: {}, support-flood-optimization: {}",
+      "TCP port: {}",
       neighborName,
-      neighbor.openrCtrlThriftPort,
-      neighbor.enableFloodOptimization);
+      neighbor.openrCtrlThriftPort);
 
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =

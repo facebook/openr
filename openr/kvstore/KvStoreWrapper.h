@@ -195,8 +195,7 @@ class KvStoreWrapper {
     return createPeerSpec(
         Constants::kPlatformHost.toString(), /* peerAddr for thrift */
         getThriftPort(),
-        state,
-        kvStoreConfig_.enable_flood_optimization_ref().value_or(false));
+        state);
   }
 
   /**

@@ -127,7 +127,6 @@ struct NeighborEvent {
       const std::string& area,
       int32_t ctrlThriftPort,
       int64_t rttUs,
-      bool enableFloodOptimization = false,
       bool adjOnlyUsedByOtherNode = false)
       : eventType(eventType),
         remoteNodeName(nodeName),
@@ -138,7 +137,6 @@ struct NeighborEvent {
         area(area),
         ctrlThriftPort(ctrlThriftPort),
         rttUs(rttUs),
-        enableFloodOptimization(enableFloodOptimization),
         adjOnlyUsedByOtherNode(adjOnlyUsedByOtherNode) {}
 };
 

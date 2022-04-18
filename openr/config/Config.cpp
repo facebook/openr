@@ -718,13 +718,6 @@ Config::toThriftKvStoreConfig() const {
   if (auto keyOriginatorIdFilters = oldConfig.key_originator_id_filters_ref()) {
     config.key_originator_id_filters_ref() = *keyOriginatorIdFilters;
   }
-  if (auto enableFloodOptimization =
-          oldConfig.enable_flood_optimization_ref()) {
-    config.enable_flood_optimization_ref() = *enableFloodOptimization;
-  }
-  if (auto isFloodRoot = oldConfig.is_flood_root_ref()) {
-    config.is_flood_root_ref() = *isFloodRoot;
-  }
   if (auto maybeIpTos = getConfig().ip_tos_ref()) {
     config.ip_tos_ref() = *maybeIpTos;
   }

@@ -979,6 +979,9 @@ struct SparkHandshakeMsg {
    */
   11: optional string neighborNodeName;
 
+  /**
+   * [TO BE DEPRECATED]
+   */
   12: optional bool enableFloodOptimization;
 } (cpp.minimize_padding)
 
