@@ -70,6 +70,8 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   }
 
   thrift::Publication publication_filtered;
+  publication_filtered.area_ref() = *pub.area_ref();
+  publication_filtered.keyVals_ref() = getFilteredKeyVals(*pub.keyVals_ref());
   publication_filtered.expiredKeys_ref() =
       getFilteredExpiredKeys(*pub.expiredKeys_ref());
 
@@ -80,14 +82,6 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   if (pub.tobeUpdatedKeys_ref()) {
     publication_filtered.tobeUpdatedKeys_ref() = *pub.tobeUpdatedKeys_ref();
   }
-
-  if (pub.floodRootId_ref()) {
-    publication_filtered.floodRootId_ref() = *pub.floodRootId_ref();
-  }
-
-  publication_filtered.area_ref() = *pub.area_ref();
-
-  publication_filtered.keyVals_ref() = getFilteredKeyVals(*pub.keyVals_ref());
 
   if (publication_filtered.keyVals_ref()->size() or
       publication_filtered.expiredKeys_ref()->size()) {

@@ -5049,8 +5049,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
        createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   auto routeDbDelta = recvRouteUpdates();
@@ -5089,8 +5088,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
        createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   routeDbBefore = dumpRouteDb({"1"})["1"];
   std::sort(
       routeDbBefore.unicastRoutes_ref()->begin(),
@@ -5159,8 +5157,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       thrift::KeyVals{},
       {"adj:3", "prefix:3", "adj:4"} /* expired keys */,
       {},
-      {},
-      std::string(""));
+      {});
 
   routeDbBefore = dumpRouteDb({"1"})["1"];
   std::sort(
@@ -5192,8 +5189,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
        createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   routeDbBefore = dumpRouteDb({"1"})["1"];
   std::sort(
       routeDbBefore.unicastRoutes_ref()->begin(),
@@ -5350,8 +5346,7 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
            {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
           {},
           {},
-          {},
-          std::string("")),
+          {}),
       false /*prefixPubExists*/);
 
   // Send static MPLS routes
@@ -5374,8 +5369,7 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
        createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
-      {},
-      std::string("")));
+      {}));
 
   // Receive & verify all the expected updates
   auto routeDbDelta = recvRouteUpdates();
@@ -5447,8 +5441,7 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
          {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
         {},
         {},
-        {},
-        std::string("")));
+        {}));
   });
 
   //
@@ -5507,8 +5500,7 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
              createPrefixKeyValue("2", 1, toIpPrefix(prefixV6))},
             {},
             {},
-            {},
-            std::string("")));
+            {}));
 
         // Receive & verify all the expected updates
         auto routeDbDelta = recvRouteUpdates();
@@ -5614,8 +5606,7 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
                  "2", 1, toIpPrefix(prefixV6), kTestingAreaName, true)},
             {},
             {},
-            {},
-            std::string("")));
+            {}));
 
         // Receive & verify all the expected updates
         auto routeDbDelta = recvRouteUpdates();
@@ -5675,8 +5666,7 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
                 "1", 1, toIpPrefix(prefixV4), kTestingAreaName)},
             {},
             {},
-            {},
-            std::string("")));
+            {}));
         // No unicast routes are generated.
         auto routeDbDelta = recvRouteUpdates();
         EXPECT_THAT(routeDbDelta.unicastRoutesToUpdate, testing::SizeIs(0));
@@ -5713,7 +5703,6 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
-      std::string(""), /*floodRootId */
       kTestingAreaName);
 
   sendKvPublication(publication);
@@ -5733,7 +5722,6 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
-      std::string(""), /*floodRootId */
       "B");
   sendKvPublication(publication);
   recvRouteUpdates();
@@ -5811,7 +5799,6 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
-      std::string(""), /*floodRootId */
       "B");
   sendKvPublication(publication);
   recvRouteUpdates();
@@ -5865,7 +5852,6 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
-      std::string(""), /*floodRootId */
       kTestingAreaName);
 
   sendKvPublication(publication);
@@ -5880,7 +5866,6 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
-      std::string(""), /*floodRootId */
       "B");
   sendKvPublication(publication);
   recvRouteUpdates();
@@ -5902,7 +5887,6 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
-      std::string(""), /*floodRootId */
       "B");
   sendKvPublication(publication);
 
@@ -5937,8 +5921,7 @@ TEST_F(DecisionTestFixture, RibPolicy) {
        createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
 
   // Expect route update. Verify next-hop weight to be 0 (ECMP)
@@ -6014,11 +5997,10 @@ TEST_F(DecisionTestFixture, RibPolicy) {
           "2", 2, addr2, kTestingAreaName, true /* withdraw */)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
   publication = createThriftPublication(
-      {createPrefixKeyValue("2", 3, addr2)}, {}, {}, {}, std::string(""));
+      {createPrefixKeyValue("2", 3, addr2)}, {}, {}, {});
   sendKvPublication(publication);
 
   {
@@ -6069,8 +6051,7 @@ TEST_F(DecisionTestFixture, RibPolicyClear) {
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
 
   // Expect route update.
@@ -6382,8 +6363,7 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
              {"prefix:2", createPrefixValue("2", 1, {addr2})}},
             {},
             {},
-            {},
-            std::string(""));
+            {});
         kvStoreUpdatesQueue.push(publication);
         kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
 
@@ -6445,8 +6425,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
        createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   auto routeDbDelta = recvRouteUpdates();
@@ -6462,11 +6441,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       NextHops({createNextHopFromAdj(adj12_1, false, 100)}));
 
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 2, {adj21_2})}},
-      {},
-      {},
-      {},
-      std::string(""));
+      {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {}, {}, {});
 
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
@@ -6484,11 +6459,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
 
   // restore the original state
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}},
-      {},
-      {},
-      {},
-      std::string(""));
+      {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}}, {}, {}, {});
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -6511,8 +6482,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       {{"adj:2", createAdjValue("2", 2, {adj21_1_overloaded, adj21_2})}},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -6547,8 +6517,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(0, counters["decision.spf_runs.count"]);
@@ -6575,8 +6544,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
 
   // we simulate adding a new router R4
@@ -6589,8 +6557,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
   recvRouteUpdates();
 
@@ -6604,7 +6571,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   auto getRouteForPrefixCount =
       counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
-      {createPrefixKeyValue("4", 1, addr4)}, {}, {}, {}, std::string(""));
+      {createPrefixKeyValue("4", 1, addr4)}, {}, {}, {});
   sendKvPublication(publication);
   recvRouteUpdates();
 
@@ -6628,16 +6595,11 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        createPrefixKeyValue("4", 2, addr5)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
 
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 5, {adj21})}},
-      {},
-      {},
-      {},
-      std::string(""));
+      {{"adj:2", createAdjValue("2", 5, {adj21})}}, {}, {}, {});
   sendKvPublication(publication);
   recvRouteUpdates();
 
@@ -6654,7 +6616,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   getRouteForPrefixCount = counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
-      {createPrefixKeyValue("4", 5, addr4)}, {}, {}, {}, std::string(""));
+      {createPrefixKeyValue("4", 5, addr4)}, {}, {}, {});
   sendKvPublication(publication);
 
   publication = createThriftPublication(
@@ -6662,8 +6624,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        createPrefixKeyValue("4", 7, addr6)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
 
   publication = createThriftPublication(
@@ -6672,8 +6633,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        createPrefixKeyValue("4", 8, addr6)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
   sendKvPublication(publication);
   recvRouteUpdates();
 
@@ -6702,8 +6662,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
        createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(0, counters["decision.spf_runs.count"]);
@@ -6735,8 +6694,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
        createPrefixKeyValue("2", 1, addr2)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(0, counters["decision.spf_runs.count"]);
@@ -6805,8 +6763,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
        createPrefixKeyValue("4", 1, addr4)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   sendKvPublication(publication);
   recvRouteUpdates();
@@ -6878,8 +6835,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
        {"adj:4", createAdjValue("4", 1, {adj41}, true /* overloaded */)}},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -6920,8 +6876,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -7135,8 +7090,7 @@ TEST_F(DecisionTestFixture, Counters) {
 
   // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
   // Node2 has partial adjacency
-  auto publication0 =
-      createThriftPublication(pubKvs, {}, {}, {}, std::string(""));
+  auto publication0 = createThriftPublication(pubKvs, {}, {}, {});
   sendKvPublication(publication0);
   const auto routeDb = recvRouteUpdates();
   for (const auto& [_, uniRoute] : routeDb.unicastRoutesToUpdate) {
@@ -7160,11 +7114,7 @@ TEST_F(DecisionTestFixture, Counters) {
 
   // fully disconnect node 2
   auto publication1 = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 2, {adj13}, false, 1)}},
-      {},
-      {},
-      {},
-      std::string(""));
+      {{"adj:1", createAdjValue("1", 2, {adj13}, false, 1)}}, {}, {}, {});
   sendKvPublication(publication1);
   // wait for update
   recvRouteUpdates();
@@ -7178,11 +7128,7 @@ TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
   for (int i = debounceTimeoutMin.count(); true; i *= 2) {
     auto nodeName = std::to_string(i);
     auto publication = createThriftPublication(
-        {createPrefixKeyValue(nodeName, 1, addr1)},
-        {},
-        {},
-        {},
-        std::string(""));
+        {createPrefixKeyValue(nodeName, 1, addr1)}, {}, {}, {});
     sendKvPublication(publication);
     if (i >= debounceTimeoutMax.count()) {
       break;
@@ -7195,7 +7141,7 @@ TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
       debounceTimeoutMax + std::chrono::milliseconds(100));
   // send one more update
   auto publication = createThriftPublication(
-      {createPrefixKeyValue("2", 1, addr1)}, {}, {}, {}, std::string(""));
+      {createPrefixKeyValue("2", 1, addr1)}, {}, {}, {});
   sendKvPublication(publication);
 }
 
@@ -7249,8 +7195,7 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
          createPrefixKeyValue("3", 1, addr3V4)},
         {},
         {},
-        {},
-        std::string(""));
+        {});
     sendKvPublication(publication);
     recvRouteUpdates();
   }
@@ -7278,8 +7223,7 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
          createPrefixKeyValue("3", 1, ribPrefixEntry)},
         {},
         {},
-        {},
-        std::string(""));
+        {});
     sendKvPublication(publication);
     recvRouteUpdates();
   }
@@ -7371,8 +7315,7 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
            {"adj:2", createAdjValue("2", 1, {adj21OnlyUsedBy1}, false, 2)}},
           {},
           {},
-          {},
-          std::string("")),
+          {}),
       false /*prefixPubExists*/);
 
   int scheduleAt{0};
@@ -7502,8 +7445,7 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
             {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)}},
             {},
             {},
-            {},
-            std::string("")));
+            {}));
 
         routeDbDelta = recvRouteUpdates();
         // Unicast route for addr1 advertised by node 2.
@@ -7567,8 +7509,7 @@ TEST_F(DecisionV4OverV6NexthopTestFixture, BasicOperationsV4OverV6Nexthop) {
        createPrefixKeyValue("2", 1, addr2V4)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   sendKvPublication(publication);
   auto routeDbDelta = recvRouteUpdates();
@@ -7595,8 +7536,7 @@ TEST_F(DecisionV4OverV6NexthopTestFixture, BasicOperationsV4OverV6Nexthop) {
        createPrefixKeyValue("3", 1, addr3V4)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   sendKvPublication(publication);
 
@@ -7687,8 +7627,7 @@ TEST_F(
        createPrefixKeyValue("2", 1, addr2V4)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   sendKvPublication(publication);
   auto routeDbDelta = recvRouteUpdates();
@@ -7715,8 +7654,7 @@ TEST_F(
        createPrefixKeyValue("3", 1, addr3V4)},
       {},
       {},
-      {},
-      std::string(""));
+      {});
 
   sendKvPublication(publication);
 

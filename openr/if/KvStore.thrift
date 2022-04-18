@@ -387,68 +387,6 @@ typedef map<string, PeerSpec> (
 ) PeersMap
 
 /**
- * @deprecated
- */
-typedef set<string> (cpp.type = "std::unordered_set<std::string>") PeerNames
-
-/**
- * @deprecated - single spanning tree information
- */
-struct SptInfo {
-  /**
-   * passive state or not
-   */
-  1: bool passive;
-
-  /**
-   * metric cost towards root
-   */
-  2: i64 cost;
-
-  /**
-   * optional parent if any (aka nexthop)
-   */
-  3: optional string parent;
-
-  /**
-   * a set of spt children
-   */
-  4: PeerNames children;
-}
-
-/**
- * @deprecated - map<root-id: SPT-info>
- */
-typedef map<string, SptInfo> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::SptInfo>",
-) SptInfoMap
-
-/**
- * @deprecated - All spanning tree(s) information
- */
-struct SptInfos {
-  /**
-   * map<root-id: SptInfo>
-   */
-  1: SptInfoMap infos;
-
-  /**
-   * all DUAL related counters
-   */
-  2: DualCounters counters;
-
-  /**
-   * current flood-root-id if any
-   */
-  3: optional string floodRootId;
-
-  /**
-   * current flooding peers
-   */
-  4: PeerNames floodPeers;
-}
-
-/**
  * KvStore Response specification. This is also used to respond to GET requests
  */
 struct Publication {

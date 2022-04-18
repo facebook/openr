@@ -98,7 +98,6 @@ thrift::Publication createThriftPublication(
     const std::vector<std::string>& expiredKeys,
     const std::optional<std::vector<std::string>>& nodeIds = std::nullopt,
     const std::optional<std::vector<std::string>>& keysToUpdate = std::nullopt,
-    const std::optional<std::string>& floodRootId = std::nullopt,
     const std::string& area = kTestingAreaName);
 
 /**

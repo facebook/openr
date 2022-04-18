@@ -1495,7 +1495,6 @@ KvStoreDb<ClientType>::setKeyVals(thrift::KeySetParams&& setParams) {
   thrift::Publication rcvdPublication;
   rcvdPublication.keyVals_ref() = std::move(*setParams.keyVals_ref());
   rcvdPublication.nodeIds_ref().move_from(setParams.nodeIds_ref());
-  rcvdPublication.floodRootId_ref().move_from(setParams.floodRootId_ref());
   mergePublication(rcvdPublication);
 }
 
@@ -2115,9 +2114,6 @@ KvStoreDb<ClientType>::bufferPublication(thrift::Publication&& publication) {
   fb303::fbData->addStatValue(
       "kvstore.rate_limit_keys", publication.keyVals_ref()->size(), fb303::AVG);
   std::optional<std::string> floodRootId{std::nullopt};
-  if (publication.floodRootId_ref().has_value()) {
-    floodRootId = publication.floodRootId_ref().value();
-  }
   // update or add keys
   for (auto const& [key, _] : *publication.keyVals_ref()) {
     publicationBuffer_[floodRootId].emplace(key);
@@ -2140,12 +2136,6 @@ KvStoreDb<ClientType>::floodBufferedUpdates() {
   // merge publication per root-id
   for (const auto& [rootId, keys] : publicationBuffer_) {
     thrift::Publication publication{};
-    // convert from std::optional to std::optional
-    std::optional<std::string> floodRootId{std::nullopt};
-    if (rootId.has_value()) {
-      floodRootId = rootId.value();
-    }
-    publication.floodRootId_ref().from_optional(floodRootId);
     for (const auto& key : keys) {
       auto kvStoreIt = kvStore_.find(key);
       if (kvStoreIt != kvStore_.end()) {
@@ -2552,8 +2542,6 @@ KvStoreDb<ClientType>::mergePublication(
       mergeKeyValues(
           kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters)
           .first;
-  deltaPublication.floodRootId_ref().copy_from(
-      rcvdPublication.floodRootId_ref());
   deltaPublication.area_ref() = area_;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals_ref()->size();

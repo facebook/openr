@@ -156,15 +156,13 @@ createThriftPublication(
     const std::vector<std::string>& expiredKeys,
     const std::optional<std::vector<std::string>>& nodeIds,
     const std::optional<std::vector<std::string>>& keysToUpdate,
-    const std::optional<std::string>& floodRootId,
     const std::string& area) {
   thrift::Publication pub;
-  *pub.keyVals_ref() = kv;
-  *pub.expiredKeys_ref() = expiredKeys;
+  pub.keyVals_ref() = kv;
+  pub.expiredKeys_ref() = expiredKeys;
   pub.nodeIds_ref().from_optional(nodeIds);
   pub.tobeUpdatedKeys_ref().from_optional(keysToUpdate);
-  pub.floodRootId_ref().from_optional(floodRootId);
-  *pub.area_ref() = area;
+  pub.area_ref() = area;
   return pub;
 }
 
