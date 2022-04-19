@@ -405,9 +405,6 @@ class Spark final : public OpenrEventBase {
   // Private state
   //
 
-  // This node's domain name
-  const std::string myDomainName_{};
-
   // This node's name
   const std::string myNodeName_{};
 
