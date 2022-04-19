@@ -1385,6 +1385,11 @@ Spark::processHelloMsg(
   if (PacketValidationResult::SUCCESS != sanityCheckResult) {
     return;
   }
+  if (remoteIfName.empty()) {
+    XLOG(DBG2) << "[SparkHelloMsg] Ignore packet from " << ifName
+               << " : empty remoteIfName";
+    return;
+  }
 
   // version check
   if (remoteVersion <
