@@ -610,7 +610,18 @@ main(int argc, char** argv) {
     t.join();
   }
 
-  vipPluginDestroy();
+  // We're about to delete VipRouteManager object. The vipRouteManager
+  // EventBase has already stopped and the event thread has also joined.
+  // However, when an EventBase is stopped, there could still be queued
+  // functions. During EventBase destruction, these oustanding functions will
+  // be executed in main thread. These outstanding functions access
+  // VipRouteManager object state, that is deleted in vipPluginDestroy().
+  // Thus, we explicitly destruct the EventBase before the VIP route manager
+  // object is deleted.
+  orderedEvbs.clear();
+  if (config->isVipServiceEnabled()) {
+    vipPluginDestroy();
+  }
 
   // Close syslog connection (this is optional)
   SYSLOG(INFO) << "Stopping OpenR daemon: ppid = " << getpid();
