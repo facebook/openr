@@ -64,7 +64,6 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
     // to be updated. If we don't optimize here, we will have go through
     // key values of a publication and copy them.
     auto filteredPub = std::make_unique<thrift::Publication>(pub);
-    filteredPub->timestamp_ms_ref() = getUnixTimeStampMs();
     publisher_.next(std::move(*filteredPub));
     return;
   }
@@ -113,7 +112,6 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   if (keyvals.size()) {
     // There is at least one key value in the publication for the client
     publication_filtered.keyVals_ref() = keyvals;
-    publication_filtered.timestamp_ms_ref() = getUnixTimeStampMs();
     publisher_.next(std::move(publication_filtered));
   }
 }

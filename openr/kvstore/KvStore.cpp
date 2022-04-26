@@ -317,11 +317,17 @@ KvStore::processRequestMsg(
   }
 
   auto& thriftRequest = maybeThriftReq.value();
-  CHECK(not thriftRequest.area_ref()->empty());
+  // XXX HACK: assume kDefaultArea if thriftRequest.area is empty
+  std::string area;
+  if (!thriftRequest.area_ref().has_value()) {
+    area = Constants::kDefaultArea.toString();
+  } else {
+    area = thriftRequest.area_ref().value();
+  }
 
   try {
     auto& kvStoreDb =
-        getAreaDbOrThrow(thriftRequest.get_area(), "processRequestMsg");
+        getAreaDbOrThrow(area, "processRequestMsg");
     XLOG(DBG2) << "Request received for area " << kvStoreDb.getAreaId();
     auto response = kvStoreDb.processRequestMsgHelper(requestId, thriftRequest);
     if (response.hasValue()) {
@@ -2418,6 +2424,53 @@ KvStoreDb::processRequestMsgHelper(
     }
     return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
+  case thrift::Command::KEY_SET: {
+    VLOG(3) << "Set key requested";
+    if (not thriftReq.keySetParams_ref().has_value()) {
+      LOG(ERROR) << "received none keySetParams";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+
+    fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
+    if (thriftReq.keySetParams_ref()->timestamp_ms_ref().has_value()) {
+      auto floodMs = getUnixTimeStampMs() -
+          thriftReq.keySetParams_ref()->timestamp_ms_ref().value();
+      if (floodMs > 0) {
+        fb303::fbData->addStatValue(
+            "kvstore.flood_duration_ms", floodMs, fb303::AVG);
+      }
+    }
+
+    auto& ketSetParamsVal = thriftReq.keySetParams_ref().value();
+    if (ketSetParamsVal.keyVals_ref()->empty()) {
+      LOG(ERROR) << "Malformed set request, ignoring";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+
+    // Update hash for key-values
+    for (auto& kv : *ketSetParamsVal.keyVals_ref()) {
+      auto& value = kv.second;
+      if (value.value_ref().has_value()) {
+        value.hash_ref() = generateHash(
+            *value.version_ref(), *value.originatorId_ref(), value.value_ref());
+      }
+    }
+
+    // Create publication and merge it with local KvStore
+    thrift::Publication rcvdPublication;
+    *rcvdPublication.keyVals_ref() = std::move(*ketSetParamsVal.keyVals_ref());
+    rcvdPublication.nodeIds_ref().move_from(ketSetParamsVal.nodeIds_ref());
+    rcvdPublication.floodRootId_ref().move_from(
+        ketSetParamsVal.floodRootId_ref());
+    rcvdPublication.area_ref() = area_;
+    mergePublication(rcvdPublication);
+
+    // respond to the client
+    if (*ketSetParamsVal.solicitResponse_ref()) {
+      return fbzmq::Message::from(Constants::kSuccessResponse.toString());
+    }
+    return fbzmq::Message();
+  }
   case thrift::Command::DUAL: {
     XLOG(DBG2) << "DUAL messages received";
     if (not thriftReq.dualMessages_ref().has_value()) {
@@ -2880,7 +2933,6 @@ KvStoreDb::finalizeFullSync(
   params.keyVals_ref() = std::move(*updates.keyVals_ref());
   // I'm the initiator, set flood-root-id
   params.floodRootId_ref().from_optional(DualNode::getSptRootId());
-  params.timestamp_ms_ref() = getUnixTimeStampMs();
   params.set_nodeIds({kvParams_.nodeId});
 
   auto peerIt = thriftPeers_.find(senderId);
@@ -3056,7 +3108,6 @@ KvStoreDb::floodPublication(
   params.keyVals_ref() = *publication.keyVals_ref();
   params.nodeIds_ref().copy_from(publication.nodeIds_ref());
   params.floodRootId_ref().copy_from(publication.floodRootId_ref());
-  params.timestamp_ms_ref() = getUnixTimeStampMs();
   params.senderId_ref() = kvParams_.nodeId;
 
   std::optional<std::string> floodRootId{std::nullopt};
