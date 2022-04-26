@@ -9,6 +9,7 @@
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {
@@ -140,15 +141,16 @@ dumpAllWithThriftClientFromMultiple(
     if (sslContext) {
       VLOG(3) << "Try to connect Open/R SSL secure client.";
       try {
-        client = getOpenrCtrlSecureClient(
-            evb,
-            sslContext,
-            folly::IPAddress(sockAddr.getAddressStr()),
-            sockAddr.getPort(),
-            connectTimeout,
-            processTimeout,
-            bindAddr,
-            maybeIpTos);
+        client =
+            getOpenrCtrlSecureClient<openr::thrift::OpenrCtrlCppAsyncClient>(
+                evb,
+                sslContext,
+                folly::IPAddress(sockAddr.getAddressStr()),
+                sockAddr.getPort(),
+                connectTimeout,
+                processTimeout,
+                bindAddr,
+                maybeIpTos);
       } catch (const std::exception& ex) {
         LOG(ERROR)
             << "Failed to connect to Open/R instance at: "
@@ -161,14 +163,15 @@ dumpAllWithThriftClientFromMultiple(
     if (!client) {
       VLOG(3) << "Try to connect Open/R plain-text client.";
       try {
-        client = getOpenrCtrlPlainTextClient(
-            evb,
-            folly::IPAddress(sockAddr.getAddressStr()),
-            sockAddr.getPort(),
-            connectTimeout,
-            processTimeout,
-            bindAddr,
-            maybeIpTos);
+        client =
+            getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
+                evb,
+                folly::IPAddress(sockAddr.getAddressStr()),
+                sockAddr.getPort(),
+                connectTimeout,
+                processTimeout,
+                bindAddr,
+                maybeIpTos);
       } catch (const std::exception& ex) {
         LOG(ERROR)
             << "Failed to connect to Open/R instance at: "

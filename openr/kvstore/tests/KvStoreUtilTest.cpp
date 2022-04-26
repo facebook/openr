@@ -354,14 +354,16 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
 
   folly::ScopedEventBaseThread evb;
   std::vector<std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>> clients;
-  clients.emplace_back(getOpenrCtrlPlainTextClient(
-      *evb.getEventBase(),
-      folly::IPAddress(Constants::kPlatformHost.toString()),
-      port1));
-  clients.emplace_back(getOpenrCtrlPlainTextClient(
-      *evb.getEventBase(),
-      folly::IPAddress(Constants::kPlatformHost.toString()),
-      port2));
+  clients.emplace_back(
+      getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
+          *evb.getEventBase(),
+          folly::IPAddress(Constants::kPlatformHost.toString()),
+          port1));
+  clients.emplace_back(
+      getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
+          *evb.getEventBase(),
+          folly::IPAddress(Constants::kPlatformHost.toString()),
+          port2));
 
   // Clients should be destroyed in a thread from EventBase with which they were
   // created, so destroy them properly at the end of the test.

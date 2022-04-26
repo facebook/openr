@@ -10,6 +10,7 @@
 #include <folly/io/async/EventBase.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/OpenrClient.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 
 DEFINE_string(host, "::1", "Host to talk to");
@@ -85,7 +86,9 @@ main(int argc, char* argv[]) {
   // Create OpenrClient and set policy
   LOG(INFO) << "Creating connection to host " << FLAGS_host;
   folly::EventBase evb;
-  auto client = getOpenrCtrlPlainTextClient(evb, folly::IPAddress(FLAGS_host));
+  auto client =
+      getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
+          evb, folly::IPAddress(FLAGS_host));
   client->sync_setRibPolicy(policy);
   LOG(INFO) << "Done setting policy";
 

@@ -11,7 +11,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
 #include <openr/common/Types.h>
-#include <openr/kvstore/KvStore.h>
 
 namespace fb303 = facebook::fb303;
 
@@ -2605,15 +2604,5 @@ KvStoreDb<ClientType>::logKvEvent(
 
   kvParams_.logSampleQueue.push(std::move(sample));
 }
-
-/*
- * ATTN: DO NOT REMOVE THIS.
- * This is explicitly instantiate all the possible template instances.
- *
- * TODO: Ideally, make KvStore.h depend on KvStore-inl.h, which includes
- * all of the template implementation.
- */
-template class KvStore<thrift::OpenrCtrlCppAsyncClient>;
-template class KvStore<thrift::KvStoreServiceAsyncClient>;
 
 } // namespace openr

@@ -723,4 +723,7 @@ class KvStore final : public OpenrEventBase {
   // initialization process.
   bool initialSyncSignalSent_{false};
 };
+
 } // namespace openr
+
+#include <openr/kvstore/KvStore-inl.h>

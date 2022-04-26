@@ -10,10 +10,8 @@
 #include <folly/io/SocketOptionMap.h>
 #include <folly/io/async/AsyncSSLSocket.h>
 #include <folly/io/async/AsyncSocket.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-
 #include <openr/common/Constants.h>
-#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
+#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 namespace openr {
 
@@ -62,7 +60,7 @@ getSocketOptionMap(std::optional<int> maybeIpTos) {
  * streaming APIs. Use this if you need stream APIs.
  */
 template <
-    typename ClientType = thrift::OpenrCtrlCppAsyncClient,
+    typename ClientType,
     typename ClientChannel = apache::thrift::HeaderClientChannel>
 static std::unique_ptr<ClientType>
 getOpenrCtrlPlainTextClient(
@@ -113,7 +111,7 @@ getOpenrCtrlPlainTextClient(
  * Create secured client for OpenrCtrlCpp service over AsyncSSLSocket.
  */
 template <
-    typename ClientType = thrift::OpenrCtrlCppAsyncClient,
+    typename ClientType,
     typename ClientChannel = apache::thrift::HeaderClientChannel>
 static std::unique_ptr<ClientType>
 getOpenrCtrlSecureClient(
