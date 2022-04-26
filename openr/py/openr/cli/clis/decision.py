@@ -52,7 +52,7 @@ class DecisionRoutesComputedCli:
     @click.command()
     @click.option(
         "--nodes",
-        default=[],
+        default=None,
         help="Get routes for a list of nodes. Default will get "
         "host's routes. Get routes for all nodes if 'all' is given.",
     )
@@ -75,15 +75,17 @@ class DecisionRoutesComputedCli:
     def routes(cli_opts, nodes, prefixes, labels, json):  # noqa: B902
         """Request the routing table from Decision module"""
 
-        nodes = parse_nodes(cli_opts, nodes)
-        decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, labels, json)
+        nodes_set = parse_nodes(cli_opts, nodes)
+        decision.DecisionRoutesComputedCmd(cli_opts).run(
+            nodes_set, prefixes, labels, json
+        )
 
 
 class DecisionAdjCli:
     @click.command()
     @click.option(
         "--nodes",
-        default=[],
+        default=None,
         help="Dump adjacencies for a list of nodes. Default will dump "
         "host's adjs. Dump adjs for all nodes if 'all' is given",
     )
@@ -102,8 +104,8 @@ class DecisionAdjCli:
     def adj(cli_opts, nodes, areas, bidir, json):  # noqa: B902
         """dump the link-state adjacencies from Decision module"""
 
-        nodes = parse_nodes(cli_opts, nodes)
-        decision.DecisionAdjCmd(cli_opts).run(nodes, set(areas), bidir, json)
+        nodes_set = parse_nodes(cli_opts, nodes)
+        decision.DecisionAdjCmd(cli_opts).run(nodes_set, set(areas), bidir, json)
 
 
 class DecisionValidateCli:

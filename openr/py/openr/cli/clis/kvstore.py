@@ -64,15 +64,15 @@ class PrefixesCli(object):
     @click.pass_obj
     def prefixes(
         cli_opts: Any,  # noqa: B902
-        nodes: List[str],
+        nodes: str,
         json: bool,
         prefix: str,
         client_type: str,
     ) -> None:
         """show the prefixes in the network"""
 
-        nodes = parse_nodes(cli_opts, nodes)
-        kvstore.PrefixesCmd(cli_opts).run(nodes, json, prefix, client_type)
+        nodes_set = parse_nodes(cli_opts, nodes)
+        kvstore.PrefixesCmd(cli_opts).run(nodes_set, json, prefix, client_type)
 
 
 class KeysCli(object):

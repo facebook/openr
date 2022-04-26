@@ -159,7 +159,7 @@ def get_fib_agent_client(
     return client
 
 
-def parse_nodes(cli_opts, nodes):
+def parse_nodes(cli_opts: bunch.Bunch, nodes: str) -> Set[str]:
     """parse nodes from user input
 
     :return set: the set of nodes
@@ -168,9 +168,9 @@ def parse_nodes(cli_opts, nodes):
     if not nodes:
         with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
             nodes = client.getMyNodeName()
-    nodes = set(nodes.strip().split(","))
+    nodes_set = set(nodes.strip().split(","))
 
-    return nodes
+    return nodes_set
 
 
 def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False) -> str:
