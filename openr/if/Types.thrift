@@ -474,6 +474,11 @@ struct PrefixDatabase {
   5: bool deletePrefix;
 
   /**
+  * Needed for backwards compatability
+  */
+  6: optional bool perPrefixKey
+
+  /**
    * Openr area in which prefix is advertised
    */
   7: string area;
