@@ -20,6 +20,7 @@ constexpr folly::StringPiece Constants::kOpenrCtrlSessionContext;
 constexpr folly::StringPiece Constants::kPlatformHost;
 constexpr folly::StringPiece Constants::kPrefixAllocMarker;
 constexpr folly::StringPiece Constants::kPrefixDbMarker;
+constexpr folly::StringPiece Constants::kPrefixDbMarkerDeprecated;
 constexpr folly::StringPiece Constants::kPrefixNameSeparator;
 constexpr folly::StringPiece Constants::kSeedPrefixAllocLenSeparator;
 constexpr folly::StringPiece Constants::kSeedPrefixAllocParamKey;
