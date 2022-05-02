@@ -100,7 +100,7 @@ static std::unordered_map<std::string, ThriftType> parseThriftValues(
  *    from ALL stores. If at least one store responds this will be non-empty.
  *  - Second member of the pair is a list of unreachable addresses
  */
-template <typename ThriftType>
+template <typename ThriftType, typename ClientType>
 static std::pair<
     std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<folly::SocketAddress> /* unreachable url */>
@@ -140,6 +140,7 @@ dumpAllWithPrefixMultipleAndParse(
  *    from ALL stores. If at least one store responds this will be non-empty.
  *  - Second member of the pair is a list of unreachable addresses
  */
+template <typename ClientType>
 static std::pair<
     std::optional<std::unordered_map<std::string, thrift::Value>>,
     std::vector<folly::SocketAddress> /* unreachable addresses */>

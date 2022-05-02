@@ -272,8 +272,9 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   // Synchronization primitive
   waitBaton.wait();
 
-  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      kTestingAreaName, sockAddrs_, "test_");
+  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<
+      thrift::Value,
+      thrift::OpenrCtrlCppAsyncClient>(kTestingAreaName, sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.has_value());
 
@@ -334,8 +335,9 @@ TEST_F(
   // Synchronization primitive
   waitBaton.wait();
 
-  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      kTestingAreaName, sockAddrs_, "test_");
+  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<
+      thrift::Value,
+      thrift::OpenrCtrlCppAsyncClient>(kTestingAreaName, sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.has_value());
 
@@ -394,8 +396,9 @@ TEST_F(
   // Synchronization primitive
   waitBaton.wait();
 
-  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      kTestingAreaName, sockAddrs_, "test_");
+  const auto [maybe, _] = dumpAllWithPrefixMultipleAndParse<
+      thrift::Value,
+      thrift::OpenrCtrlCppAsyncClient>(kTestingAreaName, sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.has_value());
 

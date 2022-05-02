@@ -11,6 +11,7 @@
 #include <folly/logging/xlog.h>
 
 #include <openr/common/OpenrClient.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreUtil.h>
 

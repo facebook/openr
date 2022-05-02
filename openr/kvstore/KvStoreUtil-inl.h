@@ -9,7 +9,6 @@
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {
@@ -40,7 +39,7 @@ parseThriftValues(
 }
 
 // static
-template <typename ThriftType>
+template <typename ThriftType, typename ClientType>
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<folly::SocketAddress> /* unreached url */>
@@ -54,15 +53,16 @@ dumpAllWithPrefixMultipleAndParse(
     std::optional<int> maybeIpTos /* std::nullopt */,
     const folly::SocketAddress&
         bindAddr /* folly::AsyncSocket::anyAddress()*/) {
-  const auto [res, unreachableAddrs] = dumpAllWithThriftClientFromMultiple(
-      area,
-      sockAddrs,
-      keyPrefix,
-      connectTimeout,
-      processTimeout,
-      sslContext,
-      maybeIpTos,
-      bindAddr);
+  const auto [res, unreachableAddrs] =
+      dumpAllWithThriftClientFromMultiple<ClientType>(
+          area,
+          sockAddrs,
+          keyPrefix,
+          connectTimeout,
+          processTimeout,
+          sslContext,
+          maybeIpTos,
+          bindAddr);
   if (not res) {
     return std::make_pair(std::nullopt, unreachableAddrs);
   }
@@ -77,7 +77,8 @@ dumpAllWithPrefixMultipleAndParse(
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& keyPrefix) {
   return parseThriftValues<ThriftType>(
-      dumpAllWithThriftClientFromMultiple(area, clients, keyPrefix));
+      dumpAllWithThriftClientFromMultiple<ClientType>(
+          area, clients, keyPrefix));
 }
 
 void
@@ -99,6 +100,7 @@ printKeyValInArea(
 }
 
 // static method to dump KvStore key-val over multiple instances
+template <typename ClientType>
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
     std::vector<folly::SocketAddress> /* unreachable addresses */>
@@ -137,20 +139,19 @@ dumpAllWithThriftClientFromMultiple(
 
   auto startTime = std::chrono::steady_clock::now();
   for (auto const& sockAddr : sockAddrs) {
-    std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+    std::unique_ptr<ClientType> client{nullptr};
     if (sslContext) {
       VLOG(3) << "Try to connect Open/R SSL secure client.";
       try {
-        client =
-            getOpenrCtrlSecureClient<openr::thrift::OpenrCtrlCppAsyncClient>(
-                evb,
-                sslContext,
-                folly::IPAddress(sockAddr.getAddressStr()),
-                sockAddr.getPort(),
-                connectTimeout,
-                processTimeout,
-                bindAddr,
-                maybeIpTos);
+        client = getOpenrCtrlSecureClient<ClientType>(
+            evb,
+            sslContext,
+            folly::IPAddress(sockAddr.getAddressStr()),
+            sockAddr.getPort(),
+            connectTimeout,
+            processTimeout,
+            bindAddr,
+            maybeIpTos);
       } catch (const std::exception& ex) {
         LOG(ERROR)
             << "Failed to connect to Open/R instance at: "
@@ -163,15 +164,14 @@ dumpAllWithThriftClientFromMultiple(
     if (!client) {
       VLOG(3) << "Try to connect Open/R plain-text client.";
       try {
-        client =
-            getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
-                evb,
-                folly::IPAddress(sockAddr.getAddressStr()),
-                sockAddr.getPort(),
-                connectTimeout,
-                processTimeout,
-                bindAddr,
-                maybeIpTos);
+        client = getOpenrCtrlPlainTextClient<ClientType>(
+            evb,
+            folly::IPAddress(sockAddr.getAddressStr()),
+            sockAddr.getPort(),
+            connectTimeout,
+            processTimeout,
+            bindAddr,
+            maybeIpTos);
       } catch (const std::exception& ex) {
         LOG(ERROR)
             << "Failed to connect to Open/R instance at: "

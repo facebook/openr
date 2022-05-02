@@ -6,6 +6,7 @@
  */
 
 #include <openr/common/Constants.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/public_tld/examples/KvStorePoller.h>
 
@@ -18,7 +19,9 @@ std::pair<
     std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
     std::vector<folly::SocketAddress> /* unreached url */>
 KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
-  return openr::dumpAllWithPrefixMultipleAndParse<thrift::AdjacencyDatabase>(
+  return openr::dumpAllWithPrefixMultipleAndParse<
+      thrift::AdjacencyDatabase,
+      thrift::OpenrCtrlCppAsyncClient>(
       AreaId{"my_area_name"},
       sockAddrs_,
       Constants::kAdjDbMarker.toString(),
@@ -30,7 +33,9 @@ std::pair<
     std::optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
     std::vector<folly::SocketAddress> /* unreached url */>
 KvStorePoller::getPrefixDatabases(std::chrono::milliseconds pollTimeout) {
-  return openr::dumpAllWithPrefixMultipleAndParse<thrift::PrefixDatabase>(
+  return openr::dumpAllWithPrefixMultipleAndParse<
+      thrift::PrefixDatabase,
+      thrift::OpenrCtrlCppAsyncClient>(
       AreaId{"my_area_name"},
       sockAddrs_,
       Constants::kPrefixDbMarker.toString(),

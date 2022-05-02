@@ -316,7 +316,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   // Step2: verify fetch + aggregate 2 keys from different kvStores with prefix
   {
     const auto [db, _] =
-        dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, "");
+        dumpAllWithThriftClientFromMultiple<thrift::KvStoreServiceAsyncClient>(
+            kTestingAreaName, sockAddrs, "");
     ASSERT_TRUE(db.has_value());
     auto pub = db.value();
     EXPECT_TRUE(pub.size() == 2);
@@ -335,7 +336,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     kvStoreWrapper2_->stopThriftServer();
 
     const auto [db, _] =
-        dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, "");
+        dumpAllWithThriftClientFromMultiple<thrift::KvStoreServiceAsyncClient>(
+            kTestingAreaName, sockAddrs, "");
     ASSERT_TRUE(db.has_value());
     ASSERT_TRUE(db.value().empty());
   }
