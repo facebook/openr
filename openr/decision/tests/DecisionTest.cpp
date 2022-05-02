@@ -7240,9 +7240,7 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
  * Test fixture for testing initial RIB computation in OpenR initialization
  * process.
  */
-class InitialRibBuildTestFixture
-    : public DecisionTestFixture,
-      public ::testing::WithParamInterface<thrift::PrefixType> {
+class InitialRibBuildTestFixture : public DecisionTestFixture {
   openr::thrift::OpenrConfig
   createConfig() override {
     auto tConfig = DecisionTestFixture::createConfig();
@@ -7255,24 +7253,10 @@ class InitialRibBuildTestFixture
     originatedPrefixV4.install_to_fib_ref() = true;
     tConfig.originated_prefixes_ref() = {originatedPrefixV4};
 
-    // Set either AddPath BGP config or VIP service config.
-    thrift::PrefixType prefixType = GetParam();
-    if (prefixType == thrift::PrefixType::BGP) {
-      // Enable segment routing.
-      tConfig.enable_segment_routing_ref() = true;
-      // Enable BGP peering.
-      tConfig.enable_bgp_peering_ref() = true;
-      tConfig.bgp_config_ref() = thrift::BgpConfig();
-      // Enable AddPath feature.
-      auto bgpPeer = thrift::BgpPeer();
-      bgpPeer.peer_addr_ref() = Constants::kPlatformHost.toString();
-      bgpPeer.add_path_ref() = thrift::AddPath::RECEIVE;
-      tConfig.bgp_config_ref()->peers_ref()->push_back(bgpPeer);
-    } else if (prefixType == thrift::PrefixType::VIP) {
-      // Enable Vip service.
-      tConfig.enable_vip_service_ref() = true;
-      tConfig.vip_service_config_ref() = vipconfig::config::VipServiceConfig();
-    }
+    // Enable Vip service.
+    tConfig.enable_vip_service_ref() = true;
+    tConfig.vip_service_config_ref() = vipconfig::config::VipServiceConfig();
+
     return tConfig;
   }
 
@@ -7281,11 +7265,6 @@ class InitialRibBuildTestFixture
     // Do not publish peers information. Test case below will handle that.
   }
 };
-
-INSTANTIATE_TEST_CASE_P(
-    InitialRibBuildTestInstance,
-    InitialRibBuildTestFixture,
-    ::testing::Values(thrift::PrefixType::BGP, thrift::PrefixType::VIP));
 
 /*
  * Verify OpenR initialzation could succeed at current node (1),
@@ -7301,9 +7280,7 @@ INSTANTIATE_TEST_CASE_P(
  *   connected, thus computed routes for prefixes advertised by node 2 and
  *   label route of node 2.
  */
-TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
-  thrift::PrefixType prefixType = GetParam();
-
+TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
   // Send adj publication (current node is 1).
   // * adjacency "1->2" can only be used by node 2,
   // * adjacency "2->1" can only be used by node 1.
@@ -7383,23 +7360,15 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
         // Initial RIB computation not triggered yet.
         EXPECT_EQ(0, routeUpdatesQueueReader.size());
 
-        if (prefixType == thrift::PrefixType::BGP) {
-          // Received static MPLS label routes for BGP prefixes.
-          DecisionRouteUpdate bgpStaticRoutes;
-          bgpStaticRoutes.prefixType = thrift::PrefixType::BGP;
-          bgpStaticRoutes.addMplsRouteToUpdate(RibMplsEntry(65000));
-          staticRouteUpdatesQueue.push(std::move(bgpStaticRoutes));
-        } else if (prefixType == thrift::PrefixType::VIP) {
-          // Received static unicast routes for VIP prefixes.
-          DecisionRouteUpdate vipStaticRoutes;
-          vipStaticRoutes.prefixType = thrift::PrefixType::VIP;
-          vipStaticRoutes.addRouteToUpdate(RibUnicastEntry(
-              toIPNetwork(addr2V4),
-              {},
-              addr2VipPrefixEntry,
-              Constants::kDefaultArea.toString()));
-          staticRouteUpdatesQueue.push(std::move(vipStaticRoutes));
-        }
+        // Received static unicast routes for VIP prefixes.
+        DecisionRouteUpdate vipStaticRoutes;
+        vipStaticRoutes.prefixType = thrift::PrefixType::VIP;
+        vipStaticRoutes.addRouteToUpdate(RibUnicastEntry(
+            toIPNetwork(addr2V4),
+            {},
+            addr2VipPrefixEntry,
+            Constants::kDefaultArea.toString()));
+        staticRouteUpdatesQueue.push(std::move(vipStaticRoutes));
       });
 
   evb.scheduleTimeout(
@@ -7423,20 +7392,12 @@ TEST_P(InitialRibBuildTestFixture, PrefixWithMixedTypeRoutes) {
         // Initial RIB computation is triggered.
         // Generated static routes and node label route for node 1.
         auto routeDbDelta = recvRouteUpdates();
-        if (prefixType == thrift::PrefixType::BGP) {
-          // Static config originated route.
-          EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-          // Static MPLS routes; Node label routes for the node itself.
-          EXPECT_EQ(2, routeDbDelta.mplsRoutesToUpdate.size());
-          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(1));
-          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(65000));
-        } else if (prefixType == thrift::PrefixType::VIP) {
-          // Static config originated route and static VIP route.
-          EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
-          // Node label routes for the node itself (1).
-          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
-          EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(1));
-        }
+
+        // Static config originated route and static VIP route.
+        EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
+        // Node label routes for the node itself (1).
+        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
+        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(1));
 
         // Send adj publication.
         // Updated adjacency for peer "2" is received,
