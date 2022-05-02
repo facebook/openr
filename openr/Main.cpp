@@ -469,11 +469,7 @@ main(int argc, char** argv) {
   if (config->isBgpPeeringEnabled()) {
     assert(pluginRouteReaderPtr);
     auto pluginArgs = PluginArgs{
-        prefixUpdatesQueue,
-        staticRouteUpdatesQueue,
-        *pluginRouteReaderPtr,
-        config,
-        sslContext};
+        prefixUpdatesQueue, *pluginRouteReaderPtr, config, sslContext};
 
     pluginStart(pluginArgs);
   }

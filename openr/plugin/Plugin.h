@@ -19,7 +19,6 @@
 namespace openr {
 struct PluginArgs {
   messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue;
   std::shared_ptr<const Config> config;
   std::shared_ptr<wangle::SSLContextConfig> sslContext;
@@ -36,9 +35,8 @@ void pluginStart(const PluginArgs& /* pluginArgs */);
 void pluginStop();
 /* create a vip plugin object and run */
 void vipPluginStart(const VipPluginArgs& /* PluginArgs */);
-/* stop vip lougin */
+/* stop vip plugin */
 void vipPluginStop();
-/* destroy vip plugin, call after vipRouteEvb is stopped to clean up the object.
- */
+/* destroy vip plugin, called after vipRouteEvb is stopped */
 void vipPluginDestroy();
 } // namespace openr
