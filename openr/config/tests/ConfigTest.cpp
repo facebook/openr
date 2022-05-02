@@ -892,28 +892,6 @@ TEST(ConfigTest, SegmentRoutingConfig) {
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX);
 }
 
-TEST(ConfigTest, AddPathConfig) {
-  auto tConfig = getBasicOpenrConfig();
-  thrift::BgpConfig bgpConfig;
-  thrift::BgpPeer bgpPeer;
-  bgpPeer.add_path_ref() = thrift::AddPath::RECEIVE;
-  bgpPeer.peer_addr_ref() = "::1";
-  bgpConfig.peers_ref() = {bgpPeer};
-  tConfig.enable_bgp_peering_ref() = true;
-  tConfig.enable_segment_routing_ref() = false;
-  tConfig.bgp_config_ref() = bgpConfig;
-  EXPECT_THROW((Config(tConfig)), std::invalid_argument);
-
-  tConfig.enable_segment_routing_ref() = true;
-  EXPECT_NO_THROW((Config(tConfig)));
-  EXPECT_TRUE(Config(tConfig).isBgpAddPathEnabled());
-
-  bgpPeer.add_path_ref() = thrift::AddPath::NONE;
-  bgpConfig.peers_ref() = {bgpPeer};
-  tConfig.bgp_config_ref() = bgpConfig;
-  EXPECT_FALSE(Config(tConfig).isBgpAddPathEnabled());
-}
-
 TEST(ConfigTest, EorTime) {
   auto tConfig = getBasicOpenrConfig();
   tConfig.spark_config_ref()->keepalive_time_s_ref() = 2;

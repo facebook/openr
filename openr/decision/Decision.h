@@ -363,8 +363,6 @@ class Decision : public OpenrEventBase {
    * computation in OpenR initialization procedure. This would be populated
    * based on config,
    * - `VIP` is added if VIP plugin is enabled in config.
-   * - `BGP` is added if BgpRib genereates static MPLS label routes, aka, BGP
-   *   peering enable, AddPath feature enabled, and segment routing enabled.
    * - `CONFIG` is added if config originated prefixes are enabled in config.
    *
    * As we receive the first static routes from these types we remove them from
