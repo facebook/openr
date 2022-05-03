@@ -73,12 +73,13 @@ dumpAllWithPrefixMultipleAndParse(
 template <typename ThriftType, typename ClientType>
 std::unordered_map<std::string /* key */, ThriftType>
 dumpAllWithPrefixMultipleAndParse(
+    folly::EventBase& evb,
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& keyPrefix) {
   return parseThriftValues<ThriftType>(
       dumpAllWithThriftClientFromMultiple<ClientType>(
-          area, clients, keyPrefix));
+          evb, area, clients, keyPrefix));
 }
 
 void
@@ -240,6 +241,7 @@ dumpAllWithThriftClientFromMultiple(
 template <typename ClientType>
 std::unordered_map<std::string /* key */, thrift::Value>
 dumpAllWithThriftClientFromMultiple(
+    folly::EventBase& evb,
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& keyPrefix) {
@@ -258,7 +260,7 @@ dumpAllWithThriftClientFromMultiple(
   }
 
   // loop semifuture collection to merge all values
-  for (const auto& result : folly::collectAll(calls).get()) {
+  for (const auto& result : folly::collectAll(calls).via(&evb).getVia(&evb)) {
     // folly::Try will contain either value or exception
     if (result.hasException()) {
       LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());

@@ -354,25 +354,14 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
   const uint16_t port1 = kvStoreWrapper1_->getThriftPort();
   const uint16_t port2 = kvStoreWrapper2_->getThriftPort();
 
-  folly::ScopedEventBaseThread evb;
+  folly::EventBase* evb = folly::EventBaseManager::get()->getEventBase();
   std::vector<std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>> clients;
   clients.emplace_back(
       getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
-          *evb.getEventBase(),
-          folly::IPAddress(Constants::kPlatformHost.toString()),
-          port1));
+          *evb, folly::IPAddress(Constants::kPlatformHost.toString()), port1));
   clients.emplace_back(
       getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
-          *evb.getEventBase(),
-          folly::IPAddress(Constants::kPlatformHost.toString()),
-          port2));
-
-  // Clients should be destroyed in a thread from EventBase with which they were
-  // created, so destroy them properly at the end of the test.
-  SCOPE_EXIT {
-    evb.getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
-        [&clients]() { clients.clear(); });
-  };
+          *evb, folly::IPAddress(Constants::kPlatformHost.toString()), port2));
 
   // Step1: insert (k1, v1) and (k2, v2) to different KvStore instances
   {
@@ -385,8 +374,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
 
   // Step2: verify fetch + aggregate 2 keys from different kvStores with prefix
   {
-    const auto& pub =
-        dumpAllWithThriftClientFromMultiple(kTestingAreaName, clients, "");
+    const auto& pub = dumpAllWithThriftClientFromMultiple(
+        *evb, kTestingAreaName, clients, "");
     EXPECT_TRUE(pub.size() == 2);
     EXPECT_TRUE(pub.count(key1));
     EXPECT_TRUE(pub.count(key2));
@@ -402,8 +391,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
     kvStoreWrapper1_->stopThriftServer();
     kvStoreWrapper2_->stopThriftServer();
 
-    const auto& pub =
-        dumpAllWithThriftClientFromMultiple(kTestingAreaName, clients, "");
+    const auto& pub = dumpAllWithThriftClientFromMultiple(
+        *evb, kTestingAreaName, clients, "");
     ASSERT_TRUE(pub.empty());
   }
 }
