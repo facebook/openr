@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,17 +7,17 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "openr/if/gen-cpp2/OpenrConfig_types.h"
 
+#include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
-
 #include <openr/decision/tests/DecisionTestUtils.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace testing;
-
-const std::string kDefaultArea{
-    openr::thrift::KvStore_constants::kDefaultArea()};
+using namespace openr;
 
 TEST(HoldableValueTest, BasicOperation) {
   openr::HoldableValue<bool> hv{true};
@@ -90,22 +90,22 @@ TEST(LinkTest, BasicOperation) {
   auto adj2 =
       openr::createAdjacency(n2, "if2", "if1", "fe80::1", "10.0.0.1", 1, 2, 1);
 
-  openr::Link l1(kDefaultArea, n1, adj1, n2, adj2);
-  EXPECT_EQ(kDefaultArea, l1.getArea());
+  openr::Link l1(kTestingAreaName, n1, adj1, n2, adj2);
+  EXPECT_EQ(kTestingAreaName.t, l1.getArea());
   EXPECT_EQ(n2, l1.getOtherNodeName(n1));
   EXPECT_EQ(n1, l1.getOtherNodeName(n2));
   EXPECT_THROW(l1.getOtherNodeName("node3"), std::invalid_argument);
 
-  EXPECT_EQ(adj1.ifName, l1.getIfaceFromNode(n1));
-  EXPECT_EQ(adj2.ifName, l1.getIfaceFromNode(n2));
+  EXPECT_EQ(*adj1.ifName_ref(), l1.getIfaceFromNode(n1));
+  EXPECT_EQ(*adj2.ifName_ref(), l1.getIfaceFromNode(n2));
   EXPECT_THROW(l1.getIfaceFromNode("node3"), std::invalid_argument);
 
-  EXPECT_EQ(adj1.metric, l1.getMetricFromNode(n1));
-  EXPECT_EQ(adj2.metric, l1.getMetricFromNode(n2));
+  EXPECT_EQ(*adj1.metric_ref(), l1.getMetricFromNode(n1));
+  EXPECT_EQ(*adj2.metric_ref(), l1.getMetricFromNode(n2));
   EXPECT_THROW(l1.getMetricFromNode("node3"), std::invalid_argument);
 
-  EXPECT_EQ(adj1.adjLabel, l1.getAdjLabelFromNode(n1));
-  EXPECT_EQ(adj2.adjLabel, l1.getAdjLabelFromNode(n2));
+  EXPECT_EQ(*adj1.adjLabel_ref(), l1.getAdjLabelFromNode(n1));
+  EXPECT_EQ(*adj2.adjLabel_ref(), l1.getAdjLabelFromNode(n2));
   EXPECT_THROW(l1.getAdjLabelFromNode("node3"), std::invalid_argument);
 
   EXPECT_FALSE(l1.getOverloadFromNode(n1));
@@ -122,7 +122,7 @@ TEST(LinkTest, BasicOperation) {
   EXPECT_FALSE(l1.isUp());
 
   // compare equivalent links
-  openr::Link l2(kDefaultArea, n2, adj2, n1, adj1);
+  openr::Link l2(kTestingAreaName, n2, adj2, n1, adj1);
   EXPECT_TRUE(l1 == l2);
   EXPECT_FALSE(l1 < l2);
   EXPECT_FALSE(l2 < l1);
@@ -131,7 +131,7 @@ TEST(LinkTest, BasicOperation) {
   std::string n3 = "node3";
   auto adj3 =
       openr::createAdjacency(n2, "if3", "if2", "fe80::3", "10.0.0.3", 1, 1, 1);
-  openr::Link l3(kDefaultArea, n1, adj1, n3, adj3);
+  openr::Link l3(kTestingAreaName, n1, adj1, n3, adj3);
   EXPECT_FALSE(l1 == l3);
   EXPECT_TRUE(l1 < l3 || l3 < l1);
 }
@@ -153,21 +153,26 @@ TEST(LinkStateTest, BasicOperation) {
   auto adj32 =
       openr::createAdjacency(n2, "if2", "if3", "fe80::2", "10.0.0.2", 1, 1, 1);
 
-  openr::Link l1(kDefaultArea, n1, adj12, n2, adj21);
-  openr::Link l2(kDefaultArea, n2, adj23, n3, adj32);
-  openr::Link l3(kDefaultArea, n3, adj31, n1, adj13);
+  openr::Link l1(kTestingAreaName, n1, adj12, n2, adj21);
+  openr::Link l2(kTestingAreaName, n2, adj23, n3, adj32);
+  openr::Link l3(kTestingAreaName, n3, adj31, n1, adj13);
 
   auto adjDb1 = openr::createAdjDb(n1, {adj12, adj13}, 1);
   auto adjDb2 = openr::createAdjDb(n2, {adj21, adj23}, 2);
   auto adjDb3 = openr::createAdjDb(n3, {adj31, adj32}, 3);
 
-  openr::LinkState state{kDefaultArea};
+  openr::LinkState state{kTestingAreaName};
 
-  EXPECT_EQ(kDefaultArea, state.getArea());
+  EXPECT_EQ(kTestingAreaName.t, state.getArea());
 
-  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb2, 0, 0).topologyChanged);
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb3, 0, 0).topologyChanged);
+  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                   .topologyChanged);
+  auto update = state.updateAdjacencyDatabase(adjDb2, kTestingAreaName, 0, 0);
+  EXPECT_TRUE(update.topologyChanged);
+  EXPECT_EQ(update.addedLinks.size(), 1);
+  update = state.updateAdjacencyDatabase(adjDb3, kTestingAreaName, 0, 0);
+  EXPECT_TRUE(update.topologyChanged);
+  EXPECT_EQ(update.addedLinks.size(), 2);
 
   EXPECT_THAT(
       state.linksFromNode(n1), UnorderedElementsAre(Pointee(l1), Pointee(l3)));
@@ -178,16 +183,20 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_THAT(state.linksFromNode("node4"), testing::IsEmpty());
 
   EXPECT_FALSE(state.isNodeOverloaded(n1));
-  adjDb1.isOverloaded = true;
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
+  adjDb1.isOverloaded_ref() = true;
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                  .topologyChanged);
   EXPECT_TRUE(state.isNodeOverloaded(n1));
-  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
-  adjDb1.isOverloaded = false;
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
+  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                   .topologyChanged);
+  adjDb1.isOverloaded_ref() = false;
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                  .topologyChanged);
   EXPECT_FALSE(state.isNodeOverloaded(n1));
 
   adjDb1 = openr::createAdjDb(n1, {adj13}, 1);
-  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).topologyChanged);
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, kTestingAreaName, 0, 0)
+                  .topologyChanged);
   EXPECT_THAT(state.linksFromNode(n1), UnorderedElementsAre(Pointee(l3)));
   EXPECT_THAT(state.linksFromNode(n2), UnorderedElementsAre(Pointee(l2)));
   EXPECT_THAT(
@@ -200,9 +209,12 @@ TEST(LinkStateTest, BasicOperation) {
 }
 
 TEST(LinkStateTest, pathAInPathB) {
-  auto l1 = std::make_shared<openr::Link>(kDefaultArea, "1", "1/2", "2", "2/1");
-  auto l2 = std::make_shared<openr::Link>(kDefaultArea, "2", "2/3", "3", "3/2");
-  auto l3 = std::make_shared<openr::Link>(kDefaultArea, "1", "1/3", "3", "3/1");
+  auto l1 =
+      std::make_shared<openr::Link>(kTestingAreaName, "1", "1/2", "2", "2/1");
+  auto l2 =
+      std::make_shared<openr::Link>(kTestingAreaName, "2", "2/3", "3", "3/2");
+  auto l3 =
+      std::make_shared<openr::Link>(kTestingAreaName, "1", "1/3", "3", "3/1");
   openr::LinkState::Path p1, p2;
 
   EXPECT_TRUE(openr::LinkState::pathAInPathB(p1, p2));
@@ -315,64 +327,158 @@ TEST(LinkStateTest, getKthPaths) {
   }
 }
 
-TEST(LinkStateTest, getHopCounts) {
+TEST(LinkStateTest, UcmpTest) {
+  // Ucmp algorithm: LWP
+  //
+  // w:2     w:1  w:1
+  //  (4)    (5)  (6)
+  //    \   /   /   /
+  //     \ /   /   /
+  //     ( 2 )/  (3)
+  //       \     /
+  //        \   /
+  //        ( 1 )
   {
-    // box
-    //
-    //   1--2
-    //   |  |
-    //   3--4
-    //
     auto linkState = openr::getLinkState({
         {1, {2, 3}},
-        {2, {1, 4}},
-        {3, {1, 4}},
-        {4, {2, 3}},
+        {2, {1, 4, 5, 6}},
+        {3, {1, 6}},
+        {4, {2}},
+        {5, {2}},
+        {6, {2, 3}},
     });
 
-    EXPECT_EQ(1, linkState.getHopsFromAToB("1", "2"));
-    EXPECT_EQ(2, linkState.getHopsFromAToB("1", "4"));
-    EXPECT_EQ(2, linkState.getMaxHopsToNode("1"));
+    auto ucmpResult = linkState.resolveUcmpWeights(
+        linkState.getSpfResult("1"),
+        {{"4", 2 * Constants::kDefaultAdjWeight},
+         {"5", Constants::kDefaultAdjWeight},
+         {"6", Constants::kDefaultAdjWeight}},
+        thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION);
+
+    EXPECT_EQ(6, ucmpResult.size());
+
+    // Check UCMP weights at node 2
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("2")),
+        UnorderedElementsAre(
+            std::make_pair("2/4/0", 2 * Constants::kDefaultAdjWeight),
+            std::make_pair("2/5/0", Constants::kDefaultAdjWeight),
+            std::make_pair("2/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(3 * Constants::kDefaultAdjWeight, ucmpResult.at("2").weight());
+
+    // Check UCMP weights at node 3
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("3")),
+        UnorderedElementsAre(
+            std::make_pair("3/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(Constants::kDefaultAdjWeight, ucmpResult.at("3").weight());
+
+    // Check UCMP weights at node 1
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("1")),
+        UnorderedElementsAre(
+            std::make_pair("1/2/0", 3 * Constants::kDefaultAdjWeight),
+            std::make_pair("1/3/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(2 * Constants::kDefaultAdjWeight, ucmpResult.at("1").weight());
   }
 
+  // Ucmp algorithm: AWP
+  //
+  // w:2     w:1  w:1
+  //  (4)    (5)  (6)
+  //    \   /   /   /
+  //     \ /   /   /
+  //     ( 2 )/  (3)
+  //       \     /
+  //        \   /
+  //        ( 1 )
   {
-    // line
-    //
-    //   1-2-3-4-5
-    //
     auto linkState = openr::getLinkState({
-        {1, {2}},
-        {2, {1, 3}},
-        {3, {2, 4}},
-        {4, {3, 5}},
-        {5, {4}},
+        {1, {2, 3}},
+        {2, {1, 4, 5, 6}},
+        {3, {1, 6}},
+        {4, {2}},
+        {5, {2}},
+        {6, {2, 3}},
     });
 
-    EXPECT_EQ(1, linkState.getHopsFromAToB("1", "2"));
-    EXPECT_EQ(3, linkState.getHopsFromAToB("1", "4"));
-    EXPECT_EQ(1, linkState.getHopsFromAToB("2", "3"));
-    EXPECT_EQ(4, linkState.getMaxHopsToNode("1"));
-    EXPECT_EQ(3, linkState.getMaxHopsToNode("2"));
-    EXPECT_EQ(2, linkState.getMaxHopsToNode("3"));
+    auto ucmpResult = linkState.resolveUcmpWeights(
+        linkState.getSpfResult("1"),
+        {{"4", 2 * Constants::kDefaultAdjWeight},
+         {"5", Constants::kDefaultAdjWeight},
+         {"6", Constants::kDefaultAdjWeight}},
+        openr::thrift::PrefixForwardingAlgorithm::
+            SP_UCMP_PREFIX_WEIGHT_PROPAGATION);
+
+    EXPECT_EQ(6, ucmpResult.size());
+
+    // Check UCMP weights at node 2
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("2")),
+        UnorderedElementsAre(
+            std::make_pair("2/4/0", 2 * Constants::kDefaultAdjWeight),
+            std::make_pair("2/5/0", Constants::kDefaultAdjWeight),
+            std::make_pair("2/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(4 * Constants::kDefaultAdjWeight, ucmpResult.at("2").weight());
+
+    // Check UCMP weights at node 3
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("3")),
+        UnorderedElementsAre(
+            std::make_pair("3/6/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(Constants::kDefaultAdjWeight, ucmpResult.at("3").weight());
+
+    // Check UCMP weights at node 1
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("1")),
+        UnorderedElementsAre(
+            std::make_pair("1/2/0", 4 * Constants::kDefaultAdjWeight),
+            std::make_pair("1/3/0", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(5 * Constants::kDefaultAdjWeight, ucmpResult.at("1").weight());
   }
 
+  // Ucmp algorithm: AWP
+  // Testing topology with non one link cost and double
+  // links between nodes
+  //
+  //  w:4    w:2   w:1
+  //  (3)    (4)   (5)
+  //    \   /     / /
+  //     \ /     / /
+  //     (2)    / / cost=2
+  //       \   / /
+  //        \ / /
+  //        (1)
   {
-    // disconnect line
-    //
-    //   1-2-3-4 5
-    //
-    auto linkState = openr::getLinkState({
-        {1, {2}},
-        {2, {1, 3}},
-        {3, {2, 4}},
-        {4, {3}},
-        {5, {}},
-    });
+    auto linkState = openr::getLinkState(
+        {{1, {{2, 1}, {5, 2}, {5, 2}}},
+         {2, {{1, 1}, {3, 1}, {4, 1}}},
+         {3, {{2, 1}}},
+         {4, {{2, 1}}},
+         {5, {{1, 2}, {1, 2}}}});
+    auto ucmpResult = linkState.resolveUcmpWeights(
+        linkState.getSpfResult("1"),
+        {{"3", 4 * Constants::kDefaultAdjWeight},
+         {"4", 2 * Constants::kDefaultAdjWeight},
+         {"5", Constants::kDefaultAdjWeight}},
+        thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION);
 
-    EXPECT_FALSE(linkState.getHopsFromAToB("1", "5").has_value());
-    EXPECT_EQ(1, linkState.getHopsFromAToB("2", "3"));
-    EXPECT_EQ(3, linkState.getMaxHopsToNode("1"));
-    EXPECT_EQ(0, linkState.getMaxHopsToNode("5"));
+    // Check UCMP weights at node 2
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("2")),
+        UnorderedElementsAre(
+            std::make_pair("2/3/0", 2 * Constants::kDefaultAdjWeight),
+            std::make_pair("2/4/0", 1 * Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(6 * Constants::kDefaultAdjWeight, ucmpResult.at("2").weight());
+
+    // Check UCMP weights at node 1
+    EXPECT_THAT(
+        getNodeUcmpResults(ucmpResult.at("1")),
+        UnorderedElementsAre(
+            std::make_pair("1/2/0", 6 * Constants::kDefaultAdjWeight),
+            std::make_pair("1/5/0", Constants::kDefaultAdjWeight),
+            std::make_pair("1/5/1", Constants::kDefaultAdjWeight)));
+    EXPECT_EQ(8 * Constants::kDefaultAdjWeight, ucmpResult.at("1").weight());
   }
 }
 
@@ -383,6 +489,7 @@ main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

@@ -1,11 +1,12 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 #include "openr/monitor/MonitorBase.h"
+#include <folly/logging/xlog.h>
 #include <openr/common/Constants.h>
 
 namespace openr {
@@ -31,16 +32,30 @@ MonitorBase::MonitorBase(
   // Schedule an immediate timeout
   setProcessCounterTimer_->scheduleTimeout(0);
 
+  // Periodically dump the heap memory profile
+  if (config->isMemoryProfilingEnabled()) {
+    dumpHeapProfileTimer_ =
+        folly::AsyncTimeout::make(*getEvb(), [this, config]() noexcept {
+          dumpHeapProfile();
+          dumpHeapProfileTimer_->scheduleTimeout(
+              config->getMemoryProfilingInterval());
+        });
+    // Schedule an immediate timeout
+    dumpHeapProfileTimer_->scheduleTimeout(0);
+  }
+
   // Fiber task to read the LogSample from queue and publish
   addFiberTask(
       [q = std::move(logSampleQueue), config, this]() mutable noexcept {
-        LOG(INFO) << "Starting log sample updates processing fiber";
+        XLOG(INFO) << "Starting log sample updates processing fiber "
+                   << "with isLogSubmissionEnable() flag: "
+                   << config->isLogSubmissionEnabled();
         while (true) {
           // perform read log from the queue
           auto maybeLog = q.get();
-          VLOG(2) << "Received log sample update";
+          XLOG(DBG2) << "Received log sample update";
           if (maybeLog.hasError()) {
-            LOG(INFO) << "Terminating log sample updates processing fiber";
+            XLOG(INFO) << "Terminating log sample updates processing fiber";
             break;
           }
 
@@ -58,22 +73,23 @@ MonitorBase::MonitorBase(
             if (recentLog_.size() >= maxLogEvents_) {
               recentLog_.pop_front();
             }
-            recentLog_.push_back(inputLog);
+            recentLog_.emplace_back(inputLog.toJson());
 
-            // and publish the log
-            processEventLog(inputLog);
+            // publish the log if enable log submission
+            if (config->isLogSubmissionEnabled()) {
+              processEventLog(inputLog);
+            }
           } catch (const std::exception& e) {
             fb303::fbData->addStatValue(
                 "monitor.log.publish.failure", 1, fb303::COUNT);
-            LOG(ERROR) << "Failed to publish the log. Error: "
-                       << folly::exceptionStr(e);
-            continue;
+            XLOG(ERR) << "Failed to publish the log. Error: "
+                      << folly::exceptionStr(e);
           }
         }
       });
 }
 
-std::list<LogSample>
+std::list<std::string>
 MonitorBase::getRecentEventLogs() {
   return recentLog_;
 }

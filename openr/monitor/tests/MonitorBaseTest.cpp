@@ -1,11 +1,12 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 #include <openr/monitor/MonitorBase.h>
+
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -26,6 +27,7 @@ class MonitorMock : public MonitorBase {
       messaging::RQueue<LogSample> eventLogUpdatesQueue)
       : MonitorBase(config, category, eventLogUpdatesQueue) {}
   MOCK_METHOD1(processEventLog, void(LogSample const& eventLog));
+  MOCK_METHOD0(dumpHeapProfile, void());
 };
 
 class MonitorTestFixture : public ::testing::Test {
@@ -34,8 +36,8 @@ class MonitorTestFixture : public ::testing::Test {
   SetUp() override {
     // generate a config for testing
     openr::thrift::OpenrConfig config;
-    config.node_name = "node1";
-    config.domain = "domain1";
+    *config.node_name_ref() = "node1";
+    *config.domain_ref() = "domain1";
 
     monitor = make_unique<MonitorMock>(
         std::make_unique<openr::Config>(config),
@@ -98,7 +100,7 @@ TEST_F(MonitorTestFixture, LogBasicOperation) {
   while (true) {
     if (monitor->getRecentEventLogs().size() == 1) {
       // Should only get the valid log from queue, discard the invalid one
-      auto sample = monitor->getRecentEventLogs().front();
+      auto sample = LogSample::fromJson(monitor->getRecentEventLogs().front());
       EXPECT_EQ(sample.getString("event"), "event_unit_test");
       EXPECT_EQ(sample.getInt("num"), 200);
       // `domain` and `node_name` should be added to each log message

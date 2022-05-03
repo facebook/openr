@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,19 +7,11 @@
 
 #pragma once
 
-#include <chrono>
-#include <random>
-#include <string>
-
-#include <fbzmq/async/ZmqTimeout.h>
-#include <folly/Format.h>
-#include <folly/Optional.h>
 #include <folly/Random.h>
 #include <folly/gen/Base.h>
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 
@@ -48,17 +40,21 @@ class RangeAllocator {
    * higher priority allocator instances joining later
    */
   RangeAllocator(
+      AreaId const& area,
       const std::string& nodeName,
       const std::string& keyPrefix,
+      KvStore* const kvStore,
       KvStoreClientInternal* const kvStoreClient,
       std::function<void(std::optional<T>)> callback,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+      const bool enableKvRequestQueue,
       const std::chrono::milliseconds minBackoffDur =
           std::chrono::milliseconds(50),
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
       const bool overrideOwner = true,
       const std::function<bool(T)> checkValueInUseCb = nullptr,
-      const std::chrono::milliseconds rangeAllocTtl = Constants::kRangeAllocTtl,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
+      const std::chrono::milliseconds rangeAllocTtl =
+          Constants::kRangeAllocTtl);
 
   /**
    * user must call this to start allocation
@@ -121,12 +117,18 @@ class RangeAllocator {
    */
   std::string createKey(const T val) const noexcept;
 
+  std::optional<std::unordered_map<std::string, thrift::Value>>
+  dumpKeysWithPrefix() const noexcept;
+
   //
   // Immutable state
   //
 
   const std::string nodeName_;
   const std::string keyPrefix_;
+
+  // raw ptr to KvStore for retreiving key-vals and subscribing keys
+  KvStore* const kvStore_{nullptr};
 
   // KvStoreClientInternal instance used for communicating with KvStore
   KvStoreClientInternal* const kvStoreClient_{nullptr};
@@ -144,6 +146,9 @@ class RangeAllocator {
   // key accidentally if a lower originator submit the key and it has not
   // propogated to the former yet
   const bool overrideOwner_{true};
+
+  // config knob for enabling key-val request queue
+  const bool enableKvRequestQueue_;
 
   //
   // Mutable state
@@ -171,6 +176,9 @@ class RangeAllocator {
   // if allocator has started
   bool hasStarted_{false};
 
+  // queue for sending key-value requests to KvStore
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
+
   // callback to check if value already exists
   const std::function<bool(T)> checkValueInUseCb_{nullptr};
 
@@ -178,7 +186,7 @@ class RangeAllocator {
   const std::chrono::milliseconds rangeAllocTtl_;
 
   // area ID
-  const std::string area_{};
+  const AreaId area_{};
 };
 
 } // namespace openr

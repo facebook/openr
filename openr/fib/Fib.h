@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,59 +7,41 @@
 
 #pragma once
 
-#include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/fibers/Semaphore.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
-#include <folly/io/async/EventBase.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/decision/RibEntry.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/FibService.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
-#include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/kvstore/KvStoreClientInternal.h>
-#include <openr/messaging/Queue.h>
+#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/messaging/ReplicateQueue.h>
+#include <openr/monitor/LogSample.h>
 
 namespace openr {
 
 /**
- * Proxy agent to program computed routes using platform dependent agent (e.g.
- * FBOSS in case of Wedge Platform).
+ * Programs computed routes to the underlying platform (e.g. FBOSS or Linux). It
+ * uses thrift interface defined in `Platform.thrift` for programming routes.
  *
- * The functionality is very simple. We just react to RouteDatabase updates
- * from Decision module and forward best paths to switch agent to program.
- * There is no state keeping being done apart from handling interface events.
- *
- * On interface event down event we find affected routes and either withdraw
- * them or reprogram with new nexthops.
- *
- * This RouteDatabase contains all Loop Free Alternate (LFAs) paths along with
- * best paths. So Fib module derives best paths (path with minimum cost) and
- * programs them.
- *
- * Note: If for a prefix there are multiple paths with the smallest cost then
- * we program all of them which simulates ECMP behaviours across programmed
- * nexthops.
- *
+ * FIB module subscribes to route updates from Decision module and programs it.
+ * It'll take care of re-programming routes under the failure cases. FIB
+ * publishes the updates after successful programming.
  */
 class Fib final : public OpenrEventBase {
  public:
-  Fib(std::shared_ptr<const Config> config,
-      int32_t thriftPort,
-      std::chrono::seconds coldStartDuration,
+  Fib(
+      // config
+      std::shared_ptr<const Config> config,
+      // consumer queue
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-      messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
-      const MonitorSubmitUrl& monitorSubmitUrl,
-      KvStore* kvStore,
-      fbzmq::Context& zmqContext);
+      // producer queue
+      messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
+      messaging::ReplicateQueue<LogSample>& logSampleQueue);
 
   /**
    * Override stop method of OpenrEventBase
@@ -73,7 +55,7 @@ class Fib final : public OpenrEventBase {
    */
   static void createFibClient(
       folly::EventBase& evb,
-      std::shared_ptr<folly::AsyncSocket>& socket,
+      folly::AsyncSocket*& socket,
       std::unique_ptr<thrift::FibServiceAsyncClient>& client,
       int32_t port);
 
@@ -82,17 +64,32 @@ class Fib final : public OpenrEventBase {
    * @param inputPrefix - a prefix that need to be matched
    * @param unicastRoutes - current unicast routes in RouteDatabase
    *
-   * @return the matched IpPrefix if prefix matching succeed.
+   * @return the matched CIDRNetwork if prefix matching succeed.
    */
-  static std::optional<thrift::IpPrefix> longestPrefixMatch(
+  static std::optional<folly::CIDRNetwork> longestPrefixMatch(
       const folly::CIDRNetwork& inputPrefix,
-      const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+      const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutes);
+
+  /**
+   * Show unicast routes which are to be added or updated
+   */
+  static void printUnicastRoutesAddUpdate(
+      const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate);
+
+  /**
+  Show MPLS routes which are to be added or updated
+  */
+  static void printMplsRoutesAddUpdate(
+      const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate);
 
   /**
    * NOTE: DEPRECATED! Use getUnicastRoutes or getMplsRoutes.
    */
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getRouteDb();
+
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabaseDetail>>
+  getRouteDetailDb();
 
   /**
    * Retrieve unicast routes for specified prefixes or IP. Returns all if
@@ -113,27 +110,15 @@ class Fib final : public OpenrEventBase {
    */
   folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>> getPerfDb();
 
+  /**
+   * API to get reader for fibUpdatesQueue
+   */
+  messaging::RQueue<DecisionRouteUpdate> getFibUpdatesReader();
+
  private:
   // No-copy
   Fib(const Fib&) = delete;
   Fib& operator=(const Fib&) = delete;
-
-  /**
-   * Process new route updates received from Decision module
-   */
-  void processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta);
-
-  /**
-   * Compare the old and new routes and update the counter if
-   * it is the default route and it has changed.
-   */
-   void compareDefaultRoutes(const thrift::UnicastRoute& oldRoute, const thrift::UnicastRoute& newRoute);
-
-  /**
-   * Process interface status information from LinkMonitor. We remove all
-   * routes associated with interface if we detect that it just went down.
-   */
-  void processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb);
 
   /**
    * Convert local perfDb_ into PerfDataBase
@@ -153,64 +138,199 @@ class Fib final : public OpenrEventBase {
       std::vector<int32_t> labels);
 
   /**
-   * Trigger add/del routes thrift calls
-   * on success no action needed
-   * on failure invokes syncRouteDbDebounced
+   * Process new route updates received from Decision module
    */
-  void updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta);
+  void processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate);
 
   /**
-   * Sync the current routeDb_ with the switch agent.
-   * on success no action needed
-   * on failure invokes syncRouteDbDebounced
+   * Incremental route programming.
+   * @return true if all routes are successfully programmed
    */
-  bool syncRouteDb();
+  bool updateRoutes(
+      DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay = true);
 
   /**
-   * Asynchrounsly schedules the syncRouteDb call and returns immediately. All
-   * APIs should call this function to sync-routes.
+   * The helper function of updateRoutes that programs unicast routes. On route
+   * programming failure, prefixes are marked dirty and retryRoutesSignal is
+   * invoked. If useDeleteDelay is false, delete routes without putting them in
+   * dirtyPrefixes (i.e., don't delay programming). Otherwise, delay deletion
+   * based on configured duration.
+   * @return true if all routes are successfully programmed
    */
-  void syncRouteDbDebounced();
+  bool updateUnicastRoutes(
+      const bool useDeleteDelay,
+      const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
+      const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
+      DecisionRouteUpdate& routeUpdate,
+      thrift::RouteDatabaseDelta& routeDbDelta);
+
+  /**
+   * The helper function of updateRoutes that programs MPLS routes. On route
+   * programming failure, labels are marked dirty and retryRoutesSignal is
+   * invoked. If useDeleteDelay is false, delete routes without putting them in
+   * dirtyLabels (i.e., don't delay programming). Otherwise, delay deletion
+   * based on configured duration.
+   * @return true if all routes are successfully programmed
+   */
+  bool updateMplsRoutes(
+      const bool useDeleteDelay,
+      const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
+      const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
+      DecisionRouteUpdate& routeUpdate,
+      thrift::RouteDatabaseDelta& routeDbDelta);
+
+  /**
+   * Sync the current RouteState with the switch agent.
+   * - On complete failure retry is scheduled
+   * - On partial failure, the failed prefixes/labels are marked dirty and
+   *   retryRoutesSignal is invoked.
+   */
+  bool syncRoutes();
+
+  /**
+   * Implements route re-programming logic, for failed routes and delayed route
+   * deletion.
+   * The routes updates to agent would be derived from RouteState. It'll handle
+   * all cases for route update e.g.
+   * - Sync initial route database
+   * - Program newly received route update
+   * - Retry static routes
+   * - Retry failed route updates
+   * - Program delete updats which are in pending state
+   */
+  void retryRoutes() noexcept;
+  void retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept;
 
   /**
    * Get aliveSince from FibService, and check if Fib restarts
    * If so, push syncFib to FibService
    */
-  void keepAliveCheck();
+  void keepAlive() noexcept;
+  void keepAliveTask(folly::fibers::Baton& stopSignal) noexcept;
 
-  // set flat counter/stats
+  /**
+   * Update flat counter/stats in fb303
+   */
   void updateGlobalCounters();
 
-  // log perf events
-  void logPerfEvents(std::optional<thrift::PerfEvents> perfEvents);
+  /**
+   * Create, log, and publish Open/R convergence event through LogSampleQueue
+   */
+  void logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents);
 
-  // Prefix to available nexthop information. Also store perf information of
-  // received route-db if provided.
+  /**
+   * State variables to represent computed and programmed routes.
+   */
   struct RouteState {
     // Non modified copy of Unicast and MPLS routes received from Decision
-    std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
-    std::unordered_map<uint32_t, thrift::MplsRoute> mplsRoutes;
+    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
+    std::unordered_map<int32_t, RibMplsEntry> mplsRoutes;
 
-    // indicates we've received a decision route publication and therefore have
-    // routes to sync. will not synce routes with system until this is set
-    bool hasRoutesFromDecision{false};
+    /**
+     * Set of route keys (prefixes & labels) that needs to be updated in HW. Two
+     * reasons for dirty marking
+     * 1) A new update/delete notification is received for Prefix/Label
+     * 2) Prefix/Label experienced a programming failure
+     * 3) A delete update needs to be delayed.
+     * Along with prefixes and labels, we also store timestamp when routes are
+     * received or updated.
+     */
+    std::unordered_map<
+        folly::CIDRNetwork,
+        std::chrono::time_point<std::chrono::steady_clock>>
+        dirtyPrefixes;
+    std::unordered_map<
+        uint32_t,
+        std::chrono::time_point<std::chrono::steady_clock>>
+        dirtyLabels;
 
-    // Set of routes whose nexthops are auto-resized on link failure.
-    // Populated
-    // - when nexthop shrink happens on interface down
-    // Cleared on
-    // - receiving new route for prefix or label
-    // - full route sync happens
-    // - interface up event happens for disabled nexthop
-    std::unordered_set<thrift::IpPrefix> dirtyPrefixes;
-    std::unordered_set<uint32_t> dirtyLabels;
+    /**
+     * Enumeration depicting the route event that may arrive and affect `State`
+     */
+    enum Event {
+      // Route update from Decision
+      RIB_UPDATE = 0,
+      // FIB Agent connected or re-connected because of process restart
+      FIB_CONNECTED = 1,
+      // FIB sync is successful
+      FIB_SYNCED = 2,
+    };
 
-    // Flag to indicate the result of previous route programming attempt.
-    // If set, it means what currently cached in local routes has not been 100%
-    // successfully synced with agent, we have to trigger an enforced full fib
-    // sync with agent again
-    bool dirtyRouteDb{false};
+    /**
+     * Enumeration depicting the current state of Routes
+     */
+    enum State {
+      // FIB starts in this state. It is awaiting RIB, but meanwhile will
+      // program any received static route update.
+      AWAITING = 0,
+      // Once the first RIB update aka snapshot is received, FIB transitions
+      // to syncing state. State may also downgrade to this state from SYNCED
+      // on FIB_CONNECTED (FibAgent reconnects).
+      SYNCING = 1,
+      // After successful SYNC of routes, FIB enters this state and perform
+      // only incremental route updates, deletes or retries.
+      SYNCED = 2,
+    };
+    State state{AWAITING}; // We start in AWAITING state
+
+    // Flag to indicate first sync
+    bool isInitialSynced{false};
+
+    /**
+     * Does current route state needs (re-)programming of routes
+     */
+    bool
+    needsRetry() const {
+      return state == SYNCING or dirtyPrefixes.size() or dirtyLabels.size();
+    }
+
+    // Util function to convert ENUM State to string
+    static std::string toStr(const State state);
+
+    /**
+     * 1. Update RouteState with the received route update from Decision or
+     * Static RouteUpdates queue. Update - unicastRoutes and mplsRoutes which
+     * are similar to intended FIB tables for unicast and mpls routes
+     * respectively.
+     * 2. Update dirty set of prefixes and labels.
+     * 3. Process delete updates and delay deletion if configured to do so.
+     */
+    void update(const DecisionRouteUpdate& routeUpdate);
+
+    /**
+     * Create DecisionRouteUpdate that'll need to be re-programmed & published
+     * to users. As a part of this dirty prefixes and labels will be cleared as
+     * they'll be captured in this update that would be programmed.
+     */
+    DecisionRouteUpdate createUpdate();
+
+    /**
+     * Update state as a result of PlatformFibUpdateError. This will populate
+     * the dirty state.
+     */
+    void processFibUpdateError(
+        thrift::PlatformFibUpdateError const& fibError,
+        std::chrono::time_point<std::chrono::steady_clock> retryAt);
   };
+
+  bool
+  delayedDeletionEnabled() const {
+    return routeDeleteDelay_ > std::chrono::milliseconds(0);
+  }
+
+  /**
+   * Get the next earliest timestamps from those routes which are pending
+   * delete.
+   */
+  std::chrono::milliseconds nextRetryDuration() const;
+
+  /**
+   * Helper function for state transition based on the event. Perform special
+   * processing if applicable.
+   */
+  void transitionRouteState(RouteState::Event event);
+
+  // Instantiation of route state
   RouteState routeState_;
 
   // Events to capture and indicate performance of protocol convergence.
@@ -219,67 +339,59 @@ class Fib final : public OpenrEventBase {
   // Create timestamp of recently logged perf event
   int64_t recentPerfEventCreateTs_{0};
 
-  // Interface status map
-  std::unordered_map<std::string /* ifName*/, bool /* isUp */>
-      interfaceStatusDb_;
-
   // Name of node on which OpenR is running
   const std::string myNodeName_;
 
   // Switch agent thrift server port
-  const int32_t thriftPort_;
+  const int32_t thriftPort_{0};
 
-  // In dry run we do not make actual thrift call to manipulate routes
-  bool dryrun_{true};
+  // Config Knob - In dry run FIB will not invoke route programming
+  // APIs, and mimick the whole logic as programming is successful.
+  const bool dryrun_{true};
 
-  // Enable segment routing
-  bool enableSegmentRouting_{false};
+  // Config Knob - Indicates if Segment Routing feature is enabled or not. MPLS
+  // routes will be programmed only if segment routing is enabled.
+  const bool enableSegmentRouting_{false};
 
-  // indicates that we should publish fib programming time to kvstore
-  bool enableOrderedFib_{false};
-
-  apache::thrift::CompactSerializer serializer_;
+  // Config knob - Minimum delay (in milliseconds) to be incurred before
+  // deleting a a route (both unicast and mpls).
+  const std::chrono::milliseconds routeDeleteDelay_{0};
 
   // Thrift client connection to switch FIB Agent using which we actually
   // manipulate routes.
-  folly::EventBase evb_;
-  std::shared_ptr<folly::AsyncSocket> socket_{nullptr};
+  folly::AsyncSocket* socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 
-  // Callback timer to sync routes to switch agent and scheduled on route-sync
-  // failure. ExponentialBackoff timer to ease up things if they go wrong
-  std::unique_ptr<folly::AsyncTimeout> syncRoutesTimer_{nullptr};
-  ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
+  // State variables for RetryRoutes programming fiber.
+  // - Stop signal to terminate retryRoutesFiber, sent only once
+  // - Semaphore used for signalling when routes are available for programming
+  // - Exponential backoff to ease of things on repetitive failures
+  folly::fibers::Baton retryRoutesStopSignal_;
+  folly::fibers::Semaphore retryRoutesSignal_{1};
+  ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
 
-  // periodically send alive msg to switch agent
-  std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
+  // Stop signal for KeepAlive fiber
+  folly::fibers::Baton keepAliveStopSignal_;
 
-  // client to interact with monitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
-
-  // module ptr to refer to KvStore for KvStoreClientInternal usage
-  KvStore* kvStore_{nullptr};
-  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
+  // Queues to publish programmed incremental IP/label routes or those from Fib
+  // sync. (Fib streaming)
+  messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue_;
 
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.
   int64_t latestAliveSince_{0};
 
-  // moves to true after initial sync
-  bool hasSyncedFib_{false};
-
+  // Open/R ClientID for programming routes
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
-  // Stats
-  struct fibStats {
-    int64_t countDefaultRouteChanged_;
-    int64_t countDefaultRouteDeleted_;
-  } stats;
-
-  // Semaphore to serialize route programming across two fibers (interface
-  // updates & route updates)
-  // NOTE: Initializing with a single slot to avoid parallel processing
+  // Semaphore to serialize route programming across multiple fibers & async
+  // timers. e.g. static route updates queue, decision route updates queue and
+  // route programming retry timers
+  // NOTE: We initialize with a single slot for exclusive locking
   folly::fibers::Semaphore updateRoutesSemaphore_{1};
+
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
 };
 
 } // namespace openr

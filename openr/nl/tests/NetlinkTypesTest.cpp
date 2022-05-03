@@ -1,15 +1,17 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 #include <openr/nl/NetlinkTypes.h>
+
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 extern "C" {
+#include <linux/fib_rules.h>
 #include <linux/rtnetlink.h>
 #include <net/if.h>
 }
@@ -76,6 +78,7 @@ TEST(NetlinkTypes, RouteBaseTest) {
   EXPECT_FALSE(route.getTos().has_value());
   EXPECT_FALSE(route.getMtu().has_value());
   EXPECT_FALSE(route.getAdvMss().has_value());
+  EXPECT_TRUE(route.isMultiPath());
 }
 
 TEST(NetlinkTypes, RouteEqualTest) {
@@ -498,31 +501,63 @@ TEST(NetlinkTypes, NeighborCopyTest) {
   EXPECT_EQ(neigh, neigh2);
 }
 
-TEST(NetlinkTypes, LinkTypeTest) {
-  std::string linkName("iface");
+TEST(NetlinkTypes, LinkTypeBaseTest) {
+  const std::string linkName("iface");
   unsigned int flags = 0x0 | IFF_RUNNING;
 
   LinkBuilder builder;
-  auto link = builder.setIfIndex(kIfIndex)
-                  .setFlags(flags)
-                  .setLinkName(linkName)
-                  .build();
+  const auto link = builder.setIfIndex(kIfIndex)
+                        .setFlags(flags)
+                        .setLinkName(linkName)
+                        .build();
   LOG(INFO) << link.str();
 
   EXPECT_EQ(kIfIndex, link.getIfIndex());
   EXPECT_EQ(linkName, link.getLinkName());
   EXPECT_EQ(flags, link.getFlags());
   EXPECT_TRUE(link.isUp());
+  EXPECT_FALSE(link.getLinkKind().has_value());
+  EXPECT_FALSE(link.getGreInfo().has_value());
 }
 
-TEST(NetlinkTypes, LinkMoveTest) {
-  std::string linkName("iface");
+TEST(NetlinkTypes, LinkTypeGreTest) {
+  const std::string linkName("iface");
   unsigned int flags = 0x0 | IFF_RUNNING;
+  const std::string linkKind("gre");
+  const GreInfo greInfo(
+      folly::IPAddress("192.0.2.0"), folly::IPAddress("192.0.2.1"), 64);
 
   LinkBuilder builder;
   auto link = builder.setIfIndex(kIfIndex)
                   .setFlags(flags)
                   .setLinkName(linkName)
+                  .setLinkKind(linkKind)
+                  .setGreInfo(greInfo)
+                  .build();
+
+  EXPECT_EQ(kIfIndex, link.getIfIndex());
+  EXPECT_EQ(linkName, link.getLinkName());
+  EXPECT_EQ(flags, link.getFlags());
+  EXPECT_TRUE(link.isUp());
+  EXPECT_TRUE(link.getLinkKind().has_value());
+  EXPECT_EQ(linkKind, link.getLinkKind().value());
+  EXPECT_TRUE(link.getGreInfo().has_value());
+  EXPECT_EQ(greInfo, link.getGreInfo().value());
+}
+
+TEST(NetlinkTypes, LinkMoveTest) {
+  const std::string linkName("iface");
+  unsigned int flags = 0x0 | IFF_RUNNING;
+  const std::string linkKind("gre");
+  const GreInfo greInfo(
+      folly::IPAddress("192.0.2.0"), folly::IPAddress("192.0.2.1"), 64);
+
+  LinkBuilder builder;
+  auto link = builder.setIfIndex(kIfIndex)
+                  .setFlags(flags)
+                  .setLinkName(linkName)
+                  .setLinkKind(linkKind)
+                  .setGreInfo(greInfo)
                   .build();
 
   // Move constructor
@@ -533,16 +568,23 @@ TEST(NetlinkTypes, LinkMoveTest) {
   EXPECT_EQ(kIfIndex, link2.getIfIndex());
   EXPECT_EQ(flags, link.getFlags());
   EXPECT_TRUE(link.isUp());
+  EXPECT_EQ(linkKind, link2.getLinkKind().value());
+  EXPECT_EQ(greInfo, link2.getGreInfo().value());
 }
 
 TEST(NetlinkTypes, LinkCopyTest) {
-  std::string linkName("iface");
+  const std::string linkName("iface");
   unsigned int flags = 0x0 | IFF_RUNNING;
+  const std::string linkKind("gre");
+  const GreInfo greInfo(
+      folly::IPAddress("192.0.2.0"), folly::IPAddress("192.0.2.1"), 64);
 
   LinkBuilder builder;
   auto link = builder.setIfIndex(kIfIndex)
                   .setFlags(flags)
                   .setLinkName(linkName)
+                  .setLinkKind(linkKind)
+                  .setGreInfo(greInfo)
                   .build();
 
   // Copy constructor
@@ -554,6 +596,64 @@ TEST(NetlinkTypes, LinkCopyTest) {
   EXPECT_EQ(link, link2);
 }
 
+TEST(NetlinkTypes, GreInfoBaseTest) {
+  const auto ip1 = folly::IPAddress("192.0.2.0");
+  const auto ip2 = folly::IPAddress("192.0.2.1");
+  const auto ttl = 64;
+  GreInfo greInfo(ip1, ip2, ttl);
+  EXPECT_EQ(ip1, greInfo.getLocalAddr());
+  EXPECT_EQ(ip2, greInfo.getRemoteAddr());
+  EXPECT_EQ(ttl, greInfo.getTtl());
+}
+
+TEST(NetlinkTypes, GreInfoMoveTest) {
+  const auto ip1 = folly::IPAddress("192.0.2.0");
+  const auto ip2 = folly::IPAddress("192.0.2.1");
+  const auto ttl = 64;
+  GreInfo greInfo(ip1, ip2, ttl);
+
+  // Move constructor
+  fbnl::GreInfo greInfo2(std::move(greInfo));
+
+  EXPECT_EQ(ip1, greInfo2.getLocalAddr());
+  EXPECT_EQ(ip2, greInfo2.getRemoteAddr());
+  EXPECT_EQ(ttl, greInfo2.getTtl());
+}
+
+TEST(NetlinkTypes, GreInfoCopyTest) {
+  const auto ip1 = folly::IPAddress("192.0.2.0");
+  const auto ip2 = folly::IPAddress("192.0.2.1");
+  const auto ttl = 64;
+  GreInfo greInfo(ip1, ip2, ttl);
+
+  // Copy constructor
+  fbnl::GreInfo greInfo2(greInfo);
+  EXPECT_EQ(greInfo, greInfo2);
+
+  // Copy assignment operator
+  greInfo2 = greInfo;
+  EXPECT_EQ(greInfo, greInfo2);
+}
+
+TEST(NetlinkTypes, RuleTypeBaseTest) {
+  const uint32_t table = 1000;
+
+  Rule rule(AF_INET, FR_ACT_TO_TBL, table);
+  EXPECT_EQ(AF_INET, rule.getFamily());
+  EXPECT_EQ(FR_ACT_TO_TBL, rule.getAction());
+  EXPECT_EQ(table, rule.getTable());
+  EXPECT_FALSE(rule.getPriority().has_value());
+  EXPECT_FALSE(rule.getFwmark().has_value());
+
+  const uint32_t fwmark = 1234;
+  rule.setFwmark(fwmark);
+  EXPECT_EQ(fwmark, rule.getFwmark());
+
+  const uint32_t priority = 3456;
+  rule.setPriority(priority);
+  EXPECT_EQ(priority, rule.getPriority());
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
@@ -561,6 +661,7 @@ main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

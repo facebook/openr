@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,24 +7,16 @@
 
 #pragma once
 
-#include <chrono>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <vector>
-
 #include <fb303/BaseService.h>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <folly/Expected.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
 
+#include <openr/common/MplsUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/FibService.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/NeighborListenerClientForFibagent.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/nl/NetlinkTypes.h>
 
@@ -110,14 +102,6 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf,
    * Translate protocol identifier to priority
    */
   static uint8_t protocolToPriority(const uint8_t protocol);
-
-  /**
-   * Convert list<SemiFuture<int>> to SemiFuture<Unit>
-   * The first error if any will be converted to NlException
-   */
-  static folly::SemiFuture<folly::Unit> collectAllResult(
-      std::vector<folly::SemiFuture<int>>&& result,
-      std::set<int> errorsToIgnore);
 
  protected:
   /**

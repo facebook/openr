@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -24,7 +24,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/PersistentStore_types.h>
+#include <openr/config/Config.h>
 
 namespace {
 constexpr folly::StringPiece kTlvFormatMarker{"TlvFormatMarker"};
@@ -54,8 +54,8 @@ struct PersistentObject {
  */
 class PersistentStore : public OpenrEventBase {
  public:
-  PersistentStore(
-      const std::string& storageFilePath,
+  explicit PersistentStore(
+      std::shared_ptr<const Config> config,
       bool dryrun = false,
       bool periodicallySaveToDisk = true);
 
@@ -123,10 +123,6 @@ class PersistentStore : public OpenrEventBase {
   bool saveDatabaseToDisk() noexcept;
   bool loadDatabaseFromDisk() noexcept;
 
-  // Load old format file from disk, this is for compatible with the old version
-  folly::Expected<folly::Unit, std::string> loadDatabaseOldFormat(
-      const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept;
-
   // Load TlvFormat from disk
   folly::Expected<folly::Unit, std::string> loadDatabaseTlvFormat(
       const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept;
@@ -165,7 +161,7 @@ class PersistentStore : public OpenrEventBase {
 
   // Database to store config data. It is synced up on a persistent storage
   // layer (disk) in a file.
-  thrift::StoreDatabase database_;
+  std::unordered_map<std::string, std::string> database_;
 
   // Serializer for encoding/decoding of thrift objects
   apache::thrift::CompactSerializer serializer_;

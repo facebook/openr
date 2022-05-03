@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import errno
 import hashlib
@@ -19,20 +17,14 @@ import time
 import zipfile
 from datetime import datetime
 from typing import Dict, NamedTuple
+from urllib.parse import urlparse
+from urllib.request import urlretrieve
 
 from .copytree import prefetch_dir_if_eden
 from .envfuncs import Env
 from .errors import TransientFailure
 from .platform import is_windows
 from .runcmd import run_cmd
-
-
-try:
-    from urlparse import urlparse
-    from urllib import urlretrieve
-except ImportError:
-    from urllib.parse import urlparse
-    from urllib.request import urlretrieve
 
 
 def file_name_is_cmake_file(file_name):
@@ -46,7 +38,7 @@ def file_name_is_cmake_file(file_name):
 
 
 class ChangeStatus(object):
-    """ Indicates the nature of changes that happened while updating
+    """Indicates the nature of changes that happened while updating
     the source directory.  There are two broad uses:
     * When extracting archives for third party software we want to
       know that we did something (eg: we either extracted code or
@@ -59,9 +51,9 @@ class ChangeStatus(object):
     """
 
     def __init__(self, all_changed=False):
-        """ Construct a ChangeStatus object.  The default is to create
+        """Construct a ChangeStatus object.  The default is to create
         a status that indicates no changes, but passing all_changed=True
-        will create one that indicates that everything changed """
+        will create one that indicates that everything changed"""
         if all_changed:
             self.source_files = 1
             self.make_files = 1
@@ -70,7 +62,7 @@ class ChangeStatus(object):
             self.make_files = 0
 
     def record_change(self, file_name):
-        """ Used by the shipit fetcher to record changes as it updates
+        """Used by the shipit fetcher to record changes as it updates
         files in the destination.  If the file name might be one used
         in the cmake build system that we use for 1st party code, then
         record that as a "make file" change.  We could broaden this
@@ -79,7 +71,7 @@ class ChangeStatus(object):
         If the file isn't a build file and is under the `fbcode_builder`
         dir then we don't class that as an interesting change that we
         might need to rebuild, so we ignore it.
-        Otherwise we record the file as a source file change. """
+        Otherwise we record the file as a source file change."""
 
         file_name = file_name.lower()
         if file_name_is_cmake_file(file_name):
@@ -90,41 +82,41 @@ class ChangeStatus(object):
             self.source_files += 1
 
     def sources_changed(self):
-        """ Returns true if any source files were changed during
+        """Returns true if any source files were changed during
         an update operation.  This will typically be used to decide
         that the build system to be run on the source dir in an
-        incremental mode """
+        incremental mode"""
         return self.source_files > 0
 
     def build_changed(self):
-        """ Returns true if any build files were changed during
+        """Returns true if any build files were changed during
         an update operation.  This will typically be used to decidfe
         that the build system should be reconfigured and re-run
-        as a full build """
+        as a full build"""
         return self.make_files > 0
 
 
 class Fetcher(object):
-    """ The Fetcher is responsible for fetching and extracting the
+    """The Fetcher is responsible for fetching and extracting the
     sources for project.  The Fetcher instance defines where the
     extracted data resides and reports this to the consumer via
-    its `get_src_dir` method. """
+    its `get_src_dir` method."""
 
     def update(self):
-        """ Brings the src dir up to date, ideally minimizing
+        """Brings the src dir up to date, ideally minimizing
         changes so that a subsequent build doesn't over-build.
         Returns a ChangeStatus object that helps the caller to
         understand the nature of the changes required during
-        the update. """
+        the update."""
         return ChangeStatus()
 
     def clean(self):
-        """ Reverts any changes that might have been made to
-        the src dir """
+        """Reverts any changes that might have been made to
+        the src dir"""
         pass
 
     def hash(self):
-        """ Returns a hash that identifies the version of the code in the
+        """Returns a hash that identifies the version of the code in the
         working copy.  For a git repo this is commit hash for the working
         copy.  For other Fetchers this should relate to the version of
         the code in the src dir.  The intent is that if a manifest
@@ -137,17 +129,17 @@ class Fetcher(object):
         pass
 
     def get_src_dir(self):
-        """ Returns the source directory that the project was
-        extracted into """
+        """Returns the source directory that the project was
+        extracted into"""
         pass
 
 
 class LocalDirFetcher(object):
-    """ This class exists to override the normal fetching behavior, and
+    """This class exists to override the normal fetching behavior, and
     use an explicit user-specified directory for the project sources.
 
     This fetcher cannot update or track changes.  It always reports that the
-    project has changed, forcing it to always be built. """
+    project has changed, forcing it to always be built."""
 
     def __init__(self, path):
         self.path = os.path.realpath(path)
@@ -166,6 +158,7 @@ class SystemPackageFetcher(object):
     def __init__(self, build_options, packages):
         self.manager = build_options.host_type.get_package_manager()
         self.packages = packages.get(self.manager)
+        self.host_type = build_options.host_type
         if self.packages:
             self.installed = None
         else:
@@ -175,23 +168,50 @@ class SystemPackageFetcher(object):
         if self.installed is not None:
             return self.installed
 
+        cmd = None
         if self.manager == "rpm":
-            result = run_cmd(["rpm", "-q"] + self.packages, allow_fail=True)
-            self.installed = result == 0
+            cmd = ["rpm", "-q"] + sorted(self.packages)
         elif self.manager == "deb":
-            result = run_cmd(["dpkg", "-s"] + self.packages, allow_fail=True)
-            self.installed = result == 0
+            cmd = ["dpkg", "-s"] + sorted(self.packages)
+        elif self.manager == "homebrew":
+            cmd = ["brew", "ls", "--versions"] + sorted(self.packages)
+
+        if cmd:
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if proc.returncode == 0:
+                # captured as binary as we will hash this later
+                self.installed = proc.stdout
+            else:
+                # Need all packages to be present to consider us installed
+                self.installed = False
+
         else:
             self.installed = False
 
-        return self.installed
+        # Hack to make openssl discovery with homebrew work. If openssl was
+        # built with autoconf we could use autoconf.envcmd.OPENSSL_ROOT_DIR
+        # from the manifest, but it isn't, so handle the special case here.
+        if (
+            self.installed
+            and self.host_type.is_darwin()
+            and self.manager == "homebrew"
+            and "openssl@1.1" in self.packages
+        ):
+            candidate = homebrew_package_prefix("openssl@1.1")
+            if os.path.exists(candidate):
+                os.environ["OPENSSL_ROOT_DIR"] = candidate
+
+        return bool(self.installed)
 
     def update(self):
         assert self.installed
         return ChangeStatus(all_changed=False)
 
     def hash(self):
-        return "0" * 40
+        if self.packages_are_installed():
+            return hashlib.sha256(self.installed).hexdigest()
+        else:
+            return "0" * 40
 
     def get_src_dir(self):
         return None
@@ -203,7 +223,7 @@ class PreinstalledNopFetcher(SystemPackageFetcher):
 
 
 class GitFetcher(Fetcher):
-    DEFAULT_DEPTH = 100
+    DEFAULT_DEPTH = 1
 
     def __init__(self, build_options, manifest, repo_url, rev, depth):
         # Extract the host/path portions of the URL and generate a flattened
@@ -234,7 +254,7 @@ class GitFetcher(Fetcher):
                     rev = m.group(1)
                     print("Using pinned rev %s for %s" % (rev, repo_url))
 
-        self.rev = rev or "master"
+        self.rev = rev or "main"
         self.origin_repo = repo_url
         self.manifest = manifest
         self.depth = depth if depth else GitFetcher.DEFAULT_DEPTH
@@ -252,7 +272,7 @@ class GitFetcher(Fetcher):
         )
         if target_hash == current_hash:
             # It's up to date, so there are no changes.  This doesn't detect eg:
-            # if origin/master moved and rev='master', but that's ok for our purposes;
+            # if origin/main moved and rev='main', but that's ok for our purposes;
             # we should be using explicit hashes or eg: a stable branch for the cases
             # that we care about, and it isn't unreasonable to require that the user
             # explicitly perform a clean build if those have moved.  For the most
@@ -262,7 +282,7 @@ class GitFetcher(Fetcher):
             return ChangeStatus()
 
         print("Updating %s -> %s" % (self.repo_dir, self.rev))
-        run_cmd(["git", "fetch", "origin"], cwd=self.repo_dir)
+        run_cmd(["git", "fetch", "origin", self.rev], cwd=self.repo_dir)
         run_cmd(["git", "checkout", self.rev], cwd=self.repo_dir)
         run_cmd(["git", "submodule", "update", "--init"], cwd=self.repo_dir)
 
@@ -337,9 +357,9 @@ def does_file_need_update(src_name, src_st, dest_name):
 
 
 def copy_if_different(src_name, dest_name):
-    """ Copy src_name -> dest_name, but only touch dest_name
+    """Copy src_name -> dest_name, but only touch dest_name
     if src_name is different from dest_name, making this a
-    more build system friendly way to copy. """
+    more build system friendly way to copy."""
     src_st = os.lstat(src_name)
     if not does_file_need_update(src_name, src_st, dest_name):
         return False
@@ -379,9 +399,9 @@ class ShipitPathMap(object):
         self.exclusion = []
 
     def add_mapping(self, fbsource_dir, target_dir):
-        """ Add a posix path or pattern.  We cannot normpath the input
+        """Add a posix path or pattern.  We cannot normpath the input
         here because that would change the paths from posix to windows
-        form and break the logic throughout this class. """
+        form and break the logic throughout this class."""
         self.roots.append(fbsource_dir)
         self.mapping.append((fbsource_dir, target_dir))
 
@@ -389,9 +409,9 @@ class ShipitPathMap(object):
         self.exclusion.append(re.compile(pattern))
 
     def _minimize_roots(self):
-        """ compute the de-duplicated set of roots within fbsource.
+        """compute the de-duplicated set of roots within fbsource.
         We take the shortest common directory prefix to make this
-        determination """
+        determination"""
         self.roots.sort(key=len)
         minimized = []
 
@@ -444,14 +464,28 @@ class ShipitPathMap(object):
         # Record the full set of files that should be in the tree
         full_file_list = set()
 
+        if sys.platform == "win32":
+            # Let's not assume st_dev has a consistent value on Windows.
+            def st_dev(path):
+                return 1
+
+        else:
+
+            def st_dev(path):
+                return os.lstat(path).st_dev
+
         for fbsource_subdir in self.roots:
             dir_to_mirror = os.path.join(fbsource_root, fbsource_subdir)
+            root_dev = st_dev(dir_to_mirror)
             prefetch_dir_if_eden(dir_to_mirror)
             if not os.path.exists(dir_to_mirror):
                 raise Exception(
                     "%s doesn't exist; check your sparse profile!" % dir_to_mirror
                 )
-            for root, _dirs, files in os.walk(dir_to_mirror):
+
+            for root, dirs, files in os.walk(dir_to_mirror):
+                dirs[:] = [d for d in dirs if root_dev == st_dev(os.path.join(root, d))]
+
                 for src_file in files:
                     full_name = os.path.join(root, src_file)
                     rel_name = os.path.relpath(full_name, fbsource_root)
@@ -496,10 +530,10 @@ FBSOURCE_REPO_DATA: Dict[str, FbsourceRepoData] = {}
 
 
 def get_fbsource_repo_data(build_options):
-    """ Returns the commit metadata for the fbsource repo.
+    """Returns the commit metadata for the fbsource repo.
     Since we may have multiple first party projects to
     hash, and because we don't mutate the repo, we cache
-    this hash in a global. """
+    this hash in a global."""
     cached_data = FBSOURCE_REPO_DATA.get(build_options.fbsource_dir)
     if cached_data:
         return cached_data
@@ -525,10 +559,11 @@ def get_fbsource_repo_data(build_options):
 
 
 class SimpleShipitTransformerFetcher(Fetcher):
-    def __init__(self, build_options, manifest):
+    def __init__(self, build_options, manifest, ctx):
         self.build_options = build_options
         self.manifest = manifest
         self.repo_dir = os.path.join(build_options.scratch_dir, "shipit", manifest.name)
+        self.ctx = ctx
 
     def clean(self):
         if os.path.exists(self.repo_dir):
@@ -536,13 +571,15 @@ class SimpleShipitTransformerFetcher(Fetcher):
 
     def update(self):
         mapping = ShipitPathMap()
-        for src, dest in self.manifest.get_section_as_ordered_pairs("shipit.pathmap"):
+        for src, dest in self.manifest.get_section_as_ordered_pairs(
+            "shipit.pathmap", self.ctx
+        ):
             mapping.add_mapping(src, dest)
         if self.manifest.shipit_fbcode_builder:
             mapping.add_mapping(
                 "fbcode/opensource/fbcode_builder", "build/fbcode_builder"
             )
-        for pattern in self.manifest.get_section_as_args("shipit.strip"):
+        for pattern in self.manifest.get_section_as_args("shipit.strip", self.ctx):
             mapping.add_exclusion(pattern)
 
         return mapping.mirror(self.build_options.fbsource_dir, self.repo_dir)
@@ -599,7 +636,6 @@ class ShipitTransformerFetcher(Fetcher):
                     "--skip-source-clean",
                     "--skip-push",
                     "--skip-reset",
-                    "--skip-project-specific",
                     "--destination-use-anonymous-https",
                     "--create-new-repo-output-path=" + tmp_path,
                 ]
@@ -691,7 +727,7 @@ class ArchiveFetcher(Fetcher):
             )
 
     def _download_dir(self):
-        """ returns the download dir, creating it if it doesn't already exist """
+        """returns the download dir, creating it if it doesn't already exist"""
         download_dir = os.path.dirname(self.file_name)
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
@@ -770,3 +806,14 @@ class ArchiveFetcher(Fetcher):
 
     def get_src_dir(self):
         return self.src_dir
+
+
+def homebrew_package_prefix(package):
+    cmd = ["brew", "--prefix", package]
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        return
+
+    if proc.returncode == 0:
+        return proc.stdout.decode("utf-8").rstrip()

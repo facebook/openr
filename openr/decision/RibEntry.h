@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,11 +10,13 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include "openr/if/gen-cpp2/Network_types.h"
 
 #include <folly/IPAddress.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrl.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 
@@ -22,9 +24,14 @@ struct RibEntry {
   // TODO: should this be map<area, nexthops>?
   std::unordered_set<thrift::NextHopThrift> nexthops;
 
+  // igp cost of all routes (ecmp) or of lowest cost route (if ucmp)
+  unsigned int igpCost;
+
   // constructor
-  explicit RibEntry(std::unordered_set<thrift::NextHopThrift> nexthops)
-      : nexthops(std::move(nexthops)) {}
+  explicit RibEntry(
+      std::unordered_set<thrift::NextHopThrift> nexthops,
+      unsigned int igpCost = 0)
+      : nexthops(std::move(nexthops)), igpCost(igpCost) {}
 
   RibEntry() = default;
 
@@ -35,15 +42,17 @@ struct RibEntry {
 };
 
 struct RibUnicastEntry : RibEntry {
-  const folly::CIDRNetwork prefix;
+  folly::CIDRNetwork prefix;
   thrift::PrefixEntry bestPrefixEntry;
   std::string bestArea;
   // install to fib or not
   bool doNotInstall{false};
-  // best nexthop fields for BGP route advertising
-  std::optional<thrift::NextHopThrift> bestNexthop{std::nullopt};
+  // Counter Id assigned to this route. Assignment comes from the
+  // RibPolicyStatement that matches to this route.
+  std::optional<thrift::RouteCounterID> counterID{std::nullopt};
 
   // constructor
+  explicit RibUnicastEntry() {}
   explicit RibUnicastEntry(const folly::CIDRNetwork& prefix) : prefix(prefix) {}
 
   RibUnicastEntry(
@@ -54,48 +63,59 @@ struct RibUnicastEntry : RibEntry {
   RibUnicastEntry(
       const folly::CIDRNetwork& prefix,
       std::unordered_set<thrift::NextHopThrift> nexthops,
-      thrift::PrefixEntry bestPrefixEntry,
+      thrift::PrefixEntry bestPrefixEntryThrift,
       const std::string& bestArea,
       bool doNotInstall = false,
-      std::optional<thrift::NextHopThrift> bestNexthop = std::nullopt)
-      : RibEntry(std::move(nexthops)),
+      unsigned int igpCost = 0,
+      const std::optional<int64_t>& ucmpWeight = std::nullopt)
+      : RibEntry(std::move(nexthops), igpCost),
         prefix(prefix),
-        bestPrefixEntry(std::move(bestPrefixEntry)),
+        bestPrefixEntry(std::move(bestPrefixEntryThrift)),
         bestArea(bestArea),
-        doNotInstall(doNotInstall),
-        bestNexthop(std::move(bestNexthop)) {}
+        doNotInstall(doNotInstall) {
+    bestPrefixEntry.weight_ref().from_optional(ucmpWeight);
+  }
 
   bool
   operator==(const RibUnicastEntry& other) const {
     return prefix == other.prefix && bestPrefixEntry == other.bestPrefixEntry &&
-        bestNexthop == other.bestNexthop &&
-        doNotInstall == other.doNotInstall && RibEntry::operator==(other);
+        doNotInstall == other.doNotInstall && counterID == other.counterID &&
+        RibEntry::operator==(other);
   }
 
+  bool
+  operator!=(const RibUnicastEntry& other) const {
+    return !(*this == other);
+  }
+
+  // TODO: rename this func
   thrift::UnicastRoute
   toThrift() const {
     thrift::UnicastRoute tUnicast;
-    tUnicast.dest = toIpPrefix(prefix);
-    tUnicast.nextHops =
+    tUnicast.dest_ref() = toIpPrefix(prefix);
+    tUnicast.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
-    tUnicast.doNotInstall = doNotInstall;
-    if (bestPrefixEntry.type == thrift::PrefixType::BGP) {
-      tUnicast.prefixType_ref() = thrift::PrefixType::BGP;
-      if (bestPrefixEntry.data_ref()) {
-        tUnicast.data_ref() = *bestPrefixEntry.data_ref();
-      }
-      tUnicast.bestNexthop_ref() = bestNexthop.value();
-    }
+    tUnicast.counterID_ref().from_optional(counterID);
     return tUnicast;
+  }
+
+  // TODO: rename this func
+  thrift::UnicastRouteDetail
+  toThriftDetail() const {
+    thrift::UnicastRouteDetail tUnicastDetail;
+    tUnicastDetail.unicastRoute_ref() = toThrift();
+    tUnicastDetail.bestRoute_ref() = bestPrefixEntry;
+    return tUnicastDetail;
   }
 };
 
 struct RibMplsEntry : RibEntry {
-  const int32_t label{0};
+  int32_t label{0};
 
   explicit RibMplsEntry(int32_t label) : label(label) {}
 
   // constructor
+  explicit RibMplsEntry() {}
   RibMplsEntry(
       int32_t label, std::unordered_set<thrift::NextHopThrift> nexthops)
       : RibEntry(std::move(nexthops)), label(label) {}
@@ -103,9 +123,9 @@ struct RibMplsEntry : RibEntry {
   static RibMplsEntry
   fromThrift(const thrift::MplsRoute& tMpls) {
     return RibMplsEntry(
-        tMpls.topLabel,
+        *tMpls.topLabel_ref(),
         std::unordered_set<thrift::NextHopThrift>(
-            tMpls.nextHops.begin(), tMpls.nextHops.end()));
+            tMpls.nextHops_ref()->begin(), tMpls.nextHops_ref()->end()));
   }
 
   bool
@@ -113,13 +133,63 @@ struct RibMplsEntry : RibEntry {
     return label == other.label && RibEntry::operator==(other);
   }
 
+  bool
+  operator!=(const RibMplsEntry& other) const {
+    return !(*this == other);
+  }
+
   thrift::MplsRoute
   toThrift() const {
     thrift::MplsRoute tMpls;
-    tMpls.topLabel = label;
-    tMpls.nextHops =
+    tMpls.topLabel_ref() = label;
+    tMpls.nextHops_ref() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
     return tMpls;
+  }
+
+  thrift::MplsRouteDetail
+  toThriftDetail() const {
+    thrift::MplsRouteDetail tMplsDetail;
+    tMplsDetail.mplsRoute_ref() = toThrift();
+    return tMplsDetail;
+  }
+
+  /**
+   * MPLS Action can be specified per next-hop. However, HW can only specify a
+   * single action on a next-hop group. For this reason we filter next-hops
+   * to a unique MPLS action.
+   */
+  void
+  filterNexthopsToUniqueAction() {
+    // Optimization for single nexthop case. POP_AND_LOOKUP is supported by
+    // this optimization
+    if (nexthops.size() <= 1) {
+      return;
+    }
+
+    // Deduce a unique MPLS action
+    thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
+    for (auto const& nextHop : nexthops) {
+      CHECK(nextHop.mplsAction_ref().has_value());
+      auto& action = *nextHop.mplsAction_ref()->action_ref();
+      // Action can't be push (we don't push labels in MPLS routes)
+      // or POP with multiple nexthops. It must be either SWAP or PHP
+      CHECK(
+          action == thrift::MplsActionCode::SWAP or
+          action == thrift::MplsActionCode::PHP);
+      if (action == thrift::MplsActionCode::PHP) {
+        mplsActionCode = thrift::MplsActionCode::PHP;
+      }
+    }
+
+    // Filter nexthop that do not match selected MPLS action
+    for (auto it = nexthops.begin(); it != nexthops.end();) {
+      if (mplsActionCode != *it->mplsAction_ref()->action_ref()) {
+        it = nexthops.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 };
 } // namespace openr

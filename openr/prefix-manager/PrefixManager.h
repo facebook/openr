@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,48 +7,95 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
-
-#include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
-#include <folly/Optional.h>
 #include <folly/futures/Future.h>
+#include <folly/gen/Base.h>
 
 #include <openr/common/AsyncThrottle.h>
 #include <openr/common/OpenrEventBase.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
-#include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
-#include <openr/if/gen-cpp2/PrefixManager_types.h>
-#include <openr/kvstore/KvStoreClientInternal.h>
-#include <openr/messaging/Queue.h>
+#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/messaging/ReplicateQueue.h>
+#include <openr/policy/PolicyManager.h>
 
 namespace openr {
+
+namespace detail {
+
+class PrefixManagerPendingUpdates {
+ public:
+  explicit PrefixManagerPendingUpdates() : changedPrefixes_{} {}
+
+  void
+  clear() {
+    changedPrefixes_.clear();
+    changedLabels_.clear();
+  }
+
+  size_t
+  size() {
+    return changedPrefixes_.size() + changedLabels_.size();
+  }
+
+  const std::unordered_set<folly::CIDRNetwork>&
+  getChangedPrefixes() {
+    return changedPrefixes_;
+  }
+
+  bool
+  hasPrefix(const folly::CIDRNetwork& prefix) {
+    return changedPrefixes_.count(prefix) > 0;
+  }
+
+  bool
+  hasLabel(const int32_t label) {
+    return changedLabels_.count(label) > 0;
+  }
+
+  void
+  addPrefixChange(const folly::CIDRNetwork& prefix) {
+    changedPrefixes_.insert(prefix);
+  }
+
+  void
+  addLabelChange(const int32_t label) {
+    changedLabels_.emplace(label);
+  }
+
+ private:
+  // Track prefixes (MPLS labels) that have changed within this batch
+  // ATTN: this collection contains:
+  //  - newly added prefixes (labels)
+  //  - updated prefixes (labels)
+  //  - prefixes (labels) being withdrawn
+  std::unordered_set<folly::CIDRNetwork> changedPrefixes_{};
+  std::unordered_set<int32_t> changedLabels_{};
+};
+
+} // namespace detail
 
 class PrefixManager final : public OpenrEventBase {
  public:
   PrefixManager(
-      messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
-      messaging::RQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue,
-      std::shared_ptr<const Config> config,
-      PersistentStore* configStore,
-      KvStore* kvStore,
-      // enable convergence performance measurement for Adjacencies update
-      bool enablePerfMeasurement,
-      const std::chrono::seconds& initialDumpTime,
-      bool perPrefixKeys = true);
+      // producer queue
+      messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+      messaging::ReplicateQueue<DecisionRouteUpdate>&
+          prefixMgrRouteUpdatesQueue,
+      messaging::ReplicateQueue<thrift::InitializationEvent>&
+          initializationEventQueue,
+      // consumer queue
+      messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
+      messaging::RQueue<PrefixEvent> prefixUpdatesQueue,
+      messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueue,
+      // config
+      std::shared_ptr<const Config> config);
 
   ~PrefixManager();
-
-  /**
-   * Override stop method of OpenrEventBase
-   */
-  void stop() override;
 
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
@@ -86,138 +133,443 @@ class PrefixManager final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
   getPrefixesByType(thrift::PrefixType prefixType);
 
- private:
-  // prefix entry with their destination areas
-  // if dstAreas become empty, entry should be withdrawn
-  struct PrefixEntry {
-    thrift::PrefixEntry tPrefixEntry;
-    std::unordered_set<std::string> dstAreas;
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>
+  getAdvertisedRoutesFiltered(thrift::AdvertisedRouteFilter filter);
 
-    PrefixEntry() = default;
-    template <typename TPrefixEntry, typename AreaSet>
-    PrefixEntry(TPrefixEntry&& tPrefixEntry, AreaSet&& dstAreas)
-        : tPrefixEntry(std::forward<TPrefixEntry>(tPrefixEntry)),
-          dstAreas(std::forward<AreaSet>(dstAreas)) {}
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
+  getOriginatedPrefixes();
 
-    bool
-    operator==(const PrefixEntry& other) const {
-      return tPrefixEntry == other.tPrefixEntry && dstAreas == other.dstAreas;
-    }
-  };
+  /**
+   * Helper functinon used in getAreaAdvertisedRoutes()
+   * Filter routes with 1. <type> attribute
+   */
+  void filterAndAddAreaRoute(
+      std::vector<thrift::AdvertisedRoute>& routes,
+      const std::string& area,
+      const thrift::RouteFilterType& routeFilterType,
+      std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries,
+      apache::thrift::optional_field_ref<thrift::PrefixType&> const&
+          typeFilter);
+  /**
+   * Util function to convert thrift::OriginatedPrefix to thrift::PrefixEntry
+   * @param prefix: the OriginatedPrefix to be converted
+   * @param tType: type of this prefix, can be CONFIG or VIP
+   */
+  thrift::PrefixEntry toPrefixEntryThrift(
+      const thrift::OriginatedPrefix& prefix, const thrift::PrefixType& tType);
 
   /*
-   * Private helpers to update prefixMap_ and send prefixes to KvStore
+   * Dump post filter (policy) routes for given area.
+   *
+   * @param rejected
+   * - true: return a list of accepted post policy routes
+   * - false: return a list of rejected routes
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+  getAreaAdvertisedRoutes(
+      std::string areaName,
+      thrift::RouteFilterType routeFilterType,
+      thrift::AdvertisedRouteFilter filter);
+
+  /**
+   * Helper functinon used in getAdvertisedRoutesFiltered()
+   * Filter routes with 1. <type> attribute
+   */
+  static void filterAndAddAdvertisedRoute(
+      std::vector<thrift::AdvertisedRouteDetail>& routes,
+      apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
+      folly::CIDRNetwork const& prefix,
+      std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries);
+
+  /*
+   * Dump routes from prefixEvent that are subject to origination policy.
+   *
+   * @param routeFilterType
+   * - pre-policy: return all received prefixes before applying origination
+   * policy
+   * - post-policy: return all accepted prefixes after applying policy
+   * - rejected: return all prefixes rejected by policy
+   * @param filter
+   *    filter prefixes by prefixes and/or prefix-type
+   *
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>
+  getAdvertisedRoutesWithOriginationPolicy(
+      thrift::RouteFilterType routeFilterType,
+      thrift::AdvertisedRouteFilter filter);
+
+  /**
+   * Helper functinon used in getAdvertisedRoutesFiltered()
+   * Filter routes with 1. <type> attribute
+   */
+  void filterAndAddOriginatedRoute(
+      std::vector<thrift::AdvertisedRoute>& routes,
+      const thrift::RouteFilterType& routeFilterType,
+      std::unordered_map<
+          thrift::PrefixType,
+          std::pair<PrefixEntry, std::string>> const& prefixEntries,
+      apache::thrift::optional_field_ref<thrift::PrefixType&> const&
+          typeFilter);
+
+ private:
+  // Process thrift publication from KvStore.
+  void processPublication(thrift::Publication&& thriftPub);
+
+  /*
+   * Private helpers to update `prefixMap_`
    *
    * Called upon:
    * - public write APIs
-   * - request from PrefixUpdateRequest
+   * - request from replicate queue
    *
    * modify prefix db and schedule syncKvStoreThrottled_ to update kvstore
    * @return true if the db is modified
    */
   bool advertisePrefixesImpl(
-      const std::vector<thrift::PrefixEntry>& prefixes,
-      const std::unordered_set<std::string>& dstAreas);
-  bool advertisePrefixesImpl(const std::vector<PrefixEntry>& prefixes);
-  bool withdrawPrefixesImpl(const std::vector<thrift::PrefixEntry>& prefixes);
+      std::vector<thrift::PrefixEntry>&& tPrefixEntries,
+      const std::unordered_set<std::string>& dstAreas,
+      const std::optional<std::string>& policyName = std::nullopt);
+  bool advertisePrefixesImpl(
+      std::vector<PrefixEntry>&& tPrefixEntries,
+      const std::unordered_set<std::string>& dstAreas,
+      const std::optional<std::string>& policyName = std::nullopt);
+  bool advertisePrefixesImpl(
+      const std::vector<PrefixEntry>& prefixEntries,
+      const std::optional<std::string>& policyName = std::nullopt);
+  bool withdrawPrefixesImpl(
+      const std::vector<thrift::PrefixEntry>& tPrefixEntries);
+  bool withdrawPrefixEntriesImpl(const std::vector<PrefixEntry>& prefixEntries);
   bool withdrawPrefixesByTypeImpl(thrift::PrefixType type);
   bool syncPrefixesByTypeImpl(
       thrift::PrefixType type,
-      const std::vector<thrift::PrefixEntry>& prefixes,
-      const std::unordered_set<std::string>& dstAreas);
+      const std::vector<thrift::PrefixEntry>& tPrefixEntries,
+      const std::unordered_set<std::string>& dstAreas,
+      const std::optional<std::string>& policyName = std::nullopt);
+  std::vector<PrefixEntry> applyOriginationPolicy(
+      const std::vector<PrefixEntry>& prefixEntries,
+      const std::string& policyName);
 
-  // Update kvstore with both ephemeral and non-ephemeral prefixes
+  /*
+   * Trigger inital prefix sync after all dependent OpenR initialization signals
+   * are reveived.
+   */
+  void triggerInitialPrefixDbSync();
+
+  /*
+   * One prefixEntry is ready to be advertised iff
+   * - If prependLabel is set, the associated label route should have been
+   *   programmed locally.
+   * - [TODO] The associated unicast route should have been programmed locally.
+   */
+  bool prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry);
+
+  /*
+   * Util function to interact with KvStore to advertise/withdraw prefixes
+   * ATTN: syncKvStore() has throttled version `syncKvStoreThrottled_` to
+   *       batch processing updates
+   */
   void syncKvStore();
 
-  // add entry.tPrefixEntry in entry.dstAreas kvstore, return a set of per
-  // prefix key name for successful injected areas
-  std::unordered_set<std::string> updateKvStorePrefixEntry(PrefixEntry& entry);
+  // Update KvStore keys of one prefix entry.
+  void updatePrefixKeysInKvStore(
+      const folly::CIDRNetwork& prefix, const PrefixEntry& prefixEntry);
 
-  // Update persistent store with non-ephemeral prefix entries
-  void persistPrefixDb();
+  // Add KvStore keys of one prefix entry.
+  // @return: set of the areas that this prefix will advertise to.
+  std::unordered_set<std::string> addKvStoreKeyHelper(const PrefixEntry& entry);
 
-  // process decision route update, inject routes to different areas
-  void processDecisionRouteUpdates(DecisionRouteUpdate&& decisionRouteUpdate);
+  // Delete KvStore keys of one prefix entry.
+  void deletePrefixKeysInKvStore(
+      const folly::CIDRNetwork& prefix,
+      DecisionRouteUpdate& routeUpdatesForDecision);
 
-  // add event named updateEvent to perfEvents if it has value and the last
-  // element is not already updateEvent
-  void addPerfEventIfNotExist(
-      thrift::PerfEvents& perfEvents, std::string const& updateEvent);
+  // Delete KvStore keys form the areas for one prefix entry.
+  void deleteKvStoreKeyHelper(
+      const folly::CIDRNetwork& prefix,
+      const std::unordered_set<std::string>& deletedArea);
+
+  /*
+   * Send static unicast routes for prefix entries of certain type in OpenR
+   * initialization process.
+   */
+  void sendStaticUnicastRoutes(thrift::PrefixType prefixType);
+
+  /*
+   * Get route updates of prefixEntry.
+   * PrefixEntry with nexthops attr set/reset introduces route add/delete.
+   */
+  void populateRouteUpdates(
+      const folly::CIDRNetwork& prefix,
+      const PrefixEntry& prefixEntry,
+      DecisionRouteUpdate& routeUpdatesForDecision,
+      DecisionRouteUpdate& routeUpdatesForBgp);
+  /*
+   * [Route Origination/Aggregation]
+   *
+   * Methods implement utility function for route origination/aggregation.
+   */
+
+  /*
+   * Build prefixes for routes read from OpenrConfig.
+   * - Read routes from OpenrConfig and stored in `OriginatedPrefixDb_`
+   *   for potential advertisement/withdrawn based on min_supporting_route
+   *   ref-count.
+   * - Publish initial static routes for prefixes with `install_to_fib=true`.
+   *   This faciliates the programming of associated routes in initial Fib sync
+   *   and the advertisement of these prefixes in initial PrefixDbSync. For
+   *   originated prefixes with `minimum_supporting_routes>0`, the nonexistence
+   *   of supporting routes will result in the delete of static routes in next
+   *   route program iteration.
+   */
+  void buildOriginatedPrefixes(
+      const std::vector<thrift::OriginatedPrefix>& prefixes);
+
+  /*
+   * Util function to process programmed route update from Fib and populate
+   * aggregates to advertise.
+   */
+  void aggregatesToAdvertise(const folly::CIDRNetwork& prefix);
+
+  /*
+   * Util function to process programmed route update from Fib and populate
+   * aggregates to withdraw.
+   */
+  void aggregatesToWithdraw(const folly::CIDRNetwork& prefix);
+
+  /*
+   * Util function to iterate through originatedPrefixDb_ for route
+   * advertisement/withdrawn
+   */
+  void processOriginatedPrefixes();
+
+  // Process Fib route update.
+  void processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate);
+
+  // Store programmed routes update from FIB, which are later used to check
+  // whether prefixes are ready to be injected into KvStore.
+  void storeProgrammedRoutes(const DecisionRouteUpdate& fibRouteUpdates);
+
+  // For one node locating in multiple areas, it should redistribute prefixes
+  // received from one area into other areas, performing similar role as border
+  // routers in BGP.
+  void redistributePrefixesAcrossAreas(DecisionRouteUpdate&& fibRouteUpdate);
+
+  // get all areaIds
+  std::unordered_set<std::string> allAreaIds();
+
+  // Record originated prefixes with origination policy name for to be exposed
+  // by Cli for debugging purpose
+  void storeOriginatedPrefixes(
+      std::vector<PrefixEntry> prefixEntries, const std::string& policyName);
+
+  void removeOriginatedPrefixes(
+      const std::vector<thrift::PrefixEntry>& prefixEntries);
+
+  void removeOriginatedPrefixes(const std::vector<PrefixEntry>& prefixEntries);
+
+  /*
+   * Private variables/Structures
+   */
 
   // this node name
   const std::string nodeId_;
 
-  // module ptr to interact with ConfigStore
-  PersistentStore* configStore_{nullptr};
+  // Openr config
+  std::shared_ptr<const Config> config_;
 
-  // module ptr to interact with KvStore
-  KvStore* kvStore_{nullptr};
+  // map from area id to area policy
+  std::unordered_map<std::string, std::optional<std::string>> areaToPolicy_;
 
-  // keep track of prefixDB on disk
-  thrift::PrefixDatabase diskState_;
+  // queue to publish originated route updates to decision
+  messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue_;
 
-  bool perPrefixKeys_{true};
+  // queue to send key-value update requests to KvStore
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
-  // enable convergence performance measurement for Adjacencies update
-  const bool enablePerfMeasurement_{false};
+  // Queue to publish prefix updates to bgprib
+  messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue_;
+
+  // Queue to publish thrift::InitializationEvent to downstream consumer
+  messaging::ReplicateQueue<thrift::InitializationEvent>&
+      initializationEventQueue_;
+
+  // V4 prefix over V6 nexthop enabled
+  const bool v4OverV6Nexthop_{false};
 
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
   std::unique_ptr<AsyncThrottle> syncKvStoreThrottled_;
   std::unique_ptr<folly::AsyncTimeout> initialSyncKvStoreTimer_;
 
-  // TTL for a key in the key value store
-  const std::chrono::milliseconds ttlKeyInKvStore_;
-
-  // kvStoreClient for persisting our prefix db
-  std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
-
+  // TODO: Merge this with advertiseStatus_.
   // The current prefix db this node is advertising. In-case if multiple entries
-  // exists for a given prefix, lowest prefix-type is preferred. This is to
-  // bring deterministic behavior for advertising routes.
-  // IMP: Ordered
-  std::
-      map<thrift::PrefixType, std::unordered_map<thrift::IpPrefix, PrefixEntry>>
-          prefixMap_;
-  // TODO: this could be <prefix, <type, OriginatePrefix>> structure
-  //   std::unordered_map<
-  //       folly::CIDRNetwork, /* prefix */
-  //       std::unordered_map<
-  //           thrift::PrefixType, /* different openr attributes */
-  //           OriginatePrefix>>
-  //       prefixMap_;
-  // TODO: tie break on attributes first, then choose the lowest prefix-type.
-  // Redistribute routes could come from remote node from area1, but showed as
-  // originated by me in area2. If I start to originate same prefix, I'll have
-  // to tie break first to choose which one I'd like to announce before it goes
-  // to Decision.
+  // exists for a given prefix, best-route-selection process would select the
+  // ones with the best metric. Lowest prefix-type is used as a tie-breaker for
+  // advertising the best selected routes to KvStore.
+  std::unordered_map<
+      folly::CIDRNetwork,
+      std::unordered_map<thrift::PrefixType, PrefixEntry>>
+      prefixMap_;
+  // Advertised prefixes in KvStore and associated best PrefixEntry.
+  std::unordered_map<folly::CIDRNetwork, PrefixEntry> advertisedPrefixEntries_;
+
+  // For prefixes came from PrefixEvent with an origination policy,
+  // store the pre-policy version in originatedPrefixMap_.
+  // Used in thrift request getAdvertisedRoutesWithOriginationPolicy().
+  std::unordered_map<
+      folly::CIDRNetwork,
+      std::unordered_map<
+          thrift::PrefixType,
+          std::pair<PrefixEntry, std::string>>>
+      originatedPrefixMap_;
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
-  // track any prefix keys for this node that we see to make sure we withdraw
-  // anything we no longer wish to advertise
-  std::unordered_set<std::string> keysToClear_;
+  // AdervertiseStatus records following information of one prefix,
+  // * Areas where one prefix is advertised into. `PrefixManager` advertises
+  //   one prefix based on best-route-selection process, and could advertise
+  //   into multiple areas. Prefix withdrawal process will remove the prefix
+  //   from all advertised areas.
+  // * Published unicast route. `PrefixManager` sends to Decision the associated
+  //   unicast routes for the prefixes with nexthops set. Prefix withdrawal
+  //   process will remove associated unicast routes from Decision.
+  struct AdervertiseStatus {
+    // Set of areas the prefix was already advertised.
+    std::unordered_set<std::string> areas;
+    // Unicast route published to Decision for programming.
+    std::optional<RibUnicastEntry> publishedRoute;
+  };
+  std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> advertiseStatus_{};
 
-  // perfEvents related to a given prefisEntry
-  std::unordered_map<
-      thrift::PrefixType,
-      std::unordered_map<thrift::IpPrefix, thrift::PerfEvents>>
-      addingEvents_;
+  // store pending updates from advertise/withdraw operation
+  detail::PrefixManagerPendingUpdates pendingUpdates_;
 
-  // area Id
-  const std::unordered_set<std::string> allAreas_{};
+  std::unique_ptr<PolicyManager> policyManager_{nullptr};
 
-  // TODO:
-  //   struct AreaInfo {
-  //     // ingress policy
-  //     // AreaPolicy ingressPolicy;
-  //     // store post policy prefix entries
-  //     std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry>
-  //         postPolicyPrefixes;
-  //   }
+  /*
+   * [Route Origination/Aggregation]
+   *
+   * Local-originated prefixes will be advertise/withdrawn from
+   * `Prefix-Manager` by calculating ref-count of supporting-
+   * route from `Decision`.
+   *  --------               ---------
+   *           ------------>
+   *  Decision               PrefixMgr
+   *           <------------
+   *  --------               ---------
+   */
 
-  //   std::unordered_map<std::string, AreaInfo> areaInfos_;
+  // struct to represent local-originiated route
+  struct OriginatedRoute {
+    // thrift structure read from config
+    thrift::OriginatedPrefix originatedPrefix;
+
+    // unicastEntry contains nexthops info
+    RibUnicastEntry unicastEntry;
+
+    // supporting routes for this originated prefix
+    std::unordered_set<folly::CIDRNetwork> supportingRoutes{};
+
+    // flag indicates is local route has been originated
+    bool isAdvertised{false};
+
+    OriginatedRoute(
+        const thrift::OriginatedPrefix& originatedPrefix,
+        const RibUnicastEntry& unicastEntry,
+        const std::unordered_set<folly::CIDRNetwork>& supportingRoutes)
+        : originatedPrefix(originatedPrefix),
+          unicastEntry(unicastEntry),
+          supportingRoutes(supportingRoutes) {}
+
+    /*
+     * Util function for route-agg check
+     */
+    bool
+    shouldInstall() const {
+      return originatedPrefix.install_to_fib_ref().value_or(false);
+    }
+
+    bool
+    shouldAdvertise() const {
+      const auto& minSupportingRouteCnt =
+          *originatedPrefix.minimum_supporting_routes_ref();
+      return (not isAdvertised) and
+          (supportingRoutes.size() >= minSupportingRouteCnt);
+    }
+
+    bool
+    shouldWithdraw() const {
+      const auto& minSupportingRouteCnt =
+          *originatedPrefix.minimum_supporting_routes_ref();
+      return isAdvertised and (supportingRoutes.size() < minSupportingRouteCnt);
+    }
+
+    bool
+    supportingRoutesFulfilled() const {
+      return supportingRoutes.size() >=
+          *originatedPrefix.minimum_supporting_routes_ref();
+    }
+  };
+
+  /*
+   * prefer local originated prefix over BGP originated prefix
+   * Turned on/off via thrift::OpenrConfig::prefer_openr_originated_config
+   */
+  bool preferOpenrOriginatedRoutes_{false};
+
+  /*
+   * prefixes to be originated from prefix-manager
+   * ATTN: to support quick information retrieval, cache the mapping:
+   *
+   *  OriginatedPrefix -> set of FIB prefixEntry(i.e. supporting routes)
+   */
+  std::unordered_map<folly::CIDRNetwork, OriginatedRoute> originatedPrefixDb_;
+
+  /*
+   * prefixes received from OpenR/Fib.
+   * ATTN: to avoid loop through ALL entries inside `originatedPrefixes`,
+   *       cache the reverse mapping:
+   *
+   *  FIB prefixEntry -> vector of OriginatedPrefix(i.e. supported routes)
+   */
+  std::unordered_map<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
+      ribPrefixDb_;
+
+  /*
+   * MPLS labels with label routes already programmed by FIB. For one prefix
+   * with prepend label, PrefixManager needs to make sure the associated label
+   * routes is programmed before advertisement.
+   */
+  std::unordered_set<int32_t> programmedLabels_;
+
+  /*
+   * Prefixes with unicast route already programmed by FIB. For one prefix,
+   * PrefixManager needs to make sure the associated unicast route is programmed
+   * before advertisement.
+   */
+  std::unordered_set<folly::CIDRNetwork> programmedPrefixes_;
+
+  // Boolean flag indicating if kvStoreSynced signal is received from KvStore in
+  // OpenR initialization procedure.
+  bool initialKvStoreSynced_{false};
+
+  /*
+   * Set of prefix types for which PrefixManager awaits in OpenR initialization
+   * procedure. This would be populated based on config
+   * - `RIB` is always added to set. For standalone node or first node brought
+   *   up in the network, there will be empty RIB route updates from OpenR/Fib
+   *   in initialization procedure.
+   * - `BGP` is added if BGP peering is enabled in config.
+   * - `VIP` is added if VIP plugin is enabled in config.
+   *
+   * As we receive the first prefix update request from these types we remove
+   * them from this set. Empty set indicates all expected prefix types are
+   * initialized. First update from Fib will remove `RIB` from this set (Note
+   * Fib sends routes rather than prefixes to PrefixManager, here we leverage
+   * the concept of `RIB` for simplicity).
+   */
+  std::unordered_set<thrift::PrefixType> uninitializedPrefixTypes_{};
 }; // PrefixManager
 
 } // namespace openr

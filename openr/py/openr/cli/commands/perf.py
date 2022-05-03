@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 from builtins import range
@@ -16,7 +13,12 @@ from openr.OpenrCtrl import OpenrCtrl
 
 
 class ViewFibCmd(OpenrCtrlCmd):
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         resp = client.getPerfDb()
         headers = ["Node", "Events", "Duration", "Unix Timestamp"]
         for i in range(len(resp.eventInfo)):

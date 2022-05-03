@@ -1,9 +1,7 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import errno
 import glob
@@ -12,18 +10,13 @@ import os
 import subprocess
 import sys
 import tempfile
+from typing import Optional, Mapping
 
 from .copytree import containing_repo_type
 from .envfuncs import Env, add_path_entry
-from .fetcher import get_fbsource_repo_data
+from .fetcher import get_fbsource_repo_data, homebrew_package_prefix
 from .manifest import ContextGenerator
-from .platform import HostType, is_windows
-
-
-try:
-    import typing  # noqa: F401
-except ImportError:
-    pass
+from .platform import HostType, is_windows, get_available_ram
 
 
 def detect_project(path):
@@ -55,32 +48,24 @@ class BuildOptions(object):
         use_shipit=False,
         vcvars_path=None,
         allow_system_packages=False,
+        lfs_path=None,
+        shared_libs=False,
+        facebook_internal=None,
     ):
-        """ fbcode_builder_dir - the path to either the in-fbsource fbcode_builder dir,
-                                 or for shipit-transformed repos, the build dir that
-                                 has been mapped into that dir.
-            scratch_dir - a place where we can store repos and build bits.
-                          This path should be stable across runs and ideally
-                          should not be in the repo of the project being built,
-                          but that is ultimately where we generally fall back
-                          for builds outside of FB
-            install_dir - where the project will ultimately be installed
-            num_jobs - the level of concurrency to use while building
-            use_shipit - use real shipit instead of the simple shipit transformer
-            vcvars_path - Path to external VS toolchain's vsvarsall.bat
+        """fbcode_builder_dir - the path to either the in-fbsource fbcode_builder dir,
+                             or for shipit-transformed repos, the build dir that
+                             has been mapped into that dir.
+        scratch_dir - a place where we can store repos and build bits.
+                      This path should be stable across runs and ideally
+                      should not be in the repo of the project being built,
+                      but that is ultimately where we generally fall back
+                      for builds outside of FB
+        install_dir - where the project will ultimately be installed
+        num_jobs - the level of concurrency to use while building
+        use_shipit - use real shipit instead of the simple shipit transformer
+        vcvars_path - Path to external VS toolchain's vsvarsall.bat
+        shared_libs - whether to build shared libraries
         """
-        if not num_jobs:
-            import multiprocessing
-
-            num_jobs = multiprocessing.cpu_count()
-            if is_windows():
-                # On Windows the cpu count tends to be the HT count.
-                # Running with that level of concurrency tends to
-                # swamp the system and make hard to perform other
-                # light work.  Let's halve the number of cores here
-                # to win that back. The user can still specify a
-                # larger number if desired.
-                num_jobs = int(num_jobs / 2)
 
         if not install_dir:
             install_dir = os.path.join(scratch_dir, "installed")
@@ -102,14 +87,35 @@ class BuildOptions(object):
         else:
             self.fbsource_dir = None
 
-        self.num_jobs = num_jobs
+        if facebook_internal is None:
+            if self.fbsource_dir:
+                facebook_internal = True
+            else:
+                facebook_internal = False
+
+        self.facebook_internal = facebook_internal
+        self.specified_num_jobs = num_jobs
         self.scratch_dir = scratch_dir
         self.install_dir = install_dir
         self.fbcode_builder_dir = fbcode_builder_dir
         self.host_type = host_type
         self.use_shipit = use_shipit
         self.allow_system_packages = allow_system_packages
+        self.lfs_path = lfs_path
+        self.shared_libs = shared_libs
         if vcvars_path is None and is_windows():
+
+            try:
+                # Allow a site-specific vcvarsall path.
+                from .facebook.vcvarsall import build_default_vcvarsall
+            except ImportError:
+                vcvarsall = []
+            else:
+                vcvarsall = (
+                    build_default_vcvarsall(self.fbsource_dir)
+                    if self.fbsource_dir is not None
+                    else []
+                )
 
             # On Windows, the compiler is not available in the PATH by
             # default so we need to run the vcvarsall script to populate the
@@ -119,7 +125,6 @@ class BuildOptions(object):
             # the version of boost in our manifest cannot be built with
             # VS 2019, so we're effectively tied to VS 2017 until we upgrade
             # the boost dependency.
-            vcvarsall = []
             for year in ["2017", "2019"]:
                 vcvarsall += glob.glob(
                     os.path.join(
@@ -147,14 +152,28 @@ class BuildOptions(object):
     def is_windows(self):
         return self.host_type.is_windows()
 
+    def is_arm(self):
+        return self.host_type.is_arm()
+
     def get_vcvars_path(self):
         return self.vcvars_path
 
     def is_linux(self):
         return self.host_type.is_linux()
 
-    def get_context_generator(self, host_tuple=None, facebook_internal=None):
-        """ Create a manifest ContextGenerator for the specified target platform. """
+    def get_num_jobs(self, job_weight):
+        """Given an estimated job_weight in MiB, compute a reasonable concurrency limit."""
+        if self.specified_num_jobs:
+            return self.specified_num_jobs
+
+        available_ram = get_available_ram()
+
+        import multiprocessing
+
+        return max(1, min(multiprocessing.cpu_count(), available_ram // job_weight))
+
+    def get_context_generator(self, host_tuple=None):
+        """Create a manifest ContextGenerator for the specified target platform."""
         if host_tuple is None:
             host_type = self.host_type
         elif isinstance(host_tuple, HostType):
@@ -162,19 +181,15 @@ class BuildOptions(object):
         else:
             host_type = HostType.from_tuple_string(host_tuple)
 
-        # facebook_internal is an Optional[bool]
-        # If it is None, default to assuming this is a Facebook-internal build if
-        # we are running in an fbsource repository.
-        if facebook_internal is None:
-            facebook_internal = self.fbsource_dir is not None
-
         return ContextGenerator(
             {
                 "os": host_type.ostype,
                 "distro": host_type.distro,
                 "distro_vers": host_type.distrovers,
-                "fb": "on" if facebook_internal else "off",
+                "fb": "on" if self.facebook_internal else "off",
+                "fbsource": "on" if self.fbsource_dir else "off",
                 "test": "off",
+                "shared_libs": "on" if self.shared_libs else "off",
             }
         )
 
@@ -192,6 +207,12 @@ class BuildOptions(object):
         if self.is_darwin() and "SDKROOT" not in env:
             sdkroot = subprocess.check_output(["xcrun", "--show-sdk-path"])
             env["SDKROOT"] = sdkroot.decode().strip()
+
+        # MacOS includes a version of bison so homebrew won't automatically add
+        # its own version to PATH. Find where the homebrew bison is and prepend
+        # it to PATH.
+        if self.is_darwin() and self.host_type.get_package_manager() == "homebrew":
+            add_homebrew_package_to_path(env, "bison")
 
         if self.fbsource_dir:
             env["YARN_YARN_OFFLINE_MIRROR"] = os.path.join(
@@ -225,33 +246,34 @@ class BuildOptions(object):
         for d in install_dirs:
             bindir = os.path.join(d, "bin")
 
-            if not (
-                manifest and manifest.get("build", "disable_env_override_pkgconfig")
-            ):
-                pkgconfig = os.path.join(d, "lib/pkgconfig")
-                if os.path.exists(pkgconfig):
-                    add_path_entry(env, "PKG_CONFIG_PATH", pkgconfig)
+            pkgconfig = os.path.join(d, "lib/pkgconfig")
+            if os.path.exists(pkgconfig):
+                add_path_entry(env, "PKG_CONFIG_PATH", pkgconfig)
 
-                pkgconfig = os.path.join(d, "lib64/pkgconfig")
-                if os.path.exists(pkgconfig):
-                    add_path_entry(env, "PKG_CONFIG_PATH", pkgconfig)
+            pkgconfig = os.path.join(d, "lib64/pkgconfig")
+            if os.path.exists(pkgconfig):
+                add_path_entry(env, "PKG_CONFIG_PATH", pkgconfig)
 
-            if not (manifest and manifest.get("build", "disable_env_override_path")):
-                add_path_entry(env, "CMAKE_PREFIX_PATH", d)
+            add_path_entry(env, "CMAKE_PREFIX_PATH", d)
 
-                # Allow resolving shared objects built earlier (eg: zstd
-                # doesn't include the full path to the dylib in its linkage
-                # so we need to give it an assist)
-                if lib_path:
-                    for lib in ["lib", "lib64"]:
-                        libdir = os.path.join(d, lib)
-                        if os.path.exists(libdir):
-                            add_path_entry(env, lib_path, libdir)
+            # Tell the thrift compiler about includes it needs to consider
+            thriftdir = os.path.join(d, "include/thrift-files")
+            if os.path.exists(thriftdir):
+                add_path_entry(env, "THRIFT_INCLUDE_PATH", thriftdir)
 
-                # Allow resolving binaries (eg: cmake, ninja) and dlls
-                # built by earlier steps
-                if os.path.exists(bindir):
-                    add_path_entry(env, "PATH", bindir, append=False)
+            # Allow resolving shared objects built earlier (eg: zstd
+            # doesn't include the full path to the dylib in its linkage
+            # so we need to give it an assist)
+            if lib_path:
+                for lib in ["lib", "lib64"]:
+                    libdir = os.path.join(d, lib)
+                    if os.path.exists(libdir):
+                        add_path_entry(env, lib_path, libdir)
+
+            # Allow resolving binaries (eg: cmake, ninja) and dlls
+            # built by earlier steps
+            if os.path.exists(bindir):
+                add_path_entry(env, "PATH", bindir, append=False)
 
             # If rustc is present in the `bin` directory, set RUSTC to prevent
             # cargo uses the rustc installed in the system.
@@ -269,14 +291,30 @@ class BuildOptions(object):
                 env["RUSTC"] = rustc_path
                 env["RUSTDOC"] = rustdoc_path
 
-            if self.is_windows():
-                libcrypto = os.path.join(d, "lib/libcrypto.lib")
-            else:
-                libcrypto = os.path.join(d, "lib/libcrypto.so")
             openssl_include = os.path.join(d, "include/openssl")
-            if os.path.isfile(libcrypto) and os.path.isdir(openssl_include):
+            if os.path.isdir(openssl_include) and any(
+                os.path.isfile(os.path.join(d, "lib", libcrypto))
+                for libcrypto in ("libcrypto.lib", "libcrypto.so", "libcrypto.a")
+            ):
                 # This must be the openssl library, let Rust know about it
                 env["OPENSSL_DIR"] = d
+                # And let openssl know to pick up the system certs if present
+                for system_ssl_cfg in ["/etc/pki/tls", "/etc/ssl"]:
+                    if os.path.isdir(system_ssl_cfg):
+                        cert_dir = system_ssl_cfg + "/certs"
+                        if os.path.isdir(cert_dir):
+                            env["SSL_CERT_DIR"] = cert_dir
+                        cert_file = system_ssl_cfg + "/cert.pem"
+                        if os.path.isfile(cert_file):
+                            env["SSL_CERT_FILE"] = cert_file
+
+        # Try extra hard to find openssl, needed with homebrew on macOS
+        if (
+            self.is_darwin()
+            and "OPENSSL_DIR" not in env
+            and "OPENSSL_ROOT_DIR" in os.environ
+        ):
+            env["OPENSSL_ROOT_DIR"] = os.environ["OPENSSL_ROOT_DIR"]
 
         return env
 
@@ -298,10 +336,9 @@ def list_win32_subst_letters():
 
 
 def find_existing_win32_subst_for_path(
-    path,  # type: str
-    subst_mapping,  # type: typing.Mapping[str, str]
-):
-    # type: (...) -> typing.Optional[str]
+    path: str,
+    subst_mapping: Mapping[str, str],
+) -> Optional[str]:
     path = ntpath.normcase(ntpath.normpath(path))
     for letter, target in subst_mapping.items():
         if ntpath.normcase(target) == path:
@@ -371,7 +408,7 @@ def _check_host_type(args, host_type):
 
 
 def setup_build_options(args, host_type=None):
-    """ Create a BuildOptions object based on the arguments """
+    """Create a BuildOptions object based on the arguments"""
 
     fbcode_builder_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     scratch_dir = args.scratch_path
@@ -443,15 +480,37 @@ def setup_build_options(args, host_type=None):
     if not is_windows():
         scratch_dir = os.path.realpath(scratch_dir)
 
+    # Save these args passed by the user in an env variable, so it
+    # can be used while hashing this build.
+    os.environ["GETDEPS_CMAKE_DEFINES"] = getattr(args, "extra_cmake_defines", "") or ""
+
     host_type = _check_host_type(args, host_type)
+
+    build_args = {
+        k: v
+        for (k, v) in vars(args).items()
+        if k
+        in {
+            "num_jobs",
+            "use_shipit",
+            "vcvars_path",
+            "allow_system_packages",
+            "lfs_path",
+            "shared_libs",
+        }
+    }
 
     return BuildOptions(
         fbcode_builder_dir,
         scratch_dir,
         host_type,
         install_dir=args.install_prefix,
-        num_jobs=args.num_jobs,
-        use_shipit=args.use_shipit,
-        vcvars_path=args.vcvars_path,
-        allow_system_packages=args.allow_system_packages,
+        facebook_internal=args.facebook_internal,
+        **build_args,
     )
+
+
+def add_homebrew_package_to_path(env, package):
+    prefix = homebrew_package_prefix(package)
+    if prefix and os.path.exists(os.path.join(prefix, "bin")):
+        add_path_entry(env, "PATH", os.path.join(prefix, "bin"), append=False)

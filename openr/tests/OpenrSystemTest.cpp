@@ -1,21 +1,13 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/async/StopEventLoopSignalHandler.h>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/FileUtil.h>
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
-#include <folly/Memory.h>
-#include <folly/gen/Base.h>
-#include <folly/gen/String.h>
 #include <folly/init/Init.h>
-#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <sodium.h>
@@ -25,12 +17,10 @@
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
-#include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/Constants.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
@@ -47,7 +37,6 @@ namespace {
 
 const std::chrono::seconds kMaxOpenrSyncTime(3);
 
-const std::chrono::seconds kKvStoreDbSyncInterval(1);
 const std::chrono::milliseconds kSpark2HelloTime(100);
 const std::chrono::milliseconds kSpark2FastInitHelloTime(20);
 const std::chrono::milliseconds kSpark2HandshakeTime(20);
@@ -55,10 +44,8 @@ const std::chrono::milliseconds kSpark2HeartbeatTime(20);
 const std::chrono::milliseconds kSpark2HandshakeHoldTime(200);
 const std::chrono::milliseconds kSpark2HeartbeatHoldTime(500);
 const std::chrono::milliseconds kSpark2GRHoldTime(1000);
-const std::chrono::seconds kLinkMonitorAdjHoldTime(1);
 const std::chrono::milliseconds kLinkFlapInitialBackoff(1);
 const std::chrono::milliseconds kLinkFlapMaxBackoff(8);
-const std::chrono::seconds kFibColdStartDuration(1);
 
 const string iface12{"1/2"};
 const string iface13{"1/3"};
@@ -136,7 +123,9 @@ using RouteMap = unordered_map<
 // disable V4 by default
 NextHop
 toNextHop(thrift::Adjacency adj, bool isV4 = false) {
-  return {adj.ifName, toIPAddress(isV4 ? adj.nextHopV4 : adj.nextHopV6)};
+  return {
+      *adj.ifName_ref(),
+      toIPAddress(isV4 ? *adj.nextHopV4_ref() : *adj.nextHopV6_ref())};
 }
 
 // Note: routeMap will be modified
@@ -145,17 +134,18 @@ fillRouteMap(
     const string& node,
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : routeDb.unicastRoutes) {
-    auto prefix = toString(route.dest);
-    for (const auto& nextHop : route.nextHops) {
-      const auto nextHopAddr = toIPAddress(nextHop.address);
+  for (auto const& route : *routeDb.unicastRoutes_ref()) {
+    auto prefix = toString(*route.dest_ref());
+    for (const auto& nextHop : *route.nextHops_ref()) {
+      const auto nextHopAddr = toIPAddress(*nextHop.address_ref());
+      assert(nextHop.address_ref()->ifName_ref());
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << nextHop.address.ifName_ref().value() << " : " << nextHopAddr
-              << " (" << nextHop.metric << ")";
+              << nextHop.address_ref()->ifName_ref().value() << " : "
+              << nextHopAddr << " (" << *nextHop.metric_ref() << ")";
 
       routeMap[make_pair(node, prefix)].insert(
-          {{nextHop.address.ifName_ref().value(), nextHopAddr},
-           nextHop.metric});
+          {{nextHop.address_ref()->ifName_ref().value(), nextHopAddr},
+           *nextHop.metric_ref()});
     }
   }
 }
@@ -203,7 +193,6 @@ class OpenrFixture : public ::testing::Test {
         context,
         nodeId,
         v4Enabled,
-        kKvStoreDbSyncInterval,
         kSpark2HelloTime,
         kSpark2FastInitHelloTime,
         kSpark2HandshakeTime,
@@ -211,10 +200,8 @@ class OpenrFixture : public ::testing::Test {
         kSpark2HandshakeHoldTime,
         kSpark2HeartbeatHoldTime,
         kSpark2GRHoldTime,
-        kLinkMonitorAdjHoldTime,
         kLinkFlapInitialBackoff,
         kLinkFlapMaxBackoff,
-        kFibColdStartDuration,
         mockIoProvider,
         memLimit);
     openrWrappers_.emplace_back(std::move(ptr));
@@ -251,16 +238,19 @@ INSTANTIATE_TEST_CASE_P(
 // Verify multi path in ring topology for both v4 and v6 and
 // test IP prefix add and withdraw.
 //
+// TODO: need to figure out way to test e2e by addressing kvstore thrift-sync
+/*
 TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   // define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface12, ifIndex12},
-                                    {iface13, ifIndex13},
-                                    {iface21, ifIndex21},
-                                    {iface24, ifIndex24},
-                                    {iface31, ifIndex31},
-                                    {iface34, ifIndex34},
-                                    {iface42, ifIndex42},
-                                    {iface43, ifIndex43}});
+  mockIoProvider->addIfNameIfIndex(
+      {{iface12, ifIndex12},
+       {iface13, ifIndex13},
+       {iface21, ifIndex21},
+       {iface24, ifIndex24},
+       {iface31, ifIndex31},
+       {iface34, ifIndex34},
+       {iface42, ifIndex42},
+       {iface43, ifIndex43}});
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface12, {{iface21, 100}}},
@@ -287,7 +277,6 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   openr3->run();
   openr4->run();
 
-  /* sleep override */
   // wait until all aquamen got synced on kvstore
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
@@ -298,26 +287,57 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   EXPECT_TRUE(openr4->getIpPrefix().has_value());
 
   // start tracking iface1
-  EXPECT_TRUE(
-      openr1->sparkUpdateInterfaceDb({{iface12, ifIndex12, ip1V4, ip1V6},
-                                      {iface13, ifIndex13, ip1V4, ip1V6}}));
+  openr1->updateInterfaceDb(
+      {InterfaceInfo(
+           iface12,
+           true,
+           ifIndex12,
+           {ip1V4, ip1V6}),
+       InterfaceInfo(
+           iface13,
+           true,
+           ifIndex13,
+           {ip1V4, ip1V6})});
 
   // start tracking iface2
-  EXPECT_TRUE(
-      openr2->sparkUpdateInterfaceDb({{iface21, ifIndex21, ip2V4, ip2V6},
-                                      {iface24, ifIndex24, ip2V4, ip2V6}}));
+  openr2->updateInterfaceDb(
+      {InterfaceInfo(
+           iface21,
+           true,
+           ifIndex21,
+           {ip2V4, ip2V6}),
+       InterfaceInfo(
+           iface24,
+           true,
+           ifIndex24,
+           {ip2V4, ip2V6})});
 
   // start tracking iface3
-  EXPECT_TRUE(
-      openr3->sparkUpdateInterfaceDb({{iface31, ifIndex31, ip3V4, ip3V6},
-                                      {iface34, ifIndex34, ip3V4, ip3V6}}));
+  openr3->updateInterfaceDb(
+      {InterfaceInfo(
+           iface31,
+           true,
+           ifIndex31,
+           {ip3V4, ip3V6}),
+       InterfaceInfo(
+           iface34,
+           true,
+           ifIndex34,
+           {ip3V4, ip3V6})});
 
   // start tracking iface4
-  EXPECT_TRUE(
-      openr4->sparkUpdateInterfaceDb({{iface42, ifIndex42, ip4V4, ip4V6},
-                                      {iface43, ifIndex43, ip4V4, ip4V6}}));
+  openr4->updateInterfaceDb(
+      {InterfaceInfo(
+           iface42,
+           true,
+           ifIndex42,
+           {ip4V4, ip4V6}),
+       InterfaceInfo(
+           iface43,
+           true,
+           ifIndex43,
+           {ip4V4, ip4V6})});
 
-  /* sleep override */
   // wait until all aquamen got synced on kvstore
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
@@ -386,8 +406,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHopsWithMetric({make_pair(toNextHop(adj12, v4Enabled), 2),
-                          make_pair(toNextHop(adj13, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj12, v4Enabled), 2),
+           make_pair(toNextHop(adj13, v4Enabled), 2)}));
 
   // validate router 2
 
@@ -401,8 +422,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHopsWithMetric({make_pair(toNextHop(adj21, v4Enabled), 2),
-                          make_pair(toNextHop(adj24, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj21, v4Enabled), 2),
+           make_pair(toNextHop(adj24, v4Enabled), 2)}));
 
   // validate router 3
 
@@ -416,8 +438,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHopsWithMetric({make_pair(toNextHop(adj31, v4Enabled), 2),
-                          make_pair(toNextHop(adj34, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj31, v4Enabled), 2),
+           make_pair(toNextHop(adj34, v4Enabled), 2)}));
 
   // validate router 4
 
@@ -431,8 +454,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHopsWithMetric({make_pair(toNextHop(adj42, v4Enabled), 2),
-                          make_pair(toNextHop(adj43, v4Enabled), 2)}));
+      NextHopsWithMetric(
+          {make_pair(toNextHop(adj42, v4Enabled), 2),
+           make_pair(toNextHop(adj43, v4Enabled), 2)}));
 
   // test IP prefix add and withdraw. Add prefixes and withdraw prefixes
   // using prefix manager client, and verify the FIB route dump reflects
@@ -445,7 +469,6 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   // openr1 uses separate IP prefix key for each prefix
   auto resp = openr1->addPrefixEntries({prefixEntry1});
   EXPECT_TRUE(resp);
-  /* sleep override */
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
   routeDb2 = openr2->fibDumpRouteDatabase();
@@ -466,7 +489,6 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   // openr2 uses one prefixKey for all prefixes
   resp = openr2->addPrefixEntries({prefixEntry2});
   EXPECT_TRUE(resp);
-  /* sleep override */
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
   routeDb1 = openr1->fibDumpRouteDatabase();
@@ -485,7 +507,6 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   // openr1 uses separate IP prefix key for each prefix
   resp = openr1->withdrawPrefixEntries({prefixEntry1});
   EXPECT_TRUE(resp);
-  /* sleep override */
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
   routeDb1 = openr1->fibDumpRouteDatabase();
@@ -513,7 +534,6 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   // then check prefix is deleted from all other nodes
   resp = openr2->withdrawPrefixEntries({prefixEntry2});
   EXPECT_TRUE(resp);
-  /* sleep override */
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
   routeDb1 = openr1->fibDumpRouteDatabase();
@@ -528,11 +548,12 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   EXPECT_FALSE(
       OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb4));
 }
+*/
 
 //
 // Verify system metrics
 //
-TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
+TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   // define interface names for the test
   mockIoProvider->addIfNameIfIndex(
       {{iface12, ifIndex12}, {iface21, ifIndex21}});
@@ -548,6 +569,7 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
 
   std::string memKey{"process.memory.rss"};
   std::string cpuKey{"process.cpu.pct"};
+  std::string upTimeKey{"process.uptime.seconds"};
   uint32_t rssMemInUse{0};
 
   // find out rss memory in use
@@ -555,13 +577,13 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
     auto openr2 = createOpenr("2", v4Enabled);
     openr2->run();
 
-    auto counters2 = openr2->zmqMonitorClient->dumpCounters();
+    auto counters2 = openr2->getCounters();
     /* sleep override */
     std::this_thread::sleep_for(kMaxOpenrSyncTime);
     while (counters2.size() == 0) {
-      counters2 = openr2->zmqMonitorClient->dumpCounters();
+      counters2 = openr2->getCounters();
     }
-    rssMemInUse = counters2[memKey].value / 1e6;
+    rssMemInUse = counters2[memKey] / 1e6;
   }
 
   uint32_t memLimitMB = static_cast<uint32_t>(rssMemInUse) + 500;
@@ -575,21 +597,21 @@ TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
   // make sure every openr has a prefix allocated
   EXPECT_TRUE(openr1->getIpPrefix().has_value());
 
-  auto counters1 = openr1->zmqMonitorClient->dumpCounters();
-  while (counters1.size() == 0) {
-    counters1 = openr1->zmqMonitorClient->dumpCounters();
+  // Wait for calling getCPUpercentage() twice for calculating the cpu% counter.
+  // Check if counters contain the uptime, cpu and memory usage counters.
+  auto counters1 = openr1->getCounters();
+  while (true) {
+    if (counters1.find(cpuKey) != counters1.end()) {
+      EXPECT_EQ(counters1.count(cpuKey), 1);
+      EXPECT_EQ(counters1.count(memKey), 1);
+      break;
+    }
+    counters1 = openr1->getCounters();
+    std::this_thread::yield();
   }
-
-  // check if counters contain the cpu and memory resource usage
-  // sleep for 6s to ensure querying twice for calculating the cpu% counter
-  std::this_thread::sleep_for(std::chrono::seconds(6));
-  counters1 = openr1->zmqMonitorClient->dumpCounters();
-  EXPECT_EQ(counters1.count(cpuKey), 1);
-  EXPECT_EQ(counters1.count(memKey), 1);
-
   // allocate memory to go beyond memory limit and check if watchdog
   // catches the over the limit condition
-  uint32_t memUsage = static_cast<uint32_t>(counters1[memKey].value / 1e6);
+  uint32_t memUsage = static_cast<uint32_t>(counters1[memKey] / 1e6);
 
   if (memUsage < memLimitMB) {
     EXPECT_FALSE(openr1->watchdog->memoryLimitExceeded());

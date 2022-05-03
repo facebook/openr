@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -36,11 +36,8 @@ class MonitorBase : public OpenrEventBase {
       const std::string& category,
       messaging::RQueue<LogSample> logSampleQueue);
 
-  // Add an event log to queue
-  void addEventLog(LogSample const& eventLog);
-
   // Get recent event logs
-  std::list<LogSample> getRecentEventLogs();
+  std::list<std::string> getRecentEventLogs();
 
   // Destructor
   virtual ~MonitorBase() = default;
@@ -53,6 +50,9 @@ class MonitorBase : public OpenrEventBase {
   // Pure virtual function for processing and publishing a log
   virtual void processEventLog(LogSample const& eventLog) = 0;
 
+  // Get the heap profile
+  virtual void dumpHeapProfile() = 0;
+
   // Set process counters
   void updateProcessCounters();
 
@@ -63,10 +63,13 @@ class MonitorBase : public OpenrEventBase {
   const uint32_t maxLogEvents_{0};
 
   // List of recent log
-  std::list<LogSample> recentLog_{};
+  std::list<std::string> recentLog_{};
 
   // Timer to periodically set process cpu/uptime/memory counter
   std::unique_ptr<folly::AsyncTimeout> setProcessCounterTimer_;
+
+  // Timer to periodically dump the heap profile
+  std::unique_ptr<folly::AsyncTimeout> dumpHeapProfileTimer_;
 
   // Start timestamp for calculate process.uptime.seconds
   const std::chrono::steady_clock::time_point startTime_;

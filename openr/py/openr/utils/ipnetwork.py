@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import ipaddress
 import socket
-from typing import List, Optional
+from typing import Union, List, Optional
 
-from openr.Fib import ttypes as fib_types
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types
+from openr.thrift.Network import types as network_types_py3
+from openr.Types import ttypes as openr_types
 
 
-def sprint_addr(addr):
-    """ binary ip addr -> string """
+def sprint_addr(addr: bytes) -> str:
+    """binary ip addr -> string"""
 
-    if not len(addr):
+    if not len(addr) or not addr:
         return ""
 
     return str(ipaddress.ip_address(addr))
 
 
-def sprint_prefix(prefix):
+def sprint_prefix(
+    prefix: Union[network_types_py3.IpPrefix, network_types.IpPrefix]
+) -> str:
     """
     :param prefix: network_types.IpPrefix representing an CIDR network
 
@@ -35,10 +34,12 @@ def sprint_prefix(prefix):
     :rtype: str or unicode
     """
 
-    return "{}/{}".format(sprint_addr(prefix.prefixAddress.addr), prefix.prefixLength)
+    return f"{sprint_addr(prefix.prefixAddress.addr)}/{prefix.prefixLength}"
 
 
-def ip_str_to_addr(addr_str: str, if_index: str = None) -> network_types.BinaryAddress:
+def ip_str_to_addr(
+    addr_str: str, if_index: Optional[str] = None
+) -> network_types.BinaryAddress:
     """
     :param addr_str: ip address in string representation
 
@@ -109,12 +110,11 @@ def ip_to_unicast_route(
 
 def mpls_to_mpls_route(
     label: int, nexthops: List[network_types.NextHopThrift]
-) -> network_types.UnicastRoute:
+) -> network_types.MplsRoute:
     """
     :param label: MPLS label
     :param nexthops: List of nexthops
     """
-
     return network_types.MplsRoute(topLabel=label, nextHops=nexthops)
 
 
@@ -141,6 +141,7 @@ def mpls_nexthop_to_nexthop_thrift(
     )
     mpls_action = network_types.MplsAction(action=action)
     if action == network_types.MplsActionCode.SWAP:
+        # pyre-fixme[16]: `Optional` has no attribute `__getitem__`.
         mpls_action.swapLabel = label[0]
     elif action == network_types.MplsActionCode.PUSH:
         mpls_action.pushLabels = label[:]
@@ -153,7 +154,7 @@ def routes_to_route_db(
     node: str,
     unicast_routes: Optional[List[network_types.UnicastRoute]] = None,
     mpls_routes: Optional[List[network_types.MplsRoute]] = None,
-) -> fib_types.RouteDatabase:
+) -> openr_types.RouteDatabase:
     """
     :param node: node name
     :param unicast_routes: list of unicast IP routes
@@ -162,7 +163,7 @@ def routes_to_route_db(
     unicast_routes = [] if unicast_routes is None else unicast_routes
     mpls_routes = [] if mpls_routes is None else mpls_routes
 
-    return fib_types.RouteDatabase(
+    return openr_types.RouteDatabase(
         thisNodeName=node, unicastRoutes=unicast_routes, mplsRoutes=mpls_routes
     )
 
@@ -184,30 +185,18 @@ def sprint_prefix_forwarding_type(forwarding_type):
 
 
 def sprint_prefix_forwarding_algorithm(
-    forwarding_algo: openr_config_types.PrefixForwardingAlgorithm
-) -> str:
+    forwarding_algo: openr_config_types.PrefixForwardingAlgorithm,
+) -> Optional[str]:
     """
     :param forwarding_algorithm: openr_config_types.PrefixForwardingAlgorithm
     """
-
     return openr_config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
         forwarding_algo
     )
 
 
-def sprint_prefix_is_ephemeral(prefix_entry: lsdb_types.PrefixEntry) -> str:
-    """
-    :param prefix_entry: lsdb_types.PrefixEntry
-    """
-
-    return (
-        str(prefix_entry.ephemeral) if prefix_entry.ephemeral is not None else "False"
-    )
-
-
 def ip_version(addr):
-    """ return ip addr version
-    """
+    """return ip addr version"""
 
     return ipaddress.ip_address(addr).version
 
@@ -232,7 +221,7 @@ def is_link_local(addr):
     return ipaddress.ip_network(addr).is_link_local
 
 
-def is_subnet_of(a, b):
+def is_subnet_of(a, b) -> bool:
     """
     Check if network-b is subnet of network-a
     """
@@ -243,7 +232,7 @@ def is_subnet_of(a, b):
     return a.prefixlen >= b.prefixlen
 
 
-def contain_any_prefix(prefix, ip_networks):
+def contain_any_prefix(prefix, ip_networks) -> bool:
     """
     Utility function to check if prefix contain any of the prefixes/ips
 

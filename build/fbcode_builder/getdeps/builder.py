@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import json
 import os
@@ -100,18 +98,28 @@ class BuilderBase(object):
             dep_dirs = self.get_dev_run_extra_path_dirs(install_dirs, dep_munger)
             dep_munger.emit_dev_run_script(script_path, dep_dirs)
 
-    def run_tests(self, install_dirs, schedule_type, owner, test_filter, retry):
-        """ Execute any tests that we know how to run.  If they fail,
-        raise an exception. """
+    @property
+    def num_jobs(self) -> int:
+        # 1.5 GiB is a lot to assume, but it's typical of Facebook-style C++.
+        # Some manifests are even heavier and should override.
+        return self.build_opts.get_num_jobs(
+            int(self.manifest.get("build", "job_weight_mib", 1536, ctx=self.ctx))
+        )
+
+    def run_tests(
+        self, install_dirs, schedule_type, owner, test_filter, retry, no_testpilot
+    ):
+        """Execute any tests that we know how to run.  If they fail,
+        raise an exception."""
         pass
 
     def _build(self, install_dirs, reconfigure):
-        """ Perform the build.
+        """Perform the build.
         install_dirs contains the list of installation directories for
         the dependencies of this project.
         reconfigure will be set to true if the fetcher determined
         that the sources have changed in such a way that the build
-        system needs to regenerate its rules. """
+        system needs to regenerate its rules."""
         pass
 
     def _compute_env(self, install_dirs):
@@ -143,41 +151,87 @@ class MakeBuilder(BuilderBase):
         inst_dir,
         build_args,
         install_args,
+        test_args,
     ):
         super(MakeBuilder, self).__init__(
             build_opts, ctx, manifest, src_dir, build_dir, inst_dir
         )
         self.build_args = build_args or []
         self.install_args = install_args or []
+        self.test_args = test_args
+
+    def _get_prefix(self):
+        return ["PREFIX=" + self.inst_dir, "prefix=" + self.inst_dir]
 
     def _build(self, install_dirs, reconfigure):
         env = self._compute_env(install_dirs)
 
         # Need to ensure that PREFIX is set prior to install because
-        # libbpf uses it when generating its pkg-config file
-        cmd = (
-            ["make", "-j%s" % self.build_opts.num_jobs]
-            + self.build_args
-            + ["PREFIX=" + self.inst_dir]
-        )
+        # libbpf uses it when generating its pkg-config file.
+        # The lowercase prefix is used by some projects.
+        cmd = ["make", "-j%s" % self.num_jobs] + self.build_args + self._get_prefix()
         self._run_cmd(cmd, env=env)
 
-        install_cmd = ["make"] + self.install_args + ["PREFIX=" + self.inst_dir]
+        install_cmd = ["make"] + self.install_args + self._get_prefix()
         self._run_cmd(install_cmd, env=env)
+
+    def run_tests(
+        self, install_dirs, schedule_type, owner, test_filter, retry, no_testpilot
+    ):
+        if not self.test_args:
+            return
+
+        env = self._compute_env(install_dirs)
+
+        cmd = ["make"] + self.test_args + self._get_prefix()
+        self._run_cmd(cmd, env=env)
+
+
+class CMakeBootStrapBuilder(MakeBuilder):
+    def _build(self, install_dirs, reconfigure):
+        self._run_cmd(
+            [
+                "./bootstrap",
+                "--prefix=" + self.inst_dir,
+                f"--parallel={self.num_jobs}",
+            ]
+        )
+        super(CMakeBootStrapBuilder, self)._build(install_dirs, reconfigure)
 
 
 class AutoconfBuilder(BuilderBase):
-    def __init__(self, build_opts, ctx, manifest, src_dir, build_dir, inst_dir, args):
+    def __init__(
+        self,
+        build_opts,
+        ctx,
+        manifest,
+        src_dir,
+        build_dir,
+        inst_dir,
+        args,
+        conf_env_args,
+    ):
         super(AutoconfBuilder, self).__init__(
             build_opts, ctx, manifest, src_dir, build_dir, inst_dir
         )
         self.args = args or []
+        self.conf_env_args = conf_env_args or {}
 
     def _build(self, install_dirs, reconfigure):
         configure_path = os.path.join(self.src_dir, "configure")
         autogen_path = os.path.join(self.src_dir, "autogen.sh")
 
         env = self._compute_env(install_dirs)
+
+        # Some configure scripts need additional env values passed derived from cmds
+        for (k, cmd_args) in self.conf_env_args.items():
+            out = (
+                subprocess.check_output(cmd_args, env=dict(env.items()))
+                .decode("utf-8")
+                .strip()
+            )
+            if out:
+                env.set(k, out)
 
         if not os.path.exists(configure_path):
             print("%s doesn't exist, so reconfiguring" % configure_path)
@@ -197,7 +251,7 @@ class AutoconfBuilder(BuilderBase):
                 self._run_cmd(["autoreconf", "-ivf"], cwd=self.src_dir, env=env)
         configure_cmd = [configure_path, "--prefix=" + self.inst_dir] + self.args
         self._run_cmd(configure_cmd, env=env)
-        self._run_cmd(["make", "-j%s" % self.build_opts.num_jobs], env=env)
+        self._run_cmd(["make", "-j%s" % self.num_jobs], env=env)
         self._run_cmd(["make", "install"], env=env)
 
 
@@ -232,7 +286,7 @@ class Iproute2Builder(BuilderBase):
         shutil.rmtree(self.build_dir)
         shutil.copytree(self.src_dir, self.build_dir)
         self._patch()
-        self._run_cmd(["make", "-j%s" % self.build_opts.num_jobs], env=env)
+        self._run_cmd(["make", "-j%s" % self.num_jobs], env=env)
         install_cmd = ["make", "install", "DESTDIR=" + self.inst_dir]
 
         for d in ["include", "lib"]:
@@ -244,11 +298,60 @@ class Iproute2Builder(BuilderBase):
         self._run_cmd(install_cmd, env=env)
 
 
+class BistroBuilder(BuilderBase):
+    def _build(self, install_dirs, reconfigure):
+        p = os.path.join(self.src_dir, "bistro", "bistro")
+        env = self._compute_env(install_dirs)
+        env["PATH"] = env["PATH"] + ":" + os.path.join(p, "bin")
+        env["TEMPLATES_PATH"] = os.path.join(p, "include", "thrift", "templates")
+        self._run_cmd(
+            [
+                os.path.join(".", "cmake", "run-cmake.sh"),
+                "Release",
+                "-DCMAKE_INSTALL_PREFIX=" + self.inst_dir,
+            ],
+            cwd=p,
+            env=env,
+        )
+        self._run_cmd(
+            [
+                "make",
+                "install",
+                "-j",
+                str(self.num_jobs),
+            ],
+            cwd=os.path.join(p, "cmake", "Release"),
+            env=env,
+        )
+
+    def run_tests(
+        self, install_dirs, schedule_type, owner, test_filter, retry, no_testpilot
+    ):
+        env = self._compute_env(install_dirs)
+        build_dir = os.path.join(self.src_dir, "bistro", "bistro", "cmake", "Release")
+        NUM_RETRIES = 5
+        for i in range(NUM_RETRIES):
+            cmd = ["ctest", "--output-on-failure"]
+            if i > 0:
+                cmd.append("--rerun-failed")
+            cmd.append(build_dir)
+            try:
+                self._run_cmd(
+                    cmd,
+                    cwd=build_dir,
+                    env=env,
+                )
+            except Exception:
+                print(f"Tests failed... retrying ({i+1}/{NUM_RETRIES})")
+            else:
+                return
+        raise Exception(f"Tests failed even after {NUM_RETRIES} retries")
+
+
 class CMakeBuilder(BuilderBase):
     MANUAL_BUILD_SCRIPT = """\
 #!{sys.executable}
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import argparse
 import subprocess
@@ -269,9 +372,7 @@ def get_jobs_argument(num_jobs_arg: int) -> str:
         return "-j" + str(num_jobs_arg)
 
     import multiprocessing
-    num_jobs = multiprocessing.cpu_count()
-    if sys.platform == "win32":
-        num_jobs //= 2
+    num_jobs = multiprocessing.cpu_count() // 2
     return "-j" + str(num_jobs)
 
 
@@ -369,7 +470,9 @@ if __name__ == "__main__":
         build_dir,
         inst_dir,
         defines,
+        loader=None,
         final_install_prefix=None,
+        extra_cmake_defines=None,
     ):
         super(CMakeBuilder, self).__init__(
             build_opts,
@@ -381,6 +484,11 @@ if __name__ == "__main__":
             final_install_prefix=final_install_prefix,
         )
         self.defines = defines or {}
+        if extra_cmake_defines:
+            self.defines.update(extra_cmake_defines)
+        self.loader = loader
+        if build_opts.shared_libs:
+            self.defines["BUILD_SHARED_LIBS"] = "ON"
 
     def _invalidate_cache(self):
         for name in [
@@ -490,6 +598,24 @@ if __name__ == "__main__":
             # tests.
             defines["CMAKE_BUILD_WITH_INSTALL_RPATH"] = "ON"
 
+        boost_169_is_required = False
+        if self.loader:
+            for m in self.loader.manifests_in_dependency_order():
+                preinstalled = m.get_section_as_dict("preinstalled.env", self.ctx)
+                boost_169_is_required = "BOOST_ROOT_1_69_0" in preinstalled.keys()
+                if boost_169_is_required:
+                    break
+
+        if (
+            boost_169_is_required
+            and self.build_opts.allow_system_packages
+            and self.build_opts.host_type.get_package_manager()
+            and self.build_opts.host_type.get_package_manager() == "rpm"
+        ):
+            # Boost 1.69 rpms don't install cmake config to the system, so to point to them explicitly
+            defines["BOOST_INCLUDEDIR"] = "/usr/include/boost169"
+            defines["BOOST_LIBRARYDIR"] = "/usr/lib64/boost169"
+
         defines.update(self.defines)
         define_args = ["-D%s=%s" % (k, v) for (k, v) in defines.items()]
 
@@ -538,12 +664,14 @@ if __name__ == "__main__":
                 "--config",
                 "Release",
                 "-j",
-                str(self.build_opts.num_jobs),
+                str(self.num_jobs),
             ],
             env=env,
         )
 
-    def run_tests(self, install_dirs, schedule_type, owner, test_filter, retry):
+    def run_tests(
+        self, install_dirs, schedule_type, owner, test_filter, retry, no_testpilot
+    ):
         env = self._compute_env(install_dirs)
         ctest = path_search(env, "ctest")
         cmake = path_search(env, "cmake")
@@ -566,7 +694,7 @@ if __name__ == "__main__":
         use_cmd_prefix = False
 
         def get_property(test, propname, defval=None):
-            """ extracts a named property from a cmake test info json blob.
+            """extracts a named property from a cmake test info json blob.
             The properties look like:
             [{"name": "WORKING_DIRECTORY"},
              {"value": "something"}]
@@ -596,11 +724,18 @@ if __name__ == "__main__":
             for test in data["tests"]:
                 working_dir = get_property(test, "WORKING_DIRECTORY")
                 labels = []
+                machine_suffix = self.build_opts.host_type.as_tuple_string()
+                labels.append("tpx_test_config::buildsystem=getdeps")
+                labels.append("tpx_test_config::platform={}".format(machine_suffix))
+
                 if get_property(test, "DISABLED"):
                     labels.append("disabled")
                 command = test["command"]
                 if working_dir:
                     command = [cmake, "-E", "chdir", working_dir] + command
+
+                import os
+
                 tests.append(
                     {
                         "type": "custom",
@@ -608,6 +743,10 @@ if __name__ == "__main__":
                         % (self.manifest.name, test["name"], machine_suffix),
                         "command": command,
                         "labels": labels,
+                        "env": {},
+                        "required_paths": [],
+                        "contacts": [],
+                        "cwd": os.getcwd(),
                     }
                 )
             return tests
@@ -618,38 +757,60 @@ if __name__ == "__main__":
             retry = 0
 
         testpilot = path_search(env, "testpilot")
-        if testpilot:
+        tpx = path_search(env, "tpx")
+        if (tpx or testpilot) and not no_testpilot:
             buck_test_info = list_tests()
+            import os
+
             buck_test_info_name = os.path.join(self.build_dir, ".buck-test-info.json")
             with open(buck_test_info_name, "w") as f:
                 json.dump(buck_test_info, f)
 
             env.set("http_proxy", "")
             env.set("https_proxy", "")
-            machine_suffix = self.build_opts.host_type.as_tuple_string()
-
             runs = []
+            from sys import platform
 
-            testpilot_args = [
-                testpilot,
-                # Need to force the repo type otherwise testpilot on windows
-                # can be confused (presumably sparse profile related)
-                "--force-repo",
-                "fbcode",
-                "--force-repo-root",
-                self.build_opts.fbsource_dir,
-                "--buck-test-info",
-                buck_test_info_name,
-                "--retry=%d" % retry,
-                "-j=%s" % str(self.build_opts.num_jobs),
-                "--test-config",
-                "platform=%s" % machine_suffix,
-                "buildsystem=getdeps",
-                "--print-long-results",
-            ]
+            if platform == "win32":
+                machine_suffix = self.build_opts.host_type.as_tuple_string()
+                testpilot_args = [
+                    "parexec-testinfra.exe",
+                    "C:/tools/testpilot/sc_testpilot.par",
+                    # Need to force the repo type otherwise testpilot on windows
+                    # can be confused (presumably sparse profile related)
+                    "--force-repo",
+                    "fbcode",
+                    "--force-repo-root",
+                    self.build_opts.fbsource_dir,
+                    "--buck-test-info",
+                    buck_test_info_name,
+                    "--retry=%d" % retry,
+                    "-j=%s" % str(self.num_jobs),
+                    "--test-config",
+                    "platform=%s" % machine_suffix,
+                    "buildsystem=getdeps",
+                    "--return-nonzero-on-failures",
+                ]
+            else:
+                testpilot_args = [
+                    tpx,
+                    "--force-local-execution",
+                    "--buck-test-info",
+                    buck_test_info_name,
+                    "--retry=%d" % retry,
+                    "-j=%s" % str(self.num_jobs),
+                    "--print-long-results",
+                ]
 
             if owner:
                 testpilot_args += ["--contacts", owner]
+
+            if tpx and env:
+                testpilot_args.append("--env")
+                testpilot_args.extend(f"{key}={val}" for key, val in env.items())
+
+            if test_filter:
+                testpilot_args += ["--", test_filter]
 
             if schedule_type == "continuous":
                 runs.append(
@@ -689,9 +850,6 @@ if __name__ == "__main__":
             else:
                 runs.append(["--collection", "oss-diff", "--purpose", "diff"])
 
-            if test_filter:
-                testpilot_args += [test_filter]
-
             for run in runs:
                 self._run_cmd(
                     testpilot_args + run,
@@ -700,21 +858,26 @@ if __name__ == "__main__":
                     use_cmd_prefix=use_cmd_prefix,
                 )
         else:
-            args = [ctest, "--output-on-failure", "-j", str(self.build_opts.num_jobs)]
+            args = [ctest, "--output-on-failure", "-j", str(self.num_jobs)]
             if test_filter:
                 args += ["-R", test_filter]
 
             count = 0
-            while count < retry:
+            while count <= retry:
                 retcode = self._run_cmd(
                     args, env=env, use_cmd_prefix=use_cmd_prefix, allow_fail=True
                 )
+
                 if retcode == 0:
                     break
                 if count == 0:
                     # Only add this option in the second run.
                     args += ["--rerun-failed"]
                 count += 1
+            if retcode != 0:
+                # Allow except clause in getdeps.main to catch and exit gracefully
+                # This allows non-testpilot runs to fail through the same logic as failed testpilot runs, which may become handy in case if post test processing is needed in the future
+                raise subprocess.CalledProcessError(retcode, args)
 
 
 class NinjaBootstrap(BuilderBase):
@@ -753,15 +916,20 @@ class OpenSSLBuilder(BuilderBase):
 
         perl = path_search(env, "perl", "perl")
 
+        make_j_args = []
         if self.build_opts.is_windows():
             make = "nmake.exe"
             args = ["VC-WIN64A-masm", "-utf-8"]
         elif self.build_opts.is_darwin():
             make = "make"
+            make_j_args = ["-j%s" % self.num_jobs]
             args = ["darwin64-x86_64-cc"]
         elif self.build_opts.is_linux():
             make = "make"
-            args = ["linux-x86_64"]
+            make_j_args = ["-j%s" % self.num_jobs]
+            args = (
+                ["linux-x86_64"] if not self.build_opts.is_arm() else ["linux-aarch64"]
+            )
         else:
             raise Exception("don't know how to build openssl for %r" % self.ctx)
 
@@ -781,7 +949,10 @@ class OpenSSLBuilder(BuilderBase):
                 "no-tests",
             ]
         )
-        self._run_cmd([make, "install_sw", "install_ssldirs"])
+        make_build = [make] + make_j_args
+        self._run_cmd(make_build)
+        make_install = [make, "install_sw", "install_ssldirs"]
+        self._run_cmd(make_install)
 
 
 class Boost(BuilderBase):
@@ -801,7 +972,7 @@ class Boost(BuilderBase):
     def _build(self, install_dirs, reconfigure):
         env = self._compute_env(install_dirs)
         linkage = ["static"]
-        if self.build_opts.is_windows():
+        if self.build_opts.is_windows() or self.build_opts.shared_libs:
             linkage.append("shared")
 
         args = []
@@ -813,14 +984,17 @@ class Boost(BuilderBase):
             args.append("--user-config=%s" % user_config)
 
         for link in linkage:
+            bootstrap_args = self.manifest.get_section_as_args(
+                "bootstrap.args", self.ctx
+            )
             if self.build_opts.is_windows():
                 bootstrap = os.path.join(self.src_dir, "bootstrap.bat")
-                self._run_cmd([bootstrap], cwd=self.src_dir, env=env)
+                self._run_cmd([bootstrap] + bootstrap_args, cwd=self.src_dir, env=env)
                 args += ["address-model=64"]
             else:
                 bootstrap = os.path.join(self.src_dir, "bootstrap.sh")
                 self._run_cmd(
-                    [bootstrap, "--prefix=%s" % self.inst_dir],
+                    [bootstrap, "--prefix=%s" % self.inst_dir] + bootstrap_args,
                     cwd=self.src_dir,
                     env=env,
                 )
@@ -829,7 +1003,7 @@ class Boost(BuilderBase):
             self._run_cmd(
                 [
                     b2,
-                    "-j%s" % self.build_opts.num_jobs,
+                    "-j%s" % self.num_jobs,
                     "--prefix=%s" % self.inst_dir,
                     "--builddir=%s" % self.build_dir,
                 ]
@@ -951,7 +1125,7 @@ install(FILES sqlite3.h sqlite3ext.h DESTINATION include)
 
         defines = {
             "CMAKE_INSTALL_PREFIX": self.inst_dir,
-            "BUILD_SHARED_LIBS": "OFF",
+            "BUILD_SHARED_LIBS": "ON" if self.build_opts.shared_libs else "OFF",
             "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         }
         define_args = ["-D%s=%s" % (k, v) for (k, v) in defines.items()]
@@ -973,7 +1147,7 @@ install(FILES sqlite3.h sqlite3ext.h DESTINATION include)
                 "--config",
                 "Release",
                 "-j",
-                str(self.build_opts.num_jobs),
+                str(self.num_jobs),
             ],
             env=env,
         )
@@ -990,6 +1164,7 @@ class CargoBuilder(BuilderBase):
         inst_dir,
         build_doc,
         workspace_dir,
+        manifests_to_build,
         loader,
     ):
         super(CargoBuilder, self).__init__(
@@ -997,6 +1172,7 @@ class CargoBuilder(BuilderBase):
         )
         self.build_doc = build_doc
         self.ws_dir = workspace_dir
+        self.manifests_to_build = manifests_to_build and manifests_to_build.split(",")
         self.loader = loader
 
     def run_cargo(self, install_dirs, operation, args=None):
@@ -1009,7 +1185,7 @@ class CargoBuilder(BuilderBase):
             "cargo",
             operation,
             "--workspace",
-            "-j%s" % self.build_opts.num_jobs,
+            "-j%s" % self.num_jobs,
         ] + args
         self._run_cmd(cmd, cwd=self.workspace_dir(), env=env)
 
@@ -1017,7 +1193,10 @@ class CargoBuilder(BuilderBase):
         return os.path.join(self.build_dir, "source")
 
     def workspace_dir(self):
-        return os.path.join(self.build_source_dir(), self.ws_dir)
+        return os.path.join(self.build_source_dir(), self.ws_dir or "")
+
+    def manifest_dir(self, manifest):
+        return os.path.join(self.build_source_dir(), manifest)
 
     def recreate_dir(self, src, dst):
         if os.path.isdir(dst):
@@ -1049,10 +1228,11 @@ incremental = false
                 )
             )
 
-        self._patchup_workspace()
+        if self.ws_dir is not None:
+            self._patchup_workspace()
 
         try:
-            from getdeps.facebook.rust import vendored_crates
+            from .facebook.rust import vendored_crates
 
             vendored_crates(self.build_opts, build_source_dir)
         except ImportError:
@@ -1060,22 +1240,46 @@ incremental = false
             # so just rely on cargo downloading crates on it's own
             pass
 
-        self.run_cargo(
-            install_dirs,
-            "build",
-            ["--out-dir", os.path.join(self.inst_dir, "bin"), "-Zunstable-options"],
-        )
+        if self.manifests_to_build is None:
+            self.run_cargo(
+                install_dirs,
+                "build",
+                ["--out-dir", os.path.join(self.inst_dir, "bin"), "-Zunstable-options"],
+            )
+        else:
+            for manifest in self.manifests_to_build:
+                self.run_cargo(
+                    install_dirs,
+                    "build",
+                    [
+                        "--out-dir",
+                        os.path.join(self.inst_dir, "bin"),
+                        "-Zunstable-options",
+                        "--manifest-path",
+                        self.manifest_dir(manifest),
+                    ],
+                )
+
         self.recreate_dir(build_source_dir, os.path.join(self.inst_dir, "source"))
 
-    def run_tests(self, install_dirs, schedule_type, owner, test_filter, retry):
+    def run_tests(
+        self, install_dirs, schedule_type, owner, test_filter, retry, no_testpilot
+    ):
         if test_filter:
             args = ["--", test_filter]
         else:
-            args = None
+            args = []
 
-        self.run_cargo(install_dirs, "test", args)
-        if self.build_doc:
-            self.run_cargo(install_dirs, "doc", ["--no-deps"])
+        if self.manifests_to_build is None:
+            self.run_cargo(install_dirs, "test", args)
+            if self.build_doc:
+                self.run_cargo(install_dirs, "doc", ["--no-deps"])
+        else:
+            for manifest in self.manifests_to_build:
+                margs = ["--manifest-path", self.manifest_dir(manifest)]
+                self.run_cargo(install_dirs, "test", args + margs)
+                if self.build_doc:
+                    self.run_cargo(install_dirs, "doc", ["--no-deps"] + margs)
 
     def _patchup_workspace(self):
         """
@@ -1162,12 +1366,12 @@ incremental = false
         is also cargo-builded and if yes then extract it's git configs and
         install dir
         """
-        dependencies = self.manifest.get_section_as_dict("dependencies", ctx=self.ctx)
+        dependencies = self.manifest.get_dependencies(self.ctx)
         if not dependencies:
             return []
 
         dep_to_git = {}
-        for dep in dependencies.keys():
+        for dep in dependencies:
             dep_manifest = self.loader.load_manifest(dep)
             dep_builder = dep_manifest.get("build", "builder", ctx=self.ctx)
             if dep_builder not in ["cargo", "nop"] or dep == "rust":
@@ -1177,7 +1381,7 @@ incremental = false
                 # toolchain.
                 continue
 
-            git_conf = dep_manifest.get_section_as_dict("git", ctx=self.ctx)
+            git_conf = dep_manifest.get_section_as_dict("git", self.ctx)
             if "repo_url" not in git_conf:
                 raise Exception(
                     "A cargo dependency requires git.repo_url to be defined."
@@ -1225,7 +1429,13 @@ incremental = false
                     continue  # filter out commented lines and ones without git deps
                 for name, conf in dep_to_git.items():
                     if 'git = "{}"'.format(conf["repo_url"]) in line:
-                        crate_name, _, _ = line.partition("=")
+                        pkg_template = ' package = "'
+                        if pkg_template in line:
+                            crate_name, _, _ = line.partition(pkg_template)[
+                                2
+                            ].partition('"')
+                        else:
+                            crate_name, _, _ = line.partition("=")
                         deps_to_crates.setdefault(name, set()).add(crate_name.strip())
         return deps_to_crates
 

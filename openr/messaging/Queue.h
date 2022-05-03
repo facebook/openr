@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -24,6 +24,14 @@ namespace messaging {
 
 enum class QueueError {
   QUEUE_CLOSED,
+};
+
+// Stats recording of
+struct RWQueueStats {
+  std::string queueId; // TODO: Change to const post T98477650
+  const size_t reads{0};
+  const size_t writes{0};
+  const size_t size{0};
 };
 
 template <typename ValueType>
@@ -54,6 +62,9 @@ class RQueue {
   // Utility function to retrieve size of pending data in underlying queue
   size_t size();
 
+  // Utility function to obtain name of the queue
+  std::string getReaderId();
+
  protected:
   // We only hold reference of above queue
   std::shared_ptr<RWQueue<ValueType>> queue_{nullptr};
@@ -64,8 +75,7 @@ class RQueue {
  * Code in critical path is minimal and ensures that readers/writers will never
  * block each other because of lock.
  *
- * This is polymorphic queue which means, you can push any type of object. There
- * are various get (blocking and async) methods to retrieve typed object.
+ *There are various get (blocking and async) methods to retrieve typed object.
  *
  * After closing queue, all subsequent push are ignored and return false. All
  * subsequent reads return QUEUE_CLOSED error
@@ -74,6 +84,7 @@ template <typename ValueType>
 class RWQueue {
  public:
   RWQueue();
+  explicit RWQueue(const std::string&);
   ~RWQueue();
 
   /**
@@ -103,6 +114,11 @@ class RWQueue {
   bool isClosed();
 
   /**
+   * Get the queue id (name)
+   */
+  std::string getQueueId();
+
+  /**
    * Return size of the current queue (number of data elements)
    */
   size_t size();
@@ -112,16 +128,37 @@ class RWQueue {
    */
   size_t numPendingReads();
 
+  /**
+   * Return the number of messages written to the queue
+   */
+  size_t numWrites();
+
+  /**
+   * Return the number of messages processed by readers
+   */
+  size_t numReads();
+
+  /**
+   * Package and return the individual queue stats.
+   */
+  RWQueueStats getStats();
+
  private:
+  // Name/id of the queue
+  std::string queueId_{""};
+
   struct PendingRead {
     folly::fibers::Baton baton;
     std::optional<ValueType> data;
   };
 
   /**
-   * Implementation for push
+   * Implementation for reading a pending or future data element.
+   *
+   * @returns true/false indicating if immediate read is performed
+   * @returns QUEUE_CLOSED error if queue is closed.
    */
-  bool getAnyImpl(PendingRead& pendingRead);
+  folly::Expected<bool, QueueError> getAnyImpl(PendingRead& pendingRead);
 
   // Lock to protect below private variables
   std::mutex lock_;
@@ -134,6 +171,12 @@ class RWQueue {
 
   // Pending data
   std::deque<ValueType> queue_;
+
+  // Sent messages
+  size_t writes_{0};
+
+  // Received messages
+  size_t reads_{0};
 };
 
 } // namespace messaging

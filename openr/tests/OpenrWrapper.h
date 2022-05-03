@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
+#include <fb303/BaseService.h>
 #include <fbzmq/zmq/Zmq.h>
 
 #include <openr/allocators/PrefixAllocator.h>
@@ -16,10 +16,12 @@
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/monitor/LogSample.h>
+#include <openr/monitor/Monitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
-#include <openr/spark/SparkWrapper.h>
-#include <openr/tests/mocks/MockNetlinkSystemHandler.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
+#include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <openr/watchdog/Watchdog.h>
 
 namespace openr {
@@ -40,7 +42,6 @@ class OpenrWrapper {
       fbzmq::Context& context,
       std::string nodeId,
       bool v4Enabled,
-      std::chrono::seconds kvStoreDbSyncInterval,
       std::chrono::milliseconds spark2HelloTime,
       std::chrono::milliseconds spark2FastInitHelloTime,
       std::chrono::milliseconds spark2HandshakeTime,
@@ -48,10 +49,8 @@ class OpenrWrapper {
       std::chrono::milliseconds spark2HandshakeHoldTime,
       std::chrono::milliseconds spark2HeartbeatHoldTime,
       std::chrono::milliseconds spark2GRHoldTime,
-      std::chrono::seconds linkMonitorAdjHoldTime,
       std::chrono::milliseconds linkFlapInitialBackoff,
       std::chrono::milliseconds linkFlapMaxBackoff,
-      std::chrono::seconds fibColdStartDuration,
       std::shared_ptr<IoProvider> ioProvider,
       uint32_t memLimit = openr::memLimitMB);
 
@@ -75,8 +74,7 @@ class OpenrWrapper {
    * add interfaceDb for spark to tracking
    * return true upon success and fasle otherwise
    */
-  bool sparkUpdateInterfaceDb(
-      const std::vector<SparkInterfaceEntry>& interfaceEntries);
+  void updateInterfaceDb(const InterfaceDatabase& ifDb);
 
   /**
    * get route databse from fib
@@ -86,12 +84,16 @@ class OpenrWrapper {
   /**
    * add prefix entries into prefix manager using prefix manager client
    */
-  bool addPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool addPrefixEntries(
+      const thrift::PrefixType type,
+      const std::vector<thrift::PrefixEntry>& prefixes);
 
   /**
    * withdraw prefix entries into prefix manager using prefix manager client
    */
-  bool withdrawPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool withdrawPrefixEntries(
+      const thrift::PrefixType type,
+      const std::vector<thrift::PrefixEntry>& prefixes);
 
   /**
    * check if a given prefix exists in routeDb
@@ -100,9 +102,9 @@ class OpenrWrapper {
       const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb);
 
   /*
-   * to get counters
+   * return all counters
    */
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient{nullptr};
+  std::map<std::string, int64_t> getCounters();
 
   /*
    * watchdog thread (used for checking memory limit exceeded)
@@ -134,7 +136,7 @@ class OpenrWrapper {
   std::unique_ptr<fbnl::MockNetlinkProtocolSocket> nlSock_{nullptr};
 
   // mocked version of netlink system handler
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler_{nullptr};
+  std::shared_ptr<NetlinkEventsInjector> nlEventsInjector_{nullptr};
 
   // IpPrefix
   folly::Synchronized<std::optional<thrift::IpPrefix>> ipPrefix_;
@@ -145,28 +147,35 @@ class OpenrWrapper {
   // sub modules owned by this wrapper
   std::shared_ptr<Config> config_;
   std::unique_ptr<PersistentStore> configStore_;
-  std::unique_ptr<fbzmq::ZmqMonitor> monitor_;
   std::unique_ptr<KvStore> kvStore_;
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<Spark> spark_;
   std::unique_ptr<LinkMonitor> linkMonitor_;
+  std::unique_ptr<Monitor> monitor_;
   std::unique_ptr<Decision> decision_;
   std::unique_ptr<Fib> fib_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
   std::unique_ptr<PrefixManager> prefixManager_;
 
-  // sub module communication zmq urls and ports
-  int kvStoreGlobalCmdPort_{0};
-  const std::string monitorSubmitUrl_;
-  const std::string monitorPubUrl_;
+  // thrift server for inter-node communication
+  std::unique_ptr<OpenrThriftServerWrapper> thriftServer_;
+
+  // sub module communication queues
   const std::string kvStoreGlobalCmdUrl_;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
-  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
+  messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
+  messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreEventsQueue_;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      initializationEventQueue_;
+  messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
+  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRoutesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRoutesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;
+  messaging::ReplicateQueue<LogSample> logSampleQueue_;
 };
 
 } // namespace openr

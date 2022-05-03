@@ -1,26 +1,20 @@
-SOURCES=$(wildcard *.md)
-PDF=$(SOURCES:%.md=%.pdf)
-HTML=$(SOURCES:%.md=%.html)
-INSTALL=install -c -m 644
-PYTHON=python
-PANDOCARGS=-s
-PANDOC=/usr/bin/pandoc
+# Minimal makefile for Sphinx documentation
+#
 
-export LANGUAGE=C
-export LC_ALL=C
+# You can set these variables from the command line, and also
+# from the environment for the first two.
+SPHINXOPTS    ?=
+SPHINXBUILD   ?= sphinx-build
+SOURCEDIR     = .
+BUILDDIR      = build
 
-all: html
+# Put it first so that "make" without argument is like "make help".
+help:
+	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-pdf: $(PDF)
+.PHONY: help Makefile
 
-html: $(HTML)
-
-# This needs pandoc 1.9 or later to work
-%.pdf: %.md
-	$(PANDOC) -f markdown_github -o $*.pdf $*.md
-
-%.html: %.md
-	$(PANDOC) $(PANDOCARGS) -f markdown_github -t html --toc -o $*.html $*.md
-
-clean:
-	$(RM) $(PDF) $(HTML)
+# Catch-all target: route all unknown targets to Sphinx using the new
+# "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
+%: Makefile
+	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)

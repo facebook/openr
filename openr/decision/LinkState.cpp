@@ -1,19 +1,15 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/decision/LinkState.h"
-
-#include <algorithm>
-#include <functional>
-#include <utility>
-
 #include <fb303/ServiceData.h>
-#include <folly/Format.h>
-#include <openr/common/Util.h>
+#include <folly/logging/xlog.h>
+#include <openr/common/LsdbUtil.h>
+#include <openr/decision/LinkState.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 
 namespace fb303 = facebook::fb303;
 
@@ -147,17 +143,19 @@ Link::Link(
     const openr::thrift::Adjacency& adj1,
     const std::string& nodeName2,
     const openr::thrift::Adjacency& adj2)
-    : Link(area, nodeName1, adj1.ifName, nodeName2, adj2.ifName) {
-  metric1_ = adj1.metric;
-  metric2_ = adj2.metric;
-  overload1_ = adj1.isOverloaded;
-  overload2_ = adj2.isOverloaded;
-  adjLabel1_ = adj1.adjLabel;
-  adjLabel2_ = adj2.adjLabel;
-  nhV41_ = adj1.nextHopV4;
-  nhV42_ = adj2.nextHopV4;
-  nhV61_ = adj1.nextHopV6;
-  nhV62_ = adj2.nextHopV6;
+    : Link(area, nodeName1, *adj1.ifName_ref(), nodeName2, *adj2.ifName_ref()) {
+  metric1_ = *adj1.metric_ref();
+  metric2_ = *adj2.metric_ref();
+  overload1_ = *adj1.isOverloaded_ref();
+  overload2_ = *adj2.isOverloaded_ref();
+  adjLabel1_ = *adj1.adjLabel_ref();
+  adjLabel2_ = *adj2.adjLabel_ref();
+  nhV41_ = *adj1.nextHopV4_ref();
+  nhV42_ = *adj2.nextHopV4_ref();
+  nhV61_ = *adj1.nextHopV6_ref();
+  nhV62_ = *adj2.nextHopV6_ref();
+  weight1_ = *adj1.weight_ref();
+  weight2_ = *adj2.weight_ref();
 }
 
 const std::string&
@@ -210,6 +208,17 @@ Link::getAdjLabelFromNode(const std::string& nodeName) const {
   }
   if (n2_ == nodeName) {
     return adjLabel2_;
+  }
+  throw std::invalid_argument(nodeName);
+}
+
+int64_t
+Link::getWeightFromNode(const std::string& nodeName) const {
+  if (n1_ == nodeName) {
+    return weight1_;
+  }
+  if (n2_ == nodeName) {
+    return weight2_;
   }
   throw std::invalid_argument(nodeName);
 }
@@ -325,6 +334,17 @@ Link::setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel) {
   }
 }
 
+void
+Link::setWeightFromNode(const std::string& nodeName, int64_t weight) {
+  if (n1_ == nodeName) {
+    weight1_ = weight;
+  } else if (n2_ == nodeName) {
+    weight2_ = weight;
+  } else {
+    throw std::invalid_argument(nodeName);
+  }
+}
+
 bool
 Link::setOverloadFromNode(
     const std::string& nodeName,
@@ -362,12 +382,12 @@ Link::operator==(const Link& other) const {
 
 std::string
 Link::toString() const {
-  return folly::sformat("{} - {}%{} <---> {}%{}", area_, n1_, if1_, n2_, if2_);
+  return fmt::format("{} - {}%{} <---> {}%{}", area_, n1_, if1_, n2_, if2_);
 }
 
 std::string
 Link::directionalToString(const std::string& fromNode) const {
-  return folly::sformat(
+  return fmt::format(
       "{} - {}%{} ---> {}%{}",
       area_,
       fromNode,
@@ -447,7 +467,7 @@ LinkState::removeNode(const std::string& nodeName) {
       CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
       CHECK(allLinks_.erase(link));
     } catch (std::out_of_range const& e) {
-      LOG(FATAL) << "std::out_of_range for " << nodeName;
+      XLOG(FATAL) << "std::out_of_range for " << nodeName;
     }
   }
   linkMap_.erase(search);
@@ -532,14 +552,14 @@ std::shared_ptr<Link>
 LinkState::maybeMakeLink(
     const std::string& nodeName, const thrift::Adjacency& adj) const {
   // only return Link if it is bidirectional.
-  auto search = adjacencyDatabases_.find(adj.otherNodeName);
+  auto search = adjacencyDatabases_.find(*adj.otherNodeName_ref());
   if (search != adjacencyDatabases_.end()) {
-    for (const auto& otherAdj : search->second.adjacencies) {
-      if (nodeName == otherAdj.otherNodeName &&
-          adj.otherIfName == otherAdj.ifName &&
-          adj.ifName == otherAdj.otherIfName) {
+    for (const auto& otherAdj : *search->second.adjacencies_ref()) {
+      if (nodeName == *otherAdj.otherNodeName_ref() &&
+          *adj.otherIfName_ref() == *otherAdj.ifName_ref() &&
+          *adj.ifName_ref() == *otherAdj.otherIfName_ref()) {
         return std::make_shared<Link>(
-            area_, nodeName, adj, adj.otherNodeName, otherAdj);
+            area_, nodeName, adj, *adj.otherNodeName_ref(), otherAdj);
       }
     }
   }
@@ -549,9 +569,9 @@ LinkState::maybeMakeLink(
 std::vector<std::shared_ptr<Link>>
 LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
   std::vector<std::shared_ptr<Link>> links;
-  links.reserve(adjDb.adjacencies.size());
-  for (const auto& adj : adjDb.adjacencies) {
-    auto linkPtr = maybeMakeLink(adjDb.thisNodeName, adj);
+  links.reserve(adjDb.adjacencies_ref()->size());
+  for (const auto& adj : *adjDb.adjacencies_ref()) {
+    auto linkPtr = maybeMakeLink(*adjDb.thisNodeName_ref(), adj);
     if (nullptr != linkPtr) {
       links.emplace_back(linkPtr);
     }
@@ -564,21 +584,24 @@ LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
 LinkState::LinkStateChange
 LinkState::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb,
+    std::string area,
     LinkStateMetric holdUpTtl,
     LinkStateMetric holdDownTtl) {
   LinkStateChange change;
-  auto const& nodeName = newAdjacencyDb.thisNodeName;
-  VLOG(1) << "Updating adjacency database for node " << nodeName << ", area "
-          << newAdjacencyDb.area;
+  auto const& nodeName = *newAdjacencyDb.thisNodeName_ref();
+  XLOG(DBG1) << "Updating adjacency database for node " << nodeName << ", area "
+             << area;
 
   // Area field must be specified and match with area_
-  DCHECK_EQ(area_, newAdjacencyDb.area);
-
-  for (auto const& adj : newAdjacencyDb.adjacencies) {
-    VLOG(3) << "  neighbor: " << adj.otherNodeName
-            << ", remoteIfName: " << getRemoteIfName(adj)
-            << ", ifName: " << adj.ifName << ", metric: " << adj.metric
-            << ", overloaded: " << adj.isOverloaded << ", rtt: " << adj.rtt;
+  DCHECK_EQ(area_, area);
+  for (auto const& adj : *newAdjacencyDb.adjacencies_ref()) {
+    XLOG(DBG3) << "  neighbor: " << *adj.otherNodeName_ref()
+               << ", remoteIfName: " << getRemoteIfName(adj)
+               << ", ifName: " << *adj.ifName_ref()
+               << ", metric: " << *adj.metric_ref()
+               << ", overloaded: " << *adj.isOverloaded_ref()
+               << ", rtt: " << *adj.rtt_ref()
+               << ", weight: " << *adj.weight_ref();
   }
 
   // Default construct if it did not exist
@@ -598,10 +621,10 @@ LinkState::updateAdjacencyDatabase(
   std::unordered_set<Link> linksDown;
 
   change.topologyChanged |= updateNodeOverloaded(
-      nodeName, newAdjacencyDb.isOverloaded, holdUpTtl, holdDownTtl);
+      nodeName, *newAdjacencyDb.isOverloaded_ref(), holdUpTtl, holdDownTtl);
 
   change.nodeLabelChanged =
-      priorAdjacencyDb.nodeLabel != newAdjacencyDb.nodeLabel;
+      *priorAdjacencyDb.nodeLabel_ref() != *newAdjacencyDb.nodeLabel_ref();
 
   auto newIter = newLinks.begin();
   auto oldIter = oldLinks.begin();
@@ -616,7 +639,8 @@ LinkState::updateAdjacencyDatabase(
       // and check for holds when running spf. this ensures we don't add the
       // same hold twice
       addLink(*newIter);
-      VLOG(1) << "addLink " << (*newIter)->toString();
+      change.addedLinks.emplace_back(*newIter);
+      XLOG(DBG1) << "[LINK UP]" << (*newIter)->toString();
       ++newIter;
       continue;
     }
@@ -628,7 +652,7 @@ LinkState::updateAdjacencyDatabase(
       // change the topology.
       change.topologyChanged |= (*oldIter)->isUp();
       removeLink(*oldIter);
-      VLOG(1) << "removeLink " << (*oldIter)->toString();
+      XLOG(DBG1) << "[LINK DOWN] " << (*oldIter)->toString();
       ++oldIter;
       continue;
     }
@@ -641,8 +665,8 @@ LinkState::updateAdjacencyDatabase(
     // change the metric on the link object we already have
     if (newLink.getMetricFromNode(nodeName) !=
         oldLink.getMetricFromNode(nodeName)) {
-      LOG(INFO) << folly::sformat(
-          "Metric change on link {}: {} => {}",
+      XLOG(DBG1) << fmt::format(
+          "[LINK UPDATE] Metric change on link {}, {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getMetricFromNode(nodeName),
           newLink.getMetricFromNode(nodeName));
@@ -655,8 +679,8 @@ LinkState::updateAdjacencyDatabase(
 
     if (newLink.getOverloadFromNode(nodeName) !=
         oldLink.getOverloadFromNode(nodeName)) {
-      LOG(INFO) << folly::sformat(
-          "Overload change on link {}: {} => {}",
+      XLOG(DBG1) << fmt::format(
+          "[LINK UPDATE] Overload change on link {}: {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getOverloadFromNode(nodeName),
           newLink.getOverloadFromNode(nodeName));
@@ -670,8 +694,8 @@ LinkState::updateAdjacencyDatabase(
     // Check if adjacency label has changed
     if (newLink.getAdjLabelFromNode(nodeName) !=
         oldLink.getAdjLabelFromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
-          "AdjLabel change on link {}: {} => {}",
+      XLOG(DBG1) << fmt::format(
+          "[LINK UPDATE] AdjLabel change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getAdjLabelFromNode(nodeName),
           newLink.getAdjLabelFromNode(nodeName));
@@ -683,11 +707,26 @@ LinkState::updateAdjacencyDatabase(
           nodeName, newLink.getAdjLabelFromNode(nodeName));
     }
 
+    // Check if link weight has changed
+    if (newLink.getWeightFromNode(nodeName) !=
+        oldLink.getWeightFromNode(nodeName)) {
+      XLOG(DBG1) << fmt::format(
+          "[LINK UPDATE] Weight change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getWeightFromNode(nodeName),
+          newLink.getWeightFromNode(nodeName));
+
+      change.linkAttributesChanged |= true;
+
+      // change the weight on the link object we already have
+      oldLink.setWeightFromNode(nodeName, newLink.getWeightFromNode(nodeName));
+    }
+
     // check if local nextHops Changed
     if (newLink.getNhV4FromNode(nodeName) !=
         oldLink.getNhV4FromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
-          "V4-NextHop address change on link {}: {} => {}",
+      XLOG(DBG1) << fmt::format(
+          "[LINK UPDATE] V4-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV4FromNode(nodeName)),
           toString(newLink.getNhV4FromNode(nodeName)));
@@ -697,8 +736,8 @@ LinkState::updateAdjacencyDatabase(
     }
     if (newLink.getNhV6FromNode(nodeName) !=
         oldLink.getNhV6FromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
-          "V4-NextHop address change on link {}: {} => {}",
+      XLOG(DBG1) << fmt::format(
+          "[LINK UPDATE] V6-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV6FromNode(nodeName)),
           toString(newLink.getNhV6FromNode(nodeName)));
@@ -719,7 +758,7 @@ LinkState::updateAdjacencyDatabase(
 LinkState::LinkStateChange
 LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
   LinkStateChange change;
-  VLOG(1) << "Deleting adjacency database for node " << nodeName;
+  XLOG(DBG1) << "Deleting adjacency database for node " << nodeName;
   auto search = adjacencyDatabases_.find(nodeName);
 
   if (search != adjacencyDatabases_.end()) {
@@ -729,8 +768,8 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
     kthPathResults_.clear();
     change.topologyChanged = true;
   } else {
-    LOG(WARNING) << "Trying to delete adjacency db for nonexisting node "
-                 << nodeName;
+    XLOG(WARNING) << "Trying to delete adjacency db for non-existing node "
+                  << nodeName;
   }
   return change;
 }
@@ -746,15 +785,6 @@ LinkState::getMetricFromAToB(
     return spfResult.at(b).metric();
   }
   return std::nullopt;
-}
-
-LinkStateMetric
-LinkState::getMaxHopsToNode(const std::string& nodeName) const {
-  LinkStateMetric max = 0;
-  for (auto const& pathsFromNode : getSpfResult(nodeName, false)) {
-    max = std::max(max, pathsFromNode.second.metric());
-  }
-  return max;
 }
 
 std::vector<LinkState::Path> const&
@@ -813,7 +843,7 @@ LinkState::runSpf(
   fb303::fbData->addStatValue("decision.spf_runs", 1, fb303::COUNT);
   const auto startTime = std::chrono::steady_clock::now();
 
-  DijkstraQ q;
+  DijkstraQ<DijkstraQSpfNode> q;
   q.insertNode(thisNodeName, 0);
   uint64_t loop = 0;
   while (auto node = q.extractMin()) {
@@ -852,31 +882,154 @@ LinkState::runSpf(
         q.insertNode(otherNodeName, recordedNodeMetric + metric);
         otherNode = q.get(otherNodeName);
       }
-      if (otherNode->result.metric() >= recordedNodeMetric + metric) {
+      if (otherNode->metric() >= recordedNodeMetric + metric) {
         // recordedNodeName is either along an alternate shortest path towards
         // otherNodeName or is along a new shorter path. In either case,
         // otherNodeName should use recordedNodeName's nextHops until it finds
         // some shorter path
-        if (otherNode->result.metric() > recordedNodeMetric + metric) {
+        if (otherNode->metric() > recordedNodeMetric + metric) {
           // if this is strictly better, forget about any other paths
           otherNode->result.reset(recordedNodeMetric + metric);
           q.reMake();
         }
-        otherNode->result.addPath(link, recordedNodeName);
-        otherNode->result.addNextHops(recordedNodeNextHops);
-        if (otherNode->result.nextHops().empty()) {
+        auto& otherNodeResult = otherNode->result;
+        otherNodeResult.addPath(link, recordedNodeName);
+        otherNodeResult.addNextHops(recordedNodeNextHops);
+        if (otherNodeResult.nextHops().empty()) {
           // directly connected node
-          otherNode->result.addNextHop(otherNodeName);
+          otherNodeResult.addNextHop(otherNodeName);
         }
       }
     }
   }
-  VLOG(3) << "Dijkstra loop count: " << loop;
+  XLOG(DBG3) << "Dijkstra loop count: " << loop;
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "SPF elapsed time: " << deltaTime.count() << "ms.";
+  XLOG(DBG3) << "SPF elapsed time: " << deltaTime.count() << "ms.";
   fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
   return result;
+}
+
+LinkState::UcmpResult
+LinkState::resolveUcmpWeights(
+    const SpfResult& spfGraph,
+    const std::unordered_map<std::string, int64_t>& leafNodeToWeights,
+    thrift::PrefixForwardingAlgorithm algo,
+    bool useLinkMetric) const {
+  CHECK(
+      algo ==
+          thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION ||
+      algo ==
+          thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION);
+  UcmpResult ucmpResult;
+
+  fb303::fbData->addStatValue("decision.ucmp_runs", 1, fb303::COUNT);
+  const auto startTime = std::chrono::steady_clock::now();
+
+  // Initialize the dijkstra queue. This block of code those two
+  // things:
+  //
+  // (1) Add all leafs nodes to the queue only if they are present in the
+  // SPF graph.
+  //
+  // (2) Make sure all leaf nodes are the same distance away from the SPF
+  // graph's root node.
+  DijkstraQ<DijkstraQUcmpNode> q;
+  std::optional<int32_t> spfMetric{std::nullopt};
+  for (const auto& [leafNodeName, leafNodeWeight] : leafNodeToWeights) {
+    auto spfGraphDstNodeIt = spfGraph.find(leafNodeName);
+    if (spfGraphDstNodeIt == spfGraph.end()) {
+      continue;
+    }
+
+    auto dstMetric = spfGraphDstNodeIt->second.metric();
+    if (!spfMetric.has_value()) {
+      spfMetric = dstMetric;
+    } else if (spfMetric.value() != dstMetric) {
+      LOG(ERROR) << "Skipping resolveUcmpWeights. Leaf node " << leafNodeName
+                 << ", has metric " << dstMetric
+                 << " away from root node. Other nodes have a metric of "
+                 << *spfMetric;
+      return ucmpResult;
+    }
+
+    // Insert leaf node into priority queue with metric zero
+    q.insertNode(leafNodeName, 0);
+    q.get(leafNodeName)->result.setWeight(leafNodeWeight);
+  }
+
+  // Walk SPF graph from leaf node to root node
+  while (auto currNode = q.extractMin()) {
+    auto& currNodeResult = currNode->result;
+
+    // Compute the advertised weight for non-leaf nodes.
+    if (!currNodeResult.weight().has_value()) {
+      int64_t advertisedWeight{0};
+      for (auto& [iface, nextHop] : currNodeResult.nextHopLinks()) {
+        switch (algo) {
+        case thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION:
+          // Weight is the sum of the next-hop link weight
+          advertisedWeight +=
+              nextHop.link->getWeightFromNode(currNode->nodeName);
+          break;
+        case thrift::PrefixForwardingAlgorithm::
+            SP_UCMP_PREFIX_WEIGHT_PROPAGATION:
+          // Weight is the sum of the next-hop prefix weight
+          advertisedWeight += nextHop.weight;
+          break;
+        default:
+          CHECK(false) << "Unsupported algo type "
+                       << apache::thrift::util::enumNameSafe(algo);
+        }
+      }
+
+      // Set the prefix weight this node will advertise
+      currNodeResult.setWeight(advertisedWeight);
+    }
+
+    // Find the current node in the SPF graph
+    auto spfGraphNodeIt = spfGraph.find(currNode->nodeName);
+    CHECK(spfGraphNodeIt != spfGraph.end());
+
+    // Walk the current node's upstream neighbors (previous node)
+    for (const auto& pathLink : spfGraphNodeIt->second.pathLinks()) {
+      // Resolve the link metric for the link from prev node to current node
+      auto linkMetric = useLinkMetric
+          ? pathLink.link->getMetricFromNode(pathLink.prevNode)
+          : 1;
+
+      // Check to see if the previous node is already in the queue.
+      // If not create it and add it to the queue.
+      auto prevNode = q.get(pathLink.prevNode);
+      if (!prevNode) {
+        q.insertNode(pathLink.prevNode, currNode->metric() + linkMetric);
+        prevNode = q.get(pathLink.prevNode);
+      }
+
+      // Add the link to prevNode along with the resolved weight
+      auto interface = pathLink.link->getIfaceFromNode(prevNode->nodeName);
+      prevNode->result.addNextHopLink(
+          interface,
+          pathLink.link,
+          currNode->nodeName,
+          *currNodeResult.weight());
+    }
+
+    // Normalize UCMP weights.
+    currNode->result.normalizeNextHopWeights();
+
+    // Cache the UCMP results for currNode
+    ucmpResult.emplace(currNode->nodeName, std::move(currNode->result));
+  }
+
+  auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - startTime);
+
+  XLOG(DBG3) << "UCMP elapsed time: " << deltaTime.count() << "ms.";
+  fb303::fbData->addStatValue(
+      "decision.ucmp_ms", deltaTime.count(), fb303::AVG);
+
+  return ucmpResult;
 }
 
 } // namespace openr

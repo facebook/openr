@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import time
 import unittest
 
 from openr.cli.utils.utils import find_adj_list_deltas, parse_prefix_database
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork
+from openr.utils.serializer import object_to_dict
 
 
 class UtilsTests(unittest.TestCase):
@@ -29,8 +27,8 @@ class UtilsTests(unittest.TestCase):
         timestamp=0,  # : int
         weight=1,  # : int
         otherIfName="",  # : str
-    ):  # -> lsdb_types.Adjacency
-        adj = lsdb_types.Adjacency(
+    ):  # -> openr_types.Adjacency
+        adj = openr_types.Adjacency(
             otherNodeName=otherNodeName,
             ifName=ifName,
             metric=metric,
@@ -40,6 +38,10 @@ class UtilsTests(unittest.TestCase):
             timestamp=(timestamp if timestamp else int(time.time())),
             weight=weight,
             otherIfName=otherIfName,
+            nextHopV6=network_types.BinaryAddress(
+                addr=b"\xfe\x80\x00\x00\x00\x00\x00\x00 \xa2\x01\xff\xfe\xf4Y\xbe"
+            ),
+            nextHopV4=network_types.BinaryAddress(addr=b"\x00\x00\x00\x00"),
         )
         return adj
 
@@ -66,20 +68,38 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(("NEIGHBOR_UP", None, adjs_new[2]), d3)
         self.assertEqual(("NEIGHBOR_UPDATE", adjs_old[2], adjs_new[1]), d4)
 
+    def test_adjacency_to_json(self):
+        adj = self.create_adjacency("nodeA", "ifaceX", metric=10)
+        adj_dict = {
+            "adjLabel": 0,
+            "ifName": "ifaceX",
+            "isOverloaded": False,
+            "metric": 10,
+            "nextHopV4": {"addr": "0.0.0.0", "ifName": None},
+            "nextHopV6": {"addr": "fe80::20a2:1ff:fef4:59be", "ifName": None},
+            "otherIfName": "",
+            "otherNodeName": "nodeA",
+            "rtt": 1,
+            "timestamp": adj.timestamp,
+            "weight": 1,
+            "adjOnlyUsedByOtherNode": False,
+        }
+        self.assertEqual(adj_dict, object_to_dict(adj))
+
     def test_parse_prefix_database(self):
-        bgp1 = lsdb_types.PrefixEntry(
+        bgp1 = openr_types.PrefixEntry(
             prefix=ipnetwork.ip_str_to_prefix("1.0.0.0/8"),
             type=network_types.PrefixType.BGP,
         )
-        bgp2 = lsdb_types.PrefixEntry(
+        bgp2 = openr_types.PrefixEntry(
             prefix=ipnetwork.ip_str_to_prefix("2.0.0.0/8"),
             type=network_types.PrefixType.BGP,
         )
-        loop1 = lsdb_types.PrefixEntry(
+        loop1 = openr_types.PrefixEntry(
             prefix=ipnetwork.ip_str_to_prefix("10.0.0.1/32"),
             type=network_types.PrefixType.LOOPBACK,
         )
-        prefix_db = lsdb_types.PrefixDatabase(
+        prefix_db = openr_types.PrefixDatabase(
             thisNodeName="node1",
             prefixEntries=[bgp1, bgp2, loop1],
             deletePrefix=False,

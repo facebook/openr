@@ -1,9 +1,7 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
 import select
@@ -51,7 +49,7 @@ def run_cmd(cmd, env=None, cwd=None, allow_fail=False, log_file=None):
         sys.stdout.buffer.write(msg.encode(errors="surrogateescape"))
 
     if log_file is not None:
-        with open(log_file, "a", errors="surrogateescape") as log:
+        with open(log_file, "a", encoding="utf-8", errors="surrogateescape") as log:
 
             def log_function(msg):
                 log.write(msg)
@@ -98,6 +96,7 @@ def _run_cmd(cmd, env, cwd, allow_fail, log_fn):
     isinteractive = os.isatty(sys.stdout.fileno())
     if isinteractive:
         stdout = None
+        sys.stdout.buffer.flush()
     else:
         stdout = subprocess.PIPE
 

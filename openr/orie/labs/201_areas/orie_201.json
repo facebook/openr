@@ -1,0 +1,86 @@
+{
+    "namespaces": {
+        "openr_left": {
+            "id": 1,
+            "interfaces": {
+                "left0": {
+                    "prefixes": [
+                        "fd00::1/64"
+                    ],
+                    "peer_name": "area1",
+                    "type": "veth"
+                },
+                "lo": {
+                    "prefixes": [
+                        "fd00:2::/64",
+                        "fd00:3::/64",
+                        "10.6.9.0/32",
+                        "10.6.9.1/32"
+                    ],
+                    "type": "loopback"
+                }
+            },
+            "oob": true,
+            "routes": {}
+        },
+        "openr_center": {
+            "id": 2,
+            "interfaces": {
+                "lo": {
+                    "prefixes": [
+                        "fd00:4::/64",
+                        "fd00:5::/64",
+                        "10.6.9.2/32",
+                        "10.6.9.3/32"
+                    ],
+                    "type": "loopback"
+                },
+                "area1": {
+                    "prefixes": [
+                        "fd00::2/64"
+                    ],
+                    "peer_name": "left0",
+                    "type": "veth"
+                },
+                "area2": {
+                    "prefixes": [
+                        "fd00:1::1/64"
+                    ],
+                    "peer_name": "right0",
+                    "type": "veth"
+                }
+            },
+            "oob": true,
+            "routes": {}
+        },
+        "openr_right": {
+            "id": 3,
+            "interfaces": {
+                "lo": {
+                    "prefixes": [
+                        "fd00:6::/64",
+                        "fd00:7::/64",
+                        "10.6.9.4/32",
+                        "10.6.9.5/32"
+                    ],
+                    "type": "loopback"
+                },
+                "right0": {
+                    "prefixes": [
+                        "fd00:1::2/64"
+                    ],
+                    "peer_name": "area2",
+                    "type": "veth"
+                }
+            },
+            "oob": true,
+            "routes": {}
+        }
+    },
+    "oob": {
+        "prefixes": [
+            "fddd::/64"
+        ]
+    },
+    "physical_int": "eth0"
+}

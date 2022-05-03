@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,8 +7,12 @@
 
 #pragma once
 
+#include <folly/IPAddress.h>
+
 #include <openr/if/gen-cpp2/FibService.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
+#include <openr/if/gen-cpp2/Platform_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/messaging/Queue.h>
 
 namespace openr {
 
@@ -72,6 +76,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   void waitForUpdateMplsRoutes();
   void waitForDeleteMplsRoutes();
   void waitForSyncMplsFib();
+  void waitForUnhealthyException(size_t count = 1);
 
   int64_t aliveSince() override;
 
@@ -109,11 +114,27 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
     return delMplsRoutesCount_;
   }
 
+  void
+  setHandlerHealthyState(bool isHealthy) {
+    isHealthy_ = isHealthy;
+  }
+
+  /**
+   * Marks following prefixes as dirty. This means any subsequent updates about
+   * these prefixes would fail to program. Deletion may succeed.
+   */
+  void setDirtyState(
+      std::vector<folly::CIDRNetwork> const& dirtyPrefixes,
+      std::vector<int32_t> const& dirtyLabels);
+
   void stop();
 
   void restart();
 
  private:
+  // Make sure the FibHandler is in healthy state. Else throw exception
+  void ensureHealthy();
+
   // Time when service started, in number of seconds, since epoch
   folly::Synchronized<int64_t> startTime_{0};
 
@@ -125,6 +146,10 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
       std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>>
       mplsRouteDb_;
 
+  // Dirty prefixes & labels in HW, and also won't be accepted from clients
+  folly::Synchronized<std::unordered_set<folly::CIDRNetwork>> dirtyPrefixes_;
+  folly::Synchronized<std::unordered_set<int32_t>> dirtyLabels_;
+
   // Stats
   std::atomic<size_t> fibSyncCount_{0};
   std::atomic<size_t> addRoutesCount_{0};
@@ -132,6 +157,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   std::atomic<size_t> fibMplsSyncCount_{0};
   std::atomic<size_t> addMplsRoutesCount_{0};
   std::atomic<size_t> delMplsRoutesCount_{0};
+  std::atomic<bool> isHealthy_{true};
 
   // A baton for synchronization
   folly::Baton<> updateUnicastRoutesBaton_;
@@ -140,6 +166,10 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Baton<> updateMplsRoutesBaton_;
   folly::Baton<> deleteMplsRoutesBaton_;
   folly::Baton<> syncMplsFibBaton_;
+
+  // We use queue for signalling & waiting for unhealthy exceptions as it can
+  // be repetitive
+  messaging::RWQueue<folly::Unit> unhealthyExceptionQueue_;
 };
 
 } // namespace openr

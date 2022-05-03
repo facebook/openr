@@ -1,12 +1,12 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 #include <openr/tests/OpenrWrapper.h>
-#include <openr/config/tests/Utils.h>
+#include <openr/tests/utils/Utils.h>
 
 namespace openr {
 
@@ -15,7 +15,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     fbzmq::Context& context,
     std::string nodeId,
     bool v4Enabled,
-    std::chrono::seconds kvStoreDbSyncInterval,
     std::chrono::milliseconds spark2HelloTime,
     std::chrono::milliseconds spark2FastInitHelloTime,
     std::chrono::milliseconds spark2HandshakeTime,
@@ -23,19 +22,15 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds spark2HandshakeHoldTime,
     std::chrono::milliseconds spark2HeartbeatHoldTime,
     std::chrono::milliseconds spark2GRHoldTime,
-    std::chrono::seconds linkMonitorAdjHoldTime,
     std::chrono::milliseconds linkFlapInitialBackoff,
     std::chrono::milliseconds linkFlapMaxBackoff,
-    std::chrono::seconds fibColdStartDuration,
     std::shared_ptr<IoProvider> ioProvider,
     uint32_t memLimit)
     : context_(context),
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
-      monitorSubmitUrl_(folly::sformat("inproc://{}-monitor-submit", nodeId_)),
-      monitorPubUrl_(folly::sformat("inproc://{}-monitor-pub", nodeId_)),
       kvStoreGlobalCmdUrl_(
-          folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)) {
+          fmt::format("inproc://{}-kvstore-cmd-global", nodeId_)) {
   // create config
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
@@ -46,20 +41,25 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /*orderedFibProgramming*/,
       true /*dryrun*/);
 
-  tConfig.kvstore_config.sync_interval_s = kvStoreDbSyncInterval.count();
-
   // link monitor config
-  auto& lmConf = tConfig.link_monitor_config;
-  lmConf.linkflap_initial_backoff_ms = linkFlapInitialBackoff.count();
-  lmConf.linkflap_max_backoff_ms = linkFlapMaxBackoff.count();
-  lmConf.use_rtt_metric = false;
-  lmConf.include_interface_regexes = {"vethLMTest_" + nodeId_ + ".*"};
+  auto& lmConf = *tConfig.link_monitor_config_ref();
+  lmConf.linkflap_initial_backoff_ms_ref() = linkFlapInitialBackoff.count();
+  lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
+  lmConf.use_rtt_metric_ref() = false;
+  lmConf.include_interface_regexes_ref() = {".*"};
+  lmConf.enable_perf_measurement_ref() = false;
+  tConfig.assume_drained_ref() = false;
+
+  // decision config
+  tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
+  tConfig.decision_config_ref()->debounce_max_ms_ref() = 250;
+  tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
 
   // prefix allocation config
   tConfig.enable_prefix_allocation_ref() = true;
   thrift::PrefixAllocationConfig pfxAllocationConf;
-  pfxAllocationConf.loopback_interface = "";
-  pfxAllocationConf.prefix_allocation_mode =
+  pfxAllocationConf.loopback_interface_ref() = "";
+  pfxAllocationConf.prefix_allocation_mode_ref() =
       thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
   pfxAllocationConf.seed_prefix_ref() = "fc00:cafe:babe::/62";
   pfxAllocationConf.allocate_prefix_len_ref() = 64;
@@ -68,29 +68,32 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // watchdog
   tConfig.enable_watchdog_ref() = true;
   thrift::WatchdogConfig watchdogConf;
-  watchdogConf.interval_s = 1;
-  watchdogConf.thread_timeout_s = 60;
-  watchdogConf.max_memory_mb = memLimit;
+  watchdogConf.interval_s_ref() = 1;
+  watchdogConf.thread_timeout_s_ref() = 60;
+  watchdogConf.max_memory_mb_ref() = memLimit;
   tConfig.watchdog_config_ref() = std::move(watchdogConf);
+
+  // monitor
+  thrift::MonitorConfig monitorConf;
+  // disable log submission for testing
+  monitorConf.enable_event_log_submission_ref() = false;
+  tConfig.monitor_config_ref() = std::move(monitorConf);
+
+  // persistent config-store config
+  tConfig.persistent_config_store_path_ref() =
+      fmt::format("/tmp/{}_openr_config_store.bin", nodeId_);
 
   config_ = std::make_shared<Config>(tConfig);
 
-  // create fakeNetlinkProtocolSocket
+  // create MockNetlinkProtocolSocket
   folly::EventBase evb;
   nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb);
 
-  // create MockSystemHandler
-  mockNlHandler_ = std::make_shared<MockNetlinkSystemHandler>(nlSock_.get());
-
-  // create zmq monitor
-  monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      MonitorPubUrl{monitorPubUrl_},
-      context_);
+  // create netlinkEventInjector
+  nlEventsInjector_ = std::make_shared<NetlinkEventsInjector>(nlSock_.get());
 
   // create and start config-store thread
-  configStore_ = std::make_unique<PersistentStore>(
-      folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_));
+  configStore_ = std::make_unique<PersistentStore>(config_);
   std::thread configStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " ConfigStore running.";
     configStore_->run();
@@ -103,11 +106,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStore_ = std::make_unique<KvStore>(
       context_,
       kvStoreUpdatesQueue_,
+      kvStoreEventsQueue_,
       peerUpdatesQueue_.getReader(),
+      kvRequestQueue_.getReader(),
+      logSampleQueue_,
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      config_,
-      std::nullopt /* ip-tos */);
+      config_->getAreaIds(),
+      config_->toThriftKvStoreConfig());
   std::thread kvStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " KvStore running.";
     kvStore_->run();
@@ -122,110 +127,86 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // Subscribe our own prefixDb
   kvStoreClient_->subscribeKey(
-      folly::sformat("prefix:{}", nodeId_),
+      kTestingAreaName,
+      fmt::format("prefix:{}", nodeId_),
       [&](const std::string& /* key */,
           std::optional<thrift::Value> value) noexcept {
         if (!value.has_value()) {
           return;
         }
         // Parse PrefixDb
-        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             value.value().value_ref().value(), serializer_);
-
-        SYNCHRONIZED(ipPrefix_) {
+        ipPrefix_.withWLock([&](auto& ipPrefix) {
           bool received = false;
-
-          for (auto& prefix : prefixDb.prefixEntries) {
-            if (prefix.type == thrift::PrefixType::PREFIX_ALLOCATOR) {
+          for (auto& prefix : *prefixDb.prefixEntries_ref()) {
+            if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
               received = true;
-              ipPrefix_ = prefix.prefix;
+              ipPrefix = *prefix.prefix_ref();
               break;
             }
           }
           if (!received) {
-            ipPrefix_ = std::nullopt;
+            ipPrefix = std::nullopt;
           }
-        }
+        });
       },
       false);
 
   //
   // create spark
   //
-  const auto& sparkConf = config_->getSparkConfig();
   spark_ = std::make_unique<Spark>(
-      config_->getConfig().domain, // My domain
-      config_->getNodeName(), // myNodeName
-      static_cast<uint16_t>(sparkConf.neighbor_discovery_port),
-      std::chrono::seconds(
-          sparkConf.graceful_restart_time_s), // hold_time_s
-      std::chrono::seconds(1),
-      std::chrono::milliseconds(1000),
-      std::chrono::seconds(sparkConf.hello_time_s),
-      std::chrono::milliseconds(sparkConf.fastinit_hello_time_ms),
-      std::chrono::milliseconds(
-          sparkConf.fastinit_hello_time_ms), // spark2_handshake_time_ms
-      std::chrono::seconds(
-          sparkConf.keepalive_time_s), // spark2_heartbeat_time_s
-      std::chrono::seconds(
-          sparkConf.keepalive_time_s), // spark2_negotiate_hold_time_s
-      std::chrono::seconds(
-          sparkConf.hold_time_s), // spark2_heartbeat_hold_time_s
-      std::nullopt, // ip-tos
-      config_->isV4Enabled(),
       interfaceUpdatesQueue_.getReader(),
+      initializationEventQueue_.getReader(),
       neighborUpdatesQueue_,
-      KvStoreCmdPort{static_cast<uint16_t>(0)},
-      OpenrCtrlThriftPort{static_cast<uint16_t>(0)},
-      std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      ioProvider,
-      false, // FloodOptimizationEnabled
-      false, // enable_spark2
-      false); // spark2_increase_hello_interval
+      ioProvider_,
+      config_);
 
   //
   // create link monitor
   //
   linkMonitor_ = std::make_unique<LinkMonitor>(
-      context_,
       config_,
-      mockNlHandler_,
       nlSock_.get(),
-      kvStore_.get(),
       configStore_.get(),
-      false /* enable perf measurement */,
       interfaceUpdatesQueue_,
       prefixUpdatesQueue_,
       peerUpdatesQueue_,
+      logSampleQueue_,
+      kvRequestQueue_,
       neighborUpdatesQueue_.getReader(),
+      kvStoreEventsQueue_.getReader(),
       nlSock_->getReader(),
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      false, /* assumeDrained */
-      false, /* overrideDrainState */
-      linkMonitorAdjHoldTime);
+      false /* overrideDrainState */);
+
+  //
+  // create monitor
+  //
+  monitor_ = std::make_unique<openr::Monitor>(
+      config_,
+      Constants::kEventLogCategory.toString(),
+      logSampleQueue_.getReader());
 
   //
   // Create prefix manager
   //
   prefixManager_ = std::make_unique<PrefixManager>(
+      staticRoutesQueue_,
+      kvRequestQueue_,
+      prefixMgrRoutesQueue_,
+      initializationEventQueue_,
+      kvStoreUpdatesQueue_.getReader(),
       prefixUpdatesQueue_.getReader(),
-      routeUpdatesQueue_.getReader(),
-      config_,
-      configStore_.get(),
-      kvStore_.get(),
-      false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0));
+      fibRouteUpdatesQueue_.getReader(),
+      config_);
 
   //
   // create decision
   //
   decision_ = std::make_unique<Decision>(
       config_,
-      true, // computeLfaPaths
-      false, // bgpDryRun
-      std::chrono::milliseconds(10),
-      std::chrono::milliseconds(250),
+      peerUpdatesQueue_.getReader(),
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       routeUpdatesQueue_);
@@ -235,34 +216,39 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   fib_ = std::make_unique<Fib>(
       config_,
-      Constants::kFibAgentPort,
-      fibColdStartDuration,
       routeUpdatesQueue_.getReader(),
-      interfaceUpdatesQueue_.getReader(),
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      kvStore_.get(),
-      context_);
+      fibRouteUpdatesQueue_,
+      logSampleQueue_);
 
   //
   // create PrefixAllocator
   //
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
+      kTestingAreaName,
       config_,
-      mockNlHandler_,
+      nlSock_.get(),
       kvStore_.get(),
-      prefixUpdatesQueue_,
-      MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
-      context_,
+      prefixUpdatesQueue_,
+      logSampleQueue_,
+      kvRequestQueue_,
       Constants::kPrefixAllocatorSyncInterval);
+
+  // create thrift-server for this openr node
+  thriftServer_ = std::make_unique<OpenrThriftServerWrapper>(
+      nodeId_,
+      decision_.get(),
+      fib_.get(),
+      kvStore_.get(),
+      linkMonitor_.get(),
+      monitor_.get(),
+      configStore_.get(),
+      prefixManager_.get(),
+      spark_.get(),
+      config_);
 
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(config_);
-
-  // Zmq monitor client to get counters
-  zmqMonitorClient = std::make_unique<fbzmq::ZmqMonitorClient>(
-      context_,
-      MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId_)});
 }
 
 template <class Serializer>
@@ -272,7 +258,7 @@ OpenrWrapper<Serializer>::run() {
     // mimick nlSock to generate LINK event
     // ATTN: LinkMonitor will be notified as it holds the reader queue
     //       from the same MockNetlinkProtocolSocket
-    mockNlHandler_->sendLinkEvent(
+    nlEventsInjector_->sendLinkEvent(
         "vethLMTest_" + nodeId_, /* ifName */
         5, /* ifIndex */
         true /* isUp */);
@@ -351,6 +337,9 @@ OpenrWrapper<Serializer>::run() {
   watchdog->waitUntilRunning();
   allThreads_.emplace_back(std::move(watchdogThread));
 
+  // start thriftServer
+  thriftServer_->run();
+
   // start eventBase_
   allThreads_.emplace_back([&]() {
     VLOG(1) << nodeId_ << " Starting eventBase_";
@@ -365,16 +354,23 @@ OpenrWrapper<Serializer>::stop() {
   // Close all queues
   routeUpdatesQueue_.close();
   peerUpdatesQueue_.close();
+  kvRequestQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
+  kvStoreEventsQueue_.close();
   nlSock_->closeQueue();
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
+  initializationEventQueue_.close();
   staticRoutesQueue_.close();
+  prefixMgrRoutesQueue_.close();
+  fibRouteUpdatesQueue_.close();
+  logSampleQueue_.close();
 
   // stop all modules in reverse order
   eventBase_.stop();
   eventBase_.waitUntilStopped();
+  thriftServer_->stop();
   watchdog->stop();
   watchdog->waitUntilStopped();
   fib_->stop();
@@ -401,8 +397,8 @@ OpenrWrapper<Serializer>::stop() {
     t.join();
   }
 
-  // destroy netlink system handler
-  mockNlHandler_.reset();
+  // destroy netlink related objects
+  nlEventsInjector_.reset();
   nlSock_.reset();
   LOG(INFO) << "OpenR with nodeId: " << nodeId_ << " stopped";
 }
@@ -410,35 +406,70 @@ OpenrWrapper<Serializer>::stop() {
 template <class Serializer>
 std::optional<thrift::IpPrefix>
 OpenrWrapper<Serializer>::getIpPrefix() {
-  SYNCHRONIZED(ipPrefix_) {
-    if (ipPrefix_.has_value()) {
-      return ipPrefix_;
-    }
+  auto prefix = ipPrefix_.withRLock([&](auto& ipPrefix) { return ipPrefix; });
+  if (prefix.has_value()) {
+    return prefix;
   }
 
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
   eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    keys =
-        kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+    const std::string keyPrefix = fmt::format("prefix:{}", nodeId_);
+    try {
+      thrift::KeyDumpParams params;
+      params.prefix_ref() = keyPrefix;
+      if (not keyPrefix.empty()) {
+        params.keys_ref() = {keyPrefix};
+      }
+      auto maybeGetKey = kvStore_
+                             ->semifuture_dumpKvStoreKeys(
+                                 std::move(params), {kTestingAreaName})
+                             .getTry(Constants::kReadTimeout);
+      if (maybeGetKey.hasValue()) {
+        auto pub = *maybeGetKey.value()->begin();
+        keys = *pub.keyVals_ref();
+      } else {
+        LOG(ERROR) << fmt::format(
+            "Failed to retrieve keys with prefix: {} from KvStore in area: {}. "
+            "Exception: {}",
+            keyPrefix,
+            kTestingAreaName.t,
+            folly::exceptionStr(maybeGetKey.exception()));
+        keys = std::nullopt;
+      }
+    } catch (const folly::FutureTimeout&) {
+      LOG(ERROR) << fmt::format(
+          "Timed out retrieving keys with prefix: {} from KvStore in area: {}",
+          keyPrefix,
+          kTestingAreaName.t);
+      keys = std::nullopt;
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << fmt::format(
+          "Failed to dump keys with prefix: {} from KvStore in area: {}. "
+          "Exception: {}",
+          keyPrefix,
+          kTestingAreaName.t,
+          ex.what());
+      keys = std::nullopt;
+    }
   });
 
-  SYNCHRONIZED(ipPrefix_) {
+  ipPrefix_.withWLock([&](auto& ipPrefix) {
     for (const auto& key : keys.value()) {
-      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           key.second.value_ref().value(), serializer_);
-      if (prefixDb.deletePrefix) {
+      if (*prefixDb.deletePrefix_ref()) {
         // Skip prefixes which are about to be deleted
         continue;
       }
 
-      for (auto& prefix : prefixDb.prefixEntries) {
-        if (prefix.type == thrift::PrefixType::PREFIX_ALLOCATOR) {
-          ipPrefix_ = prefix.prefix;
+      for (auto& prefix : *prefixDb.prefixEntries_ref()) {
+        if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
+          ipPrefix = *prefix.prefix_ref();
           break;
         }
       }
     }
-  }
+  });
   return ipPrefix_.copy();
 }
 
@@ -447,32 +478,16 @@ bool
 OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
   eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    keys =
-        kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+    keys = kvStoreClient_->dumpAllWithPrefix(
+        kTestingAreaName, fmt::format("prefix:{}", nodeId_));
   });
   return keys.has_value();
 }
 
 template <class Serializer>
-bool
-OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
-    const std::vector<SparkInterfaceEntry>& interfaceEntries) {
-  thrift::InterfaceDatabase ifDb(
-      apache::thrift::FRAGILE, nodeId_, {}, thrift::PerfEvents());
-  ifDb.perfEvents_ref().reset();
-
-  for (const auto& interface : interfaceEntries) {
-    ifDb.interfaces.emplace(
-        interface.ifName,
-        createThriftInterfaceInfo(
-            true,
-            interface.ifIndex,
-            {toIpPrefix(interface.v4Network),
-             toIpPrefix(interface.v6LinkLocalNetwork)}));
-  }
-
-  interfaceUpdatesQueue_.push(std::move(ifDb));
-  return true;
+void
+OpenrWrapper<Serializer>::updateInterfaceDb(const InterfaceDatabase& ifDb) {
+  interfaceUpdatesQueue_.push(ifDb);
 }
 
 template <class Serializer>
@@ -485,22 +500,20 @@ OpenrWrapper<Serializer>::fibDumpRouteDatabase() {
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::addPrefixEntries(
+    const thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  thrift::PrefixUpdateRequest request;
-  request.cmd = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-  request.prefixes = prefixes;
-  prefixUpdatesQueue_.push(std::move(request));
+  PrefixEvent event(PrefixEventType::ADD_PREFIXES, type, prefixes);
+  prefixUpdatesQueue_.push(std::move(event));
   return true;
 }
 
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::withdrawPrefixEntries(
+    const thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  thrift::PrefixUpdateRequest request;
-  request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
-  request.prefixes = prefixes;
-  prefixUpdatesQueue_.push(std::move(request));
+  PrefixEvent event(PrefixEventType::WITHDRAW_PREFIXES, type, prefixes);
+  prefixUpdatesQueue_.push(std::move(event));
   return true;
 }
 
@@ -508,12 +521,18 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::checkPrefixExists(
     const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : routeDb.unicastRoutes) {
-    if (prefix == route.dest) {
+  for (auto const& route : *routeDb.unicastRoutes_ref()) {
+    if (prefix == *route.dest_ref()) {
       return true;
     }
   }
   return false;
+}
+
+template <class Serializer>
+std::map<std::string, int64_t>
+OpenrWrapper<Serializer>::getCounters() {
+  return facebook::fb303::fbData->getCounters();
 }
 
 // define template instance for some common serializers

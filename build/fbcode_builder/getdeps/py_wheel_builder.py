@@ -1,9 +1,7 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import codecs
 import collections
@@ -11,6 +9,7 @@ import email
 import os
 import re
 import stat
+from typing import Dict, List
 
 from .builder import BuilderBase, CMakeBuilder
 
@@ -94,14 +93,16 @@ endif()
 # something like the following pip3 command:
 #   pip3 --isolated install --no-cache-dir --no-index --system \
 #       --target <install_dir> <wheel_file>
+# pyre-fixme[13] fields initialized in _build
 class PythonWheelBuilder(BuilderBase):
     """This Builder can take Python wheel archives and install them as python libraries
     that can be used by add_fb_python_library()/add_fb_python_executable() CMake rules.
     """
 
-    def _build(self, install_dirs, reconfigure):
-        # type: (List[str], bool) -> None
+    dist_info_dir: str
+    template_format_dict: Dict[str, str]
 
+    def _build(self, install_dirs: List[str], reconfigure: bool) -> None:
         # When we are invoked, self.src_dir contains the unpacked wheel contents.
         #
         # Since a wheel file is just a zip file, the Fetcher code recognizes it as such
@@ -170,9 +171,7 @@ class PythonWheelBuilder(BuilderBase):
         # Run the build
         self._run_cmake_build(install_dirs, reconfigure)
 
-    def _run_cmake_build(self, install_dirs, reconfigure):
-        # type: (List[str], bool) -> None
-
+    def _run_cmake_build(self, install_dirs: List[str], reconfigure: bool) -> None:
         cmake_builder = CMakeBuilder(
             build_opts=self.build_opts,
             ctx=self.ctx,
@@ -182,14 +181,13 @@ class PythonWheelBuilder(BuilderBase):
             src_dir=self.build_dir,
             build_dir=self.build_dir,
             inst_dir=self.inst_dir,
+            loader=None,
             defines={},
             final_install_prefix=None,
         )
         cmake_builder.build(install_dirs=install_dirs, reconfigure=reconfigure)
 
-    def _write_cmakelists(self, path_mapping, dependencies):
-        # type: (List[str]) -> None
-
+    def _write_cmakelists(self, path_mapping: Dict[str, str], dependencies) -> None:
         cmake_path = os.path.join(self.build_dir, "CMakeLists.txt")
         with open(cmake_path, "w") as f:
             f.write(CMAKE_HEADER.format(**self.template_format_dict))
@@ -221,9 +219,9 @@ class PythonWheelBuilder(BuilderBase):
         with open(output_path, "w") as f:
             f.write(CMAKE_CONFIG_FILE.format(**self.template_format_dict))
 
-    def _add_sources(self, path_mapping, src_path, install_path):
-        # type: (List[str], str, str) -> None
-
+    def _add_sources(
+        self, path_mapping: Dict[str, str], src_path: str, install_path: str
+    ):
         s = os.lstat(src_path)
         if not stat.S_ISDIR(s.st_mode):
             path_mapping[src_path] = install_path
@@ -236,9 +234,7 @@ class PythonWheelBuilder(BuilderBase):
                 os.path.join(install_path, entry),
             )
 
-    def _parse_wheel_name(self):
-        # type: () -> WheelNameInfo
-
+    def _parse_wheel_name(self) -> WheelNameInfo:
         # The ArchiveFetcher prepends "manifest_name-", so strip that off first.
         wheel_name = os.path.basename(self.src_dir)
         prefix = self.manifest.name + "-"

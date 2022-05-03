@@ -1,65 +1,73 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStoreWrapper.h"
-
-#include <memory>
-
-#include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/common/Constants.h>
-
-namespace {
-
-const int kSocketHwm = 99999;
-
-} // anonymous namespace
+#include <openr/kvstore/KvStoreWrapper.h>
 
 namespace openr {
 
 KvStoreWrapper::KvStoreWrapper(
     fbzmq::Context& zmqContext,
-    std::shared_ptr<const Config> config,
-    std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
-        peerUpdatesQueue,
-    bool enableKvStoreThrift)
-    : nodeId(config->getNodeName()),
-      globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
-      enableFloodOptimization_(
-          config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
-              false)),
-      enableKvStoreThrift_(enableKvStoreThrift) {
-  VLOG(1) << "KvStoreWrapper: Creating KvStore.";
+    const std::unordered_set<std::string>& areaIds,
+    const thrift::KvStoreConfig& kvStoreConfig,
+    std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
+    std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
+    : nodeId_(*kvStoreConfig.node_name_ref()),
+      globalCmdUrl_(fmt::format("inproc://{}-kvstore-global-cmd", nodeId_)),
+      areaIds_(areaIds),
+      kvStoreConfig_(kvStoreConfig) {
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
       kvStoreUpdatesQueue_,
+      kvStoreSyncEventsQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
                                    : dummyPeerUpdatesQueue_.getReader(),
-      KvStoreGlobalCmdUrl{globalCmdUrl},
-      MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId)},
-      config,
-      std::nullopt /* ip-tos */,
-      Constants::kHighWaterMark,
-      enableKvStoreThrift_);
+      kvRequestQueue.has_value() ? kvRequestQueue.value()
+                                 : dummyKvRequestQueue_.getReader(),
+      logSampleQueue_,
+      KvStoreGlobalCmdUrl{globalCmdUrl_},
+      areaIds_,
+      kvStoreConfig_);
+
+  // we need to spin up a thrift server for KvStore clients to connect to. See
+  // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update
+  // for info on data flow
+  thriftServer_ = std::make_unique<OpenrThriftServerWrapper>(
+      nodeId_,
+      nullptr, // Decision
+      nullptr, // Fib
+      kvStore_.get(),
+      nullptr, // LinkMonitor
+      nullptr, // Monitor
+      nullptr, // PersistentStore
+      nullptr, // PrefixManager
+      nullptr, // Spark
+      nullptr // Config
+  );
 }
 
 void
 KvStoreWrapper::run() noexcept {
   // Start kvstore
   kvStoreThread_ = std::thread([this]() {
-    VLOG(1) << "KvStore " << nodeId << " running.";
+    XLOG(DBG1) << "KvStore " << nodeId_ << " running.";
     kvStore_->run();
-    VLOG(1) << "KvStore " << nodeId << " stopped.";
+    XLOG(DBG1) << "KvStore " << nodeId_ << " stopped.";
   });
   kvStore_->waitUntilRunning();
+
+  thriftServer_->run();
 }
 
 void
 KvStoreWrapper::stop() {
+  XLOG(DBG1) << "Stopping KvStoreWrapper";
   // Return immediately if not running
   if (!kvStore_->isRunning()) {
     return;
@@ -67,28 +75,37 @@ KvStoreWrapper::stop() {
 
   // Close queue
   kvStoreUpdatesQueue_.close();
+  kvStoreSyncEventsQueue_.close();
   dummyPeerUpdatesQueue_.close();
+  dummyKvRequestQueue_.close();
+  logSampleQueue_.close();
+
+  if (thriftServer_) {
+    thriftServer_->stop();
+    thriftServer_.reset();
+  }
 
   // Stop kvstore
   kvStore_->stop();
   kvStoreThread_.join();
+  XLOG(DBG1) << "KvStoreWrapper stopped.";
 }
 
 bool
 KvStoreWrapper::setKey(
+    AreaId const& area,
     std::string key,
     thrift::Value value,
-    std::optional<std::vector<std::string>> nodeIds,
-    std::string area) {
+    std::optional<std::vector<std::string>> nodeIds) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
-  params.keyVals.emplace(std::move(key), std::move(value));
-  fromStdOptional(params.nodeIds_ref(), std::move(nodeIds));
+  params.keyVals_ref()->emplace(std::move(key), std::move(value));
+  params.nodeIds_ref().from_optional(std::move(nodeIds));
 
   try {
-    kvStore_->setKvStoreKeyVals(std::move(params), area).get();
+    kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
   }
   return true;
@@ -96,43 +113,63 @@ KvStoreWrapper::setKey(
 
 bool
 KvStoreWrapper::setKeys(
+    AreaId const& area,
     const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
-    std::optional<std::vector<std::string>> nodeIds,
-    std::string area) {
+    std::optional<std::vector<std::string>> nodeIds) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
-  fromStdOptional(params.nodeIds_ref(), std::move(nodeIds));
-  for (const auto& keyVal : keyVals) {
-    params.keyVals.emplace(keyVal.first, keyVal.second);
+  params.nodeIds_ref().from_optional(std::move(nodeIds));
+  for (const auto& [key, val] : keyVals) {
+    params.keyVals_ref()->emplace(key, val);
   }
 
   try {
-    kvStore_->setKvStoreKeyVals(std::move(params), area).get();
+    kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
   }
   return true;
 }
 
+void
+KvStoreWrapper::pushToKvStoreUpdatesQueue(
+    const AreaId& area,
+    const std::unordered_map<std::string /* key */, thrift::Value>& keyVals) {
+  thrift::Publication pub;
+  pub.area_ref() = area;
+  pub.keyVals_ref() = keyVals;
+  kvStoreUpdatesQueue_.push(std::move(pub));
+}
+
 std::optional<thrift::Value>
-KvStoreWrapper::getKey(std::string key, std::string area) {
+KvStoreWrapper::getKey(AreaId const& area, std::string key) {
   // Prepare KeyGetParams
   thrift::KeyGetParams params;
-  params.keys.push_back(key);
+  params.keys_ref()->push_back(key);
 
   thrift::Publication pub;
   try {
-    pub = *(kvStore_->getKvStoreKeyVals(std::move(params), area).get());
+    auto maybeGetKey =
+        kvStore_->semifuture_getKvStoreKeyVals(area, std::move(params))
+            .getTry(Constants::kReadTimeout);
+    if (maybeGetKey.hasValue()) {
+      pub = *(maybeGetKey.value());
+    } else {
+      XLOG(ERR) << "Failed to retrieve key from KvStore. Key: " << key;
+      return std::nullopt;
+    }
+  } catch (const folly::FutureTimeout&) {
+    XLOG(ERR) << "Timed out retrieving key: " << key;
   } catch (std::exception const& e) {
-    LOG(WARNING) << "Exception to get key from kvstore: "
-                 << folly::exceptionStr(e);
+    XLOG(WARNING) << "Exception to get key from kvstore: "
+                  << folly::exceptionStr(e);
     return std::nullopt; // No value found
   }
 
   // Return the result
-  auto it = pub.keyVals.find(key);
-  if (it == pub.keyVals.end()) {
+  auto it = pub.keyVals_ref()->find(key);
+  if (it == pub.keyVals_ref()->end()) {
     return std::nullopt; // No value found
   }
   return it->second;
@@ -140,101 +177,144 @@ KvStoreWrapper::getKey(std::string key, std::string area) {
 
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::dumpAll(
-    std::optional<KvStoreFilters> filters, std::string area) {
+    AreaId const& area, std::optional<KvStoreFilters> filters) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
   if (filters.has_value()) {
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
     params.prefix_ref() = keyPrefix;
     params.originatorIds_ref() = filters.value().getOriginatorIdList();
+    params.senderId_ref() = nodeId_;
     if (not keyPrefix.empty()) {
       params.keys_ref() = filters.value().getKeyPrefixes();
     }
   }
 
-  auto pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
-  return pub.keyVals;
+  auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
+                  .get()
+                  ->begin();
+  return *pub.keyVals_ref();
 }
 
 std::unordered_map<std::string /* key */, thrift::Value>
-KvStoreWrapper::dumpHashes(std::string const& prefix, std::string area) {
+KvStoreWrapper::dumpHashes(AreaId const& area, std::string const& prefix) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
   params.prefix_ref() = prefix;
   params.keys_ref() = {prefix};
+  params.senderId_ref() = nodeId_;
 
-  auto pub = *(kvStore_->dumpKvStoreHashes(std::move(params), area).get());
-  return pub.keyVals;
+  auto pub =
+      *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
+  return *pub.keyVals_ref();
+}
+
+SelfOriginatedKeyVals
+KvStoreWrapper::dumpAllSelfOriginated(AreaId const& area) {
+  auto keyVals =
+      *(kvStore_->semifuture_dumpKvStoreSelfOriginatedKeys(area).get());
+  return keyVals;
 }
 
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::syncKeyVals(
-    thrift::KeyVals const& keyValHashes, std::string area) {
+    AreaId const& area, thrift::KeyVals const& keyValHashes) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
   params.keyValHashes_ref() = keyValHashes;
+  params.senderId_ref() = nodeId_;
 
-  auto pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
-  return pub.keyVals;
+  auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
+                  .get()
+                  ->begin();
+  return *pub.keyVals_ref();
 }
 
 thrift::Publication
 KvStoreWrapper::recvPublication() {
-  auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
-  if (maybePublication.hasError()) {
-    throw std::runtime_error(std::string("recvPublication failed"));
+  while (true) {
+    auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
+    if (maybePublication.hasError()) {
+      throw std::runtime_error(std::string("recvPublication failed"));
+    }
+
+    // TODO: add timeout to avoid infinite waiting
+    if (auto* pub =
+            std::get_if<thrift::Publication>(&maybePublication.value())) {
+      return *pub;
+    }
   }
-  auto pub = maybePublication.value();
-  return pub;
+  throw std::runtime_error(std::string("timeout receiving publication"));
+}
+
+void
+KvStoreWrapper::recvKvStoreSyncedSignal() {
+  while (true) {
+    auto maybeEvent = kvStoreUpdatesQueueReader_.get(); // perform read
+    if (maybeEvent.hasError()) {
+      throw std::runtime_error(std::string("recvPublication failed"));
+    }
+
+    // TODO: add timeout to avoid infinite waiting
+    if (auto* event =
+            std::get_if<thrift::InitializationEvent>(&maybeEvent.value())) {
+      CHECK(*event == thrift::InitializationEvent::KVSTORE_SYNCED);
+      return;
+    }
+  }
+  throw std::runtime_error(std::string("timeout receiving publication"));
 }
 
 thrift::SptInfos
-KvStoreWrapper::getFloodTopo(std::string area) {
-  auto sptInfos = *(kvStore_->getSpanningTreeInfos(area).get());
+KvStoreWrapper::getFloodTopo(AreaId const& area) {
+  auto sptInfos = *(kvStore_->semifuture_getSpanningTreeInfos(area).get());
   return sptInfos;
 }
 
 bool
 KvStoreWrapper::addPeer(
-    std::string peerName, thrift::PeerSpec spec, std::string area) {
-  // Prepare peerAddParams
-  thrift::PeerAddParams params;
-  params.peers.emplace(peerName, spec);
+    AreaId const& area, std::string peerName, thrift::PeerSpec spec) {
+  thrift::PeersMap peers{{peerName, spec}};
+  return addPeers(area, peers);
+}
 
+bool
+KvStoreWrapper::addPeers(AreaId const& area, thrift::PeersMap& peers) {
   try {
-    kvStore_->addUpdateKvStorePeers(params, area).get();
+    kvStore_->semifuture_addUpdateKvStorePeers(area, peers).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Failed to add peers: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Failed to add peers: " << folly::exceptionStr(e);
     return false;
   }
   return true;
 }
 
 bool
-KvStoreWrapper::delPeer(std::string peerName, std::string area) {
-  // Prepare peerDelParams
-  thrift::PeerDelParams params;
-  params.peerNames.emplace_back(peerName);
-
+KvStoreWrapper::delPeer(AreaId const& area, std::string peerName) {
   try {
-    kvStore_->deleteKvStorePeers(params, area).get();
+    kvStore_->semifuture_deleteKvStorePeers(area, {peerName}).get();
   } catch (std::exception const& e) {
-    LOG(ERROR) << "Failed to delete peers: " << folly::exceptionStr(e);
+    XLOG(ERR) << "Failed to delete peers: " << folly::exceptionStr(e);
     return false;
   }
   return true;
 }
 
-std::optional<KvStorePeerState>
-KvStoreWrapper::getPeerState(
-    std::string const& peerName, std::string const& area) {
-  return kvStore_->getKvStorePeerState(peerName, area).get();
+std::optional<thrift::KvStorePeerState>
+KvStoreWrapper::getPeerState(AreaId const& area, std::string const& peerName) {
+  return kvStore_->semifuture_getKvStorePeerState(area, peerName).get();
 }
 
 std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
-KvStoreWrapper::getPeers(std::string area) {
-  auto peers = *(kvStore_->getKvStorePeers(area).get());
+KvStoreWrapper::getPeers(AreaId const& area) {
+  auto peers = *(kvStore_->semifuture_getKvStorePeers(area).get());
   return peers;
+}
+
+std::vector<thrift::KvStoreAreaSummary>
+KvStoreWrapper::getSummary(std::set<std::string> selectAreas) {
+  return *(
+      kvStore_->semifuture_getKvStoreAreaSummaryInternal(selectAreas).get());
 }
 
 } // namespace openr

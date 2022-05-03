@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -50,8 +50,14 @@ class RibPolicyStatement {
   // qualified)
   std::unordered_set<folly::CIDRNetwork> prefixSet_;
 
+  // Tag set. Unordered set for efficient lookup.
+  std::unordered_set<std::string> tagSet_;
+
   // PolicyAction operation
   const thrift::RibRouteAction action_;
+
+  // Route counter Id
+  const std::optional<thrift::RouteCounterID> counterID_;
 };
 
 /**
@@ -92,6 +98,20 @@ class RibPolicy {
    * @returns boolean indicating if route is transformed or not.
    */
   bool applyAction(RibUnicastEntry& route) const;
+
+  struct PolicyChange {
+    std::vector<folly::CIDRNetwork> updatedRoutes, deletedRoutes;
+  };
+
+  /**
+   * Calls applyAction on all routes in unicastEntries, removes entries that
+   * have no remaining nexthops.
+   *
+   * @returns PolicyChange struct indicating unicastEntries that were modified.
+   */
+  PolicyChange applyPolicy(
+      std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>& unicastEntries)
+      const;
 
  private:
   // List of policy statements

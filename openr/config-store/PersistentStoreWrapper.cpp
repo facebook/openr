@@ -1,18 +1,24 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/config-store/PersistentStoreWrapper.h"
+#include <folly/logging/xlog.h>
+
+#include <openr/config-store/PersistentStoreWrapper.h>
+#include <openr/tests/utils/Utils.h>
 
 namespace openr {
 
 PersistentStoreWrapper::PersistentStoreWrapper(const unsigned long tid)
-    : filePath(folly::sformat("/tmp/aq_persistent_store_test_{}", tid)) {
-  VLOG(1) << "PersistentStoreWrapper: Creating PersistentStore.";
-  store_ = std::make_unique<PersistentStore>(filePath);
+    : filePath(fmt::format("/tmp/openr_persistent_store_test_{}", tid)) {
+  XLOG(DBG1) << "PersistentStoreWrapper: Creating PersistentStore.";
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.persistent_config_store_path_ref() = filePath;
+  auto config = std::make_shared<Config>(tConfig);
+  store_ = std::make_unique<PersistentStore>(config);
 }
 
 void

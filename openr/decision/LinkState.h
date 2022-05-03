@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,13 +9,15 @@
 
 #include <algorithm>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
 
@@ -101,6 +103,8 @@ class Link {
   HoldableValue<LinkStateMetric> metric1_{1}, metric2_{1};
   HoldableValue<bool> overload1_{false}, overload2_{false};
   int32_t adjLabel1_{0}, adjLabel2_{0};
+  // Weight represents a link's capacity (ex: 100Gbps)
+  int64_t weight1_, weight2_;
   thrift::BinaryAddress nhV41_, nhV42_, nhV61_, nhV62_;
   LinkStateMetric holdUpTtl_{0};
 
@@ -137,6 +141,8 @@ class Link {
 
   int32_t getAdjLabelFromNode(const std::string& nodeName) const;
 
+  int64_t getWeightFromNode(const std::string& nodeName) const;
+
   bool getOverloadFromNode(const std::string& nodeName) const;
 
   const thrift::BinaryAddress& getNhV4FromNode(
@@ -158,6 +164,8 @@ class Link {
       LinkStateMetric holdDownTtl);
 
   void setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel);
+
+  void setWeightFromNode(const std::string& nodeName, int64_t weight);
 
   bool setOverloadFromNode(
       const std::string& nodeName,
@@ -259,6 +267,73 @@ class LinkState {
   using SpfResult =
       std::unordered_map<std::string /* otherNodeName */, NodeSpfResult>;
 
+  // Class which holds the UCMP results for a specific node which is part of the
+  // SPF graph from a root node to a list of weighted leaf nodes. The class
+  // holds the following node UCMP results.
+  //   - Node's next-hop weights
+  //   - Node's advertised weight
+  class NodeUcmpResult {
+   public:
+    class NextHopLink {
+     public:
+      NextHopLink(
+          std::shared_ptr<Link> const& l, std::string const& n, int64_t w)
+          : link(l), nextHopNode(n), weight(w) {}
+      std::shared_ptr<Link> const link;
+      std::string const nextHopNode;
+      int64_t weight{0};
+    };
+
+    explicit NodeUcmpResult() {}
+
+    std::unordered_map<std::string, NextHopLink> const&
+    nextHopLinks() const {
+      return nextHopLinks_;
+    }
+
+    std::optional<int64_t>
+    weight() const {
+      return weight_;
+    }
+
+    void
+    addNextHopLink(
+        const std::string& localIface,
+        std::shared_ptr<Link> const& link,
+        std::string const& nextHopNode,
+        int64_t weight) {
+      nextHopLinks_.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(localIface),
+          std::forward_as_tuple(link, nextHopNode, weight));
+    }
+
+    void
+    setWeight(int64_t weight) {
+      weight_ = weight;
+    }
+
+    void
+    normalizeNextHopWeights() {
+      int64_t gcd{0};
+      for (auto& [_, nh] : nextHopLinks_) {
+        gcd = std::gcd(gcd, nh.weight);
+      }
+
+      if (gcd > 1) {
+        for (auto& [_, nh] : nextHopLinks_) {
+          nh.weight = nh.weight / gcd;
+        }
+      }
+    }
+
+   private:
+    std::unordered_map<std::string, NextHopLink> nextHopLinks_;
+    std::optional<int64_t> weight_{std::nullopt};
+  };
+
+  using UcmpResult = std::unordered_map<std::string, NodeUcmpResult>;
+
   using Path = std::vector<std::shared_ptr<Link>>;
 
   // Shortest paths API:
@@ -270,6 +345,14 @@ class LinkState {
   // deleteAdjacencyDatabase() returns with LinkState::topologyChanged set true
   SpfResult const& getSpfResult(
       const std::string& nodeName, bool useLinkMetric = true) const;
+
+  // API to resolve UCMP weights for all node's on the shortest path
+  // between a root node and a list of weighted leaf nodes.
+  UcmpResult resolveUcmpWeights(
+      const SpfResult& spfGraph,
+      const std::unordered_map<std::string, int64_t>& dstWeights,
+      thrift::PrefixForwardingAlgorithm algo,
+      bool useLinkMetric = true) const;
 
  private:
   // LinkState belongs to a unique area
@@ -319,8 +402,14 @@ class LinkState {
           nodeLabelChanged == other.nodeLabelChanged;
     }
 
+    // Whether topology has changed
     bool topologyChanged{false};
+    // Newly added links in the topology. Today it is only populated in
+    // `updateAdjacencyDatabase()`.
+    std::vector<std::shared_ptr<Link>> addedLinks;
+    // Whether attributes of links have changed
     bool linkAttributesChanged{false};
+    // Whehter node labels have changed
     bool nodeLabelChanged{false};
   };
 
@@ -329,6 +418,7 @@ class LinkState {
   // update adjacencies for the given router
   LinkStateChange updateAdjacencyDatabase(
       thrift::AdjacencyDatabase const& adjacencyDb,
+      std::string area,
       LinkStateMetric holdUpTtl = 0,
       LinkStateMetric holdDownTtl = 0);
 
@@ -344,14 +434,6 @@ class LinkState {
       std::string const& a,
       std::string const& b,
       bool useLinkMetric = true) const;
-
-  std::optional<LinkStateMetric>
-  getHopsFromAToB(std::string const& a, std::string const& b) const {
-    return getMetricFromAToB(a, b, false);
-  }
-
-  // returns hop count to furthest away node connected to nodeName
-  LinkStateMetric getMaxHopsToNode(const std::string& nodeName) const;
 
   const std::string&
   getArea() const {
@@ -468,30 +550,58 @@ class LinkState {
 
 }; // class LinkState
 
-// Classes needed for running Dijkstra
-// In addition to implementing the priority queue at the heart of Dijkstra's
-// algorithm, this structure also allows us to store appication specfic data:
-// nexthops.
-class DijkstraQNode {
+// Classes needed for running Dijkstra to build an SPF graph starting at a root
+// node to all other nodes the link state topology. In addition to implementing
+// the priority queue element at the heart of Dijkstra's algorithm, this
+// structure also allows us to store appication specfic data: nexthops.
+class DijkstraQSpfNode {
  public:
-  DijkstraQNode(const std::string& n, LinkStateMetric m)
+  DijkstraQSpfNode(const std::string& n, LinkStateMetric m)
       : nodeName(n), result(m) {}
-  const std::string nodeName;
+
+  LinkStateMetric
+  metric() {
+    return result.metric();
+  }
+
+  const std::string nodeName{""};
   LinkState::NodeSpfResult result;
 };
 
+// Dijkstra queue element used to derive UCMP weights for all node's
+// on the shortest path between a root node and a list of weighted lead nodes
+class DijkstraQUcmpNode {
+ public:
+  DijkstraQUcmpNode(const std::string& n, LinkStateMetric m)
+      : nodeName(n), metric_(m) {}
+
+  LinkStateMetric
+  metric() {
+    return metric_;
+  }
+
+  const std::string nodeName{""};
+  LinkStateMetric metric_{0};
+  LinkState::NodeUcmpResult result;
+};
+
+// Dijkstra Q template class.
+// Implements a priority queue using a heap.
+//
+// Template object must have the following elements
+//   - metric
+//   - nodeName
+template <class T>
 class DijkstraQ {
  private:
-  std::vector<std::shared_ptr<DijkstraQNode>> heap_;
-  std::unordered_map<std::string, std::shared_ptr<DijkstraQNode>> nameToNode_;
+  std::vector<std::shared_ptr<T>> heap_;
+  std::unordered_map<std::string, std::shared_ptr<T>> nameToNode_;
 
   struct {
     bool
-    operator()(
-        std::shared_ptr<DijkstraQNode> a,
-        std::shared_ptr<DijkstraQNode> b) const {
-      if (a->result.metric() != b->result.metric()) {
-        return a->result.metric() > b->result.metric();
+    operator()(std::shared_ptr<T> a, std::shared_ptr<T> b) const {
+      if (a->metric() != b->metric()) {
+        return a->metric() > b->metric();
       }
       return a->nodeName > b->nodeName;
     }
@@ -500,12 +610,12 @@ class DijkstraQ {
  public:
   void
   insertNode(const std::string& nodeName, LinkStateMetric d) {
-    heap_.push_back(std::make_shared<DijkstraQNode>(nodeName, d));
+    heap_.emplace_back(std::make_shared<T>(nodeName, d));
     nameToNode_[nodeName] = heap_.back();
     std::push_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
   }
 
-  std::shared_ptr<DijkstraQNode>
+  std::shared_ptr<T>
   get(const std::string& nodeName) {
     if (nameToNode_.count(nodeName)) {
       return nameToNode_.at(nodeName);
@@ -513,7 +623,7 @@ class DijkstraQ {
     return nullptr;
   }
 
-  std::shared_ptr<DijkstraQNode>
+  std::shared_ptr<T>
   extractMin() {
     if (heap_.empty()) {
       return nullptr;

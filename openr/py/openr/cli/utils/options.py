@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 import copy
 import re
@@ -29,16 +26,16 @@ OPTIONS = bunch.Bunch(
     {
         "acceptable_peer_name": "",
         "area": "",
+        "ssl": False,
         "ca_file": "",
         "cert_file": "",
+        "key_file": "",
         "cert_reqs": ssl.CERT_NONE,
         "client_id": platform_types.FibClient.OPENR,
         "fib_agent_port": Consts.FIB_AGENT_PORT,
         "host": "localhost",
-        "key_file": "",
         "openr_ctrl_port": Consts.CTRL_PORT,
         "proto_factory": Consts.PROTO_FACTORY,
-        "ssl": False,
         "timeout": Consts.TIMEOUT_MS,
     }
 )

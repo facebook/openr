@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,8 +11,10 @@
 
 #include <folly/FileUtil.h>
 #include <folly/io/IOBuf.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 
 using std::exception;
 
@@ -25,10 +27,11 @@ static const long kDbFlushRatio = 10000;
 namespace openr {
 
 PersistentStore::PersistentStore(
-    const std::string& storageFilePath,
+    std::shared_ptr<const Config> config,
     bool dryrun,
     bool periodicallySaveToDisk)
-    : storageFilePath_(storageFilePath), dryrun_(dryrun) {
+    : storageFilePath_(config->getConfig().get_persistent_config_store_path()),
+      dryrun_(dryrun) {
   if (periodicallySaveToDisk) {
     // Create timer and backoff mechanism only if backoff is requested
     saveDbTimerBackoff_ =
@@ -51,8 +54,8 @@ PersistentStore::PersistentStore(
   // Load initial database. On failure we will just report error and continue
   // with empty database
   if (not loadDatabaseFromDisk()) {
-    LOG(ERROR) << "Failed to load config-database from file: "
-               << storageFilePath_;
+    XLOG(ERR) << "Failed to load config-database from file: "
+              << storageFilePath_;
   }
 }
 
@@ -64,16 +67,14 @@ folly::SemiFuture<folly::Unit>
 PersistentStore::store(std::string key, std::string value) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([
-    this,
-    p = std::move(p),
-    key = std::move(key),
-    value = std::move(value)
-  ]() mutable noexcept {
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        key = std::move(key),
+                        value = std::move(value)]() mutable noexcept {
     SYSLOG(INFO) << "Store key: " << key << ", value: " << value
                  << " to config-store";
     // Override previous value if any
-    database_.keyVals[key] = value;
+    database_.insert_or_assign(key, value);
     auto pObject = toPersistentObject(ActionType::ADD, key, value);
     pObjects_.emplace_back(std::move(pObject));
     maybeSaveObjectToDisk();
@@ -89,13 +90,13 @@ PersistentStore::erase(std::string key) {
   runInEventBaseThread(
       [this, p = std::move(p), key = std::move(key)]() mutable noexcept {
         SYSLOG(INFO) << "Erase key: " << key << " from config-store";
-        if (database_.keyVals.erase(key) > 0) {
+        if (database_.erase(key) > 0) {
           auto pObject = toPersistentObject(ActionType::DEL, key, "");
           pObjects_.emplace_back(std::move(pObject));
           maybeSaveObjectToDisk();
           p.setValue(true);
         } else {
-          LOG(WARNING) << "Key: " << key << " doesn't exist";
+          XLOG(WARNING) << "Key: " << key << " doesn't exist";
           p.setValue(false);
         }
       });
@@ -108,8 +109,8 @@ PersistentStore::load(std::string key) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread(
       [this, p = std::move(p), key = std::move(key)]() mutable {
-        auto it = database_.keyVals.find(key);
-        if (it != database_.keyVals.end()) {
+        auto it = database_.find(key);
+        if (it != database_.end()) {
           p.setValue(it->second);
         } else {
           p.setValue(std::nullopt);
@@ -142,8 +143,8 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
     for (auto& pObject : newObjects) {
       auto buf = encodePersistentObject(pObject);
       if (buf.hasError()) {
-        LOG(ERROR) << "Failed to encode PersistentObject to ioBuf. Error: "
-                   << folly::exceptionStr(buf.error());
+        XLOG(ERR) << "Failed to encode PersistentObject to ioBuf. Error: "
+                  << buf.error();
         return false;
       }
       queue.append(std::move(**buf));
@@ -153,9 +154,8 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
     auto ioBuf = queue.move();
     auto success = writeIoBufToDisk(ioBuf, WriteType::APPEND);
     if (success.hasError()) {
-      LOG(ERROR) << "Failed to write PersistentObject to file '"
-                 << storageFilePath_
-                 << "'. Error: " << folly::exceptionStr(success.error());
+      XLOG(ERR) << "Failed to write PersistentObject to file '"
+                << storageFilePath_ << "'. Error: " << success.error();
       return false;
     }
 
@@ -168,14 +168,14 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
       if (not saveDatabaseToDisk()) {
         return false;
       }
-      LOG(INFO) << "Updated database on disk. Took "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                       std::chrono::steady_clock::now() - startTs)
-                       .count()
-                << "ms";
+      XLOG(INFO) << "Updated database on disk. Took "
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - startTs)
+                        .count()
+                 << "ms";
     }
   } else {
-    VLOG(1) << "Skipping writing to disk in dryrun mode";
+    XLOG(DBG1) << "Skipping writing to disk in dryrun mode";
   }
   numOfWritesToDisk_++;
 
@@ -186,7 +186,7 @@ bool
 PersistentStore::saveDatabaseToDisk() noexcept {
   std::unique_ptr<folly::IOBuf> ioBuf;
   // If database is empty, write 'kTlvFormatMarker' to disk and return
-  if (database_.keyVals.size() == 0) {
+  if (database_.empty()) {
     ioBuf = folly::IOBuf::copyBuffer(
         kTlvFormatMarker.data(), kTlvFormatMarker.size());
   } else {
@@ -195,15 +195,15 @@ PersistentStore::saveDatabaseToDisk() noexcept {
     queue.append(kTlvFormatMarker.data(), kTlvFormatMarker.size());
 
     // Encode database_ and append to queue
-    for (auto& keyPair : database_.keyVals) {
+    for (auto& keyPair : database_) {
       PersistentObject pObject;
       pObject =
           toPersistentObject(ActionType::ADD, keyPair.first, keyPair.second);
 
       auto buf = encodePersistentObject(pObject);
       if (buf.hasError()) {
-        LOG(ERROR) << "Failed to encode PersistentObject to ioBuf. Error:  "
-                   << folly::exceptionStr(buf.error());
+        XLOG(ERR) << "Failed to encode PersistentObject to ioBuf. Error:  "
+                  << buf.error();
         return false;
       }
       queue.append(std::move(*buf));
@@ -214,8 +214,8 @@ PersistentStore::saveDatabaseToDisk() noexcept {
 
   auto success = writeIoBufToDisk(ioBuf, WriteType::WRITE);
   if (success.hasError()) {
-    LOG(ERROR) << "Failed to write database to file '" << storageFilePath_
-               << "'. Error: " << folly::exceptionStr(success.error());
+    XLOG(ERR) << "Failed to write database to file '" << storageFilePath_
+              << "'. Error: " << success.error();
     return false;
   }
   return true;
@@ -225,62 +225,28 @@ bool
 PersistentStore::loadDatabaseFromDisk() noexcept {
   // Check if file exists
   if (not fs::exists(storageFilePath_)) {
-    LOG(INFO) << "Storage file " << storageFilePath_ << " doesn't exists. "
-              << "Starting with empty database";
+    XLOG(INFO) << "Storage file " << storageFilePath_ << " doesn't exists. "
+               << "Starting with empty database";
     return true;
   }
 
   // Read data from file
   std::string fileData{""};
   if (not folly::readFile(storageFilePath_.c_str(), fileData)) {
-    LOG(ERROR) << "Failed to read file contents from '" << storageFilePath_
-               << "'. Error (" << errno << "): " << folly::errnoStr(errno);
+    XLOG(ERR) << "Failed to read file contents from '" << storageFilePath_
+              << "'. Error (" << errno << "): " << folly::errnoStr(errno);
     return false;
   }
 
-  // Create IoBuf and cursor for loading data from disk
+  // Create IoBuf and cursor for loading data from disk (TlvFormat)
   auto ioBuf = folly::IOBuf::wrapBuffer(fileData.c_str(), fileData.size());
-  folly::io::Cursor cursor(ioBuf.get());
-
-  // Read 'kTlvFormatMarker' from ioBuf
-  if (not cursor.canAdvance(kTlvFormatMarker.size()) or
-      cursor.readFixedString(kTlvFormatMarker.size()) != kTlvFormatMarker) {
-    // Load old Format and write TlvFormat
-    auto oldSuccess = loadDatabaseOldFormat(ioBuf);
-    if (oldSuccess.hasError()) {
-      LOG(ERROR) << "Failed to read old-format file contents from '"
-                 << storageFilePath_
-                 << "'. Error: " << folly::exceptionStr(oldSuccess.error());
-      return false;
-    }
-    return true;
-  }
-  // Load TlvFormat
   auto tlvSuccess = loadDatabaseTlvFormat(ioBuf);
   if (tlvSuccess.hasError()) {
-    LOG(ERROR) << "Failed to read Tlv-format file contents from '"
-               << storageFilePath_
-               << "'. Error: " << folly::exceptionStr(tlvSuccess.error());
+    XLOG(ERR) << "Failed to read Tlv-format file contents from '"
+              << storageFilePath_ << "'. Error: " << tlvSuccess.error();
     return false;
   }
   return true;
-}
-
-folly::Expected<folly::Unit, std::string>
-PersistentStore::loadDatabaseOldFormat(
-    const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept {
-  // Parse ioBuf into `database_`
-  try {
-    thrift::StoreDatabase newDatabase;
-    serializer_.deserialize(ioBuf.get(), newDatabase);
-    database_ = std::move(newDatabase);
-    // Write Tlv format to disk
-    saveDatabaseToDisk();
-  } catch (std::exception const& e) {
-    return folly::makeUnexpected<std::string>(
-        folly::exceptionStr(e).toStdString());
-  }
-  return folly::Unit();
 }
 
 folly::Expected<folly::Unit, std::string>
@@ -288,7 +254,7 @@ PersistentStore::loadDatabaseTlvFormat(
     const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept {
   // Parse ioBuf to persistentObject and then to `database_`
   folly::io::Cursor cursor(ioBuf.get());
-  thrift::StoreDatabase newDatabase;
+  std::unordered_map<std::string, std::string> newDatabase;
   // Read 'kTlvFormatMarker'
   try {
     cursor.readFixedString(kTlvFormatMarker.size());
@@ -312,10 +278,10 @@ PersistentStore::loadDatabaseTlvFormat(
 
     // Add/Delete persistentObject to/from 'newDatabase'
     if (pObject.type == ActionType::ADD) {
-      newDatabase.keyVals[pObject.key] =
-          pObject.data.has_value() ? pObject.data.value() : "";
+      newDatabase.insert_or_assign(
+          pObject.key, pObject.data.has_value() ? pObject.data.value() : "");
     } else if (pObject.type == ActionType::DEL) {
-      newDatabase.keyVals.erase(pObject.key);
+      newDatabase.erase(pObject.key);
     }
   }
   database_ = std::move(newDatabase);

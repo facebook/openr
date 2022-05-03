@@ -1,55 +1,48 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "SparkWrapper.h"
+#include <folly/logging/xlog.h>
 
-using namespace fbzmq;
+#include <openr/spark/SparkWrapper.h>
 
 namespace openr {
 
 SparkWrapper::SparkWrapper(
-    std::string const& myDomainName,
     std::string const& myNodeName,
-    std::chrono::milliseconds myHoldTime,
-    std::chrono::milliseconds myKeepAliveTime,
-    std::chrono::milliseconds myFastInitKeepAliveTime,
-    bool enableV4,
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
-    std::shared_ptr<thrift::OpenrConfig> config,
-    bool enableSpark2,
-    bool increaseHelloInterval,
-    SparkTimeConfig timeConfig)
-    : myNodeName_(myNodeName) {
-  spark_ = std::make_shared<Spark>(
-      myDomainName,
-      myNodeName,
-      static_cast<uint16_t>(6666),
-      myHoldTime,
-      myKeepAliveTime,
-      myFastInitKeepAliveTime, // fastInitKeepAliveTime
-      timeConfig.myHelloTime, // spark2_hello_time
-      timeConfig.myHelloFastInitTime, // spark2_hello_fast_init_time
-      timeConfig.myHandshakeTime, // spark2_handshake_time
-      timeConfig.myHeartbeatTime, // spark2_heartbeat_time
-      timeConfig.myNegotiateHoldTime, // spark2_negotiate_hold_time
-      timeConfig.myHeartbeatHoldTime, // spark2_heartbeat_hold_time
-      std::nullopt /* ip-tos */,
-      enableV4,
-      interfaceUpdatesQueue_.getReader(),
-      neighborUpdatesQueue_,
-      KvStoreCmdPort{10002},
-      OpenrCtrlThriftPort{2018},
-      version,
-      std::move(ioProvider),
-      true,
-      enableSpark2,
-      increaseHelloInterval,
-      std::move(config));
+    std::shared_ptr<const Config> config,
+    bool isRateLimitEnabled)
+    : myNodeName_(myNodeName), config_(config) {
+  // apply isRateLimitEnabled.
+  // Using a plain bool enable/disable for rate-limit here, to leave
+  // the knowledge of the default contained in Spark (and not re-specify it
+  // here).
+  spark_ = isRateLimitEnabled
+      ? std::make_shared<Spark>(
+            interfaceUpdatesQueue_.getReader(),
+            initializationEventQueue_.getReader(),
+            neighborUpdatesQueue_,
+            std::move(ioProvider),
+            config,
+            version,
+            std::nullopt) // no Spark receive rate-limit, for testing
+      : std::make_shared<Spark>(
+            interfaceUpdatesQueue_.getReader(),
+            initializationEventQueue_.getReader(),
+            neighborUpdatesQueue_,
+            std::move(ioProvider),
+            config,
+            version
+            // Go with the default Spark rate-limit
+        );
+  // For testing - fuzz testing particularly - we want parsing errors to
+  // be thrown upward, not suppressed.
+  spark_->setThrowParserErrors(true);
 
   // start spark
   run();
@@ -62,9 +55,9 @@ SparkWrapper::~SparkWrapper() {
 void
 SparkWrapper::run() {
   thread_ = std::make_unique<std::thread>([this]() {
-    VLOG(1) << "Spark running.";
+    XLOG(DBG1) << "Spark running.";
     spark_->run();
-    VLOG(1) << "Spark stopped.";
+    XLOG(DBG1) << "Spark stopped.";
   });
   spark_->waitUntilRunning();
 }
@@ -72,33 +65,23 @@ SparkWrapper::run() {
 void
 SparkWrapper::stop() {
   interfaceUpdatesQueue_.close();
+  initializationEventQueue_.close();
   spark_->stop();
   spark_->waitUntilStopped();
   thread_->join();
 }
 
-bool
-SparkWrapper::updateInterfaceDb(
-    const std::vector<SparkInterfaceEntry>& interfaceEntries) {
-  thrift::InterfaceDatabase ifDb(
-      apache::thrift::FRAGILE, myNodeName_, {}, thrift::PerfEvents());
-  ifDb.perfEvents_ref().reset();
-
-  for (const auto& interface : interfaceEntries) {
-    ifDb.interfaces.emplace(
-        interface.ifName,
-        createThriftInterfaceInfo(
-            true,
-            interface.ifIndex,
-            {toIpPrefix(interface.v4Network),
-             toIpPrefix(interface.v6LinkLocalNetwork)}));
-  }
-
-  interfaceUpdatesQueue_.push(std::move(ifDb));
-  return true;
+void
+SparkWrapper::updateInterfaceDb(const InterfaceDatabase& ifDb) {
+  interfaceUpdatesQueue_.push(ifDb);
 }
 
-folly::Expected<thrift::SparkNeighborEvent, Error>
+void
+SparkWrapper::sendPrefixDbSyncedSignal() {
+  initializationEventQueue_.push(thrift::InitializationEvent::PREFIX_DB_SYNCED);
+}
+
+std::optional<NeighborEvents>
 SparkWrapper::recvNeighborEvent(
     std::optional<std::chrono::milliseconds> timeout) {
   auto startTime = std::chrono::steady_clock::now();
@@ -106,7 +89,7 @@ SparkWrapper::recvNeighborEvent(
     // Break if timeout occurs
     auto now = std::chrono::steady_clock::now();
     if (timeout.has_value() && now - startTime > timeout.value()) {
-      return folly::makeUnexpected(Error(-1, std::string("timed out")));
+      return std::nullopt;
     }
     // Yield the thread
     std::this_thread::yield();
@@ -115,9 +98,9 @@ SparkWrapper::recvNeighborEvent(
   return neighborUpdatesReader_.get().value();
 }
 
-std::optional<thrift::SparkNeighborEvent>
-SparkWrapper::waitForEvent(
-    const thrift::SparkNeighborEventType eventType,
+std::optional<NeighborEvents>
+SparkWrapper::waitForEvents(
+    const NeighborEventType eventType,
     std::optional<std::chrono::milliseconds> rcvdTimeout,
     std::optional<std::chrono::milliseconds> procTimeout) noexcept {
   auto startTime = std::chrono::steady_clock::now();
@@ -126,45 +109,40 @@ SparkWrapper::waitForEvent(
     // check if it is beyond procTimeout
     auto endTime = std::chrono::steady_clock::now();
     if (endTime - startTime > procTimeout.value()) {
-      LOG(ERROR) << "Timeout receiving event. Time limit: "
-                 << procTimeout.value().count();
+      XLOG(ERR) << "Timeout receiving event. Time limit: "
+                << procTimeout.value().count();
       break;
     }
-    auto maybeEvent = recvNeighborEvent(rcvdTimeout);
-    if (maybeEvent.hasError()) {
-      LOG(ERROR) << "recvNeighborEvent failed: " << maybeEvent.error();
-      continue;
-    }
-    auto& event = maybeEvent.value();
-    if (eventType == event.eventType) {
-      return event;
+    if (auto maybeEvents = recvNeighborEvent(rcvdTimeout)) {
+      auto& events = maybeEvents.value();
+      NeighborEvents retEvents;
+      for (auto& event : events) {
+        if (eventType == event.eventType) {
+          retEvents.emplace_back(std::move(event));
+        }
+      }
+      if (retEvents.size() > 0) {
+        return retEvents;
+      }
     }
   }
   return std::nullopt;
 }
 
 std::pair<folly::IPAddress, folly::IPAddress>
-SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
-  return {toIPAddress(event.neighbor.transportAddressV4),
-          toIPAddress(event.neighbor.transportAddressV6)};
+SparkWrapper::getTransportAddrs(const NeighborEvent& event) {
+  return {toIPAddress(event.neighborAddrV4), toIPAddress(event.neighborAddrV6)};
 }
 
-std::optional<SparkNeighState>
+std::optional<thrift::SparkNeighState>
 SparkWrapper::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
-  return spark_->getSparkNeighState(ifName, neighborName);
+  return spark_->getSparkNeighState(ifName, neighborName).get();
 }
 
-thrift::AreaConfig
-SparkWrapper::createAreaConfig(
-    const std::string& areaId,
-    const std::vector<std::string>& neighborRegexes,
-    const std::vector<std::string>& interfaceRegexes) {
-  thrift::AreaConfig areaConfig;
-  areaConfig.area_id = areaId;
-  areaConfig.neighbor_regexes = neighborRegexes;
-  areaConfig.interface_regexes = interfaceRegexes;
-  return areaConfig;
+void
+SparkWrapper::processPacket() {
+  spark_->processPacket();
 }
 
 } // namespace openr

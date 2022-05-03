@@ -1,12 +1,9 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-
-#include <sodium.h>
-#include <thread>
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
@@ -14,47 +11,24 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace openr;
-
-namespace {
-// ttl used in test for (K,V) pair
-const std::chrono::milliseconds kTtl{1000};
-} // namespace
 
 class MultipleKvStoreTestFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
-    // define/start eventbase thread
-    evbThread = std::thread([&]() { evb.run(); });
-
     auto makeStoreWrapper = [this](std::string nodeId) {
-      auto tConfig = getBasicOpenrConfig(nodeId);
-      config_ = std::make_shared<Config>(tConfig);
-      return std::make_shared<KvStoreWrapper>(context_, config_);
-    };
+      // create KvStoreConfig
+      thrift::KvStoreConfig kvStoreConfig;
+      kvStoreConfig.node_name_ref() = nodeId;
+      const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
-    auto makeThriftServerWrapper =
-        [this](std::string nodeId, std::shared_ptr<KvStoreWrapper> store) {
-          return std::make_shared<OpenrThriftServerWrapper>(
-              nodeId,
-              nullptr /* decision */,
-              nullptr /* fib */,
-              store->getKvStore() /* kvStore */,
-              nullptr /* linkMonitor */,
-              nullptr /* configStore */,
-              nullptr /* prefixManager */,
-              nullptr /* config */,
-              MonitorSubmitUrl{"inproc://monitor_submit"},
-              context_);
-        };
+      return std::make_shared<KvStoreWrapper>(context_, areaIds, kvStoreConfig);
+    };
 
     // spin up kvStore through kvStoreWrapper
     kvStoreWrapper1_ = makeStoreWrapper(nodeId1_);
@@ -62,66 +36,30 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 
     kvStoreWrapper1_->run();
     kvStoreWrapper2_->run();
-
-    // spin up OpenrThriftServerWrapper
-    thriftServer1_ = makeThriftServerWrapper(nodeId1_, kvStoreWrapper1_);
-    thriftServer2_ = makeThriftServerWrapper(nodeId2_, kvStoreWrapper2_);
-
-    thriftServer1_->run();
-    thriftServer2_->run();
   }
 
   void
   TearDown() override {
-    if (thriftServer1_) {
-      thriftServer1_->stop();
-      thriftServer1_.reset();
-    }
-    if (thriftServer2_) {
-      thriftServer2_->stop();
-      thriftServer2_.reset();
-    }
-
     // ATTN: kvStoreUpdatesQueue must be closed before destructing
     //       KvStoreClientInternal as fiber future is depending on RQueue
     kvStoreWrapper1_->stop();
     kvStoreWrapper1_.reset();
     kvStoreWrapper2_->stop();
     kvStoreWrapper2_.reset();
-
-    // ATTN: Destroy client before destroy evb. Otherwise, destructor will
-    //       FOREVER waiting fiber future to be fulfilled.
-    client1.reset();
-    client2.reset();
-
-    evb.stop();
-    evb.waitUntilStopped();
-    evbThread.join();
   }
 
   // var used to conmmunicate to kvStore through openrCtrl thrift server
   const std::string nodeId1_{"test_1"};
   const std::string nodeId2_{"test_2"};
-  const std::string localhost_{"::1"};
 
   fbzmq::Context context_{};
-  apache::thrift::CompactSerializer serializer;
-
-  OpenrEventBase evb;
-  std::thread evbThread;
-
-  std::shared_ptr<Config> config_{nullptr};
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_{nullptr},
-      kvStoreWrapper2_{nullptr};
-  std::shared_ptr<OpenrThriftServerWrapper> thriftServer1_{nullptr},
-      thriftServer2_{nullptr};
-  std::shared_ptr<KvStoreClientInternal> client1{nullptr}, client2{nullptr};
+  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_, kvStoreWrapper2_;
 };
 
 //
 // validate mergeKeyValues
 //
-TEST(KvStore, mergeKeyValuesTest) {
+TEST(KvStoreUtil, mergeKeyValuesTest) {
   std::unordered_map<std::string, thrift::Value> oldStore;
   std::unordered_map<std::string, thrift::Value> myStore;
   std::unordered_map<std::string, thrift::Value> newStore;
@@ -155,8 +93,8 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.version++;
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    (*newKvIt->second.version_ref())++;
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -165,8 +103,8 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.version--;
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    (*newKvIt->second.version_ref())--;
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -175,8 +113,8 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.originatorId = "node55";
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    *newKvIt->second.originatorId_ref() = "node55";
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -185,8 +123,8 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.originatorId = "node3";
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    *newKvIt->second.originatorId_ref() = "node3";
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -196,7 +134,7 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref() = "dummyValueTest";
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -206,7 +144,7 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref() = "dummy";
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -216,18 +154,20 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref().reset();
-    newKvIt->second.ttl = 123;
-    newKvIt->second.ttlVersion++;
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    newKvIt->second.ttl_ref() = 123;
+    (*newKvIt->second.ttlVersion_ref())++;
+    auto keyVals = mergeKeyValues(myStore, newStore);
     auto deltaKvIt = keyVals.find(key);
     // new ttl, ttlversion
-    EXPECT_EQ(myKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
-    EXPECT_EQ(myKvIt->second.ttl, newKvIt->second.ttl);
+    EXPECT_EQ(
+        *myKvIt->second.ttlVersion_ref(), *newKvIt->second.ttlVersion_ref());
+    EXPECT_EQ(*myKvIt->second.ttl_ref(), *newKvIt->second.ttl_ref());
     // old value tho
     EXPECT_EQ(myKvIt->second.value_ref(), oldKvIt->second.value_ref());
 
-    EXPECT_EQ(deltaKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
-    EXPECT_EQ(deltaKvIt->second.ttl, newKvIt->second.ttl);
+    EXPECT_EQ(
+        *deltaKvIt->second.ttlVersion_ref(), *newKvIt->second.ttlVersion_ref());
+    EXPECT_EQ(*deltaKvIt->second.ttl_ref(), *newKvIt->second.ttl_ref());
     EXPECT_EQ(deltaKvIt->second.value_ref().has_value(), false);
   }
 
@@ -236,9 +176,9 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.ttl = 123;
-    newKvIt->second.ttlVersion++;
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    newKvIt->second.ttl_ref() = 123;
+    (*newKvIt->second.ttlVersion_ref())++;
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
   }
@@ -248,8 +188,8 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value_ref() = "dummy";
-    newKvIt->second.ttlVersion++;
-    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    (*newKvIt->second.ttlVersion_ref())++;
+    auto keyVals = mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
   }
@@ -258,8 +198,8 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     std::unordered_map<std::string, thrift::Value> emptyStore;
     newKvIt->second = thriftValue;
-    newKvIt->second.ttl = -100;
-    auto keyVals = KvStore::mergeKeyValues(emptyStore, newStore);
+    newKvIt->second.ttl_ref() = -100;
+    auto keyVals = mergeKeyValues(emptyStore, newStore);
     EXPECT_EQ(keyVals.size(), 0);
     EXPECT_EQ(emptyStore.size(), 0);
   }
@@ -268,7 +208,7 @@ TEST(KvStore, mergeKeyValuesTest) {
 //
 // Test compareValues method
 //
-TEST(KvStore, compareValuesTest) {
+TEST(KvStoreUtil, compareValuesTest) {
   auto refValue = createThriftValue(
       5, /* version */
       "node5", /* node id */
@@ -282,27 +222,27 @@ TEST(KvStore, compareValuesTest) {
   // diff version
   v1 = refValue;
   v2 = refValue;
-  v1.version++;
+  (*v1.version_ref())++;
   {
-    int rc = KvStore::compareValues(v1, v2);
+    int rc = compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
   }
 
   // diff originatorId
   v1 = refValue;
   v2 = refValue;
-  v2.originatorId = "node6";
+  *v2.originatorId_ref() = "node6";
   {
-    int rc = KvStore::compareValues(v1, v2);
+    int rc = compareValues(v1, v2);
     EXPECT_EQ(rc, -1); // v2 is better
   }
 
   // diff ttlVersion
   v1 = refValue;
   v2 = refValue;
-  v1.ttlVersion++;
+  (*v1.ttlVersion_ref())++;
   {
-    int rc = KvStore::compareValues(v1, v2);
+    int rc = compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
   }
 
@@ -310,7 +250,7 @@ TEST(KvStore, compareValuesTest) {
   v1 = refValue;
   v2 = refValue;
   {
-    int rc = KvStore::compareValues(v1, v2);
+    int rc = compareValues(v1, v2);
     EXPECT_EQ(rc, 0); // same
   }
 
@@ -320,7 +260,7 @@ TEST(KvStore, compareValuesTest) {
   v1.value_ref() = "dummyValue1";
   v1.hash_ref() = 445566;
   {
-    int rc = KvStore::compareValues(v1, v2);
+    int rc = compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
   }
 
@@ -330,7 +270,7 @@ TEST(KvStore, compareValuesTest) {
   v1.value_ref() = "dummyValue1";
   v2.hash_ref().reset();
   {
-    int rc = KvStore::compareValues(v1, v2);
+    int rc = compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
   }
 
@@ -340,7 +280,7 @@ TEST(KvStore, compareValuesTest) {
   v1.value_ref().reset();
   v1.hash_ref().reset();
   {
-    int rc = KvStore::compareValues(v1, v2);
+    int rc = compareValues(v1, v2);
     EXPECT_EQ(rc, -2); // unknown
   }
 }
@@ -351,83 +291,119 @@ TEST(KvStore, compareValuesTest) {
 TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
-  const std::string prefix = "";
-  const uint16_t port1 = thriftServer1_->getOpenrCtrlThriftPort();
-  const uint16_t port2 = thriftServer2_->getOpenrCtrlThriftPort();
+  const std::string val1{"test_value1"};
+  const std::string val2{"test_value2"};
+  const uint16_t port1 = kvStoreWrapper1_->getThriftPort();
+  const uint16_t port2 = kvStoreWrapper2_->getThriftPort();
 
   std::vector<folly::SocketAddress> sockAddrs;
-  sockAddrs.push_back(folly::SocketAddress{localhost_, port1});
-  sockAddrs.push_back(folly::SocketAddress{localhost_, port2});
+  sockAddrs.emplace_back(
+      folly::SocketAddress{Constants::kPlatformHost.toString(), port1});
+  sockAddrs.emplace_back(
+      folly::SocketAddress{Constants::kPlatformHost.toString(), port2});
 
-  // Step1: verify there is NOTHING inside kvStore instances
-  auto preDb = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-  EXPECT_TRUE(preDb.first.has_value());
-  EXPECT_TRUE(preDb.first.value().empty());
-  EXPECT_TRUE(preDb.second.empty());
-
-  evb.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
-    // Step2: initilize kvStoreClient connecting to different thriftServers
-    client1 = std::make_shared<KvStoreClientInternal>(
-        &evb, nodeId1_, kvStoreWrapper1_->getKvStore());
-    client2 = std::make_shared<KvStoreClientInternal>(
-        &evb, nodeId2_, kvStoreWrapper2_->getKvStore());
-    EXPECT_TRUE(nullptr != client1);
-    EXPECT_TRUE(nullptr != client2);
-
-    // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
-    thrift::Value value;
-    value.version = 1;
-    {
-      value.value_ref() = "test_value1";
-      EXPECT_TRUE(client1->setKey(
-          key1, fbzmq::util::writeThriftObjStr(value, serializer), 100));
-    }
-    {
-      value.value_ref() = "test_value2";
-      EXPECT_TRUE(client2->setKey(
-          key2, fbzmq::util::writeThriftObjStr(value, serializer), 200));
-    }
-  });
-
-  // Step4: verify we can fetch 2 keys from different servers as aggregation
-  // result
+  // Step1: insert (k1, v1) and (k2, v2) to different KvStore instances
   {
-    auto postDb = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-    ASSERT_TRUE(postDb.first.has_value());
-    auto pub = postDb.first.value();
+    thrift::Value tVal1 = createThriftValue(1, nodeId1_, val1);
+    EXPECT_TRUE(kvStoreWrapper1_->setKey(kTestingAreaName, key1, tVal1));
+
+    thrift::Value tVal2 = createThriftValue(1, nodeId2_, val2);
+    EXPECT_TRUE(kvStoreWrapper2_->setKey(kTestingAreaName, key2, tVal2));
+  }
+
+  // Step2: verify fetch + aggregate 2 keys from different kvStores with prefix
+  {
+    const auto [db, _] =
+        dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, "");
+    ASSERT_TRUE(db.has_value());
+    auto pub = db.value();
     EXPECT_TRUE(pub.size() == 2);
     EXPECT_TRUE(pub.count(key1));
     EXPECT_TRUE(pub.count(key2));
   }
 
-  // Step5: verify dumpAllWithPrefixMultipleAndParse API
-  {
-    auto maybe =
-        dumpAllWithPrefixMultipleAndParse<thrift::Value>(sockAddrs, "test_");
-    ASSERT_TRUE(maybe.first.has_value());
-    auto pub = maybe.first.value();
-    EXPECT_EQ(2, pub.size());
-    EXPECT_EQ("test_value1", pub[key1].value_ref());
-    EXPECT_EQ("test_value2", pub[key2].value_ref());
-  }
-
-  // Step6: shutdown both thriftSevers and verify
+  // Step3: shutdown thriftSevers and verify
   // dumpAllWithThriftClientFromMultiple() will get nothing.
   {
     // ATTN: kvStoreUpdatesQueue must be closed before destructing
     //       KvStoreClientInternal as fiber future is depending on RQueue
     kvStoreWrapper1_->closeQueue();
     kvStoreWrapper2_->closeQueue();
+    kvStoreWrapper1_->stopThriftServer();
+    kvStoreWrapper2_->stopThriftServer();
 
-    thriftServer1_->stop();
-    thriftServer1_.reset();
-    thriftServer2_->stop();
-    thriftServer2_.reset();
-
-    auto db = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-    ASSERT_TRUE(db.first.has_value());
-    ASSERT_TRUE(db.first.value().empty());
+    const auto [db, _] =
+        dumpAllWithThriftClientFromMultiple(kTestingAreaName, sockAddrs, "");
+    ASSERT_TRUE(db.has_value());
+    ASSERT_TRUE(db.value().empty());
   }
+}
+
+//
+// Test KvStoreFilters APIs
+//
+TEST(KvStoreUtil, KvStoreFiltersTest) {
+  // Nodes and keys that are in the matching list
+  const std::string node1{"node1"};
+  const std::string node2{"node2"};
+
+  const std::string node1_key1{fmt::format("prefix:{}:key1", node1)};
+  const auto node1_val1 = createThriftValue(
+      1, /* version */
+      node1, /* node id */
+      "dummyValue1");
+
+  const std::string node1_key2{fmt::format("prefix:{}:key2", node1)};
+  const auto node1_val2 = createThriftValue(
+      2, /* version */
+      node1, /* node id */
+      "dummyValue2");
+
+  const std::string node2_key1{fmt::format("prefix:{}:key1", node2)};
+  const auto node2_val1 = createThriftValue(
+      3, /* version */
+      node2, /* node id */
+      "dummyValue1");
+
+  // Only match the prefix from node1 and node2
+  std::vector<std::string> keys = {
+      fmt::format("prefix:{}:", node1), fmt::format("prefix:{}:", node2)};
+  std::set<std::string> nodes = {node1, node2};
+
+  // Node and key that are not in the matching list
+  const std::string node3{"node3"};
+  std::string node3_key1{fmt::format("prefix:{}:key1", node3)};
+  auto node3_val1 = createThriftValue(
+      1, /* version */
+      node3, /* node id */
+      "dummyValue1");
+
+  // 1. Test OR logic filter - keyMatchAny()
+  auto orFilter = KvStoreFilters(keys, nodes, thrift::FilterOperator::OR);
+  // Match key only
+  ASSERT_TRUE(orFilter.keyMatch(node1_key1, node3_val1));
+  ASSERT_TRUE(orFilter.keyMatch(node2_key1, node3_val1));
+  // Match node only
+  ASSERT_TRUE(orFilter.keyMatch(node3_key1, node1_val1));
+  ASSERT_TRUE(orFilter.keyMatch(node3_key1, node2_val1));
+  // Match both
+  ASSERT_TRUE(orFilter.keyMatch(node1_key1, node1_val2));
+  ASSERT_TRUE(orFilter.keyMatch(node1_key2, node1_val2));
+  ASSERT_TRUE(orFilter.keyMatch(node1_key2, node1_val1));
+  // No match
+  ASSERT_FALSE(orFilter.keyMatch(node3_key1, node3_val1));
+
+  // 2. Test AND logic filter - keyMatchAll()
+  auto andFilter = KvStoreFilters(keys, nodes, thrift::FilterOperator::AND);
+  // Return true if match all attributes
+  ASSERT_TRUE(andFilter.keyMatch(node1_key1, node1_val1));
+  ASSERT_TRUE(andFilter.keyMatch(node1_key1, node1_val2));
+  ASSERT_TRUE(andFilter.keyMatch(node1_key2, node1_val2));
+  ASSERT_TRUE(andFilter.keyMatch(node1_key2, node1_val1));
+  // Return false if either one doesn't match
+  ASSERT_FALSE(andFilter.keyMatch(node1_key1, node3_val1)); // Match key only
+  ASSERT_FALSE(andFilter.keyMatch(node3_key1, node1_val1)); // Match node only
+  ASSERT_FALSE(andFilter.keyMatch(node3_key1, node3_val1)); // No match
 }
 
 int
@@ -436,10 +412,8 @@ main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   folly::init(&argc, &argv);
-  google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   // Run the tests
-  auto rc = RUN_ALL_TESTS();
-
-  return rc;
+  return RUN_ALL_TESTS();
 }

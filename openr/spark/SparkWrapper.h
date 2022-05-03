@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,43 +8,12 @@
 #pragma once
 
 #include <openr/common/Constants.h>
+#include <openr/common/Types.h>
+#include <openr/config/Config.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/Spark.h>
 
 namespace openr {
-
-struct SparkInterfaceEntry {
-  std::string ifName;
-  int ifIndex;
-  folly::CIDRNetwork v4Network;
-  folly::CIDRNetwork v6LinkLocalNetwork;
-};
-
-struct SparkTimeConfig {
-  SparkTimeConfig(
-      std::chrono::milliseconds helloTime = std::chrono::milliseconds{0},
-      std::chrono::milliseconds helloFastInitTime =
-          std::chrono::milliseconds{0},
-      std::chrono::milliseconds handshakeTime = std::chrono::milliseconds{0},
-      std::chrono::milliseconds heartbeatTime = std::chrono::milliseconds{0},
-      std::chrono::milliseconds negotiateHoldTime =
-          std::chrono::milliseconds{0},
-      std::chrono::milliseconds heartbeatHoldTime =
-          std::chrono::milliseconds{0})
-      : myHelloTime(helloTime),
-        myHelloFastInitTime(helloFastInitTime),
-        myHandshakeTime(handshakeTime),
-        myHeartbeatTime(heartbeatTime),
-        myNegotiateHoldTime(negotiateHoldTime),
-        myHeartbeatHoldTime(heartbeatHoldTime) {}
-
-  std::chrono::milliseconds myHelloTime;
-  std::chrono::milliseconds myHelloFastInitTime;
-  std::chrono::milliseconds myHandshakeTime;
-  std::chrono::milliseconds myHeartbeatTime;
-  std::chrono::milliseconds myNegotiateHoldTime;
-  std::chrono::milliseconds myHeartbeatHoldTime;
-};
 
 /**
  * A utility class to wrap and interact with Spark. It exposes the APIs to
@@ -57,18 +26,11 @@ struct SparkTimeConfig {
 class SparkWrapper {
  public:
   SparkWrapper(
-      std::string const& myDomainName,
       std::string const& myNodeName,
-      std::chrono::milliseconds myHoldTime,
-      std::chrono::milliseconds myKeepAliveTime,
-      std::chrono::milliseconds myFastInitKeepAliveTime,
-      bool enableV4,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
-      std::shared_ptr<thrift::OpenrConfig> config,
-      bool enableSpark2,
-      bool increaseHelloInterval,
-      SparkTimeConfig timeConfig);
+      std::shared_ptr<const Config> config,
+      bool isRateLimitEnabled = true);
 
   ~SparkWrapper();
 
@@ -78,44 +40,63 @@ class SparkWrapper {
   // stop spark
   void stop();
 
+  // get spark instance
+  std::shared_ptr<Spark>
+  get() {
+    return spark_;
+  }
+
   // add interfaceDb for Spark to tracking
-  // return true upon success and false otherwise
-  bool updateInterfaceDb(
-      const std::vector<SparkInterfaceEntry>& interfaceEntries);
+  void updateInterfaceDb(const InterfaceDatabase& ifDb);
+
+  // send ADJ_DB_SYNC signal to Spark
+  void sendPrefixDbSyncedSignal();
 
   // receive spark neighbor event
-  folly::Expected<thrift::SparkNeighborEvent, fbzmq::Error> recvNeighborEvent(
+  std::optional<NeighborEvents> recvNeighborEvent(
       std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
-  std::optional<thrift::SparkNeighborEvent> waitForEvent(
-      const thrift::SparkNeighborEventType eventType,
+  std::optional<NeighborEvents> waitForEvents(
+      const NeighborEventType neighborEventType,
       std::optional<std::chrono::milliseconds> rcvdTimeout = std::nullopt,
       std::optional<std::chrono::milliseconds> procTimeout =
           Constants::kPlatformRoutesProcTimeout) noexcept;
 
   // utility call to check neighbor state
-  std::optional<SparkNeighState> getSparkNeighState(
+  std::optional<thrift::SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
-      const thrift::SparkNeighborEvent& event);
+      const NeighborEvent& event);
 
-  // utility function to construct thrift::AreaConfig
-  static thrift::AreaConfig createAreaConfig(
-      const std::string& areaId,
-      const std::vector<std::string>& nodeRegexes,
-      const std::vector<std::string>& interfaceRegexes);
+  // utility function to construct thrift::AreaConfig.SparkConfigs
+  const openr::thrift::SparkConfig
+  getSparkConfig() {
+    return config_->getSparkConfig();
+  }
+
+  /* Forwarded to the underlying Spark processPacket()
+   * For test purposes, e.g. to manually invoke packet handling
+   * inline on the same thread - bypassing the event-base - as is needed
+   * for fuzzing.
+   */
+  void processPacket();
 
  private:
   std::string myNodeName_{""};
+  std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor
-  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
-  messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesReader_{
+  messaging::ReplicateQueue<NeighborEvents> neighborUpdatesQueue_;
+  messaging::RQueue<NeighborEvents> neighborUpdatesReader_{
       neighborUpdatesQueue_.getReader()};
 
   // Queue to receive interface update from LinkMonitor
-  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
+
+  // Queue to receive interface update from PrefixManager
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      initializationEventQueue_;
 
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};

@@ -1,13 +1,11 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 #pragma once
-
-#include <vector>
 
 #include <folly/IPAddress.h>
 #include <folly/futures/Future.h>
@@ -17,14 +15,19 @@
 #include <folly/io/async/NotificationQueue.h>
 
 #include <openr/messaging/ReplicateQueue.h>
-#include <openr/nl/NetlinkMessage.h>
-#include <openr/nl/NetlinkRoute.h>
+#include <openr/nl/NetlinkAddrMessage.h>
+#include <openr/nl/NetlinkLinkMessage.h>
+#include <openr/nl/NetlinkMessageBase.h>
+#include <openr/nl/NetlinkNeighborMessage.h>
+#include <openr/nl/NetlinkRouteMessage.h>
+#include <openr/nl/NetlinkRuleMessage.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr::fbnl {
 
-// Netlink event as union of LINK/ADDR/NEIGH event
-using NetlinkEvent = std::variant<fbnl::Link, fbnl::IfAddress, fbnl::Neighbor>;
+// Netlink event as union of LINK/ADDR/NEIGH/RULE event
+using NetlinkEvent =
+    std::variant<fbnl::Link, fbnl::IfAddress, fbnl::Neighbor, fbnl::Rule>;
 
 // Receive socket buffer for netlink socket
 constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
@@ -102,16 +105,6 @@ class NetlinkProtocolSocket : public folly::EventHandler {
 
   virtual ~NetlinkProtocolSocket();
 
-  // Set netlinkSocket Link event callback
-  void setLinkEventCB(std::function<void(fbnl::Link, bool)> linkEventCB);
-
-  // Set netlinkSocket Addr event callback
-  void setAddrEventCB(std::function<void(fbnl::IfAddress, bool)> addrEventCB);
-
-  // Set netlinkSocket Addr event callback
-  void setNeighborEventCB(
-      std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
-
   /**
    * Add or replace route. An existing paths of route will be replaced with
    * new paths. Supports AF_INET, AF_INET6 and AF_MPLS address families.
@@ -159,6 +152,34 @@ class NetlinkProtocolSocket : public folly::EventHandler {
       const openr::fbnl::IfAddress& ifAddr);
 
   /**
+   * Add a network interface
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> addLink(const openr::fbnl::Link& link);
+
+  /**
+   * Delete a network interface
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> deleteLink(const openr::fbnl::Link& link);
+
+  /**
+   * Add a rule
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> addRule(const openr::fbnl::Rule& rule);
+
+  /**
+   * Delete a rule
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  virtual folly::SemiFuture<int> deleteRule(const openr::fbnl::Rule& rule);
+
+  /**
    * API to get interfaces from kernel
    */
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
@@ -175,6 +196,12 @@ class NetlinkProtocolSocket : public folly::EventHandler {
    */
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
   getAllNeighbors();
+
+  /**
+   * API to get rules from kernel
+   */
+  virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Rule>, int>>
+  getAllRules();
 
   /**
    * API to retrieve routes from kernel. Attributes specified in filter will be
@@ -202,23 +229,17 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   getMplsRoutes(uint8_t protocolId);
 
   /**
-   * Utility function to accumulate result of multiple requests into one. The
-   * result will be 0 if all the futures are successful else it will contains
-   * the first non-zero value (aka error code), in given sequence.
+   * Utility function to accumulate result of multiple requests into one.
+   * It will throw the exception with the first non-zero value(aka error code),
+   * in given sequence.
    */
-  static folly::SemiFuture<int> collectReturnStatus(
+  static folly::SemiFuture<folly::Unit> collectReturnStatus(
       std::vector<folly::SemiFuture<int>>&& futures,
       std::unordered_set<int> ignoredErrors = {});
 
  protected:
   // Initialize netlink socket and add to eventloop for polling
   virtual void init();
-
-  // TODO: Avoid callback and use queue for notifications
-  // Event callbacks
-  std::function<void(fbnl::Link, bool)> linkEventCB_;
-  std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
-  std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
 
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
@@ -247,14 +268,14 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // ensure thread safety of private member variables.
   folly::EventBase* evb_{nullptr};
 
-  // Queue to publish LINK/ADDR/NEIGHBOR update received from kernel
+  // Queue to publish LINK/ADDR/NEIGHBOR/RULE update received from kernel
   messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQueue_;
 
   // Notification queue for thread safe enqueuing of messages from external
   // threads. All the messages enqueued are processed by the event thread.
-  folly::NotificationQueue<std::unique_ptr<NetlinkMessage>> notifQueue_;
+  folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>> notifQueue_;
   std::unique_ptr<
-      folly::NotificationQueue<std::unique_ptr<NetlinkMessage>>::Consumer,
+      folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>>::Consumer,
       folly::DelayedDestruction::Destructor>
       notifConsumer_;
 
@@ -286,17 +307,19 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   //    value of nlh->nlmsg_seq will set to 0.
   uint32_t nextNlSeqNum_{1};
 
-  // Netlink message queue. Every add/del/get call for route/addr/neighbor/link
-  // translates into one or more NetlinkMessages. These messages are first
-  // stored in the queue and sent to kernel in rate limiting fashion. When ack
-  // for in-flight messages is received, subsequent messages are sent.
-  std::queue<std::unique_ptr<NetlinkMessage>> msgQueue_;
+  // Netlink message queue. Every add/del/get call for
+  // route/addr/neighbor/link/rule translates into one or more NetlinkMessages.
+  // These messages are first stored in the queue and sent to kernel in rate
+  // limiting fashion. When ack for in-flight messages is received, subsequent
+  // messages are sent.
+  std::queue<std::unique_ptr<NetlinkMessageBase>> msgQueue_;
 
   // Sequence number to NetlinkMesage request mapping. Each in-flight message
   // sent to kernel, is assigned a unique sequence-number and stored in this
   // map. On receipt of ack from kernel (either success or error) we clear the
   // corresponding entry from this map.
-  std::unordered_map<uint32_t, std::shared_ptr<NetlinkMessage>> nlSeqNumMap_;
+  std::unordered_map<uint32_t, std::shared_ptr<NetlinkMessageBase>>
+      nlSeqNumMap_;
 
   // Timer to help keep track of timeout of messages sent to kernel. It also
   // ensures the aliveness of the netlink socket-fd. Timer is

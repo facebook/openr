@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import copy
+import curses
 import datetime
 import ipaddress
 import json
@@ -16,24 +14,46 @@ import re
 import sys
 from builtins import chr, input, map
 from collections import defaultdict
-from functools import partial
+from functools import lru_cache, partial
+from io import TextIOBase
 from itertools import product
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+    Callable,
+    Sequence,
+)
 
 import bunch
 import click
-from openr.AllocPrefix import ttypes as alloc_types
-from openr.Fib import ttypes as fib_types
+from openr.clients.openr_client import get_openr_ctrl_client
 from openr.KvStore import ttypes as kv_store_types
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
-from openr.OpenrCtrl import OpenrCtrl
+from openr.OpenrConfig import ttypes as config_types
+from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Platform import FibService, ttypes as platform_types
+from openr.thrift.Network import types as network_types_py3
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object
-from thrift.protocol import TBinaryProtocol
-from thrift.transport import TSocket, TTransport
+from openr.utils.serializer import deserialize_thrift_object, object_to_dict
+from thrift.protocol import THeaderProtocol
+from thrift.transport import TSocket, THeaderTransport
+
+
+PrintAdvertisedTypes = Union[
+    ctrl_types.AdvertisedRoute,
+    ctrl_types.ReceivedRoute,
+    ctrl_types.NodeAndArea,
+    int,
+    network_types.PrefixType,
+]
 
 
 def yesno(question, skip_confirm=False):
@@ -129,8 +149,8 @@ def get_fib_agent_client(
     """
     transport = TSocket.TSocket(host, port)
     transport.setTimeout(timeout_ms)
-    transport = TTransport.TFramedTransport(transport)
-    protocol = TBinaryProtocol.TBinaryProtocol(transport)
+    transport = THeaderTransport.THeaderTransport(transport)
+    protocol = THeaderProtocol.THeaderProtocol(transport)
     client = service.Client(protocol)
     client.host = host  # Assign so that we can refer later on
     client.port = port  # Assign so that we can refer later on
@@ -140,9 +160,9 @@ def get_fib_agent_client(
 
 
 def parse_nodes(cli_opts, nodes):
-    """ parse nodes from user input
+    """parse nodes from user input
 
-        :return set: the set of nodes
+    :return set: the set of nodes
     """
 
     if not nodes:
@@ -154,13 +174,13 @@ def parse_nodes(cli_opts, nodes):
 
 
 def sprint_prefixes_db_full(prefix_db, loopback_only=False):
-    """ given serialized prefixes output an array of lines
-            representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
+    """given serialized prefixes output an array of lines
+        representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
 
-        :prefix_db lsdb_types.PrefixDatabase: prefix database
-        :loopback_only : is only loopback address expected
+    :prefix_db openr_types.PrefixDatabase: prefix database
+    :loopback_only : is only loopback address expected
 
-        :return [str]: the array of prefix strings
+    :return [str]: the array of prefix strings
     """
 
     prefix_strs = []
@@ -212,9 +232,9 @@ def alloc_prefix_to_loopback_ip_str(prefix):
 
 
 def parse_prefix_database(
-    prefix_filter: str,
-    client_type_filter: str,
-    prefix_dbs: Dict[str, lsdb_types.PrefixDatabase],
+    prefix_filter: Optional[Union[network_types.IpPrefix, str]],
+    client_type_filter: Optional[Union[network_types.PrefixType, str]],
+    prefix_dbs: Dict[str, openr_types.PrefixDatabase],
     prefix_db: Any,
 ):
     """
@@ -223,15 +243,20 @@ def parse_prefix_database(
     """
     if client_type_filter:
         _TYPES = network_types.PrefixType._NAMES_TO_VALUES
-        client_type_filter = _TYPES.get(client_type_filter.upper(), None)
-        if client_type_filter is None:
-            raise Exception(f"Unknown client type. Use one of {list(_TYPES.keys())}")
+        if isinstance(client_type_filter, str):
+            client_type_filter = _TYPES.get(client_type_filter.upper(), None)
+            if client_type_filter is None:
+                raise Exception(
+                    f"Unknown client type. Use one of {list(_TYPES.keys())}"
+                )
+
     if prefix_filter:
-        prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
+        if isinstance(prefix_filter, str):
+            prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
 
     if isinstance(prefix_db, kv_store_types.Value):
         prefix_db = deserialize_thrift_object(
-            prefix_db.value, lsdb_types.PrefixDatabase
+            prefix_db.value, openr_types.PrefixDatabase
         )
 
     if prefix_db.deletePrefix:
@@ -240,7 +265,7 @@ def parse_prefix_database(
         return
 
     if prefix_db.thisNodeName not in prefix_dbs:
-        prefix_dbs[prefix_db.thisNodeName] = lsdb_types.PrefixDatabase(
+        prefix_dbs[prefix_db.thisNodeName] = openr_types.PrefixDatabase(
             f"{prefix_db.thisNodeName}", []
         )
 
@@ -253,7 +278,7 @@ def parse_prefix_database(
 
 
 def print_prefixes_table(resp, nodes, prefix, client_type, iter_func):
-    """ print prefixes """
+    """print prefixes"""
 
     rows = []
     prefix_maps = {}
@@ -266,13 +291,13 @@ def print_prefixes_table(resp, nodes, prefix, client_type, iter_func):
 
 
 def thrift_to_dict(thrift_inst, update_func=None):
-    """ convert thrift instance into a dict in strings
+    """convert thrift instance into a dict in strings
 
-        :param thrift_inst: a thrift instance
-        :param update_func: transformation function to update dict value of
-                            thrift object. It is optional.
+    :param thrift_inst: a thrift instance
+    :param update_func: transformation function to update dict value of
+                        thrift object. It is optional.
 
-        :return dict: dict with attributes as key, value in strings
+    :return dict: dict with attributes as key, value in strings
     """
 
     if thrift_inst is None:
@@ -296,9 +321,9 @@ def metric_vector_to_dict(metric_vector):
 
 def collate_prefix_keys(
     kvstore_keyvals: kv_store_types.KeyVals,
-) -> Dict[str, lsdb_types.PrefixDatabase]:
-    """ collate all the prefixes of node and return a map of
-        nodename - PrefixDatabase
+) -> Dict[str, openr_types.PrefixDatabase]:
+    """collate all the prefixes of node and return a map of
+    nodename - PrefixDatabase
     """
 
     prefix_maps = {}
@@ -307,10 +332,12 @@ def collate_prefix_keys(
 
             node_name = key.split(":")[1]
             prefix_db = deserialize_thrift_object(
-                value.value, lsdb_types.PrefixDatabase
+                value.value, openr_types.PrefixDatabase
             )
+            if prefix_db.deletePrefix:
+                continue
             if node_name not in prefix_maps:
-                prefix_maps[node_name] = lsdb_types.PrefixDatabase(f"{node_name}", [])
+                prefix_maps[node_name] = openr_types.PrefixDatabase(f"{node_name}", [])
 
             for prefix_entry in prefix_db.prefixEntries:
                 prefix_maps[node_name].prefixEntries.append(prefix_entry)
@@ -319,7 +346,7 @@ def collate_prefix_keys(
 
 
 def prefix_entry_to_dict(prefix_entry):
-    """ convert prefixEntry from thrift instance into a dict in strings """
+    """convert prefixEntry from thrift instance into a dict in strings"""
 
     def _update(prefix_entry_dict, prefix_entry):
         # prefix and data need string conversion and metric_vector can be
@@ -342,11 +369,11 @@ def prefix_entry_to_dict(prefix_entry):
 
 
 def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
-    """ convert PrefixDatabase from thrift instance to a dictionary """
+    """convert PrefixDatabase from thrift instance to a dictionary"""
 
     if isinstance(prefix_db, kv_store_types.Value):
         prefix_db = deserialize_thrift_object(
-            prefix_db.value, lsdb_types.PrefixDatabase
+            prefix_db.value, openr_types.PrefixDatabase
         )
 
     def _update(prefix_db_dict, prefix_db):
@@ -358,7 +385,7 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
 
 
 def print_prefixes_json(resp, nodes, prefix, client_type, iter_func):
-    """ print prefixes in json """
+    """print prefixes in json"""
 
     prefixes_map = {}
     iter_func(
@@ -370,28 +397,28 @@ def print_prefixes_json(resp, nodes, prefix, client_type, iter_func):
 
 
 def update_global_adj_db(global_adj_db, adj_db):
-    """ update the global adj map based on publication from single node
+    """update the global adj map based on publication from single node
 
-        :param global_adj_map map(node, AdjacencyDatabase)
-            the map for all adjacencies in the network - to be updated
-        :param adj_db lsdb_types.AdjacencyDatabase: publication from single
-            node
+    :param global_adj_map map(node, AdjacencyDatabase)
+        the map for all adjacencies in the network - to be updated
+    :param adj_db openr_types.AdjacencyDatabase: publication from single
+        node
     """
 
-    assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
+    assert isinstance(adj_db, openr_types.AdjacencyDatabase)
 
     global_adj_db[adj_db.thisNodeName] = adj_db
 
 
 def build_global_adj_db(resp):
-    """ build a map of all adjacencies in the network. this is used
-        for bi-directional validation
+    """build a map of all adjacencies in the network. this is used
+    for bi-directional validation
 
-        :param resp kv_store_types.Publication: the parsed publication
+    :param resp kv_store_types.Publication: the parsed publication
 
-        :return map(node, AdjacencyDatabase): the global
-            adj map, devices name mapped to devices it connects to, and
-            properties of that connection
+    :return map(node, AdjacencyDatabase): the global
+        adj map, devices name mapped to devices it connects to, and
+        properties of that connection
     """
 
     # map: (node) -> AdjacencyDatabase)
@@ -400,20 +427,20 @@ def build_global_adj_db(resp):
     for (key, value) in resp.keyVals.items():
         if not key.startswith(Consts.ADJ_DB_MARKER):
             continue
-        adj_db = deserialize_thrift_object(value.value, lsdb_types.AdjacencyDatabase)
+        adj_db = deserialize_thrift_object(value.value, openr_types.AdjacencyDatabase)
         update_global_adj_db(global_adj_db, adj_db)
 
     return global_adj_db
 
 
 def build_global_prefix_db(resp):
-    """ build a map of all prefixes in the network. this is used
-        for checking for changes in topology
+    """build a map of all prefixes in the network. this is used
+    for checking for changes in topology
 
-        :param resp kv_store_types.Publication: the parsed publication
+    :param resp kv_store_types.Publication: the parsed publication
 
-        :return map(node, set([prefix])): the global prefix map,
-            prefixes mapped to the node
+    :return map(node, set([prefix])): the global prefix map,
+        prefixes mapped to the node
     """
 
     # map: (node) -> set([prefix])
@@ -427,19 +454,19 @@ def build_global_prefix_db(resp):
 
 
 def dump_adj_db_full(global_adj_db, adj_db, bidir):
-    """ given an adjacency database, dump neighbors. Use the
-            global adj database to validate bi-dir adjacencies
+    """given an adjacency database, dump neighbors. Use the
+        global adj database to validate bi-dir adjacencies
 
-        :param global_adj_db map(str, AdjacencyDatabase):
-            map of node names to their adjacent node names
-        :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
-        :param bidir bool: only dump bidir adjacencies
+    :param global_adj_db map(str, AdjacencyDatabase):
+        map of node names to their adjacent node names
+    :param adj_db openr_types.AdjacencyDatabase: latest from kv store
+    :param bidir bool: only dump bidir adjacencies
 
-        :return (nodeLabel, [adjacencies]): tuple of node label and list
-            of adjacencies
+    :return (nodeLabel, [adjacencies]): tuple of node label and list
+        of adjacencies
     """
 
-    assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
+    assert isinstance(adj_db, openr_types.AdjacencyDatabase)
     this_node_name = adj_db.thisNodeName
     area = adj_db.area if adj_db.area is not None else "N/A"
 
@@ -462,23 +489,8 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
     return (adj_db.nodeLabel, adj_db.isOverloaded, adjacencies, area)
 
 
-def adj_to_dict(adj):
-    """ convert adjacency from thrift instance into a dict in strings """
-
-    def _update(adj_dict, adj):
-        # Only addrs need string conversion so we udpate them
-        adj_dict.update(
-            {
-                "nextHopV6": ipnetwork.sprint_addr(adj.nextHopV6.addr),
-                "nextHopV4": ipnetwork.sprint_addr(adj.nextHopV4.addr),
-            }
-        )
-
-    return thrift_to_dict(adj, _update)
-
-
 def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
-    """ convert adj db to dict """
+    """convert adj db to dict"""
 
     node_label, is_overloaded, adjacencies, area = dump_adj_db_full(
         adj_dbs, adj_db, bidir
@@ -486,6 +498,21 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
 
     if not adjacencies:
         return
+
+    def adj_to_dict(adj):
+        """convert adjacency from thrift instance into a dict in strings"""
+
+        def _update(adj_dict, adj):
+            # Only addrs need string conversion so we udpate them
+            adj_dict.update(
+                {
+                    "nextHopV6": ipnetwork.sprint_addr(adj.nextHopV6.addr),
+                    "nextHopV4": ipnetwork.sprint_addr(adj.nextHopV4.addr),
+                    "area": area,
+                }
+            )
+
+        return thrift_to_dict(adj, _update)
 
     adjacencies = list(map(adj_to_dict, adjacencies))
 
@@ -501,14 +528,14 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
 
 
 def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
-    """ get parsed adjacency db
+    """get parsed adjacency db
 
-        :param resp kv_store_types.Publication, or decision_types.adjDbs
-        :param nodes set: the set of the nodes to print prefixes for
-        :param bidir bool: only dump bidirectional adjacencies
+    :param resp kv_store_types.Publication, or decision_types.adjDbs
+    :param nodes set: the set of the nodes to print prefixes for
+    :param bidir bool: only dump bidirectional adjacencies
 
-        :return map(node, map(adjacency_keys, (adjacency_values)): the parsed
-            adjacency DB in a map with keys and values in strings
+    :return map(node, map(adjacency_keys, (adjacency_values)): the parsed
+        adjacency DB in a map with keys and values in strings
     """
     adj_dbs = resp
     if isinstance(adj_dbs, kv_store_types.Publication):
@@ -519,7 +546,7 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
         if isinstance(adj_db, kv_store_types.Value):
             version = adj_db.version
             adj_db = deserialize_thrift_object(
-                adj_db.value, lsdb_types.AdjacencyDatabase
+                adj_db.value, openr_types.AdjacencyDatabase
             )
         adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version)
 
@@ -528,10 +555,56 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
     return adjs_map
 
 
-def print_json(map, file=sys.stdout):
+def adj_dbs_to_area_dict(
+    resp: List[openr_types.AdjacencyDatabase],
+    nodes: Set[str],
+    bidir: bool,
+):
+    """get parsed adjacency db for all areas as a two level mapping:
+    {area: {node: adjDb}}
+
+    :param resp: resp from server of type decision_types.adjDbs
+    :param nodes set: the set of the nodes to print prefixes for
+    :param bidir bool: only dump bidirectional adjacencies
+
+    :return map(area, map(node, map(adjacency_keys, (adjacency_values))):
+        the parsed adjacency DB in a map with keys and values in strings
+    """
+    adj_dbs = resp
+    version = None
+
+    adj_dbs_dict_all_areas = {}
+
+    # run through the adjDb List, and create a two level dict:
+    # {area: {node: adjDb}}
+    for db in adj_dbs:
+        if db.area not in adj_dbs_dict_all_areas:
+            adj_dbs_dict_all_areas[db.area] = {}
+        adj_dbs_dict_all_areas[db.area][db.thisNodeName] = db
+
+    # run through each area, filter on node, and run each
+    # per-node adjDb through adj_db_to_dict()
+    for area, adj_dbs_dict_per_area in sorted(adj_dbs_dict_all_areas.items()):
+        adjs_map = {}
+        for node, adj_db_per_node in sorted(adj_dbs_dict_per_area.items()):
+            if "all" not in nodes and node not in nodes:
+                continue
+            adj_db_to_dict(
+                adjs_map, adj_dbs_dict_per_area, adj_db_per_node, bidir, version
+            )
+        adj_dbs_dict_all_areas[area] = adjs_map
+
+    # return the two level dict back
+    return adj_dbs_dict_all_areas
+
+
+def print_json(map: Dict, file: Optional[TextIOBase] = None) -> None:
     """
     Print object in json format. Use this function for consistent json style
     formatting for output. Further it prints to `stdout` stream.
+    - file: Defaults to none which is sys.stdout - None causes a runtime
+            evauluation to find the current sys.stdout rather than a import
+            time evaluation. Handy for unittests where stdout is mocked.
 
     @map: object that needs to be printed in json
     """
@@ -540,9 +613,9 @@ def print_json(map, file=sys.stdout):
 
 
 def print_adjs_table(adjs_map, neigh=None, interface=None):
-    """ print adjacencies
+    """print adjacencies
 
-        :param adjacencies as list of dict
+    :param adjacencies as list of dict
     """
 
     column_labels = [
@@ -550,7 +623,6 @@ def print_adjs_table(adjs_map, neigh=None, interface=None):
         "Local Intf",
         "Remote Intf",
         "Metric",
-        "Label",
         "NextHop-v4",
         "NextHop-v6",
         "Uptime",
@@ -609,7 +681,6 @@ def print_adjs_table(adjs_map, neigh=None, interface=None):
                     adj["ifName"],
                     adj["otherIfName"],
                     metric,
-                    adj["adjLabel"],
                     adj["nextHopV4"],
                     adj["nextHopV6"],
                     uptime,
@@ -630,18 +701,18 @@ def print_adjs_table(adjs_map, neigh=None, interface=None):
 
 
 def sprint_adj_db_full(global_adj_db, adj_db, bidir):
-    """ given serialized adjacency database, print neighbors. Use the
-            global adj database to validate bi-dir adjacencies
+    """given serialized adjacency database, print neighbors. Use the
+        global adj database to validate bi-dir adjacencies
 
-        :param global_adj_db map(str, AdjacencyDatabase):
-            map of node names to their adjacent node names
-        :param adj_db lsdb_types.AdjacencyDatabase: latest from kv store
-        :param bidir bool: only print bidir adjacencies
+    :param global_adj_db map(str, AdjacencyDatabase):
+        map of node names to their adjacent node names
+    :param adj_db openr_types.AdjacencyDatabase: latest from kv store
+    :param bidir bool: only print bidir adjacencies
 
-        :return [str]: list of string to be printed
+    :return [str]: list of string to be printed
     """
 
-    assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
+    assert isinstance(adj_db, openr_types.AdjacencyDatabase)
     this_node_name = adj_db.thisNodeName
 
     title_tokens = [this_node_name]
@@ -657,7 +728,6 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
         "Local Intf",
         "Remote Intf",
         "Metric",
-        "Label",
         "NextHop-v4",
         "NextHop-v6",
         "Uptime",
@@ -685,7 +755,6 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
                 adj.ifName,
                 adj.otherIfName,
                 metric,
-                adj.adjLabel,
                 nh_v4,
                 nh_v6,
                 uptime,
@@ -697,56 +766,10 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
     )
 
 
-def interface_db_to_dict(value):
-    """
-    Convert a thrift::Value representation of InterfaceDatabase to bunch
-    object
-    """
-
-    def _parse_intf_info(info):
-        addrs = [ipnetwork.sprint_addr(v.prefixAddress.addr) for v in info.networks]
-
-        return bunch.Bunch(
-            **{"isUp": info.isUp, "ifIndex": info.ifIndex, "Addrs": addrs}
-        )
-
-    assert isinstance(value, kv_store_types.Value)
-    intf_db = deserialize_thrift_object(value.value, lsdb_types.InterfaceDatabase)
-    return bunch.Bunch(
-        **{
-            "thisNodeName": intf_db.thisNodeName,
-            "interfaces": {
-                k: _parse_intf_info(v) for k, v in intf_db.interfaces.items()
-            },
-        }
-    )
-
-
-def interface_dbs_to_dict(publication, nodes, iter_func):
-    """ get parsed interface dbs
-
-        :param publication kv_store_types.Publication
-        :param nodes set: the set of the nodes to filter interfaces for
-
-        :return map(node, InterfaceDatabase.bunch): the parsed
-            adjacency DB in a map with keys and values in strings
-    """
-
-    assert isinstance(publication, kv_store_types.Publication)
-
-    def _parse_intf_db(intf_map, value):
-        intf_db = interface_db_to_dict(value)
-        intf_map[intf_db.thisNodeName] = intf_db
-
-    intf_dbs_map = {}
-    iter_func(intf_dbs_map, publication, nodes, _parse_intf_db)
-    return intf_dbs_map
-
-
 def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
-    """ convert nextHop from thrift instance into a dict in strings """
+    """convert nextHop from thrift instance into a dict in strings"""
     if nextHop is None:
-        return None
+        return {}
 
     def _update(next_hop_dict, nextHop):
         next_hop_dict.update(
@@ -763,15 +786,13 @@ def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, A
 
 
 def unicast_route_to_dict(route):
-    """ convert route from thrift instance into a dict in strings """
+    """convert route from thrift instance into a dict in strings"""
 
     def _update(route_dict, route):
         route_dict.update(
             {
                 "dest": ipnetwork.sprint_prefix(route.dest),
                 "nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops],
-                "bestNexthop": next_hop_thrift_to_dict(route.bestNexthop),
-                "data": str(route.data),
             }
         )
 
@@ -791,7 +812,7 @@ def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
     return thrift_to_dict(route, _update)
 
 
-def route_db_to_dict(route_db: fib_types.RouteDatabase) -> Dict[str, Any]:
+def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
     """
     Convert route from thrift instance into a dict in strings
     """
@@ -804,8 +825,10 @@ def route_db_to_dict(route_db: fib_types.RouteDatabase) -> Dict[str, Any]:
 
 
 def print_routes_json(
-    route_db_dict, prefixes: List[str] = None, labels: List[int] = None
-):
+    route_db_dict: Dict,
+    prefixes: Optional[List[str]] = None,
+    labels: Optional[List[int]] = None,
+) -> None:
     """
     Print json representation of routes. Takes prefixes and labels to
     filter
@@ -843,11 +866,11 @@ def print_routes_json(
 
 
 def print_route_db(
-    route_db: fib_types.RouteDatabase,
-    prefixes: List[str] = None,
-    labels: List[int] = None,
+    route_db: openr_types.RouteDatabase,
+    prefixes: Optional[List[str]] = None,
+    labels: Optional[List[int]] = None,
 ) -> None:
-    """ print the the routes from Decision/Fib module """
+    """print the routes from Decision/Fib module"""
 
     if prefixes or not labels:
         print_unicast_routes(
@@ -863,22 +886,31 @@ def print_route_db(
         )
 
 
-def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
-    """ given the old adj list and the new one for some node, return
-        change list.
+def find_adj_list_deltas(
+    old_adj_list: Optional[Sequence[openr_types.Adjacency]],
+    new_adj_list: Optional[Sequence[openr_types.Adjacency]],
+    tags: Optional[Sequence[str]] = None,
+) -> List:
+    """given the old adj list and the new one for some node, return
+    change list.
 
-        :param old_adj_list [Adjacency]: old adjacency list
-        :param new_adj_list [Adjacency]: new adjacency list
-        :param tags 3-tuple(string): a tuple of labels for
-            (in old only, in new only, in both but different)
+    :param old_adj_list [Adjacency]: old adjacency list
+    :param new_adj_list [Adjacency]: new adjacency list
+    :param tags 3-tuple(string): a tuple of labels for
+        (in old only, in new only, in both but different)
 
-        :return [(str, Adjacency, Adjacency)]: list of tuples of
-            (changeType, oldAdjacency, newAdjacency)
-            in the case where an adjacency is added or removed,
-            oldAdjacency or newAdjacency is None, respectively
+    :return [(str, Adjacency, Adjacency)]: list of tuples of
+        (changeType, oldAdjacency, newAdjacency)
+        in the case where an adjacency is added or removed,
+        oldAdjacency or newAdjacency is None, respectively
     """
     if not tags:
         tags = ("NEIGHBOR_DOWN", "NEIGHBOR_UP", "NEIGHBOR_UPDATE")
+
+    if old_adj_list is None:
+        old_adj_list = set()
+    if new_adj_list is None:
+        new_adj_list = set()
 
     old_neighbors = {(a.otherNodeName, a.ifName) for a in old_adj_list}
     new_neighbors = {(a.otherNodeName, a.ifName) for a in new_adj_list}
@@ -937,8 +969,8 @@ def adj_list_deltas_json(adj_deltas_list, tags=None):
     nodes_update = []
 
     for data in adj_deltas_list:
-        old_adj = adjacency_to_dict(data[1]) if data[1] else None
-        new_adj = adjacency_to_dict(data[2]) if data[2] else None
+        old_adj = object_to_dict(data[1]) if data[1] else None
+        new_adj = object_to_dict(data[2]) if data[2] else None
 
         if data[0] == tags[0]:
             assert new_adj is None
@@ -969,41 +1001,21 @@ def adj_list_deltas_json(adj_deltas_list, tags=None):
     return deltas_json, return_code
 
 
-def adjacency_to_dict(adjacency):
-    """ convert adjacency from thrift instance into a dict in strings
-
-        :param adjacency as a thrift instance: adjacency
-
-        :return dict: dict with adjacency attributes as key, value in strings
-    """
-
-    # Only addrs need string conversion so we udpate them
-    adj_dict = copy.copy(adjacency).__dict__
-    adj_dict.update(
-        {
-            "nextHopV6": ipnetwork.sprint_addr(adjacency.nextHopV6.addr),
-            "nextHopV4": ipnetwork.sprint_addr(adjacency.nextHopV4.addr),
-        }
-    )
-
-    return adj_dict
-
-
 def sprint_adj_delta(old_adj, new_adj):
-    """ given old and new adjacency, create a list of strings that summarize
-        changes. If oldAdj is None, this function prints all attridutes of
-        newAdj
+    """given old and new adjacency, create a list of strings that summarize
+    changes. If oldAdj is None, this function prints all attridutes of
+    newAdj
 
-        :param oldAdj Adjacency: can be None
-        :param newAdj Adjacency: new
+    :param oldAdj Adjacency: can be None
+    :param newAdj Adjacency: new
 
-        :return str: table summarizing the change
+    :return str: table summarizing the change
     """
     assert new_adj is not None
     rows = []
-    new_adj_dict = adjacency_to_dict(new_adj)
+    new_adj_dict = object_to_dict(new_adj)
     if old_adj is not None:
-        old_adj_dict = adjacency_to_dict(old_adj)
+        old_adj_dict = object_to_dict(old_adj)
         for k in sorted(new_adj_dict.keys()):
             if old_adj_dict.get(k) != new_adj_dict.get(k):
                 rows.append([k, old_adj_dict.get(k), "-->", new_adj_dict.get(k)])
@@ -1040,16 +1052,20 @@ def sprint_pub_update(global_publication_db, key, value):
     return printing.render_horizontal_table(rows, tablefmt="plain") if rows else ""
 
 
-def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = None):
-    """ update the global prefix map with a single publication
+def update_global_prefix_db(
+    global_prefix_db: Dict,
+    prefix_db: openr_types.PrefixDatabase,
+    key: Optional[str] = None,
+):
+    """update the global prefix map with a single publication
 
-        :param global_prefix_map map(node, set([str])): map of all prefixes
-            in the network
-        :param prefix_db lsdb_types.PrefixDatabase: publication from single
-            node
+    :param global_prefix_map map(node, set([str])): map of all prefixes
+        in the network
+    :param prefix_db openr_types.PrefixDatabase: publication from single
+        node
     """
 
-    assert isinstance(prefix_db, lsdb_types.PrefixDatabase)
+    assert isinstance(prefix_db, openr_types.PrefixDatabase)
 
     prefix_set = set()
     for prefix_entry in prefix_db.prefixEntries:
@@ -1071,13 +1087,13 @@ def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = 
 
 
 def sprint_adj_db_delta(new_adj_db, old_adj_db):
-    """ given serialized adjacency database, print neighbors delta as
-            compared to the supplied global state
+    """given serialized adjacency database, print neighbors delta as
+        compared to the supplied global state
 
-        :param new_adj_db lsdb_types.AdjacencyDatabase: latest from kv store
-        :param old_adj_db lsdb_types.AdjacencyDatabase: last one we had
+    :param new_adj_db openr_types.AdjacencyDatabase: latest from kv store
+    :param old_adj_db openr_types.AdjacencyDatabase: last one we had
 
-        :return [str]: list of string to be printed
+    :return [str]: list of string to be printed
     """
 
     # check for deltas between old and new
@@ -1124,19 +1140,21 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
 
 
 def sprint_prefixes_db_delta(
-    global_prefixes_db: Dict, prefix_db: Dict, key: str = None
+    global_prefixes_db: Dict,
+    prefix_db: openr_types.PrefixDatabase,
+    key: Optional[str] = None,
 ):
-    """ given serialzied prefixes for a single node, output the delta
-            between those prefixes and global prefixes snapshot
+    """given serialzied prefixes for a single node, output the delta
+        between those prefixes and global prefixes snapshot
 
-        prefix could be entire prefix DB or per prefix key
-        entire prefix DB: prefix:<node name>
-        per prefix key: prefix:<node name>:<area>:<[IP addr/prefix len]
+    prefix could be entire prefix DB or per prefix key
+    entire prefix DB: prefix:<node name>
+    per prefix key: prefix:<node name>:<area>:<[IP addr/prefix len]
 
-        :global_prefixes_db map(node, set([str])): global prefixes
-        :prefix_db lsdb_types.PrefixDatabase: latest from kv store
+    :global_prefixes_db map(node, set([str])): global prefixes
+    :prefix_db openr_types.PrefixDatabase: latest from kv store
 
-        :return [str]: the array of prefix strings
+    :return [str]: the array of prefix strings
     """
 
     this_node_name = prefix_db.thisNodeName
@@ -1166,7 +1184,9 @@ def sprint_prefixes_db_delta(
 
 
 def dump_node_kvs(
-    cli_opts: bunch.Bunch, host: str, area: str = None
+    cli_opts: bunch.Bunch,
+    host: str,
+    area: Optional[str] = None,
 ) -> kv_store_types.Publication:
     pub = None
 
@@ -1182,10 +1202,10 @@ def dump_node_kvs(
 
 
 def print_allocations_table(alloc_str):
-    """ print static allocations """
+    """print static allocations"""
 
     rows = []
-    allocations = deserialize_thrift_object(alloc_str, alloc_types.StaticAllocation)
+    allocations = deserialize_thrift_object(alloc_str, openr_types.StaticAllocation)
     for node, prefix in allocations.nodePrefixes.items():
         rows.append([node, ipnetwork.sprint_prefix(prefix)])
     print(printing.render_horizontal_table(rows, ["Node", "Prefix"]))
@@ -1220,13 +1240,14 @@ def build_routes(
     Build list of UnicastRoute using prefixes and nexthops list
     """
 
-    prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+    prefixes_str = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
     nhs = build_nexthops(nexthops)
     return [
         network_types.UnicastRoute(
-            dest=p, nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs]
+            dest=p,
+            nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs],
         )
-        for p in prefixes
+        for p in prefixes_str
     ]
 
 
@@ -1238,12 +1259,13 @@ def get_route_as_dict_in_str(
     Convert a routeDb into a dict representing routes in string format
     """
 
-    routes_dict = None
+    routes_dict = {}
     # Thrift object instances do not have hash support
     # Make custom stringified object so we can hash and diff
     # dict of prefixes(str) : nexthops(str)
     if route_type == "unicast":
         routes_dict = {
+            # pyre-fixme[16]: `MplsRoute` has no attribute `dest`.
             ipnetwork.sprint_prefix(route.dest): sorted(
                 ip_nexthop_to_str(nh, True) for nh in route.nextHops
             )
@@ -1251,14 +1273,16 @@ def get_route_as_dict_in_str(
         }
     elif route_type == "mpls":
         routes_dict = {
+            # pyre-fixme[16]: `UnicastRoute` has no attribute `topLabel`.
             str(route.topLabel): sorted(
-                ip_nexthop_to_str(nh, True) for nh in route.nextHops
+                ip_nexthop_to_str(nh, True, True) for nh in route.nextHops
             )
             for route in routes
         }
     else:
         assert 0, "Unknown route type %s" % route_type
 
+    # pyre-fixme[7]: Expected `Dict[str, str]` but got `Dict[typing.Any, List[str]]`.
     return routes_dict
 
 
@@ -1274,9 +1298,11 @@ def get_route_as_dict(
 
     if route_type == "unicast":
         for route in routes:
+            # pyre-fixme[16]: `MplsRoute` has no attribute `dest`.
             routes_dict[ipnetwork.sprint_prefix(route.dest)] = route
     elif route_type == "mpls":
         for route in routes:
+            # pyre-fixme[16]: `UnicastRoute` has no attribute `topLabel`.
             routes_dict[str(route.topLabel)] = route
     else:
         assert 0, "Unknown route type %s" % route_type
@@ -1358,9 +1384,22 @@ def prefixes_with_different_nexthops(
 
             # nexthop diff found
             if nh_diff_found:
+                print(key, l_nh_coll, r_nh_coll)
                 keys.append((key, l_nh_coll, r_nh_coll))
 
     return keys
+
+
+def _only_mpls_routes(
+    all_routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]]
+) -> List[network_types.MplsRoute]:
+    return [r for r in all_routes if isinstance(r, network_types.MplsRoute)]
+
+
+def _only_unicast_routes(
+    all_routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]]
+) -> List[network_types.UnicastRoute]:
+    return [r for r in all_routes if isinstance(r, network_types.UnicastRoute)]
 
 
 def compare_route_db(
@@ -1369,7 +1408,7 @@ def compare_route_db(
     route_type: str,
     sources: List[str],
     quiet: bool = False,
-) -> (bool, List[str]):
+) -> Tuple[bool, List[str]]:
 
     extra_routes_in_a = routes_difference(routes_a, routes_b, route_type)
     extra_routes_in_b = routes_difference(routes_b, routes_a, route_type)
@@ -1399,9 +1438,9 @@ def compare_route_db(
         caption = "Routes in {} but not in {}".format(*sources)
         if not quiet:
             if route_type == "unicast":
-                print_unicast_routes(caption, extra_routes_in_a)
+                print_unicast_routes(caption, _only_unicast_routes(extra_routes_in_a))
             elif route_type == "mpls":
-                print_mpls_routes(caption, extra_routes_in_a)
+                print_mpls_routes(caption, _only_mpls_routes(extra_routes_in_a))
         else:
             error_msg.append(caption)
 
@@ -1409,9 +1448,9 @@ def compare_route_db(
         caption = "Routes in {} but not in {}".format(*reversed(sources))
         if not quiet:
             if route_type == "unicast":
-                print_unicast_routes(caption, extra_routes_in_b)
+                print_unicast_routes(caption, _only_unicast_routes(extra_routes_in_b))
             elif route_type == "mpls":
-                print_mpls_routes(caption, extra_routes_in_b)
+                print_mpls_routes(caption, _only_mpls_routes(extra_routes_in_b))
         else:
             error_msg.append(caption)
 
@@ -1419,7 +1458,7 @@ def compare_route_db(
         caption = "Prefixes have different nexthops in {} and {}".format(*sources)
         rows = []
         for prefix, lhs_nexthops, rhs_nexthops in diff_prefixes:
-            rows.append([prefix, ", ".join(lhs_nexthops), ", ".join(rhs_nexthops)])
+            rows.append([prefix, len(lhs_nexthops), len(rhs_nexthops)])
         column_labels = ["Prefix"] + sources
         if not quiet:
             print(
@@ -1455,8 +1494,21 @@ def validate_route_nexthops(routes, interfaces, sources, quiet=False):
         invalid_nexthop = defaultdict(list)
         for nextHop in route.nextHops:
             nh = nextHop.address
+
+            # if nexthop addr is v6 link-local, then ifName must be specified
+            if (
+                ipnetwork.ip_version(nh.addr) == 6
+                and ipnetwork.is_link_local(nh.addr)
+                and not nh.ifName
+            ):
+                invalid_nexthop[INVALID_LINK_LOCAL].append(nextHop)
+
+            # next-hop can be empty for other types. Skip if it is the case
+            if nh.ifName is None:
+                continue
+
             if nh.ifName not in interfaces or not interfaces[nh.ifName].info.isUp:
-                invalid_nexthop[MISSING_NEXTHOP].append(ip_nexthop_to_str(nextHop))
+                invalid_nexthop[MISSING_NEXTHOP].append(nextHop)
                 continue
             # if nexthop addr is v4, make sure it belongs to same subnets as
             # interface addr
@@ -1471,18 +1523,13 @@ def validate_route_nexthops(routes, interfaces, sources, quiet=False):
                     ) == 4 and not ipnetwork.is_same_subnet(
                         nh.addr, prefix.prefixAddress.addr, "31"
                     ):
-                        invalid_nexthop[INVALID_SUBNET].append(
-                            ip_nexthop_to_str(nextHop)
-                        )
-            # if nexthop addr is v6, make sure it's a link local addr
-            elif ipnetwork.ip_version(nh.addr) == 6 and not ipnetwork.is_link_local(
-                nh.addr
-            ):
-                invalid_nexthop[INVALID_LINK_LOCAL].append(ip_nexthop_to_str(nextHop))
+                        invalid_nexthop[INVALID_SUBNET].append(nextHop)
 
         # build routes per error type
         for k, v in invalid_nexthop.items():
-            invalid_routes[k].extend(build_routes([dest], v))
+            invalid_routes[k].append(
+                network_types.UnicastRoute(dest=route.dest, nextHops=v)
+            )
 
     # if all good, then return early
     if not invalid_routes:
@@ -1512,24 +1559,33 @@ def validate_route_nexthops(routes, interfaces, sources, quiet=False):
     return False, error_msg
 
 
-def mpls_action_to_str(mpls_action: network_types.MplsAction) -> str:
+def mpls_action_to_str(
+    mpls_action: Union[network_types.MplsAction, network_types_py3.MplsAction]
+) -> str:
     """
     Convert Network.MplsAction to string representation
     """
 
-    action_str = network_types.MplsActionCode._VALUES_TO_NAMES.get(
-        mpls_action.action, ""
-    )
+    if isinstance(mpls_action, network_types.MplsAction):
+        action_str = network_types.MplsActionCode._VALUES_TO_NAMES.get(
+            mpls_action.action, ""
+        )
+    else:
+        action_str = mpls_action.action.name
+
     label_str = ""
     if mpls_action.swapLabel is not None:
         label_str = f" {mpls_action.swapLabel}"
-    if mpls_action.pushLabels is not None:
-        label_str = f" {'/'.join(str(l) for l in mpls_action.pushLabels)}"
-    return "mpls {}{}".format(action_str, label_str)
+    push_labels = mpls_action.pushLabels
+    if push_labels is not None:
+        label_str = f" {'/'.join(str(l) for l in push_labels)}"
+    return f"mpls {action_str}{label_str}"
 
 
 def ip_nexthop_to_str(
-    nextHop: network_types.NextHopThrift, ignore_v4_iface: bool = False
+    nextHop: Union[network_types.NextHopThrift, network_types_py3.NextHopThrift],
+    ignore_v4_iface: bool = False,
+    ignore_v6_iface: bool = False,
 ) -> str:
     """
     Convert Network.BinaryAddress to string representation of a nexthop
@@ -1539,13 +1595,14 @@ def ip_nexthop_to_str(
     ifName = "%{}".format(nh.ifName) if nh.ifName else ""
     if len(nh.addr) == 4 and ignore_v4_iface:
         ifName = ""
+    if len(nh.addr) == 16 and ignore_v6_iface:
+        ifName = ""
     addr_str = "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
 
-    mpls_action_str = (
-        " {}".format(mpls_action_to_str(nextHop.mplsAction))
-        if nextHop.mplsAction is not None
-        else ""
-    )
+    mpls_action_str = " "
+    mpls_action = nextHop.mplsAction
+    if mpls_action:
+        mpls_action_str += mpls_action_to_str(mpls_action)
 
     # NOTE: Default weight=0 is in-fact weight=1
     weight = f" weight {1 if nextHop.weight == 0 else nextHop.weight}"
@@ -1553,16 +1610,29 @@ def ip_nexthop_to_str(
     # always put addr_str at head
     # this is consumed by downstream tooling in --json options
     # TODO remove hard dependency on json output format in fbossdeploy/fcr
-    return "{}{}{}".format(addr_str, mpls_action_str, weight)
+    return f"{addr_str}{mpls_action_str}{weight}"
 
 
 def print_unicast_routes(
     caption: str,
-    unicast_routes: List[network_types.UnicastRoute],
-    prefixes: List[str] = None,
-):
+    unicast_routes: Union[
+        Sequence[network_types_py3.UnicastRoute], List[network_types.UnicastRoute]
+    ],
+    prefixes: Optional[List[str]] = None,
+    element_prefix: str = ">",
+    element_suffix: str = "",
+    filter_exact_match: bool = False,
+    timestamp: bool = False,
+) -> None:
     """
     Print unicast routes. Subset specified by prefixes will be printed if specified
+        :param caption: Title of the table (a string).
+        :param unicast_routes: Unicast routes
+        :param prefixes: Optional prefixes/filter to print.
+        :param element_prefix: Starting prefix for each item. (string)
+        :param element_suffix: Ending/terminator for each item. (string)
+        :param filter_exact_match: Indicate exact match or subnet match.
+        :param timestamp: Prints time for each item. (bool)
     """
 
     networks = None
@@ -1574,32 +1644,63 @@ def print_unicast_routes(
         entry = build_unicast_route(route, filter_for_networks=networks)
         if entry:
             dest, nexthops = entry
-            paths_str = "\n".join(["via {}".format(nh) for nh in nexthops])
+            paths_str = "\n".join(["  via {}".format(nh) for nh in nexthops])
             route_strs.append([dest, paths_str])
 
-    print(printing.render_vertical_table(route_strs, caption=caption))
+    print(
+        printing.render_vertical_table(
+            route_strs,
+            caption=caption,
+            element_prefix=element_prefix,
+            element_suffix=element_suffix,
+            timestamp=timestamp,
+        )
+    )
 
 
 def build_unicast_route(
-    route: object,
+    route: Union[network_types_py3.UnicastRoute, network_types.UnicastRoute],
     filter_for_networks: Optional[
         List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]
     ] = None,
+    filter_exact_match: bool = False,
 ) -> Tuple[str, List[str]]:
+    """
+    Build unicast route.
+        :param route: Unicast Route
+        :param filter_for_networks: IP/Prefixes to filter.
+        :param filter_exact_match: Indicate exact match or subnet match.
+    """
     dest = ipnetwork.sprint_prefix(route.dest)
-    if filter_for_networks and not ipnetwork.contain_any_prefix(
-        dest, filter_for_networks
-    ):
-        return None
+    if filter_for_networks:
+        if filter_exact_match:
+            if not ipaddress.ip_network(dest) in filter_for_networks:
+                return ("", [])
+        else:
+            if not ipnetwork.contain_any_prefix(dest, filter_for_networks):
+                return ("", [])
     nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
     return dest, nexthops
 
 
 def print_mpls_routes(
-    caption: str, mpls_routes: List[network_types.MplsRoute], labels: List[int] = None
-):
+    caption: str,
+    mpls_routes: Union[
+        List[network_types.MplsRoute], Sequence[network_types_py3.MplsRoute]
+    ],
+    labels: Optional[List[int]] = None,
+    element_prefix: str = ">",
+    element_suffix: str = "",
+    timestamp: bool = False,
+) -> None:
     """
     List mpls routes. Subset specified by labels will be printed if specified
+        :param caption: Title of the table (a string).
+        :param mpls_routes: mpls routes
+        :param labels: Optional labels/filter to print.
+        :param element_prefix: Starting prefix for each item. (string)
+        :param element_suffix: Ending/terminator for each item. (string)
+        :param timestamp: Prints time for each item. (bool)
     """
 
     route_strs = []
@@ -1608,20 +1709,28 @@ def print_mpls_routes(
             continue
 
         paths_str = "\n".join(
-            ["via {}".format(ip_nexthop_to_str(nh)) for nh in route.nextHops]
+            ["  via {}".format(ip_nexthop_to_str(nh)) for nh in route.nextHops]
         )
         route_strs.append([str(route.topLabel), paths_str])
 
-    print(printing.render_vertical_table(route_strs, caption=caption))
+    print(
+        printing.render_vertical_table(
+            route_strs,
+            caption=caption,
+            element_prefix=element_prefix,
+            element_suffix=element_suffix,
+            timestamp=timestamp,
+        )
+    )
 
 
 def get_routes_json(
     host: str,
     client: int,
     routes: List[network_types.UnicastRoute],
-    prefixes: List[str] = None,
-    mpls_routes: List[network_types.MplsRoute] = None,
-    labels: List[int] = None,
+    prefixes: Optional[List[str]],
+    mpls_routes: Optional[List[network_types.MplsRoute]],
+    labels: Optional[List[int]],
 ):
     networks = None
     if prefixes:
@@ -1637,24 +1746,28 @@ def get_routes_json(
             "dest": dest,
             "nexthops": [ip_nexthop_to_str(nh) for nh in route.nextHops],
         }
+        # pyre-fixme[16]: `int` has no attribute `append`.
         data["routes"].append(route_data)
 
-    for label in mpls_routes:
-        dest = label.topLabel
-        if labels and dest not in labels:
-            continue
-        route_data = {
-            "dest": dest,
-            "nexthops": [ip_nexthop_to_str(nh) for nh in label.nextHops],
-        }
-        data["mplsRoutes"].append(route_data)
+    if mpls_routes:
+        for label in mpls_routes:
+            dest = label.topLabel
+            if labels and dest not in labels:
+                continue
+            route_data = {
+                "dest": dest,
+                "nexthops": [ip_nexthop_to_str(nh) for nh in label.nextHops],
+            }
+            # pyre-fixme[16]: Item `int` of `Union[List[typing.Any], int, str]` has
+            #  no attribute `append`.
+            data["mplsRoutes"].append(route_data)
 
     return data
 
 
 def get_routes(
-    route_db: fib_types.RouteDatabase,
-) -> (List[network_types.UnicastRoute], List[network_types.MplsRoute]):
+    route_db: openr_types.RouteDatabase,
+) -> Tuple[List[network_types.UnicastRoute], List[network_types.MplsRoute]]:
     """
     Find all routes for each prefix in routeDb
 
@@ -1671,35 +1784,13 @@ def get_routes(
     )
     mpls_routes = sorted(route_db.mplsRoutes, key=lambda x: x.topLabel)
 
-    ret_unicast_routes = []
-    ret_mpls_routes = []
-    for route in unicast_routes:
-        if not route.nextHops:
-            continue
-
-        min_metric = min(route.nextHops, key=lambda x: x.metric).metric
-        nextHops = [
-            nh
-            for nh in route.nextHops
-            if nh.metric == min_metric or nh.useNonShortestRoute
-        ]
-        ret_unicast_routes.append(
-            network_types.UnicastRoute(dest=route.dest, nextHops=nextHops)
-        )
-
-    for route in mpls_routes:
-        if not route.nextHops:
-            continue
-        min_metric = min(route.nextHops, key=lambda x: x.metric).metric
-        nextHops = [nh for nh in route.nextHops if nh.metric == min_metric]
-        ret_mpls_routes.append(
-            network_types.MplsRoute(topLabel=route.topLabel, nextHops=nextHops)
-        )
-    return (ret_unicast_routes, ret_mpls_routes)
+    return (unicast_routes, mpls_routes)
 
 
 def print_spt_infos(
-    spt_infos: kv_store_types.SptInfos, roots: List[str], area: str = None
+    spt_infos: kv_store_types.SptInfos,
+    roots: List[str],
+    area: Optional[str] = None,
 ) -> None:
     """
     print spanning tree information
@@ -1752,6 +1843,7 @@ def print_spt_infos(
             root, state, info.parent, info.cost, len(info.children)
         )
         rows = []
+        # pyre-fixme[16]: `Optional` has no attribute `items`.
         for nb, counters in root_counters.get(root).items():
             role = "-"
             if nb == info.parent:
@@ -1777,14 +1869,8 @@ def print_spt_infos(
     print(printing.render_vertical_table(output))
 
 
-def is_area_feature_supported(client: OpenrCtrl.Client) -> bool:
-    openr_version = client.getOpenrVersion()
-    return openr_version.version >= Consts.OPENR_AREA_VERSION
-
-
 def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
-    openr_area_config = client.getAreasConfig()
-    return openr_area_config.areas
+    return {a.area_id for a in client.getRunningConfigThrift().areas}
 
 
 # This API is used by commands that need one and only one
@@ -1792,9 +1878,6 @@ def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
 # return 'None'. If area ID is passed, API checks if it's valid and returns
 # the same ID
 def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
-    if not is_area_feature_supported(client):
-        return None
-
     # if no area is provided, return area in case only one area is configured
     areas = get_areas_list(client)
     if (area is None or area == "") and 1 == len(areas):
@@ -1807,11 +1890,11 @@ def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
     return area
 
 
-def is_color_output_supported():
+@lru_cache(maxsize=1)
+def is_color_output_supported() -> bool:
     """
     Check if stdout is a terminal and supports colors
     """
-    return False
     is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
     has_color = False
 
@@ -1825,3 +1908,204 @@ def is_color_output_supported():
         pass
 
     return is_a_tty and has_color
+
+
+def print_route_details(
+    routes: Iterable[
+        Union[ctrl_types.AdvertisedRouteDetail, ctrl_types.ReceivedRouteDetail]
+    ],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
+    detailed: bool,
+    tag_map: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Print advertised or received route.
+
+    `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
+    strings
+
+    Output format
+      > 10.0.0.0/8, entries=10, best-entries(*)=1, best-entry(@)
+        [@*] source <key>
+             forwarding algo=<fwd-algo> type=<fwd-type>
+             metrics=<metrics>
+             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+
+
+    """
+
+    rows = []
+    # print header
+    print_route_header(rows, detailed)
+
+    for route_detail in routes:
+        best_key = key_to_str_fn(route_detail.bestKey)
+        best_keys = {key_to_str_fn(k) for k in route_detail.bestKeys}
+
+        # Create a title for the route
+        rows.append(
+            f"> {ipnetwork.sprint_prefix(route_detail.prefix)}"
+            f", {len(best_keys)}/{len(route_detail.routes)}"
+        )
+
+        # Add all entries associated with routes
+        for route in route_detail.routes:
+            markers = f"{'*' if key_to_str_fn(route.key) in best_keys else ''}{'@' if key_to_str_fn(route.key) == best_key else ' '}"
+            print_route_helper(rows, route, key_to_str_fn, detailed, markers, tag_map)
+        rows.append("")
+
+    print("\n".join(rows))
+
+
+def print_advertised_routes(
+    routes: List[ctrl_types.AdvertisedRoute],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
+    detailed: bool,
+    tag_map: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Print postfilter advertised or rejected route.
+
+    `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
+    strings
+
+    @param:
+        -tag_map: If present, translate the tag value using the map
+
+    Output format
+      > 10.0.0.0/8, entries=10, best-entries(*)=1, best-entry(@)
+        [@*] source <key>
+             forwarding algo=<fwd-algo> type=<fwd-type>
+             metrics=<metrics>
+             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+
+
+    """
+
+    rows = []
+    # print header
+    print_route_header(rows, detailed)
+
+    for route in routes:
+        # Create a title for the route
+        rows.append(f"> {ipnetwork.sprint_prefix(route.route.prefix)}")
+        print_route_helper(rows, route, key_to_str_fn, detailed, "{*@}", tag_map)
+        rows.append("")
+
+    print("\n".join(rows))
+
+
+def print_route_header(rows: List[str], detailed: bool):
+    """
+    Helper function to construct print lines of header for advertised and received rooutes.
+    """
+    # Add marker information
+    rows.append("Markers: * - One of the best entries, @ - The best entry")
+    if not detailed:
+        rows.append(
+            "Acronyms: SP - Source Preference, PP - Path Preference, D - Distance\n"
+            "          MN - Min-Nexthops, PL - Prepend Label"
+        )
+    rows.append("")
+
+    # Add a header if not detailed
+    # NOTE: Using very custom formatting here instead of using table rendering
+    # for compact output. And also interleave the custom route titles in between
+    # This header is in sync with the rows we append
+    if not detailed:
+        rows.append(
+            f"{'':<2} {'Source':<36} "
+            f"{'FwdAlgo':<12} {'FwdType':<8} "
+            f"{'SP':<6} "
+            f"{'PP':<6} "
+            f"{'D':<6} "
+            f"{'MN':<6}"
+            f"{'PL':<6}"
+        )
+        rows.append("")
+
+
+def print_route_helper(
+    rows: List[str],
+    route: Union[ctrl_types.AdvertisedRoute, ctrl_types.ReceivedRoute],
+    key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
+    detailed: bool,
+    markers: str,
+    tag_map: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Construct print lines of advertised route, append to rows
+
+    `key_to_str_fn` argument specifies the transformation of key attributes to tuple of
+    strings
+    `markers` argument specifies [@*] to indicate route is ecmp/best entry
+    `tag_map` if present, map tag string to its name for readability
+
+    Output format
+        [@*] source <key>
+             forwarding algo=<fwd-algo> type=<fwd-type>
+             metrics=<metrics>
+             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+
+
+    """
+
+    key, metrics = key_to_str_fn(route.key), route.route.metrics
+    fwd_algo = config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
+        route.route.forwardingAlgorithm
+    )
+    fwd_type = config_types.PrefixForwardingType._VALUES_TO_NAMES.get(
+        route.route.forwardingType
+    )
+    if detailed:
+        rows.append(f"{markers} from {' '.join(key)}")
+        rows.append(f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}")
+        rows.append(
+            f"     Metrics - path-preference: {metrics.path_preference}"
+            f", source-preference: {metrics.source_preference}"
+            f", distance: {metrics.distance}"
+        )
+        if route.route.minNexthop:
+            rows.append(f"     Performance - min-nexthops: {route.route.minNexthop}")
+        if route.route.prependLabel or route.route.weight:
+            rows.append(
+                f"     Misc - prepend-label: {route.route.prependLabel}, weight: {route.route.weight}"
+            )
+        tag_map = tag_map if tag_map is not None else {}
+        rows.append(
+            f"     Tags - {', '.join(sorted([tag_map.get(t,t) for t in route.route.tags]))}"
+        )
+        rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
+        if (
+            isinstance(route, ctrl_types.AdvertisedRoute)
+            and hasattr(route, "hitPolicy")
+            and route.hitPolicy
+        ):
+            rows.append(f"     Policy - {route.hitPolicy}")
+        if isinstance(route, ctrl_types.AdvertisedRoute) and route.igpCost is not None:
+            rows.append(f"     IGP Cost - {route.igpCost}")
+    else:
+        min_nexthop = (
+            route.route.minNexthop if route.route.minNexthop is not None else "-"
+        )
+        prepend_label = (
+            route.route.prependLabel if route.route.prependLabel is not None else "-"
+        )
+        rows.append(
+            f"{markers:<2} {' '.join(key)[:36]:<36} "
+            f"{fwd_algo:<12} {fwd_type:<8} "
+            f"{metrics.source_preference:<6} "
+            f"{metrics.path_preference:<6} "
+            f"{metrics.distance:<6} "
+            f"{min_nexthop:<6}"
+            f"{prepend_label:<6}"
+        )
+
+
+def get_tag_to_name_map(config) -> Dict[str, str]:
+    """
+    Get mapping from tag_value to tag_name. e.g
+    65527:36706 -> FABRIC_POST_FSW_LOOP_AGG
+    """
+    tag_def = config["area_policies"]["definitions"]["openrTag"]["objects"]
+    return {v["tagSet"][0]: k for k, v in tag_def.items()}

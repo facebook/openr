@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
+from typing import List
 
-from builtins import object
-
+import bunch
 import click
 from openr.cli.commands import kvstore, lm
 from openr.cli.utils import utils
-from openr.cli.utils.options import breeze_option
 from openr.cli.utils.utils import parse_nodes
 
 
@@ -42,13 +38,11 @@ class LMCli(object):
         self.lm.add_command(
             UnsetAdjMetricCli().unset_adj_metric, name="unset-adj-metric"
         )
-        self.lm.add_command(VersionCli().version, name="version")
-        self.lm.add_command(BuildInfoCli().build_info, name="build-info")
 
     @click.group()
     @click.pass_context
     def lm(ctx):  # noqa: B902
-        """ CLI tool to peek into Link Monitor module. """
+        """CLI tool to peek into Link Monitor module."""
         pass
 
 
@@ -63,7 +57,7 @@ class LMLinksCli(object):
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def links(cli_opts, only_suppressed, json):  # noqa: B902
-        """ Dump all known links of the current host """
+        """Dump all known links of the current host"""
 
         lm.LMLinksCmd(cli_opts).run(only_suppressed, json)
 
@@ -71,12 +65,13 @@ class LMLinksCli(object):
 class LMAdjCli(object):
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.argument("areas", nargs=-1)
     @click.pass_obj
-    def adj(cli_opts, json):  # noqa: B902
-        """ Dump all formed adjacencies of the current host """
+    def adj(cli_opts: bunch.Bunch, json: bool, areas: List[str]):  # noqa: B902
+        """Dump all formed adjacencies of the current host"""
 
         nodes = parse_nodes(cli_opts, "")
-        lm.LMAdjCmd(cli_opts).run(nodes, json)
+        lm.LMAdjCmd(cli_opts).run(nodes, json, areas)
 
 
 class SetNodeOverloadCli(object):
@@ -84,7 +79,7 @@ class SetNodeOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def set_node_overload(cli_opts, yes):  # noqa: B902
-        """ Set overload bit to stop transit traffic through node. """
+        """Set overload bit to stop transit traffic through node."""
 
         lm.SetNodeOverloadCmd(cli_opts).run(yes)
 
@@ -94,7 +89,7 @@ class UnsetNodeOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def unset_node_overload(cli_opts, yes):  # noqa: B902
-        """ Unset overload bit to resume transit traffic through node. """
+        """Unset overload bit to resume transit traffic through node."""
 
         lm.UnsetNodeOverloadCmd(cli_opts).run(yes)
 
@@ -105,7 +100,7 @@ class SetLinkOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def set_link_overload(cli_opts, interface, yes):  # noqa: B902
-        """ Set overload bit for a link. Transit traffic will be drained. """
+        """Set overload bit for a link. Transit traffic will be drained."""
 
         lm.SetLinkOverloadCmd(cli_opts).run(interface, yes)
 
@@ -116,7 +111,7 @@ class UnsetLinkOverloadCli(object):
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def unset_link_overload(cli_opts, interface, yes):  # noqa: B902
-        """ Unset overload bit for a link to allow transit traffic. """
+        """Unset overload bit for a link to allow transit traffic."""
 
         lm.UnsetLinkOverloadCmd(cli_opts).run(interface, yes)
 
@@ -160,9 +155,8 @@ class SetAdjMetricCli(object):
         """
         Set custom metric value for the adjacency
         """
-        question_str = (
-            "Are you sure to override metric "
-            "for adjacency {} {} ?".format(node, interface)
+        question_str = "Are you sure to override metric for adjacency {} {} ?".format(
+            node, interface
         )
         if not utils.yesno(question_str, yes):
             return
@@ -191,27 +185,3 @@ class UnsetAdjMetricCli(object):
         lm.UnsetAdjMetricCmd(cli_opts).run(node, interface, yes)
         nodes = parse_nodes(cli_opts, "")
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
-
-
-class VersionCli(object):
-    @click.command()
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.pass_obj
-    def version(cli_opts, json):  # noqa: B902
-        """
-        Get OpenR version
-        """
-
-        lm.VersionCmd(cli_opts).run(json)
-
-
-class BuildInfoCli(object):
-    @click.command()
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.pass_obj
-    def build_info(cli_opts, json):  # noqa: B902
-        """
-        Get build information from running version of Open/R
-        """
-
-        lm.BuildInfoCmd(cli_opts).run(json)

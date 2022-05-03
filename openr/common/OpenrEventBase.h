@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,6 +16,8 @@
 #include <folly/io/async/EventHandler.h>
 
 namespace openr {
+
+using SocketCallback = folly::Function<void(uint16_t revents) noexcept>;
 
 class EventBaseStopSignalHandler : public folly::AsyncSignalHandler {
  public:
@@ -106,12 +108,26 @@ class OpenrEventBase {
    * Socket/FD polling APIs
    */
 
-  void addSocketFd(int socketFd, int events, fbzmq::SocketCallback callback);
+  void addSocketFd(int socketFd, int events, SocketCallback callback);
   void addSocket(
       uintptr_t socketPtr, int events, fbzmq::SocketCallback callback);
 
   void removeSocketFd(int socketFd);
   void removeSocket(uintptr_t socketPtr);
+
+  /**
+   * Eventbase name related APIs
+   */
+
+  std::string
+  getEvbName() {
+    return evbName_;
+  }
+
+  void
+  setEvbName(std::string name) {
+    evbName_ = name;
+  }
 
  private:
   /**
@@ -126,7 +142,7 @@ class OpenrEventBase {
         int zmqEvents,
         fbzmq::SocketCallback callback);
 
-    virtual ~ZmqEventHandler() {}
+    virtual ~ZmqEventHandler() override {}
 
    private:
     // EventHandler callback. Unblocks read/write wait
@@ -158,6 +174,9 @@ class OpenrEventBase {
   // Timestamp
   std::atomic<std::chrono::steady_clock::duration::rep> timestamp_;
   std::unique_ptr<folly::AsyncTimeout> timeout_;
+
+  // Unique name to identify eventbase
+  std::string evbName_;
 };
 
 } // namespace openr

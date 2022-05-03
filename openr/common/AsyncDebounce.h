@@ -1,13 +1,11 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 #pragma once
-
-#include <chrono>
 
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
@@ -17,14 +15,14 @@ namespace openr {
 
 /**
  * This class provides you the capability to rate-limit certain events with an
- * exponentioal backoff which might happen rapidly in the system when processing
+ * exponential backoff which might happen rapidly in the system when processing
  * of the event is expensive.
  *
- * It is similar to AsyncThorttle expect each time invoked we double the amount
+ * It is similar to AsyncThrottle except each time invoked we double the amount
  * of wait time until execution from minBackoff to maxBackoff
  */
 template <typename Duration>
-class AsyncDebounce final : private folly::AsyncTimeout {
+class AsyncDebounce final : public folly::AsyncTimeout {
  public:
   using TimeoutCallback = folly::Function<void(void)>;
 
@@ -53,9 +51,21 @@ class AsyncDebounce final : private folly::AsyncTimeout {
     CHECK(isScheduled());
   }
 
+  void
+  cancelScheduledTimeout() noexcept {
+    if (not isScheduled()) {
+      return;
+    }
+    // Cancel scheduled timeout.
+    cancelTimeout();
+    // Reset backoff_ so future `operator()()` could reschedule timeout again.
+    backoff_.reportSuccess();
+  }
+
  private:
   void
   timeoutExpired() noexcept override {
+    // Reset backoff_ so future `operator()()` could reschedule timeout again.
     backoff_.reportSuccess();
     callback_();
   }

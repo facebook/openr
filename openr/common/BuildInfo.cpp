@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,7 +8,7 @@
 #include <openr/common/BuildInfo.h>
 #include <openr/common/CMakeBuildInfo.h>
 
-#include <folly/Format.h>
+#include <fmt/format.h>
 
 namespace openr {
 
@@ -99,7 +99,7 @@ BuildInfo::getBuildMode() {
 
 void
 BuildInfo::log(std::ostream& os) {
-  os << folly::format(
+  os << fmt::format(
       "\n  Built by: {}\n"
       "  Built on: {} ({})\n"
       "  Built at: {}\n"
