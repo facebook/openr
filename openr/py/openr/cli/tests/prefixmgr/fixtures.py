@@ -93,7 +93,7 @@ MOCKED_ADVERTISED_ROUTES = [
 ]
 
 ADVERTISED_ROUTES_OUTPUT = """\
-Markers: * - One of the best entries, @ - The best entry
+Markers: * - Best entries (used for forwarding), @ - Entry used to advertise across area
 Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
           MN - Min-Nexthops, PL - Prepend Label
 
@@ -108,7 +108,7 @@ Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
 """
 
 ADVERTISED_ROUTES_OUTPUT_DETAILED = """\
-Markers: * - One of the best entries, @ - The best entry
+Markers: * - Best entries (used for forwarding), @ - Entry used to advertise across area
 
 > ::/0, 1/1
 *@ from BGP

@@ -1918,7 +1918,9 @@ def print_route_header(rows: List[str], detailed: bool) -> None:
     Helper function to construct print lines of header for advertised and received rooutes.
     """
     # Add marker information
-    rows.append("Markers: * - One of the best entries, @ - The best entry")
+    rows.append(
+        "Markers: * - Best entries (used for forwarding), @ - Entry used to advertise across area"
+    )
     if not detailed:
         rows.append(
             "Acronyms: SP - Source Preference, PP - Path Preference, D - Distance\n"
