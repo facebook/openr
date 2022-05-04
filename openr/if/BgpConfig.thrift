@@ -9,6 +9,7 @@ namespace cpp2 openr.thrift
 namespace go openr.BgpConfig
 namespace py openr.BgpConfig
 namespace py3 openr.thrift
+namespace lua openr.BgpConfig
 namespace wiki Open_Routing.Thrift_APIs.BgpConfig
 
 struct BgpPeerTimers {
