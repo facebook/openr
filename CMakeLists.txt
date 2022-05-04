@@ -300,7 +300,6 @@ install(TARGETS
 
 add_executable(openr_bin
   openr/Main.cpp
-  openr/common/Flags.cpp
 )
 
 target_link_libraries(openr_bin
