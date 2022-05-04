@@ -216,6 +216,8 @@ add_library(openrlib
   openr/common/OpenrThriftCtrlServer.cpp
   openr/common/Types.cpp
   openr/common/Util.cpp
+  openr/common/LsdbTypes.cpp
+  openr/common/LsdbUtil.cpp
   openr/config/Config.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreWrapper.cpp
