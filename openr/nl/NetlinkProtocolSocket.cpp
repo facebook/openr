@@ -29,8 +29,7 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
   CHECK(not evb_->isRunning());
 
   nlMessageTimer_ = folly::AsyncTimeout::make(*evb_, [this]() noexcept {
-    DCHECK(false) << "This shouldn't occur usually. Adding DCHECK to get "
-                  << "attention in UTs";
+    LOG(ERROR) << "This shouldn't occur usually.";
 
     fbData->addStatValue(
         "netlink.requests.timeout", nlSeqNumMap_.size(), fb303::SUM);
