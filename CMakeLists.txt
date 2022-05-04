@@ -203,7 +203,7 @@ install(TARGETS
   DESTINATION lib
 )
 
-add_library(openrlib
+add_library(openrlib SHARED
   openr/allocators/PrefixAllocator.cpp
   openr/common/AsyncThrottle.cpp
   openr/common/BuildInfo.cpp
