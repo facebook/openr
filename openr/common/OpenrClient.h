@@ -21,7 +21,7 @@ static void
 setCompressionTransform(apache::thrift::ClientChannel* channel) {
   CHECK(channel);
   apache::thrift::CompressionConfig compressionConfig;
-  compressionConfig.codecConfig_ref().ensure().set_zstdConfig();
+  compressionConfig.codecConfig().ensure().set_zstdConfig();
   channel->setDesiredCompressionConfig(compressionConfig);
 }
 

@@ -68,7 +68,7 @@ template <class IPAddressVx>
 thrift::BinaryAddress
 toBinaryAddressImpl(const IPAddressVx& addr) {
   thrift::BinaryAddress result;
-  result.addr_ref()->append(
+  result.addr()->append(
       reinterpret_cast<const char*>(addr.bytes()), IPAddressVx::byteCount());
   return result;
 }
@@ -102,8 +102,8 @@ toIPAddress(const std::string& binAddr) {
 inline folly::IPAddress
 toIPAddress(const thrift::BinaryAddress& addr) {
   return folly::IPAddress::fromBinary(folly::ByteRange(
-      reinterpret_cast<const unsigned char*>(addr.addr_ref()->data()),
-      addr.addr_ref()->size()));
+      reinterpret_cast<const unsigned char*>(addr.addr()->data()),
+      addr.addr()->size()));
 }
 
 // construct thrift::IpPrefix
@@ -111,8 +111,8 @@ inline thrift::IpPrefix
 createIpPrefix(
     thrift::BinaryAddress const& prefixAddress, int16_t prefixLength) {
   thrift::IpPrefix ipPrefix;
-  ipPrefix.prefixAddress_ref() = prefixAddress;
-  ipPrefix.prefixLength_ref() = prefixLength;
+  ipPrefix.prefixAddress() = prefixAddress;
+  ipPrefix.prefixLength() = prefixLength;
   return ipPrefix;
 }
 
@@ -135,41 +135,36 @@ toIpPrefix(const std::string& prefix) {
 
 inline std::string
 toString(const thrift::BinaryAddress& addr) {
-  return addr.addr_ref()->empty() ? "" : toIPAddress(addr).str();
+  return addr.addr()->empty() ? "" : toIPAddress(addr).str();
 }
 
 inline std::string
 toString(const thrift::IpPrefix& ipPrefix) {
   return fmt::format(
-      "{}/{}",
-      toString(*ipPrefix.prefixAddress_ref()),
-      *ipPrefix.prefixLength_ref());
+      "{}/{}", toString(*ipPrefix.prefixAddress()), *ipPrefix.prefixLength());
 }
 
 inline std::string
 toString(const thrift::MplsAction& mplsAction) {
   return fmt::format(
       "mpls {} {}{}",
-      apache::thrift::util::enumNameSafe(*mplsAction.action_ref()),
-      mplsAction.swapLabel_ref() ? std::to_string(*mplsAction.swapLabel_ref())
-                                 : "",
-      mplsAction.pushLabels_ref()
-          ? folly::join("/", *mplsAction.pushLabels_ref())
-          : "");
+      apache::thrift::util::enumNameSafe(*mplsAction.action()),
+      mplsAction.swapLabel() ? std::to_string(*mplsAction.swapLabel()) : "",
+      mplsAction.pushLabels() ? folly::join("/", *mplsAction.pushLabels())
+                              : "");
 }
 
 inline std::string
 toString(const thrift::NextHopThrift& nextHop) {
   return fmt::format(
       "via {} dev {} weight {} metric {} area {} {}",
-      toIPAddress(*nextHop.address_ref()).str(),
-      nextHop.address_ref()->ifName_ref().value_or("N/A"),
-      *nextHop.weight_ref(),
-      *nextHop.metric_ref(),
-      nextHop.area_ref().value_or("N/A"),
-      nextHop.mplsAction_ref().has_value()
-          ? toString(nextHop.mplsAction_ref().value())
-          : "");
+      toIPAddress(*nextHop.address()).str(),
+      nextHop.address()->ifName().value_or("N/A"),
+      *nextHop.weight(),
+      *nextHop.metric(),
+      nextHop.area().value_or("N/A"),
+      nextHop.mplsAction().has_value() ? toString(nextHop.mplsAction().value())
+                                       : "");
 }
 
 inline std::string
@@ -180,8 +175,8 @@ toString(const folly::IPAddress& addr) {
 inline std::string
 toString(const thrift::UnicastRoute& route) {
   std::vector<std::string> lines;
-  lines.emplace_back(fmt::format("> Prefix: {}", toString(*route.dest_ref())));
-  for (const auto& nh : *route.nextHops_ref()) {
+  lines.emplace_back(fmt::format("> Prefix: {}", toString(*route.dest())));
+  for (const auto& nh : *route.nextHops()) {
     lines.emplace_back("  " + toString(nh));
   }
   return folly::join("\n", lines);
@@ -190,8 +185,8 @@ toString(const thrift::UnicastRoute& route) {
 inline std::string
 toString(const thrift::MplsRoute& route) {
   std::vector<std::string> lines;
-  lines.emplace_back(fmt::format("> Label: {}", *route.topLabel_ref()));
-  for (const auto& nh : *route.nextHops_ref()) {
+  lines.emplace_back(fmt::format("> Label: {}", *route.topLabel()));
+  for (const auto& nh : *route.nextHops()) {
     lines.emplace_back("  " + toString(nh));
   }
   return folly::join("\n", lines);
@@ -202,8 +197,8 @@ toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
   folly::CIDRNetwork network;
   try {
     network = folly::IPAddress::createNetwork(
-        toIPAddress(*prefix.prefixAddress_ref()).str(),
-        *prefix.prefixLength_ref(),
+        toIPAddress(*prefix.prefixAddress()).str(),
+        *prefix.prefixLength(),
         applyMask);
   } catch (const folly::IPAddressFormatException& e) {
     throw thrift::OpenrError(fmt::format(
