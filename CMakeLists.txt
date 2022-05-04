@@ -146,6 +146,10 @@ add_fbthrift_cpp_library(
   openr/if/KvStore.thrift
   OPTIONS
     json
+  DEPENDS
+    fb303::fb303_thrift_cpp
+  SERVICES
+    KvStoreService
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} kv_store_cpp2)
 
