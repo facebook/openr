@@ -588,9 +588,6 @@ LinkState::updateAdjacencyDatabase(
     LinkStateMetric holdUpTtl,
     LinkStateMetric holdDownTtl) {
   LinkStateChange change;
-  auto const& nodeName = *newAdjacencyDb.thisNodeName_ref();
-  XLOG(DBG1) << "Updating adjacency database for node " << nodeName << ", area "
-             << area;
 
   // Area field must be specified and match with area_
   DCHECK_EQ(area_, area);
@@ -605,6 +602,7 @@ LinkState::updateAdjacencyDatabase(
   }
 
   // Default construct if it did not exist
+  auto const& nodeName = *newAdjacencyDb.thisNodeName_ref();
   thrift::AdjacencyDatabase priorAdjacencyDb(
       std::move(adjacencyDatabases_[nodeName]));
   // replace
