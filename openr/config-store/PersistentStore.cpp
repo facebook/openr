@@ -71,8 +71,7 @@ PersistentStore::store(std::string key, std::string value) {
                         p = std::move(p),
                         key = std::move(key),
                         value = std::move(value)]() mutable noexcept {
-    SYSLOG(INFO) << "Store key: " << key << ", value: " << value
-                 << " to config-store";
+    SYSLOG(INFO) << "Store key: " << key << " to config-store";
     // Override previous value if any
     database_.insert_or_assign(key, value);
     auto pObject = toPersistentObject(ActionType::ADD, key, value);
