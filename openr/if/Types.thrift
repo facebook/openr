@@ -691,18 +691,30 @@ struct AdjKey {
 }
 
 /**
- * Struct to store internal override states for links (e.g. metric, overloaded
- * state) etc. This is not currently exposed via any API
- * TODO: Move this to Types.cpp
+ * Struct to store internal override states for links/adjacencies:
+ *  - Hard-drain:
+ *    - Node Overload - `isOverloaded`;
+ *    - Link Overload - `overloadedLinks`;
+ *  - Soft-drain:
+ *    - Node Metric Inc - `nodeMetricIncrementVal`;
+ *    - Link Metric Inc - `linkMetricIncrementMap`;
+ *  - Adjacency Metric Override:
+ *    - Adjacency Metric Override - `adjMetricOverrides`;
+ *    - NOTE: this metric override will overthrow all previously accumulated
+ *      metric value for this specific adjacency;
  */
 struct LinkMonitorState {
   /**
+   * [HARD-DRAIN]
+   *
    * Overload bit for Open-R. If set then this node is not available for
    * transit traffic at all.
    */
   1: bool isOverloaded = 0;
 
   /**
+   * [HARD-DRAIN]
+   *
    * Overloaded links. If set then no transit traffic will pass through the
    * link and will be unreachable.
    */
@@ -722,7 +734,9 @@ struct LinkMonitorState {
   4: i32 nodeLabel = 0 (deprecated);
 
   /**
-   * Custom metric override for adjacency
+   * [ADJACENCY METRIC OVERRIDE]
+   *
+   * Custom metric override for an adjacency
    */
   5: map<AdjKey, i32> adjMetricOverrides;
 
@@ -733,13 +747,16 @@ struct LinkMonitorState {
   6: map<string, i32> nodeLabelMap;
 
   /**
-   * Custom static metric increment value for all links for the node.
-   * Open/R will add a this value to the existing metric on all links.
+   * [SOFT-DRAIN]
+   *
+   * Custom static metric increment value for ALL links of the node.
    */
   7: i32 nodeMetricIncrementVal = 0;
 
   /**
-   * Custom metric increment for links.
+   * [SOFT-DRAIN]
+   *
+   * Custom metric increment for a specifc set of links.
    */
   8: map<string, i32> linkMetiricIncrementMap;
 } (cpp.minimize_padding)

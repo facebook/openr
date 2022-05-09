@@ -35,16 +35,28 @@ getRttMetric(int64_t rttUs) {
 
 void
 printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
-  XLOG(DBG1) << "LinkMonitor state .... ";
-  for (auto const& [area, nodeLabel] : *state.nodeLabelMap_ref()) {
-    XLOG(DBG1) << "\tnodeLabel: " << nodeLabel << ", area: " << area;
-  }
-  XLOG(DBG1) << "\tisOverloaded: "
-             << (*state.isOverloaded_ref() ? "true" : "false");
+  // Hard-drain state
+  XLOG(DBG1) << fmt::format(
+      "[Hard-Drain] Node Overloaded: {}",
+      (*state.isOverloaded_ref() ? "true" : "false"));
   if (not state.overloadedLinks_ref()->empty()) {
-    XLOG(DBG1) << "\toverloadedLinks: "
-               << folly::join(",", *state.overloadedLinks_ref());
+    XLOG(DBG1) << fmt::format(
+        "[Hard-Drain] Overloaded Links: {}",
+        folly::join(",", *state.overloadedLinks_ref()));
   }
+
+  // Soft-drain state
+  XLOG(DBG1) << fmt::format(
+      "[Soft-Drain] Node Metric Increment: {}",
+      *state.nodeMetricIncrementVal_ref());
+  if (not state.linkMetiricIncrementMap_ref()->empty()) {
+    XLOG(DBG1) << fmt::format("[Soft-Drain] Link Metric Increment:");
+    for (auto const& [key, val] : *state.linkMetiricIncrementMap_ref()) {
+      XLOG(DBG1) << fmt::format("\t{}: {}", key, val);
+    }
+  }
+
+  // [TO BE DEPRECATED]
   if (not state.linkMetricOverrides_ref()->empty()) {
     XLOG(DBG1) << "\tlinkMetricOverrides: ";
     for (auto const& [key, val] : *state.linkMetricOverrides_ref()) {
@@ -942,9 +954,9 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   thrift::AdjacencyDatabase adjDb;
 
   adjDb.thisNodeName_ref() = nodeId_;
-  adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
   adjDb.area_ref() = area;
   adjDb.nodeLabel_ref() = 0;
+
   if (enableSegmentRouting_) {
     auto it = state_.nodeLabelMap_ref()->find(area);
     if (it != state_.nodeLabelMap_ref()->end()) {
@@ -952,11 +964,15 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
     }
   }
 
+  // [Hard-Drain] set node overload bit
+  adjDb.isOverloaded_ref() = *state_.isOverloaded_ref();
+
   // populate thrift::AdjacencyDatabase.adjacencies based on
   // various condition.
   auto areaAdjIt = adjacencies_.find(area);
   if (areaAdjIt != adjacencies_.end()) {
     for (auto& [adjKey, adjValue] : areaAdjIt->second) {
+      // TODO: deprecate this condition check
       if (shouldSkipAdjAnnouncement(adjKey, adjValue)) {
         LOG(INFO) << fmt::format(
             "Skip announcement of adjKey: [{}, {}] without initial sync.",
@@ -968,40 +984,41 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       // NOTE: copy on purpose
       auto adj = folly::copy(adjValue.adjacency);
 
-      // set link overload bit
+      // [Hard-Drain] set link overload bit
       adj.isOverloaded_ref() =
           state_.overloadedLinks_ref()->count(*adj.ifName_ref()) > 0;
 
-      // Calculate the adj metric - there are three types of metric, which can
-      // be potentially combined:
-      // 1. base metric derived from RTT or default hop-count metric.
-      //    ATTN: link-metirc/adj-metric override can ONLY override base metric,
-      //          and adj-metric override can overrice link-metric override.
-      // 2. node-level incremental metric;
-      // 3. link-level incremental metric.
+      // Calculate the adj metric - there are 3 places potentially contributing
+      // to the final result, which is stackable:
+      //
+      // 1. base metric derived from round-trip-time(RTT) or default hop-count;
+      // 2. [Soft-Drain] node-level incremental metric;
+      // 3. [Soft-Drain] link-level incremental metric.
       int32_t metric = adjValue.baseMetric;
 
+      // [TO BE DEPRECATED]
       // override metric with link metric if it exists
       metric = folly::get_default(
           *state_.linkMetricOverrides_ref(),
           *adj.ifName_ref(),
           adjValue.baseMetric);
 
-      // override metric with adj metric if it exists
+      // increment the node-level metric if any
+      metric += *state_.nodeMetricIncrementVal_ref();
+
+      // increment the link-level metric if any
+      if (state_.linkMetiricIncrementMap_ref()->count(*adj.ifName_ref())) {
+        metric += state_.linkMetiricIncrementMap_ref()[*adj.ifName_ref()];
+      }
+
+      // ATTN: adj-metric override will be honored if being configured.
       thrift::AdjKey tAdjKey;
       tAdjKey.nodeName_ref() = *adj.otherNodeName_ref();
       tAdjKey.ifName_ref() = *adj.ifName_ref();
       metric =
           folly::get_default(*state_.adjMetricOverrides_ref(), tAdjKey, metric);
 
-      // increment the node-level metric
-      metric += *state_.nodeMetricIncrementVal_ref();
-
-      // increment the link-level metric
-      if (state_.linkMetiricIncrementMap_ref()->count(*adj.ifName_ref())) {
-        metric += state_.linkMetiricIncrementMap_ref()[*adj.ifName_ref()];
-      }
-
+      // NOTE: this will be the final metric used for SPF calculation later
       adj.metric_ref() = metric;
 
       // set flag to indicate if adjacency will ONLY be used by other node

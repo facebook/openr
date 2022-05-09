@@ -145,50 +145,65 @@ class LinkMonitor final : public OpenrEventBase {
   }
 
   /*
-   * Public APIs to change metric:
-   * NOTE: except node overload, all requests will be throttled.
+   * [Public API][Hard-Drain]:
    *
-   * - Set/unset node overload (Node Drain)
-   * - Set/unset interface overload
-   * - Set/unset interface metric
-   * - Set/unset node adj metric
-   * - Set/unset node-level metric increment
-   * - Dump interface/link information
-   * - Dump adjacency database information
-   * - Dump links information from netlinkProtocolSocket
+   * - Set/unset node overload;
+   * - Set/unset interface overload;
    */
   folly::SemiFuture<folly::Unit> semifuture_setNodeOverload(bool isOverloaded);
   folly::SemiFuture<folly::Unit> semifuture_setInterfaceOverload(
       std::string interfaceName, bool isOverloaded);
+
+  // [TO BE DEPRECATED]
   folly::SemiFuture<folly::Unit> semifuture_setLinkMetric(
       std::string interfaceName, std::optional<int32_t> overrideMetric);
+
+  /*
+   * [Public API][Soft-Drain]:
+   *
+   * NOTE: all requests will be Throttled;
+   *
+   * - Set/unset node-level metric increment;
+   * - Set/unset node-level metric increment;
+   */
+  folly::SemiFuture<folly::Unit> semifuture_setNodeInterfaceMetricIncrement(
+      int32_t metricIncrementVal);
+  folly::SemiFuture<folly::Unit> semifuture_unsetNodeInterfaceMetricIncrement();
+  folly::SemiFuture<folly::Unit> semifuture_setInterfaceMetricIncrement(
+      std::string interfaceName, int32_t metricIncrementVal);
+  folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceMetricIncrement(
+      std::string interfaceName);
+
+  /*
+   * [Public API][Adjacency Metric Override]
+   *
+   * NOTE: this will have the highest priority to OVERRIDE adjacency metric
+   */
   folly::SemiFuture<folly::Unit> semifuture_setAdjacencyMetric(
       std::string interfaceName,
       std::string adjNodeName,
       std::optional<int32_t> overrideMetric);
+
+  /*
+   * [Public API][Link/Adjacency Dump]
+   *
+   * - Dump interface/link information
+   * - Dump links information from netlinkProtocolSocket
+   * - Dump adjacency database information
+   */
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
   semifuture_getInterfaces();
   folly::SemiFuture<InterfaceDatabase> semifuture_getAllLinks();
   folly::SemiFuture<std::unique_ptr<
       std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
   semifuture_getAreaAdjacencies(thrift::AdjacenciesFilter filter = {});
+
   /*
    * DEPRECATED. Perfer semifuture_getAreaAdjacencies to return the
    * areas as well.
    */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   semifuture_getAdjacencies(thrift::AdjacenciesFilter filter = {});
-
-  // Set/unset node-level metric increment
-  folly::SemiFuture<folly::Unit> semifuture_setNodeInterfaceMetricIncrement(
-      int32_t metricIncrementVal);
-  folly::SemiFuture<folly::Unit> semifuture_unsetNodeInterfaceMetricIncrement();
-
-  // Set/unset interface-level metric increment
-  folly::SemiFuture<folly::Unit> semifuture_setInterfaceMetricIncrement(
-      std::string interfaceName, int32_t metricIncrementVal);
-  folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceMetricIncrement(
-      std::string interfaceName);
 
  private:
   // make no-copy
