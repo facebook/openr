@@ -7033,7 +7033,6 @@ TEST_F(DecisionTestFixture, Counters) {
     decision->updateGlobalCounters();
     const auto counters = fb303::fbData->getCounters();
     EXPECT_EQ(counters.at("decision.num_nodes"), 1);
-    EXPECT_EQ(counters.at("decision.num_conflicting_prefixes"), 0);
   }
 
   // set up first publication
@@ -7101,7 +7100,6 @@ TEST_F(DecisionTestFixture, Counters) {
   // Verify counters
   decision->updateGlobalCounters();
   const auto counters = fb303::fbData->getCounters();
-  EXPECT_EQ(counters.at("decision.num_conflicting_prefixes"), 1);
   EXPECT_EQ(counters.at("decision.num_partial_adjacencies"), 1);
   EXPECT_EQ(counters.at("decision.num_complete_adjacencies"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes"), 4);

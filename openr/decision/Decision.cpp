@@ -1026,20 +1026,7 @@ Decision::updateGlobalCounters() const {
     }
   }
 
-  size_t numConflictingPrefixes{0};
-  for (const auto& [prefix, prefixEntries] : prefixState_.prefixes()) {
-    if (not PrefixState::hasConflictingForwardingInfo(prefixEntries)) {
-      continue;
-    }
-    XLOG(WARNING) << "Prefix " << folly::IPAddress::networkToString(prefix)
-                  << " has conflicting "
-                  << "forwarding algorithm or type.";
-    numConflictingPrefixes += 1;
-  }
-
   // Add custom counters
-  fb303::fbData->setCounter(
-      "decision.num_conflicting_prefixes", numConflictingPrefixes);
   fb303::fbData->setCounter(
       "decision.num_partial_adjacencies", numPartialAdjacencies);
   fb303::fbData->setCounter(
